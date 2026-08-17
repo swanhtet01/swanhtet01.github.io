@@ -1093,10 +1093,15 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
-  && managedPilotReadiness.sourceReceipts?.length === 9
+  && managedPilotReadiness.sourceReceipts?.length === 10
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/hosted-storage-privacy-proof.json')
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/managed-persistence-proof.json')
+  && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/self-serve-pilot-proof.json')
+  && managedPilotReadiness.selfServePilot?.proofComplete === true
+  && managedPilotReadiness.selfServePilot?.contract === 'supermega.self-serve-pilot-proof.v1'
+  && managedPilotReadiness.selfServePilot?.schemaVersionProven === 11
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'self_serve_pilot')?.status === 'blocked'
   && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
   && managedPilotReadiness.securityAudit?.findingCount === supabaseSecurityAudit.advisor?.findingCount

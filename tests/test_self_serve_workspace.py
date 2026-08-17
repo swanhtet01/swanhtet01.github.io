@@ -342,5 +342,122 @@ class SelfServeWorkspaceTests(unittest.TestCase):
         self.assertIn("write_enabled", detail["blockers"])
 
 
+class SelfServeWelcomeEmailTests(unittest.TestCase):
+    """The courtesy welcome send can never change the activation outcome.
+
+    It fires exactly once, only for a NEW tenant, only when the verified
+    session carries an address, and a sender failure of any kind leaves the
+    response identical to the no-sender path.
+    """
+
+    OWNER_EMAIL = "owner@example.invalid"
+
+    def setUp(self) -> None:
+        self.store = InMemoryTrialStore(reducer=MergeReducer())
+        self.sends: list[dict[str, str]] = []
+        self.sender_raises = False
+        self.sessions = {
+            OWNER_SESSION: TrialSignupSession(
+                actor_id=OWNER_ACTOR_ID,
+                session_id="d8aaab28-a5a7-4a0d-9d75-7a6265a969c3",
+                email_verified=True,
+                email=self.OWNER_EMAIL,
+            ),
+            SECOND_OWNER_SESSION: TrialSignupSession(
+                actor_id=SECOND_ACTOR_ID,
+                session_id="9c1a7e5e-13a1-4a8e-9be6-0d3f7a1c2b45",
+                email_verified=True,
+                # Verified session without a usable address: send must be skipped.
+                email="",
+            ),
+        }
+
+        def send_welcome_email(
+            *, to_email: str, business_name: str, workspace_id: str, claim_code: str
+        ) -> bool:
+            if self.sender_raises:
+                raise RuntimeError("provider exploded")
+            self.sends.append(
+                {
+                    "to_email": to_email,
+                    "business_name": business_name,
+                    "workspace_id": workspace_id,
+                    "claim_code": claim_code,
+                }
+            )
+            return True
+
+        def resolve_signup_session(request: Request) -> TrialSignupSession | None:
+            return self.sessions.get(request.headers.get("x-test-signup-session", ""))
+
+        app = FastAPI()
+        app.include_router(
+            create_trial_router(
+                store=self.store,
+                resolve_principal=lambda request: None,
+                resolve_signup_session=resolve_signup_session,
+                send_welcome_email=send_welcome_email,
+            )
+        )
+        self.client = TestClient(app)
+
+    def tearDown(self) -> None:
+        self.client.close()
+
+    def _post(self, *, claim_code: str = CLAIM_CODE, session: str = OWNER_SESSION):
+        return self.client.post(
+            "/api/trial/v1/workspaces",
+            headers={"x-test-signup-session": session},
+            json={"claimCode": claim_code, "businessName": BUSINESS_NAME},
+        )
+
+    def test_new_tenant_sends_exactly_one_welcome_with_exact_fields(self) -> None:
+        with activation_window("open"):
+            response = self._post()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "created")
+        self.assertEqual(
+            self.sends,
+            [
+                {
+                    "to_email": self.OWNER_EMAIL,
+                    "business_name": BUSINESS_NAME,
+                    "workspace_id": self_serve_workspace_id(CLAIM_CODE),
+                    "claim_code": CLAIM_CODE,
+                }
+            ],
+        )
+
+    def test_idempotent_replay_never_sends_again(self) -> None:
+        with activation_window("open"):
+            self.assertEqual(self._post().status_code, 200)
+            replay = self._post()
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(replay.json()["status"], "already_created")
+        self.assertEqual(len(self.sends), 1)
+
+    def test_session_without_address_skips_the_send(self) -> None:
+        with activation_window("open"):
+            response = self._post(claim_code=OTHER_CLAIM_CODE, session=SECOND_OWNER_SESSION)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "created")
+        self.assertEqual(self.sends, [])
+
+    def test_sender_exception_cannot_change_the_activation_response(self) -> None:
+        self.sender_raises = True
+        with activation_window("open"):
+            response = self._post()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "created")
+        self.assertEqual(body["contract"], SELF_SERVE_ACTIVATION_CONTRACT)
+        self.assertEqual(self.sends, [])
+        # The tenant durably exists despite the sender failure.
+        readiness = self.store.readiness(
+            TrialPrincipal(self_serve_workspace_id(CLAIM_CODE), OWNER_ACTOR_ID, "human")
+        )
+        self.assertTrue(readiness.capabilities)
+
+
 if __name__ == "__main__":
     unittest.main()

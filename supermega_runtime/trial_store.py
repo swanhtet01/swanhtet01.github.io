@@ -21,8 +21,41 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 10
+
+
+def _env_schema_version(default: int = 10) -> int:
+    """Parse SUPERMEGA_TRIAL_SCHEMA_VERSION without ever crashing at import.
+
+    This module is imported by the whole app runtime, and the production
+    activation runbook has the operator setting this exact variable -- an empty
+    or mistyped value must not take the entire app down with an import-time
+    ValueError. A non-parsable value falls back to the default, and if that
+    default then disagrees with the live schema, _assert_schema fail-closes the
+    trial paths cleanly at runtime (the operator's verification step surfaces
+    it) while everything else keeps serving.
+    """
+
+    raw = str(os.environ.get("SUPERMEGA_TRIAL_SCHEMA_VERSION") or "").strip()
+    if not raw:
+        return default
+    try:
+        parsed = int(raw, 10)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+# The exact live schema version the store fail-closes on: _assert_schema rejects
+# any database whose app_private schema is not EXACTLY this. Default 10 keeps
+# deployed/production behavior unchanged; an operator raises it (e.g. to 11 for a
+# v11 branch) only AFTER the matching migration has been applied to that target.
+TRIAL_SCHEMA_VERSION = _env_schema_version()
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
+# TLS transit is enforced by connection configuration (finding 6): psycopg refuses
+# to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
+# authoritative client->server (or client->Supavisor-pooler) guarantee -- a
+# per-backend pg_stat_ssl read cannot observe the client leg through a pooler.
+TRIAL_TLS_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 TRUSTED_IDENTITY_PROVIDERS = frozenset({"gateway", "supabase"})
 HUMAN_ACTOR_KIND = "human"
@@ -284,6 +317,110 @@ _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
     },
 }
 
+if TRIAL_SCHEMA_VERSION >= 12:
+    # Billing rail v12 (BILLING-RAIL-DESIGN.md 4.4): the billing tables carry
+    # their own hardening triggers, mirrored here byte-for-byte from
+    # 20260817090000_private_trial_backend_v12_billing_rail.sql so the exact
+    # trigger-inventory assertion keeps holding. On the default v10/v11 targets
+    # the inventory is unchanged; an operator raises
+    # SUPERMEGA_TRIAL_SCHEMA_VERSION only after applying v12.
+    _PRIVATE_HARDENING_TRIGGER_CONTRACT.update(
+        {
+            ("billing_invoices", "billing_invoice_guard"): {
+                "event_mask": 31,
+                "function_name": "guard_billing_invoice",
+                "function_source": """
+                    begin
+                      if tg_op = 'INSERT' then
+                        if new.status <> 'issued' then
+                          raise exception using errcode = '55000', message = 'billing invoices are recorded at issued status';
+                        end if;
+                        if new.revision <> 1 then
+                          raise exception using errcode = '55000', message = 'initial billing invoice revision must be one';
+                        end if;
+                        new.created_at := transaction_timestamp();
+                        new.updated_at := transaction_timestamp();
+                        return new;
+                      end if;
+                      if tg_op = 'DELETE' then
+                        raise exception using errcode = '55000', message = 'billing invoices cannot be deleted';
+                      end if;
+                      if new.workspace_id is distinct from old.workspace_id
+                         or new.invoice_id is distinct from old.invoice_id
+                         or new.invoice_digest is distinct from old.invoice_digest
+                         or new.payload_json is distinct from old.payload_json
+                         or new.created_at is distinct from old.created_at then
+                        raise exception using errcode = '55000', message = 'billing invoice identity is immutable';
+                      end if;
+                      if old.status <> 'issued' or new.status not in ('paid', 'void') then
+                        raise exception using errcode = '55000', message = 'billing invoice status can only transition from issued to paid or void';
+                      end if;
+                      if new.revision <> old.revision + 1 then
+                        raise exception using errcode = '40001', message = 'billing invoice revision must increment by one';
+                      end if;
+                      new.updated_at := transaction_timestamp();
+                      return new;
+                    end
+                """,
+            },
+            ("billing_events", "billing_events_immutable"): {
+                "event_mask": 27,
+                "function_name": "reject_billing_event_mutation",
+                "function_source": """
+                    begin
+                      raise exception using
+                        errcode = '55000',
+                        message = 'billing events are immutable';
+                    end
+                """,
+            },
+            ("billing_events", "billing_events_server_timestamp"): {
+                "event_mask": 7,
+                "function_name": "stamp_billing_event_insert",
+                "function_source": """
+                    begin
+                      new.created_at := transaction_timestamp();
+                      return new;
+                    end
+                """,
+            },
+            ("billing_entitlements", "billing_entitlement_guard"): {
+                "event_mask": 31,
+                "function_name": "guard_billing_entitlement",
+                "function_source": """
+                    begin
+                      if tg_op = 'INSERT' then
+                        if new.status <> 'none' or new.revision <> 1 then
+                          raise exception using errcode = '55000', message = 'billing entitlement rows start at none with revision one';
+                        end if;
+                        new.updated_at := transaction_timestamp();
+                        return new;
+                      end if;
+                      if tg_op = 'DELETE' then
+                        raise exception using errcode = '55000', message = 'billing entitlements cannot be deleted';
+                      end if;
+                      if new.workspace_id is distinct from old.workspace_id
+                         or new.tier is distinct from old.tier then
+                        raise exception using errcode = '55000', message = 'billing entitlement identity is immutable';
+                      end if;
+                      if not (
+                        (old.status = 'none' and new.status = 'granted')
+                        or (old.status = 'granted' and new.status = 'revoked')
+                        or (old.status = 'revoked' and new.status = 'granted')
+                      ) then
+                        raise exception using errcode = '55000', message = 'billing entitlement transitions are none to granted, granted to revoked, or revoked to granted';
+                      end if;
+                      if new.revision <> old.revision + 1 then
+                        raise exception using errcode = '40001', message = 'billing entitlement revision must increment by one';
+                      end if;
+                      new.updated_at := transaction_timestamp();
+                      return new;
+                    end
+                """,
+            },
+        }
+    )
+
 
 class TrialStoreError(RuntimeError):
     """Base class for safe, expected trial-store failures."""
@@ -418,6 +555,10 @@ class TrialReadiness:
     audit_ready: bool
     write_enabled: bool
     capabilities: frozenset[str] = frozenset()
+    # Billing rail v12 (BILLING-RAIL-DESIGN.md 4.3): derived ONLY from the
+    # server-side billing_entitlements projection, never stored on the device,
+    # and fail-closed to False everywhere the entitlement cannot be proven.
+    premium_unlocked: bool = False
 
     @property
     def read_ready(self) -> bool:
@@ -464,6 +605,7 @@ class TrialReadiness:
                 "write_enabled": self.write_enabled,
             },
             "blockers": list(self.blockers),
+            "premiumUnlocked": self.premium_unlocked,
         }
 
 
@@ -3004,17 +3146,23 @@ class PostgresTrialStore:
             raise TrialNotReadyError(("database_ready",))
         try:
             import psycopg
-            from psycopg.conninfo import conninfo_to_dict
             from psycopg.rows import dict_row
         except ImportError as exc:
             raise TrialNotReadyError(("postgres_driver_ready",)) from exc
-        # The Vercel runtime uses short-lived pooled connections. Keep
-        # autocommit explicitly disabled so every request can bind its identity
-        # to one transaction, disable automatic prepared statements for
-        # Supavisor transaction mode, and enforce encrypted transport even if a
-        # manually supplied URL omitted sslmode. A stronger URL setting
-        # (verify-ca / verify-full) remains in the DSN and should be used where
-        # the provider certificate is pinned.
+        # Enforce encrypted transport by CONNECTION CONFIGURATION -- the only place
+        # it holds for BOTH the direct-host lane and the Supavisor session pooler
+        # that production must use (the Supabase direct host is IPv6-only). psycopg
+        # refuses to open the connection unless the channel negotiates TLS under an
+        # sslmode of require/verify-ca/verify-full, so a successful connect proves
+        # the client->server (or client->pooler) leg is encrypted. A per-backend
+        # pg_stat_ssl read reflects the pooler->Postgres leg, not the client leg,
+        # and reads FALSE through Supavisor even when the client leg is TLS
+        # (finding 6) -- so this configuration assertion, not a query, is the
+        # authoritative guarantee. Fail closed; never silently downgrade or force.
+        self._require_dsn_tls(self.database_url)
+        # Keep autocommit explicitly disabled so every request can bind its
+        # identity to one transaction, and disable automatic prepared statements
+        # for Supavisor transaction mode.
         connection_kwargs: dict[str, Any] = {
             "row_factory": dict_row,
             "connect_timeout": 5,
@@ -3022,10 +3170,30 @@ class PostgresTrialStore:
             "prepare_threshold": None,
             "application_name": "supermega-trial-runtime",
         }
-        configured_sslmode = str(conninfo_to_dict(self.database_url).get("sslmode", "")).lower()
-        if configured_sslmode not in {"require", "verify-ca", "verify-full"}:
-            connection_kwargs["sslmode"] = "require"
         return psycopg.connect(self.database_url, **connection_kwargs)
+
+    @staticmethod
+    def _require_dsn_tls(database_url: str) -> None:
+        """Fail closed unless the connection DSN configures TLS transport.
+
+        sslmode must be one of require/verify-ca/verify-full; prefer, allow,
+        disable, or an omitted mode are rejected. This is where transit
+        encryption is actually enforced (see _connect); the DSN is never
+        surfaced in the raised error.
+        """
+
+        try:
+            from psycopg.conninfo import conninfo_to_dict
+        except ImportError as exc:
+            raise TrialNotReadyError(("postgres_driver_ready",)) from exc
+        try:
+            configured_sslmode = (
+                str(conninfo_to_dict(str(database_url)).get("sslmode", "")).strip().lower()
+            )
+        except Exception:  # noqa: BLE001 - never surface the DSN in the error
+            raise TrialNotReadyError(("database_url_invalid",)) from None
+        if configured_sslmode not in TRIAL_TLS_SSLMODES:
+            raise TrialNotReadyError(("tls_required",))
 
     @staticmethod
     def _set_context(cursor: Any, principal: TrialPrincipal) -> None:
@@ -3199,6 +3367,13 @@ class PostgresTrialStore:
 
     @staticmethod
     def _assert_runtime_role(cursor: Any) -> None:
+        # Finding 6: transit TLS is enforced by the sslmode connection assertion in
+        # _connect (require/verify-ca/verify-full), which holds through the Supavisor
+        # session pooler production must use. The old per-backend SSL-status read
+        # reflected the pooler->Postgres leg, not the client leg, so it was FALSE
+        # over the pooler even when the client leg was encrypted. The tls_active
+        # column below now only sanity-checks that the server supports TLS; the
+        # authoritative client-leg guarantee lives in _connect.
         cursor.execute(
             """
             with runtime_role as (
@@ -3244,22 +3419,56 @@ class PostgresTrialStore:
                 join pg_roles parent_role on parent_role.oid = membership.roleid
               ), false) as direct_parent_membership_exact,
               coalesce((
+                -- Exactly one conforming runtime-login member, plus at most the
+                -- Supabase-managed conforming `postgres` admin member that
+                -- supabase_admin auto-grants and the customer cannot revoke. This
+                -- mirrors the v4 backend_role_guard tolerance verbatim (that guard
+                -- runs before the login role exists; this check runs after, so it
+                -- must admit both members). postgres is the project's top role and
+                -- already outranks the backend role; its membership grants no
+                -- application escalation (RLS is GUC-actor-bound, not login-bound).
                 select
-                  count(*) = 1
+                  count(*) filter (
+                    where member_role.rolname = current_user
+                      and membership.inherit_option
+                      and not membership.set_option
+                      and not membership.admin_option
+                  ) = 1
                   and bool_and(
-                    member_role.rolname = current_user
-                    and membership.inherit_option
-                    and not membership.set_option
-                    and not membership.admin_option
+                    (
+                      member_role.rolname = current_user
+                      and membership.inherit_option
+                      and not membership.set_option
+                      and not membership.admin_option
+                    )
+                    or (
+                      member_role.rolname = 'postgres'
+                      and grantor_role.rolname in ('postgres', 'supabase_admin')
+                      and membership.admin_option
+                      and not membership.inherit_option
+                      and not membership.set_option
+                    )
                   )
                 from backend_role
                 join pg_auth_members membership on membership.roleid = backend_role.oid
                 join pg_roles member_role on member_role.oid = membership.member
+                join pg_roles grantor_role on grantor_role.oid = membership.grantor
               ), false) as backend_member_exact,
               not exists (
+                -- The runtime login role may carry only the same Supabase-managed
+                -- conforming `postgres` admin membership; any other member fails.
                 select 1
                 from runtime_role
                 join pg_auth_members membership on membership.roleid = runtime_role.oid
+                join pg_roles member_role on member_role.oid = membership.member
+                join pg_roles grantor_role on grantor_role.oid = membership.grantor
+                where not (
+                  member_role.rolname = 'postgres'
+                  and grantor_role.rolname in ('postgres', 'supabase_admin')
+                  and membership.admin_option
+                  and not membership.inherit_option
+                  and not membership.set_option
+                )
               ) as no_runtime_role_members,
               not exists (
                 select 1
@@ -3267,7 +3476,7 @@ class PostgresTrialStore:
                 where runtime_role.oid <> elevated_role.oid
                   and pg_has_role(runtime_role.oid, elevated_role.oid, 'USAGE')
               ) as no_elevated_membership,
-              coalesce((select ssl from pg_stat_ssl where pid = pg_backend_pid()), false) as tls_active
+              coalesce((select setting = 'on' from pg_settings where name = 'ssl'), false) as tls_active
             """
         )
         row = cursor.fetchone() or {}
@@ -3525,35 +3734,76 @@ class PostgresTrialStore:
                             )
                         cursor.execute(
                             """
-                            select status
+                            select owner_actor_id, status
                             from app_private.workspace_access_controls
                             where workspace_id = %s
                             """,
                             (workspace_id,),
                         )
-                        if cursor.fetchone() is not None:
+                        existing_access = cursor.fetchone()
+                        if existing_access is not None:
+                            # The membership guard above cannot see a DIFFERENT
+                            # actor's owner row: the workspace_memberships_self_read
+                            # RLS policy only exposes the caller's own membership
+                            # (actor_id = app.actor_id), so a second user claiming an
+                            # already-owned claim reads zero membership rows and the
+                            # TrialClaimConflict guard never fires. The access-control
+                            # read policy IS workspace-scoped (visible to any session
+                            # bound to this workspace GUC), so it is the authoritative
+                            # place to detect the collision. A self-serve claim is 1:1
+                            # with a workspace; an active row owned by a different actor
+                            # is a claim-code conflict and must surface as
+                            # claim_code_conflict (409 "already in use"), not the
+                            # generic durable-history transition error.
+                            if (
+                                str(existing_access.get("owner_actor_id", ""))
+                                != principal.actor_id
+                            ):
+                                raise TrialClaimConflict(claim)
                             raise TrialInvalidTransition(
                                 "Self-serve workspace identity conflicts with durable history."
                             )
-                        cursor.execute(
-                            """
-                            insert into app_private.workspace_access_controls (
-                              workspace_id, activation_id, authorization_id,
-                              authorization_contract, plan_digest, owner_actor_id,
-                              project_ref, release_commit, status
-                            ) values (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
-                            """,
-                            (
-                                workspace_id,
-                                command_id,
-                                f"self-serve-claim-{claim.lower()}",
-                                SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT,
-                                fingerprint,
-                                principal.actor_id,
-                                project_ref,
-                                release_commit,
-                            ),
-                        )
+                        try:
+                            cursor.execute(
+                                """
+                                insert into app_private.workspace_access_controls (
+                                  workspace_id, activation_id, authorization_id,
+                                  authorization_contract, plan_digest, owner_actor_id,
+                                  project_ref, release_commit, status
+                                ) values (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+                                """,
+                                (
+                                    workspace_id,
+                                    command_id,
+                                    # authorization_id is a uuid column: derive a deterministic uuid5
+                                    # from the workspace + claim so replay reuses the exact value (the
+                                    # UNIQUE constraint makes idempotency safe) and distinct from the
+                                    # activation_id's 'self-serve-create:' name. A raw
+                                    # 'self-serve-claim-<claim>' string is not valid uuid syntax (22P02)
+                                    # and would abort every self-serve creation on a real database.
+                                    str(uuid5(UUID(workspace_id), f"self-serve-authorization:{claim}")),
+                                    SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT,
+                                    fingerprint,
+                                    principal.actor_id,
+                                    project_ref,
+                                    release_commit,
+                                ),
+                            )
+                        except TrialStoreError:
+                            raise
+                        except Exception as exc:
+                            # Under true concurrency the SERIALIZABLE snapshot is taken
+                            # before pg_advisory_xact_lock is acquired, so the losing
+                            # claimant's guards above can miss the winner's committed
+                            # rows entirely and fall through to this insert. The unique
+                            # constraint on workspace_id is the authoritative arbiter:
+                            # a duplicate-key rejection here IS the claim collision and
+                            # must surface as claim_code_conflict, not the generic
+                            # not-ready error. `from None` so no driver detail (which
+                            # can embed key values) ever reaches a caller.
+                            if getattr(exc, "sqlstate", None) == "23505":
+                                raise TrialClaimConflict(claim) from None
+                            raise
                         cursor.execute(
                             """
                             insert into app_private.workspace_memberships (
@@ -3710,6 +3960,44 @@ class PostgresTrialStore:
                         raise TrialPermissionDenied(capability)
                     yield cursor, capabilities
 
+    @staticmethod
+    def _premium_unlocked(cursor: Any, workspace_id: str) -> bool:
+        """Billing rail v12 (BILLING-RAIL-DESIGN.md 4.3): derive premiumUnlocked
+        from the billing_entitlements projection, one query, fail closed.
+
+        The privilege probe runs first because the v12 billing tables are
+        deny-by-default and grant the runtime role nothing: without it the
+        entitlement read would raise insufficient_privilege and abort the
+        readiness transaction. Until a founder-approved migration adds the
+        narrow entitlement read, the probe is false and the flag stays False.
+        """
+
+        cursor.execute(
+            """
+            select case
+              when to_regclass('app_private.billing_entitlements') is null then false
+              else has_table_privilege(
+                current_user, 'app_private.billing_entitlements', 'SELECT'
+              )
+            end as entitlement_readable
+            """
+        )
+        if not bool((cursor.fetchone() or {}).get("entitlement_readable")):
+            return False
+        cursor.execute(
+            """
+            select exists (
+              select 1
+              from app_private.billing_entitlements entitlement
+              where entitlement.workspace_id = %s
+                and entitlement.tier = 'premium'
+                and entitlement.status = 'granted'
+            ) as premium_unlocked
+            """,
+            (workspace_id,),
+        )
+        return bool((cursor.fetchone() or {}).get("premium_unlocked"))
+
     def readiness(self, principal: TrialPrincipal | None) -> TrialReadiness:
         auth_ready = _principal_auth_ready(principal)
         database_ready = False
@@ -3717,6 +4005,7 @@ class PostgresTrialStore:
         schema_ready = False
         membership_ready = False
         audit_ready = False
+        premium_unlocked = False
         capabilities: frozenset[str] = frozenset()
         if not self.database_url:
             return TrialReadiness(
@@ -3746,6 +4035,10 @@ class PostgresTrialStore:
                             self._set_context(cursor, normalized)
                             capabilities = self._load_membership(cursor, normalized)
                             membership_ready = True
+                            if TRIAL_SCHEMA_VERSION >= 12:
+                                premium_unlocked = self._premium_unlocked(
+                                    cursor, normalized.workspace_id
+                                )
         except TrialNotReadyError as exc:
             if "postgres_driver_ready" in exc.reasons:
                 database_ready = False
@@ -3773,6 +4066,7 @@ class PostgresTrialStore:
             audit_ready=audit_ready,
             write_enabled=self.write_enabled,
             capabilities=capabilities,
+            premium_unlocked=premium_unlocked,
         )
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:

@@ -1,0 +1,191 @@
+# SuperMega — Product Catalog & Pricing Posture
+
+**Status:** Founder-facing internal draft, synthesized 2026-08-17 from the code-grounded inventory (7 agents, ~1.08M tokens, file-cited evidence throughout). Not customer-facing copy. Every claim carries its maturity label from the inventory; nothing below is aspirational unless explicitly marked. Written to survive the claims boundary in `SUPERMEGA-PRIVATE-PILOT-SALES-KIT.md` (may-say vs must-not-imply).
+
+**Maturity vocabulary** (from the inventory): **proven** = guarded by named tests/verifiers · **working** = implemented and reachable in UI, thin or no dedicated guard · **partial** = code exists but a documented gap blocks real use.
+
+---
+
+## 1. Executive summary
+
+**What SuperMega is.** One integrated business operating system for Myanmar SMBs, shipped as four products on a shared evidence-gated core: **Shop** (retail/POS + full back office through a general ledger), **Plant** (manufacturing with controlled batch execution, quality, and recall trace), **Website** (trade-aware site builder with gated publishing), and **Ecommerce** (storefront + request-not-order checkout) — plus a **hosted platform** (RLS multi-tenant Postgres, self-serve tenant creation, managed activation) for the paid tiers.
+
+**The honest one-line state:** all four local products are proven and free forever by build-checked invariant; hosted self-serve tenancy is proven six-for-six — on isolated, since-deleted infrastructure, not production; go-live now waits on one founder activation decision (a 4-step, mostly reversible runbook); and revenue is zero with **no billing rail built** — that is the named next gap (COORDINATION-BOARD 2026-08-06, Gate 9).
+
+Key facts the rest of this document expands:
+
+- **The free tier is the whole working business, on one device.** Till, stock, orders, appointments, purchasing, AR/AP, daily close, general ledger, monthly statement, accountant export, production, website, storefront, encrypted backup, device reset — all browser-local, no account, no server. `FREE_FOREVER` in `showroom/src/core/capability-tiers.ts` is a CI-checked invariant: moving any of these behind a tier fails the build.
+- **Everything is evidence-gated.** Every mutation requires actor + reason + evidence reference; corrections post reversals, never edits; exports are digest-sealed. 600+ guard scripts run inside the `app:verify` release gate (counts drift by release; the gate is the constant).
+- **Hosted readiness, as of the 2026-08-17 activation runbook:** hosted PG17 (v11 applied, OPS-745), security audit (OPS-747), storage privacy six-for-six (OPS-752), managed persistence seven-for-seven (OPS-759), and the self-serve end-to-end proof (approvalId `self-serve-proof-v11c-20260816`) are all proven, with sealed evidence in `hq/readiness/`. Two gates remain: releasing the self-serve remediation branch, and the founder's `production_activation` switch. (Verify the remediation branch's merge status before quoting gate counts externally — it was unconfirmed at inventory time.)
+- **Commercial state:** zero real leads, zero managed tenants, zero revenue. Pricing shapes exist (three, in the sales kit) but **no price has ever been founder-approved, and no prices exist anywhere in the code by guard-enforced decision**. Even after activation, the managed tier cannot take money: no billing/payment rail exists (Gate 9). Selling the free tier is live today — as a funnel, not revenue.
+
+---
+
+## 2. Product catalog
+
+### 2.1 SuperMega Shop (retail / POS / back office)
+
+| Module | Maturity | What it is |
+|---|---|---|
+| Counter sales (till) | proven | Tap-to-add counter, multi-item cart, Cash/KBZPay/WavePay recorded, tax snapshot, stock decrement, browser-print receipt, draft recovery |
+| Orders lifecycle & omnichannel intake | proven | Counter, storefront-request, website-intake, and (premium) AI message intake; accountable 5-stage flow, promise dates, cancellation with released reservations |
+| Inventory foundation | proven | Locations, lot/serial tracking, ATP, reservations, counts with discrepancy, movement ledger, reorder levels, RFC-4180 catalog import |
+| Purchasing & receiving | proven | Requisitions with approval, budget envelopes, sourcing with quote tolerance, POs, receiving, 3-way invoice match, supplier returns/credit notes |
+| Suppliers & payables (AP) | proven | Supplier performance scoring, AP aging, payables handoff CSV, per-SKU supplier policies |
+| Daily close & settlement | proven | Close expectation vs counted, per-payment-method lines, named variance owner, digest-sealed close CSV, Myanmar business-date boundary |
+| Corrections, returns & refunds | proven | Credit/debit correction documents, digest-linked to source; ledger reversals, never edits; refund settlement recorded as external evidence |
+| Receivables & customer credit (AR) | proven | Per-customer credit policies, exposure checks at order time, 0/7/30-day terms, AR aging, collection actions, reconciliation |
+| General ledger | proven | 14-account bilingual (EN/Burmese) chart; journal projected from 7 evidence-gated events; balanced by construction, fail-closed on imbalance; period lock; trial balance; sealed journal CSV |
+| Monthly statement | proven | Owner-language P&L ("sold / gave back / bought / till differences / kept before other costs") + balance snapshot; deliberately refuses to say "profit" |
+| Accounting handoff & exports | proven | Balanced, digest-sealed CSV packets (close, journal, AR, AP); formula-injection-guarded; free by stated policy |
+| Tax engine | proven | Effective-dated configurations, jurisdiction labels, digest-checked order calculations, correction tax handling |
+| Business templates (8 Myanmar trades) | proven | mini-mart, pharmacy, phone-electronics, fashion, hardware, tea-coffee, auto-parts, restaurant — bilingual, MMK street-realistic, registry-enforced at exactly 8 |
+| Industry packs & appointments | proven | 6 packs (retail, cafe, restaurant, spa, gym, school); bookable services with double-booking refused; every service build-pinned to a sellable counter SKU |
+| Replenishment & demand intelligence | **working** | Reorder plan with MOQ/rounding and open-PO coverage; 28-day moving-average forecast; runs locally in the UI — compile-level coverage only, no dedicated guard suite |
+| Sales velocity & revenue analytics | proven | 7/30-day trends, per-item velocity, payment-method split, channel mix, working capital, promise adherence — computed on-device |
+| Next-action guidance | proven | Opinionated "what to do right now" priority ladder over the whole shop |
+| Order support cases | proven | Cases on orders with SLA summary, service events, workload CSV |
+
+**Vs Odoo Community / SAP B1 / POS-SaaS.** The sell/stock/buy/close/hand-to-accountant loop is complete and, module for module, deeper than an Odoo Community starter install — with things Odoo Community lacks out of the box (purchase budget envelopes, quote tolerance checks, named till-variance accountability) and a whole territory POS SaaS (Square, Loyverse) simply does not have (requisition-to-3-way-match purchasing, AP/AR aging, customer credit terms — the informal-credit "kyway" workflow Myanmar shops actually run, formalized). The GL is what SAP B1 calls automatic postings, but stricter: it is a pure projection over the operating record — no manual journal entry can exist, so the books structurally cannot disagree with operations. The trade-off is deliberate narrowness: single store, MMK integers, Myanmar commercial-tax focus.
+
+**Top 3 honest gaps:** (1) payments are *recorded evidence*, not processed — no KBZPay/WavePay API, no card acquiring; refunds and supplier payments move outside the product; (2) no barcode scanning and no receipt-printer/cash-drawer hardware — receipts print via the browser; (3) not a full P&L — rent/wages/fuel are outside the operating record and the ledger accepts no manual entries by design (no equity accounts, no balance-sheet close).
+
+### 2.2 SuperMega Plant (manufacturing)
+
+| Module | Maturity | What it is |
+|---|---|---|
+| Production jobs & work plan | proven | Job register with priority, named owner, due time, schedule-change audit, short close with evidence, append-only event log |
+| Industry packs & opening plan | proven | 5 packs (general, batch-process, food-beverage, apparel, assembly), each test-guarded to plan a controlled batch |
+| Controlled order execution | proven | Hash-chained command log (sha256 per command), effective-dated plans, full status machine, fail-closed replay validation on every load |
+| BOM + Shop SKU mapping | proven | Single-level BOM, milli-precision quantities, explicit BOM-row→Shop-SKU mapping ("no name matching") |
+| Routing & work centres | proven | Sequential operations with enforced flow arithmetic (progress cannot exceed prior op output) |
+| Calibration gates | proven | Release refused unless every routed work centre holds current calibration — enforced in the data contract |
+| Availability check & release | proven | Release requires a passing, digest-bound, non-stale availability check; double release refused |
+| Material issue, substitution & lot binding | proven | Issue against released lot only; reviewed substitution approvals with exact conversion arithmetic |
+| MRP-lite & Shop handoff | proven | Portfolio requirements across 20 orders; Shop issue/return integration; every authority flag hard-typed false, human reviews each handoff |
+| OEE / effectiveness & cost variance | proven | Three-factor OEE from operator-recorded evidence; MMK job costing; digest-sealed cost review packet |
+| Downtime tracking | proven | Proofed start/end intervals feeding OEE availability; blocks shift close while open |
+| Machine state observations | proven | running/attention/stopped with observer proof — explicitly observation-only, no equipment control |
+| Maintenance strategies & execution | proven | Interval strategies, due queue, return-to-service dispositions; restricted findings auto-open a quality issue |
+| Quality holds, issues & CAPA | proven | Inspection-driven holds, mandatory attributable rework, 6M root cause, recurrence detection, effectiveness-overdue tracking |
+| Shift close | proven | A close that structurally cannot happen over open holds, issues, downtime, or blocked orders; digest-bound to exact state revision |
+| Equipment master, import & commissioning | proven | Asset register, guarded CSV import, commissioning ceremony with safety baseline reference |
+| Batch genealogy & recall trace | proven | Multi-hop upstream/downstream lot↔batch trace with explicit completeness verdict, digest-sealed export |
+
+**Vs Odoo Community / SAP B1 / POS-SaaS.** Stronger than SAP B1's core on routing (B1 has none native), CAPA (B1 has none), calibration-blocking release (neither incumbent does this natively), and traceability discipline; thinner than Odoo MRP on scheduling, multi-level BOM, and ecosystem. The defensible wedge is stated plainly in the inventory: evidence integrity + fail-closed gates + free-forever local operation — not breadth. Where Odoo warns, Plant refuses: the gates live in the data contract, so a corrupted or out-of-order history is rejected wholesale, not patched around. POS SaaS has no manufacturing story at all.
+
+**Top 3 honest gaps:** (1) everything is operator-entered — no IoT/MES/machine feed; machine states and downtime are observations, and the dashboard labelled "OEE summary" is actually a quality-rate/progress view (do not market it as OEE); (2) single-level BOM, strictly sequential routing, bounded scale (12 materials/12 operations per plan, 20 concurrent orders, single location); (3) MMK-only costing that never posts to accounting, and recall trace is read-only — no inventory block or customer-contact workflow.
+
+### 2.3 SuperMega Website
+
+| Module | Maturity | What it is |
+|---|---|---|
+| Site generation from brief | proven | 3 starter templates; copy drafted from the shop's declared trade using only operationally supportable facts — no invented credentials |
+| Content & navigation workspace | proven | Schema-validated, bounded editor (4 pages × 4 sections), device previews, recovery/restore |
+| Publish readiness gate | proven | Publish refused unless the exact content digest was approved against recorded content/responsive/link evidence; any edit invalidates approval |
+| Static HTML export | proven | Single-file, CSP-hardened (default-src 'none'), sanitized-filename site the owner keeps outright |
+| Leads capture & inquiry inbox | **partial** | Guarded in-app lead ledger with consent flag — but the exported site cannot post forms (CSP form-action 'none'), so the inbox is operator-fed |
+| SEO fields & coverage | **partial** | Per-page meta + coverage briefs; no sitemap/robots/Open Graph, and nothing is crawlable until a customer site is hosted |
+| Release foundation (managed) | working | Release records, brand tokens, my-MM locale contracts, deploy-plan contract — with no hosting/deploy pipeline behind it yet |
+| Opening plan (from Shop onboarding) | working | Page plan digest-bound to the shop's onboarding record |
+| Website→Shop order intake | working | Operator-mediated intake; SKU must match exactly one stock item or intake blocks |
+
+**Vs Odoo Community / SAP B1 / POS-SaaS.** This is not Odoo Website or Shopify parity and should never be sold as such. Its two genuinely unusual properties: an evidence-gated publish (incumbents publish instantly, approval-free) and download-your-site ownership (incumbents host and lock you in). SAP B1 has no website story; POS SaaS offers hosted templates that the owner never owns.
+
+**Top 3 honest gaps:** (1) no hosting — publish produces a record and a downloadable file, not a live site; (2) no end-to-end web lead path — the exported site's CSP forbids form submission, so "leads from your website" is not yet a true claim; (3) hard caps (4 pages, 3 layouts, no media management).
+
+### 2.4 SuperMega Ecommerce
+
+| Module | Maturity | What it is |
+|---|---|---|
+| Storefront builder | proven | Preview from a read-only Shop catalog snapshot, sha256-bound so the storefront cannot drift from stock; merchandising overlay |
+| Checkout quote engine | proven | PIM projection, promotion/shipping/payment/tax decisions from Shop-owned policies; manual payment adapters (pay-on-pickup, COD, KBZPay-manual); 15-minute quote expiry |
+| Cart & customer order request (ECR) | proven | Idempotent request receipt bound to preview digest — deliberately a *request*, not an order |
+| Post-order customer intents (6 lifecycles) | proven | Return, support, correction, cancellation, amendment, reschedule — each recorded separately from the Shop-side decision |
+| Checkout→Shop handoff | **partial** | Reliable only in managed mode; in local mode the draft travels as one-shot navigation state and Shop's persistent request inbox never receives it |
+| Order review & activation packets | working | Schema-validated go-live packets with explicit forbidden-action lists; no dedicated guard test yet |
+
+**Vs Odoo Community / SAP B1 / POS-SaaS.** Not Shopify parity — an integrity-first storefront whose differentiators are the digest-bound catalog truth (the storefront cannot lie about stock; checkout re-verifies price and availability and fails closed on drift) and the request-not-order boundary: only Shop confirmation creates an order, stock move, or charge, and every screen says so. In Odoo/Shopify a checkout order lands unconditionally; here a human accepts it. Sales claims should lead with those, not with "ecommerce platform".
+
+**Top 3 honest gaps:** (1) no public hosting — customers cannot browse the storefront from the internet; requests are created in-app; (2) no online payment capture — all payment adapters are manual/offline, MMK only, no product images; (3) the local-mode checkout→Shop handoff gap above (a managed-tier claim only, today).
+
+---
+
+## 3. Platform & trust (the discipline that is itself a selling point)
+
+The hosted platform's differentiation is not "hosted Postgres, TLS, backups, multi-tenancy" — the inventory explicitly flags those as table stakes not to oversell. It is that **every trust property is an executable, fail-closed check rather than an ops promise**:
+
+- **Fail-closed tenancy (proven).** Workspace-scoped RLS with per-transaction identity binding; the backend refuses to serve unless the live database's schema version, md5-pinned constraints, trigger catalog, role privileges, and TLS all match a verified contract. Event-sourced immutable tenant records — tampering raises SQLSTATE 55000.
+- **Human-only decisions, database-enforced (proven).** An agent may propose; only a human actor kind can decide an approval — an invariant in the schema, with the deciding actor's kind recorded in the row. Incumbents do this as app-layer config.
+- **Session revocation at the data layer (proven).** A revoked session loses reads and writes on the next store call, enforced inside the database, not at the next app deploy.
+- **Proof-on-disposable-infrastructure (proven, scope-limited).** Storage privacy (six counted requests), managed persistence (seven proofs: durable write, idempotent retry, version conflict, immutability, cross-tenant denial, restore round-trip, atomic rollback), and self-serve tenancy (six-for-six through the real production connection path) were each proven on isolated hosted branches that were then deleted, with digest-sealed evidence banked in `hq/readiness/`. Seven real hosted-RLS defects were found and fixed on those branches before any customer existed. The honest phrasing is always "proven on isolated hosted targets" — never "in production."
+- **A readiness ledger that cannot overclaim (proven).** Gate status is computed from evidence, never asserted; an overclaimed gate literally fails to serialize; the ledger refuses to contain secrets. The closest incumbent analogue is SOC 2 evidence assembled by hand.
+- **Paired releases (proven).** App and public site release identity must match field-for-field across two live domains; a half-shipped release is detected, not hoped against.
+- **Owner-held exit (proven, free tier).** Encrypted backup (PBKDF2, 600k iterations), restore on any device, device reset with a restore point first — and a CI guard proving backup coverage tracks every registered business-data key. "Leaving is always free" is enforced, not promised.
+
+Honesty constraints that bound every platform claim: **no production tenant exists**; production writes are disabled pending the founder's `production_activation`; the managed login is unreachable from the public build; and the readiness ledger records its own overall status as blocked — by design, honestly.
+
+---
+
+## 4. Free vs Premium vs Enterprise (exactly what capability-tiers.ts says)
+
+Source of truth: `showroom/src/core/capability-tiers.ts`. Its own stated rules: **no prices live in the file, by decision, with a guard asserting no amount ever appears**; tier entitlement is never stored on-device where it could be edited; and locked capabilities always show what they do and why they cost — the action is "Talk to us about this", never "upgrade", never a price, never a countdown.
+
+**FREE — and free forever, by build-checked invariant.** The `FREE_FOREVER` list pins 11 capability ids that can never move out of the free tier (the build fails if any does): `shop-counter`, `shop-inventory`, `shop-orders`, `shop-appointments`, `shop-daily-close`, `shop-accounting-handoff`, `plant-production`, `website-builder`, `ecommerce-storefront`, `local-backup`, `device-reset`. Rationale in the file: these run entirely on the owner's device and cost the company nothing; retroactively paywalling a shop's own till "is the one thing that would make every promise on the signup page a lie." Two reasons are worth quoting to buyers verbatim: daily close — "charging for it would be charging for honesty"; accounting export — "your records are yours."
+
+**PREMIUM — capabilities that need SuperMega's compute or storage** ("so it needs a conversation"):
+- `ai-order-intake` — paste a Messenger/Viber message, get a draft order where every field is quoted from what the customer actually wrote. Built end-to-end and gated; runs against the managed-tenant endpoint; model calls currently fail closed pending activation and the pre-registered evaluation (no live eval run yet).
+- `ai-demand-advice` — reorder/demand advice from the owner's own trading history. **Tier declaration + locked-notice UI only; no backing implementation exists in the repo.** Do not list it as a feature.
+- `cloud-backup` — automatic off-device encrypted backup. Declared; no hosted implementation yet (manual backup stays free forever).
+
+What premium requires in practice: a relationship with SuperMega-run infrastructure — the AI intake path is served from the managed tenant runtime, so premium is not a switch a free user can flip alone. And the plain fact: **premium has no purchase path.** `premiumUnlocked` exists in code with no grant, billing, or entitlement mechanism behind it. The only statement of this anywhere in the corpus is COORDINATION-BOARD 2026-08-06, **Gate 9 (CODE-MISSING): no billing/payment rail exists for the managed tier** — revenue stays blocked on this even after every readiness gate passes, and no later document addresses it.
+
+**ENTERPRISE — records shared between people, on a managed workspace SuperMega runs:** `shared-workspace` (one set of records for counter, stockroom, office), `staff-roles` (per-person sign-in and limits), `verified-statements` (a trading record a lender or buyer can check has not been edited — "the proof is only worth anything if someone independent holds it"). The backing RLS platform is proven on isolated targets (section 3); no live tenant exists.
+
+**Pricing:** three pricing shapes were drafted in the sales kit (fixed 30-day pilot fee; setup + subscription; design partner). **None was ever founder-approved. No pricing numbers appear in this document because none exist that legitimately could.** What a business pays is agreed with the founder, per the tier file's own design.
+
+---
+
+## 5. Unique value propositions (the 5 sharpest, all code-true today)
+
+1. **The whole business runs free, local, offline — and that promise is a build invariant, not a policy.** Till, stock, orders, appointments, production, website, storefront, daily close, and accountant export need no account, no server, no card; `FREE_FOREVER` fails CI if any local capability is ever paywalled. Odoo needs a hosted instance; SAP B1 needs a consultant; POS SaaS needs a subscription.
+2. **Books that cannot disagree with operations.** The general ledger is a pure projection over digest-sealed operational events: entries balance by construction, an imbalanced journal refuses to emit, corrections post reversals instead of edits, and no manual entry can exist. The accountant receives a balanced, tamper-evident packet — free, forever, by stated policy.
+3. **Evidence-gated by construction, across all four products.** Every mutation carries actor + reason + evidence reference into an append-only trail; Plant's release gates (calibration, availability) live in the data contract where no UI bug or eager operator can bypass them; a shift structurally cannot close over open problems; a website cannot publish without digest-bound approval. Where incumbents warn, SuperMega refuses.
+4. **Myanmar-first correctness, not localization.** Integer-MMK arithmetic everywhere, KBZPay/WavePay as first-class recorded payment methods (the manual transfer-reference is the local payment model, not a gap), Burmese script in account names and trade packs, Myanmar business dates, and 8 registry-enforced local trades with street-realistic starter catalogs — first value arrives in the owner's own trade language, in under a minute, with no signup wall.
+5. **Hosted trust proven the hard way, before customer one.** Tenant isolation, storage privacy, and durable persistence were each proven on disposable hosted branches with counted requests, sealed digests, and zero secrets — and seven real hosted-RLS defects were burned down before any customer could hit them. The evidence is machine-validated files, not a compliance PDF.
+
+(Refined from the corpus's 8 candidates; dropped: the analytics lattice — true but subsumed by #1; the agent-company operating model — real but has zero retained customer proof; provenance-first AI as a headline — moved to section 6 because the AI path has not passed its own evaluation gate yet, and the sharpest claims should be things a prospect can touch today.)
+
+---
+
+## 6. Innovation / disruption angles
+
+- **Inverting the freemium wedge.** Every incumbent holds features back to force upgrade; SuperMega gives away the entire single-device business and charges only where it incurs real cost (compute, storage, managed identity) — with the give-away enforced in CI. This is a story no competitor can copy without rebuilding their revenue model.
+- **Evidence-gated operations as a category.** "ERP with an audit trail" is a checkbox; "an operating record where the gates live in the data contract and fail closed" is a different product class — closer to regulated-industry execution discipline (calibration-blocked release, structurally-honest shift close, recall trace with a completeness verdict) at SMB effort and zero license cost.
+- **Offline-first as infrastructure realism.** In a market of unreliable connectivity and no card-acquiring rails, browser-local operation with owner-held encrypted backup is not a degraded mode — it is the correct architecture, and the free tier costs SuperMega nothing to serve at any scale.
+- **Provenance-first AI, draft-only.** The order-intake design makes fabrication structurally impossible rather than discouraged: every AI-attributed field must cite a verbatim quote whose character offsets are re-verified against the real message, twice (server contract and client), and nothing writes until a human confirms. A 20-fixture golden set including prompt-injection fixtures is checked into the repo as a hard go/no-go gate. Honest label: **evaluation-gated** — the guardrail architecture and eval discipline are facts; no AI capability is live for customers, and no live-model evaluation has run.
+- **The trust story is reproducible.** "Proof on disposable infrastructure" — spin up an isolated branch, run a counted, read-only verifier, seal the evidence, delete the branch — is a repeatable pattern (it ran three times: storage, persistence, self-serve) that converts security claims from marketing into artifacts. Incumbents answer the same question with a SOC 2 PDF.
+
+---
+
+## 7. What must be true before selling each tier
+
+**Free tier — nothing. It is live today.** The paired app + public site deploys are verified; signup provisions a working, trade-specific shop in under a minute with no account. Selling it produces a funnel, not revenue. The sales kit's boundary applies to every conversation: isolated demo, browser-local sample state, governed assistance prepares drafts, managed trials require activation gates — and nothing may imply managed persistence in production, customer results, revenue, accuracy, compliance, autonomous operation, approved pricing, or an implementation date.
+
+**Premium** (ai-order-intake, cloud-backup; ai-demand-advice is unimplemented):
+1. Founder `production_activation` (managed infrastructure is a prerequisite for the AI endpoint), plus AI budget hosted-activation proof.
+2. The pre-registered order-intake evaluation run green, with a named pilot operator and the correction-effort bar met — the corpus's own go/no-go gate before any operator sees the feature.
+3. A billing rail (Gate 9) — there is no way to take payment.
+4. A cloud-backup hosted implementation, if that capability is to be sold rather than merely declared.
+
+**Enterprise / managed** (shared-workspace, staff-roles, verified-statements):
+1. **Founder activation decision** — the 4-step runbook (apply v11 → schema version env → open the activation window → enable writes; all but the last reversible), preceded by the remediation-branch release.
+2. **Billing rail** — Gate 9 again; even with a live tenant, no revenue can occur without it, and no successor design doc exists.
+3. **Support commitment** — a managed workspace is a promise to run and keep infrastructure available for someone's livelihood; the enterprise ladder in the research corpus (verified-statements → staff-roles → shared-workspace, each proven in production before the next) plus tenant #1's five-day order-to-close evidence plan is the sequenced path.
+4. Honest-copy cleanup before invitations go out. Two of three items landed 2026-08-17: the trial terms now ship inline with the signup checkbox (`showroom/src/core/trial-terms.ts`, seven plain-language points recorded on-device), and the claim-code activation UI exists (`ManagedLoginPage` opens an activation panel for a signed-in account with no company, calling `createSelfServeWorkspace`; zero-workspace sign-in no longer logs the user out). Remaining: there is no lifecycle email beyond the two contact-time sends (no activation-complete/welcome email), and the not-configured login fallback copy still says "not active in this release" (true only while the managed runtime is absent; disappears at activation).
+
+**The shortest true summary for the founder:** the product is finished enough to give away today, proven enough to activate this week, and unable to earn a single kyat until a billing rail is designed — which no document since 2026-08-06 has picked up.
+
+---
+
+*Compliance note: this document deliberately contains no pricing numbers (none are approved), no claim of live customers, revenue, uptime, accuracy, or compliance certification (none exist), and labels every hosted proof as isolated-infrastructure evidence. Sentences here are written to be liftable into customer copy only where their maturity label is "proven" and the sales-kit boundary permits the exact claim.*

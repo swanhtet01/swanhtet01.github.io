@@ -92,6 +92,12 @@ export function ManagedAccountPage() {
         await openWorkspace(signIn, signIn.workspaces[0].workspaceId)
         return
       }
+      if (signIn.workspaces.length === 0) {
+        // Signed in with no company yet: the login page opens the claim-code
+        // activation panel for exactly this state.
+        navigate('/login')
+        return
+      }
       setDirectory(signIn)
       setWorkspaceId(signIn.workspaces[0].workspaceId)
       setNotice(`Password saved. Choose one of ${signIn.workspaces.length} companies assigned to ${signIn.email}.`)

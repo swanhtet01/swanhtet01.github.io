@@ -1,0 +1,92 @@
+{
+  "contract": "supermega.self-serve-pilot-proof.v1",
+  "approvalId": "self-serve-proof-v11c-20260816",
+  "recordedAt": "2026-08-16T17:00:52.000Z",
+  "operator": "tech-lead session, founder-directed",
+  "branch": {
+    "name": "self-serve-proof-v11c-24h-20260816",
+    "projectRef": "xhumqlinowwetqcbeisw",
+    "parentProjectRef": "zvtzwcimpvvtkowflhda",
+    "createdAt": "2026-08-16T16:10:15.157116+00:00",
+    "deletedAt": "2026-08-16T17:00:52.000Z",
+    "maximumLifetimeHours": 24,
+    "deleteAfterEvidence": true
+  },
+  "instrument": {
+    "path": "tools/verify_self_serve_pilot.py",
+    "commit": "b668deb06c0ee32fa50af7b0918d1a28cab9139a",
+    "selfTestCases": 40,
+    "connectionLane": "session_pooler",
+    "schemaVersionProven": 11,
+    "storeFixesProven": [
+      "authorization_id-uuid5",
+      "authorization_contract-self_serve_claim_v1",
+      "guc-bound-insert-policies-and-grants",
+      "env-configurable-schema-version",
+      "tolerate-supabase-postgres-admin-member",
+      "dsn-tls-enforced-not-pg_stat_ssl",
+      "cross-actor-claim-conflict-via-access-controls-owner"
+    ]
+  },
+  "audit": {
+    "actor_a_digest": "sha256:ea535b74bac0e1594b36d343138b43c90421513dee7cf4ebf1f6cf1bd93f4c7c",
+    "actor_b_digest": "sha256:61e8c8489c00e6dd5d6d4460ddca307c08cb7a18eeaf90a6f4e482c50133902d",
+    "adapter": "postgres_self_serve_workspace_v1",
+    "captured_at": "2026-08-16T16:56:56Z",
+    "claim_a_digest": "sha256:ad9b82ecd809fb7a1d5009ba9ca754a12d96d473aa0b6caa60b78b4d1120c82b",
+    "claim_b_digest": "sha256:058b1a30151229c10edbb5b50f1db952e7258e1df84de6f2c3412a9ec5851b48",
+    "connection_lane": "session_pooler",
+    "contract": "supermega.self-serve-pilot.v1",
+    "evidence_digest": "sha256:2bd27ae755d5eb2785ef534e9bb0e4207da8e80e47ae8dc54edced6908b3bbff",
+    "ok": true,
+    "owner_approval_digest": "sha256:e6fd4ee195f0de15d80ad6fb9437a6edf6c54663eebff59f641ec90cfc3a3dbf",
+    "owner_capabilities_expected": 15,
+    "proofs": [
+      {
+        "id": "window_closed_refused",
+        "refusal_class": "activation_window_closed",
+        "result": "refused_before_store"
+      },
+      {
+        "access_control_rows": 1,
+        "claim_linkage_bound": true,
+        "created_event_rows": 1,
+        "id": "claim_creates_isolated_tenant",
+        "owner_capability_count": 15,
+        "owner_membership_rows": 1,
+        "result": "tenant_created"
+      },
+      {
+        "id": "exact_idempotent_replay",
+        "new_rows_created": 0,
+        "result": "no_op_replay"
+      },
+      {
+        "conflict_class": "claim_code_conflict",
+        "id": "different_user_same_claim_rejected",
+        "result": "rejected"
+      },
+      {
+        "delete_sqlstate": "55000",
+        "id": "created_event_immutable",
+        "result": "update_and_delete_rejected",
+        "update_sqlstate": "55000"
+      },
+      {
+        "foreign_rows_visible": 0,
+        "id": "cross_tenant_invisible",
+        "result": "denied_with_canary"
+      }
+    ],
+    "schema_version_observed": 11,
+    "secrets_exposed": false,
+    "sessions_performed": 3,
+    "statements_performed": 23,
+    "store_calls_performed": 4,
+    "target_host_digest": "sha256:4172602ea17ca262119eaa4d3340b776502fbaf6030d23aa8f4158c8f101c7cf",
+    "tenant_rows_exposed": false,
+    "workspace_a_digest": "sha256:fb06d131b73686133c9fa8e8396dffc75693d11e1cf7f438bcc3a536293fe743",
+    "workspace_b_digest": "sha256:f5879938f445cd0e88cce284e4ecf346ae1ebbef13ccac0a3761fd3c54ed38c5",
+    "writes_confined_to_fixtures": true
+  }
+}

@@ -146,8 +146,13 @@ export const capabilities: readonly Capability[] = [
     id: 'ai-demand-advice',
     label: 'Reorder and demand advice',
     tier: 'premium',
-    outcome: 'See what is about to run out and what is not selling, from your own trading history.',
-    reason: 'Runs on our servers against your exported records.',
+    // Honesty rule: this capability is DESIGNED, not built — no implementation
+    // exists behind it yet (the free reorder plan in shop-replenishment.ts is a
+    // different, local feature). The copy must say so; promising an unbuilt
+    // capability with "talk to us" framing would break the door-honesty rule
+    // the rest of this file enforces.
+    outcome: 'Being designed: advice on what is about to run out and what is not selling, from your own trading history. The free reorder plan already works today.',
+    reason: 'It would run on our servers against records you choose to share — tell us if you want to shape it.',
   },
   {
     id: 'cloud-backup',

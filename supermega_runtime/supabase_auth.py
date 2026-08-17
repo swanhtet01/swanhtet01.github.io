@@ -71,6 +71,10 @@ class VerifiedSupabaseUser:
     user_id: str
     session_id: str
     email_verified: bool = False
+    # The server-confirmed address, populated ONLY when email_verified is true
+    # so an unconfirmed address never travels. Used for the one courtesy send
+    # at self-serve activation; authorization never depends on it.
+    email: str = ""
 
 
 def _normalize_base_url(value: str) -> str:
@@ -221,6 +225,7 @@ def verify_supabase_user_identity(
         user_id=token_identity.user_id,
         session_id=token_identity.session_id,
         email_verified=email_verified,
+        email=email.strip() if email_verified and isinstance(email, str) else "",
     )
 
 
