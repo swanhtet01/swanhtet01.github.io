@@ -17,6 +17,7 @@ const EXPECTED_EAGER_MANIFEST = Object.freeze([
   'crew-run.mjs',
   'crew-runner.mjs',
   'gateway.mjs',
+  'ops-key.mjs',
   'owner-evidence.mjs',
   'store.mjs',
   'supermega-hq-authority.mjs',
