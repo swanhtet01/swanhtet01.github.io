@@ -654,5 +654,145 @@ class OrderIntakeNegationGuardTests(unittest.TestCase):
         self.assertNotIn("negated_value_conflict", draft.blockers)
 
 
+class OrderIntakeMultipleItemProvenanceTests(unittest.TestCase):
+    """order-intake eval run 5 diagnosis (2026-08-17, fixture
+    en-multiple-items-10, live-diagnosed against the real OpenAI provider):
+    a genuine multiple_item_order forces sku/quantity null -- the schema has
+    no room for two items in one scalar field -- but the model still wants
+    to cite each line item's own evidence, emitting TWO provenance records
+    that share the same field name rather than one record with multiple
+    source_quotes. The live gpt-5-mini response for this exact fixture also
+    left uncertain_fields empty. Both were hard contract violations
+    (draft: None, order_intake_provider_invalid_response) before this fix;
+    these tests reproduce that exact live response directly."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.catalog = [
+            OrderIntakeCatalogItem(
+                sku="SM-1001", name="Classic Tee", variant="Black / M",
+                unit_price_mmk=25_000, on_hand=12,
+            ),
+            OrderIntakeCatalogItem(
+                sku="SM-2001", name="Canvas Tote", variant="Natural",
+                unit_price_mmk=18_000, on_hand=6,
+            ),
+        ]
+        cls.message = "Viber: send 2 Classic Tees and 1 Canvas Tote. Pay with WavePay."
+
+    def test_live_provider_response_now_resolves_instead_of_raising(self) -> None:
+        extraction = OrderIntakeModelExtraction(
+            scope="multiple_item_order",
+            customer_reference=None,
+            channel="viber",
+            sku=None,
+            quantity=None,
+            payment="wavepay",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Viber", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Classic Tee", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="2 Classic Tees", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Canvas Tote", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="1 Canvas Tote", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="WavePay", occurrence=1)],
+                ),
+            ],
+        )
+        draft = build_order_intake_draft(
+            message=self.message,
+            catalog=self.catalog,
+            extraction=extraction,
+            response_id="resp-multi-item-live",
+            model="fixture-model",
+        )
+        self.assertEqual(draft.scope, "multiple_item_order")
+        self.assertEqual(draft.status, "needs_clarification")
+        self.assertIsNone(draft.sku)
+        self.assertIsNone(draft.quantity)
+        self.assertEqual(draft.channel, "viber")
+        self.assertEqual(draft.payment, "wavepay")
+        # Forced uncertain deterministically even though the model's own
+        # uncertain_fields list (correctly reproduced above) was empty.
+        self.assertIn("sku", draft.uncertain_fields)
+        self.assertIn("quantity", draft.uncertain_fields)
+        self.assertIn("uncertain_fields", draft.blockers)
+        self.assertIn("multiple_items", draft.blockers)
+        # Both items' evidence is preserved, merged under one record per field.
+        sku_provenance = next(record for record in draft.provenance if record.field == "sku")
+        self.assertEqual(
+            {span.quote for span in sku_provenance.source_spans},
+            {"Classic Tee", "Canvas Tote"},
+        )
+        quantity_provenance = next(record for record in draft.provenance if record.field == "quantity")
+        self.assertEqual(
+            {span.quote for span in quantity_provenance.source_spans},
+            {"2 Classic Tees", "1 Canvas Tote"},
+        )
+
+    def test_duplicate_provenance_for_a_non_null_field_still_rejected(self) -> None:
+        # The merge tolerance is scoped to null fields only -- a single-item
+        # order where the model cites two conflicting spans for the SAME
+        # populated field must still hard-fail, unchanged from before.
+        extraction = OrderIntakeModelExtraction(
+            scope="single_item_order",
+            customer_reference=None,
+            channel="viber",
+            sku="SM-1001",
+            quantity=2,
+            payment="wavepay",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Viber", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Classic Tee", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Canvas Tote", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="2 Classic Tees", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="WavePay", occurrence=1)],
+                ),
+            ],
+        )
+        with self.assertRaises(OrderIntakeContractError):
+            build_order_intake_draft(
+                message=self.message,
+                catalog=self.catalog,
+                extraction=extraction,
+                response_id="resp-non-null-duplicate",
+                model="fixture-model",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

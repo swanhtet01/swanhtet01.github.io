@@ -285,11 +285,32 @@ def _resolve_source_quote(
 def _resolve_provenance(
     message: str,
     extraction: OrderIntakeModelExtraction,
-) -> list[OrderIntakeFieldProvenance]:
-    provenance_by_field: dict[OrderIntakeField, OrderIntakeFieldProvenance] = {}
-    resolved: list[OrderIntakeFieldProvenance] = []
+) -> tuple[list[OrderIntakeFieldProvenance], frozenset[OrderIntakeField]]:
+    """Resolve and validate the model's cited evidence against the raw message.
+
+    A multiple_item_order cannot carry more than one item in a scalar field
+    like sku or quantity, so the model correctly nulls that field but often
+    still wants to cite each line item's own evidence -- emitting two
+    provenance records that share the same field name instead of one record
+    with multiple source_quotes (order-intake eval run 5, fixture
+    en-multiple-items-10: live-diagnosed 2026-08-17, error "duplicate
+    provenance for sku"). That is a real, reproducible extraction-schema gap,
+    not model sampling noise: every quote is still independently resolved
+    against the raw message below, so merging never fabricates evidence, it
+    only tolerates the model splitting one field's evidence across records
+    when the field's value is null. A field's value staying non-null still
+    requires exactly one provenance record, unchanged.
+
+    The second return value surfaces fields where this happened so the
+    caller can force them uncertain deterministically -- the same
+    never-trust-the-model's-own-flag posture already used for negation
+    conflicts -- instead of depending on the model to also remember to list
+    them in uncertain_fields, which the same live run showed it can forget.
+    """
+    spans_by_field: dict[OrderIntakeField, list[OrderIntakeSourceSpan]] = {}
     for record in extraction.provenance:
-        if record.field in provenance_by_field:
+        value = _field_value(extraction, record.field)
+        if record.field in spans_by_field and value is not None:
             raise OrderIntakeContractError(
                 f"duplicate provenance for {record.field}"
             )
@@ -297,30 +318,29 @@ def _resolve_provenance(
             _resolve_source_quote(message, source)
             for source in record.source_quotes
         ]
-        if len({(span.start, span.end) for span in spans}) != len(spans):
+        merged = spans_by_field.get(record.field, []) + spans
+        if len({(span.start, span.end) for span in merged}) != len(merged):
             raise OrderIntakeContractError(
                 f"duplicate source quote for {record.field}"
             )
-        final_record = OrderIntakeFieldProvenance(
-            field=record.field,
-            source_spans=spans,
-        )
-        provenance_by_field[record.field] = final_record
-        resolved.append(final_record)
+        spans_by_field[record.field] = merged
 
-    uncertain = set(extraction.uncertain_fields)
+    resolved: list[OrderIntakeFieldProvenance] = []
+    evidence_backed_null_fields: set[OrderIntakeField] = set()
     for field in _FIELD_ORDER:
-        value = _field_value(extraction, field)
-        has_provenance = field in provenance_by_field
-        if value is not None and not has_provenance:
+        spans = spans_by_field.get(field)
+        if spans is None:
+            continue
+        resolved.append(OrderIntakeFieldProvenance(field=field, source_spans=spans))
+        if _field_value(extraction, field) is None:
+            evidence_backed_null_fields.add(field)
+
+    for field in _FIELD_ORDER:
+        if _field_value(extraction, field) is not None and field not in spans_by_field:
             raise OrderIntakeContractError(
                 f"{field} is not backed by a source span"
             )
-        if value is None and has_provenance and field not in uncertain:
-            raise OrderIntakeContractError(
-                f"null {field} has provenance but is not marked uncertain"
-            )
-    return resolved
+    return resolved, frozenset(evidence_backed_null_fields)
 
 
 def _append_unique(
@@ -346,7 +366,7 @@ def build_order_intake_draft(
     request = OrderIntakeDraftRequest(message=message)
     if len(catalog) != len({item.sku for item in catalog}):
         raise OrderIntakeContractError("catalog SKUs must be unique")
-    provenance = _resolve_provenance(request.message, extraction)
+    provenance, evidence_backed_null_fields = _resolve_provenance(request.message, extraction)
 
     # Deterministic override, independent of what the model claimed: a field
     # caught by _detect_negated_enum_conflicts is never trusted, even if the
@@ -354,9 +374,16 @@ def build_order_intake_draft(
     # stays in `provenance` for a human reviewer; the field's VALUE in the
     # draft is forced to null exactly like any other field the model itself
     # marks uncertain, and the safety net cannot be bypassed by the model
-    # simply not flagging uncertainty.
+    # simply not flagging uncertainty. evidence_backed_null_fields is the
+    # same posture applied to a field the model already left null but forgot
+    # to list in uncertain_fields -- forced uncertain here rather than
+    # trusted from the model's own list.
     negated_conflicts = _detect_negated_enum_conflicts(request.message)
-    effective_uncertain = frozenset(extraction.uncertain_fields) | negated_conflicts
+    effective_uncertain = (
+        frozenset(extraction.uncertain_fields)
+        | negated_conflicts
+        | evidence_backed_null_fields
+    )
 
     def effective_value(field: OrderIntakeField) -> object:
         if field in negated_conflicts:
