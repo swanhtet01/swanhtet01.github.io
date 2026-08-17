@@ -700,6 +700,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         evidence,
         eventType,
         expectedVersion: current.version,
+        identity: managedIdentity,
         state: candidate as unknown as Record<string, unknown>,
       })
       if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the write was confirmed.')

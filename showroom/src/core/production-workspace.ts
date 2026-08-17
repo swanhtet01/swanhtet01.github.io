@@ -3327,6 +3327,7 @@ export function closeProductionJob(state: ProductionState, jobId: string, shiftR
   const latestJobEvent = state.events.find((event) => event.subjectId === jobId)
   if (!job
     || job.closure
+    || job.qualityHold
     || !Number.isSafeInteger(remainingUnits)
     || remainingUnits < 1
     || (latestJobEvent && timestampBefore(proof.capturedAt, latestJobEvent.createdAt))
@@ -3363,7 +3364,7 @@ export function recordProductionOutput(state: ProductionState, jobId: string, qu
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job || job.closure) return null
+  if (!job || job.closure || job.qualityHold) return null
   const nextOutput = job.output + quantity
   const scrap = job.scrap ?? 0
   const shiftOutput = productionShiftOutput(state, shiftRef)
@@ -3392,7 +3393,7 @@ export function recordProductionScrap(state: ProductionState, jobId: string, qua
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job || job.closure) return null
+  if (!job || job.closure || job.qualityHold) return null
   const currentScrap = job.scrap ?? 0
   const nextScrap = currentScrap + quantity
   const shiftOutput = productionShiftOutput(state, shiftRef)
@@ -3438,7 +3439,7 @@ export function recordProductionMaterialConsumption(
   if (actionIdIsUsed(state, proof.actionId) || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job || job.closure || job.output + (job.scrap ?? 0) >= job.target) return null
+  if (!job || job.closure || job.qualityHold || job.output + (job.scrap ?? 0) >= job.target) return null
   const creationEvent = state.events.find((event) => event.kind === 'job_created' && event.subjectId === jobId)
   if (creationEvent && timestampBefore(proof.capturedAt, creationEvent.createdAt)) return null
   const event = eventFor(proof, {

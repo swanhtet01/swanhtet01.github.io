@@ -748,6 +748,16 @@ test('commerceSupplierSourcingSelectedQuote, commercePurchaseBudgetCommitment, c
   assert.equal(commitment.openRequisitions, 0)
   assert.equal(commitment.activePurchaseOrders, 0)
 
+  // commercePurchaseBudgetCommitment: utilizationBasisPoints must be exact BigInt math, not
+  // float division — committedMmk=57 of ceilingMmk=100 is exactly 5700bp (plain float division
+  // yields 5699 due to imprecision).
+  const precisionEnvelope = { id: 'ENV-PRECISION', ceilingMmk: 100 }
+  const precisionState = {
+    purchaseRequisitions: [{ id: 'PR-PRECISION', budgetEnvelopeId: 'ENV-PRECISION', totalMmk: 57 }],
+    purchaseOrders: [],
+  }
+  assert.equal(commercePurchaseBudgetCommitment(precisionState, precisionEnvelope).utilizationBasisPoints, 5700)
+
   // commercePurchaseOrderProgress: seed PO has no receipt movements → open, full remaining.
   const po = seed.purchaseOrders[0]
   assert.ok(po)
@@ -1438,6 +1448,13 @@ test('advanceCommerceOrder, saveCommerceClose, commerceDailyCloseExport, and com
   assert.equal(advanceCommerceOrder(seed, 'ORD-1039', 'completed', advanceProof), null)
   // ORD-1041 is 'ready' but paymentStatus is 'pending' → cannot complete → null.
   assert.equal(advanceCommerceOrder(seed, 'ORD-1041', 'ready', advanceProof), null)
+  // Replay: same actionId, same expectedStatus, against the already-advanced state → returns
+  // the unchanged state (idempotent), not null.
+  const replayedAdvance = advanceCommerceOrder(withReady, 'ORD-1042', 'preparing', advanceProof)
+  assert.ok(replayedAdvance !== null, 'retrying a completed advancement with the same actionId must not fail')
+  assert.equal(replayedAdvance.orders.find((o) => o.id === 'ORD-1042')?.status, 'ready')
+  // A different actionId against the already-advanced order is a genuine mismatch → null.
+  assert.equal(advanceCommerceOrder(withReady, 'ORD-1042', 'preparing', { ...advanceProof, actionId: 'ACT-TEST-T028-ADV-OTHER' }), null)
 
   // saveCommerceClose: close the day using ORD-1039 (the only completed+reconciled seed order).
   const closeExp = commerceCloseExpectation(seed, seedNowIso)

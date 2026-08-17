@@ -1346,6 +1346,28 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             commerce_shop_demand_intelligence(completed_state(), "not-a-time")
 
+    def test_shop_demand_intelligence_floors_weekly_bucket_at_zero(self) -> None:
+        # The sale lands in the oldest weekly bucket (week 3); its return lands
+        # in the newest bucket (week 0), which otherwise has no gross demand
+        # to offset it. Without a floor, weekly[0] would go negative.
+        as_of = "2026-08-14T09:20:00.000Z"
+        current = completed_state("ORD-DEMAND-FLOOR")
+        current = returned_state(
+            current,
+            quantity=2,
+            action_id="ACT-RETURN-FLOOR",
+            captured_at="2026-08-13T09:20:00.000Z",
+        )
+
+        projection = commerce_shop_demand_intelligence(current, as_of)
+
+        row = projection["rows"][0]
+        self.assertEqual(row["grossDemandUnits"], 2)
+        self.assertEqual(row["returnedUnits"], 2)
+        self.assertEqual(row["netDemandUnits"], 0)
+        self.assertEqual(row["weeklyNetDemandUnits"], [0, 0, 0, 2])
+        self.assertTrue(all(bucket >= 0 for bucket in row["weeklyNetDemandUnits"]))
+
     def test_shop_procurement_decision_ranks_evidence_and_preserves_authority(self) -> None:
         current = catalog_state()
         first_order = purchase_order_record(
@@ -2294,6 +2316,18 @@ class CommerceRuntimeTests(unittest.TestCase):
                 sold_out,
                 "commerce.storefront_request.received",
                 sold_out_next,
+            )
+
+        short_stock = deepcopy(current)
+        short_stock["items"][0]["onHand"] = 1  # type: ignore[index]
+        short_stock_request = storefront_request(quantity=2)
+        short_stock_next = deepcopy(short_stock)
+        short_stock_next["storefrontRequests"] = [short_stock_request]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                short_stock,
+                "commerce.storefront_request.received",
+                short_stock_next,
             )
 
         changed_receipt = deepcopy(accepted)

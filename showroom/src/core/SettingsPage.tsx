@@ -1747,7 +1747,7 @@ export function SettingsPage() {
       }
       const request = toManagedApprovalRequest(approval)
       if (!request) throw new Error('The owner approval request packet is incomplete.')
-      const managedRecord = await createManagedApproval(request)
+      const managedRecord = await createManagedApproval(request, managedIdentity)
       setApprovals((current) => mergeManagedApprovals(current, [managedRecord]))
       setNotice('Managed owner approval request recorded. No Shop queue import, customer message, payment, delivery, stock move, or activation ran.')
     } catch (error) {

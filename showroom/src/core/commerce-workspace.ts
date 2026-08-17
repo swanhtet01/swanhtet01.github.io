@@ -5706,7 +5706,7 @@ export function commercePurchaseBudgetCommitment(state: CommerceState, envelope:
   return {
     committedMmk,
     availableMmk: envelope.ceilingMmk - committedMmk,
-    utilizationBasisPoints: Math.floor(committedMmk / envelope.ceilingMmk * 10_000),
+    utilizationBasisPoints: Number(BigInt(committedMmk) * 10_000n / BigInt(envelope.ceilingMmk)),
     openRequisitions,
     activePurchaseOrders,
   }
@@ -10513,6 +10513,16 @@ export function advanceCommerceOrder(
 ) {
   const current = validateCommerceState(state)
   const order = current.orders.find((candidate) => candidate.id === orderId)
+  if (order && proof && validProof(proof)) {
+    const advanceTargets: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
+    const replayed = (expectedStatus === 'confirmed' || expectedStatus === 'preparing')
+      ? order.status === advanceTargets[expectedStatus]
+        && order.advancementActionIds?.[order.advancementActionIds.length - 1] === proof.actionId
+      : expectedStatus === 'ready'
+        ? order.status === 'completed' && order.completion?.actionId === proof.actionId
+        : false
+    if (replayed) return current
+  }
   if (!order || order.status !== expectedStatus || order.status === 'completed' || order.status === 'cancelled') return null
   const currentStatus = order.status as 'confirmed' | 'preparing' | 'ready'
   if (order.status === 'ready' && order.paymentStatus !== 'reconciled') return null

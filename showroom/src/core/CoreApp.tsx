@@ -3908,7 +3908,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function openReturnEditor(orderId: string) {
-    if (pendingAction || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+    if (pendingAction || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
       setNotice('Finish or cancel the current Shop help action before recording a return.')
       return
     }
@@ -7233,7 +7233,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedHoldJobId = holdableJobs.some((job) => job.id === holdJobId) ? holdJobId : holdableJobs[0]?.id ?? ''
   const selectedHoldJob = holdableJobs.find((job) => job.id === selectedHoldJobId)
   const activeJobs = production.jobs
-    .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .filter((job) => !job.closure && !job.qualityHold && job.output + (job.scrap ?? 0) < job.target)
     .sort(compareProductionJobSchedule)
   const completedJobs = production.jobs.filter((job) => Boolean(job.closure) || job.output + (job.scrap ?? 0) >= job.target)
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''

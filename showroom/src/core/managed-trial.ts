@@ -3714,7 +3714,7 @@ export async function saveManagedCommerceCommand(request: {
   evidence: ManagedCommandEvidence
   eventType: ManagedCommerceEvent
   expectedVersion: number
-  identity?: ManagedIdentity
+  identity: ManagedIdentity
   state: Record<string, unknown>
 }) {
   const counterOrderIntent = request.eventType === 'commerce.order.created'
@@ -3795,7 +3795,7 @@ export async function saveManagedProductionCommand(request: {
   evidence: ManagedCommandEvidence
   eventType: ManagedProductionEvent
   expectedVersion: number
-  identity?: ManagedIdentity
+  identity: ManagedIdentity
   state: Record<string, unknown>
 }) {
   const productionJobIntent = request.eventType === 'production.job.created'
@@ -3847,18 +3847,29 @@ export async function saveManagedWebsiteCommand(request: {
   return response.result
 }
 
-export async function createManagedApproval(request: ManagedApprovalRequest) {
-  const response = await authorizedRequest<{ approval: ManagedApprovalRecord }>('/api/trial/v1/approvals', {
-    method: 'POST',
-    body: JSON.stringify(request),
-  })
+export async function createManagedApproval(request: ManagedApprovalRequest, expectedIdentity: ManagedIdentity) {
+  const response = await authorizedRequest<{ approval: ManagedApprovalRecord }>(
+    '/api/trial/v1/approvals',
+    {
+      method: 'POST',
+      body: JSON.stringify(request),
+    },
+    true,
+    expectedIdentity,
+  )
   return response.approval
 }
 
-export async function decideManagedApproval(approvalId: string, decision: ManagedApprovalDecision) {
+export async function decideManagedApproval(
+  approvalId: string,
+  decision: ManagedApprovalDecision,
+  expectedIdentity: ManagedIdentity,
+) {
   const response = await authorizedRequest<{ approval: ManagedApprovalRecord }>(
     `/api/trial/v1/approvals/${encodeURIComponent(approvalId)}/decision`,
     { method: 'POST', body: JSON.stringify(decision) },
+    true,
+    expectedIdentity,
   )
   return response.approval
 }

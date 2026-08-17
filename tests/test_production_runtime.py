@@ -25,6 +25,7 @@ from supermega_runtime.plant_order_foundation import (
     project_plant_order_cost_drivers,
     project_plant_order_financial_cost,
     record_plant_order_operation,
+    record_plant_order_output,
     release_plant_order,
     validate_plant_order_cost_review_packet,
 )
@@ -1168,6 +1169,94 @@ class ProductionRuntimeTests(unittest.TestCase):
             renewed["events"][0]["sourceDigest"],
             renewed["events"][1]["sourceDigest"],
         )
+
+    def test_shift_close_requires_controlled_orders_clear_of_inspection_and_release(
+        self,
+    ) -> None:
+        current = starting_workspace(target=20)
+        plan_evidence = action_evidence("ACT-SHIFT-GATE-001")
+        execution = planned_order_execution(current, plan_evidence, target=5)
+        availability_evidence = action_evidence("ACT-SHIFT-GATE-002", captured_at=LATER)
+        execution = check_plant_order_availability(
+            execution,
+            check_id="CHK-SHIFT-GATE-001",
+            source_digest=plant_order_evidence_digest({"availability": "observed"}),
+            materials=[{
+                "materialId": "MAT-MANAGED-001",
+                "inputLotId": "LOT-MANAGED-001",
+                "availableQuantityMilli": 5_000,
+            }],
+            work_centres=[{"workCentreId": "WC-MANAGED-001", "availableMinutes": 5}],
+            proof=availability_evidence,
+            expected_head_digest=execution["headDigest"],
+        )["state"]
+        release_evidence = action_evidence("ACT-SHIFT-GATE-003", captured_at=LATER)
+        execution = release_plant_order(
+            execution,
+            release_id="REL-SHIFT-GATE-001",
+            availability_check_id="CHK-SHIFT-GATE-001",
+            proof=release_evidence,
+            expected_head_digest=execution["headDigest"],
+        )["state"]
+        issue_evidence = action_evidence("ACT-SHIFT-GATE-004", captured_at=LATER)
+        execution = issue_plant_order_material(
+            execution,
+            issue_id="ISSUE-SHIFT-GATE-001",
+            material_id="MAT-MANAGED-001",
+            input_lot_id="LOT-MANAGED-001",
+            quantity_milli=5_000,
+            proof=issue_evidence,
+            expected_head_digest=execution["headDigest"],
+        )["state"]
+        operation_evidence = action_evidence("ACT-SHIFT-GATE-005", captured_at=LATER)
+        execution = record_plant_order_operation(
+            execution,
+            operation_run_id="OPRUN-SHIFT-GATE-001",
+            operation_id="OP-MANAGED-10",
+            quantity=5,
+            actual_minutes_milli=5_000,
+            proof=operation_evidence,
+            expected_head_digest=execution["headDigest"],
+        )["state"]
+        output_recorded_evidence = action_evidence("ACT-SHIFT-GATE-006", captured_at=LATER)
+        execution = record_plant_order_output(
+            execution,
+            output_id="OUT-SHIFT-GATE-001",
+            output_batch_id="BATCH-MANAGED-001",
+            quantity=5,
+            proof=output_recorded_evidence,
+            expected_head_digest=execution["headDigest"],
+        )["state"]
+        self.assertEqual(project_plant_order(execution)["status"], "inspection_due")
+
+        base = deepcopy(current)
+        base["orderExecution"] = execution
+        base = validate_production_state(base)
+
+        output_evidence = action_evidence("ACT-SHIFT-GATE-OUTPUT", captured_at=LATER)
+        with_output = apply_event(
+            base,
+            "production.output.recorded",
+            output_state(base, 3, output_evidence),
+            output_evidence,
+        )
+        material_evidence = action_evidence("ACT-SHIFT-GATE-MATERIAL", captured_at=LATEST)
+        traced = apply_event(
+            with_output,
+            "production.material.consumed",
+            material_state(with_output, 1.25, material_evidence),
+            material_evidence,
+        )
+
+        close_evidence = action_evidence("ACT-SHIFT-GATE-CLOSE", captured_at=LATEST)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                traced,
+                "production.shift.closed",
+                shift_closed_state(traced, close_evidence),
+                close_evidence,
+            )
+
     def test_shop_demand_job_retains_digest_bound_customer_free_source(self) -> None:
         current = starting_workspace()
         snapshot = {
