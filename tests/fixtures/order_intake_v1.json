@@ -45,7 +45,7 @@
           "customer_reference": ["မမသီတာ"],
           "channel": ["Messenger"],
           "sku": ["Classic Tee Black / M"],
-          "quantity": ["၂"],
+          "quantity": ["၂ ထည်"],
           "payment": ["KBZPay"],
           "fulfilment": ["delivery"]
         }
@@ -121,7 +121,7 @@
         "source_quotes": {
           "channel": ["Messenger"],
           "sku": ["အပြာရောင် hoodie"],
-          "quantity": ["၂"],
+          "quantity": ["၂ ထည်"],
           "payment": ["KBZPay"]
         }
       }
@@ -146,7 +146,7 @@
         "source_quotes": {
           "channel": ["Messenger"],
           "sku": ["Classic Tee"],
-          "quantity": ["၂", "၃"],
+          "quantity": ["၂ ထည်", "၃ ထည်"],
           "payment": ["KBZPay"]
         }
       }
@@ -376,7 +376,7 @@
         "source_quotes": {
           "channel": ["Phone"],
           "sku": ["Desk Lamp White"],
-          "quantity": ["20"],
+          "quantity": ["အလုံး 20"],
           "payment": ["Card"],
           "fulfilment": ["delivery"]
         }
@@ -429,7 +429,7 @@
           "customer_reference": ["Ko Aung"],
           "channel": ["Viber"],
           "sku": ["Desk Lamp"],
-          "quantity": ["1"],
+          "quantity": ["1 x"],
           "payment": ["WavePay"],
           "fulfilment": ["deliver"]
         }

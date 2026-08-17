@@ -455,5 +455,204 @@ class OrderIntakeContractTests(unittest.TestCase):
             evaluate_order_intake_results(self.corpus, private_source)
 
 
+class OrderIntakeNegationGuardTests(unittest.TestCase):
+    """The deterministic override from order-intake eval run 4: a message
+    naming two candidate values for the same enum field with a negation
+    between them can never resolve to ready_for_review, even when the model
+    itself is confident and marks nothing uncertain. This is exactly the
+    real, observed provider bug (fixture mixed-conflicting-channel-13) --
+    three prompt-only strategies failed to stop it, so these tests construct
+    the BUGGY extraction directly rather than the golden one."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.catalog = [
+            OrderIntakeCatalogItem(
+                sku="SM-1001",
+                name="Widget",
+                variant=None,
+                unit_price_mmk=1_000,
+                on_hand=10,
+            )
+        ]
+
+    def test_overconfident_model_output_is_still_forced_to_uncertain(self) -> None:
+        message = "Messenger မဟုတ်ဘူး Viber order ပါ။ SM-1001 qty 1, KBZPay."
+        # This mirrors the real run-3/run-4 provider bug exactly: the model
+        # confidently picked "viber", cited only its own one-sided quote, and
+        # flagged nothing uncertain.
+        overconfident = OrderIntakeModelExtraction(
+            scope="single_item_order",
+            customer_reference=None,
+            channel="viber",
+            sku="SM-1001",
+            quantity=1,
+            payment="kbzpay",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Viber", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="SM-1001", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="qty 1", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="KBZPay", occurrence=1)],
+                ),
+            ],
+        )
+        draft = build_order_intake_draft(
+            message=message,
+            catalog=self.catalog,
+            extraction=overconfident,
+            response_id="resp-negation-guard",
+            model="fixture-model",
+        )
+        self.assertIsNone(draft.channel)
+        self.assertIn("channel", draft.uncertain_fields)
+        self.assertIn("negated_value_conflict", draft.blockers)
+        self.assertEqual(draft.status, "needs_clarification")
+        # The model's one-sided evidence is preserved for a human reviewer,
+        # not erased -- the override changes the FINAL value, not the record
+        # of what the model claimed.
+        channel_provenance = next(
+            record for record in draft.provenance if record.field == "channel"
+        )
+        self.assertEqual(channel_provenance.source_spans[0].quote, "Viber")
+
+    def test_two_channel_mentions_without_negation_are_left_alone(self) -> None:
+        # No negation marker present -- the guard must not fire on a message
+        # that simply mentions two channel words in passing.
+        extraction = OrderIntakeModelExtraction(
+            scope="single_item_order",
+            customer_reference=None,
+            channel="viber",
+            sku="SM-1001",
+            quantity=1,
+            payment="kbzpay",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Viber", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="SM-1001", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="qty 1", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="KBZPay", occurrence=1)],
+                ),
+            ],
+        )
+        draft = build_order_intake_draft(
+            message="I used Messenger before but this order is via Viber. SM-1001 qty 1, KBZPay.",
+            catalog=self.catalog,
+            extraction=extraction,
+            response_id="resp-no-negation",
+            model="fixture-model",
+        )
+        self.assertEqual(draft.channel, "viber")
+        self.assertEqual(draft.status, "ready_for_review")
+        self.assertNotIn("negated_value_conflict", draft.blockers)
+
+    def test_single_candidate_with_unrelated_negation_is_left_alone(self) -> None:
+        # "not" appears (unrelated to channel), but only ONE channel
+        # candidate is present -- must not trigger.
+        extraction = OrderIntakeModelExtraction(
+            scope="single_item_order",
+            customer_reference=None,
+            channel="messenger",
+            sku="SM-1001",
+            quantity=1,
+            payment="kbzpay",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Messenger", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="SM-1001", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="qty 1", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="KBZPay", occurrence=1)],
+                ),
+            ],
+        )
+        draft = build_order_intake_draft(
+            message="Not sure about the price, but via Messenger. SM-1001 qty 1, KBZPay.",
+            catalog=self.catalog,
+            extraction=extraction,
+            response_id="resp-unrelated-negation",
+            model="fixture-model",
+        )
+        self.assertEqual(draft.channel, "messenger")
+        self.assertEqual(draft.status, "ready_for_review")
+        self.assertNotIn("negated_value_conflict", draft.blockers)
+
+    def test_cash_on_delivery_does_not_double_count_as_two_payment_candidates(self) -> None:
+        # "cash on delivery" alone must count as ONE candidate (cash_on_delivery),
+        # not two ("cash" + "cash_on_delivery"), even with a negation present.
+        extraction = OrderIntakeModelExtraction(
+            scope="single_item_order",
+            customer_reference=None,
+            channel="messenger",
+            sku="SM-1001",
+            quantity=1,
+            payment="cash_on_delivery",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Messenger", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="SM-1001", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="qty 1", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="cash on delivery", occurrence=1)],
+                ),
+            ],
+        )
+        draft = build_order_intake_draft(
+            message="Not sure yet, but pay cash on delivery via Messenger. SM-1001 qty 1.",
+            catalog=self.catalog,
+            extraction=extraction,
+            response_id="resp-cod",
+            model="fixture-model",
+        )
+        self.assertEqual(draft.payment, "cash_on_delivery")
+        self.assertNotIn("negated_value_conflict", draft.blockers)
+
+
 if __name__ == "__main__":
     unittest.main()

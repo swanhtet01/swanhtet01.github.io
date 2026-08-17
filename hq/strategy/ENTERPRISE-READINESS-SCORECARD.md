@@ -8,6 +8,17 @@ Rule: every grade cites a repo file. Companion: ERP-COMPETITIVE-ROADMAP.md sec 3
 (the enterprise checklist), AI-NATIVE-ARCHITECTURE.md (stages and triggers),
 hq/readiness/managed-pilot-readiness.json (gate ledger, 4 blocking).
 
+**Freshness note, 2026-08-17 (tech lead):** this scorecard predates a full day
+of subsequent work and should not be quoted as current without checking the
+newer sources first: `PRODUCT-CATALOG-AND-PRICING.md` (code-grounded, dated
+2026-08-17), `hq/readiness/managed-pilot-readiness.json` (gate ledger now 2
+blocking, not 4 — self-serve remediation #419 and its release #420 are both
+merged), and `BILLING-RAIL-DESIGN.md` (Gate 9's successor — the billing data
+model, RLS, and founder-action methods are now built and tested; only the
+operational entrypoint is missing, not the whole rail). Grades below are not
+re-derived; treat any grade touching security, auditability, or the managed
+pilot as a floor, not a current reading, until a full re-grade pass is done.
+
 Grading key: A = provable today against an enterprise buyer's checklist.
 C = built or designed but not activated. F = absent with no plan.
 

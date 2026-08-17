@@ -16,9 +16,9 @@ const branchPattern = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
 // an isolated branch (hq/readiness/self-serve-pilot-proof.json), fingerprint-
 // pinned in verify_private_trial_migrations.mjs. The packet describes the full
 // reviewed chain; applying it to production remains a separate founder decision.
-const expectedSchemaVersion = 12
-const expectedMigrationCount = 13
-const expectedFinalMigration = '20260817090000_private_trial_backend_v12_billing_rail.sql'
+const expectedSchemaVersion = 13
+const expectedMigrationCount = 14
+const expectedFinalMigration = '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql'
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
 

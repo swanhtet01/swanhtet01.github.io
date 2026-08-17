@@ -8,6 +8,7 @@ ephemeral draft that still requires the existing human order confirmation.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Literal
@@ -47,6 +48,7 @@ OrderIntakeBlocker = Literal[
     "uncertain_fields",
     "unknown_sku",
     "insufficient_stock",
+    "negated_value_conflict",
 ]
 
 _FIELD_ORDER: tuple[OrderIntakeField, ...] = (
@@ -63,6 +65,58 @@ _REQUIRED_ORDER_FIELDS: tuple[OrderIntakeField, ...] = (
     "quantity",
     "payment",
 )
+
+# Deterministic post-model safety net (order-intake eval run 4, fixture
+# mixed-conflicting-channel-13). Three independently-designed prompt
+# strategies each failed to stop the model from confidently resolving a
+# message that names TWO candidate values for the same enum field with an
+# explicit negation between them -- e.g. "Messenger မဟုတ်ဘူး Viber order"
+# ("not Messenger, [it's a] Viber order"). Prompting alone cannot be trusted
+# for this pattern, so the server detects it directly from the raw message,
+# independent of whatever the model claims, and forces the field to
+# uncertain regardless of the model's confidence. This is intentionally
+# narrow: it fires only when TWO OR MORE distinct candidate values for the
+# SAME field are literally present in the message AND a negation marker
+# appears anywhere in it -- a message that merely mentions two channels
+# without any negation is left to the model and the existing conflict rule.
+_NEGATION_MARKERS: tuple[str, ...] = (
+    "not",
+    "n't",
+    "instead of",
+    "မဟုတ်",  # Burmese negation root; covers မဟုတ်ဘူး, မဟုတ်ပါ, and other suffixed forms
+)
+_ENUM_FIELD_CANDIDATE_PATTERNS: dict[
+    Literal["channel", "payment", "fulfilment"], tuple[re.Pattern[str], ...]
+] = {
+    "channel": (
+        re.compile(r"\bmessenger\b", re.IGNORECASE),
+        re.compile(r"\bviber\b", re.IGNORECASE),
+        re.compile(r"\bphone\b", re.IGNORECASE),
+        re.compile(r"\bwebsite\b", re.IGNORECASE),
+        re.compile(r"\bwalk[\s-]?in\b", re.IGNORECASE),
+    ),
+    "payment": (
+        re.compile(r"\bkbzpay\b", re.IGNORECASE),
+        re.compile(r"\bwavepay\b", re.IGNORECASE),
+        re.compile(r"\bcash\s+on\s+delivery\b|\bcod\b", re.IGNORECASE),
+        re.compile(r"\bcash\b(?!\s+on\s+delivery)", re.IGNORECASE),
+        re.compile(r"\bcard\b", re.IGNORECASE),
+    ),
+    "fulfilment": (
+        re.compile(r"\bdelivery\b", re.IGNORECASE),
+        re.compile(r"\bpickup\b", re.IGNORECASE),
+    ),
+}
+
+
+def _detect_negated_enum_conflicts(message: str) -> frozenset[OrderIntakeField]:
+    if not any(marker in message.lower() for marker in _NEGATION_MARKERS):
+        return frozenset()
+    conflicted: set[OrderIntakeField] = set()
+    for field, patterns in _ENUM_FIELD_CANDIDATE_PATTERNS.items():
+        if sum(1 for pattern in patterns if pattern.search(message)) >= 2:
+            conflicted.add(field)
+    return frozenset(conflicted)
 
 
 class OrderIntakeContractError(ValueError):
@@ -294,15 +348,30 @@ def build_order_intake_draft(
         raise OrderIntakeContractError("catalog SKUs must be unique")
     provenance = _resolve_provenance(request.message, extraction)
 
+    # Deterministic override, independent of what the model claimed: a field
+    # caught by _detect_negated_enum_conflicts is never trusted, even if the
+    # model marked it certain. The model's own (possibly one-sided) evidence
+    # stays in `provenance` for a human reviewer; the field's VALUE in the
+    # draft is forced to null exactly like any other field the model itself
+    # marks uncertain, and the safety net cannot be bypassed by the model
+    # simply not flagging uncertainty.
+    negated_conflicts = _detect_negated_enum_conflicts(request.message)
+    effective_uncertain = frozenset(extraction.uncertain_fields) | negated_conflicts
+
+    def effective_value(field: OrderIntakeField) -> object:
+        if field in negated_conflicts:
+            return None
+        return _field_value(extraction, field)
+
+    effective_sku = effective_value("sku")
     catalog_item = next(
-        (item for item in catalog if item.sku == extraction.sku),
+        (item for item in catalog if item.sku == effective_sku),
         None,
     )
     missing_fields = [
-        field
-        for field in _REQUIRED_ORDER_FIELDS
-        if _field_value(extraction, field) is None
+        field for field in _REQUIRED_ORDER_FIELDS if effective_value(field) is None
     ]
+    effective_quantity = effective_value("quantity")
     blockers: list[OrderIntakeBlocker] = []
     if extraction.scope == "not_an_order":
         _append_unique(blockers, "not_an_order")
@@ -312,20 +381,22 @@ def build_order_intake_draft(
         _append_unique(blockers, "ambiguous_order")
     if missing_fields:
         _append_unique(blockers, "incomplete_required_fields")
-    if extraction.uncertain_fields:
+    if effective_uncertain:
         _append_unique(blockers, "uncertain_fields")
-    if extraction.sku is not None and catalog_item is None:
+    if negated_conflicts:
+        _append_unique(blockers, "negated_value_conflict")
+    if effective_sku is not None and catalog_item is None:
         _append_unique(blockers, "unknown_sku")
     if (
         catalog_item is not None
-        and extraction.quantity is not None
-        and extraction.quantity > catalog_item.on_hand
+        and effective_quantity is not None
+        and effective_quantity > catalog_item.on_hand
     ):
         _append_unique(blockers, "insufficient_stock")
 
     total_mmk = (
-        catalog_item.unit_price_mmk * extraction.quantity
-        if catalog_item is not None and extraction.quantity is not None
+        catalog_item.unit_price_mmk * effective_quantity
+        if catalog_item is not None and effective_quantity is not None
         else None
     )
     ready = extraction.scope == "single_item_order" and not blockers
@@ -343,17 +414,17 @@ def build_order_intake_draft(
         ),
         status="ready_for_review" if ready else "needs_clarification",
         scope=extraction.scope,
-        customer_reference=extraction.customer_reference,
-        channel=extraction.channel,
-        sku=extraction.sku,
-        quantity=extraction.quantity,
-        payment=extraction.payment,
-        fulfilment=extraction.fulfilment,
+        customer_reference=effective_value("customer_reference"),
+        channel=effective_value("channel"),
+        sku=effective_sku,
+        quantity=effective_quantity,
+        payment=effective_value("payment"),
+        fulfilment=effective_value("fulfilment"),
         catalog_item=catalog_item,
         total_mmk=total_mmk,
         missing_fields=missing_fields,
         uncertain_fields=[
-            field for field in _FIELD_ORDER if field in extraction.uncertain_fields
+            field for field in _FIELD_ORDER if field in effective_uncertain
         ],
         blockers=blockers,
         provenance=provenance,

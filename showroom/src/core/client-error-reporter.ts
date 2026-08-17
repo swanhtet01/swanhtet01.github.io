@@ -146,7 +146,13 @@ let reportsSent = 0
 const reportedKeys = new Set<string>()
 const sessionReports: ClientErrorEvent[] = []
 
-function report(candidate: unknown, fallbackMessage: string): void {
+// Exported so RouteErrorBoundary can report a caught render crash directly.
+// React's componentDidCatch does NOT propagate to window.onerror or
+// unhandledrejection, so the two listeners below never see a route crash on
+// their own -- calling report() from the boundary is the only way that class
+// of failure (the stale-deploy chunk load this reporter exists for) ever
+// reaches the beacon. Same dedupe/rate-limit/fail-open guarantees either way.
+export function report(candidate: unknown, fallbackMessage: string): void {
   try {
     if (reportsSent >= MAX_REPORTS_PER_SESSION) return
     const errorClass = classifyError(candidate, fallbackMessage)
