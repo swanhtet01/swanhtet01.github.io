@@ -51,7 +51,7 @@ unlocks nothing does not close Gate 9.
 | D3 | **Currency posture.** | Recommend v1 = MMK, integer amounts, exponent 0. The contract stays parameterized (currency + exponent per invoice) so a USD design-partner deal remains possible — but mixing is your call. |
 | D4 | **Tax posture.** | Recommend `tax.decided: false` on every v1 invoice and no tax-invoice claims of any kind until you decide otherwise (claims boundary: nothing implies compliance). |
 | D5 | **Entitlement lapse policy.** | Recommend NO automatic expiry in v1: you review monthly and revoke manually. Auto-expiry is an automated entitlement change — it would breach the founder-gated rule, so it is out unless you explicitly delegate it later. |
-| D6 | **Apply the entitlement-read migration.** | `supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql` is written, reviewed, and locally verified (`node tools/verify_private_trial_migrations.mjs` green) — exactly the DEVIATION this document called out: one narrow, GUC-scoped, read-only SELECT policy on `billing_entitlements` for the runtime role, nothing on `billing_invoices`/`billing_events`. Not yet proven on a hosted branch and not applied anywhere. Recommend: prove it on a disposable branch (same protocol as v11) before it rides the production runbook alongside v12 — this is the migration that makes `premiumUnlocked` actually resolve true for a granted workspace instead of staying fail-closed dark. |
+| D6 | **Apply the entitlement-read migration.** | `supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql` is written, reviewed, locally verified (`node tools/verify_private_trial_migrations.mjs` green), and now **proven on a disposable hosted Supabase Postgres 17 branch** (full v1-v13 chain replayed from scratch; evidence sealed to `hq/readiness/billing-entitlement-read-proof.json`; branch deleted). Own-workspace SELECT succeeds, cross-workspace SELECT returns nothing even when directly queried, INSERT/UPDATE/DELETE are all denied to the runtime role, and `billing_invoices`/`billing_events` stay completely dark — exactly the DEVIATION this document called out. Still **not applied to production**: that is the founder's own `PRODUCTION-ACTIVATION-RUNBOOK.md` action, alongside v12, whenever you choose. This is the migration that makes `premiumUnlocked` actually resolve true for a granted workspace instead of staying fail-closed dark. |
 
 ---
 
@@ -266,7 +266,7 @@ Why the surface route is wrong here, concretely:
 | Item | Size | Status |
 | --- | --- | --- |
 | Migration `..._private_trial_backend_v12_billing_rail.sql` (3 tables, triggers, RLS, version guard) | 1 migration, v6-shaped; registered in `tools/verify_private_trial_migrations.mjs` | **Built.** |
-| Migration `..._v13_billing_entitlement_read.sql` — the narrow GUC-scoped SELECT-only read this doc's DEVIATION named | 1 small migration | **Built, reviewed, locally verified. Not yet proven on a hosted branch or applied anywhere** (decision D6). |
+| Migration `..._v13_billing_entitlement_read.sql` — the narrow GUC-scoped SELECT-only read this doc's DEVIATION named | 1 small migration | **Built, reviewed, locally verified, and proven on a disposable hosted branch** (`hq/readiness/billing-entitlement-read-proof.json`). Not yet applied to production — a separate founder runbook action (decision D6). |
 | `supermega_runtime/billing_rail.py` — `BillingLedger` in the provisioner style: `issue_invoice`, `confirm_payment`, `void_invoice`, `grant_entitlement`, `revoke_entitlement`, `record_refund`, `get_billing_state` | ~7 methods, direct SQL, idempotent replay, evidence validation | **Built.** |
 | **Founder CLI entrypoint** — `python -m supermega_runtime.billing_rail <subcommand>`, one per `BillingLedger` method plus `status`. Database URL and evidence always read from files, never CLI args (so nothing touches shell history); every mutating subcommand requires `--confirm-billing-action "CONFIRM BILLING ACTION"` (checked BEFORE the database URL file is even read); structured JSON stdout; two-tier exception handling that never leaks driver/provider detail (verified: a raise carrying an IP, port, and password never surfaces in the output). Mirrors `managed_activation.py`'s CLI shape exactly. | This was the one missing piece named throughout this document | **Built and tested** (26 tests in `test_billing_rail.py`, incl. 5 CLI-level tests). **This is the actual operational entrypoint — a founder can now run a real billing transition against a real database, gated by the confirmation phrase and the evidence the CLI requires.** |
 | Trial-store read-path touch: entitlement in the workspace/session payload | one query + one field | **Built** (`premiumUnlocked` on `TrialReadiness`, fail-closed dark pending v13's application). |
@@ -274,10 +274,11 @@ Why the surface route is wrong here, concretely:
 | Showroom plumbing: pass server-supplied `premiumUnlocked` into `currentCapabilityTier` | small; `capability-tiers.ts` itself untouched | **Not yet done** — the only remaining wiring item, and it has no effect until v13 is applied and a real entitlement is granted, so it is not urgent. |
 | Tests: python suite for `billing_rail` + CLI, migration verifier | the usual | **Built** (26 unit tests, 23-check migration verifier). |
 
-**What remains before a real invoice can be issued against production:** (1) prove v13 on a
-disposable hosted branch and apply it (same protocol as v11), (2) the founder's five pricing
-decisions D1-D5, (3) the small showroom plumbing item above. The CLI itself, and everything
-it depends on, is done.
+**What remains before a real invoice can be issued against production:** (1) apply v12 and v13
+to production via `PRODUCTION-ACTIVATION-RUNBOOK.md` (v13's hosted proof is now done — see
+`hq/readiness/billing-entitlement-read-proof.json`), (2) the founder's five pricing decisions
+D1-D5, (3) the small showroom plumbing item above. The CLI itself, and everything it depends
+on, is done.
 
 ---
 
