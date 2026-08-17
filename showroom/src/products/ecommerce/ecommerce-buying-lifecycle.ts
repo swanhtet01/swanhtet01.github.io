@@ -1622,6 +1622,9 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   if (new Set([...amendmentIntents, ...rescheduleIntents].map((intent) => intent.orderId)).size !== amendmentIntents.length + rescheduleIntents.length) {
     throw new Error('Only one replacement workflow may exist for an Ecommerce order.')
   }
+  if (new Set([...cancellationIntents, ...amendmentIntents, ...rescheduleIntents].map((intent) => intent.orderId)).size !== cancellationIntents.length + amendmentIntents.length + rescheduleIntents.length) {
+    throw new Error('A cancellation request and a replacement workflow may not both exist for an Ecommerce order.')
+  }
   for (const intent of rescheduleIntents) {
     const sourceRequest = requestById.get(intent.sourceRequestId)
     const replacementRequest = requestById.get(intent.replacementRequestId)

@@ -465,6 +465,22 @@ export function useStoredState<T>(key: string, seed: T, normalize?: (value: T) =
     }
   }, [key, normalizedState, persist])
 
+  useEffect(() => {
+    function refreshFromStorage(event: StorageEvent) {
+      if (event.key !== key) return
+      try {
+        const stored = window.localStorage.getItem(key)
+        if (!stored) return
+        const value = JSON.parse(stored) as T
+        setState(normalize ? normalize(value) : value)
+      } catch {
+        // Ignore a malformed payload written by another tab.
+      }
+    }
+    window.addEventListener('storage', refreshFromStorage)
+    return () => window.removeEventListener('storage', refreshFromStorage)
+  }, [key, normalize])
+
   return [normalizedState, setState] as const
 }
 

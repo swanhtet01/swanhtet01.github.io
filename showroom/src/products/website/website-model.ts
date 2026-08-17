@@ -807,6 +807,7 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
   const uniqueSlugs = new Set(normalizedSlugs)
   const readyPaths = new Set(normalizedSlugs)
   const readyAnchors = new Set(normalizedSlugs.map(pageAnchorForSlug))
+  const anchorCollision = findAnchorCollision(normalizedSlugs)
   const visibleNavigation = workspace.pages.filter((page) => page.navigation.visible)
   const completePages = readyPages.filter((page) => pageIssues(page).length === 0)
   const destinationsAreSafe = readyPages.every((page) => {
@@ -849,6 +850,14 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
       label: 'Ready page paths are unique',
       detail: String(uniqueSlugs.size) + ' unique paths across ' + String(readyPages.length) + ' ready pages.',
       passed: uniqueSlugs.size === readyPages.length,
+    },
+    {
+      id: 'unique-anchors',
+      label: 'Ready page anchors do not collide',
+      detail: anchorCollision
+        ? 'Paths ' + anchorCollision[0] + ' and ' + anchorCollision[1] + ' both flatten to the same on-page anchor. Rename one path so their anchors differ.'
+        : String(readyAnchors.size) + ' unique anchors across ' + String(readyPages.length) + ' ready pages.',
+      passed: !anchorCollision,
     },
     {
       id: 'navigation',
@@ -1065,7 +1074,7 @@ export async function mutateWebsiteWorkspace(
       const loaded = loadWebsiteWorkspace(storage)
       if (!loaded.ok) return loaded
       if (loaded.workspace.revision !== expectedRevision
-        && loaded.workspace.contentRevision !== expectedContentRevision) {
+        || loaded.workspace.contentRevision !== expectedContentRevision) {
         return { ok: false, error: 'Website content changed in another tab. The current record was preserved; review the refreshed content revision.' }
       }
       const transitioned = applyWebsiteWorkspaceUpdate(loaded.workspace, update)
@@ -1390,6 +1399,21 @@ function pageAnchorForSlug(value: string) {
   return normalized === '/' ? 'home' : normalized.slice(1).replaceAll('/', '-')
 }
 
+// Distinct slugs (e.g. /checkout-info and /checkout/info) can flatten to the
+// same anchor id via pageAnchorForSlug. Callers that only build a Set of
+// anchors silently coalesce that collision; this walks the slugs in order and
+// reports the first pair that collides so validation can name both of them.
+function findAnchorCollision(slugs: string[]): [string, string] | null {
+  const anchorToSlug = new Map<string, string>()
+  for (const slug of slugs) {
+    const anchor = pageAnchorForSlug(slug)
+    const existingSlug = anchorToSlug.get(anchor)
+    if (existingSlug !== undefined && existingSlug !== slug) return [existingSlug, slug]
+    anchorToSlug.set(anchor, slug)
+  }
+  return null
+}
+
 export function formatTimestamp(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Unknown time'
@@ -1707,6 +1731,7 @@ function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
   if (contentDigest !== 'site-' + canonicalDigest(content)) return false
   const slugs = value.pages.map((page) => page.slug)
   if (!hasUniqueStrings(slugs) || slugs.filter((slug) => slug === '/').length !== 1) return false
+  if (findAnchorCollision(slugs)) return false
   const readyPaths = new Set(slugs)
   const readyAnchors = new Set(slugs.map(pageAnchorForSlug))
   return value.pages

@@ -2872,8 +2872,8 @@ if (!localWorkspaceBackupSource.includes("LOCAL_WORKSPACE_BACKUP_CONTRACT = 'sup
   || !localWorkspaceStorageSource.includes('export function listLocalWorkspaceStorageKeys(')
   || !localWorkspaceBackupSource.includes('export function restoreLocalWorkspaceBackupFromEvidence(')
   || !localWorkspaceBackupSource.includes("evidence.version !== 24")
-  || !localWorkspaceBackupSource.includes('export function applyLocalWorkspaceBackup(')
-  || !localWorkspaceBackupSource.includes('Object.entries(previous.records).forEach')
+  || !localWorkspaceBackupSource.includes('export async function applyLocalWorkspaceBackup(')
+  || !localWorkspaceBackupSource.includes('for (const [key, raw] of Object.entries(previous.records))')
   || !settingsPageSource.includes('localWorkspaceBackup, behaviorTrail')
   || !settingsPageSource.includes("version: 24, exportedAt")
   || !settingsPageSource.includes('Save restore point')
@@ -11079,6 +11079,38 @@ async function verifyWebsiteRuntime() {
     assert(firstContentEdit.ok && !staleContentEdit.ok && afterContentRace.ok && afterContentRace.workspace.siteName === 'First tab edit', 'website_stale_content_edit_overwrote_current_state')
     assert(afterContentRace.ok && model.getCurrentApproval(afterContentRace.workspace) === null && model.getCurrentPublish(afterContentRace.workspace) === null, 'website_content_change_did_not_stale_release')
 
+    // Regression: a consequential action (evidence/approval/publish) always bumps revision but only
+    // bumps contentRevision when siteName/pages actually changed. A second tab holding the pre-action
+    // revision with a still-matching contentRevision must be told about the conflict -- reporting it
+    // requires EITHER counter to have diverged, not both, or the guard silently proceeds on stale state.
+    const guardValues = new Map(values)
+    const guardStorage = { getItem: (key) => guardValues.get(key) ?? null, setItem: (key, value) => guardValues.set(key, String(value)), removeItem: (key) => guardValues.delete(key) }
+    const beforeGuardRace = afterContentRace.workspace
+    const revisionOnlyAdvance = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, {
+        actionId: 'evidence-revision-only-runtime',
+        capturedAt: at(2500),
+        kind: 'content',
+        finding: 'Copy reviewed again after the content race',
+        reference: 'CONTENT-REVIEW-2',
+        verifiedBy: 'OP-OWNER',
+      }),
+      beforeGuardRace.revision,
+      beforeGuardRace.contentRevision,
+      guardStorage,
+      locks,
+    )
+    assert(revisionOnlyAdvance.ok && revisionOnlyAdvance.workspace.revision === beforeGuardRace.revision + 1 && revisionOnlyAdvance.workspace.contentRevision === beforeGuardRace.contentRevision, 'website_evidence_did_not_advance_revision_alone')
+    const revisionOnlyRaw = guardValues.get(model.WEBSITE_STORAGE_KEY)
+    const staleTabRetry = await model.mutateWebsiteWorkspace(
+      (current) => ({ ...current, selectedPageId: 'page-products' }),
+      beforeGuardRace.revision,
+      beforeGuardRace.contentRevision,
+      guardStorage,
+      locks,
+    )
+    assert(!staleTabRetry.ok && guardValues.get(model.WEBSITE_STORAGE_KEY) === revisionOnlyRaw, 'website_stale_revision_matching_content_revision_silently_proceeded')
+
     const beforeFailure = values.get(model.WEBSITE_STORAGE_KEY)
     const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
     const failedWrite = await model.mutateWebsiteWorkspace(
@@ -11193,11 +11225,11 @@ async function verifyWebsiteOrderCompletionRuntime() {
       sku: 'SM-CARE-01',
       quantity: 1,
     })
-    const pending = handoffContract.writeWebsiteEcommerceHandoff(pendingHandoff, workspace)
+    const pending = await handoffContract.writeWebsiteEcommerceHandoff(pendingHandoff, workspace)
     assert(pending?.schema === 'website_ecommerce_handoff_store.v1' && pending.audit.length === 0 && !pending.draft && !pending.order, 'runtime_v1_pending_invalid')
-    const accepted = handoffContract.acceptWebsiteEcommerceHandoff(pendingHandoff.id, 'OP-OWNER')
+    const accepted = await handoffContract.acceptWebsiteEcommerceHandoff(pendingHandoff.id, 'OP-OWNER')
     assert(accepted?.schema === 'website_ecommerce_handoff_store.v1' && accepted.audit.length === 1 && !accepted.draft && !accepted.order, 'runtime_v1_acceptance_invalid')
-    const drafted = handoffContract.createWebsiteOrderDraft(pendingHandoff.id, {
+    const drafted = await handoffContract.createWebsiteOrderDraft(pendingHandoff.id, {
       sku: 'SM-CARE-01',
       itemName: 'Family care set',
       variant: 'Standard bundle',
@@ -11222,7 +11254,7 @@ async function verifyWebsiteOrderCompletionRuntime() {
     assert(exactRetry?.order?.id === completed.order.id && localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY) === v3Raw && exactRetry.audit.length === 2, 'runtime_exact_retry_not_idempotent')
     const conflictingRetry = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, { ...input, paymentMethod: 'manual_bank_transfer' })
     assert(conflictingRetry === null && localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY) === v3Raw, 'runtime_conflicting_retry_overwrote_record')
-    assert(lockRequests === 3, 'runtime_completion_lock_missing')
+    assert(lockRequests === 6, 'runtime_completion_lock_missing')
 
     localStorage.setItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY, v2Raw)
     const changedSource = websiteModel.applyWebsiteWorkspaceUpdate(workspace, (current) => ({ ...current, siteName: 'Changed Website source' }))
@@ -19428,7 +19460,7 @@ try {
   if (recoverableRows.some(([key]) => recoveryTarget.getItem(key) !== null)
     || recoveryTarget.getItem('supermega.auth.session.v1') !== 'auth-kept'
     || recoveryTarget.getItem('unrelated.browser.state') !== 'unrelated-kept') fail('local_workspace_reset_boundary_invalid')
-  localBackup.applyLocalWorkspaceBackup(recoveryTarget, recoveryPoint)
+  await localBackup.applyLocalWorkspaceBackup(recoveryTarget, recoveryPoint)
   if (recoverableRows.some(([key, value]) => recoveryTarget.getItem(key) !== value)
     || recoveryTarget.getItem('supermega.auth.session.v1') !== 'auth-kept'
     || recoveryTarget.getItem('unrelated.browser.state') !== 'unrelated-kept') fail('local_workspace_restore_round_trip_invalid')

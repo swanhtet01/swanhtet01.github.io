@@ -35,9 +35,6 @@ const CACHE_TTL_MS = Number(process.env.SUPERMEGA_AI_CACHE_TTL_MS || 3_600_000) 
 const SPEND_RESERVATION_TTL_MS = Math.max(60_000, Number(process.env.SUPERMEGA_SPEND_RESERVATION_TTL_MS) || 900_000)
 const MAX_PROVIDER_REQUEST_BYTES = Math.min(262_144, Math.max(4_096, Number(process.env.SUPERMEGA_MAX_PROVIDER_REQUEST_BYTES) || 131_072))
 const PROVIDER_FRAMING_TOKEN_ALLOWANCE = 4_096
-const REQUIRE_DURABLE_SPEND = process.env.SUPERMEGA_REQUIRE_DURABLE_SPEND === undefined
-  ? process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL)
-  : String(process.env.SUPERMEGA_REQUIRE_DURABLE_SPEND) === '1'
 const RESPONSE_CACHE_PREFIX = 'ai-response:v2:'
 const RESPONSE_CACHE_POLICY_VERSION = 'gateway-policy:v1'
 const RESERVED_CONTROL_CACHE_PREFIXES = [
@@ -530,7 +527,7 @@ async function reserveSpend({ reservationId, dispatchToken, context, clientId, w
     error.reason = result?.reason || 'reservation_rejected'
     throw error
   }
-  if (REQUIRE_DURABLE_SPEND && !result.durable) {
+  if (hostedRuntime() && !result.durable) {
     await releaseSpendReservation(reservation)
     const error = new Error('gateway_durable_spend_required')
     error.clientId = clientId

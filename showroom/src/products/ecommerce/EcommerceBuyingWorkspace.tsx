@@ -665,7 +665,8 @@ export function EcommerceBuyingWorkspace({
       return
     }
     if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)
-      || activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)) {
+      || activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)
+      || activeBuyingState.cancellationIntents.some((intent) => intent.orderId === order.id)) {
       setNotice('This order already has one recoverable change request.')
       return
     }
@@ -1424,7 +1425,7 @@ export function EcommerceBuyingWorkspace({
             <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
             <div className="ecommerce-return-actions">
               {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openRescheduleRequest(entry)} type="button">Change time</button> : null}
-              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change details</button> : null}
+              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change details</button> : null}
               {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
             </div>
           </article>) : null}

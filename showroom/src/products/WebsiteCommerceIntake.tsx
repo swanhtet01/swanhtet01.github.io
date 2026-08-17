@@ -69,11 +69,11 @@ function matchingCatalogItem(context: WebsiteEcommerceHandoffContext, catalog: W
   return matches.length === 1 ? matches[0] : null
 }
 
-function createDraftFromAcceptedIntake(context: WebsiteEcommerceHandoffContext, catalog: WebsiteCommerceCatalogItem[]) {
+async function createDraftFromAcceptedIntake(context: WebsiteEcommerceHandoffContext, catalog: WebsiteCommerceCatalogItem[]) {
   if (context.handoff.state !== 'accepted' || context.draft) return context
   const item = matchingCatalogItem(context, catalog)
   if (!item) return null
-  return createWebsiteOrderDraft(context.handoff.id, {
+  return await createWebsiteOrderDraft(context.handoff.id, {
     sku: item.sku,
     itemName: item.name,
     variant: item.variant || 'Standard',
@@ -121,17 +121,17 @@ export function WebsiteCommerceIntake({
       : `${pendingManaged.id} was not queued. Resolve the Shop notice, then retry.`)
   }
 
-  function acceptIntake(event: FormEvent<HTMLFormElement>) {
+  async function acceptIntake(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (disabled || !context || context.handoff.state !== 'pending_acceptance' || !operatorPattern.test(operatorId) || !confirmed || !item) return
 
-    const accepted = acceptWebsiteEcommerceHandoff(context.handoff.id, operatorId)
+    const accepted = await acceptWebsiteEcommerceHandoff(context.handoff.id, operatorId)
     if (!accepted) {
       setNotice('The Website evidence could not be revalidated. Nothing changed.')
       return
     }
 
-    const drafted = createDraftFromAcceptedIntake(accepted, catalog)
+    const drafted = await createDraftFromAcceptedIntake(accepted, catalog)
     setContext(drafted ?? accepted)
     setConfirmed(false)
     setNotice(drafted?.draft
@@ -139,9 +139,9 @@ export function WebsiteCommerceIntake({
       : 'The intake was accepted, but its current catalogue record could not create a draft.')
   }
 
-  function prepareDraft() {
+  async function prepareDraft() {
     if (disabled || !context || context.handoff.state !== 'accepted') return
-    const drafted = createDraftFromAcceptedIntake(context, catalog)
+    const drafted = await createDraftFromAcceptedIntake(context, catalog)
     if (!drafted?.draft) {
       setNotice('Draft creation failed closed. Recheck the Website evidence and matching inventory item.')
       return

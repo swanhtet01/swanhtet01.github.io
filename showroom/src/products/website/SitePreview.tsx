@@ -1,4 +1,4 @@
-import { type PreviewDevice, type WebsitePage } from './website-model'
+import { normalizeSlug, type PreviewDevice, type WebsitePage } from './website-model'
 
 type SitePreviewProps = {
   device: PreviewDevice
@@ -11,7 +11,7 @@ type SitePreviewProps = {
 export function SitePreview({ device, page, pages, siteName, onSelectPage }: SitePreviewProps) {
   const visiblePages = pages.filter((candidate) => candidate.navigation.visible)
   const ctaHref = page.hero.ctaHref.trim()
-  const ctaPage = pages.find((candidate) => candidate.slug === ctaHref)
+  const ctaPage = pages.find((candidate) => candidate.slug === normalizeSlug(ctaHref))
   const safeStandaloneCta = ctaHref.startsWith('https://') || ctaHref.startsWith('#') ? ctaHref : ''
 
   return (

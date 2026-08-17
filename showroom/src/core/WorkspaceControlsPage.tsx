@@ -381,11 +381,11 @@ export function WorkspaceControlsPage() {
     }
   }
 
-  function restoreWorkspace() {
+  async function restoreWorkspace() {
     if (!restorePoint || restoreBusy) return
     setRestoreBusy(true)
     try {
-      applyLocalWorkspaceBackup(window.localStorage, restorePoint)
+      await applyLocalWorkspaceBackup(window.localStorage, restorePoint)
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       window.location.assign('/')
     } catch (error) {

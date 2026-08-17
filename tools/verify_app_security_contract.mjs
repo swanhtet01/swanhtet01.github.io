@@ -747,7 +747,7 @@ requireContract('free company backup is encrypted, bounded, customer-owned, excl
   && /MAX_RECORDS/.test(companyBackupClient)
   && /authRecordsIncluded: false/.test(companyBackupClient)
   && /managedWorkspaceRecordsIncluded: false/.test(companyBackupClient)
-  && /restoreValues\(storage, previous\)/.test(companyBackupClient)
+  && /restoreValues\(storage, previous,/.test(companyBackupClient)
   && /valuesMatch\(storage, previous\)/.test(companyBackupClient)
   && /previous company state was restored/.test(companyBackupClient)
   && !/fetch\s*\(/.test(companyBackupClient)
