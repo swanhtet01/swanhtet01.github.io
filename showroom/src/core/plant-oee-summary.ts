@@ -32,7 +32,10 @@ export function projectPlantOeeSummary(production: ProductionState, asOf: string
     const entry = byLine[job.line] ?? { total: 0, closed: 0, onHold: 0, target: 0, scrap: 0 }
     entry.total += 1
 
-    const isClosed = !!job.closure
+    // closeProductionJob() only ever sets job.closure for a short close (remainingUnits >= 1);
+    // a job that hits its full target has no closure and must be treated as finished here too,
+    // matching CoreApp.tsx's own completedJobs definition, or quality rate silently reads 0/stuck.
+    const isClosed = !!job.closure || job.output + (job.scrap ?? 0) >= job.target
     const isOnHold = !isClosed && !!job.qualityHold
 
     if (isClosed) {

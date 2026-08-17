@@ -221,4 +221,30 @@ function makeHold(heldAt = '2026-08-10T09:00:00.000Z') {
   check(r.byLine['Line A']?.onHold === 1, 'byLine onHold count correct')
 }
 
+// 23. Job that hits its full target with no formal closure counts as closed, not open
+// (closeProductionJob() rejects remainingUnits < 1, so a job that hits target exactly
+// can never receive a .closure — it must still count as finished for OEE to be meaningful)
+{
+  const r = projectPlantOeeSummary(makeProduction([makeJob('J-001', 'Line A', 100, 100)]), AS_OF)
+  check(r.closedJobs === 1, 'on-target job with no closure counted in closedJobs')
+  check(r.openJobs === 0, 'on-target job with no closure not left in openJobs')
+  check(r.totalTarget === 100, 'on-target job with no closure contributes to totalTarget')
+  check(r.qualityRate === 100, 'on-target job with no closure yields correct qualityRate')
+}
+
+// 24. Job that exceeds target with no formal closure counts as closed
+{
+  const r = projectPlantOeeSummary(makeProduction([makeJob('J-001', 'Line A', 100, 100, { scrap: 5 })]), AS_OF)
+  check(r.closedJobs === 1, 'over-target job (output+scrap>=target) with no closure counted as closed')
+  check(r.totalGoodOutput === 95, 'good output = output - scrap for the on-target unclosed job')
+}
+
+// 25. On-target job with no closure and a past dueAt is not overdue
+{
+  const r = projectPlantOeeSummary(makeProduction([
+    makeJob('J-001', 'Line A', 100, 100, { dueAt: '2026-08-01T08:00:00.000Z' }),
+  ]), AS_OF)
+  check(r.overdueJobs === 0, 'on-target job with no closure is not overdue despite past dueAt')
+}
+
 console.log(`plant OEE summary: ${checks} checks passed`)
