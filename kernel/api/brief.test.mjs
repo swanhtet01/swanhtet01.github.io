@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { runScheduledBrief } from './brief.mjs'
+import handler, { runScheduledBrief } from './brief.mjs'
 import { notifyDetailed } from '../alert.mjs'
 import { loadCeoOutcomeCycleState, recordCeoOutcomeCompletion } from '../agent-company-operations.mjs'
 import { SUPERMEGA_HQ_AUTHORITY } from '../supermega-hq-authority.mjs'
@@ -652,4 +652,45 @@ test('owner notification distinguishes acknowledgement, rejection, and transport
   assert.deepEqual(unconfigured, { ok: false, status: 'failed' })
   assert.equal(requests, 0)
   assert.doesNotMatch(JSON.stringify({ sent, rejected, uncertain, unconfigured }), /private|owner-chat/)
+})
+
+test('a below-floor ops key reads as absent to the brief handler (shared usableOpsKey floor)', async () => {
+  // Regression: the handler used to read SUPERMEGA_OPS_KEY raw, so a below-floor
+  // key it accepted was refused as absent by every other owner surface. Routing
+  // through usableOpsKey makes a short key read as absent here too: with no cron
+  // secret configured, the handler reports auth_not_configured rather than
+  // treating the weak key as a usable credential.
+  const saved = {
+    ops: process.env.SUPERMEGA_OPS_KEY,
+    cron: process.env.CRON_SECRET,
+    token: process.env.SUPERMEGA_INTERNAL_CRON_TOKEN,
+  }
+  const restore = (name, value) => { if (value === undefined) delete process.env[name]; else process.env[name] = value }
+  const mockRes = () => {
+    const res = { statusCode: 0, body: null, headers: {} }
+    res.status = (code) => { res.statusCode = code; return res }
+    res.json = (payload) => { res.body = payload; return res }
+    res.setHeader = (key, value) => { res.headers[key] = value; return res }
+    return res
+  }
+  try {
+    process.env.SUPERMEGA_OPS_KEY = 'short-owner-key' // below OPS_KEY_MINIMUM_LENGTH (32)
+    delete process.env.CRON_SECRET
+    delete process.env.SUPERMEGA_INTERNAL_CRON_TOKEN
+
+    const absent = mockRes()
+    await handler({ headers: {} }, absent)
+    assert.equal(absent.statusCode, 503, 'a below-floor ops key with no cron secret is auth_not_configured')
+    assert.equal(absent.body?.reason, 'auth_not_configured')
+
+    // Presenting that same short key must NOT authorize either -- it reads as absent.
+    const presented = mockRes()
+    await handler({ headers: { 'x-ops-key': 'short-owner-key' } }, presented)
+    assert.equal(presented.statusCode, 503, 'presenting a below-floor ops key cannot authorize the route')
+    assert.equal(presented.body?.reason, 'auth_not_configured')
+  } finally {
+    restore('SUPERMEGA_OPS_KEY', saved.ops)
+    restore('CRON_SECRET', saved.cron)
+    restore('SUPERMEGA_INTERNAL_CRON_TOKEN', saved.token)
+  }
 })
