@@ -430,6 +430,20 @@ export function WorkspaceControlsPage() {
           <p className="authority-note">SuperMega can prepare local work. Customer messages, payments, publishing, imports, and managed writes still require verified company controls and human approval.</p>
         </section>
 
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Read-only summaries pulled from what is already saved in Shop, Plant, Website, and Ecommerce. Nothing changes by looking.</p></div>
+          <div className="trial-actions">
+            <Link className="core-button primary" to="/settings/?view=ceo-brief#controls">Operating brief</Link>
+            <Link className="core-button" to="/settings/?view=shop-revenue#controls">Shop revenue</Link>
+            <Link className="core-button" to="/settings/?view=plant-oee#controls">Plant OEE</Link>
+            <Link className="core-button" to="/settings/?view=website-leads#controls">Website leads</Link>
+            <Link className="core-button" to="/settings/?view=ecommerce-pipeline#controls">Ecommerce pipeline</Link>
+            <Link className="core-button" to="/settings/?view=customer-journey#controls">Customer journey</Link>
+            <Link className="core-button" to="/settings/?view=cross-product#controls">Order and production status</Link>
+            <Link className="core-button" to="/settings/?view=local-metrics#controls">Session metrics</Link>
+          </div>
+        </section>
+
         <section className="core-panel trial-control-panel">
           <div><span className="core-eyebrow">Browser workspace</span><h2>Save or restore your work.</h2><p>A restore point stays on this device. A downloaded backup can be kept somewhere safer.</p></div>
           <div className="trial-actions">

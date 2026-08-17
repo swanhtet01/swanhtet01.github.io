@@ -156,6 +156,23 @@ Tags: [product] / [platform] / [gate]. FD = requires a founder decision.
 6.  [ecommerce][gate] Prove cart -> Shop handoff and customer-safe
     acknowledgement on protected preview + isolated tenant (priority 95,
     ENG-146 done, portfolio.json ecommerce localAutomation).
+    **Decision, recorded 2026-08-17 (was previously an unowned gap — a company
+    review flagged that local-mode's checkout-to-Shop handoff limitation had
+    no tracked fix owner anywhere):** the LOCAL-mode limitation (checkout
+    drafts travel as one-shot navigation state, so Shop's persistent request
+    inbox never receives them off-device) is deliberately NOT being fixed on
+    its own. The managed-mode path above is the real answer — a persistent,
+    multi-session request needs a server-side inbox, which local mode
+    structurally cannot offer without becoming a different product. Building
+    a local-mode-only patch (e.g. writing the draft into the same
+    localStorage key Shop reads) would work for a single device/browser but
+    would silently break the moment the customer and the shop operator are on
+    different devices, which is the common case this gap actually matters
+    for — so a local patch would trade a visible gap for an invisible one.
+    Tracked here explicitly so it reads as a scope call, not an oversight;
+    revisit only if local-mode Ecommerce becomes a real go-to-market surface
+    on its own (currently it is not — Ecommerce's stated wedge in
+    `PRODUCT-CATALOG-AND-PRICING.md` is the Shop-connected storefront).
 7.  [plant][gate] FD (tenant approval): one order-bound OEE window with named
     operator and supervisor; reconcile exact downtime source before any
     costing adapter (portfolio.json plant nextGate).

@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
+import { report as reportClientError } from './client-error-reporter'
+
 // Every product route is a lazy chunk. When one fails to arrive the error is thrown
 // inside <Suspense>, escapes to the root, and React unmounts the whole tree — sidebar,
 // topbar and nav included — leaving a blank rectangle with no text and no way back.
@@ -55,9 +57,13 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, Route
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // No crash reporting exists yet, so the console is the only record. Keep it: without
-    // this the founder has no way to learn what a shop owner saw.
+    // The console stays as the local record. It is no longer the ONLY record:
+    // reportClientError feeds the same no-PII beacon lane the two window
+    // listeners use, so a caught route crash (this exact class of failure,
+    // stale-deploy chunk loads first) now reaches it too -- componentDidCatch
+    // never propagates to window.onerror on its own.
     console.error('SuperMega route failed to render', error, info.componentStack)
+    reportClientError(error, error.message)
   }
 
   render() {
