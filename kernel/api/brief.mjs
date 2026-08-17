@@ -3,6 +3,7 @@
 // hourly execution claim, and every owner-only delivery has a durable daily claim.
 
 import crypto from 'node:crypto'
+import { usableOpsKey } from '../ops-key.mjs'
 import { runOperator } from './operator.mjs'
 import { notifyDetailed } from '../alert.mjs'
 import { claimWorkcellDelivery, claimWorkcellExecution, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
@@ -366,7 +367,10 @@ export async function runScheduledBrief(options = {}) {
 
 export default async function handler(req, res) {
   const cronSecret = String(process.env.CRON_SECRET || process.env.SUPERMEGA_INTERNAL_CRON_TOKEN || '').trim()
-  const opsKey = String(process.env.SUPERMEGA_OPS_KEY || '').trim()
+  // Route the ops key through the shared floor: a below-length key must read as
+  // ABSENT here exactly as it does on every other owner surface (ops-key.mjs),
+  // rather than being accepted raw only on this route.
+  const opsKey = usableOpsKey(process.env.SUPERMEGA_OPS_KEY)
   if (!cronSecret && !opsKey) { res.status(503).json({ ok: false, reason: 'auth_not_configured' }); return }
 
   const auth = String(req.headers['authorization'] || '')
