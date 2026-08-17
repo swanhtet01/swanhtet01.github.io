@@ -218,6 +218,17 @@ class FakeBillingCursor:
                     )
                 }
             ]
+        elif (
+            "from app_private.billing_events" in sql
+            and "billing.refund.recorded" in sql
+        ):
+            workspace_id = str(values[0])
+            self.rows = [
+                deepcopy(event)
+                for key, event in self.database.events.items()
+                if key[0] == workspace_id
+                and event.get("event_type") == "billing.refund.recorded"
+            ]
         elif "from app_private.billing_events" in sql and sql.startswith("select"):
             event = self.database.events.get((str(values[0]), str(values[1])))
             self.rows = [deepcopy(event)] if event else []
@@ -656,6 +667,77 @@ class BillingLedgerTests(unittest.TestCase):
                 refund_reference="WAVE-REFUND-0001",
                 evidence=founder_evidence("refund-0001", "a-different-reference"),
             )
+
+    def test_refunds_cannot_cumulatively_exceed_the_invoice_total(self) -> None:
+        # Each single refund is within the 125000 sealed total, but their sum
+        # must not exceed it. Without the cumulative bound, two refunds under
+        # different references each pass the per-refund check and overshoot.
+        self.issue()
+        self.confirm()
+        first = self.ledger.record_refund(
+            workspace_id=WORKSPACE_ID,
+            invoice_digest=self.digest,
+            amount_minor=100000,
+            channel_category="mobile_money",
+            refund_reference="WAVE-REFUND-0001",
+            evidence=founder_evidence("refund-0001", "WAVE-REFUND-0001"),
+        )
+        self.assertEqual(first["status"], "refund_recorded")
+        # A second refund that brings the cumulative sum exactly to the total
+        # is still allowed.
+        second = self.ledger.record_refund(
+            workspace_id=WORKSPACE_ID,
+            invoice_digest=self.digest,
+            amount_minor=25000,
+            channel_category="mobile_money",
+            refund_reference="WAVE-REFUND-0002",
+            evidence=founder_evidence("refund-0002", "WAVE-REFUND-0002"),
+        )
+        self.assertEqual(second["status"], "refund_recorded")
+        # A third refund of even 1 minor unit now exceeds the sealed total and
+        # is rejected -- the exact over-refund the per-refund check missed.
+        with self.assertRaises(BillingRailConflict):
+            self.ledger.record_refund(
+                workspace_id=WORKSPACE_ID,
+                invoice_digest=self.digest,
+                amount_minor=1,
+                channel_category="mobile_money",
+                refund_reference="WAVE-REFUND-0003",
+                evidence=founder_evidence("refund-0003", "WAVE-REFUND-0003"),
+            )
+        # Exactly two refund events were durably recorded; the rejected one wrote
+        # nothing.
+        refund_events = [
+            event
+            for event in self.database.events.values()
+            if event.get("event_type") == "billing.refund.recorded"
+        ]
+        self.assertEqual(len(refund_events), 2)
+
+    def test_replayed_refund_is_not_double_counted_toward_the_total(self) -> None:
+        # An idempotent replay of the same refund (same reference) must return
+        # the original receipt without adding to the cumulative sum, so the
+        # replay path cannot be used to sidestep the cumulative bound.
+        self.issue()
+        self.confirm()
+        args = dict(
+            workspace_id=WORKSPACE_ID,
+            invoice_digest=self.digest,
+            amount_minor=125000,
+            channel_category="mobile_money",
+            refund_reference="WAVE-REFUND-0001",
+            evidence=founder_evidence("refund-0001", "WAVE-REFUND-0001"),
+        )
+        first = self.ledger.record_refund(**args)
+        self.assertFalse(first["replayed"])
+        replay = self.ledger.record_refund(**args)
+        self.assertTrue(replay["replayed"])
+        refund_events = [
+            event
+            for event in self.database.events.values()
+            if event.get("event_type") == "billing.refund.recorded"
+        ]
+        self.assertEqual(len(refund_events), 1)
 
     def test_evidence_shape_rejection_writes_nothing(self) -> None:
         incomplete = founder_evidence("issue-0001", "viber:handover:2026-08-17")

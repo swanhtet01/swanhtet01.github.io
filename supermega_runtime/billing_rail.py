@@ -589,6 +589,36 @@ class BillingLedger:
         return cursor.fetchone()
 
     @staticmethod
+    def _prior_refund_total(cursor: Any, workspace_id: str, invoice_digest: str) -> int:
+        """Sum amountMinor across every prior recorded refund for this exact
+        invoice digest. record_refund bounds each single refund to the sealed
+        invoice total, but without this cumulative sum the SAME invoice could be
+        refunded past its total across multiple references -- each passing the
+        per-refund check independently -- contradicting the guard's own stated
+        invariant. Runs inside the held advisory lock, so no concurrent refund
+        can slip between this read and the append."""
+        cursor.execute(
+            """
+            select payload_json
+            from app_private.billing_events
+            where workspace_id = %s
+              and event_type = 'billing.refund.recorded'
+            """,
+            (workspace_id,),
+        )
+        total = 0
+        for row in cursor.fetchall():
+            packet = _row_json(row, "payload_json", 0)
+            if not isinstance(packet, Mapping):
+                continue
+            if packet.get("invoiceDigest") != invoice_digest:
+                continue
+            amount = packet.get("amountMinor")
+            if isinstance(amount, int) and not isinstance(amount, bool):
+                total += amount
+        return total
+
+    @staticmethod
     def _entitlement_row(cursor: Any, workspace_id: str) -> Any:
         cursor.execute(
             """
@@ -1232,13 +1262,14 @@ class BillingLedger:
                     stored_total = (
                         stored_amount.get("totalMinor") if isinstance(stored_amount, Mapping) else None
                     )
+                    prior_refunds = self._prior_refund_total(cursor, workspace, digest)
                     if (
                         not isinstance(stored_total, int)
                         or isinstance(stored_total, bool)
-                        or amount > stored_total
+                        or prior_refunds + amount > stored_total
                     ):
                         raise BillingRailConflict(
-                            "A recorded refund cannot exceed the sealed invoice total."
+                            "Recorded refunds cannot cumulatively exceed the sealed invoice total."
                         )
                     created_at = self._append_event(
                         cursor,
