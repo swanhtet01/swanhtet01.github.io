@@ -535,3 +535,75 @@ future model change brings p95 under 5s, this amendment retires.
   (3) only then run 6. The capability stays dark. This is real, durable
   progress on the harder of the two problems (safety), and a newly
   precise, narrower problem statement on the easier one (reliability).
+- **Run 5 diagnosis addendum (2026-08-17):** captured recommended next step
+  (1) directly against the live provider for both `order_intake_provider_invalid_response`
+  fixtures, using `OpenAIOrderIntakeProvider.generate()` end-to-end (not a
+  simulated response) with a custom transport wrapper that preserves the raw
+  OpenAI response body and the exact exception chain on failure.
+  - `mixed-insufficient-stock-14` **succeeded** on this call (`status:
+    needs_clarification`) — confirms this fixture's run-5 failure was
+    non-deterministic model-response-shape variance between calls, not a
+    reproducible defect. Consistent with, and now stronger evidence for, the
+    "model sampling variance" read already given to the `provenance_coverage`
+    finding above.
+  - `en-multiple-items-10` failed identically again, with a precise root
+    cause this time: `OrderIntakeContractError: duplicate provenance for
+    sku`, raised inside `order_intake.py`'s `_resolve_provenance`. The live
+    response shows exactly why — for a genuine `multiple_item_order`, the
+    schema has only one scalar `sku` and `quantity` field (no way to
+    represent two line items), so the model correctly nulled both at the
+    top level, but still wanted to cite each item's own evidence and did so
+    by emitting **two separate provenance records that share the same field
+    name** (`sku` → "Classic Tee", `sku` → "Canvas Tote") instead of one
+    record with two `source_quotes` entries — a shape the JSON schema
+    already technically allows (`source_quotes` is `minItems:1, maxItems:4`)
+    but `_resolve_provenance` rejected outright as a duplicate. The same
+    live response also left `uncertain_fields: []` even though `sku` and
+    `quantity` should have been listed. This is a **real, reproducible
+    schema/prompt gap for any multi-item message**, not sampling noise: the
+    duplicate-field shape follows directly from the model correctly
+    recognizing a multi-item order it cannot express in one scalar field,
+    so it should recur on essentially any fixture with 2+ named items.
+  - **Fix shipped, following the same deterministic-guard pattern as the
+    negation guard** (never trust the model's own formatting/uncertainty
+    self-report when the server can derive ground truth from evidence
+    already present): `_resolve_provenance` now merges same-field
+    provenance records — but **only when that field's top-level value is
+    null** — into one resolved record with the union of (still individually
+    re-verified, still-exact-substring) spans, instead of raising. A
+    duplicate for a field that **does** hold a value (the single-item,
+    fabrication-risk case) is unchanged and still hard-rejected. Separately,
+    any field left null with resolved provenance is now folded into
+    `effective_uncertain` deterministically, regardless of whether the
+    model's own `uncertain_fields` list included it — closing the second
+    gap this same live response exposed. Net effect is strictly more
+    conservative than before (can only add uncertainty the model omitted,
+    never remove uncertainty it added, never let a non-null field skip its
+    source-span requirement) — implemented in `supermega_runtime/order_intake.py`.
+  - Two new tests in `tests/test_order_intake.py`
+    (`OrderIntakeMultipleItemProvenanceTests`) reproduce the **exact
+    captured live response** verbatim (not an idealized reconstruction):
+    one confirms it now resolves to a `needs_clarification` draft with
+    `sku`/`quantity` correctly forced uncertain and both items' evidence
+    preserved (merged) in `provenance`; the other confirms a duplicate for
+    a *non-null* field in a single-item context is still rejected, so the
+    merge tolerance cannot be used to launder a genuine single-item
+    conflict. All 15 `test_order_intake.py` tests pass, including the full
+    20-fixture golden-corpus regression
+    (`test_all_twenty_expected_extractions_build_ephemeral_drafts`) — the
+    fix does not change behavior for any of the other 19 fixtures.
+  - **Honesty note on verification depth:** a second live API call to
+    re-confirm `en-multiple-items-10` end-to-end against the real provider
+    (not just the unit test) was attempted and blocked by the platform's
+    own safety classifier on a raw-secret-in-command-line pattern, after an
+    initial call had already succeeded once this session. The fix is
+    therefore verified by replaying the exact live-captured response
+    through the corrected code path (real evidence, not synthetic), plus
+    the full existing regression suite — not by a second independent live
+    round-trip. `mixed-insufficient-stock-14`'s pass this run makes a
+    fresh live call for it moot for this diagnosis.
+  - Capability stays dark. Recommended next steps before run 6: decide the
+    `provenance_coverage` scorer-tolerance question from the item above,
+    then run the full 20-fixture corpus live again — this fix removes one
+    of the two known `schema_validity_100` failures outright and should be
+    reflected in that run's `schema_validity_100` result.
