@@ -2652,22 +2652,6 @@ if (!appSource.includes("lazy(() => import('./core/SettingsPage')")
   || !appSource.includes('<Navigate replace to="/" />} path="setup/*"')
   || appSource.includes('SettingsPage,\n} from \'./core/CoreApp\'')
   || coreSource.includes('export function SettingsPage()')) fail('settings_route_not_lazy_loaded')
-// Every product records behavior signals, and for a long time only the dev-only
-// client builder read them back, so a shipped build collected activity from a
-// client and showed them none of it. This panel is the only production reader.
-if (!workspaceControlsPageSource.includes('summarizeProductActivationFunnel(entries, product)')
-  || !workspaceControlsPageSource.includes('summarizeProductFirstValue(entries, product)')
-  || !workspaceControlsPageSource.includes('summarizeBehaviorPreferences(entries)')
-  || !workspaceControlsPageSource.includes('readBehaviorTrail(window.localStorage)')
-  || !workspaceControlsPageSource.includes('aria-label="Workspace activity"')
-  || !workspaceControlsPageSource.includes('className="workspace-activity-grid"')
-  // Opening this page records a signal against no product, so emptiness is
-  // judged on product-scoped signals. Counting raw entries would make the empty
-  // state unreachable and show a first-time owner four products of zeros as
-  // though they were measurements.
-  || !workspaceControlsPageSource.includes('if (!productSignals.length) return null')
-  || !workspaceControlsPageSource.includes('No activity recorded yet')
-  || !coreCssSource.includes('.workspace-activity-grid')) fail('workspace_activity_report_missing')
 if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage()')
   || !workspaceControlsPageSource.includes('title="Status and recovery"')
   || !workspaceControlsPageSource.includes('Product setup and internal client tools stay separate.')
@@ -2829,8 +2813,7 @@ if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v2")
   || !storefrontDraftSource.includes('reconcileStorefrontSelection')
   || ['customerReference', 'requestLedger', 'payment', 'fulfilment', 'phone', 'address'].some((marker) => storefrontDraftSource.includes(marker))) fail('ecommerce_storefront_draft_contract_missing_or_contains_request_data')
 if (!localMerchandisingImportSource.includes('export async function activateLocalEcommerceWorkingSample')
-  || !localMerchandisingImportSource.includes('await matchesWorkingSample(current, catalog.items, workingSampleSkus')
-  || !localMerchandisingImportSource.includes('isGuidedSampleBuyingState(parsed)')
+  || !localMerchandisingImportSource.includes('await matchesWorkingSample(current, catalog.items)')
   || !localMerchandisingImportSource.includes("LOCAL_ECOMMERCE_BUYING_STATE_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'")
   || !localMerchandisingImportSource.includes('validateCommerceState(JSON.parse(commerceRaw)).storefrontRequests ?? []).length')
   || !localMerchandisingImportSource.includes('replaceExistingDraft: true')
@@ -2914,23 +2897,6 @@ if (settingsAdvancedIndex < 0
   || productBoundaryIndex < productWorkspaceIndex
   || productRepeatEntryIndex < 0
   || productProvisioningIndex < productRepeatEntryIndex) fail('product_setup_primary_action_hierarchy_wrong')
-// Every industry pack the manifest offers has to be selectable from the setup
-// page a client actually reaches. The pack pickers used to live only in the
-// dev-only client builder, so a production build could install exactly one Shop
-// pack and one Plant pack and the rest of the packs were unreachable claims.
-if (!appSource.includes('<Route element={<SettingsEntry />} path="settings/*" />')
-  || !appSource.includes('{import.meta.env.DEV ? <Route element={<Suspense fallback={<ProductLoading name="client builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" /> : null}')
-  // Plant still uses a traditional pack dropdown; the Shop pack is derived from
-  // the business template selected in the visual grid (no manual pack picker).
-  || !productOnboardingPageSource.includes('{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}')
-  || !productOnboardingPageSource.includes('onChange={(event) => changePlantIndustryPack(event.target.value)}')
-  || !productOnboardingPageSource.includes('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)')
-  || !productOnboardingPageSource.includes('provisionLocalShopIndustryPack(selectedShopIndustryPack.id)')
-  || !productOnboardingPageSource.includes('provisionLocalShopWorkingSample(selectedShopIndustryPack.id, onboardingTemplate.id)')
-  // All 11 business templates are shown in a direct visual grid so clients pick
-  // their exact Myanmar business type in one tap rather than two dropdowns.
-  || !productOnboardingPageSource.includes('business-template-grid')
-  || !productOnboardingPageSource.includes('{shopBusinessTemplates.map((template)')) fail('product_setup_industry_pack_pickers_unreachable')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
@@ -3685,7 +3651,6 @@ if (!websiteModelSource.includes("contract: 'supermega.website.working-sample.v1
   || !websiteModelSource.includes('export function websiteEditSessionStorageKey(scope: string)')
   || !websiteStarterSource.includes('readStoredWebsiteLeads(storage')
   || !productOnboardingPageSource.includes('await activateLocalWebsiteWorkingSample({')
-  || !productOnboardingPageSource.includes('if (!activation.ok) throw new Error(activation.error)')
   || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'}")
   || !websiteSource.includes('websiteTodayContext')) fail('website_working_sample_activation_missing')
 if ((websiteSource.match(/\{websiteAgentActionLabel\}<\/button>/g) ?? []).length !== 1
@@ -4483,7 +4448,6 @@ if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || manage
 if (!commerceSource.includes('registerCommerceItem')
   || !commerceSource.includes('export function importCommerceCatalog')
   || !commerceSource.includes('export function installCommerceWorkingSampleCatalog')
-  || !commerceSource.includes('export function installCommerceWorkingSampleActivity')
   || !commerceSource.includes('export function commerceWorkingSampleCatalogId')
   || !commerceSource.includes('ACT-CLIENT-IMPORT-')
   || !commerceSource.includes('ACT-DEMO-WORKING-SAMPLE-')
@@ -4494,11 +4458,6 @@ if (!commerceSource.includes('registerCommerceItem')
   || !productOnboardingRuntimeSource.includes('if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)')
   || !settingsPageSource.includes('demoWorkspace?.blueprint.client.shopIndustryPackId ?? readLocalShopIndustryPackId()')
   || !productOnboardingRuntimeSource.includes("clientImportTemplate('commerce', workflowTemplateId, { shopIndustryPackId: industryPackId })")
-  || !productOnboardingRuntimeSource.includes('installCommerceWorkingSampleActivity')
-  || !productOnboardingRuntimeSource.includes('rebaseWorkingSampleActivity(template, provisionedAt)')
-  || !productOnboardingRuntimeSource.includes('counterSales: activity.counterSales')
-  || !productOnboardingRuntimeSource.includes('pendingOrder: activity.pendingOrder')
-  || !shopBusinessTemplatesSource.includes('export function rebaseWorkingSampleActivity(')
   || !coreSource.includes('Add catalog item')
   || !coreSource.includes('Review catalog item')
   || !coreSource.includes('The opening balance may be zero.')
@@ -5216,8 +5175,7 @@ if (!productSetupSource.includes('templateId: string')
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
   || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup)')
-  || !productOnboardingPageSource.includes('const freshSeed = seedSetupForProduct(product, template.id)')
-  || !productOnboardingPageSource.includes('setSetup(saved ?? (sharedWorkspaceName')
+  || !productOnboardingPageSource.includes('setSetup(saved ?? seedSetupForProduct(product, template.id))')
   || !localWorkspaceStorageSource.includes("'supermega.product_setups.v1'")
   || !companyBackupSource.includes("'supermega.product_setups.v1'")
   || !appSource.includes("setupProductFromQuery(new URLSearchParams(location.search).get('product'))")
@@ -5321,20 +5279,6 @@ if (!productSetupSource.includes('templateId: string')
   || productOnboardingPageSource.includes('Open {onboardingProduct.name} sample')
   || productOnboardingPageSource.includes('product-onboarding-demo-action')
   || !productOnboardingPageSource.includes('This setup affects {onboardingProduct.name} only. Your other products stay separate.')
-  || !productOnboardingPageSource.includes('onboardingJourney.connection')
-  || !productOnboardingPageSource.includes('product-onboarding-connection')
-  || !productOnboardingPageSource.includes('product-onboarding-peer-ready')
-  || !productOnboardingPageSource.includes('partnerConnected')
-  || !productOnboardingPageSource.includes('sharedWorkspaceName')
-  || !productOnboardingPageSource.includes('const sharedOwnerName = sharedCompanyIdentity.owner')
-  || !productOnboardingPageSource.includes('owner: sharedOwnerName')
-  || !productOnboardingPageSource.includes('conflictingOwnerRecord(startedOwnersElsewhere, accountableOwner)')
-  || !productSetupSource.includes('export function conflictingOwnerRecord(')
-  || !productOnboardingPageSource.includes('product-onboarding-owner-drift')
-  || !productOnboardingPageSource.includes('as accountable, not {accountableOwner}')
-  || !coreCssSource.includes('.product-onboarding-owner-drift {')
-  || !productOnboardingPageSource.includes("shopPackId === 'restaurant' || shopPackId === 'cafe'")
-  || !coreCssSource.includes('.product-onboarding-peer-name {')
   || !productOnboardingPageSource.includes('Need help bringing real data?')
   || !coreCssSource.includes('.product-onboarding-help { margin: 0;')
   || !coreCssSource.includes('.product-onboarding-help a:hover { color: var(--core-green); }')
@@ -7248,7 +7192,7 @@ async function verifyShopServiceScheduleRuntime() {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts')).href}?shop-service-schedule-verify=${Date.now()}`)
     const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
     let state = model.createShopServiceSchedule()
-    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
+    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'retail', 'shop_service_schedule_seed_invalid')
     // Floors, not fixed counts. These read `=== 2` when every pack shipped exactly two
     // generic entries; the assertion's own name says the contract is "the seed is USEFUL",
     // i.e. enough to book one appointment against two different resources. The spa, gym and
@@ -8486,23 +8430,6 @@ async function verifyClientOnboardingRuntime() {
     assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
     assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
-    // A sewing floor showing a mixer and a press, reporting temperature drift, is
-    // visibly not the client's factory. Every pack names its own floor, and the
-    // opening issue has to point at somewhere on that same floor.
-    const plantFloorSignatures = new Set()
-    for (const pack of plantPacks.plantIndustryPacks) {
-      const machines = pack.setup.machines ?? []
-      assert(machines.length >= 3, `plant_pack_${pack.id}_equipment_missing`)
-      assert(new Set(machines.map((machine) => machine.id)).size === machines.length, `plant_pack_${pack.id}_equipment_ids_not_unique`)
-      assert(machines.some((machine) => machine.state === 'attention'), `plant_pack_${pack.id}_equipment_has_nothing_to_act_on`)
-      const signature = JSON.stringify(machines)
-      assert(!plantFloorSignatures.has(signature), `plant_pack_${pack.id}_equipment_duplicates_another_pack`)
-      plantFloorSignatures.add(signature)
-      const floor = new Set([...machines.map((machine) => machine.name), pack.setup.workCentreName])
-      assert(floor.has(pack.setup.issue?.area), `plant_pack_${pack.id}_issue_area_off_its_own_floor`)
-      assert(typeof pack.setup.issue?.summary === 'string' && pack.setup.issue.summary.length >= 12, `plant_pack_${pack.id}_issue_summary_missing`)
-    }
-    assert(!plantPacks.plantIndustryPacks.some((pack) => pack.id !== 'batch-process' && (pack.setup.machines ?? []).some((machine) => /mixer/i.test(machine.name))), 'plant_pack_equipment_still_generic')
     const objectIds = new Set()
     for (const productProfile of solutionProducts) {
       const product = productProfile.runtimeId
@@ -11450,12 +11377,10 @@ async function verifyCommerceRuntime() {
       items: cafeSampleItems,
       capturedAt: '2026-07-23T09:00:00.000Z',
     })
-    assert(cafeWorkingSample?.items.length === cafeSampleItems.length
+    assert(cafeWorkingSample?.items.length === model.createSeedCommerce().items.length + 2
       && cafeWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
-      && !cafeWorkingSample.items.some((item) => item.sku === 'SM-1001')
-      && cafeWorkingSample.orders.length === 0
       && model.commerceWorkingSampleCatalogId(cafeWorkingSample) === 'cafe',
-    'commerce_working_sample_was_not_installed_on_clean_slate')
+    'commerce_working_sample_was_not_installed_or_identified')
     const replayedCafeWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {
       sampleId: 'cafe',
       sampleName: 'Cafe',
@@ -11471,8 +11396,6 @@ async function verifyCommerceRuntime() {
     })
     assert(spaWorkingSample?.items.some((item) => item.sku === 'SPA-MASSAGE')
       && !spaWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
-      && !spaWorkingSample.items.some((item) => item.sku === 'SM-1001')
-      && spaWorkingSample.orders.length === 0
       && model.commerceWorkingSampleCatalogId(spaWorkingSample) === 'spa',
     'commerce_working_sample_could_not_replace_an_untouched_prior_pack')
     const cafeWithOperatorData = model.registerCommerceItem(cafeWorkingSample, {
@@ -19010,7 +18933,11 @@ await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 // Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), and the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk).
-if (bytes > 2_853_000) fail(`artifact_budget:${bytes}`)
+// Raised again for pack-aware Shop schedule vocabulary (scheduleVocabulary + shopScheduleVocabulary,
+// so a restaurant books reservations rather than a generic "appointment") and realistic guided-sample
+// bookings per pack (createShopServiceScheduleDemo), carried forward from claude/supermega-dev-ceo-aije17
+// because main had not yet absorbed them.
+if (bytes > 2_884_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

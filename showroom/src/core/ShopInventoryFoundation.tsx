@@ -6,7 +6,6 @@ import {
   buildShopInventoryImportPackage,
   createShopInventoryMaster,
   createEmptyShopInventoryState,
-  MAX_SHOP_INVENTORY_STOCK_UNITS,
   projectShopInventory,
   setShopSupplierPolicy,
   shopInventoryEvidenceDigest,

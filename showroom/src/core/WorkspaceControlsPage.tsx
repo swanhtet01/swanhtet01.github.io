@@ -332,10 +332,6 @@ export function WorkspaceControlsPage() {
   const [resetArmed, setResetArmed] = useState(false)
   const [resetBusy, setResetBusy] = useState(false)
   const backupDownload = useMemo(() => ({ href: backupHref(currentBackup), filename: backupFilename(currentBackup) }), [currentBackup])
-  // Every product records these signals already; until now nothing outside the
-  // dev-only client builder read them back, so the owner never saw their own
-  // activity. Read once on mount: this is a report, not a live counter.
-  const [activity] = useState(readActivity)
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
@@ -432,24 +428,6 @@ export function WorkspaceControlsPage() {
           {runtime.requirements.length ? <ul className="requirement-list">{runtime.requirements.slice(0, 4).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
           <div className="trial-actions"><Link className="core-button" to="/login">Company login</Link><Link className="core-button primary" to="/">Open a product</Link></div>
           <p className="authority-note">SuperMega can prepare local work. Customer messages, payments, publishing, imports, and managed writes still require verified company controls and human approval.</p>
-        </section>
-
-        <section aria-label="Workspace activity" className="core-panel workspace-activity-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Your activity</span><h2>{activity ? 'What this workspace has done' : 'No activity recorded yet'}</h2><p>Counted from what you opened and finished on this device. Nothing is sent anywhere, and nothing here is an estimate.</p></div>{activity ? <span className="panel-note">{activity.signals} recorded {activity.signals === 1 ? 'step' : 'steps'}</span> : null}</div>
-          {activity ? (
-            <>
-              <div aria-label="Product activity" className="workspace-activity-grid">
-                {activity.products.map((entry) => (
-                  <article key={entry.product}>
-                    <strong>{entry.name}</strong>
-                    <span className={`status-pill ${entry.firstValue.status === 'completed' ? 'approved' : entry.firstValue.status === 'in_progress' ? 'pending' : 'bounded'}`}>{firstValueLabel(entry.firstValue.status, entry.firstValue.elapsedSeconds)}</span>
-                    <small>Setup {entry.funnel.completionPercent}% · next: {entry.funnel.nextAction.toLowerCase()}</small>
-                  </article>
-                ))}
-              </div>
-              {activity.preference.preferred ? <p className="authority-note">Most used so far: <strong>{productContracts[activity.preference.preferred.product].name}</strong> — {activity.preference.preferred.detail} ({activity.preference.preferred.chosenCount}&times;).</p> : null}
-            </>
-          ) : <p className="form-notice">Open a product and finish its first task. This panel then shows how far each product got and how long the first result took.</p>}
         </section>
 
         <section className="core-panel trial-control-panel">

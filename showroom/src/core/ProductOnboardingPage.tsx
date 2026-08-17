@@ -11,7 +11,6 @@ import {
 } from './pilot-outcome'
 import { currentProductionShiftClose } from './production-workspace'
 import {
-  conflictingOwnerRecord,
   productContracts,
   managedTrialRequestUrl,
   readProductSetup,
@@ -46,20 +45,6 @@ import {
   shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
-
-const BUSINESS_TEMPLATE_ICONS: Record<string, string> = {
-  'mini-mart': '🛒',
-  'pharmacy': '💊',
-  'phone-electronics': '📱',
-  'fashion': '👗',
-  'hardware': '🔧',
-  'tea-coffee': '☕',
-  'auto-parts': '🔩',
-  'restaurant': '🍜',
-  'spa': '💆',
-  'gym': '💪',
-  'school': '📚',
-}
 import {
   useAccountableActions,
   useManagedIdentity,
@@ -67,45 +52,34 @@ import {
   useSetupWorkspace,
 } from './workspace-runtime'
 
-const PRIMARY_PARTNER: Partial<Record<SetupProductId, SetupProductId>> = {
-  commerce: 'ecommerce',
-  production: 'commerce',
-  website: 'ecommerce',
-  ecommerce: 'commerce',
-}
-
 type ProductOnboardingPageProps = {
   product: SetupProductId
 }
 
-const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: string; actionLabel: string; firstTaskPath: string; connection: string }> = {
+const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: string; actionLabel: string; firstTaskPath: string }> = {
   commerce: {
     outcome: 'Complete a sample sale',
     detail: 'A realistic catalog and stock are ready. Tap an item, choose payment, then create the order.',
     actionLabel: 'Create Shop and start selling',
     firstTaskPath: '/shop/?tab=counter',
-    connection: 'Shop receives online orders from Ecommerce and shares stock data with Plant.',
   },
   production: {
     outcome: 'Run a sample production job',
     detail: 'A scheduled job, materials, and line are ready. Review the job, then record output.',
     actionLabel: 'Create Plant and open the job',
     firstTaskPath: '/plant/?tab=production',
-    connection: 'Plant draws material plans from Shop stock and returns finished goods to Shop.',
   },
   website: {
     outcome: 'Preview a business website',
     detail: 'A responsive homepage is ready. Check desktop and mobile, then edit the page.',
     actionLabel: 'Create Website and preview it',
     firstTaskPath: '/website/',
-    connection: 'Website showcases your business and can link to Ecommerce for online ordering.',
   },
   ecommerce: {
     outcome: 'Open a working online store',
     detail: 'A storefront and checkout sample are ready. Review the store, then send an order into Shop.',
     actionLabel: 'Create Ecommerce and open the store',
     firstTaskPath: '/ecommerce/',
-    connection: 'Ecommerce customer requests become Shop orders, linking the storefront to fulfilment.',
   },
 }
 
@@ -153,9 +127,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const onboardingJourney = onboardingJourneys[product]
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
-  const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
-  // Starter catalogs are written for one shop type, so offering the others here
-  // would install a catalog that contradicts the schedule and capabilities.
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
     : product === 'commerce'
@@ -164,10 +135,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
-  const accountableOwner = setup.owner.trim()
-  const ownerRecordedElsewhere = conflictingOwnerRecord(startedOwnersElsewhere, accountableOwner)
-  const partnerConnected = partnerSetup?.startedAt ? partnerSetup.workspace : null
-  const partnerProductName = PRIMARY_PARTNER[product] ? productContracts[PRIMARY_PARTNER[product]!].name : null
 
   useEffect(() => {
     if (setup.product === product) return undefined
@@ -177,17 +144,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     const selectionTimer = window.setTimeout(() => {
       rememberProductSetup(window.localStorage, setup)
       const saved = readProductSetup(window.localStorage, product)
-      const freshSeed = seedSetupForProduct(product, template.id)
-      setSetup(saved ?? (sharedWorkspaceName
-        ? { ...freshSeed, workspace: sharedWorkspaceName, owner: sharedOwnerName }
-        : freshSeed))
+      setSetup(saved ?? seedSetupForProduct(product, template.id))
       setNotice(saved
         ? `Continue your saved ${onboardingProduct.name} workspace.`
-        : sharedWorkspaceName && sharedOwnerName
-          ? `${onboardingProduct.name} is ready. We carried over your business name and the person accountable — change either if this workspace needs different ones.`
-          : sharedWorkspaceName
-            ? `${onboardingProduct.name} is ready. We matched your business name — change it if this workspace needs a different one.`
-            : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
+        : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
     }, 0)
     return () => window.clearTimeout(selectionTimer)
   }, [onboardingProduct.name, product, selectedShopIndustryPack.workflowTemplateId, setSetup, setup])
@@ -220,13 +180,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     setBusinessChoiceId(value)
     if (value.startsWith('pack:')) setShopIndustryPackId(value.slice('pack:'.length) as ShopIndustryPackId)
     setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
-  }
-
-  function changePlantIndustryPack(value: string) {
-    const next = plantIndustryPacks.find((pack) => pack.id === value)
-    if (!next) return
-    setPlantIndustryPackId(next.id)
-    setSetup((current) => (current.product === 'production' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
   }
 
   function updateSetup(patch: Partial<SetupState>) {
@@ -398,7 +351,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 </select>
                 <small>{selectedPlantIndustryPack.firstWorkflow}. {selectedPlantIndustryPack.description}</small>
               </label>
-              <ul className="product-onboarding-capabilities">{selectedPlantIndustryPack.capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul>
             </details>
           ) : null}
           <div className="product-onboarding-primary">
@@ -409,9 +361,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
             <small id="product-onboarding-submit-hint">{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
-          <p className="product-onboarding-help product-onboarding-connection">{onboardingJourney.connection}</p>
-          {partnerConnected ? <p className="product-onboarding-help product-onboarding-peer-ready"><strong>{partnerProductName}</strong> workspace <strong className="product-onboarding-peer-name">{partnerConnected}</strong> is ready to connect.</p> : null}
-          {ownerRecordedElsewhere ? <p className="product-onboarding-help product-onboarding-owner-drift"><strong>{productContracts[ownerRecordedElsewhere.product].name}</strong> records <strong className="product-onboarding-peer-name">{ownerRecordedElsewhere.owner}</strong> as accountable, not {accountableOwner}. Update whichever is out of date — each product keeps its own record.</p> : null}
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
           <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>

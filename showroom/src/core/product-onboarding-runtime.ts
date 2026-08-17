@@ -4,7 +4,6 @@ import {
   createClientImportPreview,
 } from './client-onboarding'
 import {
-  installCommerceWorkingSampleActivity,
   installCommerceWorkingSampleCatalog,
   commerceWorkingSampleCatalogId,
   loadCommerceWorkspace,
@@ -13,21 +12,13 @@ import {
 } from './commerce-workspace'
 import { plantImportDueAt } from './managed-trial'
 import {
-  PRODUCTION_KEY,
-  appendGuidedSampleProductionActivity,
-  createSeedProduction,
-  hasGuidedSampleProductionActivity,
   installProductionWorkingSampleJobs,
-  isGuidedSampleProduction,
-  mutateProductionWorkspace,
   mutateProductionWorkingSample,
-  validateProductionState,
   type ProductionJob,
 } from './production-workspace'
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
-  createShopServiceScheduleDemo,
-  isGuidedSampleShopSchedule,
+  createShopServiceSchedule,
   provisionEmptyShopServiceSchedule,
   readShopServiceSchedule,
   shopIndustryPack,
@@ -36,7 +27,6 @@ import {
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs'
 import { SETUP_KEY, normalizeSetup, type SetupState } from './product-setup'
 import {
-  rebaseWorkingSampleActivity,
   shopBusinessTemplate,
   shopBusinessTemplateCatalogCsv,
   shopBusinessTemplates,
@@ -208,22 +198,14 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
   const commerceWorkspace = loadCommerceWorkspace()
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
-  const provisionedAt = new Date().toISOString()
-  const activity = rebaseWorkingSampleActivity(template, provisionedAt)
   const result = await mutateCommerceWorkspace((current) => {
-    const withCatalog = installCommerceWorkingSampleCatalog(current, {
+    const next = installCommerceWorkingSampleCatalog(current, {
       sampleId: template.id,
       sampleName: template.name.en,
       items,
-      capturedAt: provisionedAt,
+      capturedAt: new Date().toISOString(),
     })
-    if (!withCatalog) return current
-    const next = installCommerceWorkingSampleActivity(withCatalog, {
-      sampleId: template.id,
-      sampleName: template.name.en,
-      counterSales: activity.counterSales,
-      pendingOrder: activity.pendingOrder,
-    }) ?? withCatalog
+    if (!next) return current
     disposition = next === current ? 'current' : 'installed'
     return next
   })
@@ -253,47 +235,18 @@ export async function provisionLocalPlantWorkingSample(industryPackId: PlantIndu
     priority: 'normal',
     dueAt: plantImportDueAt(row.values.dueDate),
   }))
-  // A pure guided-sample workspace may be replaced when switching packs; real
-  // operator evidence keeps the existing preservation behavior.
-  try {
-    const stored = window.localStorage.getItem(PRODUCTION_KEY)
-    if (stored) {
-      const current = validateProductionState(JSON.parse(stored))
-      if (isGuidedSampleProduction(current) && hasGuidedSampleProductionActivity(current)) {
-        window.localStorage.setItem(PRODUCTION_KEY, JSON.stringify(createSeedProduction()))
-      }
-    }
-  } catch {
-    // Unreadable production data keeps its existing recovery path.
-  }
-  // Install an hour back so the guided shift evidence that follows lands in the past;
-  // future-dated evidence silently blocks short close and shift close.
-  const sampleInstalledAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-  const outcome: { disposition: 'installed' | 'current' | 'preserved' } = { disposition: 'preserved' }
+  let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
   const result = await mutateProductionWorkingSample((current) => {
     const next = installProductionWorkingSampleJobs(current, {
       sampleId: pack.id,
       sampleName: pack.name,
       jobs,
-      capturedAt: sampleInstalledAt,
-      // Otherwise an apparel floor opens on a mixer and a press reporting
-      // temperature drift, which is visibly not the client's factory.
-      machines: pack.setup.machines.map((machine) => ({ ...machine })),
-      issue: { ...pack.setup.issue },
+      capturedAt: new Date().toISOString(),
     })
     if (!next) return current
-    outcome.disposition = next === current ? 'current' : 'installed'
+    disposition = next === current ? 'current' : 'installed'
     return next
   })
   if (!result.ok) throw new Error(result.error)
-  if (outcome.disposition === 'installed') {
-    const planningDay = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
-    const seeded = await mutateProductionWorkspace((current) => appendGuidedSampleProductionActivity(current, {
-      planningDay,
-      materialRef: pack.setup.materialId,
-      materialUnit: pack.setup.materialUnit,
-    }))
-    if (!seeded.ok) throw new Error(seeded.error)
-  }
-  return outcome.disposition
+  return disposition
 }

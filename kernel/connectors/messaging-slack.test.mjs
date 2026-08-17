@@ -1,4 +1,4 @@
-// Contract tests for the Slack connector â€” a SEND-class integration with two transports
+// Contract tests for the Slack connector — a SEND-class integration with two transports
 // (incoming webhook and bot chat.postMessage). Covers: fail-closed without env, empty-message
 // rejection before network, exact request shape per transport, webhook-URL and bot-token
 // redaction in errors, and no-throw degradation. `node --test`.
@@ -87,7 +87,7 @@ test('bot mode targets chat.postMessage with the channel and the bearer token', 
   assert.equal(calls[0].options.method, 'POST')
   assert.equal(calls[0].options.headers.authorization, `Bearer ${BOT_TOKEN}`)
   assert.deepEqual(JSON.parse(calls[0].options.body), { channel: '#alerts', text: 'Budget alert' })
-  // The token travels only in the header â€” never in the URL or body.
+  // The token travels only in the header — never in the URL or body.
   assert.doesNotMatch(calls[0].url, /xoxb/)
   assert.doesNotMatch(calls[0].options.body, /xoxb/)
 })
@@ -115,7 +115,7 @@ test('provider failures return stable reasons that never leak the webhook URL or
   assert.match(notFound.reason, /^slack_webhook_404: /)
   assert.doesNotMatch(JSON.stringify(notFound), /webhooksecretpart123/)
 
-  // Slack signals a bad body with HTTP 200 + literal 'invalid_payload' â€” must still fail.
+  // Slack signals a bad body with HTTP 200 + literal 'invalid_payload' — must still fail.
   globalThis.fetch = async () => response(200, null, 'invalid_payload')
   assert.equal((await send('hello')).ok, false)
 
