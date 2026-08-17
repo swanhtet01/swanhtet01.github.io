@@ -10,7 +10,8 @@
 // those fail loudly anyway, so covering them costs nothing and keeps the rule simple.
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import { cpus } from 'node:os'
 
 const TOOLS = 'tools'
 const scripts = readdirSync(TOOLS)
@@ -24,17 +25,34 @@ if (scripts.length < 10) {
   process.exit(1)
 }
 
-const broken = []
-for (const path of scripts) {
-  try {
-    execFileSync(process.execPath, ['--check', path], { stdio: 'pipe' })
-  } catch (error) {
-    const detail = String(error.stderr ?? error.message ?? '')
-      .split('\n')
-      .find((line) => /Error|error/.test(line)) ?? 'unparseable'
-    broken.push({ path, detail: detail.trim().slice(0, 160) })
+function check(path) {
+  return new Promise((done) => {
+    execFile(process.execPath, ['--check', path], (error, _stdout, stderr) => {
+      if (!error) { done(null); return }
+      const detail = String(stderr ?? error.message ?? '')
+        .split('\n')
+        .find((line) => /Error|error/.test(line)) ?? 'unparseable'
+      done({ path, detail: detail.trim().slice(0, 160) })
+    })
+  })
+}
+
+// Each `node --check` is independent, so run a bounded pool instead of serially
+// spawning ~one process at a time (this step was ~35% of the whole gate). Results
+// are written back by index, so `broken` stays in sorted-scripts order and the
+// output is deterministic regardless of completion timing.
+const results = new Array(scripts.length).fill(null)
+let cursor = 0
+async function worker() {
+  for (;;) {
+    const i = cursor
+    cursor += 1
+    if (i >= scripts.length) return
+    results[i] = await check(scripts[i])
   }
 }
+await Promise.all(Array.from({ length: Math.max(1, cpus().length) }, () => worker()))
+const broken = results.filter(Boolean)
 
 if (broken.length) {
   console.error(JSON.stringify({ ok: false, error: 'tool_syntax_invalid', broken }, null, 2))
