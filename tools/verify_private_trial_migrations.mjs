@@ -26,6 +26,7 @@ const expectedMigrations = [
   '20260803063822_private_trial_backend_v9_metadata_rls.sql',
   '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
   '20260816120000_private_trial_backend_v11_self_serve_grants.sql',
+  '20260817090000_private_trial_backend_v12_billing_rail.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -202,9 +203,66 @@ const expectedTriggerContract = {
     functionName: 'guard_workspace_state_update',
     sourceHash: '1acd37aadc59d091ef066349d0a734f776dd7aaf15218b0911bf813224f2b460',
   },
+  billing_invoice_guard: {
+    table: 'billing_invoices',
+    eventMask: 31,
+    functionName: 'guard_billing_invoice',
+    sourceHash: '9357f8bb46f9e3926b482424566ee1569e2ed52bc1b27b92a8d0bfa95ca69bb2',
+  },
+  billing_events_immutable: {
+    table: 'billing_events',
+    eventMask: 27,
+    functionName: 'reject_billing_event_mutation',
+    sourceHash: 'e842b7e9fa37239f1ad70f54cb401cf80a6eeda7ecdbb1259089c5118fb6bef0',
+  },
+  billing_events_server_timestamp: {
+    table: 'billing_events',
+    eventMask: 7,
+    functionName: 'stamp_billing_event_insert',
+    sourceHash: '84db3637f01c535294d6df96798fc64c7fc7fe891eb21e977c9d17a1fc7fd338',
+  },
+  billing_entitlement_guard: {
+    table: 'billing_entitlements',
+    eventMask: 31,
+    functionName: 'guard_billing_entitlement',
+    sourceHash: '68ccc18d3e389d4647204098815da29fcc9f0bf09040a97032d9ccea1811178a',
+  },
 }
 const expectedIndexes = {
   approval_requests_pkey: ['approval_requests', ['approval_id'], [0], true, true, 'p'],
+  billing_entitlements_pkey: [
+    'billing_entitlements',
+    ['workspace_id'],
+    [0],
+    true,
+    true,
+    'p',
+  ],
+  billing_events_pkey: ['billing_events', ['event_id'], [0], true, true, 'p'],
+  billing_events_timeline_idx: [
+    'billing_events',
+    ['workspace_id', 'created_at'],
+    [0, 3],
+    false,
+    false,
+    null,
+  ],
+  billing_events_workspace_id_command_id_key: [
+    'billing_events',
+    ['workspace_id', 'command_id'],
+    [0, 0],
+    true,
+    false,
+    'u',
+  ],
+  billing_invoices_pkey: [
+    'billing_invoices',
+    ['workspace_id', 'invoice_id'],
+    [0, 0],
+    true,
+    true,
+    'p',
+  ],
   approval_requests_queue_idx: [
     'approval_requests',
     ['workspace_id', 'status', 'requested_at'],
@@ -361,7 +419,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version eleven', version.rows[0]?.schema_version === 11)
+requireCheck('schema version twelve', version.rows[0]?.schema_version === 12)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -379,6 +437,9 @@ requireCheck(
     JSON.stringify(
       [
         'approval_requests',
+        'billing_entitlements',
+        'billing_events',
+        'billing_invoices',
         'trial_schema_meta',
         'workspace_access_controls',
         'workspace_events',
@@ -400,6 +461,9 @@ const rlsRows = await database.query(`
 `)
 const expectedRls = [
   { relation_name: 'approval_requests', rls_enabled: true, rls_forced: true },
+  { relation_name: 'billing_entitlements', rls_enabled: true, rls_forced: true },
+  { relation_name: 'billing_events', rls_enabled: true, rls_forced: true },
+  { relation_name: 'billing_invoices', rls_enabled: true, rls_forced: true },
   { relation_name: 'trial_schema_meta', rls_enabled: true, rls_forced: false },
   { relation_name: 'workspace_access_controls', rls_enabled: true, rls_forced: true },
   { relation_name: 'workspace_events', rls_enabled: true, rls_forced: true },
@@ -453,6 +517,24 @@ requireCheck(
       const initplanCalls = expression.match(/\(\s*select\s+current_setting\(/g)?.length ?? 0
       return requestContextCalls > 0 && requestContextCalls === initplanCalls
     }),
+)
+
+// v12 billing rail: deny by default is the contract. The exact policy inventory
+// above already proves the billing tables carry no policies; this check proves
+// the runtime member role and the Supabase API roles also hold no table
+// privilege, so premiumUnlocked stays fail-closed until a founder-approved
+// migration adds the narrow entitlement read.
+const billingPrivilegeRows = await database.query(`
+  select bool_or(
+    has_table_privilege(role_name, format('app_private.%I', table_name), privilege_name)
+  ) as any_privilege
+  from unnest(array['billing_invoices', 'billing_events', 'billing_entitlements']) table_name,
+       unnest(array['supermega_trial_backend', 'anon', 'authenticated', 'service_role']) role_name,
+       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) privilege_name
+`)
+requireCheck(
+  'v12 billing tables are deny-by-default for the runtime and API roles',
+  billingPrivilegeRows.rows[0]?.any_privilege === false,
 )
 
 const accessFunctionRows = await database.query(`
@@ -781,7 +863,7 @@ const hostedVersion = await hostedDatabase.query(
 )
 requireCheck(
   'exact Supabase hosted administrative membership accepted',
-  hostedVersion.rows[0]?.schema_version === 11,
+  hostedVersion.rows[0]?.schema_version === 12,
 )
 
 const memberDatabase = new PGlite()

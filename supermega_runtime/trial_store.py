@@ -317,6 +317,110 @@ _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
     },
 }
 
+if TRIAL_SCHEMA_VERSION >= 12:
+    # Billing rail v12 (BILLING-RAIL-DESIGN.md 4.4): the billing tables carry
+    # their own hardening triggers, mirrored here byte-for-byte from
+    # 20260817090000_private_trial_backend_v12_billing_rail.sql so the exact
+    # trigger-inventory assertion keeps holding. On the default v10/v11 targets
+    # the inventory is unchanged; an operator raises
+    # SUPERMEGA_TRIAL_SCHEMA_VERSION only after applying v12.
+    _PRIVATE_HARDENING_TRIGGER_CONTRACT.update(
+        {
+            ("billing_invoices", "billing_invoice_guard"): {
+                "event_mask": 31,
+                "function_name": "guard_billing_invoice",
+                "function_source": """
+                    begin
+                      if tg_op = 'INSERT' then
+                        if new.status <> 'issued' then
+                          raise exception using errcode = '55000', message = 'billing invoices are recorded at issued status';
+                        end if;
+                        if new.revision <> 1 then
+                          raise exception using errcode = '55000', message = 'initial billing invoice revision must be one';
+                        end if;
+                        new.created_at := transaction_timestamp();
+                        new.updated_at := transaction_timestamp();
+                        return new;
+                      end if;
+                      if tg_op = 'DELETE' then
+                        raise exception using errcode = '55000', message = 'billing invoices cannot be deleted';
+                      end if;
+                      if new.workspace_id is distinct from old.workspace_id
+                         or new.invoice_id is distinct from old.invoice_id
+                         or new.invoice_digest is distinct from old.invoice_digest
+                         or new.payload_json is distinct from old.payload_json
+                         or new.created_at is distinct from old.created_at then
+                        raise exception using errcode = '55000', message = 'billing invoice identity is immutable';
+                      end if;
+                      if old.status <> 'issued' or new.status not in ('paid', 'void') then
+                        raise exception using errcode = '55000', message = 'billing invoice status can only transition from issued to paid or void';
+                      end if;
+                      if new.revision <> old.revision + 1 then
+                        raise exception using errcode = '40001', message = 'billing invoice revision must increment by one';
+                      end if;
+                      new.updated_at := transaction_timestamp();
+                      return new;
+                    end
+                """,
+            },
+            ("billing_events", "billing_events_immutable"): {
+                "event_mask": 27,
+                "function_name": "reject_billing_event_mutation",
+                "function_source": """
+                    begin
+                      raise exception using
+                        errcode = '55000',
+                        message = 'billing events are immutable';
+                    end
+                """,
+            },
+            ("billing_events", "billing_events_server_timestamp"): {
+                "event_mask": 7,
+                "function_name": "stamp_billing_event_insert",
+                "function_source": """
+                    begin
+                      new.created_at := transaction_timestamp();
+                      return new;
+                    end
+                """,
+            },
+            ("billing_entitlements", "billing_entitlement_guard"): {
+                "event_mask": 31,
+                "function_name": "guard_billing_entitlement",
+                "function_source": """
+                    begin
+                      if tg_op = 'INSERT' then
+                        if new.status <> 'none' or new.revision <> 1 then
+                          raise exception using errcode = '55000', message = 'billing entitlement rows start at none with revision one';
+                        end if;
+                        new.updated_at := transaction_timestamp();
+                        return new;
+                      end if;
+                      if tg_op = 'DELETE' then
+                        raise exception using errcode = '55000', message = 'billing entitlements cannot be deleted';
+                      end if;
+                      if new.workspace_id is distinct from old.workspace_id
+                         or new.tier is distinct from old.tier then
+                        raise exception using errcode = '55000', message = 'billing entitlement identity is immutable';
+                      end if;
+                      if not (
+                        (old.status = 'none' and new.status = 'granted')
+                        or (old.status = 'granted' and new.status = 'revoked')
+                        or (old.status = 'revoked' and new.status = 'granted')
+                      ) then
+                        raise exception using errcode = '55000', message = 'billing entitlement transitions are none to granted, granted to revoked, or revoked to granted';
+                      end if;
+                      if new.revision <> old.revision + 1 then
+                        raise exception using errcode = '40001', message = 'billing entitlement revision must increment by one';
+                      end if;
+                      new.updated_at := transaction_timestamp();
+                      return new;
+                    end
+                """,
+            },
+        }
+    )
+
 
 class TrialStoreError(RuntimeError):
     """Base class for safe, expected trial-store failures."""
@@ -451,6 +555,10 @@ class TrialReadiness:
     audit_ready: bool
     write_enabled: bool
     capabilities: frozenset[str] = frozenset()
+    # Billing rail v12 (BILLING-RAIL-DESIGN.md 4.3): derived ONLY from the
+    # server-side billing_entitlements projection, never stored on the device,
+    # and fail-closed to False everywhere the entitlement cannot be proven.
+    premium_unlocked: bool = False
 
     @property
     def read_ready(self) -> bool:
@@ -497,6 +605,7 @@ class TrialReadiness:
                 "write_enabled": self.write_enabled,
             },
             "blockers": list(self.blockers),
+            "premiumUnlocked": self.premium_unlocked,
         }
 
 
@@ -3851,6 +3960,44 @@ class PostgresTrialStore:
                         raise TrialPermissionDenied(capability)
                     yield cursor, capabilities
 
+    @staticmethod
+    def _premium_unlocked(cursor: Any, workspace_id: str) -> bool:
+        """Billing rail v12 (BILLING-RAIL-DESIGN.md 4.3): derive premiumUnlocked
+        from the billing_entitlements projection, one query, fail closed.
+
+        The privilege probe runs first because the v12 billing tables are
+        deny-by-default and grant the runtime role nothing: without it the
+        entitlement read would raise insufficient_privilege and abort the
+        readiness transaction. Until a founder-approved migration adds the
+        narrow entitlement read, the probe is false and the flag stays False.
+        """
+
+        cursor.execute(
+            """
+            select case
+              when to_regclass('app_private.billing_entitlements') is null then false
+              else has_table_privilege(
+                current_user, 'app_private.billing_entitlements', 'SELECT'
+              )
+            end as entitlement_readable
+            """
+        )
+        if not bool((cursor.fetchone() or {}).get("entitlement_readable")):
+            return False
+        cursor.execute(
+            """
+            select exists (
+              select 1
+              from app_private.billing_entitlements entitlement
+              where entitlement.workspace_id = %s
+                and entitlement.tier = 'premium'
+                and entitlement.status = 'granted'
+            ) as premium_unlocked
+            """,
+            (workspace_id,),
+        )
+        return bool((cursor.fetchone() or {}).get("premium_unlocked"))
+
     def readiness(self, principal: TrialPrincipal | None) -> TrialReadiness:
         auth_ready = _principal_auth_ready(principal)
         database_ready = False
@@ -3858,6 +4005,7 @@ class PostgresTrialStore:
         schema_ready = False
         membership_ready = False
         audit_ready = False
+        premium_unlocked = False
         capabilities: frozenset[str] = frozenset()
         if not self.database_url:
             return TrialReadiness(
@@ -3887,6 +4035,10 @@ class PostgresTrialStore:
                             self._set_context(cursor, normalized)
                             capabilities = self._load_membership(cursor, normalized)
                             membership_ready = True
+                            if TRIAL_SCHEMA_VERSION >= 12:
+                                premium_unlocked = self._premium_unlocked(
+                                    cursor, normalized.workspace_id
+                                )
         except TrialNotReadyError as exc:
             if "postgres_driver_ready" in exc.reasons:
                 database_ready = False
@@ -3914,6 +4066,7 @@ class PostgresTrialStore:
             audit_ready=audit_ready,
             write_enabled=self.write_enabled,
             capabilities=capabilities,
+            premium_unlocked=premium_unlocked,
         )
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
