@@ -1,0 +1,89 @@
+{
+  "contract": "supermega.billing-entitlement-read-proof.v1",
+  "approvalId": "billing-v13-proof-24h-20260817",
+  "recordedAt": "2026-08-17T14:35:00.000Z",
+  "operator": "tech-lead session, founder-directed",
+  "branch": {
+    "name": "billing-v13-proof-24h-20260817",
+    "id": "553a464e-2772-4d5c-acfa-6cdd28e41883",
+    "projectRef": "pbgiumcytlvoztqsjoam",
+    "parentProjectRef": "zvtzwcimpvvtkowflhda",
+    "postgresEngine": "17.6",
+    "maximumLifetimeHours": 24,
+    "deleteAfterEvidence": true
+  },
+  "instrument": {
+    "migrationChain": "supabase/migrations/*.sql",
+    "commit": "3a81a36aef86f4b0ade2775bd0e232504e67527a",
+    "migrationCount": 14,
+    "finalMigration": "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
+    "schemaVersionProven": 13,
+    "method": "full chain replayed from scratch (v1 through v13, each internal version guard enforced in sequence) on a fresh disposable branch, then a live psql session bound to the non-BYPASSRLS supermega_trial_backend role via GUC identity (app.workspace_id/app.actor_id/app.actor_kind), matching the runtime's real connection shape"
+  },
+  "audit": {
+    "captured_at": "2026-08-17T14:32:10Z",
+    "contract": "billing_entitlements_self_read.v1",
+    "ok": true,
+    "roleAttributesConfirmedUnchanged": {
+      "rolcanlogin": false,
+      "postgresMembership": {
+        "admin_option": true,
+        "inherit_option": false,
+        "set_option": false
+      },
+      "note": "SET option was granted to postgres temporarily (via the ADMIN option v4 already grants it) only to open a session as the runtime role for this proof, then revoked immediately after; final state verified identical to the v4-guarded baseline."
+    },
+    "proofs": [
+      {
+        "id": "own_workspace_entitlement_visible",
+        "workspace_bound": "ws-proof-a",
+        "row_returned": { "workspace_id": "ws-proof-a", "tier": "premium", "status": "granted", "revision": 2 },
+        "result": "select_succeeded_exact_own_row"
+      },
+      {
+        "id": "cross_workspace_entitlement_invisible",
+        "workspace_bound": "ws-proof-a",
+        "queried_workspace": "ws-proof-b",
+        "visible_count": 0,
+        "result": "denied_with_canary"
+      },
+      {
+        "id": "billing_invoices_stays_dark",
+        "sqlstate": "42501",
+        "result": "permission_denied_no_policy_no_grant"
+      },
+      {
+        "id": "billing_events_stays_dark",
+        "sqlstate": "42501",
+        "result": "permission_denied_no_policy_no_grant"
+      },
+      {
+        "id": "entitlement_insert_denied",
+        "sqlstate": "42501",
+        "result": "permission_denied"
+      },
+      {
+        "id": "entitlement_update_denied",
+        "sqlstate": "42501",
+        "result": "permission_denied"
+      },
+      {
+        "id": "entitlement_delete_denied",
+        "sqlstate": "42501",
+        "result": "permission_denied"
+      }
+    ],
+    "securityAdvisors": {
+      "level_breakdown": { "INFO": 2, "WARN": 0, "ERROR": 0 },
+      "findings": [
+        "rls_enabled_no_policy on app_private.billing_events (expected: deny-by-default, founder-only forever)",
+        "rls_enabled_no_policy on app_private.billing_invoices (expected: deny-by-default, founder-only forever)"
+      ],
+      "actionRequired": false
+    },
+    "secrets_exposed": false,
+    "writes_confined_to_fixtures": true,
+    "fixture_workspaces": ["ws-proof-a", "ws-proof-b", "ws-proof-c"]
+  },
+  "verdict": "billing_entitlements_self_read policy proven on real hosted Postgres 17: a session bound to one workspace reads only that workspace's entitlement row, cannot see another workspace's row even when directly queried, cannot write (insert/update/delete all denied), and billing_invoices/billing_events remain completely dark to the runtime role. Migration v13 is safe to apply to production as its own founder decision, separate from v12."
+}
