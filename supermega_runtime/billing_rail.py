@@ -21,11 +21,13 @@ digest-sealed invoice packet and is only ever validated, never fabricated.
 
 from __future__ import annotations
 
+import argparse
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+from pathlib import Path
 import re
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
@@ -1323,6 +1325,210 @@ class BillingLedger:
             connection.close()
 
 
+# Founder-run CLI: the only place BillingLedger is ever actually invoked
+# (design section 6). Mirrors managed_activation.py's CLI shape exactly --
+# argparse subparsers, evidence and packets always read from files (never as
+# raw CLI arguments, so reason text and other free-form fields never touch
+# shell history or a process listing), structured JSON stdout, and a two-tier
+# exception handler that never leaks driver or provider detail.
+
+# Deliberate typed-confirmation friction gate for every mutating subcommand,
+# consistent with how this repo gates every consequential founder action
+# (mirrors managed_activation's --confirm-owner-approval, matched here against
+# a fixed phrase instead of a plan's approvalId since there is no plan file).
+CONFIRM_BILLING_ACTION_PHRASE = "CONFIRM BILLING ACTION"
+
+
+def _read_json(path_value: str, label: str) -> Any:
+    path = Path(path_value).resolve()
+    if not path.is_file() or path.stat().st_size > MAX_INPUT_BYTES:
+        raise BillingRailError(f"{label} is missing or too large.")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise BillingRailError(f"{label} is not valid UTF-8 JSON.") from exc
+    if not isinstance(value, dict):
+        raise BillingRailError(f"{label} must contain a JSON object.")
+    return value
+
+
+def _read_database_url(path_value: str) -> str:
+    """Read the administrative database URL from a file, never a CLI
+    argument, so the URL never appears in shell history or a process listing.
+    BillingLedger._connect enforces the encrypted-sslmode and CA rules; this
+    helper only has to get the bytes off disk safely."""
+
+    path = Path(path_value).resolve()
+    if not path.is_file() or path.stat().st_size > 16 * 1024:
+        raise BillingRailError("Billing database URL file is missing or too large.")
+    value = path.read_text(encoding="utf-8").strip()
+    if not value:
+        raise BillingRailError("Billing database URL file is empty.")
+    return value
+
+
+def _int_argument(value: str, label: str) -> int:
+    if not isinstance(value, str) or not re.fullmatch(r"-?[0-9]+", value):
+        raise BillingRailError(f"{label} must be an integer.")
+    return int(value)
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Record one founder-verified billing rail transition (Gate 9)."
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def add_read_arguments(sub: argparse.ArgumentParser) -> None:
+        sub.add_argument("--database-url-file", required=True)
+        sub.add_argument("--workspace-id", required=True)
+
+    def add_mutation_arguments(sub: argparse.ArgumentParser) -> None:
+        add_read_arguments(sub)
+        sub.add_argument("--evidence-file", required=True)
+        sub.add_argument("--confirm-billing-action", required=True)
+
+    issue_invoice = subparsers.add_parser("issue-invoice")
+    add_mutation_arguments(issue_invoice)
+    issue_invoice.add_argument("--packet-file", required=True)
+
+    confirm_payment = subparsers.add_parser("confirm-payment")
+    add_mutation_arguments(confirm_payment)
+    confirm_payment.add_argument("--invoice-id", required=True)
+    confirm_payment.add_argument("--expected-revision", required=True)
+    confirm_payment.add_argument("--payment-reference", required=True)
+    confirm_payment.add_argument("--channel-category", required=True)
+    confirm_payment.add_argument("--paid-at", required=True)
+
+    void_invoice = subparsers.add_parser("void-invoice")
+    add_mutation_arguments(void_invoice)
+    void_invoice.add_argument("--invoice-id", required=True)
+    void_invoice.add_argument("--expected-revision", required=True)
+
+    grant_entitlement = subparsers.add_parser("grant-entitlement")
+    add_mutation_arguments(grant_entitlement)
+    grant_entitlement.add_argument("--invoice-digest", required=True)
+    grant_entitlement.add_argument("--expected-revision", required=True)
+
+    revoke_entitlement = subparsers.add_parser("revoke-entitlement")
+    add_mutation_arguments(revoke_entitlement)
+    revoke_entitlement.add_argument("--reason-class", required=True)
+    revoke_entitlement.add_argument("--expected-revision", required=True)
+
+    record_refund = subparsers.add_parser("record-refund")
+    add_mutation_arguments(record_refund)
+    record_refund.add_argument("--invoice-digest", required=True)
+    record_refund.add_argument("--amount-minor", required=True)
+    record_refund.add_argument("--channel-category", required=True)
+    record_refund.add_argument("--refund-reference", required=True)
+
+    status = subparsers.add_parser("status")
+    add_read_arguments(status)
+
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    mutation_performed = False
+    try:
+        if args.command != "status" and args.confirm_billing_action != CONFIRM_BILLING_ACTION_PHRASE:
+            raise BillingRailError(
+                f'Billing mutations require --confirm-billing-action "{CONFIRM_BILLING_ACTION_PHRASE}".'
+            )
+        database_url = _read_database_url(args.database_url_file)
+        ledger = BillingLedger(database_url)
+        if args.command == "status":
+            result = ledger.get_billing_state(args.workspace_id)
+        else:
+            evidence = _read_json(args.evidence_file, "Billing evidence")
+            if args.command == "issue-invoice":
+                packet = _read_json(args.packet_file, "Invoice packet")
+                result = ledger.issue_invoice(
+                    packet, workspace_id=args.workspace_id, evidence=evidence
+                )
+            elif args.command == "confirm-payment":
+                result = ledger.confirm_payment(
+                    workspace_id=args.workspace_id,
+                    invoice_id=args.invoice_id,
+                    expected_revision=_int_argument(args.expected_revision, "Expected revision"),
+                    payment_reference=args.payment_reference,
+                    channel_category=args.channel_category,
+                    paid_at=args.paid_at,
+                    evidence=evidence,
+                )
+            elif args.command == "void-invoice":
+                result = ledger.void_invoice(
+                    workspace_id=args.workspace_id,
+                    invoice_id=args.invoice_id,
+                    expected_revision=_int_argument(args.expected_revision, "Expected revision"),
+                    evidence=evidence,
+                )
+            elif args.command == "grant-entitlement":
+                result = ledger.grant_entitlement(
+                    workspace_id=args.workspace_id,
+                    invoice_digest=args.invoice_digest,
+                    expected_revision=_int_argument(args.expected_revision, "Expected revision"),
+                    evidence=evidence,
+                )
+            elif args.command == "revoke-entitlement":
+                result = ledger.revoke_entitlement(
+                    workspace_id=args.workspace_id,
+                    reason_class=args.reason_class,
+                    expected_revision=_int_argument(args.expected_revision, "Expected revision"),
+                    evidence=evidence,
+                )
+            elif args.command == "record-refund":
+                result = ledger.record_refund(
+                    workspace_id=args.workspace_id,
+                    invoice_digest=args.invoice_digest,
+                    amount_minor=_int_argument(args.amount_minor, "Amount minor"),
+                    channel_category=args.channel_category,
+                    refund_reference=args.refund_reference,
+                    evidence=evidence,
+                )
+            else:
+                raise BillingRailError("Unknown billing command.")
+            mutation_performed = result.get("replayed") is False
+        print(json.dumps(result, ensure_ascii=False, separators=(",", ":"), sort_keys=True))
+        return 0
+    except (BillingRailError, TrialIdempotencyConflict, OSError, json.JSONDecodeError) as exc:
+        print(
+            json.dumps(
+                {
+                    "contract": "supermega.managed_billing_event_error.v1",
+                    "status": "blocked",
+                    "error": str(exc),
+                    "secretValuesExposed": False,
+                    "externalMutationPerformed": mutation_performed,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+        return 1
+    except Exception:
+        print(
+            json.dumps(
+                {
+                    "contract": "supermega.managed_billing_event_error.v1",
+                    "status": "blocked",
+                    "error": "Billing rail command failed without exposing provider or credential details.",
+                    "secretValuesExposed": False,
+                    "externalMutationPerformed": mutation_performed,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
 __all__ = [
     "BILLING_EVENT_RESULT_CONTRACT",
     "BILLING_EVENT_TYPES",
@@ -1331,11 +1537,13 @@ __all__ = [
     "BillingLedger",
     "BillingRailConflict",
     "BillingRailError",
+    "CONFIRM_BILLING_ACTION_PHRASE",
     "INVOICE_PACKET_CONTRACT",
     "MANAGED_BILLING_CONTRACT",
     "PAYMENT_CHANNEL_CATEGORIES",
     "PREMIUM_TIER",
     "REVOKE_REASON_CLASSES",
+    "main",
     "validate_founder_evidence",
     "validate_invoice_packet",
 ]
