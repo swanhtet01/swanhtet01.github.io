@@ -128,8 +128,11 @@ class OpenAIOrderIntakeProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(timeout, 30)
         self.assertEqual(
             set(payload),
-            {"model", "instructions", "input", "max_output_tokens", "safety_identifier", "store", "text"},
+            {"model", "instructions", "input", "max_output_tokens", "reasoning", "safety_identifier", "store", "text"},
         )
+        # Reasoning models spend max_output_tokens on reasoning FIRST; effort is
+        # pinned low so the strict-schema JSON actually fits (2026-08-17 eval).
+        self.assertEqual(payload["reasoning"], {"effort": "low"})
         self.assertFalse(payload["store"])
         self.assertNotIn("tools", payload)
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")  # type: ignore[index]

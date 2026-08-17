@@ -41,7 +41,13 @@ DEFAULT_ORDER_INTAKE_MODEL = "gpt-5-mini"
 MAX_ORDER_INTAKE_CATALOG_ITEMS = 250
 MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES = 96 * 1024
 MAX_ORDER_INTAKE_PROVIDER_RESPONSE_BYTES = 256 * 1024
-ORDER_INTAKE_MAX_OUTPUT_TOKENS = 1_200
+# gpt-5-mini is a REASONING model: its reasoning tokens are billed inside
+# max_output_tokens BEFORE any JSON is emitted. The 2026-08-17 golden-set run
+# proved a 1,200 cap is fully consumed by reasoning (1,152/1,152 observed,
+# status "incomplete", 20/20 fixtures dead) — so the payload pins reasoning
+# effort low and the cap leaves headroom for the strict-schema extraction.
+ORDER_INTAKE_MAX_OUTPUT_TOKENS = 4_000
+ORDER_INTAKE_REASONING_EFFORT = "low"
 ORDER_INTAKE_TIMEOUT_SECONDS = 20.0
 COMPANY_DAILY_BUDGET_DEFAULT_UNITS = 500_000
 COMPANY_DAILY_BUDGET_HARD_MAX_UNITS = 2_000_000
@@ -442,6 +448,7 @@ class OpenAIOrderIntakeProvider:
             "instructions": _SYSTEM_INSTRUCTIONS,
             "input": provider_input,
             "max_output_tokens": ORDER_INTAKE_MAX_OUTPUT_TOKENS,
+            "reasoning": {"effort": ORDER_INTAKE_REASONING_EFFORT},
             "safety_identifier": hmac.new(
                 self._safety_secret,
                 f"{workspace_id}\x1f{actor_id}".encode("utf-8"),
