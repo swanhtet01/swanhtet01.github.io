@@ -485,3 +485,53 @@ future model change brings p95 under 5s, this amendment retires.
   number only when no such marker is present. The five outlier fixtures were
   corrected to match; verified every corrected quote is a literal substring
   of its fixture's message. Nothing from run 4 counts toward the gate.
+- Run 5 (2026-08-17): **First run to pass both zero-tolerance safety
+  gates** (`zero_fabricated_critical_facts`, `zero_unsafe_ready_for_review`),
+  achieved by a structural change rather than a fourth prompt strategy:
+  `supermega_runtime/order_intake.py` gained a deterministic post-model
+  guard, `_detect_negated_enum_conflicts`, that scans the raw message for
+  two or more distinct candidate names for the same enum field
+  (channel/payment/fulfilment) together with a negation marker (English
+  "not"/"n't"/"instead of", Burmese `မဟုတ်`) anywhere in the text. When it
+  fires, `build_order_intake_draft` forces that field to null and uncertain
+  in the FINAL DRAFT regardless of what the model claimed or how confident
+  it was — the model's own (possibly one-sided) evidence is preserved in
+  `provenance` for a human reviewer, only the draft's value and status are
+  overridden. This is independent of prompt wording by design: after three
+  prompt-only strategies each failed on fixture
+  `mixed-conflicting-channel-13`, the server no longer trusts the model for
+  this exact pattern at all. Verified against the full 20-fixture corpus
+  before running live that the guard fires only on fixture 13 and does not
+  false-positive on the three other fixtures containing a negation marker
+  (04, 17, 19); added 4 unit tests in `tests/test_order_intake.py`
+  reproducing the exact historical bug (an overconfident extraction
+  identical in shape to what the real provider returned) plus three
+  guard-boundary cases (no negation, single candidate, `cash on delivery`
+  not double-counted as two payment candidates).
+  Overall `quality_gate_passed` is **still false** — this is not a pass, and
+  is not represented as one:
+  - `schema_validity_100` failed: 2/20 fixtures (`en-multiple-items-10`,
+    `mixed-insufficient-stock-14`) returned `order_intake_provider_invalid_response`
+    with `draft: None` — the failure is inside `order_intake_provider.py`'s
+    own response-shape parsing, upstream of and unrelated to the new guard
+    (`order_intake.py` never ran for either). Matches the class of failure
+    already seen in run 2 (3 schema_errors then); an inherent provider/model
+    response-shape reliability issue, not a regression from this change.
+  - `provenance_coverage_100` failed: 0.90 (55/61) — several fixtures with
+    NO negation marker present, entirely untouched by the new guard code
+    path, returned VALUES that matched the golden fixtures but QUOTE TEXT
+    that did not literally match the annotated `source_quotes` string
+    (e.g. citing a shorter or differently-worded span for the same correct
+    value). Read as model sampling variance between calls, not a defect
+    introduced here; genuinely new information from this run, since prior
+    runs never isolated quote-literal drift from value-extraction accuracy.
+  Recommended next steps, in order, before another full run: (1) capture the
+  raw invalid response body for a `order_intake_provider_invalid_response`
+  the next time it occurs, to diagnose whether it is a truncation/format
+  issue fixable server-side; (2) decide whether the scorer's provenance
+  check should tolerate a semantically-equivalent shorter/longer quote
+  instead of requiring an exact literal match against one annotated string,
+  given a reasoning model's demonstrated non-determinism in exact wording;
+  (3) only then run 6. The capability stays dark. This is real, durable
+  progress on the harder of the two problems (safety), and a newly
+  precise, narrower problem statement on the easier one (reliability).
