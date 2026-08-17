@@ -15,16 +15,38 @@ import {
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
 import { loadCommerceWorkspace } from './commerce-workspace'
-import { loadProductionWorkspace } from './production-workspace'
+import { loadProductionWorkspace, productionMaintenanceDueQueue } from './production-workspace'
 import { projectShopOrderProductionStatus } from './shop-production-status'
 import { projectCrossProductOperatingSummary } from './cross-product-report'
 import { projectShopRevenueSummary } from './shop-revenue-summary'
 import { projectPlantOeeSummary } from './plant-oee-summary'
+import { projectPlantEquipmentMaintenanceSummary } from './plant-equipment-maintenance-summary'
 import { projectWebsiteLeadSummary } from './website-lead-summary'
 import { readWebsiteLeadLedger } from '../products/website/website-leads'
 import { projectCustomerJourneySummary } from './customer-journey-summary'
 import { projectCeoOperatingBrief } from './ceo-operating-brief'
 import type { EcommercePipelineSummary } from './ecommerce-pipeline-summary'
+import { projectEcommerceStaleRequestQueue } from './ecommerce-request-age-summary'
+import type { EcommerceOrderRequestV2 } from '../products/ecommerce/ecommerce-buying-lifecycle.ts'
+
+const ECOMMERCE_BUYING_LOCAL_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'
+
+// Same raw-localStorage read EcommercePipelineView below uses: readEcommerceBuyingState's
+// validation is async, and every other view on this page reads its workspace state
+// synchronously in useMemo, so this stays consistent with that existing pattern rather than
+// introducing the only async view on the page. Malformed or missing data degrades to an
+// empty queue rather than throwing.
+function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
+  try {
+    if (typeof window === 'undefined') return []
+    const raw = window.localStorage.getItem(ECOMMERCE_BUYING_LOCAL_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as { requests?: unknown }
+    return Array.isArray(parsed.requests) ? parsed.requests as EcommerceOrderRequestV2[] : []
+  } catch {
+    return []
+  }
+}
 
 function CeoOperatingBriefView() {
   const commerce = useMemo(() => loadCommerceWorkspace().state, [])
@@ -230,6 +252,97 @@ function PlantOeeView() {
   )
 }
 
+function PlantMaintenanceDueView() {
+  const production = useMemo(() => loadProductionWorkspace().state, [])
+  const asOf = useMemo(() => new Date().toISOString(), [])
+  const summary = useMemo(() => projectPlantEquipmentMaintenanceSummary(production, asOf), [production, asOf])
+  const queue = useMemo(() => productionMaintenanceDueQueue(production, asOf), [production, asOf])
+  const summaryRows: Array<readonly [string, string]> = [
+    ['With maintenance strategy', String(summary.withMaintenanceStrategy)],
+    ['Overdue', String(summary.overdueCount)],
+    ['Due within 7 days', String(summary.dueSoonCount)],
+    ['On track', String(summary.onTrackCount)],
+    ['Critical overdue', String(summary.criticalOverdueCount)],
+  ]
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Preventive maintenance due dates from equipment maintenance strategy records. Read-only — nothing here starts or completes maintenance work." eyebrow="Plant" title="Maintenance due" />
+      <div className="settings-control-stack">
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Due summary</span></div>
+          <div aria-label="Maintenance due summary" className="readiness-list">
+            {summaryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+        </section>
+        {queue.items.length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">Equipment, soonest due first</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>Equipment</th><th>Criticality</th><th>Owner</th><th>Procedure</th><th>Due</th><th>Status</th></tr></thead>
+                <tbody>{queue.items.map((item) => (
+                  <tr key={item.assetId}>
+                    <td>{item.assetName} ({item.assetId})</td>
+                    <td>{item.criticality}</td>
+                    <td>{item.owner}</td>
+                    <td>{item.procedureReference}</td>
+                    <td>{item.dueAt.slice(0, 10)}</td>
+                    <td>{item.status === 'overdue'
+                      ? <span className="status-pill pending">{item.daysUntilDue === 0 ? 'Overdue' : `${Math.abs(item.daysUntilDue)}d overdue`}</span>
+                      : item.status === 'due_soon'
+                        ? <span className="status-pill bounded">Due in {item.daysUntilDue}d</span>
+                        : <span className="status-pill approved">Due in {item.daysUntilDue}d</span>}</td>
+                  </tr>
+                ))}</tbody>
+              </table></div></section>
+          : <p className="form-notice">No commissioned equipment has a maintenance strategy yet. Save a preventive maintenance strategy in Plant to populate this view.</p>}
+      </div>
+    </div>
+  )
+}
+
+function EcommerceStaleRequestsView() {
+  const asOf = useMemo(() => new Date().toISOString(), [])
+  const requests = useMemo(() => readEcommercePendingRequests(), [])
+  const queue = useMemo(() => projectEcommerceStaleRequestQueue(requests, asOf), [requests, asOf])
+  const agingCount = queue.filter((entry) => entry.tier === 'aging').length
+  const staleCount = queue.filter((entry) => entry.tier === 'stale').length
+  const summaryRows: Array<readonly [string, string]> = [
+    ['Aging (24h-7d)', String(agingCount)],
+    ['Stale (7d+)', String(staleCount)],
+    ['Oldest pending', queue[0] ? `${queue[0].ageHours}h` : '—'],
+  ]
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Pending Ecommerce requests Shop hasn't reviewed yet, oldest first. Read-only — no message is sent to any customer from here." eyebrow="Ecommerce" title="Stale request follow-up" />
+      <div className="settings-control-stack">
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Follow-up queue</span></div>
+          <div aria-label="Stale request summary" className="readiness-list">
+            {summaryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+        </section>
+        {queue.length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">Requests, oldest first</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>Request</th><th>Customer</th><th>Fulfilment</th><th>Total</th><th>Received</th><th>Age</th></tr></thead>
+                <tbody>{queue.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{entry.id}</td>
+                    <td>{entry.customerReference}</td>
+                    <td>{entry.fulfilment}</td>
+                    <td>{entry.totalMmk.toLocaleString()}</td>
+                    <td>{entry.createdAt.slice(0, 10)}</td>
+                    <td>{entry.tier === 'stale'
+                      ? <span className="status-pill pending">{entry.ageHours}h — stale</span>
+                      : <span className="status-pill bounded">{entry.ageHours}h — aging</span>}</td>
+                  </tr>
+                ))}</tbody>
+              </table></div></section>
+          : <p className="form-notice">No pending request has been waiting more than 24 hours. Shop's review queue is current.</p>}
+      </div>
+    </div>
+  )
+}
+
 function ShopRevenueView() {
   const commerce = useMemo(() => loadCommerceWorkspace().state, [])
   const summary = useMemo(() => projectShopRevenueSummary(commerce), [commerce])
@@ -343,9 +456,11 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'cross-product') return <CrossProductView />
   if (searchParams.get('view') === 'shop-revenue') return <ShopRevenueView />
   if (searchParams.get('view') === 'plant-oee') return <PlantOeeView />
+  if (searchParams.get('view') === 'plant-maintenance-due') return <PlantMaintenanceDueView />
   if (searchParams.get('view') === 'website-leads') return <WebsiteLeadsView />
   if (searchParams.get('view') === 'customer-journey') return <CustomerJourneyView />
   if (searchParams.get('view') === 'ecommerce-pipeline') return <EcommercePipelineView />
+  if (searchParams.get('view') === 'ecommerce-stale-requests') return <EcommerceStaleRequestsView />
   if (searchParams.get('view') === 'ceo-brief') return <CeoOperatingBriefView />
 
   function saveRestorePoint() {

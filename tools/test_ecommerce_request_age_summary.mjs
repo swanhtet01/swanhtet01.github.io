@@ -9,7 +9,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { projectEcommerceRequestAgeSummary } from './ecommerce-request-age-summary.ts'`,
+    contents: `export { projectEcommerceRequestAgeSummary, projectEcommerceStaleRequestQueue } from './ecommerce-request-age-summary.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/ecommerce-age-test-entry.ts',
     loader: 'ts',
@@ -21,7 +21,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { projectEcommerceRequestAgeSummary } = await import(
+const { projectEcommerceRequestAgeSummary, projectEcommerceStaleRequestQueue } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -219,6 +219,70 @@ function state({ requests = [], returnIntents = [], cancellationIntents = [], ca
     ASOF,
   )
   check(r.pendingCancellationIntents === 1, 'only the undecided cancellation intent remains pending')
+}
+
+// --- projectEcommerceStaleRequestQueue: the Shop-operator follow-up queue -----------------
+// Same fresh/aging/stale boundaries as above, but returns the individual non-fresh requests
+// (not just bucket counts), sorted oldest-first, for a manual-follow-up view.
+
+// 15. Empty requests → empty queue
+{
+  const q = projectEcommerceStaleRequestQueue([], ASOF)
+  check(Array.isArray(q) && q.length === 0, 'queue: empty requests produce an empty queue')
+}
+
+// 16. A fresh request (1 hour ago) is excluded from the queue entirely
+{
+  const q = projectEcommerceStaleRequestQueue([req({ hoursAgo: 1 })], ASOF)
+  check(q.length === 0, 'queue: fresh request is excluded')
+}
+
+// 17. A request at the 24h boundary is included and tagged aging
+{
+  const q = projectEcommerceStaleRequestQueue([req({ hoursAgo: 24 })], ASOF)
+  check(q.length === 1, 'queue: 24h boundary request is included')
+  check(q[0].tier === 'aging', 'queue: 24h boundary request tagged aging')
+  check(q[0].ageHours === 24, 'queue: 24h boundary request has ageHours 24')
+}
+
+// 18. A request at the 168h boundary is tagged stale
+{
+  const q = projectEcommerceStaleRequestQueue([req({ hoursAgo: 168 })], ASOF)
+  check(q.length === 1, 'queue: 168h boundary request is included')
+  check(q[0].tier === 'stale', 'queue: 168h boundary request tagged stale')
+}
+
+// 19. Just under the 168h boundary (167h) is still tagged aging
+{
+  const q = projectEcommerceStaleRequestQueue([req({ hoursAgo: 167 })], ASOF)
+  check(q[0].tier === 'aging', 'queue: 167h request tagged aging, not stale')
+}
+
+// 20. Mixed ages sort oldest-first and drop the fresh entry
+{
+  const requests = [
+    req({ hoursAgo: 5 }),    // fresh — excluded
+    req({ hoursAgo: 300 }),  // stale
+    req({ hoursAgo: 48 }),   // aging
+    req({ hoursAgo: 500 }),  // stale, oldest
+  ]
+  const q = projectEcommerceStaleRequestQueue(requests, ASOF)
+  check(q.length === 3, 'queue: fresh request dropped, three remain')
+  check(q.map((e) => e.ageHours).join(',') === '500,300,48', 'queue: sorted oldest-first by ageHours')
+  check(q[0].tier === 'stale' && q[1].tier === 'stale' && q[2].tier === 'aging', 'queue: tiers assigned per entry')
+}
+
+// 21. Each queue entry carries the fields a follow-up view needs
+{
+  const q = projectEcommerceStaleRequestQueue(
+    [req({ hoursAgo: 200, totalMmk: 42000, fulfilment: 'delivery' })],
+    ASOF,
+  )
+  check(q[0].id === 'req-200', 'queue: entry carries id')
+  check(q[0].customerReference === 'Customer A', 'queue: entry carries customerReference')
+  check(q[0].fulfilment === 'delivery', 'queue: entry carries fulfilment')
+  check(q[0].totalMmk === 42000, 'queue: entry carries totalMmk')
+  check(typeof q[0].createdAt === 'string', 'queue: entry carries createdAt')
 }
 
 console.log(JSON.stringify({ ok: true, checks }))
