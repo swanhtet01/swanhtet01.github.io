@@ -653,6 +653,102 @@ class OrderIntakeNegationGuardTests(unittest.TestCase):
         self.assertEqual(draft.payment, "cash_on_delivery")
         self.assertNotIn("negated_value_conflict", draft.blockers)
 
+    def test_cash_on_delivery_plus_pickup_does_not_false_block_fulfilment(self) -> None:
+        # Regression for the COD false-block: "cash on delivery" must NOT inject
+        # a spurious "delivery" fulfilment candidate that, together with a
+        # "pickup" mention and a negation, falsely nulls a valid fulfilment.
+        # Customer clarifies COD payment and declines pickup; fulfilment is a
+        # clean delivery, not a conflict.
+        extraction = OrderIntakeModelExtraction(
+            scope="single_item_order",
+            customer_reference=None,
+            channel="phone",
+            sku="SM-1001",
+            quantity=2,
+            payment="cash_on_delivery",
+            fulfilment="delivery",
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Phone", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="SM-1001", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="qty 2", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="cash on delivery", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="fulfilment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="delivery", occurrence=1)],
+                ),
+            ],
+        )
+        draft = build_order_intake_draft(
+            message="Phone order: SM-1001 qty 2, pay cash on delivery, not pickup.",
+            catalog=self.catalog,
+            extraction=extraction,
+            response_id="resp-cod-pickup",
+            model="fixture-model",
+        )
+        self.assertEqual(draft.fulfilment, "delivery")
+        self.assertEqual(draft.payment, "cash_on_delivery")
+        self.assertNotIn("negated_value_conflict", draft.blockers)
+        self.assertEqual(draft.status, "ready_for_review")
+
+    def test_negation_substring_words_do_not_trigger_the_guard(self) -> None:
+        # Regression: words that merely CONTAIN "not" as a substring
+        # ("another", "note", "nothing") are not negations and must not fire the
+        # guard, even when two candidate channel values are present.
+        extraction = OrderIntakeModelExtraction(
+            scope="single_item_order",
+            customer_reference=None,
+            channel="viber",
+            sku="SM-1001",
+            quantity=1,
+            payment="kbzpay",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="channel",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Viber", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="SM-1001", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="quantity",
+                    source_quotes=[OrderIntakeSourceQuote(quote="qty 1", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="KBZPay", occurrence=1)],
+                ),
+            ],
+        )
+        # "another" and "Messenger" both appear; "another" contains the
+        # substring "not" but is not a negation, so with only-real-negations
+        # detection the guard must not fire and channel stays resolved.
+        draft = build_order_intake_draft(
+            message="Viber order, moved from Messenger — another note about timing. SM-1001 qty 1, KBZPay.",
+            catalog=self.catalog,
+            extraction=extraction,
+            response_id="resp-substring-not",
+            model="fixture-model",
+        )
+        self.assertEqual(draft.channel, "viber")
+        self.assertNotIn("negated_value_conflict", draft.blockers)
+        self.assertEqual(draft.status, "ready_for_review")
+
 
 class OrderIntakeMultipleItemProvenanceTests(unittest.TestCase):
     """order-intake eval run 5 diagnosis (2026-08-17, fixture
@@ -792,6 +888,69 @@ class OrderIntakeMultipleItemProvenanceTests(unittest.TestCase):
                 response_id="resp-non-null-duplicate",
                 model="fixture-model",
             )
+
+    def test_five_line_items_build_a_reviewable_draft_not_a_crash(self) -> None:
+        # Regression: the #425 merge could accumulate >4 spans for a nulled
+        # field when a multi-item order cites 5+ line items separately, which
+        # exceeded OrderIntakeFieldProvenance.source_spans (max 4) and crashed
+        # the whole draft into a 503 instead of the reviewable draft the fix
+        # was meant to produce. The merged spans are now capped at 4.
+        message = "Order: 2 Alpha, 1 Bravo, 3 Charlie, 1 Delta, 2 Echo. Pay WavePay."
+        extraction = OrderIntakeModelExtraction(
+            scope="multiple_item_order",
+            customer_reference=None,
+            channel=None,
+            sku=None,
+            quantity=None,
+            payment="wavepay",
+            fulfilment=None,
+            uncertain_fields=[],
+            provenance=[
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Alpha", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Bravo", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Charlie", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Delta", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="sku",
+                    source_quotes=[OrderIntakeSourceQuote(quote="Echo", occurrence=1)],
+                ),
+                OrderIntakeModelFieldProvenance(
+                    field="payment",
+                    source_quotes=[OrderIntakeSourceQuote(quote="WavePay", occurrence=1)],
+                ),
+            ],
+        )
+        draft = build_order_intake_draft(
+            message=message,
+            catalog=self.catalog,
+            extraction=extraction,
+            response_id="resp-five-items",
+            model="fixture-model",
+        )
+        self.assertEqual(draft.scope, "multiple_item_order")
+        self.assertEqual(draft.status, "needs_clarification")
+        self.assertIsNone(draft.sku)
+        self.assertIn("sku", draft.uncertain_fields)
+        # Five cited spans merged, capped to the schema's 4-span ceiling.
+        sku_provenance = next(record for record in draft.provenance if record.field == "sku")
+        self.assertEqual(len(sku_provenance.source_spans), 4)
+        # The retained spans are a subset of the five real, re-verified quotes.
+        self.assertTrue(
+            {span.quote for span in sku_provenance.source_spans}
+            <= {"Alpha", "Bravo", "Charlie", "Delta", "Echo"}
+        )
 
 
 if __name__ == "__main__":

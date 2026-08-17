@@ -607,3 +607,35 @@ future model change brings p95 under 5s, this amendment retires.
     then run the full 20-fixture corpus live again — this fix removes one
     of the two known `schema_validity_100` failures outright and should be
     reflected in that run's `schema_validity_100` result.
+- **Scorer-tolerance decision (2026-08-17): DO NOT loosen the scorer.**
+  Traced the run-5 `provenance_coverage` concern to the actual scorer code
+  in `supermega_runtime/order_intake_eval.py`. Two findings correct the
+  run-5 note's mechanism:
+  1. `provenance_coverage_100` (the gate) is computed at lines 382-387 as
+     `provenance_covered / provenance_required`, where a field only counts
+     as covered if the draft carries **a provenance record for that field**
+     — it does NOT compare quote text at all. So the "quotes didn't
+     literally match the annotated string" explanation in the run-5 note is
+     the wrong mechanism for THIS gate. The gate only drops when a required
+     non-null field has no record — which happens wholesale when a draft
+     fails to build (draft is None), i.e. it is a downstream symptom of the
+     same `schema_validity` build failures, not an independent problem.
+  2. Quote-literal wording IS checked, but at lines 232-238 (`_fixture_findings`),
+     and a mismatch there only appends a finding that lowers `pass_rate` /
+     `passed_all`. Neither is one of the eight members of
+     `quality_gate_passed` (lines 442-452). So quote-wording variance cannot,
+     by construction, fail `quality_gate_passed`.
+  Conclusion: there is no scorer change that would be both correct and
+  necessary. Loosening the exact-quote check would weaken a pre-registered
+  gate to fix something that does not gate — the eval-integrity equivalent
+  of moving the goalpost after seeing the result, explicitly against the
+  point of a pre-registered gate. The PR #425 multi-item fix, by letting
+  `en-multiple-items-10` build instead of erroring, should raise BOTH
+  `schema_validity_100` (one fewer build failure) AND `provenance_coverage_100`
+  (that fixture's channel+payment records now count) in the next live run.
+  The only genuinely-open item is therefore a fresh full 20-fixture live run
+  to measure the post-#425 gate state — not a scorer edit. That live run is
+  currently blocked in this environment (the raw-key-in-command-line pattern
+  trips the platform safety classifier); it should be run by the founder in
+  a normal shell with `OPENAI_API_KEY` exported, or from CI with the key as
+  a secret, then scored with `python tools/evaluate_order_intake_results.py`.

@@ -79,11 +79,19 @@ _REQUIRED_ORDER_FIELDS: tuple[OrderIntakeField, ...] = (
 # SAME field are literally present in the message AND a negation marker
 # appears anywhere in it -- a message that merely mentions two channels
 # without any negation is left to the model and the existing conflict rule.
-_NEGATION_MARKERS: tuple[str, ...] = (
-    "not",
-    "n't",
-    "instead of",
-    "မဟုတ်",  # Burmese negation root; covers မဟုတ်ဘူး, မဟုတ်ပါ, and other suffixed forms
+# Negation markers are matched with word boundaries, NOT as raw substrings.
+# The earlier substring form over-fired: `"not" in message` is true for
+# "note", "another", "nothing", "notice", "cannot" -- so an ordinary message
+# mentioning any of those wrongly counted as a negation and could null a field.
+# These patterns keep the genuine negations ("not", "cannot", the "n't"
+# contractions like don't/can't/won't/isn't) while excluding the innocent
+# substrings. Burmese has no ASCII word boundary, so its root stays a raw match.
+_NEGATION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bnot\b", re.IGNORECASE),           # "not", "is not" (not "note"/"another"/"cannot")
+    re.compile(r"\bcannot\b", re.IGNORECASE),        # explicit: \bnot\b does not match inside "cannot"
+    re.compile(r"n['’]t\b", re.IGNORECASE),     # don't, can't, won't, isn't (straight or curly apostrophe)
+    re.compile(r"\binstead of\b", re.IGNORECASE),
+    re.compile(r"မဟုတ်"),                             # Burmese negation root; covers မဟုတ်ဘူး, မဟုတ်ပါ, etc.
 )
 _ENUM_FIELD_CANDIDATE_PATTERNS: dict[
     Literal["channel", "payment", "fulfilment"], tuple[re.Pattern[str], ...]
@@ -103,14 +111,19 @@ _ENUM_FIELD_CANDIDATE_PATTERNS: dict[
         re.compile(r"\bcard\b", re.IGNORECASE),
     ),
     "fulfilment": (
-        re.compile(r"\bdelivery\b", re.IGNORECASE),
+        # Do not count the "delivery" inside the payment phrase "cash on
+        # delivery" as a fulfilment candidate -- that spurious second candidate
+        # was false-firing the conflict guard on ordinary COD orders (the most
+        # common Myanmar payment method), nulling a valid fulfilment. Mirrors
+        # the negative lookahead already guarding plain "cash" above.
+        re.compile(r"(?<!on )\bdelivery\b", re.IGNORECASE),
         re.compile(r"\bpickup\b", re.IGNORECASE),
     ),
 }
 
 
 def _detect_negated_enum_conflicts(message: str) -> frozenset[OrderIntakeField]:
-    if not any(marker in message.lower() for marker in _NEGATION_MARKERS):
+    if not any(pattern.search(message) for pattern in _NEGATION_PATTERNS):
         return frozenset()
     conflicted: set[OrderIntakeField] = set()
     for field, patterns in _ENUM_FIELD_CANDIDATE_PATTERNS.items():
@@ -331,7 +344,16 @@ def _resolve_provenance(
         spans = spans_by_field.get(field)
         if spans is None:
             continue
-        resolved.append(OrderIntakeFieldProvenance(field=field, source_spans=spans))
+        # OrderIntakeFieldProvenance.source_spans caps at 4. A non-null field's
+        # single record already respects that (the model schema caps its own
+        # source_quotes at 4). Only the merged null-field path (a >4 line-item
+        # order citing each item separately) can exceed it, so cap here rather
+        # than crash the whole draft into a 503. The field is already null and
+        # forced-uncertain; 4 example spans are ample evidence for the reviewer
+        # that this is a multi-item order needing manual entry.
+        resolved.append(
+            OrderIntakeFieldProvenance(field=field, source_spans=spans[:4])
+        )
         if _field_value(extraction, field) is None:
             evidence_backed_null_fields.add(field)
 
