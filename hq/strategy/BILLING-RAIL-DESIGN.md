@@ -51,6 +51,7 @@ unlocks nothing does not close Gate 9.
 | D3 | **Currency posture.** | Recommend v1 = MMK, integer amounts, exponent 0. The contract stays parameterized (currency + exponent per invoice) so a USD design-partner deal remains possible — but mixing is your call. |
 | D4 | **Tax posture.** | Recommend `tax.decided: false` on every v1 invoice and no tax-invoice claims of any kind until you decide otherwise (claims boundary: nothing implies compliance). |
 | D5 | **Entitlement lapse policy.** | Recommend NO automatic expiry in v1: you review monthly and revoke manually. Auto-expiry is an automated entitlement change — it would breach the founder-gated rule, so it is out unless you explicitly delegate it later. |
+| D6 | **Apply the entitlement-read migration.** | `supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql` is written, reviewed, and locally verified (`node tools/verify_private_trial_migrations.mjs` green) — exactly the DEVIATION this document called out: one narrow, GUC-scoped, read-only SELECT policy on `billing_entitlements` for the runtime role, nothing on `billing_invoices`/`billing_events`. Not yet proven on a hosted branch and not applied anywhere. Recommend: prove it on a disposable branch (same protocol as v11) before it rides the production runbook alongside v12 — this is the migration that makes `premiumUnlocked` actually resolve true for a granted workspace instead of staying fail-closed dark. |
 
 ---
 

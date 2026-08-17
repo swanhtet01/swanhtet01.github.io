@@ -27,6 +27,7 @@ const expectedMigrations = [
   '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
   '20260816120000_private_trial_backend_v11_self_serve_grants.sql',
   '20260817090000_private_trial_backend_v12_billing_rail.sql',
+  '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -51,6 +52,12 @@ const expectedPolicyFingerprints = {
     command: 'SELECT',
     permissive: 'PERMISSIVE',
     qual: '59ee715578ea24aa2483ddaa0debdcd467fb15e23d0c39e5fd6ac9ea360e9f99',
+    check: null,
+  },
+  billing_entitlements_self_read: {
+    command: 'SELECT',
+    permissive: 'PERMISSIVE',
+    qual: '28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5',
     check: null,
   },
   trial_schema_meta_backend_read: {
@@ -136,6 +143,7 @@ const initplanPolicyNames = [
   'approval_requests_capability_insert',
   'approval_requests_capability_update',
   'approval_requests_member_read',
+  'billing_entitlements_self_read',
   'workspace_access_controls_member_read',
   'workspace_events_capability_insert',
   'workspace_events_member_read',
@@ -419,7 +427,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version twelve', version.rows[0]?.schema_version === 12)
+requireCheck('schema version thirteen', version.rows[0]?.schema_version === 13)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -519,22 +527,55 @@ requireCheck(
     }),
 )
 
-// v12 billing rail: deny by default is the contract. The exact policy inventory
-// above already proves the billing tables carry no policies; this check proves
-// the runtime member role and the Supabase API roles also hold no table
-// privilege, so premiumUnlocked stays fail-closed until a founder-approved
-// migration adds the narrow entitlement read.
-const billingPrivilegeRows = await database.query(`
+// v12 billing rail: deny by default is the contract for invoices and events --
+// the exact policy inventory above already proves those two tables carry no
+// policies; this check proves the runtime member role and every Supabase API
+// role also hold no table privilege on them whatsoever, founder-only forever.
+const billingInvoicesEventsPrivilegeRows = await database.query(`
   select bool_or(
     has_table_privilege(role_name, format('app_private.%I', table_name), privilege_name)
   ) as any_privilege
-  from unnest(array['billing_invoices', 'billing_events', 'billing_entitlements']) table_name,
+  from unnest(array['billing_invoices', 'billing_events']) table_name,
        unnest(array['supermega_trial_backend', 'anon', 'authenticated', 'service_role']) role_name,
        unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) privilege_name
 `)
 requireCheck(
-  'v12 billing tables are deny-by-default for the runtime and API roles',
-  billingPrivilegeRows.rows[0]?.any_privilege === false,
+  'v12 billing invoices and events stay deny-by-default for the runtime and API roles',
+  billingInvoicesEventsPrivilegeRows.rows[0]?.any_privilege === false,
+)
+
+// v13 lights up exactly one narrow read: the runtime role may SELECT (never
+// write) billing_entitlements, and every Supabase API role still holds
+// nothing at all -- premiumUnlocked can now resolve, and only that.
+const entitlementApiPrivilegeRows = await database.query(`
+  select bool_or(
+    has_table_privilege(role_name, 'app_private.billing_entitlements', privilege_name)
+  ) as any_privilege
+  from unnest(array['anon', 'authenticated', 'service_role']) role_name,
+       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) privilege_name
+`)
+requireCheck(
+  'v13 billing entitlements stay deny-by-default for every Supabase API role',
+  entitlementApiPrivilegeRows.rows[0]?.any_privilege === false,
+)
+const entitlementRuntimeWriteRows = await database.query(`
+  select bool_or(
+    has_table_privilege('supermega_trial_backend', 'app_private.billing_entitlements', privilege_name)
+  ) as any_write_privilege
+  from unnest(array['INSERT', 'UPDATE', 'DELETE']) privilege_name
+`)
+requireCheck(
+  'v13 billing entitlements grant the runtime role read-only access',
+  entitlementRuntimeWriteRows.rows[0]?.any_write_privilege === false,
+)
+const entitlementRuntimeReadRow = await database.query(`
+  select has_table_privilege(
+    'supermega_trial_backend', 'app_private.billing_entitlements', 'SELECT'
+  ) as select_privilege
+`)
+requireCheck(
+  'v13 billing entitlements grant the runtime role its SELECT read',
+  entitlementRuntimeReadRow.rows[0]?.select_privilege === true,
 )
 
 const accessFunctionRows = await database.query(`
@@ -863,7 +904,7 @@ const hostedVersion = await hostedDatabase.query(
 )
 requireCheck(
   'exact Supabase hosted administrative membership accepted',
-  hostedVersion.rows[0]?.schema_version === 12,
+  hostedVersion.rows[0]?.schema_version === 13,
 )
 
 const memberDatabase = new PGlite()
