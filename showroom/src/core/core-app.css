@@ -2546,3 +2546,20 @@ input, select, textarea { border-color: var(--core-field-line); }
    the Myanmar display floor (line-height 1.3, zero tracking) applies.
    ========================================================================== */
 .storefront-preview > header span { font-family: inherit; font-size: var(--font-size-display); font-weight: var(--font-weight-black); letter-spacing: 0; line-height: 1.3; }
+
+/* ============================================================================
+   Design rule 4 repair: the phase-1 shadow ramp was declared on :root only.
+   --shadow-1/--shadow-3 carry a light-tuned green-black tint, and --shadow-2
+   fell into the exact trap the .theme-dark comment above documents: a var()
+   inside a custom property is substituted against the element it is DECLARED
+   on, so `--shadow-2: var(--core-shadow)` froze at the LIGHT --core-shadow and
+   never saw the dark remap below it. The phase-2 cart sticky bar is the ramp's
+   first consumer (ecommerce-product.css .ecommerce-cart-sticky-bar), so it was
+   rendering the light shadow in dark mode. Restated here, mirroring the dark
+   --core-shadow values, so every :root token has a .theme-dark counterpart.
+   ========================================================================== */
+.theme-dark {
+  --shadow-1: 0 8px 24px rgba(0, 0, 0, .38);
+  --shadow-2: var(--core-shadow);
+  --shadow-3: 0 30px 90px rgba(0, 0, 0, .55);
+}
