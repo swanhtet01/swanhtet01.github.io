@@ -19001,9 +19001,9 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // the design phase-1 foundation (2026-08 tribunal: token ramps, WCAG contrast overrides, Myanmar script
 // stacks, money-path type floor, touch targets, light-theme tile art) plus the design phase-2 wave (the
 // one-review 'Paid & handed over' settle path, 'Close the day' lifted out of the policy accordion, cart
-// money total, status-pill semantics, de-branded merchant surfaces). See CLAUDE.md: this budget is
-// expected to trip on any fresh dist/ after real product/design work lands — raise it, never shrink
-// product code to fit an old number.
+// money total, status-pill semantics, de-branded merchant surfaces) pushed the measured total to
+// 2,954,266. See CLAUDE.md: this budget is expected to trip on any fresh dist/ after real
+// product/design work lands — raise it, never shrink product code to fit an old number.
 if (bytes > 2_985_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
