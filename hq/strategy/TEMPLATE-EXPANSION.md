@@ -322,20 +322,25 @@ they will.
 
 Each item is one branch → full gate → PR → read CI → squash merge.
 
-Status (2026-08-18): items 1-4 SHIPPED on `claude/supermega-dev-ceo-aije17`
-(`853ca7c8`, `bf4043e2`, `23b7d60e`). Both Shop and Plant now open on a
-believable bakery business end to end — catalog, counter sales, a pending
-order, appointment bookings (Shop) and jobs, a named floor, and a running
-shift with recorded output/scrap (Plant) — with every acceptance point
-verified directly against real state, not assumed. Two corrections surfaced
-along the way and are recorded in those commits rather than silently fixed:
-a real pre-existing bug in `productionWorkingSampleTransitionIsExact` that
-made `installProductionWorkingSampleJobs`'s own `machines`/`issue`
-parameters unreachable through the app's one write path (item 3), and a
+Status (2026-08-18): items 1-5 SHIPPED on `claude/supermega-dev-ceo-aije17`
+(`853ca7c8`, `bf4043e2`, `23b7d60e`, `89cc95c7`). Shop, Plant, and Ecommerce
+now all open on a believable bakery business end to end — catalog, counter
+sales, a pending order, appointment bookings (Shop); jobs, a named floor,
+and a running shift with recorded output/scrap (Plant); trade-specific
+storefront copy and hero-SKU ranking (Ecommerce) — with Website already
+covered for free via its existing reuse of Shop's ids. Every acceptance
+point was verified directly against real state, not assumed. Corrections
+surfaced along the way and are recorded in their commits rather than
+silently fixed: a pre-existing bug in `productionWorkingSampleTransitionIsExact`
+that made `installProductionWorkingSampleJobs`'s own `machines`/`issue`
+parameters unreachable through the app's one write path (item 3); a
 behavior change to the second-provisioning-run story once shift activity
-exists — a rerun now refuses to reinstall and reports `'preserved'` rather
-than silently reseeding (item 4, which corrected item 3's own test
-assertions to match). Items 5+ below are unstarted.
+exists (item 4); and, on the Ecommerce side, an inert naive SKU-ranking fix
+replaced with a real two-tier rank, plus two out-of-scope defects
+(extensionless ESM imports breaking under Node, and a "read" function that
+was secretly seeding a Shop workspace as a side effect) found and fixed
+(item 5). Items 6+ below are unstarted; 7 and 11 are gated (7 needs its own
+PR and reasoning per its own section above, 11 needs a named customer).
 
 1. **Wire Shop's sample activity into onboarding.** Call
    `rebaseWorkingSampleActivity` (`business-templates.ts:75`) then
