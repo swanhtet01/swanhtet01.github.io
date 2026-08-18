@@ -2508,3 +2508,14 @@ input, select, textarea { border-color: var(--core-field-line); }
    the Myanmar display floor (line-height 1.3, zero tracking) applies.
    ========================================================================== */
 .storefront-preview > header span { font-family: inherit; font-size: var(--font-size-display); font-weight: var(--font-weight-black); letter-spacing: 0; line-height: 1.3; }
+
+/* ============================================================================
+   Design phase 2 — item 5: status-pill traffic-light semantics.
+   Before this, "late" wore the same amber as "unpaid" and "due soon" rendered
+   reassuring green; --core-danger was never used by any pill. The OrderList
+   remap (CoreApp.tsx) sends late -> .late, cancelled -> .cancelled, and
+   due_soon -> .pending. Both tokens consumed here are already mirrored in
+   .theme-dark (--core-danger, --core-quiet), so no dark override is needed.
+   ========================================================================== */
+.status-pill.late, .status-pill.danger { border-color: color-mix(in srgb, var(--core-danger) 35%, transparent); color: var(--core-danger); }
+.status-pill.cancelled { color: var(--core-quiet); }
