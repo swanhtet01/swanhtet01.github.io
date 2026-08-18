@@ -35,9 +35,9 @@ function backupAgeSentence(value: string): string {
  * A count alone after the write -- which is all this panel used to give -- cannot be acted on.
  */
 function deletionSentence(plan: CompanyRestorePlan): string {
-  const total = plan.deleting.length
+  const total = plan.losingOwnerWork.length
   if (total === 0) return 'Nothing saved on this device will be deleted.'
-  const where = summarizeCompanyStorageKeys(plan.deleting).map((item) => `${item.count} in ${item.label}`).join(', ')
+  const where = summarizeCompanyStorageKeys(plan.losingOwnerWork).map((item) => `${item.count} in ${item.label}`).join(', ')
   return `Restoring deletes ${total} ${total === 1 ? 'record' : 'records'} you saved after this backup: ${where}. This backup does not hold them. Download a new backup first if you want to keep them.`
 }
 
@@ -120,7 +120,7 @@ export function CompanyBackupPanel() {
       setNotice('Inspect the encrypted backup before restoring it.')
       return
     }
-    if (plan.deleting.length > 0 && !deletionAcknowledged) {
+    if (plan.losingOwnerWork.length > 0 && !deletionAcknowledged) {
       setNotice('Tick the box to confirm the newer records will be deleted. Nothing was restored.')
       return
     }
@@ -157,8 +157,8 @@ export function CompanyBackupPanel() {
       <div className="company-backup-categories">{inspection.categories.map((category) => <span key={category.label}><small>{category.label}</small><strong>{category.count}</strong></span>)}</div>
       <p>This replaces current free-mode company records in this browser. It never restores auth, company account identity, or credentials.</p>
       <p>{backupAgeSentence(inspection.exportedAt)} {plan ? deletionSentence(plan) : ''}</p>
-      {plan && plan.deleting.length > 0 ? <label className="website-intake-confirm"><input checked={deletionAcknowledged} disabled={busyAction !== null} onChange={(event) => setDeletionAcknowledged(event.target.checked)} type="checkbox" /><span>I understand these {plan.deleting.length} newer {plan.deleting.length === 1 ? 'record' : 'records'} will be deleted.</span></label> : null}
-      <div className="company-backup-actions">{restoreArmed ? <><button className="text-link" disabled={busyAction !== null} onClick={() => setRestoreArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={busyAction !== null} onClick={() => void restoreBackup()} type="button">{busyAction === 'restore' ? 'Restoring...' : 'Confirm restore'}</button></> : <button className="core-button" disabled={busyAction !== null || !plan || (plan.deleting.length > 0 && !deletionAcknowledged)} onClick={() => setRestoreArmed(true)} type="button">Restore this backup</button>}</div>
+      {plan && plan.losingOwnerWork.length > 0 ? <label className="website-intake-confirm"><input checked={deletionAcknowledged} disabled={busyAction !== null} onChange={(event) => setDeletionAcknowledged(event.target.checked)} type="checkbox" /><span>I understand these {plan.losingOwnerWork.length} newer {plan.losingOwnerWork.length === 1 ? 'record' : 'records'} will be deleted.</span></label> : null}
+      <div className="company-backup-actions">{restoreArmed ? <><button className="text-link" disabled={busyAction !== null} onClick={() => setRestoreArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={busyAction !== null} onClick={() => void restoreBackup()} type="button">{busyAction === 'restore' ? 'Restoring...' : 'Confirm restore'}</button></> : <button className="core-button" disabled={busyAction !== null || !plan || (plan.losingOwnerWork.length > 0 && !deletionAcknowledged)} onClick={() => setRestoreArmed(true)} type="button">Restore this backup</button>}</div>
     </div> : null}
     <p aria-live="polite" className="form-notice company-backup-notice" role="status">{notice}</p>
   </section>

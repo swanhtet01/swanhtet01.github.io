@@ -142,6 +142,7 @@ const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', '
 const operationalReportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts'), 'utf8')
 const sharedMasterDataSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shared-master-data.ts'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
+const metricsCollectorSource = await readFile(resolve(root, 'showroom', 'src', 'analytics', 'metrics-collector.ts'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
 const plantOrderPythonSource = await readFile(resolve(root, 'supermega_runtime', 'plant_order_foundation.py'), 'utf8')
@@ -3950,6 +3951,22 @@ if (!channelOrderUiSource.includes('Turn one message into an order draft')
   || !channelOrderUiSource.includes('className="channel-intake-disclosure"')
   || !channelOrderUiSource.includes('channelOrderDraftIsReady')) fail('channel_order_intake_ui_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => channelOrderUiSource.includes(marker))) fail('channel_order_intake_ui_crossed_network_boundary')
+// Wiring contracts. Each module below has its own passing checks, but nothing imported the
+// CALL SITE, so deleting the one line that joins module to app left the entire gate green
+// while the feature silently stopped happening: metrics persistence, the durable appointment
+// write, the AI-vs-accepted correction record, and the only two business metrics the pilot
+// produces. Source-string assertions are this repo's mechanism for pinning a call site (see
+// shopServiceScheduleUiSource above); every literal here was confirmed present before it was
+// asserted, and every contract was mutation-tested by deleting the line it pins.
+if (!shopServiceScheduleUiSource.includes('mutateShopServiceSchedule(planShopServiceScheduleWrite(')
+  || shopServiceScheduleUiSource.includes('persistLocal(next)')) fail('shop_service_schedule_durable_write_contract_missing')
+if (!metricsCollectorSource.includes('writeStoredMetrics(SESSION_EVENTS)')
+  || !metricsCollectorSource.includes('if (SESSION_EVENTS.length === 0) SESSION_EVENTS.push(...readStoredMetrics())')) fail('local_metrics_persistence_wiring_missing')
+if (!channelOrderUiSource.includes('const [aiProposedDraft, setAiProposedDraft] = useState<ChannelOrderDraft | null>(null)')
+  || !channelOrderUiSource.includes('proposed: aiProposedDraft,')
+  || !channelOrderUiSource.includes('captureOrderIntakeCorrection(window.localStorage, {')) fail('order_intake_correction_capture_wiring_missing')
+if (!coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })")
+  || !coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })")) fail('pilot_business_metric_emission_missing')
 if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
   || !coreSource.includes("data-order-receipt=\"view\"")
   || !coreSource.includes('onViewReceipt={setReceiptAck}')
@@ -18871,7 +18888,13 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // in a module array, so every reload erased them and a month-long pilot would have
 // produced no measurable evidence at all. Deliberately not portable in a backup: these
 // counters describe THIS device.
-if (bytes > 2_891_000) fail(`artifact_budget:${bytes}`)
+// ...and the restore deletion split (core/company-backup.ts planCompanyRestore now separates
+// clearedByDesign from losingOwnerWork, and CompanyBackupPanel warns only on the latter;
+// ~0.8KB, measured 2_891_184). Non-portable keys are cleared on EVERY restore because a
+// backup can never carry them, so counting them as "records you saved" fired the
+// acknowledgement every single time -- and an alarm that always sounds is one the owner
+// learns to click past, on the one restore that would really cost a day of appointments.
+if (bytes > 2_892_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

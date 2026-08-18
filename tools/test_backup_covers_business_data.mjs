@@ -276,4 +276,44 @@ check(
   'write: the appointment book carried by the backup survived the restore intact',
 )
 
+// ---- the deletion warning must not cry wolf ---------------------------------------------
+//
+// A restore always clears the deliberately-not-portable keys, because a backup can never carry
+// them. Counting those as "records you saved after this backup" makes the acknowledgement fire on
+// EVERY restore -- including one taken seconds earlier -- and an alarm that always sounds is one
+// the owner learns to click past. That would defeat the guard on the one restore that really does
+// cost them a day of appointments.
+//
+// This became live rather than theoretical when local metrics began persisting: the metrics key is
+// non-portable, so after any use of the app it is always present and always removed.
+{
+  const device = makeStorage({})
+  device.setItem('supermega.commerce.workspace.v2', JSON.stringify({ catalog: 'real' }))
+  const made = await createEncryptedCompanyBackup(device, 'a-good-passphrase-1')
+
+  // Nothing of the owner's changes. Only device-local scaffolding appears, exactly as normal use
+  // of the app produces it.
+  device.setItem('supermega.hq.local-metrics.v1', JSON.stringify({ schema: 'supermega.local_metrics.v1', version: 1, events: [] }))
+  const quiet = planCompanyRestore(device, await inspectEncryptedCompanyBackup(made.json, 'a-good-passphrase-1'))
+
+  check(quiet.deleting.includes('supermega.hq.local-metrics.v1'), 'the write still clears the non-portable key')
+  check(quiet.clearedByDesign.includes('supermega.hq.local-metrics.v1'), 'and names it as cleared by design')
+  check(quiet.losingOwnerWork.length === 0, 'a restore that costs the owner NOTHING raises no warning')
+
+  // Now something the owner really would lose: work saved after the backup was taken.
+  device.setItem('supermega.shop.service-schedule.v1', JSON.stringify({ appointments: 'booked after the backup' }))
+  const loud = planCompanyRestore(device, await inspectEncryptedCompanyBackup(made.json, 'a-good-passphrase-1'))
+
+  check(loud.losingOwnerWork.includes('supermega.shop.service-schedule.v1'), 'real newer work IS named as a loss')
+  check(!loud.losingOwnerWork.includes('supermega.hq.local-metrics.v1'), 'and the scaffolding is not padded into that count')
+  check(
+    loud.deleting.length === loud.clearedByDesign.length + loud.losingOwnerWork.length,
+    'every deleted key is accounted for in exactly one of the two buckets -- the write set is never narrowed',
+  )
+  check(
+    loud.clearedByDesign.every((key) => deliberatelyNotPortableKeys.includes(key) || key.includes('.v1.')),
+    'nothing lands in cleared-by-design unless it is genuinely non-portable',
+  )
+}
+
 console.log(`backup covers business data contract: ${checks} checks passed`)

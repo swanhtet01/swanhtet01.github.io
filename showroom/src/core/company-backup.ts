@@ -170,6 +170,17 @@ export type CompanyRestorePlan = {
   replacing: string[]
   /** Held here and NOT in the backup. Restore removes these. Newer work lands here. */
   deleting: string[]
+  /**
+   * The subset of `deleting` that is cleared on EVERY restore by design: keys that are
+   * deliberately not portable, so a backup can never carry them and their removal is never a
+   * loss of the owner's work. Split out because warning about them would fire the "you will
+   * lose newer records" acknowledgement on every restore, including one taken seconds ago --
+   * and an alarm that always sounds is one the owner learns to click past, which is worse than
+   * no alarm on the one restore that would really cost them a day of appointments.
+   */
+  clearedByDesign: string[]
+  /** `deleting` minus `clearedByDesign`: what the owner actually stands to lose. Warn on THIS. */
+  losingOwnerWork: string[]
   /** In the backup and not here yet. */
   adding: string[]
   /** In both, already identical. */
@@ -502,6 +513,11 @@ function valuesMatch(storage: CompanyStorage, values: Map<string, string | null>
  * derivation of the same sets. A preview that re-derived them would agree today and drift later,
  * and the failure mode of that drift is a deletion the owner was never shown.
  */
+function clearedByDesign(key: string) {
+  return deliberatelyNotPortableKeys.includes(key)
+    || deliberatelyNotPortablePrefixes.some((prefix) => key.startsWith(prefix))
+}
+
 export function planCompanyRestore(storage: CompanyStorage, inspection: CompanyBackupInspection): CompanyRestorePlan {
   if (!inspection || inspection.contract !== COMPANY_SNAPSHOT_CONTRACT || inspection.authRecordsIncluded !== false || inspection.managedWorkspaceRecordsIncluded !== false) {
     throw backupError('Inspect this encrypted backup before restoring it.')
@@ -512,12 +528,20 @@ export function planCompanyRestore(storage: CompanyStorage, inspection: CompanyB
   const currentKeys = listResettableCompanyStorageKeys(storage)
   const incoming = new Map(snapshot.records.map((record) => [record.key, record.value]))
   const affectedKeys = [...new Set([...currentKeys, ...incoming.keys()])].sort()
-  const plan: CompanyRestorePlan = { replacing: [], deleting: [], adding: [], unchanged: [] }
+  const plan: CompanyRestorePlan = { replacing: [], deleting: [], clearedByDesign: [], losingOwnerWork: [], adding: [], unchanged: [] }
   for (const key of affectedKeys) {
     const next = incoming.get(key) ?? null
     const current = storage.getItem(key)
     // A key that is already absent cannot be destroyed, so it is not a loss worth warning about.
-    if (next === null) { if (current !== null) plan.deleting.push(key) }
+    if (next === null) {
+      if (current !== null) {
+        plan.deleting.push(key)
+        // A key a backup can never carry is not the owner's newer work; it is scaffolding this
+        // restore is meant to clear.
+        if (clearedByDesign(key)) plan.clearedByDesign.push(key)
+        else plan.losingOwnerWork.push(key)
+      }
+    }
     else if (current === null) plan.adding.push(key)
     else if (current === next) plan.unchanged.push(key)
     else plan.replacing.push(key)
