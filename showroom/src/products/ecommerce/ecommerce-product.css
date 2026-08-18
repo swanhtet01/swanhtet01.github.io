@@ -1889,3 +1889,40 @@
 
 /* Design phase 1: ops-cockpit copy reads as caption, not warning. */
 .ecommerce-ops-cockpit p { font-size: var(--font-size-sm); color: var(--core-quiet); }
+
+/* Design phase 2 — persistent cart money total (tribunal item 3). The workspace
+   summary badge now carries the running MMK total, so it drops the 8px
+   uppercase treatment it inherits from the shared request-lab badge rule; the
+   sticky bar keeps the total on screen while the cart and checkout form
+   scroll, settling at its natural place at the end of the workspace. Tokens
+   only; the amount is tabular so it does not jitter as quantities change. */
+.ecommerce-buying-workspace > summary b {
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+}
+
+.ecommerce-cart-sticky-bar {
+  position: sticky;
+  z-index: 12;
+  bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  margin: 0 var(--space-3) var(--space-3);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background: var(--core-green);
+  color: var(--core-on-accent);
+  font-size: var(--font-size-base);
+  box-shadow: var(--shadow-2);
+}
+
+.ecommerce-cart-sticky-bar b {
+  font-size: var(--font-size-price);
+  font-weight: var(--font-weight-black);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
