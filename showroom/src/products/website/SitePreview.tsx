@@ -29,7 +29,7 @@ export function SitePreview({ device, page, pages, siteName, onSelectPage }: Sit
         <div className={'website-preview-frame is-' + device}>
           <article className="website-preview-site" aria-label={page.internalName + ' page preview'} role="document">
             <header className="preview-site-header">
-              <strong><span aria-hidden="true">&gt;_</span>{siteName || 'Untitled site'}</strong>
+              <strong>{siteName || 'Untitled site'}</strong>
               <nav aria-label="Preview navigation">
                 {visiblePages.map((candidate) => (
                   <button

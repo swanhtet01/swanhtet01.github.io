@@ -1,16 +1,19 @@
 .website-product {
-  --website-bg: #f6f4ee;
-  --website-panel: #ffffff;
-  --website-panel-raised: #eef4ef;
-  --website-ink: #17231d;
-  --website-muted: #56665d;
-  --website-quiet: #7b8980;
-  --website-line: rgba(31, 68, 51, .12);
-  --website-line-strong: rgba(31, 68, 51, .2);
-  --website-green: #0b745e;
-  --website-green-soft: rgba(11, 116, 94, .1);
-  --website-warn: #946200;
-  --website-danger: #b42336;
+  --website-bg: var(--core-bg, #f6f4ee);
+  --website-panel: var(--core-panel, #ffffff);
+  --website-panel-raised: var(--core-panel-raised, #eef4ef);
+  --website-ink: var(--core-ink, #17231d);
+  --website-muted: var(--core-muted, #56665d);
+  --website-quiet: var(--core-quiet, #5f6f67); /* Design phase 1: was #7b8980 = 3.66:1 on white (AA fail); now matches --core-quiet, 5.31:1 */
+  --website-line: var(--core-line, rgba(31, 68, 51, .12));
+  --website-line-strong: var(--core-line-strong, rgba(31, 68, 51, .2));
+  --website-green: var(--core-green, #0b745e);
+  --website-green-soft: var(--core-green-soft, rgba(11, 116, 94, .1));
+  /* Design phase 1: was consumed at the primary-action hover but never defined,
+     making the hover declaration invalid (Save vanished on the white bar). */
+  --website-green-dark: #075c4b;
+  --website-warn: var(--core-warn, #946200);
+  --website-danger: var(--core-danger, #b42336);
   --website-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   position: relative;
   width: 100%;
@@ -2150,7 +2153,7 @@
   --website-quiet: #5f6d65;
   --website-line: #dce3de;
   --website-line-strong: #c7d1ca;
-  --website-green: #08745d;
+  --website-green: #0b745e; /* Design phase 1: was #08745d, a silent fork of the manifest accent */
   --website-green-soft: #e8f4ef;
   --website-warn: #8a5a00;
   --website-danger: #aa273b;
@@ -4059,3 +4062,37 @@
     min-height: 44px;
   }
 }
+
+/* Myanmar script foundation (design phase 1) — mirrors the core stack for the
+   website island and the owner-content preview surfaces; floors the preview
+   hero (was .95/-.055em, which clips Burmese diacritics in the owner's own
+   headline). */
+.website-product { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
+.website-preview-site, .storefront-preview { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
+.website-product :lang(my), .website-product [lang="my"] { line-height: 1.65; letter-spacing: 0; }
+.preview-hero > h1 { line-height: 1.3; letter-spacing: 0; }
+
+/* Design phase 1 — the owner's daily dashboard surfaces, raised off the
+   6-10px micro-type floor (tribunal rank 9). */
+.website-today-metrics small, .website-lead-counts small { font-size: var(--font-size-xs); }
+.website-today-metrics strong { font-size: var(--font-size-display); }
+.website-today-priority p, .website-lead-inbox p { font-size: var(--font-size-base); }
+.website-today-source { font-size: var(--font-size-sm); }
+.website-lead-list article small { font-size: var(--font-size-sm); }
+.website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
+.website-business-controls > summary small, .website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
+.website-page-index > div > button small { font-size: var(--font-size-xs); }
+
+/* Design phase 1: un-trap the editor scroll on phones — mirrors the
+   site-settings opt-out; only the preview iframe genuinely needs a viewport. */
+@media (max-width: 640px) {
+  .website-editor-panel { height: auto; min-height: 0; }
+  .website-editor-scroll { overflow: visible; }
+}
+
+/* Design phase 2 - item 2: de-brand merchant surfaces. The site preview
+   header shows the merchant's site name as a wordmark, not a ">_" terminal
+   prompt (glyph span removed in SitePreview.tsx; the old
+   .preview-site-header > strong > span rules are now inert). siteName is
+   owner data: natural case, zero tracking, Myanmar-safe line-height. */
+.preview-site-header > strong { font-size: var(--font-size-display); font-weight: var(--font-weight-black); letter-spacing: 0; line-height: 1.3; text-transform: none; }

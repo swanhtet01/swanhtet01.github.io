@@ -255,7 +255,6 @@ export function ContentWorkspace({
               </article>
             )) : (
               <div className="website-empty">
-                <span aria-hidden="true">&gt;_</span>
                 <p>Add one section before marking this page ready.</p>
               </div>
             )}

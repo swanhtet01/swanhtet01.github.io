@@ -134,7 +134,7 @@ for (const pack of orphanPacks) {
 // same price.
 //
 // This is not hypothetical. The spa catalog briefly shipped massage oil and compress balls with
-// no treatment at all, which left a real named client -- Sol Luxury Spa -- able to book a 45,000
+// no treatment at all, which left a real spa pilot client able to book a 45,000
 // MMK massage and unable to charge for it.
 //
 // Matching on PRICE ALONE is not enough, and that is a correction to an earlier version of this

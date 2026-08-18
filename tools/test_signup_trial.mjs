@@ -229,7 +229,7 @@ check(JSON.parse(trialSignupClaimFile(agreed)).termsAccepted === true, 'and acce
 // --- every industry pack must be reachable from signup ----------------------------------
 // Offering only trade templates silently excluded spa, gym and school -- the three packs with no
 // trade -- so the owner of a spa picked "Standard starter catalog" and was handed a RETAIL shop.
-// Sol Luxury Spa is a real named client, and this is the same defect class as a bookable service
+// A spa pilot is a real client shape, and this is the same defect class as a bookable service
 // with no catalog item: N options exist, only the demoed ones work.
 const choices = signupBusinessChoices(shopBusinessTemplates, shopIndustryPacks)
 const reachablePacks = new Set(choices.map((choice) => choice.industryPackId))

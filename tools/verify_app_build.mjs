@@ -4075,7 +4075,7 @@ if (!orderListContract.includes("const settleRefundIsPrimary = !reconcileIsPrima
   || !orderListContract.includes('const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder')
   || !orderListContract.includes('className="order-row-more"')
   || !orderListContract.includes('aria-label={`More options for ${order.id}`}')
-  || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 3
+  || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 4
   || !orderListContract.includes('>Cancel order</button>')
   || !coreCssSource.includes('.order-row-more > summary {')
   || !coreCssSource.includes('.order-row-more > div .text-link { min-height: 44px;')) fail('shop_order_action_hierarchy_missing')
@@ -18894,7 +18894,14 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // backup can never carry them, so counting them as "records you saved" fired the
 // acknowledgement every single time -- and an alarm that always sounds is one the owner
 // learns to click past, on the one restore that would really cost a day of appointments.
-if (bytes > 2_892_000) fail(`artifact_budget:${bytes}`)
+// MERGE MEASUREMENT 2026-08-19: pilot-safety branch combined with main through 3ee3b03d
+// measures 2_904_676 -- 5_324 under the 2_910_000 main raised for the design phase-2 wave.
+// The ceiling is left at main's figure rather than tightened to the combined total: main
+// chose that headroom for design work still in flight, and shrinking it here would fail
+// their next commit for a reason belonging to this branch. Neither side's pre-merge number
+// was correct on its own (this branch had 2_892_000, main 2_910_000) -- re-measure after
+// combining, never inherit either figure.
+if (bytes > 2_910_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
