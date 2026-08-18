@@ -68,6 +68,13 @@
   --core-scroll-accent: rgba(11, 116, 94, .26);
 }
 
+/* Zero-flash theme restore (paired with the inline script in showroom/index.html).
+   .theme-dark below only reaches descendants of .core-shell, so html/body — its
+   ancestors — never saw it and always painted the light --core-bg. This lets the
+   pre-mount attribute reach the actual background before React ever applies the
+   class. */
+:root[data-supermega-theme="dark"] { --core-bg: #05080d; }
+
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; max-width: 100%; height: 100%; }
 html { min-width: 320px; background: var(--core-bg); }

@@ -406,6 +406,7 @@ export function CoreLayout() {
 
   useEffect(() => {
     document.documentElement.dataset.supermegaTheme = theme
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#05080d' : '#f6f4ee')
     try {
       window.localStorage.setItem(THEME_KEY, theme)
     } catch {
