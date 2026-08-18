@@ -471,7 +471,19 @@ else {
     || webmanifest.short_name !== manifest.brand.name
     || webmanifest.description !== manifest.company.supporting
     || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
+  // Design phase 2 item 8: the vector favicon alone does not satisfy Chrome/Android
+  // installability (wants a raster PNG at 192/512) and iOS "Add to Home Screen" does
+  // not read the manifest at all -- both are checked here, not just icons[0].
+  const rasterIcons = webmanifest.icons?.filter((icon) => icon.type === 'image/png') ?? []
+  if (!rasterIcons.some((icon) => icon.sizes === '192x192' && icon.purpose === 'any')
+    || !rasterIcons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'any')
+    || !rasterIcons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'maskable')) fail('missing_pwa_raster_icons')
+  for (const icon of rasterIcons) {
+    if (!await exists(resolve(dist, icon.src.replace(/^\//, '')))) fail(`missing_manifest_icon_file:${icon.src}`)
+  }
 }
+if (!indexSource.includes('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
+  || !await exists(resolve(dist, 'apple-touch-icon.png'))) fail('missing_apple_touch_icon')
 if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
@@ -18854,8 +18866,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk), the General Ledger MVP (FREE_FOREVER local projection: shop-ledger-accounts/-journal/-monthly-statement + ShopMonthlyStatement surface + accounting-handoff v4 ledger section; ~20KB net across the ledger chunk and owner statement), and the self-serve claim-code activation panel + inline trial terms (ManagedLoginPage activation flow, trial-terms.ts seven clauses at the signup checkbox; ~4KB — the customer path the activation window opens onto), and the design phase-1 foundation (2026-08 tribunal: token ramps + on-accent/field-line/scroll-accent tokens, WCAG contrast overrides, Myanmar script stacks with :lang(my) line-height guard, money-path type floor, 561-840px touch targets, light-theme tile art — ~6KB of appended CSS across the three islands), and the design phase-2 wave (the one-review 'Paid & handed over' settle path, the 'Close the day' section lifted out of the policy accordion, cart money total, status-pill semantics, de-branded merchant surfaces).
-if (bytes > 2_910_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk), the General Ledger MVP (FREE_FOREVER local projection: shop-ledger-accounts/-journal/-monthly-statement + ShopMonthlyStatement surface + accounting-handoff v4 ledger section; ~20KB net across the ledger chunk and owner statement), and the self-serve claim-code activation panel + inline trial terms (ManagedLoginPage activation flow, trial-terms.ts seven clauses at the signup checkbox; ~4KB — the customer path the activation window opens onto), and the design phase-1 foundation (2026-08 tribunal: token ramps + on-accent/field-line/scroll-accent tokens, WCAG contrast overrides, Myanmar script stacks with :lang(my) line-height guard, money-path type floor, 561-840px touch targets, light-theme tile art — ~6KB of appended CSS across the three islands), the design phase-2 wave (the one-review 'Paid & handed over' settle path, the 'Close the day' section lifted out of the policy accordion, cart money total, status-pill semantics, de-branded merchant surfaces), and the PWA raster icon set (design phase-2 item 8: icon-192/icon-512/icon-512-maskable/apple-touch-icon PNGs -- the vector favicon alone does not satisfy Chrome/Android installability or iOS home-screen icons; ~11.7KB of binary assets, not app code).
+if (bytes > 2_930_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
