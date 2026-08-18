@@ -2768,3 +2768,230 @@ test('returnCommerceStockFromProduction returns stock from production and reject
     expectedInventoryHeadDigest: withReturn.inventoryFoundation.headDigest,
   }, returnProofPos) !== null, 'idempotent replay must return current state')
 })
+
+// --- TEMPLATE-EXPANSION.md queue item 5: Ecommerce per-trade storefront copy -----------------
+//
+// workingSamplePlan/matchesWorkingSample/activateLocalEcommerceWorkingSample now take a trade
+// (ShopBusinessTemplateId | null) resolved via readLocalShopBusinessTemplateId. These tests prove
+// the three acceptance points from TEMPLATE-EXPANSION.md section (e), item 5:
+//   1. a bakery storefront reads trade-specific copy ("Fresh today"/"Order ahead" and a bakery
+//      summary), not the generic workflow wording;
+//   2. with no resolvable trade, every emitted string is BYTE-IDENTICAL to the literals captured
+//      from this exact file before ecommerce-trade-storefront.ts existed -- not eyeballed;
+//   3. provisioning a bakery storefront twice does not raise "Existing Ecommerce edits were
+//      preserved", including when the FIRST provisioning happened before the Shop trade was
+//      recognizable at all (the reason matchesWorkingSample must try {trade, null}, not trade
+//      alone).
+
+const CAPTURED_AT_BAKERY = '2026-08-18T02:00:00.000Z'
+
+// Mirrors the real bakery template's catalog (business-templates.ts) closely enough to exercise
+// the same "onHand ranking picks the wrong hero" bug the plan names: WATER-500ML's onHand (50)
+// out-ranks most of the bread and pastry lines, so an unprefered ranking puts bottled water in
+// the storefront's top four right alongside a coconut bun.
+const BAKERY_ITEMS = [
+  { sku: 'BREAD-WHITE', name: 'White sandwich loaf', onHand: 30, reorderAt: 5, price: 3000 },
+  { sku: 'BREAD-WHOLEWHEAT', name: 'Whole wheat loaf', onHand: 20, reorderAt: 5, price: 3800 },
+  { sku: 'BUN-COCONUT', name: 'Coconut bun', onHand: 60, reorderAt: 5, price: 1200 },
+  { sku: 'CROISSANT-BUTTER', name: 'Butter croissant', onHand: 36, reorderAt: 5, price: 2500 },
+  { sku: 'DONUT-GLAZED', name: 'Glazed donut', onHand: 48, reorderAt: 5, price: 1500 },
+  { sku: 'CAKE-SLICE-CHOC', name: 'Chocolate cake slice', onHand: 24, reorderAt: 5, price: 3500 },
+  { sku: 'CAKE-BIRTHDAY-1KG', name: 'Birthday cake 1kg', onHand: 6, reorderAt: 5, price: 32000 },
+  { sku: 'COOKIE-BUTTER-BOX', name: 'Butter cookie box', onHand: 25, reorderAt: 5, price: 6500 },
+  { sku: 'TART-EGG', name: 'Egg tart', onHand: 40, reorderAt: 5, price: 1800 },
+  { sku: 'PUFF-CURRY', name: 'Curry puff', onHand: 5, reorderAt: 5, price: 1600 },
+  { sku: 'COFFEE-ICED', name: 'Iced coffee', onHand: 40, reorderAt: 5, price: 2200 },
+  { sku: 'WATER-500ML', name: 'Drinking water 500ml', onHand: 50, reorderAt: 5, price: 600 },
+]
+
+// sampleId 'bakery' is a real ShopBusinessTemplateId, so readLocalShopBusinessTemplateId resolves
+// it -- this is what a device whose Shop was set up via provisionLocalShopBusinessTemplateSample
+// looks like.
+function bakeryWorkspace() {
+  const installed = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
+    sampleId: 'bakery',
+    sampleName: 'Bakery & patisserie',
+    items: BAKERY_ITEMS,
+    capturedAt: CAPTURED_AT_BAKERY,
+  })
+  assert.ok(installed, 'the bakery working sample must install')
+  return installed
+}
+
+// sampleId 'general-goods' is NOT a ShopBusinessTemplateId, so readLocalShopBusinessTemplateId
+// returns null for this workspace even though it carries the same working-sample SKUs as
+// bakeryWorkspace() above (commerceWorkingSampleSkus only checks the action-id PREFIX, not
+// membership in a real trade). This isolates the trade-resolution axis from the
+// preferredSkus/workingSampleSkus axis in the test below: swapping this workspace out for
+// bakeryWorkspace() changes ONLY whether the trade resolves, not which SKUs are preferred.
+function generalGoodsWorkspace() {
+  const installed = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
+    sampleId: 'general-goods',
+    sampleName: 'General goods',
+    items: BAKERY_ITEMS,
+    capturedAt: CAPTURED_AT_BAKERY,
+  })
+  assert.ok(installed, 'the general-goods working sample must install')
+  return installed
+}
+
+function memoryStorageAdapter(initial = new Map()) {
+  const storage = initial
+  return {
+    storage,
+    adapter: {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => { storage.set(key, String(value)) },
+      removeItem: (key) => { storage.delete(key) },
+    },
+  }
+}
+
+const noopLocks = { request: async (_name, _options, callback) => callback() }
+
+test('a bakery Ecommerce storefront reads trade-specific copy, not the generic workflow wording', async () => {
+  const state = bakeryWorkspace()
+  const { adapter } = memoryStorageAdapter(new Map([[COMMERCE_KEY, JSON.stringify(state)]]))
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } = await import(
+    '../showroom/src/products/ecommerce/storefront-draft.ts'
+  )
+  const result = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Golden Bakery', capturedAt: CAPTURED_AT_BAKERY },
+    { storage: adapter, catalog: state.items, locks: noopLocks },
+  )
+  assert.ok(result.ok, `bakery activation failed: ${result.ok ? '' : result.error}`)
+  const draft = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, adapter).draft
+  const collections = new Set(draft.merchandising.map((row) => row.collection))
+  assert.ok(collections.has('Fresh today'), `bakery storefront must read 'Fresh today', saw ${JSON.stringify([...collections])}`)
+  assert.ok(collections.has('Order ahead'), `bakery storefront must read 'Order ahead', saw ${JSON.stringify([...collections])}`)
+  assert.ok(!collections.has('Featured today'), 'generic demo wording must not appear once the trade resolves to bakery')
+  assert.ok(!collections.has('More to browse'), 'generic demo wording must not appear once the trade resolves to bakery')
+  assert.ok(
+    draft.summary.includes('Golden Bakery') && /bread|cake|pastr/i.test(draft.summary),
+    `bakery summary must be trade-specific, saw ${draft.summary}`,
+  )
+  assert.ok(
+    draft.merchandising.every((row) => !row.note.startsWith('Demo social listing')),
+    'notes must read as bakery guidance, not the generic social-listing note',
+  )
+  // The trade's own hero SKUs (bread, croissant, cake, tart) must be preferred over the plain
+  // onHand ranking that would otherwise put a bottled water in the storefront's top four.
+  assert.ok(
+    draft.selectedSkus.includes('BREAD-WHITE'),
+    `bakery storefront must lead with bakery goods, saw ${JSON.stringify(draft.selectedSkus)}`,
+  )
+  assert.ok(
+    !draft.selectedSkus.includes('WATER-500ML'),
+    `bakery storefront must not be led by bottled water, saw ${JSON.stringify(draft.selectedSkus)}`,
+  )
+})
+
+// Literals captured from workingSamplePlan's output against this exact bakery-shaped catalog and
+// business name, on the commit immediately before ecommerce-trade-storefront.ts was introduced
+// (queue items 1-4 shipped, item 5 not yet started). This is the byte-identical-fallback baseline
+// TEMPLATE-EXPANSION.md's acceptance point demands -- an assertion, not an eyeballed read.
+const NO_TRADE_BASELINE = {
+  'social-storefront': {
+    summary: "Browse Golden Bakery's featured products and send one order request for Shop review.",
+    selectedSkus: ['BUN-COCONUT', 'COFFEE-ICED', 'DONUT-GLAZED', 'WATER-500ML'],
+    collections: ['Featured today', 'Featured today', 'More to browse', 'More to browse'],
+    note: 'Demo social listing: confirm campaign copy and availability before launch.',
+  },
+  'pickup-preorder': {
+    summary: 'Choose available items from Golden Bakery for pickup or preorder confirmation.',
+    selectedSkus: ['BUN-COCONUT', 'DONUT-GLAZED', 'PUFF-CURRY', 'WATER-500ML'],
+    collections: ['Pickup menu', 'Pickup menu', 'Pickup menu', 'Pickup menu'],
+    note: 'Demo pickup listing: confirm collection time and availability before launch.',
+  },
+  'wholesale-request': {
+    summary: "Browse Golden Bakery's trade assortment and request quantities for manager review.",
+    selectedSkus: ['BUN-COCONUT', 'COFFEE-ICED', 'CROISSANT-BUTTER', 'DONUT-GLAZED', 'TART-EGG', 'WATER-500ML'],
+    collections: Array(6).fill('Trade assortment'),
+    note: 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
+  },
+}
+
+test('with no resolvable Shop trade, Ecommerce working-sample copy is byte-identical to the pre-trade baseline', async () => {
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } = await import(
+    '../showroom/src/products/ecommerce/storefront-draft.ts'
+  )
+  for (const [templateId, expected] of Object.entries(NO_TRADE_BASELINE)) {
+    const { storage, adapter } = memoryStorageAdapter()
+    // No Shop workspace at all in this storage: COMMERCE_KEY is absent, so the trade must resolve
+    // to null -- the exact "hand-imported CSV, trade undeterminable" case section (c) protects,
+    // and also the case a fresh device is in before Shop has ever been set up.
+    const result = await activateLocalEcommerceWorkingSample(
+      { templateId, businessName: 'Golden Bakery', capturedAt: CAPTURED_AT_BAKERY },
+      { storage: adapter, catalog: BAKERY_ITEMS, locks: noopLocks },
+    )
+    assert.ok(result.ok, `${templateId} activation failed: ${result.ok ? '' : result.error}`)
+    const draft = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, adapter).draft
+    assert.equal(draft.summary, expected.summary, `${templateId} summary drifted from the pre-trade baseline`)
+    assert.deepEqual(draft.selectedSkus, expected.selectedSkus, `${templateId} selectedSkus drifted from the pre-trade baseline`)
+    assert.deepEqual(draft.merchandising.map((row) => row.collection), expected.collections, `${templateId} collection labels drifted`)
+    assert.ok(draft.merchandising.every((row) => row.note === expected.note), `${templateId} notes drifted from the pre-trade baseline`)
+    // Not just the wording: resolving the trade must not fabricate a Shop workspace as a side
+    // effect on a device that never had one -- see the commerceRaw guard in
+    // activateLocalEcommerceWorkingSample.
+    assert.ok(!storage.has(COMMERCE_KEY), `${templateId} activation must not create a Shop workspace as a side effect`)
+  }
+})
+
+test('provisioning a bakery Ecommerce storefront twice does not raise "Existing Ecommerce edits were preserved"', async () => {
+  const state = bakeryWorkspace()
+  const { adapter } = memoryStorageAdapter(new Map([[COMMERCE_KEY, JSON.stringify(state)]]))
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const activate = (capturedAt) => activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Golden Bakery', capturedAt },
+    { storage: adapter, catalog: state.items, locks: noopLocks },
+  )
+  const first = await activate(CAPTURED_AT_BAKERY)
+  assert.ok(first.ok && first.status === 'installed', `first bakery provisioning failed: ${first.ok ? first.status : first.error}`)
+  const second = await activate('2026-08-18T02:05:00.000Z')
+  assert.ok(second.ok, `re-provisioning a bakery storefront must not fail: ${second.ok ? '' : second.error}`)
+  assert.equal(second.status, 'current', 're-provisioning an unchanged bakery storefront must be a no-op replay, not a fresh install')
+})
+
+test('a storefront installed before the Shop trade was recognizable is still matched once it resolves to bakery', async () => {
+  const { storage, adapter } = memoryStorageAdapter(new Map([[COMMERCE_KEY, JSON.stringify(generalGoodsWorkspace())]]))
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } = await import(
+    '../showroom/src/products/ecommerce/storefront-draft.ts'
+  )
+  // First provisioning: Shop is 'general-goods', which is not a ShopBusinessTemplateId, so the
+  // trade resolves to null and the storefront is built from the generic wording.
+  const first = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Golden Bakery', capturedAt: CAPTURED_AT_BAKERY },
+    { storage: adapter, catalog: BAKERY_ITEMS, locks: noopLocks },
+  )
+  assert.ok(first.ok && first.status === 'installed', `initial no-trade provisioning failed: ${first.ok ? first.status : first.error}`)
+  const firstDraft = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, adapter).draft
+  assert.ok(firstDraft.merchandising.some((row) => row.collection === 'Featured today'), 'the first provisioning must have used the generic collection wording')
+
+  // The owner's Shop is now recognized as a bakery, in the SAME storage. commerceWorkingSampleSkus
+  // is unaffected by the swap (both workspaces carry the identical BAKERY_ITEMS as their working
+  // sample), so this isolates the trade-resolution change from any preferredSkus change.
+  storage.set(COMMERCE_KEY, JSON.stringify(bakeryWorkspace()))
+  const second = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Golden Bakery', capturedAt: '2026-08-18T02:05:00.000Z' },
+    { storage: adapter, catalog: BAKERY_ITEMS, locks: noopLocks },
+  )
+  // matchesWorkingSample must try the {trade, null} pair: the draft on disk was built under the
+  // null plan, but the trade now resolves to bakery, so re-provisioning must recognize the
+  // installed draft as this device's own working sample and refresh it to the bakery copy --
+  // not refuse with "Existing Ecommerce edits were preserved".
+  assert.ok(second.ok, `re-provisioning after the trade became determinable must not be refused: ${second.ok ? '' : second.error}`)
+  assert.equal(second.status, 'installed', 'the bakery copy differs from the generic copy, so this must be a real update, not a no-op replay')
+  const secondDraft = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, adapter).draft
+  assert.ok(secondDraft.merchandising.some((row) => row.collection === 'Fresh today'), 'the second provisioning must have switched to the bakery collection wording')
+})

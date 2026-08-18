@@ -1,8 +1,13 @@
+// Explicit .ts extensions throughout this block: local-merchandising-import.ts now imports
+// readLocalShopBusinessTemplateId from this module, and verify_app_build.mjs imports THAT module
+// directly under node for its runtime checks, where an extensionless specifier does not resolve.
+// Vite tolerates either, so the omission only shows in CI -- see the identical note atop
+// local-merchandising-import.ts.
 import {
   clientDemoPresets,
   clientImportTemplate,
   createClientImportPreview,
-} from './client-onboarding'
+} from './client-onboarding.ts'
 import {
   installCommerceWorkingSampleActivity,
   installCommerceWorkingSampleCatalog,
@@ -10,15 +15,15 @@ import {
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
   type CommerceItem,
-} from './commerce-workspace'
-import { plantImportDueAt } from './managed-trial'
+} from './commerce-workspace.ts'
+import { plantImportDueAt } from './managed-trial.ts'
 import {
   appendGuidedSampleProductionActivity,
   installProductionWorkingSampleJobs,
   mutateProductionWorkingSample,
   mutateProductionWorkspace,
   type ProductionJob,
-} from './production-workspace'
+} from './production-workspace.ts'
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   createShopServiceSchedule,
@@ -28,20 +33,20 @@ import {
   readShopServiceSchedule,
   shopIndustryPack,
   type ShopIndustryPackId,
-} from './shop-service-scheduling'
-import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs'
-import { SETUP_KEY, normalizeSetup, type SetupState } from './product-setup'
+} from './shop-service-scheduling.ts'
+import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
+import { SETUP_KEY, normalizeSetup, type SetupState } from './product-setup.ts'
 import {
   rebaseWorkingSampleActivity,
   shopBusinessTemplate,
   shopBusinessTemplateCatalogCsv,
   shopBusinessTemplates,
   type ShopBusinessTemplateId,
-} from '../products/shop/business-templates'
+} from '../products/shop/business-templates.ts'
 import {
   plantBusinessTemplateForShopTemplateId,
   plantBusinessTemplateJobs,
-} from '../products/plant/business-templates'
+} from '../products/plant/business-templates.ts'
 
 export function readLocalShopIndustryPackId() {
   if (typeof window === 'undefined') return clientDemoPresets[0].shopIndustryPackId
