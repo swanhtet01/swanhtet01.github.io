@@ -40,6 +40,32 @@ function inV4(ip, cidr) {
   return (ipToLong(ip) & mask) === (ipToLong(base) & mask)
 }
 const V4_BLOCKED = ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.168.0.0/16', '198.18.0.0/15', '224.0.0.0/4', '240.0.0.0/4']
+
+// Expand a valid (net.isIP()===6) address into 8 numeric groups, folding a trailing dotted-decimal
+// IPv4 tail into hex first so :: compression resolves the same way regardless of notation.
+function expandV6(ip) {
+  const dotted = ip.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
+  const hex = dotted
+    ? ip.slice(0, dotted.index) + ((+dotted[1] << 8) | +dotted[2]).toString(16) + ':' + ((+dotted[3] << 8) | +dotted[4]).toString(16)
+    : ip
+  const [head, tail] = hex.split('::')
+  const headG = head ? head.split(':') : []
+  const tailG = hex.includes('::') && tail ? tail.split(':') : []
+  const groups = hex.includes('::') ? [...headG, ...Array(8 - headG.length - tailG.length).fill('0'), ...tailG] : headG
+  return groups.length === 8 ? groups.map((g) => parseInt(g, 16) || 0) : null
+}
+// Any IPv4 riding the low 32 bits of a known embedding prefix — v4-compatible (::a.b.c.d,
+// deprecated), v4-mapped (::ffff:a.b.c.d), or NAT64 (64:ff9b::a.b.c.d, RFC 6052) — caught whether
+// written as dotted-decimal or as pure hex groups (e.g. ::ffff:a9fe:a9fe / 64:ff9b::a9fe:a9fe).
+// Scoped to these three /96 prefixes so an ordinary global-unicast v6 address isn't misread as one.
+function embeddedV4(ip) {
+  const g = expandV6(ip)
+  if (!g) return null
+  const [a, b, c, d, e, f] = g
+  const zero5 = a === 0 && b === 0 && c === 0 && d === 0 && e === 0
+  const ok = (zero5 && (f === 0 || f === 0xffff)) || (a === 0x64 && b === 0xff9b && c === 0 && d === 0 && e === 0 && f === 0)
+  return ok ? `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}` : null
+}
 function isBlockedIp(ip) {
   const v = isIP(ip)
   if (v === 4) return V4_BLOCKED.some((c) => inV4(ip, c))
@@ -48,7 +74,7 @@ function isBlockedIp(ip) {
     if (lo === '::1' || lo === '::') return true
     if (/^f[cd]/.test(lo)) return true        // fc00::/7 unique-local
     if (/^fe[89ab]/.test(lo)) return true     // fe80::/10 link-local
-    const m = lo.match(/(?:::ffff:)(\d+\.\d+\.\d+\.\d+)$/); if (m) return isBlockedIp(m[1]) // v4-mapped
+    const v4 = embeddedV4(lo); if (v4) return isBlockedIp(v4) // v4-mapped / v4-compatible / NAT64
     return false
   }
   return false
