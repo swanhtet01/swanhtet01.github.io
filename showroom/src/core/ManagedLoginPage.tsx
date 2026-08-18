@@ -31,6 +31,12 @@ export function ManagedLoginPage() {
   const [businessName, setBusinessName] = useState(() => readTrialSignup(window.localStorage)?.businessName ?? '')
   const [notice, setNotice] = useState('')
   const [noticeTone, setNoticeTone] = useState<'quiet' | 'error'>('quiet')
+  // Design phase 2 item 11: the notice was a single paragraph disconnected from any
+  // field, so a screen reader user got no signal about WHICH input the error concerns.
+  // Only claim_code_conflict is attributable to a specific field (the code itself) --
+  // activation_window_closed and generic failures are system state, not a bad value in
+  // the box, so they stay as the shared notice only rather than falsely flagging it.
+  const [claimCodeFieldError, setClaimCodeFieldError] = useState(false)
   const [busy, setBusy] = useState(false)
   const managedReady = runtime.status === 'enterprise' && managedTrialAuthConfigured()
 
@@ -104,6 +110,7 @@ export function ManagedLoginPage() {
     event.preventDefault()
     setBusy(true)
     setNoticeTone('quiet')
+    setClaimCodeFieldError(false)
     setNotice('Creating your company from the claim...')
     try {
       const workspace = await createSelfServeWorkspace(claimCode, businessName)
@@ -118,6 +125,7 @@ export function ManagedLoginPage() {
       if (code === 'activation_window_closed' || code === 'http_503') {
         setNotice('Self-serve activation is not open yet. Your claim code stays valid — send an activation request and a person finishes setup with you.')
       } else if (code === 'claim_code_conflict') {
+        setClaimCodeFieldError(true)
         setNotice('This claim code is already linked to a different account. If that was you on another email, sign in with it; otherwise request help.')
       } else {
         setNotice(error instanceof Error ? error.message : 'The company could not be activated.')
@@ -134,22 +142,26 @@ export function ManagedLoginPage() {
         <Link className="core-button primary" to="/settings/#controls">Open company</Link>
       </section> : managedReady && activating ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
         <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Use the claim code from your free trial. The company is created for this signed-in account and only this account owns it.</p></div>
-        <label>Claim code<input autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
+        <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
         <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Ask a person to finish setup instead</a>
-        <button className="account-inline-link account-link-button" onClick={() => { setActivating(false); setNotice(''); setNoticeTone('quiet') }} type="button">Back to sign in</button>
-        <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
+        <button className="account-inline-link account-link-button" onClick={() => { setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">Back to sign in</button>
+        <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : managedReady ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
         <div><span className="core-eyebrow">Company account</span><h2>{directory ? 'Choose your company.' : 'Use your work account.'}</h2><p>{directory ? 'Only active companies assigned to this account are shown.' : 'No workspace code or technical setup is required.'}</p></div>
         {directory ? <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <>
-          <label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
-          <label>Password<input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
+          {/* Design phase 2 item 11: a failed sign-in only ever means "this email/password
+              combination was rejected" -- there is no way to attribute it to just one of the
+              two fields without leaking which one was wrong, so both point at the shared
+              notice rather than leaving it disconnected from either input. */}
+          <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
+          <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent)}>Forgot password?</Link>
           <Link className="account-inline-link" to="/signup">No account yet? Free trial</Link>
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? 'Open company' : 'Find my company'}</button>
-        <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
+        <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
         <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
         <div className="managed-login-actions"><Link className="core-button primary" to="/signup">Free trial</Link><Link className="core-button" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>

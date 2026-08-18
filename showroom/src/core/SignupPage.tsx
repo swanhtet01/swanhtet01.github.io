@@ -197,7 +197,12 @@ export function SignupPage() {
           <h2>Tell us about your business.</h2>
           <p>Everything stays on this device until you ask us for a company account.</p>
         </div>
-        <label>Business name<input autoComplete="organization" maxLength={120} onChange={(event) => setBusinessName(event.target.value)} required value={businessName} /></label>
+        {/* Design phase 2 item 11: startTrial's failures are storage/provisioning errors, not a
+            bad value in any one field, so there is no single input to mark aria-invalid. The
+            honest fix is a programmatic link from the form's first field to the notice, so a
+            screen reader user tabbing back after a failed submit hears that something changed,
+            rather than a paragraph with no relationship to any control. */}
+        <label>Business name<input aria-describedby={noticeTone === 'error' ? 'signup-notice' : undefined} autoComplete="organization" maxLength={120} onChange={(event) => setBusinessName(event.target.value)} required value={businessName} /></label>
         <label>What kind of business?<select onChange={(event) => setChoiceId(event.target.value)} value={choiceId}>
           <option value="">Standard starter catalog</option>
           <optgroup label="Shops and trades">
@@ -224,7 +229,7 @@ export function SignupPage() {
           </ol>
         </details>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : 'Start my free trial'}</button>
-        <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
+        <p className="form-notice" data-tone={noticeTone} id="signup-notice" role="status">{notice}</p>
       </form>
       <section className="managed-login-panel" aria-label="Company account">
         <div>
