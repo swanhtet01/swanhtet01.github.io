@@ -2498,3 +2498,13 @@ input, select, textarea { border-color: var(--core-field-line); }
   .shop-item-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shop-product-tile { min-height: 170px; }
 }
+
+/* ============================================================================
+   Design phase 2 - item 2: de-brand merchant surfaces. The customer-facing
+   storefront preview header no longer opens with the ">_" terminal prompt
+   (span removed in EcommerceProduct.tsx); the store name reads as the
+   merchant's own wordmark, not SuperMega console chrome. SuperMega's own
+   brand mark (CoreShell, favicon) is unchanged. storeName is owner data, so
+   the Myanmar display floor (line-height 1.3, zero tracking) applies.
+   ========================================================================== */
+.storefront-preview > header span { font-family: inherit; font-size: var(--font-size-display); font-weight: var(--font-weight-black); letter-spacing: 0; line-height: 1.3; }
