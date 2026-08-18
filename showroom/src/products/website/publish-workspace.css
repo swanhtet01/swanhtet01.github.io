@@ -884,3 +884,13 @@
     width: 100%;
   }
 }
+
+/* Design phase 1: solid focus ring (the 32% color-mix ring computed under 3:1).
+   Identical selector as the original above; later rule wins, dark unaffected. */
+.publish-flow-nav button:focus-visible,
+.website-publish-workspace button:focus-visible,
+.website-publish-workspace a:focus-visible,
+.website-publish-workspace input:focus-visible,
+.website-publish-workspace select:focus-visible {
+  outline-color: var(--website-green);
+}
