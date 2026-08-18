@@ -65,6 +65,14 @@ import {
   normalizeProduction,
 } from '../showroom/src/core/production-workspace.ts'
 import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
+import {
+  applyPlantOrderPlan,
+  buildPlantOrderPlan,
+  checkPlantOrderAvailability,
+  createEmptyPlantOrderState,
+  EMPTY_PLANT_ORDER_DIGEST,
+} from '../showroom/src/core/plant-order-foundation.ts'
+import { upsertProductionOrderExecution } from '../showroom/src/core/production-order-portfolio.ts'
 
 const PLANNING_DAY = '2026-08-07'
 const INSTALLED_AT = `${PLANNING_DAY}T01:00:00.000Z`
@@ -190,6 +198,117 @@ test('a workspace carrying controlled-order work is never a replaceable sample',
   // report this as a pure sample and a pack switch would destroy the released batch
   // that is the only Plant proof.
   assert.equal(isGuidedSampleProduction({ ...state, orderExecution: { commands: [] } }), false)
+})
+
+// Fixtures for the widened order-portfolio branch of isGuidedSampleProduction: a workspace
+// whose order portfolio is populated is only replaceable when every retained entry's every
+// command proof is guided-sample. These build genuinely valid PlantOrderState command chains
+// through the real command-append functions (applyPlantOrderPlan, checkPlantOrderAvailability)
+// -- not hand-rolled digests -- so validatePlantOrderState's full replay validation actually
+// runs, and the fixture exercises the real widening logic rather than the outer try/catch.
+const ORDER_PORTFOLIO_SOURCE_DIGEST = `sha256:${'a'.repeat(64)}`
+
+function orderPortfolioProof(actionId, capturedAt, evidenceReference) {
+  return { actionId, capturedAt, actor: GUIDED_SAMPLE_PRODUCTION_ACTOR, reason: 'Guided sample order portfolio command.', evidenceReference }
+}
+
+function orderPortfolioPlan(jobId) {
+  return buildPlantOrderPlan({
+    planId: 'PLN-GUIDED-0001',
+    sourceDigest: ORDER_PORTFOLIO_SOURCE_DIGEST,
+    job: { jobId, product: 'Guided widget', targetQuantity: 100, outputBatchId: 'BATCH-GUIDED-001' },
+    materials: [{ materialId: 'MAT-GUIDED-1', name: 'Guided material', unit: 'pcs', quantityPerUnitMilli: 1_000 }],
+    workCentres: [{ workCentreId: 'WC-GUIDED-1', name: 'Guided work centre' }],
+    routing: [{ operationId: 'OP-GUIDED-1', sequence: 1, name: 'Guided operation', workCentreId: 'WC-GUIDED-1', minutesPerUnitMilli: 1_000 }],
+  })
+}
+
+// Two commands (import_plan, availability_check) so the "every command" sweep has more than
+// one row to actually iterate. `secondActionId` lets a test swap in a non-guided actionId on
+// the SECOND command only, proving the guard inspects every command, not just the first.
+function orderPortfolioExecution(jobId, secondActionId = 'ACT-GUIDED-SAMPLE-ORDER-002') {
+  const plan = orderPortfolioPlan(jobId)
+  const step1 = applyPlantOrderPlan(
+    createEmptyPlantOrderState(),
+    plan,
+    orderPortfolioProof('ACT-GUIDED-SAMPLE-ORDER-001', '2026-08-01T00:00:00.000Z', 'GUIDED-ORDER-001'),
+    EMPTY_PLANT_ORDER_DIGEST,
+  )
+  const step2 = checkPlantOrderAvailability(step1.state, {
+    checkId: 'CHK-GUIDED-0001',
+    sourceDigest: ORDER_PORTFOLIO_SOURCE_DIGEST,
+    materials: [{ materialId: 'MAT-GUIDED-1', inputLotId: 'LOT-GUIDED-1', availableQuantityMilli: 1_000_000 }],
+    workCentres: [{ workCentreId: 'WC-GUIDED-1', availableMinutes: 1_000_000 }],
+    proof: orderPortfolioProof(secondActionId, '2026-08-01T00:05:00.000Z', 'GUIDED-ORDER-002'),
+    expectedHeadDigest: step1.state.headDigest,
+  })
+  return step2.state
+}
+
+function orderPortfolioBaseState(jobId) {
+  return {
+    schema: PRODUCTION_WORKSPACE_SCHEMA,
+    revision: 0,
+    jobs: [{ id: jobId, line: 'Guided line', product: 'Guided widget', target: 100, output: 0 }],
+    issues: [],
+    machines: [],
+    events: [],
+  }
+}
+
+test('a workspace whose entire order portfolio carries guided-sample proof is a replaceable sample', () => {
+  const jobId = 'JOB-GUIDED-001'
+  const state = upsertProductionOrderExecution(orderPortfolioBaseState(jobId), orderPortfolioExecution(jobId))
+  validateProductionState(state) // proves this is a genuinely valid, populated order portfolio
+  assert.ok(isGuidedSampleProduction(state), 'an all-guided order portfolio must stay replaceable')
+})
+
+test('one operator-authored order-portfolio command anywhere blocks replaceability', () => {
+  const jobId = 'JOB-GUIDED-001'
+  const state = upsertProductionOrderExecution(orderPortfolioBaseState(jobId), orderPortfolioExecution(jobId, 'ACT-PLANNER-002'))
+  validateProductionState(state)
+  assert.equal(isGuidedSampleProduction(state), false, 'a single operator command anywhere in the portfolio must block replaceability')
+})
+
+test('equipmentMaster stays a hard bar even over an all-guided order portfolio', () => {
+  const jobId = 'JOB-GUIDED-001'
+  const withPortfolio = upsertProductionOrderExecution(orderPortfolioBaseState(jobId), orderPortfolioExecution(jobId))
+  const equipmentActionId = 'ACT-GUIDED-SAMPLE-EQUIP-001'
+  const state = {
+    ...withPortfolio,
+    revision: 1,
+    events: [{
+      id: `EVT-${equipmentActionId}`,
+      actionId: equipmentActionId,
+      kind: 'equipment_master_imported',
+      subjectId: 'equipment-master',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      actor: GUIDED_SAMPLE_PRODUCTION_ACTOR,
+      reason: 'Imported guided equipment master.',
+      evidenceReference: `sha256:${'b'.repeat(64)}`,
+      summary: 'Imported 1 equipment master records',
+      equipmentIds: ['EQ-GUIDED-001'],
+    }],
+    equipmentMaster: {
+      contract: 'supermega.production.equipment-master.v1',
+      assets: [{
+        id: 'EQ-GUIDED-001',
+        name: 'Guided press',
+        workCentreId: 'WC-GUIDED-EQUIP-1',
+        criticality: 'medium',
+        owner: GUIDED_SAMPLE_PRODUCTION_ACTOR,
+        commissioningStatus: 'not_commissioned',
+        sourceActionId: equipmentActionId,
+        sourcePackageDigest: `sha256:${'b'.repeat(64)}`,
+        importedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    },
+  }
+  validateProductionState(state) // proves this is genuinely valid, not the outer try/catch
+  // Every event and every order-portfolio command here is guided-prefixed, so without the
+  // equipment master this workspace would already read as a pure guided sample -- isolating
+  // equipmentMaster as the actual reason isGuidedSampleProduction must still refuse it.
+  assert.equal(isGuidedSampleProduction(state), false, 'equipmentMaster must block replaceability even when every other record is guided')
 })
 
 test('guided evidence never lands after the records it follows', () => {

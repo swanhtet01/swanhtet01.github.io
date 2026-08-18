@@ -3978,7 +3978,14 @@ export function isGuidedSampleProduction(stateValue: ProductionState) {
   // Controlled-order and equipment work append no events, so the event log alone
   // cannot prove this workspace is still a pure sample. A released batch is the
   // only Plant proof; treating such a workspace as replaceable would destroy it.
-  if (state.orderExecution || state.orderPortfolio || state.equipmentMaster) return false
+  // The legacy single-order field and the equipment master stay hard bars regardless
+  // of content. A populated order portfolio is narrower: it is still replaceable when
+  // every retained entry's every command carries guided-sample proof end to end, since
+  // that is proof of the same guided walkthrough the event log already accepts below --
+  // not a human-authored plan or execution step.
+  if (state.orderExecution || state.equipmentMaster) return false
+  if (state.orderPortfolio && !productionOrderPortfolioEntries(state).every((entry) => entry.execution.commands
+    .every((command) => command.payload.proof.actionId.startsWith(guidedSampleActionPrefix)))) return false
   return state.events.every((event) => event.actionId.startsWith(productionWorkingSampleActionPrefix)
     || event.actionId.startsWith(guidedSampleActionPrefix))
 }
