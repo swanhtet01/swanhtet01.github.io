@@ -31,6 +31,7 @@ from supermega_runtime.order_intake_provider import (
     OrderIntakeProviderError,
 )
 from supermega_runtime.production_runtime import reduce_production_state
+from supermega_runtime.activation_email import send_self_serve_welcome_email
 from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_identity
 from supermega_runtime.telemetry.tracing import instrument_app as instrument_telemetry
 from supermega_runtime.trial_runtime import TrialSignupSession, create_trial_router
@@ -386,6 +387,7 @@ def resolve_self_serve_signup_session(request: Request) -> TrialSignupSession | 
         session_id=identity.session_id,
         email_verified=identity.email_verified,
         identity_provider="supabase",
+        email=identity.email,
     )
 
 
@@ -1270,6 +1272,7 @@ def create_app() -> FastAPI:
             resolve_principal=resolve_trial_principal,
             resolve_signup_session=resolve_self_serve_signup_session,
             order_intake_provider=order_intake_provider,
+            send_welcome_email=send_self_serve_welcome_email,
         )
     )
     app.include_router(cloud_runtime_router)

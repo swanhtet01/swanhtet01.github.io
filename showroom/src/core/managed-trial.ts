@@ -2724,11 +2724,12 @@ async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorks
   })
   if (!response.ok) throw await parseError(response)
   const workspaces = parseWorkspaceDirectory(await response.json())
-  if (!workspaces.length) {
-    throw new ManagedTrialError('This account has no active SuperMega company. Ask the company owner to activate access.', {
-      code: 'workspace_membership_missing',
-    })
-  }
+  // Zero companies is a STATE, not an error: since the 2026-08-12 self-serve
+  // decision the signed-in user IS the prospective owner, and this is exactly
+  // the moment they activate with their trial claim code. Throwing here (and
+  // the wrappers' sign-out-on-error) used to log the user out at the one point
+  // the activation UI needs their session. completeManagedWorkspaceSignIn still
+  // fail-closes independently, so an empty directory can never open a company.
   return {
     userId: session.user.id,
     email: session.user.email ?? 'Named user',

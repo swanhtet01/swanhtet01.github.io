@@ -160,6 +160,10 @@ import {
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
+import { projectShopArAgingSummary } from './shop-ar-aging-summary'
+import { projectShopApAgingSummary } from './shop-ap-aging-summary'
+import { buildShopLedgerJournal } from './shop-ledger-journal'
+import { projectShopMonthlyStatement } from './shop-monthly-statement'
 import { projectProductionMaterialRequirements } from './production-material-handoff'
 import { channelOrderDraftIsReady, type ChannelOrderDraft } from './channel-order-intake'
 import type {
@@ -256,6 +260,7 @@ const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').t
 const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module) => ({ default: module.ShopOperatingFlow })))
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
 const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
+const ShopMonthlyStatement = lazy(() => import('./ShopMonthlyStatement').then((module) => ({ default: module.ShopMonthlyStatement })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 const ReceiptDialog = lazy(() => import('./ReceiptDialog').then((module) => ({ default: module.ReceiptDialog })))
 
@@ -5896,6 +5901,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 
+  // Owner-language monthly statement, derived from the same operating record.
+  // The ledger is a projection: it fails closed (null) rather than show an
+  // unbalanced statement, so the panel simply does not render on imbalance.
+  const shopStatementAsOf = new Date(purchaseOrderClock).toISOString()
+  const shopLedgerJournal = buildShopLedgerJournal(commerce)
+  const shopMonthlyStatement = shopLedgerJournal
+    ? projectShopMonthlyStatement(
+        shopLedgerJournal,
+        projectShopArAgingSummary(commerce, shopStatementAsOf),
+        projectShopApAgingSummary(commerce, shopStatementAsOf),
+        { asOf: shopStatementAsOf },
+      )
+    : null
+  const shopMonthlyStatementPanel = shopMonthlyStatement
+    ? <Suspense fallback={null}><ShopMonthlyStatement statement={shopMonthlyStatement} /></Suspense>
+    : null
+
   const afterSalesCount = commerce.orders.reduce((total, order) => (
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
@@ -6036,6 +6058,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           </section>
           {shopAccountingReadiness}
           {shopAccountingPacket}
+          {shopMonthlyStatementPanel}
         </div>
       </details>
     </section>

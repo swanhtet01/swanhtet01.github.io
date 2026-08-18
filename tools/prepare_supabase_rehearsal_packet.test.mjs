@@ -16,7 +16,7 @@ const releaseCommit = 'a'.repeat(40)
 const generatedAt = '2026-08-03T00:00:00.000Z'
 const releaseReview = originMainReleaseReview(releaseCommit)
 
-test('builds an exact non-mutating v10 rehearsal packet', async () => {
+test('builds an exact non-mutating v13 rehearsal packet', async () => {
   const manifest = JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'))
   const ignoreRules = await readFile(resolve(repositoryRoot, '.gitignore'), 'utf8')
   const runbook = await readFile(resolve(repositoryRoot, 'docs', 'supermega-enterprise-activation.md'), 'utf8')
@@ -31,10 +31,10 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
 
   assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v2')
   assert.equal(packet.state, 'prepared-not-executed')
-  assert.equal(packet.release.schemaVersion, 10)
-  assert.equal(packet.release.migrationCount, 11)
+  assert.equal(packet.release.schemaVersion, 13)
+  assert.equal(packet.release.migrationCount, 14)
   assert.deepEqual(packet.release.review, releaseReview)
-  assert.equal(packet.release.migrations.at(-1).name, '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql')
+  assert.equal(packet.release.migrations.at(-1).name, '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql')
   assert.equal(packet.release.browserQuarantine.contract, 'supermega.public-browser-quarantine.v1')
   assert.equal(packet.release.browserQuarantine.scope, 'isolated-rehearsal-only')
   assert.equal(packet.release.browserQuarantine.sourceAudit.publicTableCount, 27)

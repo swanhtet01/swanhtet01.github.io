@@ -14,6 +14,16 @@ import {
   type ShopInventoryOrderReturnAllocation,
   type ShopInventoryState,
 } from './shop-inventory-foundation.ts'
+import { ledgerAccountRoles, type LedgerAccountRole } from './shop-ledger-accounts.ts'
+// The general ledger is a projection over this workspace. The v4 handoff
+// delegates to it; these bindings are only ever read inside functions, so the
+// import cycle with shop-ledger-journal never touches module-evaluation order.
+import {
+  buildShopLedgerJournal,
+  computeLedgerTrialBalance,
+  type LedgerJournal,
+  type LedgerTrialBalance,
+} from './shop-ledger-journal.ts'
 
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
@@ -21,6 +31,7 @@ export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calcu
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
+export const COMMERCE_ACCOUNTING_HANDOFF_V4_SCHEMA = 'supermega.commerce.accounting-handoff.v4' as const
 export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
 export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.customer-receivables-handoff.v1' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
@@ -126,7 +137,11 @@ export type CommerceTaxConfigurationInput = {
 export type CommerceAccountRole = 'payment_clearing' | 'sales_revenue' | 'sales_revenue_unverified' | 'tax_payable' | 'sales_adjustment' | 'correction_receivable' | 'correction_payable'
 
 export type CommerceAccountMappingEntry = {
-  accountRole: CommerceAccountRole
+  // Widened to the ledger role set so a third mapping generation can map the
+  // general-ledger roles (accounts_receivable, accounts_payable, etc.) to
+  // external accountant codes. The legacy-4 and current-7 generations only ever
+  // use CommerceAccountRole values, which remain a subset of LedgerAccountRole.
+  accountRole: LedgerAccountRole
   externalAccountCode: string
 }
 
@@ -766,6 +781,23 @@ export type CommerceAccountingHandoff = {
   stockExceptionSkus: string[]
   entries: CommerceAccountingHandoffEntry[]
   digest: string
+}
+
+// Accounting handoff v4 grows a ledger section over v3: the close handoff is
+// carried through unchanged, and the general-ledger journal (the whole ledger
+// since the shop's first close) plus its trial balance ride alongside it. The
+// review-only posture is preserved exactly -- the device never claims the
+// accountant's books were written.
+export type CommerceAccountingHandoffV4 = {
+  schema: typeof COMMERCE_ACCOUNTING_HANDOFF_V4_SCHEMA
+  status: 'review_required'
+  postingAuthority: 'none'
+  externalPostingPerformed: false
+  closeHandoff: CommerceAccountingHandoff
+  ledger: {
+    journal: LedgerJournal
+    trialBalance: LedgerTrialBalance
+  }
 }
 
 export type CommerceSupplierPayablesHandoffRow = {
@@ -1889,7 +1921,7 @@ function movementMatchesReturn(movement: CommerceStockMovement, record: Commerce
     && movement.evidenceReference === record.evidenceReference
 }
 
-function myanmarBusinessDate(timestamp: string) {
+export function myanmarBusinessDate(timestamp: string) {
   return new Date(Date.parse(timestamp) + myanmarUtcOffsetMs).toISOString().slice(0, 10)
 }
 
@@ -1931,7 +1963,7 @@ function rotateRight(value: number, bits: number) {
   return (value >>> bits) | (value << (32 - bits))
 }
 
-function sha256Hex(source: string) {
+export function sha256Hex(source: string) {
   const input = new TextEncoder().encode(source)
   const paddedLength = Math.ceil((input.length + 9) / 64) * 64
   const padded = new Uint8Array(paddedLength)
@@ -2654,12 +2686,15 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     if (!Array.isArray(candidate.mappings)
       || (candidate.mappings.length !== legacyCommerceAccountRoles.length
-        && candidate.mappings.length !== commerceAccountRoles.length)) {
+        && candidate.mappings.length !== commerceAccountRoles.length
+        && candidate.mappings.length !== ledgerAccountRoles.length)) {
       throw new Error(`accountMappingConfigurations[${index}].mappings must cover every account role exactly once.`)
     }
-    const expectedAccountRoles = candidate.mappings.length === legacyCommerceAccountRoles.length
+    const expectedAccountRoles: readonly LedgerAccountRole[] = candidate.mappings.length === legacyCommerceAccountRoles.length
       ? legacyCommerceAccountRoles
-      : commerceAccountRoles
+      : candidate.mappings.length === commerceAccountRoles.length
+        ? commerceAccountRoles
+        : ledgerAccountRoles
     for (const [mappingIndex, mapping] of candidate.mappings.entries()) {
       const field = `accountMappingConfigurations[${index}].mappings[${mappingIndex}]`
       if (!isRecord(mapping) || !hasExactKeys(mapping, ['accountRole', 'externalAccountCode'])
@@ -10171,6 +10206,27 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     artifact.digest,
   ])
   return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
+}
+
+// Accounting handoff v4: the v3 close handoff plus the general-ledger section,
+// delegating the journal derivation to shop-ledger-journal. Fails closed if the
+// close handoff is unavailable or the ledger does not balance (buildShopLedger-
+// Journal returns null on any imbalance) -- no partial handoff is emitted. The
+// v3 close handoff is carried through byte-for-byte, so its own CSV still
+// verifies against the same digest.
+export function commerceAccountingHandoffV4(state: CommerceState, closeId: string): CommerceAccountingHandoffV4 | null {
+  const closeHandoff = commerceAccountingHandoff(state, closeId)
+  if (!closeHandoff) return null
+  const journal = buildShopLedgerJournal(state)
+  if (!journal) return null
+  return {
+    schema: COMMERCE_ACCOUNTING_HANDOFF_V4_SCHEMA,
+    status: 'review_required',
+    postingAuthority: 'none',
+    externalPostingPerformed: false,
+    closeHandoff,
+    ledger: { journal, trialBalance: computeLedgerTrialBalance(journal) },
+  }
 }
 
 function commerceSupplierPayablesHandoffProjection(artifact: Omit<CommerceSupplierPayablesHandoff, 'digest'>) {

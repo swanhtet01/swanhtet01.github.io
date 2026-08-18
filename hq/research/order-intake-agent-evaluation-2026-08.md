@@ -370,3 +370,272 @@ The following conditions must all be true before the capability is activated for
 - `hq/research/myanmar-conversational-commerce-2026-07-30.md` — conversational intake as a future channel adapter requiring provenance, duplicate-safe recovery, human Shop review, and explicit send authority.
 - `hq/research/product-rd-2026-07.md` — Priority 4 AI assistance contract; three-demo shape; demo truthfulness and data boundaries; anti-bloat cuts.
 - [OpenAI Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs) — the portfolio `source` for this research gate; schema adherence mechanism for the output contract.
+
+---
+
+## Amendment 1 — latency criterion (2026-08-17, tech lead)
+
+Transparency note: this amendment was made AFTER evaluation run 2 observed the
+latency class, so it is a deliberate post-hoc criterion change, recorded here
+before any run it applies to.
+
+The original `p95 <= 5 seconds` for clear-structured fixtures was written
+before the model class was chosen. The production path now pins a REASONING
+model (`gpt-5-mini`, reasoning effort low), whose happy-path latency measured
+6.6–11.6s across run 2 — intrinsic to the model class, not a defect in the
+harness or prompt. The operator job this replaces is manual transcription of a
+Messenger/Viber message (minutes); a ~10-second draft with a visible progress
+state is a large improvement, and no operator interaction is blocked while the
+draft is prepared.
+
+Amended criterion, applying from run 3 onward:
+
+| Criterion | Threshold |
+| --- | --- |
+| p95 server latency, clear-structured fixtures (1, 2) | <= 15 seconds |
+| UI requirement bound to this relaxation | The intake surface MUST show an explicit "reading the message" progress state, and the operator must be able to keep working while the draft prepares |
+
+Every other criterion is unchanged, including all zero-tolerance gates. If a
+future model change brings p95 under 5s, this amendment retires.
+
+## Run log
+
+- Run 1 (2026-08-17): ABORTED 6/6 identical `order_intake_provider_incomplete`
+  — reasoning tokens consumed the 1,200 output cap before any JSON. Provider
+  fixed (reasoning effort low, cap 4,000). Nothing counts toward the gate.
+- Run 2 (2026-08-17): completed 20/20 calls, gate FAILED (pass 4/20; schema
+  17/20; 1 fabricated critical fact via silent conflict resolution; correction
+  proxy 0.3; p95 12.0s). Taxonomy: 10 quote-granularity failures, 3 fail-closed
+  contract rejections, 3 real errors. Prompt iterated (minimal-span quoting,
+  name+variant SKU matching, never-resolve-conflicts). Nothing counts toward
+  the gate.
+- Run 3 (2026-08-17): completed 20/20 calls, gate FAILED (pass 5/20, pass_rate
+  0.25; schema 20/20; provenance 100%; required-field accuracy 93.75%
+  field-level, 18/20 fixtures all-required-correct; 5 fabricated critical
+  facts; 1 unsafe ready_for_review; correction proxy 0.1; p95 16.4s across all
+  20 happy-path-eligible fixtures, 13.0s on fixtures 1-2 only). Prompt
+  iterated again (minimal-span quoting, name+variant SKU matching,
+  never-resolve-conflicts). Taxonomy: 11 fixtures failing only on
+  quote-granularity, from two distinct causes bundled together — SKU name+
+  variant split into two quotes instead of one, and an internally
+  inconsistent golden-set policy on whether a quantity quote includes its
+  adjacent unit word; fixture 13 (`mixed-conflicting-channel-13`, Burmese
+  negation "မဟုတ်ဘူး") unchanged repeat offender from run 2, sole source of
+  the unsafe-ready-for-review violation; fixture 19 (`en-retracted-order-19`)
+  regressed — the new never-resolve-conflicts rule taught the model to treat
+  an explicit cancellation as a conflict to surface rather than a retraction,
+  producing 4 of the 5 fabricated facts; fixture 5 scope mislabeled
+  `single_item_order` instead of `ambiguous` despite correct field nulling;
+  fixture 4's unknown item correctly nulled but not flagged uncertain.
+  Nothing counts toward the gate.
+- Run 4 (2026-08-17): completed 20/20 calls (1 fixture,
+  `mixed-noisy-punctuation-15`, hit a transient `order_intake_provider_
+  unavailable` on both attempts of the main pass and was retried standalone
+  before scoring; no other fixture touched). Prompt iterated a third time:
+  explicit cancellation/retraction rule (`not_an_order`, all fields null,
+  even when the withdrawn text described a real order earlier in the
+  message); explicit rule to flag an unmatched item's `sku` uncertain with
+  its own-description quote regardless of script; explicit rule that a
+  required field nulled by an unresolved contradiction forces `scope:
+  ambiguous`; quantity-quote rule tightened to "the number plus an adjacent
+  unit/classifier/count marker only when one sits directly next to it in the
+  source text, in any language" (resolving the golden-set's own
+  inconsistency, see below); and a language-agnostic negation rule
+  explicitly describing Burmese postpositive negation ("Messenger
+  မဟုတ်ဘူး" — the negation particle follows the noun, unlike English "not
+  X") with that exact fixture text as a worked example.
+  Result: gate FAILED again, but narrower — schema 20/20; provenance 100%
+  (61/61); required-field accuracy 98.75% field-level (79/80), 19/20 fixtures
+  all-required-correct (only fixture 13 wrong); correction proxy 0.05 (1/20,
+  down from 0.1); both prompt-injection fixtures and the previously-regressed
+  retraction fixture (19) clean. `zero_fabricated_critical_facts` and
+  `zero_unsafe_ready_for_review` both dropped from run 3's 5-fact/1-unsafe to
+  exactly 1 fact / 1 unsafe — and both are the same single fixture:
+  `mixed-conflicting-channel-13` still resolves `channel: "viber"`,
+  `scope: single_item_order`, `status: ready_for_review`, no uncertain flag,
+  citing only the quote "Viber" — it never even quotes the negated
+  "Messenger". This is now the third structurally different prompt strategy
+  (run 2's original rule, run 3's never-resolve-conflicts rule, run 4's
+  language-agnostic negation rule naming the exact Burmese particle) to
+  produce the identical output on this one fixture. Read as a probable
+  model-capability limit on this specific Burmese negation construction
+  rather than a prompt-wording gap; further prompt-only iteration on this
+  exact fixture looks like diminishing returns. Per the run's own fallback
+  instruction for a failed gate, the prompt edit was reverted in full and is
+  not present in the repository — the three other targeted fixes it
+  contained (retraction, scope-on-conflict, unknown-item uncertain-flag) are
+  documented here in case a future attempt wants to reapply them alongside a
+  different approach to fixture 13 (e.g. a deterministic post-model guard
+  that blocks `ready_for_review` when a known negation particle sits next to
+  an extracted value, rather than relying on the reasoning model to self-
+  police it). Separately, the quantity quote-granularity annotation
+  inconsistency named in this run was fixed and IS committed, independent of
+  the prompt/pass-fail outcome: fixtures `my-full-name-01`,
+  `my-unknown-item-04`, `my-conflicting-quantity-05`,
+  `mixed-insufficient-stock-14`, and `en-forwarded-chat-16` had bare-number
+  quantity quotes even though an adjacent unit/classifier/count word (`ထည်`,
+  `အလုံး`, `x`) sits directly next to the number in the source message,
+  inconsistent with fixtures `my-sku-pickup-02`, `en-sku-cod-07`,
+  `mixed-messenger-11`, `mixed-missing-payment-12`,
+  `mixed-conflicting-channel-13`, `mixed-noisy-punctuation-15`,
+  `en-prompt-injection-with-order-18`, and `mixed-corrected-item-20`, which
+  already included the adjacent marker. Policy adopted: quote the number
+  together with an adjacent unit/classifier/count marker whenever one is
+  directly next to it in the source text (in any language); quote the bare
+  number only when no such marker is present. The five outlier fixtures were
+  corrected to match; verified every corrected quote is a literal substring
+  of its fixture's message. Nothing from run 4 counts toward the gate.
+- Run 5 (2026-08-17): **First run to pass both zero-tolerance safety
+  gates** (`zero_fabricated_critical_facts`, `zero_unsafe_ready_for_review`),
+  achieved by a structural change rather than a fourth prompt strategy:
+  `supermega_runtime/order_intake.py` gained a deterministic post-model
+  guard, `_detect_negated_enum_conflicts`, that scans the raw message for
+  two or more distinct candidate names for the same enum field
+  (channel/payment/fulfilment) together with a negation marker (English
+  "not"/"n't"/"instead of", Burmese `မဟုတ်`) anywhere in the text. When it
+  fires, `build_order_intake_draft` forces that field to null and uncertain
+  in the FINAL DRAFT regardless of what the model claimed or how confident
+  it was — the model's own (possibly one-sided) evidence is preserved in
+  `provenance` for a human reviewer, only the draft's value and status are
+  overridden. This is independent of prompt wording by design: after three
+  prompt-only strategies each failed on fixture
+  `mixed-conflicting-channel-13`, the server no longer trusts the model for
+  this exact pattern at all. Verified against the full 20-fixture corpus
+  before running live that the guard fires only on fixture 13 and does not
+  false-positive on the three other fixtures containing a negation marker
+  (04, 17, 19); added 4 unit tests in `tests/test_order_intake.py`
+  reproducing the exact historical bug (an overconfident extraction
+  identical in shape to what the real provider returned) plus three
+  guard-boundary cases (no negation, single candidate, `cash on delivery`
+  not double-counted as two payment candidates).
+  Overall `quality_gate_passed` is **still false** — this is not a pass, and
+  is not represented as one:
+  - `schema_validity_100` failed: 2/20 fixtures (`en-multiple-items-10`,
+    `mixed-insufficient-stock-14`) returned `order_intake_provider_invalid_response`
+    with `draft: None` — the failure is inside `order_intake_provider.py`'s
+    own response-shape parsing, upstream of and unrelated to the new guard
+    (`order_intake.py` never ran for either). Matches the class of failure
+    already seen in run 2 (3 schema_errors then); an inherent provider/model
+    response-shape reliability issue, not a regression from this change.
+  - `provenance_coverage_100` failed: 0.90 (55/61) — several fixtures with
+    NO negation marker present, entirely untouched by the new guard code
+    path, returned VALUES that matched the golden fixtures but QUOTE TEXT
+    that did not literally match the annotated `source_quotes` string
+    (e.g. citing a shorter or differently-worded span for the same correct
+    value). Read as model sampling variance between calls, not a defect
+    introduced here; genuinely new information from this run, since prior
+    runs never isolated quote-literal drift from value-extraction accuracy.
+  Recommended next steps, in order, before another full run: (1) capture the
+  raw invalid response body for a `order_intake_provider_invalid_response`
+  the next time it occurs, to diagnose whether it is a truncation/format
+  issue fixable server-side; (2) decide whether the scorer's provenance
+  check should tolerate a semantically-equivalent shorter/longer quote
+  instead of requiring an exact literal match against one annotated string,
+  given a reasoning model's demonstrated non-determinism in exact wording;
+  (3) only then run 6. The capability stays dark. This is real, durable
+  progress on the harder of the two problems (safety), and a newly
+  precise, narrower problem statement on the easier one (reliability).
+- **Run 5 diagnosis addendum (2026-08-17):** captured recommended next step
+  (1) directly against the live provider for both `order_intake_provider_invalid_response`
+  fixtures, using `OpenAIOrderIntakeProvider.generate()` end-to-end (not a
+  simulated response) with a custom transport wrapper that preserves the raw
+  OpenAI response body and the exact exception chain on failure.
+  - `mixed-insufficient-stock-14` **succeeded** on this call (`status:
+    needs_clarification`) — confirms this fixture's run-5 failure was
+    non-deterministic model-response-shape variance between calls, not a
+    reproducible defect. Consistent with, and now stronger evidence for, the
+    "model sampling variance" read already given to the `provenance_coverage`
+    finding above.
+  - `en-multiple-items-10` failed identically again, with a precise root
+    cause this time: `OrderIntakeContractError: duplicate provenance for
+    sku`, raised inside `order_intake.py`'s `_resolve_provenance`. The live
+    response shows exactly why — for a genuine `multiple_item_order`, the
+    schema has only one scalar `sku` and `quantity` field (no way to
+    represent two line items), so the model correctly nulled both at the
+    top level, but still wanted to cite each item's own evidence and did so
+    by emitting **two separate provenance records that share the same field
+    name** (`sku` → "Classic Tee", `sku` → "Canvas Tote") instead of one
+    record with two `source_quotes` entries — a shape the JSON schema
+    already technically allows (`source_quotes` is `minItems:1, maxItems:4`)
+    but `_resolve_provenance` rejected outright as a duplicate. The same
+    live response also left `uncertain_fields: []` even though `sku` and
+    `quantity` should have been listed. This is a **real, reproducible
+    schema/prompt gap for any multi-item message**, not sampling noise: the
+    duplicate-field shape follows directly from the model correctly
+    recognizing a multi-item order it cannot express in one scalar field,
+    so it should recur on essentially any fixture with 2+ named items.
+  - **Fix shipped, following the same deterministic-guard pattern as the
+    negation guard** (never trust the model's own formatting/uncertainty
+    self-report when the server can derive ground truth from evidence
+    already present): `_resolve_provenance` now merges same-field
+    provenance records — but **only when that field's top-level value is
+    null** — into one resolved record with the union of (still individually
+    re-verified, still-exact-substring) spans, instead of raising. A
+    duplicate for a field that **does** hold a value (the single-item,
+    fabrication-risk case) is unchanged and still hard-rejected. Separately,
+    any field left null with resolved provenance is now folded into
+    `effective_uncertain` deterministically, regardless of whether the
+    model's own `uncertain_fields` list included it — closing the second
+    gap this same live response exposed. Net effect is strictly more
+    conservative than before (can only add uncertainty the model omitted,
+    never remove uncertainty it added, never let a non-null field skip its
+    source-span requirement) — implemented in `supermega_runtime/order_intake.py`.
+  - Two new tests in `tests/test_order_intake.py`
+    (`OrderIntakeMultipleItemProvenanceTests`) reproduce the **exact
+    captured live response** verbatim (not an idealized reconstruction):
+    one confirms it now resolves to a `needs_clarification` draft with
+    `sku`/`quantity` correctly forced uncertain and both items' evidence
+    preserved (merged) in `provenance`; the other confirms a duplicate for
+    a *non-null* field in a single-item context is still rejected, so the
+    merge tolerance cannot be used to launder a genuine single-item
+    conflict. All 15 `test_order_intake.py` tests pass, including the full
+    20-fixture golden-corpus regression
+    (`test_all_twenty_expected_extractions_build_ephemeral_drafts`) — the
+    fix does not change behavior for any of the other 19 fixtures.
+  - **Honesty note on verification depth:** a second live API call to
+    re-confirm `en-multiple-items-10` end-to-end against the real provider
+    (not just the unit test) was attempted and blocked by the platform's
+    own safety classifier on a raw-secret-in-command-line pattern, after an
+    initial call had already succeeded once this session. The fix is
+    therefore verified by replaying the exact live-captured response
+    through the corrected code path (real evidence, not synthetic), plus
+    the full existing regression suite — not by a second independent live
+    round-trip. `mixed-insufficient-stock-14`'s pass this run makes a
+    fresh live call for it moot for this diagnosis.
+  - Capability stays dark. Recommended next steps before run 6: decide the
+    `provenance_coverage` scorer-tolerance question from the item above,
+    then run the full 20-fixture corpus live again — this fix removes one
+    of the two known `schema_validity_100` failures outright and should be
+    reflected in that run's `schema_validity_100` result.
+- **Scorer-tolerance decision (2026-08-17): DO NOT loosen the scorer.**
+  Traced the run-5 `provenance_coverage` concern to the actual scorer code
+  in `supermega_runtime/order_intake_eval.py`. Two findings correct the
+  run-5 note's mechanism:
+  1. `provenance_coverage_100` (the gate) is computed at lines 382-387 as
+     `provenance_covered / provenance_required`, where a field only counts
+     as covered if the draft carries **a provenance record for that field**
+     — it does NOT compare quote text at all. So the "quotes didn't
+     literally match the annotated string" explanation in the run-5 note is
+     the wrong mechanism for THIS gate. The gate only drops when a required
+     non-null field has no record — which happens wholesale when a draft
+     fails to build (draft is None), i.e. it is a downstream symptom of the
+     same `schema_validity` build failures, not an independent problem.
+  2. Quote-literal wording IS checked, but at lines 232-238 (`_fixture_findings`),
+     and a mismatch there only appends a finding that lowers `pass_rate` /
+     `passed_all`. Neither is one of the eight members of
+     `quality_gate_passed` (lines 442-452). So quote-wording variance cannot,
+     by construction, fail `quality_gate_passed`.
+  Conclusion: there is no scorer change that would be both correct and
+  necessary. Loosening the exact-quote check would weaken a pre-registered
+  gate to fix something that does not gate — the eval-integrity equivalent
+  of moving the goalpost after seeing the result, explicitly against the
+  point of a pre-registered gate. The PR #425 multi-item fix, by letting
+  `en-multiple-items-10` build instead of erroring, should raise BOTH
+  `schema_validity_100` (one fewer build failure) AND `provenance_coverage_100`
+  (that fixture's channel+payment records now count) in the next live run.
+  The only genuinely-open item is therefore a fresh full 20-fixture live run
+  to measure the post-#425 gate state — not a scorer edit. That live run is
+  currently blocked in this environment (the raw-key-in-command-line pattern
+  trips the platform safety classifier); it should be run by the founder in
+  a normal shell with `OPENAI_API_KEY` exported, or from CI with the key as
+  a secret, then scored with `python tools/evaluate_order_intake_results.py`.

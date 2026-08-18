@@ -12,9 +12,13 @@ const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const branchPattern = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
-const expectedSchemaVersion = 10
-const expectedMigrationCount = 11
-const expectedFinalMigration = '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql'
+// v11 (self-serve grants) joined the reviewed chain 2026-08-16: hosted-proven on
+// an isolated branch (hq/readiness/self-serve-pilot-proof.json), fingerprint-
+// pinned in verify_private_trial_migrations.mjs. The packet describes the full
+// reviewed chain; applying it to production remains a separate founder decision.
+const expectedSchemaVersion = 13
+const expectedMigrationCount = 14
+const expectedFinalMigration = '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql'
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
 

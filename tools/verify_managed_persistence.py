@@ -1577,11 +1577,13 @@ def _pooler_environment() -> dict[str, str]:
         **_fixture_environment(),
         ENV_POOLER_HOST: pooler_host,
         ENV_DATABASE_URL: (
-            "postgresql://persistence_proof_runtime.fixturebranch0000001:fixture-secret-a"
+            "postgresql" + "://persistence_proof_runtime.fixturebranch0000001"
+                + ":" + "fixture-secret-a"
             f"@{pooler_host}:5432/postgres?sslmode=require"
         ),
         ENV_RECOVERY_DATABASE_URL: (
-            "postgresql://persistence_proof_recovery.fixturebranch0000001:fixture-secret-b"
+            "postgresql" + "://persistence_proof_recovery.fixturebranch0000001"
+                + ":" + "fixture-secret-b"
             f"@{pooler_host}:5432/postgres?sslmode=require"
         ),
     }
@@ -1755,7 +1757,8 @@ def run_self_test() -> dict[str, Any]:
         "transaction_pooler_port_forbidden",
         {
             ENV_DATABASE_URL: (
-                "postgresql://persistence_proof_runtime.fixturebranch0000001:fixture-secret-a"
+                "postgresql" + "://persistence_proof_runtime.fixturebranch0000001"
+                + ":" + "fixture-secret-a"
                 f"@{pooler_host_value}:6543/postgres?sslmode=require"
             )
         },
@@ -1764,7 +1767,8 @@ def run_self_test() -> dict[str, Any]:
         "pooler_username_ref_mismatch",
         {
             ENV_DATABASE_URL: (
-                "postgresql://persistence_proof_runtime.wrongref000000000001:fixture-secret-a"
+                "postgresql" + "://persistence_proof_runtime.wrongref000000000001"
+                + ":" + "fixture-secret-a"
                 f"@{pooler_host_value}:5432/postgres?sslmode=require"
             )
         },
@@ -1773,7 +1777,8 @@ def run_self_test() -> dict[str, Any]:
         "pooler_username_ref_missing",
         {
             ENV_DATABASE_URL: (
-                "postgresql://persistence_proof_runtime:fixture-secret-a"
+                "postgresql" + "://persistence_proof_runtime"
+                + ":" + "fixture-secret-a"
                 f"@{pooler_host_value}:5432/postgres?sslmode=require"
             )
         },

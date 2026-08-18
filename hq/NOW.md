@@ -1,10 +1,10 @@
-﻿# HQ now
+# HQ now
 
 Updated: 2026-08-11
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `7333486e722254ed1d5ab041c06551d3aa5f4891`
+Live release commit: `12ade3db2a73a586f244dd4e3e26cc4d9bb868fc`
 Live state observed: `2026-08-03T14:46:45.695Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
@@ -20,10 +20,10 @@ Prove one measured workflow where SuperMega keeps the record and a responsible o
 
 The active delivery focus is:
 
-1. **Shop** â€” orders, stock, fulfilment, payment status, exceptions, and daily close.
-2. **Plant** â€” jobs, output, problems, equipment, maintenance, and shift handoff.
-3. **Website** â€” a local website builder and review workflow.
-4. **Ecommerce** â€” a storefront builder with request receipt and Shop handoff.
+1. **Shop** Ã¢â‚¬â€ orders, stock, fulfilment, payment status, exceptions, and daily close.
+2. **Plant** Ã¢â‚¬â€ jobs, output, problems, equipment, maintenance, and shift handoff.
+3. **Website** Ã¢â‚¬â€ a local website builder and review workflow.
+4. **Ecommerce** Ã¢â‚¬â€ a storefront builder with request receipt and Shop handoff.
 
 AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay internal.
 
@@ -52,7 +52,7 @@ Five research documents in `hq/research/`: opentelemetry (adopt-with-managed-mod
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
 - The deterministic 12-profile rehearsal passes 24 rows. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero.
-- Both domains serve deployed `7333486e722254ed1d5ab041c06551d3aa5f4891` after guarded release `31894145057`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
+- Both domains serve deployed `12ade3db2a73a586f244dd4e3e26cc4d9bb868fc` after guarded release `31941210015`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
 - Working-set trim is non-terminating and stops no process. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -65,8 +65,9 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - Read-only hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v10 with 15 private policies, metadata RLS, and zero workspace data. The public browser quarantine is applied: zero browser-privileged objects remain, the Security Advisor is clear (27 INFO-only accepted default-deny notices), and writes stay off pending storage/recovery proof and owner authorization.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `7333486e`; no release drift is present. Three hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, and managed persistence are ready-hosted); external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `12ade3db`; no release drift is present. Two hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, managed persistence, and the live product contract prerequisites are ready-hosted); external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
+- Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch (`hq/readiness/self-serve-pilot-proof.json`): window refusal, isolated owner tenant, idempotent replay, cross-actor `claim_code_conflict`, event immutability, cross-tenant invisibility — all through the session pooler under real RLS. It is not live: production stays at v10 behind the 503 window, so a real tenant awaits the founder `production_activation` decision (`hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`).
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
 ## Decisions in force

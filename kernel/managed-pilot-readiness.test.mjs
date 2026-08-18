@@ -16,7 +16,31 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
     reason: 'Named operator and isolated tenant are missing.',
   },
 }))
-const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((path) => ({ path, digest: readinessDigest(path) }))
+const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
+const selfServePilotProof = {
+  contract: 'supermega.self-serve-pilot-proof.v1',
+  approvalId: 'self-serve-proof-v11c-20260816',
+  recordedAt: '2026-08-16T17:00:52.000Z',
+  branch: { deleteAfterEvidence: true, deletedAt: '2026-08-16T17:00:52.000Z' },
+  audit: {
+    ok: true,
+    sessions_performed: 3,
+    statements_performed: 23,
+    store_calls_performed: 4,
+    schema_version_observed: 11,
+    secrets_exposed: false,
+    tenant_rows_exposed: false,
+    writes_confined_to_fixtures: true,
+    proofs: [
+      { id: 'window_closed_refused' },
+      { id: 'claim_creates_isolated_tenant' },
+      { id: 'exact_idempotent_replay' },
+      { id: 'different_user_same_claim_rejected', conflict_class: 'claim_code_conflict' },
+      { id: 'created_event_immutable' },
+      { id: 'cross_tenant_invisible' },
+    ],
+  },
+}
 const input = {
   portfolio: { schemaVersion: 'supermega.hq.portfolio.v3', products },
   databaseEvidence: {
@@ -93,6 +117,35 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.ok(ledger.controls.forbiddenUntilReady.includes('deploy'))
   assert.ok(ledger.controls.forbiddenUntilReady.includes('hosted_scheduler_activation'))
   assert.equal(validateManagedPilotReadiness(ledger), ledger)
+})
+
+test('records the self-serve pilot proof but keeps the gate blocked on production activation', () => {
+  const withoutProof = buildManagedPilotReadiness(input)
+  assert.equal(withoutProof.selfServePilot.proofComplete, false)
+  const blockedGate = withoutProof.gates.find((gate) => gate.id === 'self_serve_pilot')
+  assert.equal(blockedGate.status, 'blocked')
+  assert.equal(blockedGate.evidence, 'HQ records no completed self-serve pilot proof or measured baseline.')
+
+  const proven = buildManagedPilotReadiness({ ...input, selfServePilotEvidence: selfServePilotProof })
+  assert.equal(proven.selfServePilot.proofComplete, true)
+  assert.equal(proven.selfServePilot.approvalId, 'self-serve-proof-v11c-20260816')
+  assert.equal(proven.selfServePilot.schemaVersionProven, 11)
+  assert.equal(proven.selfServePilot.liveActivationBlockedOn, 'production_activation')
+  const provenGate = proven.gates.find((gate) => gate.id === 'self_serve_pilot')
+  // The proof is banked, but the gate stays blocked: v11 is not on production yet.
+  assert.equal(provenGate.status, 'blocked')
+  assert.match(provenGate.evidence, /proven six-for-six/)
+  assert.match(provenGate.nextAction, /PRODUCTION-ACTIVATION-RUNBOOK\.md/)
+  assert.equal(validateManagedPilotReadiness(proven), proven)
+})
+
+test('rejects a self-serve pilot proof whose cross-actor conflict is not claim_code_conflict', () => {
+  const tampered = structuredClone(selfServePilotProof)
+  tampered.audit.proofs[3].conflict_class = 'wrong_class'
+  assert.throws(
+    () => buildManagedPilotReadiness({ ...input, selfServePilotEvidence: tampered }),
+    /managed_pilot_readiness_self_serve_proof_invalid/,
+  )
 })
 
 test('text evidence digests are stable across Git line-ending normalization', () => {

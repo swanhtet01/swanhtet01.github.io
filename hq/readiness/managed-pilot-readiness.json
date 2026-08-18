@@ -1,12 +1,12 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
-  "asOf": "2026-08-16T10:00:59.584Z",
-  "sourceDigest": "sha256:3fd9b3d665a00df9d2f3cd123092f1c1626161a315ef62ef0673251e03add9e6",
+  "asOf": "2026-08-17T03:11:33.451Z",
+  "sourceDigest": "sha256:8ca91fd9a3935c7e9ea896d30ee4aee5517308250e91ac433f59e1169803f716",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 3,
+    "blockingGateCount": 2,
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "bounded-managed-pilot-rehearsal",
@@ -94,6 +94,15 @@
     "recordedAt": "2026-08-16T09:14:56.804Z",
     "branchDeletedAt": "2026-08-16T09:14:56.808Z"
   },
+  "selfServePilot": {
+    "proofComplete": true,
+    "contract": "supermega.self-serve-pilot-proof.v1",
+    "approvalId": "self-serve-proof-v11c-20260816",
+    "recordedAt": "2026-08-16T17:00:52.000Z",
+    "branchDeletedAt": "2026-08-16T17:00:52.000Z",
+    "schemaVersionProven": 11,
+    "liveActivationBlockedOn": "production_activation"
+  },
   "gates": [
     {
       "id": "local_postgres17",
@@ -115,9 +124,9 @@
     },
     {
       "id": "live_product_contract",
-      "status": "blocked",
-      "evidence": "The exact paired release is verified, but its managed product contract remains isolated_demo.",
-      "nextAction": "Prove managed persistence and security on the approved isolated target before any managed-pilot claim."
+      "status": "ready-hosted",
+      "evidence": "Managed persistence and security are proven on isolated targets; the live product contract remains isolated_demo by design until the activation window and production gates open.",
+      "nextAction": "Keep the paired release and proof evidence current; the next steps are founder decisions."
     },
     {
       "id": "managed_persistence",
@@ -134,8 +143,8 @@
     {
       "id": "self_serve_pilot",
       "status": "blocked",
-      "evidence": "HQ records no completed self-serve pilot setup or measured baseline.",
-      "nextAction": "Open the self-serve activation window on the approved isolated target."
+      "evidence": "Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS: window refusal before the store, one isolated owner tenant, exact idempotent replay, cross-actor claim_code_conflict, event immutability (SQLSTATE 55000), and cross-tenant invisibility. Production remains at v10, so applying the reviewed v11 self-serve grants and opening the activation window is the founder production_activation decision.",
+      "nextAction": "Run hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md as the founder production_activation decision: apply the reviewed v11 migration to production, set the store schema version to 11, open the activation window, then enable writes."
     },
     {
       "id": "production_activation",
@@ -213,7 +222,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:094d7a48aef775ccecda91bbadfe99b612ea6c9bb1382b1cbabc22c1fac57775"
+      "digest": "sha256:8a7fd2434cb072b1dcef22cdc5afba4c3ff9741624ee7b3e511e3a0bd7922e86"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -232,16 +241,20 @@
       "digest": "sha256:7a5313676672cf55fafdbbdbf53b27c08db97ef01a400101a8fbf7a7726472a0"
     },
     {
+      "path": "hq/readiness/self-serve-pilot-proof.json",
+      "digest": "sha256:ec6f171cd45d983de86e52344ad65a6e40c332da1af0fd8a2d3078bd4dd47146"
+    },
+    {
       "path": "hq/NOW.md",
-      "digest": "sha256:1811fed771bfde351a2ac0a89c0f60bc95933002ce2a09e9f09ac4bcd8d58dcb"
+      "digest": "sha256:f3c839a83b48410a2ce8f6e93b0a9fd6b8d028809522c841143f226dc7802d14"
     },
     {
       "path": "package.json",
-      "digest": "sha256:a7234013649c1b866565ea1b9781eaae66c715403fcd93169a32eb1c4faec011"
+      "digest": "sha256:0a8c31ff2b60288ee5c12ac549449ed240f019ccbff4a3b3f8e083356db2d1d6"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:7db3039de69a520e7926dad61c539ea17363df53ec55bd62df99a83f07a8a486"
+      "digest": "sha256:f432ecec624de248b531057e0b903c1a9ca71182b5b8376b981f4cb3a2a15b28"
     }
   ]
 }

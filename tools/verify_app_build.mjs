@@ -7281,8 +7281,8 @@ async function verifyShopBusinessTemplateRuntime() {
     const onboardingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?shop-business-template-import-verify=${Date.now()}`)
     const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-business-template-commerce-verify=${Date.now()}`)
     assert(model.validateShopBusinessTemplates() === model.shopBusinessTemplates, 'shop_business_template_registry_invalid')
-    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,restaurant'
-      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 8, 'shop_business_template_catalog_wrong')
+    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,restaurant,beauty-spa'
+      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 9, 'shop_business_template_catalog_wrong')
     const commerceUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
     assert(model.shopBusinessTemplateUnits.length === commerceUnits.size && model.shopBusinessTemplateUnits.every((unit) => commerceUnits.has(unit)), 'shop_business_template_unit_set_drifted')
     for (const template of model.shopBusinessTemplates) {
@@ -18965,11 +18965,13 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), and the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk).
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk), the General Ledger MVP (FREE_FOREVER local projection: shop-ledger-accounts/-journal/-monthly-statement + ShopMonthlyStatement surface + accounting-handoff v4 ledger section; ~20KB net across the ledger chunk and owner statement), and the self-serve claim-code activation panel + inline trial terms (ManagedLoginPage activation flow, trial-terms.ts seven clauses at the signup checkbox; ~4KB — the customer path the activation window opens onto).
 // Raised again for pack-aware Shop schedule vocabulary (scheduleVocabulary + shopScheduleVocabulary,
 // so a restaurant books reservations rather than a generic "appointment") and realistic guided-sample
 // bookings per pack (createShopServiceScheduleDemo), carried forward from claude/supermega-dev-ceo-aije17
-// because main had not yet absorbed them.
+// because main had not yet absorbed them. Also covers the OpenTelemetry Phase A frontend traceparent
+// injection (managed-trial.ts) — negligible size, no bundle-visible instrumentation beyond it since the
+// rest of Phase A is backend-only (supermega_runtime/telemetry/).
 if (bytes > 2_884_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')

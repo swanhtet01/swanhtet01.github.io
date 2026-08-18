@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import os
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, Protocol, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
@@ -113,12 +113,27 @@ class TrialSignupSession:
     session_id: str = ""
     email_verified: bool = False
     identity_provider: str = "supabase"
+    # Server-confirmed address (empty unless verified); used only for the
+    # courtesy welcome send after tenant creation, never for authorization.
+    email: str = ""
 
 
 PrincipalResolver = Callable[[Request], TrialPrincipal | None]
 SignupSessionResolver = Callable[[Request], TrialSignupSession | None]
 DateResolver = Callable[[], date]
 ResultT = TypeVar("ResultT")
+
+
+class WelcomeEmailSender(Protocol):
+    """Best-effort courtesy send after a NEW tenant is created.
+
+    Implementations must never raise into the activation path and must be
+    idempotent per workspace; the router additionally guards both properties.
+    """
+
+    def __call__(
+        self, *, to_email: str, business_name: str, workspace_id: str, claim_code: str
+    ) -> bool: ...
 
 
 def self_serve_activation_window_open() -> bool:
@@ -1003,6 +1018,7 @@ def create_trial_router(
     resolve_principal: PrincipalResolver,
     resolve_signup_session: SignupSessionResolver | None = None,
     order_intake_provider: OrderIntakeDraftProvider | None = None,
+    send_welcome_email: WelcomeEmailSender | None = None,
     current_date: DateResolver = _current_yangon_date,
 ) -> APIRouter:
     """Create an unwired private-trial router with injected storage and auth.
@@ -1062,6 +1078,23 @@ def create_trial_router(
                 identity_provider=session.identity_provider,
             )
         )
+        if (
+            send_welcome_email is not None
+            and not result.idempotent_replay
+            and str(getattr(session, "email", "") or "").strip()
+        ):
+            # Courtesy send, strictly after the durable write and strictly
+            # unable to change the outcome: the sender returns a bool and any
+            # unexpected exception is swallowed here. Replays never send.
+            try:
+                send_welcome_email(
+                    to_email=session.email,
+                    business_name=result.label,
+                    workspace_id=result.workspace_id,
+                    claim_code=result.claim_code,
+                )
+            except Exception:  # noqa: BLE001 - the tenant exists; email is best-effort
+                pass
         return {
             "contract": SELF_SERVE_ACTIVATION_CONTRACT,
             "status": "already_created" if result.idempotent_replay else "created",

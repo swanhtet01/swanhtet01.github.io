@@ -52,7 +52,13 @@ ORDER_INTAKE_PROVIDER_ANTHROPIC = "anthropic"
 MAX_ORDER_INTAKE_CATALOG_ITEMS = 250
 MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES = 96 * 1024
 MAX_ORDER_INTAKE_PROVIDER_RESPONSE_BYTES = 256 * 1024
-ORDER_INTAKE_MAX_OUTPUT_TOKENS = 1_200
+# gpt-5-mini is a REASONING model: its reasoning tokens are billed inside
+# max_output_tokens BEFORE any JSON is emitted. The 2026-08-17 golden-set run
+# proved a 1,200 cap is fully consumed by reasoning (1,152/1,152 observed,
+# status "incomplete", 20/20 fixtures dead) — so the payload pins reasoning
+# effort low and the cap leaves headroom for the strict-schema extraction.
+ORDER_INTAKE_MAX_OUTPUT_TOKENS = 4_000
+ORDER_INTAKE_REASONING_EFFORT = "low"
 ORDER_INTAKE_TIMEOUT_SECONDS = 20.0
 COMPANY_DAILY_BUDGET_DEFAULT_UNITS = 500_000
 COMPANY_DAILY_BUDGET_HARD_MAX_UNITS = 2_000_000
@@ -89,10 +95,11 @@ Safety and scope:
 
 Extraction rules:
 - Classify the message as a single-item order, multiple-item order, not an order, or ambiguous.
-- Use a SKU only when it exactly matches one server-owned catalog item. Never invent a SKU, price, stock value, customer, quantity, payment method, fulfilment method, or channel.
+- Use a SKU only when it exactly matches one server-owned catalog item. A message names a catalog item when its words match the item's name, or the item's name plus its variant, ignoring case; then the SKU is that item's SKU. Never invent a SKU, price, stock value, customer, quantity, payment method, fulfilment method, or channel.
 - Every non-null extracted field must have exactly one provenance record containing one or more short quotes copied verbatim from the message. Use occurrence 1 unless the same quote appears more than once.
-- When conflicting text makes a field uncertain, return null, add the field to uncertain_fields, and cite the conflicting quote or quotes.
-- A channel is present only when the message itself names it. Do not infer a channel from surrounding application context.
+- Quote the MINIMAL span that proves the value: the exact word or token, never the sentence or phrase around it. For a payment method quote only the method name; for a channel only the channel name; for a quantity only the number and its unit word.
+- When the message contains contradictory statements about any field - two different quantities, two different channels, a correction like "not X, Y" - NEVER silently choose one, even when one reading seems more plausible. Return null for that field, add it to uncertain_fields, cite both conflicting quotes, and the draft status must not be ready_for_review.
+- A channel is present only when the message itself names it exactly once and unambiguously. Do not infer a channel from surrounding application context.
 - Keep customer_reference short and literal. Do not include phone numbers, addresses, or unrelated conversation text.
 - For multiple items, do not collapse them into one line. Mark the scope multiple_item_order so a human can review it.
 """
@@ -621,6 +628,7 @@ class OpenAIOrderIntakeProvider:
                 "instructions": _SYSTEM_INSTRUCTIONS,
                 "input": provider_input,
                 "max_output_tokens": ORDER_INTAKE_MAX_OUTPUT_TOKENS,
+                "reasoning": {"effort": ORDER_INTAKE_REASONING_EFFORT},
                 "safety_identifier": hmac.new(
                     self._safety_secret,
                     f"{workspace_id}\x1f{actor_id}".encode("utf-8"),
