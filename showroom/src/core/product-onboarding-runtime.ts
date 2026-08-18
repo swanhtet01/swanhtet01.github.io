@@ -4,6 +4,7 @@ import {
   createClientImportPreview,
 } from './client-onboarding'
 import {
+  installCommerceWorkingSampleActivity,
   installCommerceWorkingSampleCatalog,
   commerceWorkingSampleCatalogId,
   loadCommerceWorkspace,
@@ -19,6 +20,8 @@ import {
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   createShopServiceSchedule,
+  createShopServiceScheduleDemo,
+  isGuidedSampleShopSchedule,
   provisionEmptyShopServiceSchedule,
   readShopServiceSchedule,
   shopIndustryPack,
@@ -27,6 +30,7 @@ import {
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs'
 import { SETUP_KEY, normalizeSetup, type SetupState } from './product-setup'
 import {
+  rebaseWorkingSampleActivity,
   shopBusinessTemplate,
   shopBusinessTemplateCatalogCsv,
   shopBusinessTemplates,
@@ -106,7 +110,7 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
 }
 
 /**
- * Install the industry pack's empty schedule, PRESERVING any appointment already taken.
+ * Install the industry pack's appointment book, PRESERVING any appointment already taken.
  *
  * provisionEmptyShopServiceSchedule refuses to overwrite a schedule that has bookings, and that
  * refusal is correct -- it is protecting a real customer's appointment. What was wrong is that
@@ -119,19 +123,38 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
  * type is deliberately unchanged so callers that read .industryPackId keep working, and when a
  * schedule is preserved that pack id is the correct answer anyway. The invariant stays where it
  * belongs, in provisionEmptyShopServiceSchedule.
+ *
+ * What is installed is the pack's guided sample day, not a blank book. A spa whose first screen
+ * is an empty diary has been handed a filing cabinet; three bookings partway through their day
+ * is the product working. The sample is replaceable by construction --
+ * isGuidedSampleShopSchedule holds for it -- and it books nothing a real customer would be
+ * charged for.
  */
-export function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
+export function provisionLocalShopIndustryPack(
+  industryPackId: ShopIndustryPackId,
+  planningDay = new Date().toISOString().slice(0, 10),
+) {
   const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
   if (!stored) {
-    const created = createShopServiceSchedule(industryPackId)
+    const created = createShopServiceScheduleDemo(industryPackId, planningDay)
     window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(created))
     return created
   }
   const current = readShopServiceSchedule(stored)
   try {
-    const next = provisionEmptyShopServiceSchedule(current, industryPackId)
-    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
-    return next
+    // The invariant still lives in provisionEmptyShopServiceSchedule and is still asked. What
+    // changed is WHAT is handed to it. A schedule carrying only guided-sample events is this
+    // function's own previous output, so it is reduced to the blank book it grew from before the
+    // question is put -- otherwise re-running setup on a seeded device could never move pack
+    // again. A schedule carrying a single event a human authored fails isGuidedSampleShopSchedule
+    // and is handed over INTACT, so the refusal fires and the appointment survives.
+    const replaceable = isGuidedSampleShopSchedule(current)
+      ? createShopServiceSchedule(current.industryPackId)
+      : current
+    const next = provisionEmptyShopServiceSchedule(replaceable, industryPackId)
+    const seeded = createShopServiceScheduleDemo(next.industryPackId, planningDay)
+    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(seeded))
+    return seeded
   } catch {
     // An appointment already exists. Keep it, keep its pack, and let onboarding continue so the
     // catalog still installs.
@@ -197,17 +220,37 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
   }))
   const commerceWorkspace = loadCommerceWorkspace()
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
+  const provisionedAt = new Date().toISOString()
+  // Authored once per provisioning run, not once per attempt, so the sales and the promise are
+  // shifted against the same instant the catalog is stamped with.
+  const activity = rebaseWorkingSampleActivity(template, provisionedAt)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
   const result = await mutateCommerceWorkspace((current) => {
     const next = installCommerceWorkingSampleCatalog(current, {
       sampleId: template.id,
       sampleName: template.name.en,
       items,
-      capturedAt: new Date().toISOString(),
+      capturedAt: provisionedAt,
     })
     if (!next) return current
-    disposition = next === current ? 'current' : 'installed'
-    return next
+    // The catalog alone is a price list, not a business: no takings, no order waiting. The sales
+    // and the pending order go in inside the SAME transition so the workspace is never written in
+    // the half-state a client would read as "it did not work".
+    //
+    // installCommerceWorkingSampleActivity fails closed and returns null. Treated exactly like the
+    // catalog result above -- return `current`, leave the disposition at 'preserved' -- so a
+    // failure abandons the whole transition instead of persisting a catalog the caller was told
+    // carried activity. 'preserved' is what ProductOnboardingPage turns into "nothing was
+    // overwritten", which is precisely true when the transition is abandoned.
+    const withActivity = installCommerceWorkingSampleActivity(next, {
+      sampleId: template.id,
+      sampleName: template.name.en,
+      counterSales: activity.counterSales,
+      pendingOrder: activity.pendingOrder,
+    })
+    if (!withActivity) return current
+    disposition = withActivity === current ? 'current' : 'installed'
+    return withActivity
   })
   if (!result.ok) throw new Error(result.error)
   return disposition
