@@ -6687,11 +6687,11 @@ function OrderList({
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <div className="order-statuses">
-          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'pending' : 'bounded'}`}>{order.status}</span>
+          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{order.status}</span>
           <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
           {order.refundStatus === 'due' ? <span className="status-pill pending">refund due</span> : null}
-          {promiseUrgency === 'late' ? <span className="status-pill pending">late</span> : null}
-          {promiseUrgency === 'due_soon' ? <span className="status-pill bounded">due soon</span> : null}
+          {promiseUrgency === 'late' ? <span className="status-pill late">late</span> : null}
+          {promiseUrgency === 'due_soon' ? <span className="status-pill pending">due soon</span> : null}
           {promiseUrgency === 'unrecorded' ? <span className="status-pill pending">promise missing</span> : null}
         </div>
         <strong>{order.customer} · {order.lines
