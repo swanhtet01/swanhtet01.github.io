@@ -322,6 +322,21 @@ they will.
 
 Each item is one branch → full gate → PR → read CI → squash merge.
 
+Status (2026-08-18): items 1-4 SHIPPED on `claude/supermega-dev-ceo-aije17`
+(`853ca7c8`, `bf4043e2`, `23b7d60e`). Both Shop and Plant now open on a
+believable bakery business end to end — catalog, counter sales, a pending
+order, appointment bookings (Shop) and jobs, a named floor, and a running
+shift with recorded output/scrap (Plant) — with every acceptance point
+verified directly against real state, not assumed. Two corrections surfaced
+along the way and are recorded in those commits rather than silently fixed:
+a real pre-existing bug in `productionWorkingSampleTransitionIsExact` that
+made `installProductionWorkingSampleJobs`'s own `machines`/`issue`
+parameters unreachable through the app's one write path (item 3), and a
+behavior change to the second-provisioning-run story once shift activity
+exists — a rerun now refuses to reinstall and reports `'preserved'` rather
+than silently reseeding (item 4, which corrected item 3's own test
+assertions to match). Items 5+ below are unstarted.
+
 1. **Wire Shop's sample activity into onboarding.** Call
    `rebaseWorkingSampleActivity` (`business-templates.ts:75`) then
    `installCommerceWorkingSampleActivity` (`commerce-workspace.ts:6491`) inside
