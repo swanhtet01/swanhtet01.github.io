@@ -1,5 +1,5 @@
-import type { ProductionJob, ProductionJobPriority, ProductionMachine } from '../../core/production-workspace.ts'
-import { productionJobPriorities, productionMachineStates } from '../../core/production-workspace.ts'
+import type { ProductionJob, ProductionJobPriority, ProductionMachine, ProductionMaterialUnit } from '../../core/production-workspace.ts'
+import { productionJobPriorities, productionMachineStates, productionMaterialUnits } from '../../core/production-workspace.ts'
 import type { PlantIndustryPackId } from '../../core/plant-industry-packs.ts'
 import type { PlantOrderMaterial, PlantOrderRoutingDraft, PlantOrderWorkCentre } from '../../core/plant-order-foundation.ts'
 import { shopBusinessTemplate, type ShopBusinessTemplateId } from '../shop/business-templates.ts'
@@ -56,6 +56,11 @@ export type PlantBusinessTemplate = {
   machines: readonly ProductionMachine[]
   openingIssue: { area: string; summary: string }
   jobs: readonly PlantBusinessTemplateJob[]
+  // The trade's real primary input, named for the guided shift-activity seeder
+  // (appendGuidedSampleProductionActivity, production-workspace.ts) -- distinct from the BOM
+  // material list `plan.materials` would carry. It only needs a name and a unit, not a full
+  // PlantOrderMaterial, so it does not require the deferred plan above.
+  primaryMaterial: { ref: string; unit: ProductionMaterialUnit }
   plan?: PlantBusinessTemplatePlan
 }
 
@@ -76,6 +81,9 @@ const plantBusinessTemplateSeeds: readonly PlantBusinessTemplate[] = [
       area: 'Bakery Line 02',
       summary: 'Proofing cabinet running warm -- watch dough rise times before the next bake',
     },
+    // The bakery's real primary ingredient -- flour, by mass. Feeds appendGuidedSampleProductionActivity's
+    // material-issue entry; no BOM exists yet to draw this from (see PlantBusinessTemplatePlan above).
+    primaryMaterial: { ref: 'Bread flour', unit: 'kg' },
     jobs: [
       // product/shopSku pair with shopBusinessTemplates 'bakery' catalog (BREAD-WHITE), so a
       // low-stock or over-committed loaf in Shop already surfaces this job via
@@ -177,6 +185,10 @@ export function validatePlantBusinessTemplates() {
 
     if (!template.openingIssue.area.trim() || !template.openingIssue.summary.trim()) throw new Error(`${template.id} needs an opening issue in the trade's own words.`)
     if (template.openingIssue.summary.trim() === 'Temperature drift requires supervisor review') throw new Error(`${template.id} must replace the generic seed opening issue.`)
+
+    const materialRef = template.primaryMaterial.ref.trim()
+    if (!materialRef || materialRef.length > 120) throw new Error(`${template.id} needs a primary material reference of 1 to 120 characters.`)
+    if (!productionMaterialUnits.includes(template.primaryMaterial.unit)) throw new Error(`${template.id} primary material unit is invalid.`)
   }
   if (templateIds.size !== 1) throw new Error('The Plant business template registry must carry exactly 1 template.')
   return plantBusinessTemplates

@@ -15,6 +15,24 @@
 // to productionWorkingSampleTransitionIsExact in production-workspace.ts) because the
 // boundary's own "is this transition exactly a sample install" recompute silently dropped them
 // and forced every candidate back onto the generic seed floor.
+//
+// TEMPLATE-EXPANSION.md queue item 4: immediately after the jobs/floor install above,
+// provisionLocalPlantWorkingSample now also calls appendGuidedSampleProductionActivity (its own
+// locked mutateProductionWorkspace transition -- chaining it into the working-sample transition
+// above is not possible, because productionWorkingSampleTransitionIsExact requires the candidate
+// to carry exactly one event per job, and the activity call appends several more). This file
+// proves output and scrap land on the running shift, that isGuidedSampleProduction and
+// hasGuidedSampleProductionActivity both read true afterward, and documents the SECOND
+// provisioning run's real behaviour: once guided-sample activity events exist, they are not
+// prefixed with the working-sample action prefix, so installProductionWorkingSampleJobs's own
+// "is the current state consistent with having been built by me" recompute no longer matches on
+// a second call -- the reinstall is refused (not an error; the transition returns the state
+// unchanged) and provisionLocalPlantWorkingSample reports 'preserved'. This is a DIFFERENT
+// mechanism than the "second run re-seeds with shifted due dates and still reports 'installed'"
+// finding queue item 3 documented -- that finding described the behaviour of the jobs/floor
+// install in isolation, before this item's activity call existed to block it. With the activity
+// call now chained on every provisioning attempt, a second run is a genuine no-op: recorded
+// shift progress is preserved rather than being silently reset by a fresh reinstall.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -38,6 +56,7 @@ const bundle = await build({
       } from './commerce-workspace.ts'
       export {
         createSeedProduction, validateProductionState, isGuidedSampleProduction,
+        hasGuidedSampleProductionActivity, productionShiftOutput,
         productionWorkingSamplePackId, PRODUCTION_KEY,
       } from './production-workspace.ts'
       export { plantIndustryPack } from './plant-industry-packs.ts'
@@ -62,6 +81,7 @@ const {
   shopBusinessTemplates, shopBusinessTemplate,
   createSeedCommerce, installCommerceWorkingSampleCatalog, commerceWorkingSampleCatalogId,
   createSeedProduction, validateProductionState, isGuidedSampleProduction,
+  hasGuidedSampleProductionActivity, productionShiftOutput,
   productionWorkingSamplePackId, PRODUCTION_KEY,
   plantIndustryPack,
   provisionLocalPlantWorkingSample, readLocalShopBusinessTemplateId,
@@ -117,6 +137,13 @@ check(
 )
 
 check(bakery.plan === undefined, 'v1 does not populate a BOM/routing plan -- isGuidedSampleProduction stays true only while orderPortfolio/orderExecution/equipmentMaster are unset')
+
+check(Boolean(bakery.primaryMaterial?.ref?.trim()), 'the bakery template names a real primary material for the guided shift-activity seeder')
+check(bakery.primaryMaterial.ref !== 'MAT-PRIMARY-001' && bakery.primaryMaterial.ref !== 'Primary material', 'the primary material replaces the generic pack placeholder, not just relabels it')
+check(
+  ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'].includes(bakery.primaryMaterial.unit),
+  'the primary material carries a valid ProductionMaterialUnit',
+)
 
 // ---- plantBusinessTemplateForShopTemplateId: selection, and refusal to guess -----------------
 check(plantBusinessTemplateForShopTemplateId('bakery') === bakery, 'bakery Shop resolves to the bakery Plant template')
@@ -235,36 +262,52 @@ function storeWithShopTemplate(templateId) {
   // pure guided sample after the jobs install.
   check(isGuidedSampleProduction(state), 'isGuidedSampleProduction still returns true after installing the bakery jobs')
 
-  // Second run: report what actually happens rather than assume replay is a no-op -- the plan's
-  // equivalent Shop-side assumption turned out wrong for the same reason found here. capturedAt
-  // is `new Date().toISOString()` at millisecond precision, taken fresh on every call, and
-  // dueAt is materialized as capturedAt + dueInDays -- so two real calls, even moments apart,
-  // almost never share a capturedAt and therefore never produce byte-identical jobs. That is
-  // NOT the same shape as the generic pack path directly below, whose {{dueDate14}}/{{dueDate21}}
-  // placeholders resolve against a Yangon CALENDAR DATE (clientImportPlanningDate), stable across
-  // an entire day -- so two generic-pack runs on the same day DO replay as a byte-identical
-  // no-op, while two bakery runs, even on the same day, do not. installProductionWorkingSampleJobs
-  // still accepts the second bakery run as a legitimate working-sample transition (jobs simply
-  // get fresh due dates relative to whenever setup runs); it is a real content change and reports
-  // 'installed' again, not a rejection and not a no-op.
-  const firstDueAts = state.jobs.map((job) => job.dueAt).sort()
-  // A real deployment separates two provisioning attempts by at least seconds of human action;
-  // this sleep just keeps the millisecond-precision capturedAt from coincidentally landing on
-  // the exact same value twice in a tight test loop.
+  // ---- queue item 4: guided shift activity chained onto the same provisioning call ----------
+  check(hasGuidedSampleProductionActivity(state), 'hasGuidedSampleProductionActivity is true after provisioning -- the shift-activity call actually ran')
+  check(isGuidedSampleProduction(state), 'isGuidedSampleProduction is STILL true after the shift-activity call, not just after the jobs install')
+  check(state.orderPortfolio === undefined, 'no orderPortfolio was written -- no BOM/plan, no released batch')
+  check(state.orderExecution === undefined, 'no orderExecution was written -- no released batch')
+  check(state.equipmentMaster === undefined, 'no equipmentMaster was written')
+  check(
+    state.events.every((event) => event.kind !== 'shift_closed'),
+    'no shift was closed -- item 4 stays strictly below Plant\'s outcome-metric proof counter',
+  )
+  // Batch release and output inspection are plant-order-foundation.ts concepts recorded on
+  // orderPortfolio/orderExecution, not on ProductionState.events -- already proven absent above.
+  const guidedEvents = state.events.filter((event) => event.actionId.startsWith('ACT-GUIDED-SAMPLE-'))
+  check(guidedEvents.length >= 1, 'at least one guided-sample activity event was recorded')
+  const materialEvent = guidedEvents.find((event) => event.kind === 'material_consumed')
+  check(materialEvent?.materialRef === bakery.primaryMaterial.ref, 'the material issue uses the template\'s primaryMaterial ref')
+  check(materialEvent?.materialUnit === bakery.primaryMaterial.unit, 'the material issue uses the template\'s primaryMaterial unit')
+  const primaryJob = state.jobs.find((job) => job.id === bakery.jobs[0].jobCode)
+  check(Boolean(primaryJob) && primaryJob.output > 0, 'the running shift shows good output recorded on a bakery job')
+  check(Boolean(primaryJob) && (primaryJob.scrap ?? 0) > 0, 'the running shift shows scrap recorded on a bakery job')
+  const shiftRef = guidedEvents.find((event) => event.kind === 'output_recorded')?.shiftRef
+  const shift = productionShiftOutput(state, shiftRef ?? '')
+  check(shift.goodUnits > 0 && shift.scrapUnits > 0, 'productionShiftOutput reports both good output and scrap for the running shift')
+
+  // ---- second run: report what actually happens rather than assume replay is a no-op --------
+  // Before this item, installProductionWorkingSampleJobs accepted a second bakery run as a
+  // legitimate reinstall (fresh due dates each time, since capturedAt is millisecond-precision
+  // and taken fresh on every call -- see queue item 3's finding). That is STILL true of
+  // installProductionWorkingSampleJobs in isolation. But provisionLocalPlantWorkingSample no
+  // longer calls only that: once the guided-sample activity call above has appended events that
+  // do NOT carry the working-sample action prefix, installProductionWorkingSampleJobs's own
+  // "is the current state exactly consistent with a prior sample install" recompute
+  // (productionWorkingSampleTransitionIsExact's structural check) no longer matches on a second
+  // call -- those extra events are the discrepancy. So the reinstall is refused (the transition
+  // returns the input state unchanged, not an error), and disposition falls back to its
+  // 'preserved' default. The net effect: with item 4 wired, a second provisioning run IS a
+  // genuine no-op -- but via jobs-reinstall refusal, not via a byte-identical recompute, and it
+  // preserves the recorded shift progress instead of silently resetting it.
   await new Promise((resolve) => setTimeout(resolve, 5))
   const secondDisposition = await provisionLocalPlantWorkingSample('general-manufacturing', 'production-control', 'Thiri Bakery Owner')
-  check(secondDisposition === 'installed', 'a second bakery provisioning run installs again -- it is not a byte-identical replay, and this is expected')
+  check(secondDisposition === 'preserved', 'a second bakery provisioning run is refused as a reinstall and reports \'preserved\', now that guided-sample activity events are present')
   const stateAfterSecondRun = validateProductionState(JSON.parse(store.getItem(PRODUCTION_KEY)))
+  check(JSON.stringify(stateAfterSecondRun) === JSON.stringify(state), 'the second run leaves the workspace byte-identical -- a genuine no-op, not just an unchanged disposition label')
   check(productionWorkingSamplePackId(stateAfterSecondRun) === 'bakery', 'the second run is still the bakery sample')
   check(isGuidedSampleProduction(stateAfterSecondRun), 'the second run is still a pure guided sample')
-  check(
-    JSON.stringify(stateAfterSecondRun.jobs.map((job) => job.product).sort()) === JSON.stringify(bakery.jobs.map((job) => job.product).sort()),
-    'the second run still installs the same bakery products',
-  )
-  check(
-    JSON.stringify(stateAfterSecondRun.jobs.map((job) => job.dueAt).sort()) !== JSON.stringify(firstDueAts),
-    'the second run\'s due dates shifted forward relative to its own later capturedAt, confirming this genuinely re-ran rather than silently reusing the first result',
-  )
+  check(hasGuidedSampleProductionActivity(stateAfterSecondRun), 'the second run still carries the guided-sample activity')
 }
 
 // ---- a non-bakery Shop falls back to the unchanged generic pack path -----------------------

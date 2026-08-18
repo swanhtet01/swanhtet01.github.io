@@ -13,8 +13,10 @@ import {
 } from './commerce-workspace'
 import { plantImportDueAt } from './managed-trial'
 import {
+  appendGuidedSampleProductionActivity,
   installProductionWorkingSampleJobs,
   mutateProductionWorkingSample,
+  mutateProductionWorkspace,
   type ProductionJob,
 } from './production-workspace'
 import {
@@ -286,6 +288,20 @@ export async function provisionLocalPlantWorkingSample(industryPackId: PlantIndu
       return next
     })
     if (!result.ok) throw new Error(result.error)
+    // Guided shift activity (good output, a little scrap, one material issue on up to 2 active
+    // jobs) goes in as its own locked transition, not chained into the mutateProductionWorkingSample
+    // call above: that call's write boundary (productionWorkingSampleTransitionIsExact) requires
+    // the candidate to carry exactly one event per job -- the jobs/floor seed events -- so appending
+    // the several extra events appendGuidedSampleProductionActivity writes would fail that check.
+    // appendGuidedSampleProductionActivity is itself a safe no-op (returns the unchanged input) once
+    // hasGuidedSampleProductionActivity is already true, so calling it on every provisioning run,
+    // not just the first, is correct.
+    const activityResult = await mutateProductionWorkspace((current) => appendGuidedSampleProductionActivity(current, {
+      planningDay: capturedAt.slice(0, 10),
+      materialRef: businessTemplate.primaryMaterial.ref,
+      materialUnit: businessTemplate.primaryMaterial.unit,
+    }))
+    if (!activityResult.ok) throw new Error(activityResult.error)
     return disposition
   }
 
