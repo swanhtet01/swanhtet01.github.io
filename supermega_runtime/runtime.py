@@ -27,8 +27,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
 from supermega_runtime.commerce_runtime import reduce_commerce_state
 from supermega_runtime.order_intake_provider import (
-    OpenAIOrderIntakeProvider,
     OrderIntakeProviderError,
+    order_intake_provider_from_environment,
 )
 from supermega_runtime.production_runtime import reduce_production_state
 from supermega_runtime.activation_email import send_self_serve_welcome_email
@@ -1006,7 +1006,7 @@ def create_app() -> FastAPI:
         write_enabled=_flag("SUPERMEGA_TRIAL_WRITES_ENABLED"),
     )
     try:
-        order_intake_provider = OpenAIOrderIntakeProvider.from_environment()
+        order_intake_provider = order_intake_provider_from_environment()
     except OrderIntakeProviderError:
         order_intake_provider = None
     app = FastAPI(
