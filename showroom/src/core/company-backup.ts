@@ -89,10 +89,19 @@ export const deliberatelyNotPortablePrefixes: readonly string[] = [
   'supermega.website.workspace.recovery.v1.',
 ]
 
+/**
+ * The only place a storage key is turned into a word an owner reads. Used by the backup summary AND
+ * by the restore deletion preview, so the two cannot name the same record differently.
+ *
+ * The families are matched by their whole prefix rather than by one draft family each, because
+ * anything unmatched falls through to 'Controls' and reads as scaffolding. Under the narrower
+ * matchers the appointment book and the lead ledger -- the two records whose loss started this --
+ * both landed in 'Controls', which is the last label that would make an owner stop and look.
+ */
 const categoryMatchers: Array<[string, (key: string) => boolean]> = [
-  ['Shop', (key) => key === 'supermega.commerce.workspace.v2' || key.startsWith('supermega.shop.order_draft.v1.')],
-  ['Plant', (key) => key === 'supermega.production.workspace.v2' || key.startsWith('supermega.plant.order-foundation.v1:')],
-  ['Website', (key) => key === 'supermega.website.workspace.v2' || key.startsWith('supermega.website.release-foundation.v1:')],
+  ['Shop', (key) => key === 'supermega.commerce.workspace.v2' || key.startsWith('supermega.shop.')],
+  ['Plant', (key) => key === 'supermega.production.workspace.v2' || key.startsWith('supermega.plant.')],
+  ['Website', (key) => key.startsWith('supermega.website.')],
   ['Ecommerce', (key) => key === 'supermega.website-ecommerce-handoff.v1' || key.startsWith('supermega.ecommerce.')],
   ['Controls', () => true],
 ]
@@ -138,6 +147,26 @@ export type CompanyBackupInspection = {
   managedWorkspaceRecordsIncluded: false
   externalWritesPerformed: false
   snapshot: CompanySnapshot
+}
+
+/**
+ * What a restore would do to THIS device, key by key, before anything is written.
+ *
+ * `deleting` is the reason this type exists. A restore writes the union of the snapshot's keys and
+ * every resettable key already here, and a key the snapshot does not carry resolves to null, which
+ * means removeItem. So a record created after the backup was taken -- an order draft started at
+ * 14:00 against a backup taken at 09:00 -- is deleted purely because of when it was made, and until
+ * now the owner only learned a count after the write.
+ */
+export type CompanyRestorePlan = {
+  /** Held here and in the backup, with different contents. The backup's copy wins. */
+  replacing: string[]
+  /** Held here and NOT in the backup. Restore removes these. Newer work lands here. */
+  deleting: string[]
+  /** In the backup and not here yet. */
+  adding: string[]
+  /** In both, already identical. */
+  unchanged: string[]
 }
 
 export type CompanyRestoreResult = {
@@ -389,10 +418,11 @@ export async function createEncryptedCompanyBackup(storage: CompanyStorage, pass
   return { envelope, filename: `supermega-company-backup-${createdAt.slice(0, 10)}.json`, json }
 }
 
-function categorySummary(records: CompanyBackupRecord[]): Array<{ label: string; count: number }> {
+/** Groups keys into the words an owner reads. Exported so the deletion preview counts the same way. */
+export function summarizeCompanyStorageKeys(keys: readonly string[]): Array<{ label: string; count: number }> {
   const counts = new Map<string, number>()
-  for (const record of records) {
-    const label = categoryMatchers.find(([, matcher]) => matcher(record.key))?.[0] ?? 'Controls'
+  for (const key of keys) {
+    const label = categoryMatchers.find(([, matcher]) => matcher(key))?.[0] ?? 'Controls'
     counts.set(label, (counts.get(label) ?? 0) + 1)
   }
   return categoryMatchers.map(([label]) => ({ label, count: counts.get(label) ?? 0 })).filter((item) => item.count > 0)
@@ -439,7 +469,7 @@ export async function inspectEncryptedCompanyBackup(input: string, passphrase: s
     exportedAt: snapshot.exportedAt,
     recordCount: snapshot.records.length,
     snapshotDigest: digest,
-    categories: categorySummary(snapshot.records),
+    categories: summarizeCompanyStorageKeys(snapshot.records.map((record) => record.key)),
     authRecordsIncluded: false,
     managedWorkspaceRecordsIncluded: false,
     externalWritesPerformed: false,
@@ -458,6 +488,36 @@ function valuesMatch(storage: CompanyStorage, values: Map<string, string | null>
   return [...values].every(([key, value]) => storage.getItem(key) === value)
 }
 
+/**
+ * What restoring this backup onto this device would change, without changing anything.
+ *
+ * restoreCompanyBackup is built from the plan this returns rather than from its own second
+ * derivation of the same sets. A preview that re-derived them would agree today and drift later,
+ * and the failure mode of that drift is a deletion the owner was never shown.
+ */
+export function planCompanyRestore(storage: CompanyStorage, inspection: CompanyBackupInspection): CompanyRestorePlan {
+  if (!inspection || inspection.contract !== COMPANY_SNAPSHOT_CONTRACT || inspection.authRecordsIncluded !== false || inspection.managedWorkspaceRecordsIncluded !== false) {
+    throw backupError('Inspect this encrypted backup before restoring it.')
+  }
+  const snapshot = validateCompanySnapshot(inspection.snapshot)
+  // Recovery markers and legacy drafts are not portable, but they can override
+  // restored records. Clear them inside the same rollback-protected transaction.
+  const currentKeys = listResettableCompanyStorageKeys(storage)
+  const incoming = new Map(snapshot.records.map((record) => [record.key, record.value]))
+  const affectedKeys = [...new Set([...currentKeys, ...incoming.keys()])].sort()
+  const plan: CompanyRestorePlan = { replacing: [], deleting: [], adding: [], unchanged: [] }
+  for (const key of affectedKeys) {
+    const next = incoming.get(key) ?? null
+    const current = storage.getItem(key)
+    // A key that is already absent cannot be destroyed, so it is not a loss worth warning about.
+    if (next === null) { if (current !== null) plan.deleting.push(key) }
+    else if (current === null) plan.adding.push(key)
+    else if (current === next) plan.unchanged.push(key)
+    else plan.replacing.push(key)
+  }
+  return plan
+}
+
 export async function restoreCompanyBackup(storage: CompanyStorage, inspection: CompanyBackupInspection): Promise<CompanyRestoreResult> {
   if (!inspection || inspection.contract !== COMPANY_SNAPSHOT_CONTRACT || inspection.authRecordsIncluded !== false || inspection.managedWorkspaceRecordsIncluded !== false) {
     throw backupError('Inspect this encrypted backup before restoring it.')
@@ -467,13 +527,14 @@ export async function restoreCompanyBackup(storage: CompanyStorage, inspection: 
   if (snapshotDigest !== inspection.snapshotDigest || snapshot.records.length !== inspection.recordCount) {
     throw backupError('The inspected backup changed before restore. Inspect it again.')
   }
-  // Recovery markers and legacy drafts are not portable, but they can override
-  // restored records. Clear them inside the same rollback-protected transaction.
-  const currentKeys = listResettableCompanyStorageKeys(storage)
+  // The write is driven by the same plan the panel previews. A key can only be removed here if it
+  // was named in plan.deleting, so "shown" and "deleted" are one set rather than two that agree.
+  const plan = planCompanyRestore(storage, inspection)
   const incoming = new Map(snapshot.records.map((record) => [record.key, record.value]))
-  const affectedKeys = [...new Set([...currentKeys, ...incoming.keys()])].sort()
+  const removing = new Set(plan.deleting)
+  const affectedKeys = [...plan.replacing, ...plan.adding, ...plan.unchanged, ...plan.deleting].sort()
   const previous = new Map(affectedKeys.map((key) => [key, storage.getItem(key)]))
-  const target = new Map(affectedKeys.map((key) => [key, incoming.get(key) ?? null]))
+  const target = new Map(affectedKeys.map((key) => [key, removing.has(key) ? null : incoming.get(key) ?? null]))
   try {
     restoreValues(storage, target)
     if (!valuesMatch(storage, target)) throw backupError('The browser did not confirm every restored record.')
@@ -487,8 +548,8 @@ export async function restoreCompanyBackup(storage: CompanyStorage, inspection: 
     throw backupError(`Restore failed; the previous company state was restored. ${error instanceof Error ? error.message : ''}`.trim())
   }
   return {
-    restoredCount: incoming.size,
-    removedCount: currentKeys.filter((key) => !incoming.has(key)).length,
+    restoredCount: plan.replacing.length + plan.adding.length + plan.unchanged.length,
+    removedCount: plan.deleting.length,
     snapshotDigest,
     authRecordsRestored: false,
     managedWorkspaceRecordsRestored: false,
