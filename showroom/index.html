@@ -13,6 +13,20 @@
       content="Shop sells and tracks stock. Plant runs production. Website builds pages. Ecommerce creates Shop-connected ordering."
     />
     <meta name="theme-color" content="#f6f4ee" />
+    <!-- Zero-flash theme restore. A returning user's theme choice lives in localStorage
+         and CoreShell only stamps it onto <html> after React mounts, so without this a
+         dark-theme user saw a light flash on every load. This runs synchronously, before
+         the browser paints, so the CSS in core-app.css that matches
+         :root[data-supermega-theme="dark"] is already active at first paint. Keep the key
+         in sync with THEME_KEY in showroom/src/core/CoreShell.tsx. -->
+    <script>
+      try {
+        if (window.localStorage.getItem('supermega-interface-theme') === 'dark') {
+          document.documentElement.dataset.supermegaTheme = 'dark'
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#05080d')
+        }
+      } catch (e) {}
+    </script>
     <meta property="og:title" content="SuperMega" />
     <meta
       property="og:description"

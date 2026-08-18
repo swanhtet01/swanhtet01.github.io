@@ -33,8 +33,10 @@ img, svg { display: block; max-width: 100%; }
   color: var(--core-muted, #56665d);
   text-align: center;
 }
-.product-route-loading span { color: var(--sm-green); font: 700 18px/1 Geist Mono, ui-monospace, monospace; }
+.product-route-loading span { color: var(--sm-green); font: 700 18px/1 Geist Mono, ui-monospace, monospace; animation: product-route-loading-pulse 1.4s ease-in-out infinite; }
 .product-route-loading p { margin: 0; }
+@keyframes product-route-loading-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .product-route-loading span { animation: none; } }
 
 /* Lives in the global sheet rather than core-app.css, and every colour carries a literal
    fallback: the failure this renders for is frequently "a chunk or stylesheet never
