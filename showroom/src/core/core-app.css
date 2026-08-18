@@ -177,10 +177,14 @@ details:not([open]) > :not(summary) { display: none; }
 .page-heading h1 { margin: 5px 0 4px; font-size: clamp(32px, 3.3vw, 46px); line-height: .98; letter-spacing: -.045em; }
 .page-heading p { max-width: 760px; margin: 0; overflow: hidden; color: var(--core-muted); font-size: 14px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .heading-actions { flex: 0 0 auto; }
-.core-button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--core-line-strong); border-radius: 10px; padding: 0 15px; background: #fff; color: var(--core-ink); font-size: 13px; font-weight: 760; text-decoration: none; cursor: pointer; }
+.core-button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--core-line-strong); border-radius: var(--radius-md); padding: 0 15px; background: #fff; color: var(--core-ink); font-size: 13px; font-weight: var(--font-weight-bold); text-decoration: none; cursor: pointer; }
 .core-button:hover { border-color: var(--core-green); background: var(--core-green-soft); }
-.core-button.primary { border-color: var(--core-green); background: var(--core-green); color: #fff; }
-.core-button.compact { min-height: 36px; padding-inline: 11px; font-size: 11px; }
+.core-button.primary { border-color: var(--core-green); background: var(--core-green); color: var(--core-on-accent); }
+/* Design phase 2 item 13: compact was 36px, below the 44px touch-target floor phase 1
+   closed everywhere else. The ≤840px media query already forced this one selector to
+   44px (see the combined touch-target rule below) -- normalizing the base rule instead
+   of relying on a mobile-only override. */
+.core-button.compact { min-height: 44px; padding-inline: 11px; font-size: 11px; }
 .core-button.danger { border-color: rgba(255,123,141,.4); color: var(--core-danger); }
 .text-link { min-height: 34px; display: inline-flex; align-items: center; border: 0; padding: 0; background: transparent; color: var(--core-green); font-size: 11px; font-weight: 760; text-decoration: none; cursor: pointer; }
 .text-link:hover { color: var(--core-ink); }
@@ -1637,7 +1641,7 @@ textarea { min-height: 72px; resize: vertical; }
 .theme-dark .core-nav a.active { border-color: rgba(86,240,193,.22); background: rgba(86,240,193,.1); }
 .theme-dark .core-button { border-color: var(--core-line-strong); background: #121a23; color: var(--core-ink); }
 .theme-dark .core-button:hover { border-color: var(--core-green); background: rgba(86,240,193,.1); }
-.theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: #02120d; }
+.theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: var(--core-on-accent); }
 .theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
 .theme-dark input::placeholder, .theme-dark textarea::placeholder { color: #657386; }
 .theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
