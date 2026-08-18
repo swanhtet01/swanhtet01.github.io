@@ -6537,6 +6537,9 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
   const itemBySku = new Map(base.items.map((item) => [item.sku, item]))
   const newOrders: CommerceOrder[] = []
   const newMovements: CommerceStockMovement[] = []
+  // Running total reserved per SKU across every sale and the pending order, so a sample that
+  // reserves the same item twice is checked against actual stock, not just each line alone.
+  const reservedQuantityBySku = new Map<string, number>()
 
   for (const [n, sale] of input.counterSales.entries()) {
     const saleNumber = n + 1
@@ -6559,6 +6562,9 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
       orderQuantity = nextQty
       orderTotal = nextTotal
       orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+      const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
+      if (reservedSoFar === null || reservedSoFar > item.onHand) return null
+      reservedQuantityBySku.set(item.sku, reservedSoFar)
     }
     const completedAt = new Date(Date.parse(sale.recordedAt) + 15 * 60 * 1000).toISOString()
     const reserveProof: CommerceActionProof = { actionId: reserveActionId, capturedAt: sale.recordedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample sale ${saleNumber}.`, evidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-RESERVE` }
@@ -6609,6 +6615,9 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
     pendingQuantity = nextQty
     pendingTotal = nextTotal
     pendingOrderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
+    if (reservedSoFar === null || reservedSoFar > item.onHand) return null
+    reservedQuantityBySku.set(item.sku, reservedSoFar)
   }
   const pendingReserveProof: CommerceActionProof = { actionId: pendingReserveActionId, capturedAt: pendingOrder.requestedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample pending order.`, evidenceReference: `SETUP-${sampleIdUpper}-ORDER-RESERVE` }
   newOrders.push({
@@ -6635,9 +6644,15 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
     newMovements.push(movementFor(pendingReserveProof, { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId: pendingOrderId }, `line-${lineIndex + 1}`))
   }
 
+  const nextItems = base.items.map((item) => {
+    const reserved = reservedQuantityBySku.get(item.sku)
+    return reserved ? { ...item, onHand: item.onHand - reserved } : item
+  })
+
   try {
     return validateCommerceState({
       ...base,
+      items: nextItems,
       orders: [...base.orders, ...newOrders],
       movements: [...base.movements, ...newMovements],
     })

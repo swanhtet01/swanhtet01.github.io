@@ -301,7 +301,19 @@ function PlantMaintenanceDueView() {
 
 function EcommerceStaleRequestsView() {
   const asOf = useMemo(() => new Date().toISOString(), [])
-  const requests = useMemo(() => readEcommercePendingRequests(), [])
+  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
+  // A request record is immutable and always reads state 'pending_shop_review' -- Shop's
+  // confirmation is tracked separately, as a Commerce order whose sourceRecordId matches the
+  // request id (the same match EcommerceBuyingWorkspace uses). Without this filter, a request
+  // Shop already confirmed stays in this follow-up queue forever once it turns 24h old.
+  const confirmedRequestIds = useMemo(
+    () => new Set(commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])),
+    [commerce],
+  )
+  const requests = useMemo(
+    () => readEcommercePendingRequests().filter((request) => !confirmedRequestIds.has(request.id)),
+    [confirmedRequestIds],
+  )
   const queue = useMemo(() => projectEcommerceStaleRequestQueue(requests, asOf), [requests, asOf])
   const agingCount = queue.filter((entry) => entry.tier === 'aging').length
   const staleCount = queue.filter((entry) => entry.tier === 'stale').length

@@ -3,6 +3,7 @@
 import { isShopServiceSku } from '../shop/business-templates.ts'
 import {
   COMMERCE_KEY,
+  commerceWorkingSampleSkus,
   validateCommerceState,
   type CommerceItem,
   type CommerceStorefrontMerchandising,
@@ -15,6 +16,15 @@ import {
   type StorefrontDraftStorage,
 } from './storefront-draft.ts'
 import { buildStorefrontPreview, readStorefrontCatalog, storefrontPreviewDigest } from './storefront-model.ts'
+import {
+  createEmptyEcommerceBuyingState,
+  ecommerceBuyingStateStorageKey,
+  recordEcommerceOrderRequestV2,
+  validateEcommerceBuyingState,
+} from './ecommerce-buying-lifecycle.ts'
+import { buildGuidedSampleOrderRequest, isGuidedSampleBuyingState } from './guided-sample-order.ts'
+
+const LOCAL_ECOMMERCE_BUYING_SCOPE = 'ecommerce:local'
 
 export type LocalEcommerceMerchandisingImport = {
   created: number
@@ -49,13 +59,22 @@ type EcommerceWorkingSampleInput = {
   capturedAt: string
 }
 
-function workingSamplePlan(catalog: CommerceItem[], input: Pick<EcommerceWorkingSampleInput, 'templateId' | 'businessName'>) {
+function workingSamplePlan(
+  catalog: CommerceItem[],
+  input: Pick<EcommerceWorkingSampleInput, 'templateId' | 'businessName'>,
+  preferredSkus: readonly string[] = [],
+) {
   if (!workingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
+  // The client's own working-sample products come before the generic Shop seed items, so a
+  // storefront shows that business rather than demo household goods left over from Shop's seed.
+  const preferred = new Set(preferredSkus)
   // Bookable services carry onHand 999 to mean "always available", not deep stock, so every
   // onHand-based sort put them first: a tea shop's storefront led with "Catering consultation"
   // ahead of the tea. Demote them behind real goods rather than excluding them, because a spa has
   // nothing BUT services and must still get a storefront.
   const ranked = catalog.filter((item) => item.onHand > 0).sort((left, right) => (
+    Number(preferred.has(right.sku)) - Number(preferred.has(left.sku))
+  ) || (
     Number(isShopServiceSku(left.sku)) - Number(isShopServiceSku(right.sku))
   ) || (
     input.templateId === 'pickup-preorder'
@@ -85,10 +104,14 @@ function workingSamplePlan(catalog: CommerceItem[], input: Pick<EcommerceWorking
   return { rows, summary }
 }
 
-async function matchesWorkingSample(current: NonNullable<ReturnType<typeof readStorefrontDraft>['draft']>, catalog: CommerceItem[]) {
+async function matchesWorkingSample(
+  current: NonNullable<ReturnType<typeof readStorefrontDraft>['draft']>,
+  catalog: CommerceItem[],
+  preferredSkus: readonly string[] = [],
+) {
   if (!('sourcePreviewDigest' in current)) return false
   for (const templateId of workingSampleTemplateIds) {
-    const plan = workingSamplePlan(catalog, { templateId, businessName: current.storeName })
+    const plan = workingSamplePlan(catalog, { templateId, businessName: current.storeName }, preferredSkus)
     const preview = buildStorefrontPreview(catalog, {
       storeName: current.storeName,
       summary: plan.summary,
@@ -163,13 +186,29 @@ export async function activateLocalEcommerceWorkingSample(
     const currentResult = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, storage)
     if (currentResult.status === 'invalid' || currentResult.status === 'unavailable') throw new Error(currentResult.error)
     const current = currentResult.draft
-    if (current && !await matchesWorkingSample(current, catalog.items)) throw new Error('Existing Ecommerce edits were preserved.')
     const commerceRaw = storage.getItem(COMMERCE_KEY)
-    if (storage.getItem(LOCAL_ECOMMERCE_BUYING_STATE_KEY) !== null
+    const workingSampleSkus = commerceRaw === null
+      ? []
+      : commerceWorkingSampleSkus(validateCommerceState(JSON.parse(commerceRaw)))
+    if (current && !await matchesWorkingSample(current, catalog.items, workingSampleSkus)) {
+      throw new Error('Existing Ecommerce edits were preserved.')
+    }
+    const buyingRaw = storage.getItem(LOCAL_ECOMMERCE_BUYING_STATE_KEY)
+    // A previous guided sample may be replaced; any real customer evidence is preserved.
+    const buyingStateIsReplaceable = buyingRaw === null || await (async () => {
+      try {
+        const parsed = await validateEcommerceBuyingState(JSON.parse(buyingRaw), LOCAL_ECOMMERCE_BUYING_SCOPE)
+        return isGuidedSampleBuyingState(parsed)
+      } catch {
+        return false
+      }
+    })()
+    if (!buyingStateIsReplaceable
       || commerceRaw !== null && (validateCommerceState(JSON.parse(commerceRaw)).storefrontRequests ?? []).length) {
       throw new Error('Existing Ecommerce order evidence was preserved.')
     }
-    const plan = workingSamplePlan(catalog.items, input)
+    if (buyingRaw !== null) storage.removeItem(LOCAL_ECOMMERCE_BUYING_STATE_KEY)
+    const plan = workingSamplePlan(catalog.items, input, workingSampleSkus)
     const preview = buildStorefrontPreview(catalog.items, {
       storeName: input.businessName,
       summary: plan.summary,
@@ -184,6 +223,26 @@ export async function activateLocalEcommerceWorkingSample(
       rows: plan.rows,
       sourceDigest,
     }, { ...options, storage, replaceExistingDraft: true, now: () => input.capturedAt })
+    // Seed one pending customer request so the demo opens mid-funnel. It stops at
+    // pending_shop_review: confirming it in Shop is the live demo moment and is
+    // what earns the Ecommerce proof, so a sample must never perform it.
+    const guidedRequest = await buildGuidedSampleOrderRequest({
+      scope: LOCAL_ECOMMERCE_BUYING_SCOPE,
+      preview,
+      sourcePreviewDigest: sourceDigest,
+      capturedAt: input.capturedAt,
+      storefrontRevision: result.revision,
+      storefrontActionId: 'demo-working-sample',
+    })
+    if (guidedRequest) {
+      try {
+        const empty = createEmptyEcommerceBuyingState(LOCAL_ECOMMERCE_BUYING_SCOPE)
+        const seeded = await recordEcommerceOrderRequestV2(empty, guidedRequest, empty.headDigest)
+        storage.setItem(ecommerceBuyingStateStorageKey(LOCAL_ECOMMERCE_BUYING_SCOPE), JSON.stringify(seeded))
+      } catch {
+        // The storefront stays installed even if the sample request cannot be seeded.
+      }
+    }
     return { ok: true as const, status: result.revision === beforeRevision ? 'current' as const : 'installed' as const, ...result }
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : 'The Ecommerce working sample was not changed.' }
