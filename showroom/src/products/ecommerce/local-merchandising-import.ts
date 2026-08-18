@@ -285,6 +285,7 @@ export async function activateLocalEcommerceWorkingSample(
       capturedAt: input.capturedAt,
       storefrontRevision: result.revision,
       storefrontActionId: 'demo-working-sample',
+      trade,
     })
     if (guidedRequest) {
       try {

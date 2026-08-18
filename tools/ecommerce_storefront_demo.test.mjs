@@ -2995,3 +2995,144 @@ test('a storefront installed before the Shop trade was recognizable is still mat
   const secondDraft = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, adapter).draft
   assert.ok(secondDraft.merchandising.some((row) => row.collection === 'Fresh today'), 'the second provisioning must have switched to the bakery collection wording')
 })
+
+// --- TEMPLATE-EXPANSION.md queue item 6: Ecommerce per-trade fulfilment and payment mix --------
+//
+// guided-sample-order.ts's buildGuidedSampleOrderRequest now takes the resolved trade and looks up
+// its guidedOrder mix (ecommerce-trade-storefront.ts) instead of hardcoding pickup/pay_on_pickup.
+// These tests prove the three acceptance points from TEMPLATE-EXPANSION.md section (e), item 6:
+//   1. the hardware storefront's seeded request is delivery/cash_on_delivery, carries a real
+//      delivery address, and still stops at pending_shop_review (buildEcommerceCheckoutQuote
+//      rejects a delivery fulfilment with no address, so reaching pending_shop_review at all is
+//      proof the address was supplied and accepted, not just that the fields read back correctly);
+//   2. isGuidedSampleBuyingState is still true after provisioning, for both bakery (pickup) and
+//      hardware (delivery);
+//   3. bakery -- and a workspace with no resolvable trade -- reproduce today's exact
+//      pickup/pay_on_pickup/no-address request, byte for byte, proving the fallback default in
+//      guided-sample-order.ts (not just the explicit bakery guidedOrder entry) still lands on the
+//      pre-item-6 shape.
+
+// Mirrors the real hardware template's catalog (business-templates.ts) closely enough to exercise
+// the same trade-preferred ranking bakery already proved: GLOVES-WORK's onHand (90) would otherwise
+// out-rank every preferred hardware SKU under the plain onHand sort.
+const HARDWARE_ITEMS = [
+  { sku: 'CEMENT-50KG', name: 'Cement 50kg bag', onHand: 40, reorderAt: 15, price: 16500 },
+  { sku: 'REBAR-10MM', name: 'Steel rebar 10mm 12m', onHand: 60, reorderAt: 20, price: 9500 },
+  { sku: 'NAIL-2IN-KG', name: 'Common nails 2 inch per kg', onHand: 25, reorderAt: 8, price: 4500 },
+  { sku: 'PAINT-4L-WHT', name: 'Emulsion paint 4L white', onHand: 12, reorderAt: 4, price: 34000 },
+  { sku: 'BRUSH-3IN', name: 'Paint brush 3 inch', onHand: 20, reorderAt: 6, price: 3000 },
+  { sku: 'PVC-PIPE-1IN', name: 'PVC pipe 1 inch 4m', onHand: 35, reorderAt: 12, price: 6000 },
+  { sku: 'HAMMER-CLAW', name: 'Claw hammer', onHand: 10, reorderAt: 4, price: 9500 },
+  { sku: 'GLOVES-WORK', name: 'Work gloves', onHand: 90, reorderAt: 10, price: 2500 },
+]
+
+// sampleId 'hardware' is a real ShopBusinessTemplateId, so readLocalShopBusinessTemplateId
+// resolves it the same way bakeryWorkspace() resolves 'bakery' above.
+function hardwareWorkspace() {
+  const installed = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
+    sampleId: 'hardware',
+    sampleName: 'Hardware & construction supply',
+    items: HARDWARE_ITEMS,
+    capturedAt: CAPTURED_AT_BAKERY,
+  })
+  assert.ok(installed, 'the hardware working sample must install')
+  return installed
+}
+
+async function seedGuidedRequest(adapter) {
+  const { ecommerceBuyingStateStorageKey, validateEcommerceBuyingState } = await import(
+    '../showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts'
+  )
+  const raw = adapter.getItem(ecommerceBuyingStateStorageKey('ecommerce:local'))
+  assert.ok(raw, 'a guided sample request must be seeded')
+  const buying = await validateEcommerceBuyingState(JSON.parse(raw), 'ecommerce:local')
+  assert.equal(buying.requests.length, 1)
+  return buying
+}
+
+test('a hardware Ecommerce guided request is delivery/cash_on_delivery, carries a real delivery address, and still stops at pending_shop_review', async () => {
+  const state = hardwareWorkspace()
+  const { adapter } = memoryStorageAdapter(new Map([[COMMERCE_KEY, JSON.stringify(state)]]))
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { isGuidedSampleBuyingState } = await import(
+    '../showroom/src/products/ecommerce/guided-sample-order.ts'
+  )
+  const result = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Golden Hardware', capturedAt: CAPTURED_AT_BAKERY },
+    { storage: adapter, catalog: state.items, locks: noopLocks },
+  )
+  assert.ok(result.ok, `hardware activation failed: ${result.ok ? '' : result.error}`)
+  const buying = await seedGuidedRequest(adapter)
+  const [request] = buying.requests
+  // Reaching pending_shop_review at all is the proof: buildEcommerceCheckoutQuote throws for a
+  // delivery fulfilment with no address, and buildGuidedSampleOrderRequest swallows that throw and
+  // returns null (no request seeded) rather than surfacing it -- so an empty/missing address would
+  // show up here as "no guided request was seeded", not as a validation error to catch directly.
+  assert.equal(request.state, 'pending_shop_review')
+  assert.equal(request.fulfilment, 'delivery')
+  assert.equal(request.quote.payment.adapter, 'cash_on_delivery')
+  assert.ok(request.deliveryAddress, 'a delivery request must carry a delivery address')
+  assert.equal(request.deliveryAddress.line1, 'No. 42, Bogyoke Aung San Road')
+  assert.equal(request.deliveryAddress.township, 'Botahtaung')
+  assert.equal(request.deliveryAddress.city, 'Yangon')
+  assert.ok(isGuidedSampleBuyingState(buying))
+})
+
+test('isGuidedSampleBuyingState is true after provisioning for both bakery (pickup) and hardware (delivery)', async () => {
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { isGuidedSampleBuyingState } = await import(
+    '../showroom/src/products/ecommerce/guided-sample-order.ts'
+  )
+  for (const [trade, businessName, state] of [
+    ['bakery', 'Golden Bakery', bakeryWorkspace()],
+    ['hardware', 'Golden Hardware', hardwareWorkspace()],
+  ]) {
+    const { adapter } = memoryStorageAdapter(new Map([[COMMERCE_KEY, JSON.stringify(state)]]))
+    const result = await activateLocalEcommerceWorkingSample(
+      { templateId: 'social-storefront', businessName, capturedAt: CAPTURED_AT_BAKERY },
+      { storage: adapter, catalog: state.items, locks: noopLocks },
+    )
+    assert.ok(result.ok, `${trade} activation failed: ${result.ok ? '' : result.error}`)
+    const buying = await seedGuidedRequest(adapter)
+    assert.ok(isGuidedSampleBuyingState(buying), `${trade} guided request must still read as a guided sample`)
+  }
+})
+
+test('a bakery guided request reproduces the exact pre-item-6 pickup/pay_on_pickup/no-address shape', async () => {
+  const state = bakeryWorkspace()
+  const { adapter } = memoryStorageAdapter(new Map([[COMMERCE_KEY, JSON.stringify(state)]]))
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const result = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Golden Bakery', capturedAt: CAPTURED_AT_BAKERY },
+    { storage: adapter, catalog: state.items, locks: noopLocks },
+  )
+  assert.ok(result.ok, `bakery activation failed: ${result.ok ? '' : result.error}`)
+  const buying = await seedGuidedRequest(adapter)
+  const [request] = buying.requests
+  assert.equal(request.fulfilment, 'pickup')
+  assert.equal(request.quote.payment.adapter, 'pay_on_pickup')
+  assert.equal(request.deliveryAddress, null)
+})
+
+test('with no resolvable Shop trade, the guided request reproduces the exact pre-item-6 pickup/pay_on_pickup/no-address shape', async () => {
+  const { adapter } = memoryStorageAdapter()
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const result = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Golden Bakery', capturedAt: CAPTURED_AT_BAKERY },
+    { storage: adapter, catalog: BAKERY_ITEMS, locks: noopLocks },
+  )
+  assert.ok(result.ok, `no-trade activation failed: ${result.ok ? '' : result.error}`)
+  const buying = await seedGuidedRequest(adapter)
+  const [request] = buying.requests
+  assert.equal(request.fulfilment, 'pickup')
+  assert.equal(request.quote.payment.adapter, 'pay_on_pickup')
+  assert.equal(request.deliveryAddress, null)
+})

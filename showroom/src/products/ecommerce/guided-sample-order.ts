@@ -5,7 +5,15 @@ import {
   type EcommerceBuyingState,
   type EcommerceOrderRequestV2,
 } from './ecommerce-buying-lifecycle.ts'
+import { ecommerceTradeStorefront } from './ecommerce-trade-storefront.ts'
 import type { StorefrontPreview } from './storefront-model.ts'
+import type { ShopBusinessTemplateId } from '../shop/business-templates.ts'
+
+// Falls back to today's exact pre-item-6 default -- pickup, pay_on_pickup, no delivery address --
+// when the trade is unknown or has no guidedOrder mix written yet. See
+// ecommerce-trade-storefront.ts's EcommerceGuidedOrderMix for why a 'delivery' entry always carries
+// an address: this default's 'pickup' branch never needs one.
+const DEFAULT_GUIDED_ORDER_MIX = { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' } as const
 
 // A fixed, obviously-synthetic checkout key keeps the guided sample deterministic
 // and recognizable, so it can be replaced on re-provisioning while any real
@@ -33,6 +41,10 @@ export type GuidedSampleOrderInput = {
   capturedAt: string
   storefrontRevision: number
   storefrontActionId: string
+  // The Shop trade the storefront resolved to, the same value workingSamplePlan takes
+  // (local-merchandising-import.ts). null covers both "no trade" and "a trade with no
+  // guidedOrder mix written yet" -- either way this must fall back to DEFAULT_GUIDED_ORDER_MIX.
+  trade: ShopBusinessTemplateId | null
 }
 
 /**
@@ -52,6 +64,12 @@ export async function buildGuidedSampleOrderRequest(
   const quotedAt = new Date(input.capturedAt)
   if (!Number.isFinite(quotedAt.getTime())) return null
   const expiresAt = new Date(quotedAt.getTime() + GUIDED_SAMPLE_QUOTE_MINUTES * 60_000)
+  // trade is a second, orthogonal axis on top of the workflow template id, exactly like
+  // ecommerce-trade-storefront.ts's storefront copy -- null (no trade, or a trade with no
+  // guidedOrder mix written yet) MUST reproduce today's exact pickup/pay_on_pickup/no-address
+  // request, byte for byte.
+  const guidedOrder = ecommerceTradeStorefront(input.trade)?.guidedOrder ?? DEFAULT_GUIDED_ORDER_MIX
+  const deliveryAddress = guidedOrder.fulfilment === 'delivery' ? guidedOrder.deliveryAddress : null
   try {
     const pim = await buildEcommercePimProjection(input.scope, input.sourcePreviewDigest, input.preview)
     const quote = await buildEcommerceCheckoutQuote({
@@ -59,9 +77,9 @@ export async function buildGuidedSampleOrderRequest(
       cart,
       customerReference: 'Guided sample customer',
       customerProfile: { name: 'Ma Thida Aung', phone: '09 450 118 720' },
-      deliveryAddress: null,
-      fulfilment: 'pickup',
-      paymentAdapter: 'pay_on_pickup',
+      deliveryAddress,
+      fulfilment: guidedOrder.fulfilment,
+      paymentAdapter: guidedOrder.paymentAdapter,
       promotionCode: null,
       idempotencyKey: GUIDED_SAMPLE_CHECKOUT_KEY,
       quotedAt: quotedAt.toISOString(),

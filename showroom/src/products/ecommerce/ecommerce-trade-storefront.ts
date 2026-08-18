@@ -19,8 +19,26 @@
 // the one website-trade-brief.ts documents, and it is what keeps a hand-imported CSV -- where the
 // trade cannot be determined -- reading exactly as it does today.
 import type { ShopBusinessTemplateId } from '../shop/business-templates.ts'
+import type { EcommercePaymentAdapter } from './ecommerce-buying-lifecycle.ts'
 
 export const ECOMMERCE_TRADE_STOREFRONT_SCHEMA = 'supermega.ecommerce.trade_storefront.v1' as const
+
+// The guided sample's checkout mix for this trade -- replaces the hardcoded pickup/pay_on_pickup
+// guided-sample-order.ts shipped with (TEMPLATE-EXPANSION.md queue item 6). buildEcommerceCheckoutQuote
+// (ecommerce-buying-lifecycle.ts) requires a delivery address whenever fulfilment is 'delivery' and
+// throws otherwise -- a thrown error inside buildGuidedSampleOrderRequest is swallowed and yields a
+// silently unseeded sample, not a visible failure, so the discriminated union below makes a
+// delivery entry missing its address unrepresentable at the type level rather than relying on a
+// runtime check someone could forget. ecommercePaymentMatchesFulfilment (same file) constrains the
+// pairing further: kbzpay_manual pairs with either fulfilment, pickup requires pay_on_pickup, and
+// delivery requires cash_on_delivery -- every entry below must satisfy that pairing.
+export type EcommerceGuidedOrderMix =
+  | { fulfilment: 'pickup'; paymentAdapter: EcommercePaymentAdapter }
+  | {
+      fulfilment: 'delivery'
+      paymentAdapter: EcommercePaymentAdapter
+      deliveryAddress: { line1: string; township: string; city: string; instructions: string | null }
+    }
 
 export type EcommerceTradeStorefront = {
   // The storefront's one-line promise. Takes the business name because the generic copy it
@@ -40,17 +58,47 @@ export type EcommerceTradeStorefront = {
   // replacing, any preferredSkus the caller already supplies (the client's own installed
   // working-sample SKUs), so both signals count.
   preferredSkus?: readonly string[]
+  // Fulfilment and payment mix for the one guided customer request this trade's Ecommerce sample
+  // seeds. Optional: a trade entry may omit this and inherit guided-sample-order.ts's default of
+  // pickup/pay_on_pickup/no address -- see that file. A bakery customer picking up their own cake
+  // IS the realistic default, so bakery below writes it out explicitly rather than relying on the
+  // fallback, to keep the choice visible and testable per trade rather than implicit.
+  guidedOrder?: EcommerceGuidedOrderMix
 }
 
 // Only trades with Ecommerce-appropriate copy appear here -- see the file header. Section (d) of
-// TEMPLATE-EXPANSION.md scopes which trades are worth writing next; this item's acceptance bar is
-// bakery alone.
+// TEMPLATE-EXPANSION.md scopes which trades are worth writing next; item 5's acceptance bar was
+// bakery alone, item 6 adds hardware as the delivery/cash_on_delivery example its acceptance
+// criterion names.
 const TRADE_STOREFRONT: Readonly<Partial<Record<ShopBusinessTemplateId, EcommerceTradeStorefront>>> = {
   bakery: {
     summary: (businessName) => `Browse ${businessName}'s fresh bread, cakes and pastries -- order ahead for a cake, or pick up what's ready today.`,
     collections: { featured: 'Fresh today', rest: 'Order ahead' },
     note: "Demo bakery listing: confirm today's bake list, pickup time and pricing before launch.",
     preferredSkus: ['BREAD-WHITE', 'CROISSANT-BUTTER', 'CAKE-SLICE-CHOC', 'TART-EGG'],
+    // A bakery customer collects their own cake in person and settles at the counter -- the exact
+    // pickup/pay_on_pickup pair guided-sample-order.ts already defaulted to before this item.
+    guidedOrder: { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' },
+  },
+  // Hardware SKUs (business-templates.ts's hardware seed) and its 'Site delivery before concrete
+  // pour' pending order both point the same way: a hardware customer orders bulk site materials
+  // for delivery and settles in cash when the load arrives -- delivery/cash_on_delivery, the
+  // non-pickup pairing TEMPLATE-EXPANSION.md's item 6 acceptance criterion names explicitly.
+  hardware: {
+    summary: (businessName) => `Browse ${businessName}'s building materials, tools and site consumables -- request a delivery quantity for manager review.`,
+    collections: { featured: 'Site essentials', rest: 'Tools' },
+    note: 'Demo hardware listing: confirm delivery address, quantity and pricing before launch.',
+    preferredSkus: ['CEMENT-50KG', 'REBAR-10MM', 'NAIL-2IN-KG', 'PAINT-4L-WHT'],
+    guidedOrder: {
+      fulfilment: 'delivery',
+      paymentAdapter: 'cash_on_delivery',
+      deliveryAddress: {
+        line1: 'No. 42, Bogyoke Aung San Road',
+        township: 'Botahtaung',
+        city: 'Yangon',
+        instructions: 'Call before arrival; unload at the side gate.',
+      },
+    },
   },
 }
 
