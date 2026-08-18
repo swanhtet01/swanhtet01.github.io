@@ -1212,7 +1212,7 @@ export function EcommerceBuyingWorkspace({
       >
         <summary>
           <span><strong>Cart and checkout</strong><small>Review one total before Shop</small></span>
-          <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : latestRequest ? 'Recovered' : 'Empty'}</b>
+          <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'} · ${formatMmk(cartTotal)}` : latestRequest ? 'Recovered' : 'Empty'}</b>
         </summary>
         <div className="ecommerce-buying-body">
           {cart.length ? (
@@ -1368,6 +1368,12 @@ export function EcommerceBuyingWorkspace({
           </section>
 
         </div>
+        {cart.length ? (
+          <div className="ecommerce-cart-sticky-bar">
+            <span>{cart.length} {cart.length === 1 ? 'item' : 'items'} in the cart</span>
+            <b>{formatMmk(cartTotal)}</b>
+          </div>
+        ) : null}
       </details>
 
       <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || rescheduleDraft || cancellationDraft || returnDraft || supportDraft || correctionDraft) || undefined}>
