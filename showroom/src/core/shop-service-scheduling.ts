@@ -497,3 +497,116 @@ export function provisionEmptyShopServiceSchedule(state: ShopServiceSchedule, in
   }
   return createShopServiceSchedule(industryPackId)
 }
+
+export const SHOP_SERVICE_SCHEDULE_LOCK = 'supermega-shop-service-schedule-v1'
+
+/**
+ * Decide whether one owner-originated appointment change may overwrite storage.
+ *
+ * This lives here, rather than inline in the component, so that the guard which
+ * SHIPS is the guard which is TESTED. Written inline it was trivially possible
+ * for a test to hand-write its own equivalent closure, pass, and still miss a
+ * change to the real one.
+ *
+ * `baseRevision` is the revision the caller derived its change from. A null
+ * baseline means the book was never successfully read, so there is no way to
+ * tell whether the change is based on what is stored; refusing is the only safe
+ * answer. A stored revision AHEAD of the baseline means another tab wrote
+ * first, and overwriting would silently drop that tab's booking.
+ */
+export function planShopServiceScheduleWrite(
+  baseRevision: number | null,
+  next: ShopServiceSchedule,
+): (current: ShopServiceSchedule) => ShopServiceSchedule | null {
+  return (current) => {
+    if (baseRevision === null) return null
+    return current.revision > baseRevision ? null : next
+  }
+}
+
+// KNOWN LIMIT, recorded because it bounds what this guard can promise.
+//
+// `revision` is a COUNT, not an identity, and booking ids come from
+// `identifier(prefix, revision)` -- `booking-0001` -- so they are derived from
+// that same counter. Two tabs that each book once from revision 5 therefore
+// produce books at revision 6 whose event records are byte-identical AND whose
+// new bookings share an id. There is nothing at this layer to tell the two
+// lineages apart; a content check was tried and cannot work for exactly this
+// reason.
+//
+// So the guard stops the FIRST collision, and the caller must reconcile from
+// storage when refused (see commit() in ShopServiceSchedule.tsx) or its stale
+// in-memory revision will match storage by coincidence and be accepted next
+// time. Closing this properly needs per-write identity -- a writer id, or
+// booking ids that do not come from the revision counter -- which is a stored
+// schema change and deliberately not attempted here, days before the first
+// pilot. The collision itself needs two tabs of ONE browser profile on ONE
+// device: localStorage and Web Locks are per-origin-per-profile, so two devices
+// never contend for this key.
+
+type ShopServiceScheduleStorage = {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => void
+}
+
+type ShopServiceScheduleLockManager = {
+  request: <T>(name: string, options: { mode: 'exclusive' }, callback: () => T | Promise<T>) => Promise<T>
+}
+
+export type ShopServiceScheduleMutationResult =
+  | { ok: true; schedule: ShopServiceSchedule; replayed: boolean }
+  | { ok: false; error: string }
+
+function scheduleBrowserStorage() {
+  try { return globalThis.localStorage as ShopServiceScheduleStorage | undefined } catch { return undefined }
+}
+
+/**
+ * Apply one appointment-book change under the same guarantees Commerce gets.
+ *
+ * The appointment book is the appointment trades' primary record — for a spa it
+ * IS the business — but it was previously written with a bare setItem: no lock,
+ * so two open tabs could interleave and silently drop a booking; no read-back,
+ * so a quota or private-mode rejection looked like success; and no validation of
+ * the proposed state, so a bad transition could persist an unreadable book that
+ * `readShopServiceSchedule` then refuses to load.
+ *
+ * Mirrors `mutateCommerceWorkspace` in commerce-workspace.ts. One deliberate
+ * difference: an absent key is NOT an error here. Commerce requires explicit
+ * initialization, whereas a missing appointment book means a fresh install and
+ * `readShopServiceSchedule(null)` seeds an empty schedule — so absence is
+ * normal and must stay a working first write, not a refusal.
+ */
+export async function mutateShopServiceSchedule(
+  transition: (schedule: ShopServiceSchedule) => ShopServiceSchedule | null,
+  storage: ShopServiceScheduleStorage | undefined = scheduleBrowserStorage(),
+  lockManager = globalThis.navigator?.locks as unknown as ShopServiceScheduleLockManager | undefined,
+): Promise<ShopServiceScheduleMutationResult> {
+  if (!storage) return { ok: false, error: 'Appointment storage is unavailable; the change was not applied.' }
+  if (!lockManager?.request) return { ok: false, error: 'This browser cannot lock appointment writes; the change was not applied.' }
+  try {
+    return await lockManager.request(SHOP_SERVICE_SCHEDULE_LOCK, { mode: 'exclusive' }, async () => {
+      let raw: string | null
+      try { raw = storage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY) } catch { return { ok: false, error: 'Appointments could not be read; the change was not applied.' } as const }
+      let current: ShopServiceSchedule
+      try { current = readShopServiceSchedule(raw) } catch { return { ok: false, error: 'Saved appointments are unreadable; the change failed closed. Export or clear the local evidence before continuing.' } as const }
+      const next = transition(current)
+      if (!next) return { ok: false, error: 'The appointment book changed or the requested change is not valid. Nothing was written.' } as const
+      if (next === current) return { ok: true, schedule: current, replayed: true } as const
+      let serialized: string
+      try {
+        validateShopServiceSchedule(next)
+        serialized = JSON.stringify(next)
+      } catch { return { ok: false, error: 'The proposed appointment book failed integrity checks. Nothing was written.' } as const }
+      try {
+        storage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, serialized)
+        if (storage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY) !== serialized) return { ok: false, error: 'Appointment storage did not confirm the write.' } as const
+      } catch {
+        return { ok: false, error: 'Appointment storage rejected the write. The booking was not saved.' } as const
+      }
+      return { ok: true, schedule: next, replayed: false } as const
+    })
+  } catch {
+    return { ok: false, error: 'The appointment write lock failed. Nothing was applied.' }
+  }
+}

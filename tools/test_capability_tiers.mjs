@@ -56,9 +56,39 @@ for (const id of FREE_FOREVER) {
   check(isCapabilityAvailable(id, 'free'), `${id}: is reachable on the free tier`)
 }
 
-// Every locally-working product area is covered, so a new one cannot quietly ship paid-only.
-for (const area of ['shop-counter', 'shop-daily-close', 'shop-accounting-handoff', 'local-backup', 'device-reset']) {
+// The loop above only protects what is ALREADY named in FREE_FOREVER, so on its own it can be
+// defeated by a two-line diff: delete the id from the list, then move the capability to a paid
+// tier. Nothing would fail. The pins below name each locally-working area independently of the
+// list, so removing one is itself the failure.
+//
+// This is not hypothetical for `shop-appointments`: it is the appointment book, which for a spa,
+// a gym or a clinic IS the business, and the first pilot is a spa. Paywalling it would take the
+// one record the pilot depends on away from the tier that promised it.
+for (const area of [
+  'shop-counter',
+  'shop-inventory',
+  'shop-orders',
+  'shop-appointments',
+  'shop-daily-close',
+  'shop-accounting-handoff',
+  'plant-production',
+  'website-builder',
+  'ecommerce-storefront',
+  'local-backup',
+  'device-reset',
+]) {
   check(FREE_FOREVER.includes(area), `${area}: must be named in FREE_FOREVER, not merely marked free today`)
+}
+
+// And the inverse, which closes the remaining gap: a NEW capability that works on the owner's
+// device can be marked `tier: 'free'` today and quietly moved to a paid tier tomorrow, because
+// nothing would have pinned it. Anything free must be free by contract, not by accident.
+for (const found of capabilities) {
+  if (found.tier !== 'free') continue
+  check(
+    FREE_FOREVER.includes(found.id),
+    `${found.id}: is marked free but is not named in FREE_FOREVER. Add it there, so the promise is checked rather than assumed. If it genuinely should not be free forever, it should not ship as free.`,
+  )
 }
 
 // --- the model holds together -----------------------------------------------------------
