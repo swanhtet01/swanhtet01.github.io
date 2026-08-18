@@ -145,13 +145,13 @@
   color: var(--website-green);
   font-family: var(--website-mono);
   font-size: 18px;
-  font-weight: 850;
+  font-weight: var(--font-weight-black);
   letter-spacing: -.14em;
 }
 
 .website-brand > strong {
   font-size: 10px;
-  font-weight: 850;
+  font-weight: var(--font-weight-black);
   letter-spacing: .11em;
 }
 
@@ -190,7 +190,7 @@
   color: var(--website-muted);
   font-family: var(--website-mono);
   font-size: 7px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -238,7 +238,7 @@
   color: var(--website-quiet);
   font-family: var(--website-mono);
   font-size: 7px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .09em;
   text-transform: uppercase;
 }
@@ -371,7 +371,7 @@
   color: var(--website-green);
   font-family: var(--website-mono);
   font-size: 11px;
-  font-weight: 820;
+  font-weight: var(--font-weight-black);
 }
 
 .website-sidebar-foot > p {
@@ -413,7 +413,7 @@
   background: transparent;
   color: var(--website-quiet);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-mobile-pane-controls > button[aria-pressed="true"] {
@@ -429,7 +429,7 @@
   color: var(--website-green);
   font-family: var(--website-mono);
   font-size: 8px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .09em;
   text-transform: uppercase;
 }
@@ -487,7 +487,7 @@
   background: transparent;
   color: var(--website-quiet);
   font-size: 8px;
-  font-weight: 720;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-preview-controls > button:hover {
@@ -592,7 +592,7 @@
   padding: 0 5px;
   color: var(--website-muted);
   font-size: 9px;
-  font-weight: 780;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-fieldset.has-heading-action {
@@ -621,7 +621,7 @@
   gap: 5px;
   color: var(--website-muted);
   font-size: 8px;
-  font-weight: 680;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-product label > span:first-child {
@@ -679,7 +679,7 @@
   color: var(--website-green);
   font-family: var(--website-mono);
   font-size: 8px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-text-button:hover {
@@ -754,7 +754,7 @@
   padding: 0 12px;
   color: var(--website-muted);
   font-size: 9px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
   list-style: none;
 }
@@ -864,7 +864,7 @@
   background: var(--website-panel);
   color: var(--website-ink);
   font-size: 9px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   white-space: nowrap;
 }
 
@@ -1098,7 +1098,7 @@
   color: var(--website-green);
   font-family: var(--website-mono);
   font-size: 7px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-check-list {
@@ -1264,7 +1264,7 @@
 .website-confirmation > span {
   color: var(--website-muted);
   font-size: 8px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .website-gate-actions {
@@ -1331,7 +1331,7 @@
   gap: 3px;
   color: var(--website-muted);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-handoff-controls input {
@@ -1545,7 +1545,7 @@
   align-items: center;
   gap: 8px;
   font-size: 10px;
-  font-weight: 850;
+  font-weight: var(--font-weight-black);
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -1572,7 +1572,7 @@
   cursor: pointer;
   font: inherit;
   font-size: 8px;
-  font-weight: 680;
+  font-weight: var(--font-weight-bold);
 }
 
 .preview-site-header > nav > button.is-current {
@@ -1603,7 +1603,7 @@
   color: #137943;
   font-family: var(--website-mono);
   font-size: clamp(7px, 1vw, 9px);
-  font-weight: 780;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .09em;
   text-transform: uppercase;
 }
@@ -1638,7 +1638,7 @@
   cursor: pointer;
   font-family: inherit;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   text-decoration: none;
 }
 
@@ -1702,7 +1702,7 @@
 
 .preview-site-footer > span {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -2230,7 +2230,7 @@
   color: var(--website-ink);
   font-family: inherit;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -2275,7 +2275,7 @@
   padding: 0 10px;
   font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -2331,7 +2331,7 @@
   background: var(--website-green-soft);
   color: var(--website-green);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -2440,7 +2440,7 @@
 .website-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
 .website-business-controls > summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .website-business-controls > summary small { overflow: hidden; color: var(--website-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.website-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--website-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.website-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--website-muted); font-size: 10px; font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .website-business-controls-content { display: grid; gap: 10px; padding: 10px; }
 
 .website-lead-inbox {
@@ -2483,7 +2483,7 @@
 }
 
 .website-lead-capture-form label,
-.website-lead-review-controls label { display: grid; gap: 5px; color: var(--website-muted); font-size: 10px; font-weight: 700; }
+.website-lead-review-controls label { display: grid; gap: 5px; color: var(--website-muted); font-size: 10px; font-weight: var(--font-weight-bold); }
 .website-lead-capture-form input:not([type='checkbox']),
 .website-lead-capture-form textarea,
 .website-lead-review-controls input {
@@ -2494,12 +2494,12 @@
   background: var(--website-panel);
   color: var(--website-ink);
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .website-lead-request,
 .website-lead-consent { grid-column: 1 / -1; }
-.website-lead-consent { grid-template-columns: auto 1fr !important; align-items: center; font-weight: 500 !important; }
+.website-lead-consent { grid-template-columns: auto 1fr !important; align-items: center; font-weight: var(--font-weight-medium) !important; }
 .website-lead-consent input { inline-size: 18px; block-size: 18px; accent-color: var(--website-green); }
 .website-lead-capture-form > .website-button { justify-self: start; }
 .website-lead-capture-form > .website-field-error { align-self: center; color: var(--website-danger); font-size: 10px; }
@@ -2660,7 +2660,7 @@
   color: var(--website-muted);
   font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -2690,7 +2690,7 @@
 .website-fieldset > legend {
   color: var(--website-ink);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-product input,
@@ -3190,7 +3190,7 @@
 .website-editor-section-picker > span {
   color: var(--website-muted);
   font-size: 13px;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-editor-section-picker > select {
@@ -3320,7 +3320,7 @@
 .website-page-control > label {
   color: var(--website-muted);
   font-size: 13px;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-page-control > select {
@@ -3352,7 +3352,7 @@
 
 .website-save-state[data-state="unsaved"] {
   color: var(--website-warn);
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-save-state[data-state="unsaved"]::before {
@@ -3361,7 +3361,7 @@
 
 .website-save-state[data-state="conflict"] {
   color: var(--website-danger);
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-save-state[data-state="conflict"]::before {
@@ -3411,7 +3411,7 @@
   background: var(--website-panel);
   color: var(--website-ink);
   font-size: 14px;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
   list-style: none;
   white-space: nowrap;
@@ -3529,7 +3529,7 @@
   padding: 0 12px;
   color: var(--website-ink);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
 
@@ -3602,7 +3602,7 @@
   color: #fff;
   font: inherit;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
 
@@ -3649,7 +3649,7 @@
 .website-trial-ready-summary > span {
   color: var(--website-green);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -3701,7 +3701,7 @@
   background: var(--website-green-soft);
   color: var(--website-green);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: var(--font-weight-black);
 }
 
 .website-trial-ready-steps > li > div {
@@ -3891,7 +3891,7 @@
 .website-starter-control > span {
   color: var(--website-muted);
   font-size: 13px;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-starter-control > strong {
@@ -3945,12 +3945,12 @@
 .website-starter-form label > small,
 .website-starter-form label > span small {
   color: var(--website-quiet);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .website-starter-form .website-field-error {
   color: var(--website-danger);
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .website-starter-form input[aria-invalid="true"],
@@ -3961,7 +3961,7 @@
 .website-starter-form input::placeholder,
 .website-starter-form textarea::placeholder {
   color: var(--website-quiet);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   opacity: .72;
 }
 
