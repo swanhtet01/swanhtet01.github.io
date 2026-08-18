@@ -14,13 +14,17 @@ the *values* of the scrubbed output — because a false negative here would
 mean real customer data reaching an exporter, this second, whole-output
 check is the one the task calls "the single most important" property of
 this file, so it is asserted for every leak fixture, not sampled.
+
+Uses plain `unittest` (with `subTest` for the parametrized cases) rather
+than pytest: CI discovers and runs this suite via
+`python -m unittest discover -s tests -p 'test_*.py'`, and pytest is not in
+`requirements-test.txt` — every other file under `tests/` is unittest-based.
 """
 
 from __future__ import annotations
 
+import unittest
 from typing import Any
-
-import pytest
 
 from supermega_runtime.telemetry import redact, schema
 
@@ -40,14 +44,6 @@ def _all_scrubbed_string_values(attributes: dict[str, Any]) -> list[str]:
         elif isinstance(value, (list, tuple)):
             values.extend(item for item in value if isinstance(item, str))
     return values
-
-
-def _assert_no_leak(raw_pii_values: tuple[str, ...], scrubbed: dict[str, Any]) -> None:
-    scrubbed_values = _all_scrubbed_string_values(scrubbed)
-    for pii in raw_pii_values:
-        assert pii not in scrubbed_values, f"leaked exact value: {pii!r} in {scrubbed!r}"
-        for value in scrubbed_values:
-            assert pii not in value, f"leaked substring: {pii!r} inside {value!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -232,12 +228,6 @@ PASS_FIXTURES: list[tuple[str, dict[str, Any]]] = [
 assert len(PASS_FIXTURES) >= 20, "golden corpus needs at least 20 pass-through fixtures"
 
 
-@pytest.mark.parametrize("fixture_id,attributes", PASS_FIXTURES, ids=[f[0] for f in PASS_FIXTURES])
-def test_pass_fixtures_survive_unchanged(fixture_id: str, attributes: dict[str, Any]) -> None:
-    scrubbed = redact.scrub_attributes(attributes, deny_values=frozenset())
-    assert scrubbed == attributes, f"{fixture_id}: a safe attribute was altered or dropped"
-
-
 # ---------------------------------------------------------------------------
 # LEAK fixtures — 23 spans containing real-shaped Myanmar PII that must never
 # reach an exporter. `pii_values` lists every raw customer-content literal
@@ -412,44 +402,6 @@ LEAK_FIXTURES: list[tuple[str, dict[str, Any], tuple[str, ...], tuple[str, ...]]
 assert len(LEAK_FIXTURES) >= 20, "golden corpus needs at least 20 PII-leak fixtures"
 
 
-@pytest.mark.parametrize(
-    "fixture_id,attributes,deny_values,pii_values",
-    LEAK_FIXTURES,
-    ids=[f[0] for f in LEAK_FIXTURES],
-)
-def test_leak_fixtures_are_scrubbed(
-    fixture_id: str,
-    attributes: dict[str, Any],
-    deny_values: tuple[str, ...],
-    pii_values: tuple[str, ...],
-) -> None:
-    scrubbed = redact.scrub_attributes(attributes, deny_values=frozenset(deny_values))
-    _assert_no_leak(pii_values, scrubbed)
-    # The offending key itself must be gone, not merely have an altered value
-    # (plan section 7: "the scrubber defaults to dropping the attribute").
-    for key in attributes:
-        if key in schema.FORBIDDEN_ATTRIBUTE_KEYS:
-            assert key not in scrubbed, f"{fixture_id}: forbidden key {key!r} survived scrubbing"
-    # Opt-in whitelist invariant (plan section 7): nothing not on the
-    # allowlist survives, regardless of whether its value looked dangerous.
-    assert set(scrubbed.keys()) <= schema.ATTRIBUTE_WHITELIST, (
-        f"{fixture_id}: a non-allowlisted key survived scrubbing: {set(scrubbed) - schema.ATTRIBUTE_WHITELIST!r}"
-    )
-
-
-def test_zero_false_negatives_across_full_corpus() -> None:
-    """The single aggregate assertion the task calls the bar: zero PII leaks."""
-
-    failures: list[str] = []
-    for fixture_id, attributes, deny_values, pii_values in LEAK_FIXTURES:
-        scrubbed = redact.scrub_attributes(attributes, deny_values=frozenset(deny_values))
-        scrubbed_values = _all_scrubbed_string_values(scrubbed)
-        for pii in pii_values:
-            if pii in scrubbed_values or any(pii in value for value in scrubbed_values):
-                failures.append(f"{fixture_id}: leaked {pii!r}")
-    assert not failures, "false negatives found:\n" + "\n".join(failures)
-
-
 # ---------------------------------------------------------------------------
 # db.statement -> db.operation / db.collection derivation (plan section 4:
 # "spans carry table+operation only").
@@ -483,37 +435,81 @@ DB_STATEMENT_FIXTURES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "fixture_id,statement,expected_operation,expected_table",
-    DB_STATEMENT_FIXTURES,
-    ids=[f[0] for f in DB_STATEMENT_FIXTURES],
-)
-def test_db_statement_enrichment_derives_operation_and_table(
-    fixture_id: str, statement: str, expected_operation: str, expected_table: str
-) -> None:
-    enriched = redact.enrich_and_scrub_db_attributes({"db.statement": statement, "db.system": "postgresql"})
-    assert "db.statement" not in enriched, f"{fixture_id}: raw SQL text survived enrichment"
-    assert enriched.get("db.operation") == expected_operation
-    assert enriched.get("db.collection") == expected_table
+class RedactGoldenCorpusTests(unittest.TestCase):
+    def test_pass_fixtures_survive_unchanged(self) -> None:
+        for fixture_id, attributes in PASS_FIXTURES:
+            with self.subTest(fixture_id=fixture_id):
+                scrubbed = redact.scrub_attributes(attributes, deny_values=frozenset())
+                self.assertEqual(scrubbed, attributes, f"{fixture_id}: a safe attribute was altered or dropped")
 
-    scrubbed = redact.scrub_attributes(enriched, deny_values=frozenset())
-    assert "db.statement" not in scrubbed
-    assert "db.query.text" not in scrubbed
-    assert scrubbed.get("db.operation") == expected_operation
-    assert scrubbed.get("db.collection") == expected_table
-    assert statement not in str(scrubbed)
+    def test_leak_fixtures_are_scrubbed(self) -> None:
+        for fixture_id, attributes, deny_values, pii_values in LEAK_FIXTURES:
+            with self.subTest(fixture_id=fixture_id):
+                scrubbed = redact.scrub_attributes(attributes, deny_values=frozenset(deny_values))
+                scrubbed_values = _all_scrubbed_string_values(scrubbed)
+                for pii in pii_values:
+                    self.assertNotIn(pii, scrubbed_values, f"{fixture_id}: leaked exact value: {pii!r} in {scrubbed!r}")
+                    for value in scrubbed_values:
+                        self.assertNotIn(pii, value, f"{fixture_id}: leaked substring: {pii!r} inside {value!r}")
+                # The offending key itself must be gone, not merely have an altered value
+                # (plan section 7: "the scrubber defaults to dropping the attribute").
+                for key in attributes:
+                    if key in schema.FORBIDDEN_ATTRIBUTE_KEYS:
+                        self.assertNotIn(key, scrubbed, f"{fixture_id}: forbidden key {key!r} survived scrubbing")
+                # Opt-in whitelist invariant (plan section 7): nothing not on the
+                # allowlist survives, regardless of whether its value looked dangerous.
+                self.assertLessEqual(
+                    set(scrubbed.keys()),
+                    schema.ATTRIBUTE_WHITELIST,
+                    f"{fixture_id}: a non-allowlisted key survived scrubbing: {set(scrubbed) - schema.ATTRIBUTE_WHITELIST!r}",
+                )
+
+    def test_zero_false_negatives_across_full_corpus(self) -> None:
+        """The single aggregate assertion the task calls the bar: zero PII leaks."""
+
+        failures: list[str] = []
+        for fixture_id, attributes, deny_values, pii_values in LEAK_FIXTURES:
+            scrubbed = redact.scrub_attributes(attributes, deny_values=frozenset(deny_values))
+            scrubbed_values = _all_scrubbed_string_values(scrubbed)
+            for pii in pii_values:
+                if pii in scrubbed_values or any(pii in value for value in scrubbed_values):
+                    failures.append(f"{fixture_id}: leaked {pii!r}")
+        self.assertFalse(failures, "false negatives found:\n" + "\n".join(failures))
+
+    def test_corpus_size_meets_the_plan_gate(self) -> None:
+        self.assertGreaterEqual(len(PASS_FIXTURES), 20)
+        self.assertGreaterEqual(len(LEAK_FIXTURES), 20)
+
+    def test_forbidden_keys_are_never_in_the_allowlist(self) -> None:
+        self.assertTrue(schema.FORBIDDEN_ATTRIBUTE_KEYS.isdisjoint(schema.ATTRIBUTE_WHITELIST))
 
 
-def test_db_statement_with_customer_content_never_reaches_scrubbed_output() -> None:
-    statement = (
-        "select * from app_private.workspace_events "
-        "where workspace_id = 'ws-1' and note = 'Ma Thida Win, 09512345678, 15,000 MMK'"
-    )
-    enriched = redact.enrich_and_scrub_db_attributes({"db.statement": statement, "db.system": "postgresql"})
-    scrubbed = redact.scrub_attributes(enriched, deny_values=frozenset())
-    dump = str(scrubbed)
-    for pii in ("Ma Thida Win", "09512345678", "15,000 MMK"):
-        assert pii not in dump
+class DbStatementEnrichmentTests(unittest.TestCase):
+    def test_db_statement_enrichment_derives_operation_and_table(self) -> None:
+        for fixture_id, statement, expected_operation, expected_table in DB_STATEMENT_FIXTURES:
+            with self.subTest(fixture_id=fixture_id):
+                enriched = redact.enrich_and_scrub_db_attributes({"db.statement": statement, "db.system": "postgresql"})
+                self.assertNotIn("db.statement", enriched, f"{fixture_id}: raw SQL text survived enrichment")
+                self.assertEqual(enriched.get("db.operation"), expected_operation)
+                self.assertEqual(enriched.get("db.collection"), expected_table)
+
+                scrubbed = redact.scrub_attributes(enriched, deny_values=frozenset())
+                self.assertNotIn("db.statement", scrubbed)
+                self.assertNotIn("db.query.text", scrubbed)
+                self.assertEqual(scrubbed.get("db.operation"), expected_operation)
+                self.assertEqual(scrubbed.get("db.collection"), expected_table)
+                self.assertNotIn(statement, str(scrubbed))
+
+    def test_db_statement_with_customer_content_never_reaches_scrubbed_output(self) -> None:
+        statement = (
+            "select * from app_private.workspace_events "
+            "where workspace_id = 'ws-1' and note = 'Ma Thida Win, 09512345678, 15,000 MMK'"
+        )
+        enriched = redact.enrich_and_scrub_db_attributes({"db.statement": statement, "db.system": "postgresql"})
+        scrubbed = redact.scrub_attributes(enriched, deny_values=frozenset())
+        dump = str(scrubbed)
+        for pii in ("Ma Thida Win", "09512345678", "15,000 MMK"):
+            self.assertNotIn(pii, dump)
 
 
 # ---------------------------------------------------------------------------
@@ -522,31 +518,29 @@ def test_db_statement_with_customer_content_never_reaches_scrubbed_output() -> N
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "name,deny_values",
-    [
-        ("Ma Thida Win checkout", frozenset({"Ma Thida Win checkout"})),
-        ("call 09512345678 now", frozenset()),
-        ("refund of 15,000 MMK", frozenset()),
-        ("x" * 250, frozenset()),
-    ],
-)
-def test_unsafe_span_names_are_redacted(name: str, deny_values: frozenset[str]) -> None:
-    assert redact.scrub_span_name(name, deny_values) == "[redacted]"
+class SpanNameRedactionTests(unittest.TestCase):
+    def test_unsafe_span_names_are_redacted(self) -> None:
+        cases = [
+            ("Ma Thida Win checkout", frozenset({"Ma Thida Win checkout"})),
+            ("call 09512345678 now", frozenset()),
+            ("refund of 15,000 MMK", frozenset()),
+            ("x" * 250, frozenset()),
+        ]
+        for name, deny_values in cases:
+            with self.subTest(name=name):
+                self.assertEqual(redact.scrub_span_name(name, deny_values), "[redacted]")
 
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "shop.order.confirm",
-        "plant.job.release",
-        "ecommerce.request.submit",
-        "POST /api/trial/v1/commands",
-        "SELECT",
-    ],
-)
-def test_safe_span_names_survive(name: str) -> None:
-    assert redact.scrub_span_name(name, frozenset()) == name
+    def test_safe_span_names_survive(self) -> None:
+        names = [
+            "shop.order.confirm",
+            "plant.job.release",
+            "ecommerce.request.submit",
+            "POST /api/trial/v1/commands",
+            "SELECT",
+        ]
+        for name in names:
+            with self.subTest(name=name):
+                self.assertEqual(redact.scrub_span_name(name, frozenset()), name)
 
 
 # ---------------------------------------------------------------------------
@@ -554,64 +548,53 @@ def test_safe_span_names_survive(name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_extract_customer_content_values_walks_nested_bodies() -> None:
-    body = {
-        "surface": "commerce",
-        "payload": {
-            "state": {
-                "orders": [
-                    {
-                        "id": "order-1",
-                        "customerName": "Ma Thida Win",
-                        "customerPhone": "09512345678",
-                        "deliveryAddress": "No. 42, Bo Aung Kyaw Street, Yangon",
-                        "totalMmk": 15000,
-                        "lines": [{"sku": "SKU-1", "quantity": 2}],
-                    }
-                ]
+class ExtractCustomerContentValuesTests(unittest.TestCase):
+    def test_extract_customer_content_values_walks_nested_bodies(self) -> None:
+        body = {
+            "surface": "commerce",
+            "payload": {
+                "state": {
+                    "orders": [
+                        {
+                            "id": "order-1",
+                            "customerName": "Ma Thida Win",
+                            "customerPhone": "09512345678",
+                            "deliveryAddress": "No. 42, Bo Aung Kyaw Street, Yangon",
+                            "totalMmk": 15000,
+                            "lines": [{"sku": "SKU-1", "quantity": 2}],
+                        }
+                    ]
+                },
+                "evidence": {
+                    "actor": "actor-operator",
+                    "reason": "Customer called about a late delivery.",
+                },
             },
-            "evidence": {
-                "actor": "actor-operator",
-                "reason": "Customer called about a late delivery.",
-            },
-        },
-    }
-    values = redact.extract_customer_content_values(body)
-    assert "Ma Thida Win" in values
-    assert "09512345678" in values
-    assert "No. 42, Bo Aung Kyaw Street, Yangon" in values
-    assert "15000" in values
-    assert "Customer called about a late delivery." in values
-    # Structural, non-customer-content leaves must not be swept in.
-    assert "order-1" not in values
-    assert "SKU-1" not in values
-    assert "actor-operator" not in values
+        }
+        values = redact.extract_customer_content_values(body)
+        self.assertIn("Ma Thida Win", values)
+        self.assertIn("09512345678", values)
+        self.assertIn("No. 42, Bo Aung Kyaw Street, Yangon", values)
+        self.assertIn("15000", values)
+        self.assertIn("Customer called about a late delivery.", values)
+        # Structural, non-customer-content leaves must not be swept in.
+        self.assertNotIn("order-1", values)
+        self.assertNotIn("SKU-1", values)
+        self.assertNotIn("actor-operator", values)
+
+    def test_extract_customer_content_values_ignores_none_and_bool_leaves(self) -> None:
+        body = {"reasonCode": None, "nameVerified": True, "note": ""}
+        self.assertEqual(redact.extract_customer_content_values(body), frozenset())
+
+    def test_extract_customer_content_values_picks_up_unmarked_phone_and_amount(self) -> None:
+        # Even a field the caller didn't name "phone"/"amount" is still caught if
+        # its value itself looks like a Myanmar phone number or an MMK amount —
+        # defense in depth for a renamed field.
+        body = {"contactMethod": "09512345678", "settlement": "12,500 MMK"}
+        values = redact.extract_customer_content_values(body)
+        self.assertIn("09512345678", values)
+        self.assertIn("12,500 MMK", values)
 
 
-def test_extract_customer_content_values_ignores_none_and_bool_leaves() -> None:
-    body = {"reasonCode": None, "nameVerified": True, "note": ""}
-    assert redact.extract_customer_content_values(body) == frozenset()
-
-
-def test_extract_customer_content_values_picks_up_unmarked_phone_and_amount() -> None:
-    # Even a field the caller didn't name "phone"/"amount" is still caught if
-    # its value itself looks like a Myanmar phone number or an MMK amount —
-    # defense in depth for a renamed field.
-    body = {"contactMethod": "09512345678", "settlement": "12,500 MMK"}
-    values = redact.extract_customer_content_values(body)
-    assert "09512345678" in values
-    assert "12,500 MMK" in values
-
-
-# ---------------------------------------------------------------------------
-# Corpus bookkeeping / self-check
-# ---------------------------------------------------------------------------
-
-
-def test_corpus_size_meets_the_plan_gate() -> None:
-    assert len(PASS_FIXTURES) >= 20
-    assert len(LEAK_FIXTURES) >= 20
-
-
-def test_forbidden_keys_are_never_in_the_allowlist() -> None:
-    assert schema.FORBIDDEN_ATTRIBUTE_KEYS.isdisjoint(schema.ATTRIBUTE_WHITELIST)
+if __name__ == "__main__":
+    unittest.main()
