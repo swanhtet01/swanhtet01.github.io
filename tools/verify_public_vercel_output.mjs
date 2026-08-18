@@ -297,9 +297,15 @@ for (const product of publicProducts) {
     `href="/contact/?product=${product.id}">${setupLabel}</a>`,
     'Free browser sample',
     'Mobile-ready workflows',
-    'What the working sample covers.',
-    'Operate without a stripped-down plan.',
-    'Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.',
+    // Product pages now lead with the FULL module list and the free/premium/managed
+    // story (design tribunal: the site showed 3-4 features of 12-14 and two products
+    // had no description at all). The free tier still leads, and the claims boundary
+    // is unchanged — these pins moved with the copy, not around it.
+    'free on your device.',
+    'The whole working business is the free part.',
+    'Every module listed above',
+    'Leaving is always free',
+    'Priced per shop — talk to us',
     'No account or model call required',
     'aria-label="Security boundary"',
     'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',

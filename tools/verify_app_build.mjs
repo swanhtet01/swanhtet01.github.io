@@ -4090,7 +4090,7 @@ if (!orderListContract.includes("const settleRefundIsPrimary = !reconcileIsPrima
   || !orderListContract.includes('const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder')
   || !orderListContract.includes('className="order-row-more"')
   || !orderListContract.includes('aria-label={`More options for ${order.id}`}')
-  || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 3
+  || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 4
   || !orderListContract.includes('>Cancel order</button>')
   || !coreCssSource.includes('.order-row-more > summary {')
   || !coreCssSource.includes('.order-row-more > div .text-link { min-height: 44px;')) fail('shop_order_action_hierarchy_missing')
@@ -18996,14 +18996,15 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // Raised again after merging main (Beauty spa template, billing dashboards, General Ledger MVP landing
 // together with two new WorkspaceControlsPage views — Plant maintenance-due, Ecommerce stale-request
 // follow-up — and the Plant certificate of conformance feature) pushed the measured total to 2,929,574.
-// Raised again for the bakery Shop business template (10th industry) and, from this merge of main, the
-// design phase-1 foundation (2026-08 tribunal: token ramps + on-accent/field-line/scroll-accent tokens,
-// WCAG contrast overrides, Myanmar script stacks with :lang(my) line-height guard, money-path type floor,
-// 561-840px touch targets, light-theme tile art — ~6KB of appended CSS across the three islands) and
-// design phase-2 in-progress work (cart running total, merchant-surface de-branding) pushed the measured
-// total to 2,939,879. See CLAUDE.md: this budget is expected to trip on any fresh dist/ after real
-// product/design work lands — raise it, never shrink product code to fit an old number.
-if (bytes > 2_970_000) fail(`artifact_budget:${bytes}`)
+// Raised again for the bakery Shop business template (10th industry), the wired-up guided-sample
+// activity (Shop counter sales/pending order, Shop appointment book), and — from this merge of main —
+// the design phase-1 foundation (2026-08 tribunal: token ramps, WCAG contrast overrides, Myanmar script
+// stacks, money-path type floor, touch targets, light-theme tile art) plus the design phase-2 wave (the
+// one-review 'Paid & handed over' settle path, 'Close the day' lifted out of the policy accordion, cart
+// money total, status-pill semantics, de-branded merchant surfaces). See CLAUDE.md: this budget is
+// expected to trip on any fresh dist/ after real product/design work lands — raise it, never shrink
+// product code to fit an old number.
+if (bytes > 2_985_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

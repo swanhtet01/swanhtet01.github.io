@@ -264,8 +264,21 @@ const sharedStyle = `
   .solution-block h3 { margin-top: 24px; font-size: clamp(30px, 4vw, 48px); }
   .solution-block p { color: var(--muted); }
   .solution-modules { display: grid; border-top: 1px solid var(--line); }
-  .solution-modules span { min-height: 48px; display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-  .solution-modules i { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; font-style: normal; }
+  .solution-modules span { min-height: 52px; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 14px; line-height: 1.45; padding: 10px 0; }
+  .solution-modules i { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
+  /* Design tribunal phase 1 language, applied to the public site: the free/premium/
+     managed story and the nine trade demo links, at a readable size on a cheap phone. */
+  .tier-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; border-top: 1px solid var(--line-strong); padding-top: 24px; }
+  .tier-lane h3 { margin: 4px 0 8px; font-size: 17px; letter-spacing: -.01em; }
+  .tier-lane .eyebrow { color: var(--green); }
+  .trade-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+  .trade-card { min-height: 76px; display: grid; align-content: center; gap: 4px; border: 1px solid var(--line-strong); border-radius: 12px; padding: 14px 16px; color: inherit; text-decoration: none; transition: border-color .15s ease, transform .15s ease; }
+  .trade-card:hover { border-color: var(--green); transform: translateY(-2px); }
+  .trade-card:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+  .trade-card strong { font-size: 15px; }
+  .trade-card span { color: var(--muted); font-size: 13px; line-height: 1.4; }
+  @media (max-width: 900px) { .tier-grid { grid-template-columns: 1fr; gap: 24px; } .trade-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+  @media (max-width: 560px) { .trade-grid { grid-template-columns: 1fr; } .solution-modules span { grid-template-columns: 28px 1fr; font-size: 14px; } }
   .template-catalog { margin-top: 54px; scroll-margin-top: 92px; }
   .template-tags { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 18px; }
   .template-tags span { min-height: 38px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 13px; color: var(--muted); font-size: 11px; }
@@ -412,6 +425,25 @@ const homeHtml = documentHtml({
   </main>`,
 })
 
+// The nine shipped Shop trade templates. Each link opens the real app with that
+// trade's catalog, sample sales and a live order already loaded — no signup. This
+// is the strongest thing the site can offer a shop owner: their own trade, running.
+const SHOP_TRADES = [
+  ['mini-mart', 'Mini-mart & grocery', 'Daily groceries and household basics'],
+  ['pharmacy', 'Pharmacy', 'Medicine and clinic supplies with strict reorder levels'],
+  ['phone-electronics', 'Phone & electronics', 'Accessories and small electronics'],
+  ['fashion', 'Fashion & clothing', 'Stock tracked down to the size'],
+  ['hardware', 'Hardware & construction', 'Bulk orders quoted and set aside'],
+  ['tea-coffee', 'Tea & coffee shop', 'Counter menu plus office preorders'],
+  ['auto-parts', 'Auto parts', 'Exact-fit spares checked against stock'],
+  ['restaurant', 'Restaurant', 'Full menu with table bookings'],
+  ['beauty-spa', 'Beauty spa', 'Treatments booked against staff and rooms'],
+]
+
+function tradeTemplatesHtml() {
+  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one loads a real catalog, sample sales and a live order in your browser. Nothing to install, no account, free.</p></div><div class="trade-grid">${SHOP_TRADES.map(([id, name, note]) => `<a class="trade-card" href="https://app.supermega.dev/settings/?product=shop&amp;template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+}
+
 function productLandingHtml(product, page) {
   const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
@@ -425,8 +457,9 @@ function productLandingHtml(product, page) {
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
     <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
-    <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">${escapeHtml(product.name)} modules</span><h2>What the working sample covers.</h2></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} modules">${moduleItems.map((item, index) => `<span><i>0${index + 1}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
-    <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Operate without a stripped-down plan.</h2><p>Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.</p></div><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></section>
+    <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">${escapeHtml(product.name)} modules</span><h2>Everything ${escapeHtml(product.name)} does, free on your device.</h2><p>${moduleItems.length} working modules. No account, no server, no cost — open the sample and every one of these is there.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} modules">${moduleItems.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
+    ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
+    <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free forever, then a conversation</span><h2>The whole working business is the free part.</h2><p>Everything above runs on the owner’s own device. Paid tiers only cover what needs our servers or a shared workspace — and they never take away what is already free.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Free forever</span><h3>On your device</h3><ul class="offer-model-list"><li>Every module listed above</li><li>Encrypted backup and restore on any device</li><li>Accounting export — your records are yours</li><li>Leaving is always free</li></ul></div><div class="tier-lane"><span class="eyebrow">Premium</span><h3>Needs our compute</h3><ul class="offer-model-list"><li>Read orders from Viber or Messenger messages</li><li>Automatic off-device backup</li><li>Priced per shop — talk to us</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>Shared across people</h3><ul class="offer-model-list"><li>One set of records for the whole team</li><li>Staff sign-ins and limits</li><li>A trading record a lender can verify</li></ul></div></div></section>
     <section class="frame trust-strip" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
     <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a></div></section>
   </main>`,

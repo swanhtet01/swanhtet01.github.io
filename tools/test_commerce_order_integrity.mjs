@@ -16,7 +16,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { createSeedCommerce, reserveCommerceOrder } from './commerce-workspace.ts'`,
+    contents: `export { createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder } from './commerce-workspace.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/order-integrity-entry.ts',
     loader: 'ts',
@@ -28,7 +28,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { createSeedCommerce, reserveCommerceOrder } = await import(
+const { createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -173,5 +173,61 @@ const onHandBefore = item.onHand
 reserveCommerceOrder(state, orderFor(honestLines), proof)
 const itemAfter = state.items.find((candidate) => candidate.sku === item.sku)
 check(itemAfter.onHand === onHandBefore, 'reserving returns a new state rather than mutating the caller\'s')
+
+// --- the one-review settle composition (design phase 2 item 1) ---------------
+// "Paid & handed over" composes reconcileCommercePayment + three
+// advanceCommerceOrder steps inside ONE transition so the everyday cash sale is
+// a single atomic write. The contract this pins: the composition reaches
+// completed+reconciled through the SAME individual transitions (nothing skips
+// the lifecycle), each inner step must carry its own unique actionId (the
+// attribution ledger refuses reuse), and composing never mutates the input.
+const settleBase = reserveCommerceOrder(createSeedCommerce(), orderFor(honestLines), proof)
+check(settleBase !== null, 'settle composition test starts from an accepted counter order')
+
+function composeSettle(startState, baseProof) {
+  let composed = reconcileCommercePayment(startState, 'ORD-TEST-1', baseProof)
+  if (!composed) return null
+  for (let step = 0; step < 3; step += 1) {
+    const live = composed.orders.find((candidate) => candidate.id === 'ORD-TEST-1')
+    if (!live || live.status === 'cancelled') return null
+    if (live.status === 'completed') return composed
+    const advanced = advanceCommerceOrder(
+      composed,
+      'ORD-TEST-1',
+      live.status,
+      { ...baseProof, actionId: `${baseProof.actionId}:advance-${live.status}` },
+      'client',
+    )
+    if (!advanced) return null
+    composed = advanced
+  }
+  const settled = composed.orders.find((candidate) => candidate.id === 'ORD-TEST-1')
+  return settled?.status === 'completed' ? composed : null
+}
+
+// Exactly the five canonical proof keys, matching what commerceActionProof
+// produces in the app — the stored completion record is hasExactKeys-validated,
+// so a stray commandId would invalidate the whole composed state.
+const settleProof = { actionId: 'ACT-SETTLE-1', capturedAt: CAPTURED_AT, actor: OPERATOR, reason: 'Cash received and the customer took the order.', evidenceReference: 'COUNTER-0001' }
+const settled = composeSettle(settleBase, settleProof)
+check(settled !== null, 'the composed settle reaches a valid state')
+const settledOrder = settled.orders.find((candidate) => candidate.id === 'ORD-TEST-1')
+check(settledOrder.status === 'completed', 'the composed settle completes the order')
+check(settledOrder.paymentStatus === 'reconciled', 'and reconciles its payment')
+check(settledOrder.paymentReconciliationActionId === 'ACT-SETTLE-1', 'payment reconciliation is attributed to the base action')
+
+// Derived actionIds are REQUIRED, not decorative: reusing the base id for the
+// first advance must be refused by the attribution ledger, failing the whole
+// composition closed rather than recording two transitions under one id.
+const reusedId = (() => {
+  const reconciled = reconcileCommercePayment(settleBase, 'ORD-TEST-1', settleProof)
+  if (!reconciled) return 'reconcile-failed'
+  return advanceCommerceOrder(reconciled, 'ORD-TEST-1', 'confirmed', settleProof, 'client')
+})()
+check(reusedId === null, 'reusing one actionId across composed transitions is refused — each step stays individually attributable')
+
+// Composing returns new states; the accepted-order snapshot it started from is untouched.
+const baseOrderAfter = settleBase.orders.find((candidate) => candidate.id === 'ORD-TEST-1')
+check(baseOrderAfter.status === 'confirmed' && baseOrderAfter.paymentStatus === 'pending', 'the composition does not mutate the state it was given')
 
 console.log(`commerce order integrity contract: ${checks} checks passed`)
