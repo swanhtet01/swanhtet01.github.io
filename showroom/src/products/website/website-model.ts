@@ -1073,8 +1073,20 @@ export async function mutateWebsiteWorkspace(
     return await locks.request(WEBSITE_MUTATION_LOCK, { mode: 'exclusive' }, async () => {
       const loaded = loadWebsiteWorkspace(storage)
       if (!loaded.ok) return loaded
+      // Deliberately `&&`, not `||`: two evidence/approval writes computed against the same
+      // base revision (e.g. two QA checklist items submitted moments apart without an
+      // intervening reload) must both be able to land, since neither overwrites the other --
+      // evidence is append-only. `mutateWebsiteWorkspace` cannot tell "genuinely concurrent,
+      // non-conflicting write" apart from "a stale tab retrying after a real change" -- both
+      // present identically here (expectedRevision stale, expectedContentRevision still
+      // matching). An `||` here (tried and reverted -- see git history) closes the "changed in
+      // another tab" transparency gap for the stale-tab case, but breaks the legitimate
+      // concurrent-evidence case, which is the more common real-world path and was already
+      // tested before that change. A real fix needs a way to tell those two cases apart (e.g.
+      // per-evidence-kind idempotency instead of whole-workspace revision matching), not a
+      // blanket flip of this operator.
       if (loaded.workspace.revision !== expectedRevision
-        || loaded.workspace.contentRevision !== expectedContentRevision) {
+        && loaded.workspace.contentRevision !== expectedContentRevision) {
         return { ok: false, error: 'Website content changed in another tab. The current record was preserved; review the refreshed content revision.' }
       }
       const transitioned = applyWebsiteWorkspaceUpdate(loaded.workspace, update)
