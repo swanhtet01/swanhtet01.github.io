@@ -131,6 +131,7 @@ export type ActionKind =
   | 'order_support_resolve'
   | 'order_correction'
   | 'payment_reconcile'
+  | 'order_settle'
   | 'collection_contact'
   | 'refund_settle'
   | 'catalog_item_create'

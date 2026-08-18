@@ -4058,7 +4058,7 @@ if (!orderListContract.includes("const settleRefundIsPrimary = !reconcileIsPrima
   || !orderListContract.includes('const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder')
   || !orderListContract.includes('className="order-row-more"')
   || !orderListContract.includes('aria-label={`More options for ${order.id}`}')
-  || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 3
+  || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 4
   || !orderListContract.includes('>Cancel order</button>')
   || !coreCssSource.includes('.order-row-more > summary {')
   || !coreCssSource.includes('.order-row-more > div .text-link { min-height: 44px;')) fail('shop_order_action_hierarchy_missing')

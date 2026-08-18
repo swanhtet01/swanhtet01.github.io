@@ -3854,6 +3854,51 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     })
   }
 
+  function settleSale(orderId: string) {
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    if (order.paymentStatus !== 'pending') {
+      setNotice(`${order.id} payment is already reconciled. Advance fulfilment instead.`)
+      return
+    }
+    // The everyday counter outcome — the customer paid and took the order — as ONE
+    // reviewed action. #355's explicit lifecycle is preserved: the counter still only
+    // creates orders, and payment reconciliation and each fulfilment step remain the
+    // same recorded state transitions they always were. This composes them inside a
+    // single atomic, crash-safe write (one command, one recovery intent) instead of
+    // four separate confirmations. Each inner step carries a derived actionId because
+    // every recorded transition must stay individually attributable and unique.
+    const displayReference = commerceOrderDisplayReference(order.id)
+    queueAction({
+      kind: 'order_settle',
+      subjectId: orderId,
+      summary: `Settle ${displayReference} · paid and handed over`,
+      before: `${order.payment} · ${order.paymentStatus} · ${order.status}`,
+      after: `${order.payment} · reconciled · completed`,
+      reasonSuggestion: `${order.payment} received and the customer took the order.`,
+      evidenceReferenceSuggestion: `Order ${displayReference}`,
+      apply: (action) => {
+        const proof = commerceActionProof(action)
+        const lane = managedIdentity ? 'managed-server' : 'client'
+        return mutateCommerce('commerce.payment.reconciled', action.commandId, proof, (current) => {
+          let state = reconcileCommercePayment(current, orderId, proof)
+          if (!state) return null
+          for (let step = 0; step < 3; step += 1) {
+            const live = state.orders.find((candidate) => candidate.id === orderId)
+            if (!live || live.status === 'cancelled') return null
+            if (live.status === 'completed') return state
+            const stepStatus = live.status
+            const advanced = advanceCommerceOrder(state, orderId, stepStatus, { ...proof, actionId: `${proof.actionId}:advance-${stepStatus}` }, lane)
+            if (!advanced) return null
+            state = advanced
+          }
+          const settled = state.orders.find((candidate) => candidate.id === orderId)
+          return settled?.status === 'completed' ? state : null
+        })
+      },
+    })
+  }
+
   function recordCollectionContact(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'cancelled' || order.paymentStatus !== 'pending') {
@@ -6031,7 +6076,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onViewReceipt={setReceiptAck} orders={actionOrders} />
+      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -6657,6 +6702,7 @@ function OrderList({
   onCancel,
   onReconcilePayment,
   onSettleRefund,
+  onSettleSale,
   onViewReceipt,
 }: {
   acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
@@ -6668,6 +6714,7 @@ function OrderList({
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
   onSettleRefund: (id: string) => void
+  onSettleSale: (id: string) => void
   onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
 }) {
   const promiseNow = useMinuteClock()
@@ -6676,13 +6723,19 @@ function OrderList({
   return <div className="order-list">{orders.map((order) => {
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
     const needsPayment = order.paymentStatus === 'pending'
-    const reconcileIsPrimary = needsPayment && (order.status === 'ready' || order.status === 'completed')
+    // The everyday outcome — paid and handed over — is the one-review primary for
+    // any active unpaid order; payment-only reconciliation (pay-later customers)
+    // stays reachable under More. Both remain the same recorded transitions.
+    const settleSaleIsPrimary = needsPayment && active
+    const reconcileIsPrimary = !settleSaleIsPrimary && needsPayment && (order.status === 'ready' || order.status === 'completed')
+    // No settle-sale guard needed here: a refund is only ever due on a cancelled
+    // order, and the settle primary only shows on an active one.
     const settleRefundIsPrimary = !reconcileIsPrimary && order.refundStatus === 'due'
-    const canAdvance = active && !reconcileIsPrimary && !settleRefundIsPrimary
+    const canAdvance = active && !settleSaleIsPrimary && !reconcileIsPrimary && !settleRefundIsPrimary
     const promiseUrgency = active ? commerceOrderPromiseUrgency(order, promiseNow) : 'scheduled'
     const acknowledgement = acknowledgementDownloads.get(order.id)
     const canCancelOrder = active && canCancel(order.id)
-    const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary)
+    const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || settleSaleIsPrimary
     const targetId = commerceOrderTargetId(order.id)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
@@ -6711,12 +6764,14 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
+        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button">Paid &amp; handed over</button> : null}
         {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
         {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
         {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
         {hasSecondaryActions ? <details className="order-row-more">
           <summary aria-label={`More options for ${order.id}`}>More</summary>
           <div>
+            {settleSaleIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
             {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
             {acknowledgement ? <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button> : null}
             {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
