@@ -6283,8 +6283,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     supportResolutionDraft={supportResolutionDraft}
     supportWorkloadDownload={supportWorkloadDownload}
   />
-  <details className="core-panel today-more order-daily-controls" id="shop-close-controls">
-    <summary><span>Pricing, credit, and close</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
+  <details className="core-panel today-more order-daily-controls">
+    <summary><span>Pricing and credit policies</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
@@ -6404,49 +6404,56 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
-      <details className="compact-disclosure" data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
-        <summary><span>Settlement count</span><small>{closePreview ? `${closeExpectedByPayment.size} payment method${closeExpectedByPayment.size === 1 ? '' : 's'} · ${closeSettlement?.status === 'matched' ? 'matched' : closeSettlement?.status === 'variance_review' ? 'variance needs review' : 'complete the count'}` : 'No open close'}</small></summary>
-        <section aria-label="Daily settlement count" className="core-form compact-form">
-          {effectiveCloseSettlementDraft.length ? effectiveCloseSettlementDraft.map((line) => {
-            const expectedMmk = closeExpectedByPayment.get(line.paymentMethod) ?? 0
-            const countedMmk = /^(?:0|[1-9]\d*)$/.test(line.countedMmk) ? Number(line.countedMmk) : null
-            const varianceMmk = countedMmk !== null && Number.isSafeInteger(countedMmk) ? countedMmk - expectedMmk : null
-            const update = (changes: Partial<CloseSettlementDraftLine>) => setCloseSettlementDraft(
-              effectiveCloseSettlementDraft.map((candidate) => candidate.paymentMethod === line.paymentMethod ? { ...candidate, ...changes } : candidate),
-            )
-            return <div className="settlement-method" data-variance={varianceMmk === 0 ? 'matched' : 'review'} key={line.paymentMethod}>
-              <div className="form-row">
-                <label>{line.paymentMethod} counted<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => {
-                  const countedMmk = event.target.value
-                  update({ countedMmk, ...(Number(countedMmk) === expectedMmk ? { varianceOwner: '', varianceReason: '' } : {}) })
-                }} required step="1" type="number" value={line.countedMmk} /></label>
-                <div className="form-notice"><strong>Expected {formatMoney(expectedMmk)}</strong><br />{varianceMmk === null ? 'Enter whole MMK' : varianceMmk === 0 ? 'Matched' : `Variance ${varianceMmk > 0 ? '+' : ''}${formatMoney(varianceMmk)}`}</div>
-              </div>
-              {varianceMmk !== null && varianceMmk !== 0 ? <div className="form-row">
-                <label>Variance owner<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => update({ varianceOwner: event.target.value })} placeholder="Responsible person" required value={line.varianceOwner} /></label>
-                <label>Review reason<input disabled={commerceControlsDisabled} maxLength={240} onChange={(event) => update({ varianceReason: event.target.value })} placeholder="Why the count differs and what happens next" required value={line.varianceReason} /></label>
-              </div> : null}
-            </div>
-          }) : <p className="form-notice">No reconciled payments are waiting. Save a zero-value close only if the business date still needs an accountable snapshot.</p>}
-          <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
-        </section>
-      </details>
-      <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
-      <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
-      {latestClose?.operator ? <details className="compact-disclosure">
-        <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
-        <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
-        <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
-        {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
-        {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
-        {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
-          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
-          <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href} onClick={() => emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })}>Download accounting CSV</a>
-        </div> : null}
-      </details> : null}
       {actionHistory}
     </div>
   </details>
+  {/* Design phase 2 item 4: counting the drawer is the ritual that sells this
+      product against a paper notebook, so it is a first-class section rather
+      than the tail of a policy accordion. The anchor id moves with it, keeping
+      the /shop/?tab=orders#shop-close-controls deep links working. */}
+  <section aria-labelledby="shop-close-heading" className="core-panel shop-close-day" id="shop-close-controls">
+    <div className="section-head"><h2 id="shop-close-heading">Close the day</h2><small>{closableOrders.length ? `${closableOrders.length} ready` : latestClose ? 'Today is closed' : 'Nothing to close yet'}</small></div>
+    <details className="compact-disclosure" data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
+      <summary><span>Settlement count</span><small>{closePreview ? `${closeExpectedByPayment.size} payment method${closeExpectedByPayment.size === 1 ? '' : 's'} · ${closeSettlement?.status === 'matched' ? 'matched' : closeSettlement?.status === 'variance_review' ? 'variance needs review' : 'complete the count'}` : 'No open close'}</small></summary>
+      <section aria-label="Daily settlement count" className="core-form compact-form">
+        {effectiveCloseSettlementDraft.length ? effectiveCloseSettlementDraft.map((line) => {
+          const expectedMmk = closeExpectedByPayment.get(line.paymentMethod) ?? 0
+          const countedMmk = /^(?:0|[1-9]\d*)$/.test(line.countedMmk) ? Number(line.countedMmk) : null
+          const varianceMmk = countedMmk !== null && Number.isSafeInteger(countedMmk) ? countedMmk - expectedMmk : null
+          const update = (changes: Partial<CloseSettlementDraftLine>) => setCloseSettlementDraft(
+            effectiveCloseSettlementDraft.map((candidate) => candidate.paymentMethod === line.paymentMethod ? { ...candidate, ...changes } : candidate),
+          )
+          return <div className="settlement-method" data-variance={varianceMmk === 0 ? 'matched' : 'review'} key={line.paymentMethod}>
+            <div className="form-row">
+              <label>{line.paymentMethod} counted<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => {
+                const countedMmk = event.target.value
+                update({ countedMmk, ...(Number(countedMmk) === expectedMmk ? { varianceOwner: '', varianceReason: '' } : {}) })
+              }} required step="1" type="number" value={line.countedMmk} /></label>
+              <div className="form-notice"><strong>Expected {formatMoney(expectedMmk)}</strong><br />{varianceMmk === null ? 'Enter whole MMK' : varianceMmk === 0 ? 'Matched' : `Variance ${varianceMmk > 0 ? '+' : ''}${formatMoney(varianceMmk)}`}</div>
+            </div>
+            {varianceMmk !== null && varianceMmk !== 0 ? <div className="form-row">
+              <label>Variance owner<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => update({ varianceOwner: event.target.value })} placeholder="Responsible person" required value={line.varianceOwner} /></label>
+              <label>Review reason<input disabled={commerceControlsDisabled} maxLength={240} onChange={(event) => update({ varianceReason: event.target.value })} placeholder="Why the count differs and what happens next" required value={line.varianceReason} /></label>
+            </div> : null}
+          </div>
+        }) : <p className="form-notice">No reconciled payments are waiting. Save a zero-value close only if the business date still needs an accountable snapshot.</p>}
+        <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
+      </section>
+    </details>
+    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
+    <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
+    {latestClose?.operator ? <details className="compact-disclosure">
+      <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
+      <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
+      <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
+      {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
+      {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
+      {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
+        <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
+        <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href} onClick={() => emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })}>Download accounting CSV</a>
+      </div> : null}
+    </details> : null}
+  </section>
   <Suspense fallback={null}><ReceiptDialog ack={receiptAck} onClose={() => setReceiptAck(null)} /></Suspense>
   {actionGate}</div>
 
