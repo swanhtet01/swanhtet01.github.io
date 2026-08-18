@@ -26,8 +26,23 @@
     "sharedCoreNoClientForks": true,
     "plannedModulesMayNotBeSoldAsAvailable": true,
     "maxEnabledModulesAtLaunch": 6,
-    "lifecycle": ["choose-pack", "map-import", "preview-sample", "named-operator-pilot", "prove-outcome", "managed-activation", "measure-and-iterate"],
-    "importWorkflow": ["upload", "map", "validate", "preview", "named-human-confirm", "activate"]
+    "lifecycle": [
+      "choose-pack",
+      "map-import",
+      "preview-sample",
+      "named-operator-pilot",
+      "prove-outcome",
+      "managed-activation",
+      "measure-and-iterate"
+    ],
+    "importWorkflow": [
+      "upload",
+      "map",
+      "validate",
+      "preview",
+      "named-human-confirm",
+      "activate"
+    ]
   },
   "customerProducts": [
     {
@@ -49,26 +64,160 @@
         "url": "/contact/?product=shop"
       },
       "modules": [
-        "Counter sales and cart",
-        "Orders, fulfilment, and returns",
-        "Stock, lots, receipts, and counts",
-        "Daily close and evidence"
+        "Counter sales — ring up a sale, take Cash, KBZPay or WavePay, stock falls on its own",
+        "Appointment book — treatments and services against staff and rooms, double-booking refused",
+        "Orders, returns and refunds — hold, hand over, and issue a credit note when something comes back",
+        "Stock and reorder levels — lots, counts and movement history, told before you run out",
+        "Purchasing and receiving — requisitions, approvals, purchase orders, 3-way invoice match",
+        "Suppliers and money owed (AP) — supplier scoring, ageing, payables handoff",
+        "Customer credit (AR) — terms, exposure checks at order time, ageing and collections",
+        "Daily close — count the drawer against the day, keep every difference with its reason",
+        "General ledger — 14 bilingual accounts, balanced by construction, no manual entries",
+        "Monthly statement — profit and loss in plain language, not accountant words",
+        "Accounting export — a balanced, sealed packet your accountant can check",
+        "Tax engine — effective-dated rates and digest-checked order calculations",
+        "9 Myanmar trade templates — mini-mart, pharmacy, phone, fashion, hardware, tea shop, auto parts, restaurant, spa",
+        "Sales and stock insight — 7/30-day trends, payment mix, what to do next"
       ],
       "internalTemplatePacks": [
-        {"id": "retail", "name": "Retail", "status": "core-compatible", "workflowTemplateId": "retail-wholesale", "entryPoint": "Walk-in", "firstWorkflow": "counter sale and reviewed pickup", "availableNow": ["Sell", "Orders", "Stock", "Purchasing", "Returns", "Pickup schedule"], "plannedNext": ["Promotions", "Loyalty"]},
-        {"id": "cafe", "name": "Cafe", "status": "core-compatible", "workflowTemplateId": "restaurant-ordering", "entryPoint": "Walk-in", "firstWorkflow": "counter order and collection slot", "availableNow": ["Sell", "Orders", "Stock", "Daily close", "Collection schedule"], "plannedNext": ["Menu modifiers", "Kitchen tickets"]},
-        {"id": "restaurant", "name": "Restaurant", "status": "core-compatible", "workflowTemplateId": "restaurant-ordering", "entryPoint": "Walk-in", "firstWorkflow": "order and table reservation", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Reservations"], "plannedNext": ["Table map", "Kitchen display"]},
-        {"id": "spa", "name": "Spa", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "treatment appointment", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Appointments", "Service resources"], "plannedNext": ["Staff commission", "Customer messaging"]},
-        {"id": "gym", "name": "Gym", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "personal training session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Training schedule", "Staff resources"], "plannedNext": ["Memberships", "Facility check-in"]},
-        {"id": "school", "name": "School", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "enrollment consultation or class session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Class schedule", "Teacher resources"], "plannedNext": ["Students", "Fees ledger", "Attendance"]}
+        {
+          "id": "retail",
+          "name": "Retail",
+          "status": "core-compatible",
+          "workflowTemplateId": "retail-wholesale",
+          "entryPoint": "Walk-in",
+          "firstWorkflow": "counter sale and reviewed pickup",
+          "availableNow": [
+            "Sell",
+            "Orders",
+            "Stock",
+            "Purchasing",
+            "Returns",
+            "Pickup schedule"
+          ],
+          "plannedNext": [
+            "Promotions",
+            "Loyalty"
+          ]
+        },
+        {
+          "id": "cafe",
+          "name": "Cafe",
+          "status": "core-compatible",
+          "workflowTemplateId": "restaurant-ordering",
+          "entryPoint": "Walk-in",
+          "firstWorkflow": "counter order and collection slot",
+          "availableNow": [
+            "Sell",
+            "Orders",
+            "Stock",
+            "Daily close",
+            "Collection schedule"
+          ],
+          "plannedNext": [
+            "Menu modifiers",
+            "Kitchen tickets"
+          ]
+        },
+        {
+          "id": "restaurant",
+          "name": "Restaurant",
+          "status": "core-compatible",
+          "workflowTemplateId": "restaurant-ordering",
+          "entryPoint": "Walk-in",
+          "firstWorkflow": "order and table reservation",
+          "availableNow": [
+            "Sell",
+            "Orders",
+            "Stock",
+            "Payments",
+            "Reservations"
+          ],
+          "plannedNext": [
+            "Table map",
+            "Kitchen display"
+          ]
+        },
+        {
+          "id": "spa",
+          "name": "Spa",
+          "status": "core-compatible",
+          "workflowTemplateId": "social-commerce",
+          "entryPoint": "Phone",
+          "firstWorkflow": "treatment appointment",
+          "availableNow": [
+            "Sell",
+            "Orders",
+            "Stock",
+            "Payments",
+            "Appointments",
+            "Service resources"
+          ],
+          "plannedNext": [
+            "Staff commission",
+            "Customer messaging"
+          ]
+        },
+        {
+          "id": "gym",
+          "name": "Gym",
+          "status": "core-compatible",
+          "workflowTemplateId": "social-commerce",
+          "entryPoint": "Phone",
+          "firstWorkflow": "personal training session",
+          "availableNow": [
+            "Sell",
+            "Orders",
+            "Stock",
+            "Payments",
+            "Training schedule",
+            "Staff resources"
+          ],
+          "plannedNext": [
+            "Memberships",
+            "Facility check-in"
+          ]
+        },
+        {
+          "id": "school",
+          "name": "School",
+          "status": "core-compatible",
+          "workflowTemplateId": "social-commerce",
+          "entryPoint": "Phone",
+          "firstWorkflow": "enrollment consultation or class session",
+          "availableNow": [
+            "Sell",
+            "Orders",
+            "Stock",
+            "Payments",
+            "Class schedule",
+            "Teacher resources"
+          ],
+          "plannedNext": [
+            "Students",
+            "Fees ledger",
+            "Attendance"
+          ]
+        }
       ],
       "templates": [
         {
           "id": "social-commerce",
           "name": "Social commerce",
           "outcome": "Convert trusted chat channels into structured orders, stock movement, fulfilment, and follow-up.",
-          "workflow": ["Capture conversation", "Confirm order", "Reserve stock", "Fulfil", "Collect payment", "Follow up"],
-          "entryPoints": ["Messenger", "Viber", "Phone"],
+          "workflow": [
+            "Capture conversation",
+            "Confirm order",
+            "Reserve stock",
+            "Fulfil",
+            "Collect payment",
+            "Follow up"
+          ],
+          "entryPoints": [
+            "Messenger",
+            "Viber",
+            "Phone"
+          ],
           "metric": "Order handling time and completion rate",
           "provisioningRecipe": {
             "contract": "supermega.client_provisioning_recipe.v1",
@@ -77,25 +226,47 @@
             "productId": "shop",
             "runtimeProductId": "commerce",
             "templateId": "social-commerce",
-            "compatibleFromVersions": [0, 1],
+            "compatibleFromVersions": [
+              0,
+              1
+            ],
             "roles": [
               {
                 "id": "owner",
                 "label": "Shop owner",
                 "actorKind": "human",
-                "capabilities": ["setup.read", "setup.write", "commerce.read", "commerce.write", "company.read", "company.write", "company.baseline.approve", "company.control.approve", "approvals.read", "approvals.request", "approvals.decide"]
+                "capabilities": [
+                  "setup.read",
+                  "setup.write",
+                  "commerce.read",
+                  "commerce.write",
+                  "company.read",
+                  "company.write",
+                  "company.baseline.approve",
+                  "company.control.approve",
+                  "approvals.read",
+                  "approvals.request",
+                  "approvals.decide"
+                ]
               },
               {
                 "id": "order-operator",
                 "label": "Order operator",
                 "actorKind": "human",
-                "capabilities": ["commerce.read", "commerce.write", "approvals.request"]
+                "capabilities": [
+                  "commerce.read",
+                  "commerce.write",
+                  "approvals.request"
+                ]
               },
               {
                 "id": "stock-keeper",
                 "label": "Stock keeper",
                 "actorKind": "human",
-                "capabilities": ["commerce.read", "commerce.write"]
+                "capabilities": [
+                  "commerce.read",
+                  "commerce.write"
+                ]
               }
             ],
             "objects": [
@@ -125,14 +296,53 @@
               {
                 "id": "order-fulfilment",
                 "initialState": "confirmed",
-                "terminalStates": ["completed", "cancelled"],
+                "terminalStates": [
+                  "completed",
+                  "cancelled"
+                ],
                 "transitions": [
-                  {"id": "start-preparation", "fromState": "confirmed", "toState": "preparing", "event": "commerce.order.advanced", "approval": "named-human"},
-                  {"id": "mark-ready", "fromState": "preparing", "toState": "ready", "event": "commerce.order.advanced", "approval": "named-human"},
-                  {"id": "complete-paid-order", "fromState": "ready", "toState": "completed", "event": "commerce.order.advanced", "approval": "named-human"},
-                  {"id": "cancel-confirmed", "fromState": "confirmed", "toState": "cancelled", "event": "commerce.order.cancelled", "approval": "named-human"},
-                  {"id": "cancel-preparing", "fromState": "preparing", "toState": "cancelled", "event": "commerce.order.cancelled", "approval": "named-human"},
-                  {"id": "cancel-ready", "fromState": "ready", "toState": "cancelled", "event": "commerce.order.cancelled", "approval": "named-human"}
+                  {
+                    "id": "start-preparation",
+                    "fromState": "confirmed",
+                    "toState": "preparing",
+                    "event": "commerce.order.advanced",
+                    "approval": "named-human"
+                  },
+                  {
+                    "id": "mark-ready",
+                    "fromState": "preparing",
+                    "toState": "ready",
+                    "event": "commerce.order.advanced",
+                    "approval": "named-human"
+                  },
+                  {
+                    "id": "complete-paid-order",
+                    "fromState": "ready",
+                    "toState": "completed",
+                    "event": "commerce.order.advanced",
+                    "approval": "named-human"
+                  },
+                  {
+                    "id": "cancel-confirmed",
+                    "fromState": "confirmed",
+                    "toState": "cancelled",
+                    "event": "commerce.order.cancelled",
+                    "approval": "named-human"
+                  },
+                  {
+                    "id": "cancel-preparing",
+                    "fromState": "preparing",
+                    "toState": "cancelled",
+                    "event": "commerce.order.cancelled",
+                    "approval": "named-human"
+                  },
+                  {
+                    "id": "cancel-ready",
+                    "fromState": "ready",
+                    "toState": "cancelled",
+                    "event": "commerce.order.cancelled",
+                    "approval": "named-human"
+                  }
                 ]
               }
             ],
@@ -142,11 +352,46 @@
                 "objectId": "shop-catalog",
                 "workflowTemplateId": "social-commerce",
                 "fields": [
-                  {"target": "sku", "sourceAliases": ["sku", "item_code", "product_code"]},
-                  {"target": "name", "sourceAliases": ["name", "item_name", "product_name"]},
-                  {"target": "onHand", "sourceAliases": ["on_hand", "opening_stock", "quantity"]},
-                  {"target": "reorderAt", "sourceAliases": ["reorder_at", "minimum_stock", "reorder_level"]},
-                  {"target": "price", "sourceAliases": ["price", "price_mmk", "selling_price"]}
+                  {
+                    "target": "sku",
+                    "sourceAliases": [
+                      "sku",
+                      "item_code",
+                      "product_code"
+                    ]
+                  },
+                  {
+                    "target": "name",
+                    "sourceAliases": [
+                      "name",
+                      "item_name",
+                      "product_name"
+                    ]
+                  },
+                  {
+                    "target": "onHand",
+                    "sourceAliases": [
+                      "on_hand",
+                      "opening_stock",
+                      "quantity"
+                    ]
+                  },
+                  {
+                    "target": "reorderAt",
+                    "sourceAliases": [
+                      "reorder_at",
+                      "minimum_stock",
+                      "reorder_level"
+                    ]
+                  },
+                  {
+                    "target": "price",
+                    "sourceAliases": [
+                      "price",
+                      "price_mmk",
+                      "selling_price"
+                    ]
+                  }
                 ],
                 "previewRequired": true,
                 "humanConfirmationRequired": true
@@ -157,24 +402,59 @@
               "primaryAction": "Review the earliest promised order",
               "maxVisiblePanels": 3,
               "panels": [
-                {"id": "orders-next", "sourceId": "shop-orders", "label": "Orders needing the next step"},
-                {"id": "stock-exceptions", "sourceId": "shop-catalog", "label": "Stock below reorder"},
-                {"id": "evidence-gaps", "sourceId": "shop-evidence", "label": "Actions missing evidence"}
+                {
+                  "id": "orders-next",
+                  "sourceId": "shop-orders",
+                  "label": "Orders needing the next step"
+                },
+                {
+                  "id": "stock-exceptions",
+                  "sourceId": "shop-catalog",
+                  "label": "Stock below reorder"
+                },
+                {
+                  "id": "evidence-gaps",
+                  "sourceId": "shop-evidence",
+                  "label": "Actions missing evidence"
+                }
               ]
             },
             "acceptanceChecks": [
-              {"id": "deterministic-plan", "kind": "contract", "required": true},
-              {"id": "compatible-upgrade", "kind": "migration", "required": true},
-              {"id": "digest-bound-rollback", "kind": "rollback", "required": true},
-              {"id": "zero-unapproved-writes", "kind": "security", "required": true},
-              {"id": "task-first-mobile-flow", "kind": "usability", "required": true}
+              {
+                "id": "deterministic-plan",
+                "kind": "contract",
+                "required": true
+              },
+              {
+                "id": "compatible-upgrade",
+                "kind": "migration",
+                "required": true
+              },
+              {
+                "id": "digest-bound-rollback",
+                "kind": "rollback",
+                "required": true
+              },
+              {
+                "id": "zero-unapproved-writes",
+                "kind": "security",
+                "required": true
+              },
+              {
+                "id": "task-first-mobile-flow",
+                "kind": "usability",
+                "required": true
+              }
             ],
             "migrations": [
               {
                 "fromVersion": 0,
                 "toVersion": 1,
                 "steps": [
-                  {"id": "introduce-social-commerce-recipe", "operation": "plan-create-resources"}
+                  {
+                    "id": "introduce-social-commerce-recipe",
+                    "operation": "plan-create-resources"
+                  }
                 ]
               }
             ],
@@ -183,8 +463,14 @@
               "requiresExactPlanDigest": true,
               "requiresHumanApproval": true,
               "steps": [
-                {"id": "verify-plan-identity", "operation": "assert-plan-digest"},
-                {"id": "restore-reviewed-snapshot", "operation": "plan-restore-snapshot"}
+                {
+                  "id": "verify-plan-identity",
+                  "operation": "assert-plan-digest"
+                },
+                {
+                  "id": "restore-reviewed-snapshot",
+                  "operation": "plan-restore-snapshot"
+                }
               ]
             }
           }
@@ -193,16 +479,39 @@
           "id": "retail-wholesale",
           "name": "Retail and wholesale",
           "outcome": "Control customer orders, stock, payment, delivery, and daily reconciliation.",
-          "workflow": ["Capture order", "Allocate stock", "Pick", "Reconcile payment", "Deliver", "Close"],
-          "entryPoints": ["Walk-in", "Phone", "Spreadsheet"],
+          "workflow": [
+            "Capture order",
+            "Allocate stock",
+            "Pick",
+            "Reconcile payment",
+            "Deliver",
+            "Close"
+          ],
+          "entryPoints": [
+            "Walk-in",
+            "Phone",
+            "Spreadsheet"
+          ],
           "metric": "Pick-to-close time and stock variance"
         },
         {
           "id": "restaurant-ordering",
           "name": "Restaurant ordering",
           "outcome": "Coordinate channel orders, preparation, handoff, delivery, payment, and close.",
-          "workflow": ["Capture channel order", "Confirm", "Prepare", "Handoff", "Deliver", "Close"],
-          "entryPoints": ["Messenger", "Phone", "Website", "Walk-in"],
+          "workflow": [
+            "Capture channel order",
+            "Confirm",
+            "Prepare",
+            "Handoff",
+            "Deliver",
+            "Close"
+          ],
+          "entryPoints": [
+            "Messenger",
+            "Phone",
+            "Website",
+            "Walk-in"
+          ],
           "metric": "Order-to-handoff time and exception rate"
         }
       ]
@@ -226,40 +535,165 @@
         "url": "/contact/?product=plant"
       },
       "modules": [
-        "Jobs: recurring plans, targets and confirmed output",
-        "Problems: quality, materials, equipment and maintenance",
-        "Accountability: shift evidence, owner review and recovery"
+        "Production jobs — plans, targets, named owner, due time, full change history",
+        "Controlled batch execution — every command hash-chained, replay validated on load",
+        "Recipes and Shop stock mapping — each material bound to a real Shop SKU, no name matching",
+        "Routing and work centres — sequential steps that cannot report more than the step before",
+        "Calibration gates — a batch cannot be released while any work centre is out of calibration",
+        "Material issue and lot binding — issue against the released lot, reviewed substitutions only",
+        "Quality holds, issues and CAPA — inspection holds, root cause, recurrence detection",
+        "Maintenance — interval strategies, due queue, return-to-service checks",
+        "Downtime and machine state — observed intervals feeding effectiveness",
+        "Shift close — cannot close over an open hold, issue, or downtime",
+        "Batch trace and recall — follow a lot up and down the chain, with an honest completeness verdict",
+        "Equipment register — assets, guarded import, commissioning with a safety baseline"
       ],
       "internalTemplatePacks": [
-        {"id": "general-manufacturing", "name": "General manufacturing", "status": "core-compatible", "firstWorkflow": "plan and record output", "availableNow": ["Jobs", "Output", "Materials", "Problems", "Quality", "Maintenance"], "plannedNext": ["Finite scheduling", "Cost rollup"]},
-        {"id": "batch-process", "name": "Batch and process", "status": "core-compatible", "firstWorkflow": "run controlled batch", "availableNow": ["Jobs", "Batch control", "Materials", "Quality holds", "Output", "Shift handoff"], "plannedNext": ["Formula scaling", "Yield variance"]},
-        {"id": "food-beverage", "name": "Food and beverage", "status": "core-compatible", "firstWorkflow": "make and release batch", "availableNow": ["Jobs", "Batch control", "Materials", "Quality holds", "Output", "Maintenance"], "plannedNext": ["Expiry", "Allergen controls", "Recall trace"]},
-        {"id": "apparel", "name": "Apparel", "status": "core-compatible", "firstWorkflow": "run style order", "availableNow": ["Jobs", "Output", "Materials", "Problems", "Quality", "Shift handoff"], "plannedNext": ["Size-color matrix", "Cut and sew WIP"]},
-        {"id": "assembly", "name": "Assembly", "status": "core-compatible", "firstWorkflow": "build and inspect order", "availableNow": ["Jobs", "Batch control", "Materials", "Quality holds", "Output", "Maintenance"], "plannedNext": ["Serial tracking", "Work instructions"]}
+        {
+          "id": "general-manufacturing",
+          "name": "General manufacturing",
+          "status": "core-compatible",
+          "firstWorkflow": "plan and record output",
+          "availableNow": [
+            "Jobs",
+            "Output",
+            "Materials",
+            "Problems",
+            "Quality",
+            "Maintenance"
+          ],
+          "plannedNext": [
+            "Finite scheduling",
+            "Cost rollup"
+          ]
+        },
+        {
+          "id": "batch-process",
+          "name": "Batch and process",
+          "status": "core-compatible",
+          "firstWorkflow": "run controlled batch",
+          "availableNow": [
+            "Jobs",
+            "Batch control",
+            "Materials",
+            "Quality holds",
+            "Output",
+            "Shift handoff"
+          ],
+          "plannedNext": [
+            "Formula scaling",
+            "Yield variance"
+          ]
+        },
+        {
+          "id": "food-beverage",
+          "name": "Food and beverage",
+          "status": "core-compatible",
+          "firstWorkflow": "make and release batch",
+          "availableNow": [
+            "Jobs",
+            "Batch control",
+            "Materials",
+            "Quality holds",
+            "Output",
+            "Maintenance"
+          ],
+          "plannedNext": [
+            "Expiry",
+            "Allergen controls",
+            "Recall trace"
+          ]
+        },
+        {
+          "id": "apparel",
+          "name": "Apparel",
+          "status": "core-compatible",
+          "firstWorkflow": "run style order",
+          "availableNow": [
+            "Jobs",
+            "Output",
+            "Materials",
+            "Problems",
+            "Quality",
+            "Shift handoff"
+          ],
+          "plannedNext": [
+            "Size-color matrix",
+            "Cut and sew WIP"
+          ]
+        },
+        {
+          "id": "assembly",
+          "name": "Assembly",
+          "status": "core-compatible",
+          "firstWorkflow": "build and inspect order",
+          "availableNow": [
+            "Jobs",
+            "Batch control",
+            "Materials",
+            "Quality holds",
+            "Output",
+            "Maintenance"
+          ],
+          "plannedNext": [
+            "Serial tracking",
+            "Work instructions"
+          ]
+        }
       ],
       "templates": [
         {
           "id": "production-control",
           "name": "Production control",
           "outcome": "Plan, run, confirm, and review output by line, shift, and product.",
-          "workflow": ["Plan", "Run", "Confirm output", "Quality check", "Shift close"],
-          "entryPoints": ["Shift sheet", "Spreadsheet", "ERP export"],
+          "workflow": [
+            "Plan",
+            "Run",
+            "Confirm output",
+            "Quality check",
+            "Shift close"
+          ],
+          "entryPoints": [
+            "Shift sheet",
+            "Spreadsheet",
+            "ERP export"
+          ],
           "metric": "Plan attainment and confirmed good output"
         },
         {
           "id": "maintenance-downtime",
           "name": "Maintenance and downtime",
           "outcome": "Record machine state, stoppages, ownership, repair, and return to service.",
-          "workflow": ["Detect", "Assign", "Repair", "Test", "Return to service"],
-          "entryPoints": ["Machine log", "Supervisor handoff", "Paper form"],
+          "workflow": [
+            "Detect",
+            "Assign",
+            "Repair",
+            "Test",
+            "Return to service"
+          ],
+          "entryPoints": [
+            "Machine log",
+            "Supervisor handoff",
+            "Paper form"
+          ],
           "metric": "Downtime and mean time to restore"
         },
         {
           "id": "quality-traceability",
           "name": "Quality and traceability",
           "outcome": "Capture checks, exceptions, evidence, approval, and lot history.",
-          "workflow": ["Inspect", "Hold", "Investigate", "Approve", "Trace"],
-          "entryPoints": ["Quality sheet", "Paper form", "ERP export"],
+          "workflow": [
+            "Inspect",
+            "Hold",
+            "Investigate",
+            "Approve",
+            "Trace"
+          ],
+          "entryPoints": [
+            "Quality sheet",
+            "Paper form",
+            "ERP export"
+          ],
           "metric": "Exception closure time and trace completeness"
         }
       ]
@@ -275,36 +709,101 @@
       "eyebrow": "Website maker",
       "headline": "Build a simple company website from a brief.",
       "workspaceSchema": "supermega.website.workspace.v2",
-      "views": ["Start", "Edit", "Preview", "Download"],
-      "workflow": ["Answer a short business brief", "Edit finite pages", "Review responsive preview", "Save ready pages", "Download standalone website", "Request managed hosting when needed"],
+      "views": [
+        "Start",
+        "Edit",
+        "Preview",
+        "Download"
+      ],
+      "workflow": [
+        "Answer a short business brief",
+        "Edit finite pages",
+        "Review responsive preview",
+        "Save ready pages",
+        "Download standalone website",
+        "Request managed hosting when needed"
+      ],
       "templates": [
         {
           "id": "business-presence",
           "name": "Business presence",
           "outcome": "Create a clear mobile-first company website with services, proof, and one contact path.",
-          "workflow": ["Define audience", "Shape offer", "Add proof", "Review mobile", "Download website"],
-          "entryPoints": ["Business brief", "Existing website", "Company profile"],
+          "workflow": [
+            "Define audience",
+            "Shape offer",
+            "Add proof",
+            "Review mobile",
+            "Download website"
+          ],
+          "entryPoints": [
+            "Business brief",
+            "Existing website",
+            "Company profile"
+          ],
           "metric": "Time to first usable website download and qualified contact starts"
         },
         {
           "id": "lead-generation",
           "name": "Lead generation",
           "outcome": "Turn one offer into a focused landing experience with attributable proof and enquiry intent.",
-          "workflow": ["Choose offer", "Write promise", "Add evidence", "Review conversion path", "Download website"],
-          "entryPoints": ["Campaign brief", "Sales deck", "Service list"],
+          "workflow": [
+            "Choose offer",
+            "Write promise",
+            "Add evidence",
+            "Review conversion path",
+            "Download website"
+          ],
+          "entryPoints": [
+            "Campaign brief",
+            "Sales deck",
+            "Service list"
+          ],
           "metric": "Qualified enquiry rate and response readiness"
         },
         {
           "id": "catalog-showcase",
           "name": "Catalog showcase",
           "outcome": "Present a finite product or service collection and route approved interest into accountable follow-up.",
-          "workflow": ["Structure collection", "Add product proof", "Review navigation", "Test enquiry path", "Download website"],
-          "entryPoints": ["Catalog CSV", "Product sheet", "Existing brochure"],
+          "workflow": [
+            "Structure collection",
+            "Add product proof",
+            "Review navigation",
+            "Test enquiry path",
+            "Download website"
+          ],
+          "entryPoints": [
+            "Catalog CSV",
+            "Product sheet",
+            "Existing brochure"
+          ],
           "metric": "Catalog completion and enquiry handoff accuracy"
         }
       ],
-      "proof": ["Content revision", "Safe destination checks", "Responsive preview", "Standalone HTML export", "Confirmed browser write", "Managed approval history when connected"],
-      "boundaries": ["No CMS", "No domain write", "No analytics connection", "No deployment", "No customer send", "No payment action"]
+      "proof": [
+        "Content revision",
+        "Safe destination checks",
+        "Responsive preview",
+        "Standalone HTML export",
+        "Confirmed browser write",
+        "Managed approval history when connected"
+      ],
+      "boundaries": [
+        "No CMS",
+        "No domain write",
+        "No analytics connection",
+        "No deployment",
+        "No customer send",
+        "No payment action"
+      ],
+      "description": "Draft a simple, mobile-first company website from what your shop already knows, approve it, and download the whole site to keep.",
+      "modules": [
+        "Site drafted from your trade — copy written from facts your shop can actually support",
+        "Page and menu editor — bounded, schema-checked, with device previews",
+        "Approve before publish — publishing is refused until the exact content was approved",
+        "Download your site — a single, self-contained file you own outright",
+        "Enquiry inbox — capture and review leads with a consent flag",
+        "Page details for search — titles and descriptions per page"
+      ]
     },
     {
       "id": "ecommerce",
@@ -316,36 +815,114 @@
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
       "headline": "Create an online ordering page connected to Shop.",
-      "views": ["Storefront", "Cart and quote", "Request receipt", "Shop review", "Returns"],
-      "workflow": ["Choose Shop-backed products", "Build cart", "Select pickup or delivery intent", "Review a 15-minute whole-MMK quote", "Save a recoverable request receipt", "Confirm exact Shop handoff", "Complete payment, fulfilment, returns, and refunds in Shop"],
+      "views": [
+        "Storefront",
+        "Cart and quote",
+        "Request receipt",
+        "Shop review",
+        "Returns"
+      ],
+      "workflow": [
+        "Choose Shop-backed products",
+        "Build cart",
+        "Select pickup or delivery intent",
+        "Review a 15-minute whole-MMK quote",
+        "Save a recoverable request receipt",
+        "Confirm exact Shop handoff",
+        "Complete payment, fulfilment, returns, and refunds in Shop"
+      ],
       "templates": [
         {
           "id": "social-storefront",
           "name": "Social storefront",
           "outcome": "Give chat-first sellers a focused Shop-backed catalog and a reviewable order-request handoff.",
-          "workflow": ["Select Shop items", "Merchandise collection", "Review mobile", "Capture request", "Confirm in Shop"],
-          "entryPoints": ["Shop catalog", "Social product list", "Campaign collection"],
+          "workflow": [
+            "Select Shop items",
+            "Merchandise collection",
+            "Review mobile",
+            "Capture request",
+            "Confirm in Shop"
+          ],
+          "entryPoints": [
+            "Shop catalog",
+            "Social product list",
+            "Campaign collection"
+          ],
           "metric": "Request completion and Shop confirmation time"
         },
         {
           "id": "pickup-preorder",
           "name": "Pickup and preorder",
           "outcome": "Collect product intent for pickup or preorder without creating payment or stock side effects.",
-          "workflow": ["Select availability", "Set collection", "Capture intent", "Review promise", "Confirm in Shop"],
-          "entryPoints": ["Shop catalog", "Preorder sheet", "Store collection"],
+          "workflow": [
+            "Select availability",
+            "Set collection",
+            "Capture intent",
+            "Review promise",
+            "Confirm in Shop"
+          ],
+          "entryPoints": [
+            "Shop catalog",
+            "Preorder sheet",
+            "Store collection"
+          ],
           "metric": "Confirmed request rate and promise accuracy"
         },
         {
           "id": "wholesale-request",
           "name": "Wholesale request",
           "outcome": "Present a controlled wholesale assortment and hand quantity requests to a named Shop reviewer.",
-          "workflow": ["Choose assortment", "Add trade context", "Capture quantities", "Review buyer details", "Confirm in Shop"],
-          "entryPoints": ["Shop catalog", "Wholesale list", "Buyer request sheet"],
+          "workflow": [
+            "Choose assortment",
+            "Add trade context",
+            "Capture quantities",
+            "Review buyer details",
+            "Confirm in Shop"
+          ],
+          "entryPoints": [
+            "Shop catalog",
+            "Wholesale list",
+            "Buyer request sheet"
+          ],
           "metric": "Qualified wholesale requests and review cycle time"
         }
       ],
-      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Deterministic 15-minute checkout quote", "Recoverable cart and request state", "Exact retained-ledger membership", "Idempotent receipt and exact managed replay", "Revision, action-identity, and cross-tenant conflict rejection", "Bootstrap recovery", "Unchanged Shop orders and stock movements", "Human-confirmed source-locked Shop draft", "Payment remains unauthorized before Shop", "23 Ecommerce buying runtime checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"],
-      "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No payment authorization or charge", "Delivery stays an intent until Shop confirms fee and fulfilment", "Returns and refunds are completed in Shop", "No customer send", "No publishing", "No external write"]
+      "proof": [
+        "Read-only Shop catalogue snapshot",
+        "Locked price and availability projection",
+        "Deterministic SHA-256 preview digest",
+        "Deterministic 15-minute checkout quote",
+        "Recoverable cart and request state",
+        "Exact retained-ledger membership",
+        "Idempotent receipt and exact managed replay",
+        "Revision, action-identity, and cross-tenant conflict rejection",
+        "Bootstrap recovery",
+        "Unchanged Shop orders and stock movements",
+        "Human-confirmed source-locked Shop draft",
+        "Payment remains unauthorized before Shop",
+        "23 Ecommerce buying runtime checks",
+        "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"
+      ],
+      "boundaries": [
+        "No duplicate stock ledger",
+        "No isolated hosted tenant proof",
+        "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale",
+        "No Shop order or stock reservation before separate accountable confirmation",
+        "No payment authorization or charge",
+        "Delivery stays an intent until Shop confirms fee and fulfilment",
+        "Returns and refunds are completed in Shop",
+        "No customer send",
+        "No publishing",
+        "No external write"
+      ],
+      "description": "Show your Shop catalog online and take order requests a person reviews — stock and price stay bound to the real Shop record.",
+      "modules": [
+        "Storefront from real stock — the catalog is sealed to Shop, so it cannot show what you do not have",
+        "Checkout quote — price, delivery and tax decided from Shop policies, valid for 15 minutes",
+        "Request, not an order — a person in Shop confirms before anything is reserved or charged",
+        "After the order — returns, support, changes, cancellation, reschedule and corrections",
+        "Pay-on-pickup, cash on delivery and manual KBZPay — no card capture, nothing charged automatically"
+      ]
     }
   ],
   "sharedCapabilities": [
@@ -357,38 +934,143 @@
       "status": "gated-r-and-d",
       "firstWorkflow": "Order Intake",
       "headline": "Prepare bounded work, then let the responsible person decide.",
-      "workflow": ["Choose approved input", "Create structured draft", "Show provenance", "Review or edit", "Approve or discard"],
-      "boundaries": ["No autonomous send", "No payment", "No publish", "No deployment", "No access change", "No production or machine write"]
+      "workflow": [
+        "Choose approved input",
+        "Create structured draft",
+        "Show provenance",
+        "Review or edit",
+        "Approve or discard"
+      ],
+      "boundaries": [
+        "No autonomous send",
+        "No payment",
+        "No publish",
+        "No deployment",
+        "No access change",
+        "No production or machine write"
+      ]
     }
   ],
   "pages": [
-    { "route": "/", "file": "index.html", "title": "SuperMega | Four products" },
-    { "route": "/shop/", "file": "shop/index.html", "title": "Shop | Sell, track stock, and close the day | SuperMega", "productId": "shop", "liveGate": "post-release" },
-    { "route": "/plant/", "file": "plant/index.html", "title": "Plant | Plan jobs, record output, and close shifts | SuperMega", "productId": "plant", "liveGate": "post-release" },
-    { "route": "/website/", "file": "website/index.html", "title": "Website | Build a simple company website from a brief | SuperMega", "productId": "website", "liveGate": "post-release", "description": "Answer a short business brief, edit finite pages, review a responsive preview, and download a standalone website. Request managed hosting when needed." },
-    { "route": "/ecommerce/", "file": "ecommerce/index.html", "title": "Ecommerce | Online ordering connected to Shop | SuperMega", "productId": "ecommerce", "liveGate": "post-release", "description": "Choose Shop-backed products, build a cart, review a deterministic 15-minute quote, and save a recoverable request receipt. Payment, fulfilment, returns, and refunds are completed in Shop." },
-    { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
-    { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
+    {
+      "route": "/",
+      "file": "index.html",
+      "title": "SuperMega | Four products"
+    },
+    {
+      "route": "/shop/",
+      "file": "shop/index.html",
+      "title": "Shop | Sell, track stock, and close the day | SuperMega",
+      "productId": "shop",
+      "liveGate": "post-release"
+    },
+    {
+      "route": "/plant/",
+      "file": "plant/index.html",
+      "title": "Plant | Plan jobs, record output, and close shifts | SuperMega",
+      "productId": "plant",
+      "liveGate": "post-release"
+    },
+    {
+      "route": "/website/",
+      "file": "website/index.html",
+      "title": "Website | Build a simple company website from a brief | SuperMega",
+      "productId": "website",
+      "liveGate": "post-release",
+      "description": "Answer a short business brief, edit finite pages, review a responsive preview, and download a standalone website. Request managed hosting when needed."
+    },
+    {
+      "route": "/ecommerce/",
+      "file": "ecommerce/index.html",
+      "title": "Ecommerce | Online ordering connected to Shop | SuperMega",
+      "productId": "ecommerce",
+      "liveGate": "post-release",
+      "description": "Choose Shop-backed products, build a cart, review a deterministic 15-minute quote, and save a recoverable request receipt. Payment, fulfilment, returns, and refunds are completed in Shop."
+    },
+    {
+      "route": "/contact/",
+      "file": "contact/index.html",
+      "title": "Contact | SuperMega"
+    },
+    {
+      "route": "/privacy/",
+      "file": "privacy/index.html",
+      "title": "Privacy | SuperMega"
+    }
   ],
   "redirects": [
-    { "source": "^/solutions/?$", "destination": "/#products" },
-    { "source": "^/trust/?$", "destination": "/#trust" },
-    { "source": "^/shop(?:/.+)?$", "destination": "/shop/" },
-    { "source": "^/plant(?:/.+)?$", "destination": "/plant/" },
-    { "source": "^/website(?:/.+)?$", "destination": "/website/" },
-    { "source": "^/ecommerce(?:/.+)?$", "destination": "/ecommerce/" },
-    { "source": "^/templates(?:/.*)?$", "destination": "/#products" },
-    { "source": "^/work(?:/.*)?$", "destination": "/#products" },
-    { "source": "^/(?:products?|offers|pricing|plans|packages)/?$", "destination": "/#products" },
-    { "source": "^/products/(?:commerce|retail|restaurant|store|shop)/?.*$", "destination": "/#shop" },
-    { "source": "^/products/(?:production|factory|operations|erp|plant)/?.*$", "destination": "/#plant" },
-    { "source": "^/products/website/?.*$", "destination": "/#website" },
-    { "source": "^/products/ecommerce/?.*$", "destination": "/#ecommerce" },
-    { "source": "^/(?:vision|ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#products" },
-    { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/#products" },
-    { "source": "^/(?:start|book|setup|get-started|intake)/?.*$", "destination": "/contact/" },
-    { "source": "^/(?:app|login|clients)/?.*$", "destination": "https://app.supermega.dev/" },
-    { "source": "^/demo/?$", "destination": "https://app.supermega.dev/" }
+    {
+      "source": "^/solutions/?$",
+      "destination": "/#products"
+    },
+    {
+      "source": "^/trust/?$",
+      "destination": "/#trust"
+    },
+    {
+      "source": "^/shop(?:/.+)?$",
+      "destination": "/shop/"
+    },
+    {
+      "source": "^/plant(?:/.+)?$",
+      "destination": "/plant/"
+    },
+    {
+      "source": "^/website(?:/.+)?$",
+      "destination": "/website/"
+    },
+    {
+      "source": "^/ecommerce(?:/.+)?$",
+      "destination": "/ecommerce/"
+    },
+    {
+      "source": "^/templates(?:/.*)?$",
+      "destination": "/#products"
+    },
+    {
+      "source": "^/work(?:/.*)?$",
+      "destination": "/#products"
+    },
+    {
+      "source": "^/(?:products?|offers|pricing|plans|packages)/?$",
+      "destination": "/#products"
+    },
+    {
+      "source": "^/products/(?:commerce|retail|restaurant|store|shop)/?.*$",
+      "destination": "/#shop"
+    },
+    {
+      "source": "^/products/(?:production|factory|operations|erp|plant)/?.*$",
+      "destination": "/#plant"
+    },
+    {
+      "source": "^/products/website/?.*$",
+      "destination": "/#website"
+    },
+    {
+      "source": "^/products/ecommerce/?.*$",
+      "destination": "/#ecommerce"
+    },
+    {
+      "source": "^/(?:vision|ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$",
+      "destination": "/#products"
+    },
+    {
+      "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$",
+      "destination": "/#products"
+    },
+    {
+      "source": "^/(?:start|book|setup|get-started|intake)/?.*$",
+      "destination": "/contact/"
+    },
+    {
+      "source": "^/(?:app|login|clients)/?.*$",
+      "destination": "https://app.supermega.dev/"
+    },
+    {
+      "source": "^/demo/?$",
+      "destination": "https://app.supermega.dev/"
+    }
   ],
   "retiredPublicNames": [
     "MegaOS",
