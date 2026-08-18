@@ -101,9 +101,23 @@ actor string — actor strings are display copy and will be rewritten.
 
 1. Design phase 2 (`hq/strategy/DESIGN-PROGRAM.md`) — starts with the one-tap
    cash sale.
-2. Verified correctness backlog — Plant→Shop SKU binding, GL refund reversal,
-   SSRF IPv6 gap, ecommerce intent coexistence (verify each against intended
-   behavior first).
+2. ~~Verified correctness backlog~~ — all four items closed 2026-08-18 on
+   `claude/supermega-dev-ceo-aije17`; do not re-chase them:
+   - **SSRF IPv6 gap** — real, fixed (`cdb7c1d6`). NAT64 `64:ff9b::/96` and the
+     v4-compatible/uncompressed v4-mapped forms bypassed the connector guard;
+     an embedded-IPv4 extractor now covers all three /96 prefixes. Known
+     residual: 6to4 (`2002::/16`) embeds at a different bit position.
+   - **Plant→Shop SKU binding** — real, fixed (`f78aa5cd`). Two BOM rows could
+     map to one Shop SKU and each read the full on-hand, a 2× availability
+     overstatement on the requirements screen. Now unique per plan in the TS
+     and Python validators. (The older "defaults to first stocked item" bug
+     the type comment describes was already fixed.)
+   - **GL refund reversal** — false positive. `refundStatus` is a one-way
+     machine enforced by `validateCommerceState`, so the suspected duplicate
+     reversal is unreachable; the tied/lump-sum split mirrors
+     `acceptedCalculation` by design.
+   - **Ecommerce intent coexistence** — already implemented correctly; the two
+     cross-kind rules were merely untested, now pinned (`7bc16bb0`).
 3. Founder-gated items stay parked until the founder acts: production
    activation runbook, v12/v13 to prod, pricing decisions, release dispatch.
 
