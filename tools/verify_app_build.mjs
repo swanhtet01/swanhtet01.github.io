@@ -16085,6 +16085,30 @@ async function verifyStorefrontRuntime() {
       )
     } catch { duplicateCancellationRejected = true }
     buyingAssert(duplicateCancellationRejected, 'ecommerce_duplicate_cancellation_request_was_accepted')
+    // The same-kind duplicate rules above are only half the coexistence matrix. These two cover the
+    // cross-kind exclusions, which nothing exercised before: every branch above records onto the same
+    // `recordedBuying` base, so an amendment never met a cancellation or a reschedule. Both rules are
+    // enforced in validateEcommerceBuyingState and were correct -- these pin them against regression.
+    let amendmentAfterCancellationRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderAmendment(
+        cancellationBuyingState,
+        replacementRequest,
+        amendmentIntent,
+        cancellationBuyingState.headDigest,
+      )
+    } catch { amendmentAfterCancellationRejected = true }
+    buyingAssert(amendmentAfterCancellationRejected, 'ecommerce_cancellation_and_replacement_workflow_coexisted')
+    let rescheduleAfterAmendmentRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderReschedule(
+        amendedBuyingState,
+        rescheduleRequest,
+        rescheduleIntent,
+        amendedBuyingState.headDigest,
+      )
+    } catch { rescheduleAfterAmendmentRejected = true }
+    buyingAssert(rescheduleAfterAmendmentRejected, 'ecommerce_two_replacement_workflows_coexisted')
     const acknowledgementGoldenState = commerce.validateCommerceState({
       schema: 'supermega.commerce.workspace.v2',
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 8, reorderAt: 2, price: 100 }],
