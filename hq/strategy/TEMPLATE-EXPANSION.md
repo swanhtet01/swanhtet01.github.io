@@ -322,16 +322,22 @@ they will.
 
 Each item is one branch → full gate → PR → read CI → squash merge.
 
-Status (2026-08-18): items 1-8 SHIPPED on `claude/supermega-dev-ceo-aije17`
+Status (2026-08-18): items 1-9 SHIPPED on `claude/supermega-dev-ceo-aije17`
 (`853ca7c8`, `bf4043e2`, `23b7d60e`, `89cc95c7`, item 6's commit, item 7's
-commit, and item 8's commit). Shop, Plant, and Ecommerce now all open on a
-believable bakery business end to end — catalog, counter sales, a pending
-order, appointment bookings (Shop); jobs, a named floor, a running shift
-with recorded output/scrap, AND a released BOM/routing order with 5 costed
-materials and 4 costed operations on the primary job (Plant); trade-specific
-storefront copy, hero-SKU ranking, and a per-trade fulfilment/payment mix on
-the one guided request (Ecommerce) — with Website already covered for free
-via its existing reuse of Shop's ids. Every acceptance point was verified
+commit, item 8's commit, and item 9's commit). Shop, Plant, and Ecommerce
+now all open on a believable bakery business end to end — catalog, counter
+sales, a pending order, appointment bookings (Shop); jobs, a named floor, a
+running shift with recorded output/scrap, AND a released BOM/routing order
+with 5 costed materials and 4 costed operations on the primary job (Plant);
+trade-specific storefront copy, hero-SKU ranking, and a per-trade
+fulfilment/payment mix on the one guided request (Ecommerce) — with Website
+already covered for free via its existing reuse of Shop's ids. The same
+full Plant story (jobs/floor, shift activity, released BOM/routing order)
+now also ships for `fashion` (cut-and-sew: `TSHIRT-M-WHT`/`LONGYI-MEN`
+paired against the real Shop catalog), proving item 8's write path was
+built generically the first time — item 9 needed zero changes to
+`provisionPlantBusinessTemplateOrder`/`provisionLocalPlantWorkingSample`,
+only new template data. Every acceptance point was verified
 directly against real state, not assumed. Corrections surfaced along the
 way are recorded in their commits rather than silently fixed: a
 pre-existing bug in `productionWorkingSampleTransitionIsExact` that made
@@ -365,7 +371,11 @@ shift activity has already recorded output/scrap against that same job by
 the time item 8 runs; and `releasePlantOrder` requires a current
 `record_calibration` command for every distinct work centre in a
 `buildPlantOrderControlledPlan`-built routing before it will release —
-missing either would have made the release silently fail closed. Items 9+
+missing either would have made the release silently fail closed. Item 9's
+own queue text also had a stale claim: it names a `verify_app_build.mjs`
+"id-list pin" for the Plant registry that does not exist — grepped and
+confirmed absent (the only registry id-list pin in that file is Shop's
+10-trade list, untouched here); nothing needed updating there. Items 10-11
 below are unstarted; 10 is gated on item 7's outcome (shipped, but the
 founder has not asked for equipment in the demo) and 11 needs a named
 customer.

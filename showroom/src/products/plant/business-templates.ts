@@ -9,7 +9,7 @@ export const PLANT_BUSINESS_TEMPLATE_SCHEMA = 'supermega.plant.business_template
 // Subset of ShopBusinessTemplateId -- only a trade whose Plant template has actually shipped
 // gets an id here. See hq/strategy/TEMPLATE-EXPANSION.md section (d) for which of Shop's ten
 // trades genuinely convert inputs into a countable batch, and why the other eight do not.
-export type PlantBusinessTemplateId = 'bakery'
+export type PlantBusinessTemplateId = 'bakery' | 'fashion'
 
 export type PlantBusinessTemplateJob = {
   jobCode: string
@@ -118,6 +118,65 @@ const plantBusinessTemplateSeeds: readonly PlantBusinessTemplate[] = [
         { operationId: 'OP-020', name: 'Proof dough', workCentreId: 'WC-PROOF', workCentreName: 'Proofing', minutesPerUnitMilli: 3_000, standardCostPerMinuteMmk: 80 },
         { operationId: 'OP-030', name: 'Bake loaves', workCentreId: 'WC-BAKE', workCentreName: 'Baking and packing', minutesPerUnitMilli: 4_000, standardCostPerMinuteMmk: 200 },
         { operationId: 'OP-040', name: 'Cool and pack', workCentreId: 'WC-BAKE', workCentreName: 'Baking and packing', minutesPerUnitMilli: 1_000, standardCostPerMinuteMmk: 100 },
+      ],
+    },
+  },
+  {
+    id: 'fashion',
+    schema: PLANT_BUSINESS_TEMPLATE_SCHEMA,
+    name: { en: 'Fashion cut-and-sew floor', my: 'အထည်ချုပ်စက်ရုံ' },
+    description: 'Two cut-and-sew lines turning fabric into finished garments, on the same trade as the fashion Shop catalog.',
+    shopTemplateId: 'fashion',
+    industryPackId: 'apparel',
+    machines: [
+      { id: 'MC-CUT-01', name: 'Fabric cutting table 01', state: 'attention' },
+      { id: 'MC-SEW-01', name: 'Single-needle lockstitch machine 01', state: 'running' },
+      { id: 'MC-SEW-02', name: 'Overlock machine 01', state: 'running' },
+    ],
+    openingIssue: {
+      area: 'Fashion Line 01',
+      summary: 'Cutting table blade needs resharpening -- fabric edges fraying on the last few panels',
+    },
+    // The fashion trade's real primary input -- cut-and-sew fabric, by the metre. Feeds
+    // appendGuidedSampleProductionActivity's material-issue entry; no BOM exists to draw this
+    // from until jobs[0]'s plan below is applied (see PlantBusinessTemplatePlan above).
+    primaryMaterial: { ref: 'Cotton jersey fabric', unit: 'm' },
+    jobs: [
+      // product/shopSku pair with shopBusinessTemplates 'fashion' catalog (TSHIRT-M-WHT), so a
+      // low-stock or over-committed T-shirt in Shop already surfaces this job via
+      // shop-production-demand.ts's jobMatchesProduct, with no code change.
+      { jobCode: 'JOB-FASHION-001', line: 'Fashion Line 01', product: 'Cotton T-shirt medium white', shopSku: 'TSHIRT-M-WHT', target: 200, dueInDays: 3, priority: 'urgent' },
+      // Same pairing against LONGYI-MEN.
+      { jobCode: 'JOB-FASHION-002', line: 'Fashion Line 02', product: 'Men pasoe longyi', shopSku: 'LONGYI-MEN', target: 60, dueInDays: 5, priority: 'normal' },
+    ],
+    // BOM + routing for jobs[0] (JOB-FASHION-001, the cotton T-shirt). Five real cut-and-sew
+    // inputs -- main fabric, neckband trim, sewing thread, a woven brand label, and shoulder seam
+    // tape (a knitwear stabiliser, not "interfacing" in the tailored-garment sense but the same
+    // construction role) -- and four operations across three work centres: cut, sew, and a shared
+    // finishing/packing centre. Every material and routing step carries a standard MMK cost so the
+    // cost-driver and financial-cost projections (plant-order-foundation.ts) have something to
+    // report the moment the order is released. shopSupply is deliberately left unset on every
+    // material: the fashion Shop catalog stocks finished garments (T-shirts, longyis), not raw
+    // fabric or trims -- see TEMPLATE-EXPANSION.md section (b).
+    plan: {
+      outputBatchSuffix: 'TSHIRT-001',
+      materials: [
+        { materialId: 'MAT-FABRIC', name: 'Cotton jersey fabric', unit: 'm', quantityPerUnitMilli: 1_200, standardCostPerUnitMmk: 3_500 },
+        { materialId: 'MAT-LABEL', name: 'Woven brand label', unit: 'pcs', quantityPerUnitMilli: 1_000, standardCostPerUnitMmk: 150 },
+        { materialId: 'MAT-RIB', name: 'Rib-knit neckband', unit: 'm', quantityPerUnitMilli: 150, standardCostPerUnitMmk: 4_500 },
+        { materialId: 'MAT-TAPE', name: 'Shoulder seam tape', unit: 'm', quantityPerUnitMilli: 300, standardCostPerUnitMmk: 600 },
+        { materialId: 'MAT-THREAD', name: 'Polyester sewing thread', unit: 'm', quantityPerUnitMilli: 45_000, standardCostPerUnitMmk: 8 },
+      ],
+      workCentres: [
+        { workCentreId: 'WC-CUT', name: 'Cutting table' },
+        { workCentreId: 'WC-FINISH', name: 'Finishing and packing' },
+        { workCentreId: 'WC-SEW', name: 'Sewing line' },
+      ],
+      routing: [
+        { operationId: 'OP-010', name: 'Cut fabric panels', workCentreId: 'WC-CUT', workCentreName: 'Cutting table', minutesPerUnitMilli: 800, standardCostPerMinuteMmk: 100 },
+        { operationId: 'OP-020', name: 'Sew garment', workCentreId: 'WC-SEW', workCentreName: 'Sewing line', minutesPerUnitMilli: 6_000, standardCostPerMinuteMmk: 120 },
+        { operationId: 'OP-030', name: 'Press and finish', workCentreId: 'WC-FINISH', workCentreName: 'Finishing and packing', minutesPerUnitMilli: 1_500, standardCostPerMinuteMmk: 80 },
+        { operationId: 'OP-040', name: 'Fold and pack', workCentreId: 'WC-FINISH', workCentreName: 'Finishing and packing', minutesPerUnitMilli: 700, standardCostPerMinuteMmk: 60 },
       ],
     },
   },
@@ -250,6 +309,6 @@ export function validatePlantBusinessTemplates() {
       if (usedCentreIds.size !== workCentreIds.length) throw new Error(`${template.id} plan declares a work centre no routing step uses.`)
     }
   }
-  if (templateIds.size !== 1) throw new Error('The Plant business template registry must carry exactly 1 template.')
+  if (templateIds.size !== 2) throw new Error('The Plant business template registry must carry exactly 2 templates.')
   return plantBusinessTemplates
 }
