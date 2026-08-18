@@ -7722,6 +7722,26 @@ async function verifyPlantOrderRuntime() {
       && replenishmentPlan.summary.recommendedOrderUnits === 3
       && Object.values(replenishmentPlan.authority).every((allowed) => allowed === false),
     'shop_replenishment_status_or_authority_wrong')
+    // The well-formed fixture's Plant material links to a Shop SKU that genuinely
+    // exists, so a correct build must show zero unmatched demand here.
+    assertReplenishment(replenishmentPlan.unmatchedDemand.length === 0 && replenishmentPlan.summary.unmatchedSkuCount === 0,
+      'shop_replenishment_false_positive_unmatched_demand')
+    // A Plant material's Shop SKU is free text on its BOM row, never checked against a
+    // real Shop item -- if the item is later renamed or deleted, the SAME Plant demand
+    // that drove the assertions above must not silently vanish: it has to surface as
+    // unmatched, naming the sku, the material and quantity actually needed (a "Shop
+    // stock unit" count is meaningless for a sku that never resolved), and the jobs
+    // that need it.
+    const commerceWithoutLinkedItem = commerce.validateCommerceState({ ...mrpPurchaseOrder, items: [], purchaseOrders: [] })
+    const orphanedReplenishmentPlan = replenishment.projectShopReplenishment(commerceWithoutLinkedItem, productionForReplenishment)
+    const orphanedDemand = orphanedReplenishmentPlan.unmatchedDemand.find((entry) => entry.sku === 'SKU-RM-BAG')
+    assertReplenishment(orphanedReplenishmentPlan.rows.length === 0
+      && orphanedDemand?.materialName === 'Filter media'
+      && orphanedDemand.unit === 'kg'
+      && orphanedDemand.requiredQuantityMilli === 30_000
+      && orphanedDemand.jobIds.join(',') === 'JOB-401,JOB-402'
+      && orphanedReplenishmentPlan.summary.unmatchedSkuCount === 1,
+    'shop_replenishment_orphaned_plant_demand_not_surfaced')
     assertReplenishment(replenishment.validateShopReplenishment(replenishmentPlan, mrpPurchaseOrder, productionForReplenishment).digest === replenishmentPlan.digest,
       'shop_replenishment_current_packet_rejected')
     const tamperedReplenishment = structuredClone(replenishmentPlan)
