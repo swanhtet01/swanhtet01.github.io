@@ -27,6 +27,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -35,7 +36,31 @@ from uuid import NAMESPACE_URL, uuid5
 from supermega_runtime.trial_store import TrialIdempotencyConflict
 
 
-BILLING_SCHEMA_VERSION = 12
+def _env_schema_version(default: int = 12) -> int:
+    """Parse SUPERMEGA_BILLING_SCHEMA_VERSION without ever crashing at import.
+
+    Mirrors trial_store._env_schema_version exactly: migrations for this same
+    app_private.trial_schema_meta counter can land in the repo (reviewed,
+    proven on a disposable branch) well before a founder applies them to a
+    given target (BILLING-RAIL-DESIGN.md D6). Default 12 keeps deployed
+    behavior unchanged; an operator raises it (e.g. to 13) only AFTER the
+    matching migration has been applied to that target -- never by editing
+    this constant and redeploying.
+    """
+
+    raw = str(os.environ.get("SUPERMEGA_BILLING_SCHEMA_VERSION") or "").strip()
+    if not raw:
+        return default
+    try:
+        parsed = int(raw, 10)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+# The exact live schema version the ledger fail-closes on: _assert_schema
+# rejects any database whose app_private schema is not EXACTLY this.
+BILLING_SCHEMA_VERSION = _env_schema_version()
 BILLING_EVENT_RESULT_CONTRACT = "supermega.managed_billing_event.v1"
 BILLING_STATE_CONTRACT = "supermega.managed_billing_state.v1"
 INVOICE_PACKET_CONTRACT = "supermega.managed-billing.invoice-packet.v1"
@@ -515,7 +540,9 @@ class BillingLedger:
             "entitlementUpdate": bool(_row_value(row, "entitlement_update", 14)),
         }
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != BILLING_SCHEMA_VERSION:
-            raise BillingRailError("The billing ledger requires PostgreSQL 17 and private schema version 12.")
+            raise BillingRailError(
+                f"The billing ledger requires PostgreSQL 17 and private schema version {BILLING_SCHEMA_VERSION}."
+            )
         if not snapshot["backendRoleSafe"]:
             raise BillingRailError("The billing ledger backend role is unsafe.")
         if not snapshot["runtimeRoleDenied"]:
