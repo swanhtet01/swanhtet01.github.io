@@ -18975,9 +18975,9 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // design phase-1 foundation (2026-08 tribunal: token ramps + on-accent/field-line/scroll-accent tokens,
 // WCAG contrast overrides, Myanmar script stacks with :lang(my) line-height guard, money-path type floor,
 // 561-840px touch targets, light-theme tile art — ~6KB of appended CSS across the three islands) and
-// design phase-2 in-progress work (cart running total, merchant-surface de-branding). See CLAUDE.md: this
-// budget is expected to trip on any fresh dist/ after real product/design work lands — raise it, never
-// shrink product code to fit an old number.
+// design phase-2 in-progress work (cart running total, merchant-surface de-branding) pushed the measured
+// total to 2,939,879. See CLAUDE.md: this budget is expected to trip on any fresh dist/ after real
+// product/design work lands — raise it, never shrink product code to fit an old number.
 if (bytes > 2_970_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
