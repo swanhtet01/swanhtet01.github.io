@@ -2107,11 +2107,22 @@ function productionWorkingSampleTransitionIsExact(current: ProductionState, cand
   const reasonMatch = /^Seed the (.+) working sample\.$/.exec(sampleEvents[0]?.reason ?? '')
   if (!capturedAt || !reasonMatch
     || sampleEvents.some((event) => event.createdAt !== capturedAt || event.reason !== sampleEvents[0].reason)) return false
+  // Re-derived from the candidate itself, not compared against a fixed reference: this check is
+  // a STRUCTURAL invariant (only installProductionWorkingSampleJobs's own construction pattern
+  // can explain the delta from `current`), the same way the jobs above are re-verified without
+  // being compared to any canonical job list. Leaving machines/issue out of this recompute (as
+  // an earlier version of this function did) forced every candidate to match the generic seed
+  // floor byte-for-byte, which silently made installProductionWorkingSampleJobs's own machines
+  // and issue parameters unusable through this write boundary -- the only path app code actually
+  // calls. A pack that hands over its own floor was never reachable in the running app.
+  const floorIssue = candidate.issues.find((issue) => issue.id === productionSeedAnchorIssueId)
   const expected = installProductionWorkingSampleJobs(current, {
     sampleId,
     sampleName: reasonMatch[1],
     jobs: candidate.jobs.map((job) => ({ ...job })),
     capturedAt,
+    machines: candidate.machines.map((machine) => ({ ...machine })),
+    issue: floorIssue ? { area: floorIssue.area, summary: floorIssue.summary } : undefined,
   })
   return Boolean(expected) && JSON.stringify(expected) === JSON.stringify(candidate)
 }

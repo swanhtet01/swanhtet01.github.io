@@ -36,6 +36,10 @@ import {
   shopBusinessTemplates,
   type ShopBusinessTemplateId,
 } from '../products/shop/business-templates'
+import {
+  plantBusinessTemplateForShopTemplateId,
+  plantBusinessTemplateJobs,
+} from '../products/plant/business-templates'
 
 export function readLocalShopIndustryPackId() {
   if (typeof window === 'undefined') return clientDemoPresets[0].shopIndustryPackId
@@ -257,6 +261,34 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
 }
 
 export async function provisionLocalPlantWorkingSample(industryPackId: PlantIndustryPackId, workflowTemplateId: string, owner: string) {
+  // A device whose Shop was set up on a trade that has a matching Plant business template (only
+  // bakery today -- see products/plant/business-templates.ts and TEMPLATE-EXPANSION.md section
+  // (d)) gets that trade's own jobs, floor, and opening issue instead of the generic pack CSV
+  // below. readLocalShopBusinessTemplateId returns null for a device with no Shop yet, a
+  // hand-imported catalog, or a trade with no Plant template, and null always falls through to
+  // the unchanged generic path -- this must never change behavior for those devices.
+  const businessTemplate = plantBusinessTemplateForShopTemplateId(readLocalShopBusinessTemplateId())
+  if (businessTemplate) {
+    const capturedAt = new Date().toISOString()
+    const jobs = plantBusinessTemplateJobs(businessTemplate, capturedAt, owner)
+    let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
+    const result = await mutateProductionWorkingSample((current) => {
+      const next = installProductionWorkingSampleJobs(current, {
+        sampleId: businessTemplate.id,
+        sampleName: businessTemplate.name.en,
+        jobs,
+        capturedAt,
+        machines: [...businessTemplate.machines],
+        issue: businessTemplate.openingIssue,
+      })
+      if (!next) return current
+      disposition = next === current ? 'current' : 'installed'
+      return next
+    })
+    if (!result.ok) throw new Error(result.error)
+    return disposition
+  }
+
   const pack = plantIndustryPack(industryPackId)
   const preview = await createClientImportPreview(
     clientImportTemplate('production', workflowTemplateId, { plantIndustryPackId: industryPackId }),
