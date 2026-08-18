@@ -18865,7 +18865,13 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // from main. Note this exceeds every ceiling the three branches carried individually
 // (2_885/2_886/2_887_000), so a merge that took the highest of them would have failed:
 // re-measure after combining, never inherit the largest number.
-if (bytes > 2_890_000) fail(`artifact_budget:${bytes}`)
+// ...and local analytics persistence (analytics/metrics-collector.ts: the reserved
+// supermega.hq.local-metrics.v1 key is finally written, bounded to 500 events, with a
+// closed-shape validator on read; ~0.95KB, measured 2_890_408). The collector kept events
+// in a module array, so every reload erased them and a month-long pilot would have
+// produced no measurable evidence at all. Deliberately not portable in a backup: these
+// counters describe THIS device.
+if (bytes > 2_891_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
