@@ -2174,7 +2174,7 @@ export function EcommerceProduct() {
             {previewResult.preview ? (
               <div className="storefront-preview">
                 <header>
-                  <span>&gt;_ {previewResult.preview.storeName}</span>
+                  <span>{previewResult.preview.storeName}</span>
                   <b>{previewResult.preview.items.length} products</b>
                 </header>
                 <section className="storefront-hero">
@@ -2218,7 +2218,6 @@ export function EcommerceProduct() {
               </div>
             ) : (
               <div className="ecommerce-preview-empty">
-                <span>&gt;_</span>
                 <strong>Preview needs attention</strong>
                 <p>{previewResult.error}</p>
               </div>

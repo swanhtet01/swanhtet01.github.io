@@ -18971,7 +18971,14 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // Raised again after merging main (Beauty spa template, billing dashboards, General Ledger MVP landing
 // together with two new WorkspaceControlsPage views — Plant maintenance-due, Ecommerce stale-request
 // follow-up — and the Plant certificate of conformance feature) pushed the measured total to 2,929,574.
-if (bytes > 2_945_000) fail(`artifact_budget:${bytes}`)
+// Raised again for the bakery Shop business template (10th industry) and, from this merge of main, the
+// design phase-1 foundation (2026-08 tribunal: token ramps + on-accent/field-line/scroll-accent tokens,
+// WCAG contrast overrides, Myanmar script stacks with :lang(my) line-height guard, money-path type floor,
+// 561-840px touch targets, light-theme tile art — ~6KB of appended CSS across the three islands) and
+// design phase-2 in-progress work (cart running total, merchant-surface de-branding). See CLAUDE.md: this
+// budget is expected to trip on any fresh dist/ after real product/design work lands — raise it, never
+// shrink product code to fit an old number.
+if (bytes > 2_970_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
