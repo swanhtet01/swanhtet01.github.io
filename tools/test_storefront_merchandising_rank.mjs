@@ -103,7 +103,7 @@ const servicesOnly = [
   { sku: 'SPA-SVC-FACIAL', name: 'Facial treatment 45 min', price: 38_000, onHand: 999, variant: 'Standard' },
   { sku: 'SPA-SVC-STEAM', name: 'Herbal steam 30 min', price: 18_000, onHand: 999, variant: 'Standard' },
 ]
-const spa = await storefrontSkus(servicesOnly, 'Sol Luxury Spa')
+const spa = await storefrontSkus(servicesOnly, 'Shwe Padauk Spa')
 check(spa.ok, `a spa that sells only treatments still opens a storefront -- ${spa.error}`)
 check(
   spa.skus.length > 0 && spa.skus.every((sku) => isShopServiceSku(sku)),
