@@ -38,6 +38,23 @@ export type ShopReplenishmentRow = {
   status: ShopReplenishmentStatus
 }
 
+// A Plant material's Shop SKU (plant-order-foundation.ts) is free text keyed into a
+// BOM row -- nothing validates it against a real Shop item at entry time. When it is
+// mistyped, or the Shop item is later renamed or deleted, production-material-handoff.ts
+// already detects this per material (status 'mapping_required'), but until now that
+// status was silently dropped by the demand loop below along with everything needed
+// to name what failed. Plant believed it had flagged real demand; Shop never learned
+// it existed. unmatchedDemand surfaces exactly those rows instead of dropping them --
+// reported in the material's own unit, since a "Shop stock unit" count is meaningless
+// for a SKU that was never actually resolved to a real item.
+export type ShopUnmatchedDemand = {
+  sku: string
+  materialName: string
+  unit: string
+  requiredQuantityMilli: number
+  jobIds: string[]
+}
+
 export type ShopReplenishmentPlan = {
   contract: typeof SHOP_REPLENISHMENT_PLAN_CONTRACT
   source: {
@@ -45,6 +62,7 @@ export type ShopReplenishmentPlan = {
     productionOrders: Array<{ jobId: string; headDigest: string }>
   }
   rows: ShopReplenishmentRow[]
+  unmatchedDemand: ShopUnmatchedDemand[]
   summary: {
     reviewedSkus: number
     orderRequired: number
@@ -52,6 +70,7 @@ export type ShopReplenishmentPlan = {
     supplyAtRisk: number
     productionDemandUnits: number
     recommendedOrderUnits: number
+    unmatchedSkuCount: number
   }
   authority: {
     purchaseCreated: false
@@ -154,12 +173,21 @@ export function projectShopReplenishment(
   const portfolio = productionOrderPortfolioEntries(production)
   const jobsById = new Map(production.jobs.map((job) => [job.id, job]))
   const demandBySku = new Map<string, { units: number; jobs: Set<string>; dueAt: string[] }>()
+  const unmatchedBySku = new Map<string, { materialName: string; unit: string; requiredQuantityMilli: number; jobs: Set<string> }>()
 
   for (const entry of portfolio) {
     const requirements = projectProductionMaterialRequirements(entry.execution, commerce)
     if (!requirements) continue
     const job = jobsById.get(entry.jobId)
     for (const requirement of requirements.rows) {
+      if (requirement.status === 'mapping_required' && requirement.attemptedShopSku) {
+        const sku = requirement.attemptedShopSku
+        const current = unmatchedBySku.get(sku) ?? { materialName: requirement.materialName, unit: requirement.unit, requiredQuantityMilli: 0, jobs: new Set<string>() }
+        current.requiredQuantityMilli = safeAdd(current.requiredQuantityMilli, requirement.remainingQuantityMilli, `Unmatched Plant demand for ${sku}`)
+        current.jobs.add(entry.jobId)
+        unmatchedBySku.set(sku, current)
+        continue
+      }
       if (!requirement.shopSupply || requirement.status === 'fulfilled') continue
       const current = demandBySku.get(requirement.shopSupply.sku) ?? { units: 0, jobs: new Set<string>(), dueAt: [] }
       current.units = safeAdd(current.units, requirement.shopSupply.requiredStockUnits, `Plant demand for ${requirement.shopSupply.sku}`)
@@ -180,6 +208,10 @@ export function projectShopReplenishment(
     : null
   const retainedVendors = inventory?.vendors ?? []
   const retainedVendorNames = new Map(retainedVendors.map((vendor) => [vendor.id, vendor.name]))
+
+  const unmatchedDemand: ShopUnmatchedDemand[] = [...unmatchedBySku.entries()]
+    .map(([sku, demand]) => ({ sku, materialName: demand.materialName, unit: demand.unit, requiredQuantityMilli: demand.requiredQuantityMilli, jobIds: [...demand.jobs].sort() }))
+    .sort((left, right) => left.sku.localeCompare(right.sku))
 
   const rows = commerce.items.flatMap((item): ShopReplenishmentRow[] => {
     const demand = demandBySku.get(item.sku) ?? { units: 0, jobs: new Set<string>(), dueAt: [] }
@@ -278,11 +310,13 @@ export function projectShopReplenishment(
     supplyAtRisk: rows.filter((row) => row.status === 'supply_at_risk').length,
     productionDemandUnits: rows.reduce((total, row) => safeAdd(total, row.productionDemandUnits, 'Total Plant demand'), 0),
     recommendedOrderUnits: rows.reduce((total, row) => safeAdd(total, row.recommendedOrderUnits, 'Total recommended order'), 0),
+    unmatchedSkuCount: unmatchedDemand.length,
   }
   const body = {
     contract: SHOP_REPLENISHMENT_PLAN_CONTRACT,
     source,
     rows,
+    unmatchedDemand,
     summary,
     authority: { purchaseCreated: false, supplierContacted: false, paymentCreated: false, inventoryChanged: false, productionChanged: false, providerCalled: false } as const,
   }
