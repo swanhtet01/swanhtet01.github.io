@@ -120,7 +120,7 @@ details:not([open]) > :not(summary) { display: none; }
 .sidebar-foot .signup-shell-link { background: var(--core-green-soft); border-color: var(--core-green); color: var(--core-ink); }
 .theme-toggle { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 8px; padding: 0 10px; background: transparent; color: var(--core-muted); font-size: 11px; font-weight: 720; cursor: pointer; }
 .theme-toggle:hover { border-color: var(--core-green); color: var(--core-ink); }
-.theme-toggle span { color: var(--core-green); font-family: var(--core-mono); font-size: 14px; }
+.theme-toggle-icon { color: var(--core-green); flex-shrink: 0; }
 .mobile-theme-toggle { width: 44px; min-height: 44px; justify-content: center; padding: 0; }
 
 .core-topbar { position: relative; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--core-line); padding: 0 20px; background: rgba(255,255,255,.92); backdrop-filter: blur(18px); }
