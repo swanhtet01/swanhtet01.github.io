@@ -114,9 +114,13 @@ export const capabilities: readonly Capability[] = [
   },
   {
     id: 'ecommerce-storefront',
-    label: 'Online storefront',
+    label: 'Storefront and order requests',
     tier: 'free',
-    outcome: 'Show a catalog online and take order requests into Shop for review.',
+    // Said "Show a catalog online", which the next line contradicts and the code does not do:
+    // a storefront order request is typed `mode: 'browser-local-request'` and the storefront is a
+    // surface inside this app, not a public URL. Publishing a shop the internet can reach is a
+    // managed-mode capability; promising it here would be a promise the free tier cannot keep.
+    outcome: 'Show your catalog on this device and take order requests into Shop for review.',
     reason: 'Runs entirely on your device.',
   },
   {
