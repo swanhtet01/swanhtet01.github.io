@@ -16,6 +16,11 @@ import {
 import { lockedCapabilityNotice } from './capability-tiers'
 import type { CommerceItem } from './commerce-workspace'
 import { prepareManagedOrderIntakeDraft, type ManagedIdentity } from './managed-trial'
+import {
+  captureOrderIntakeCorrection,
+  readManagedIntakeGeneration,
+  type OrderIntakeGeneration,
+} from './order-intake-correction-capture'
 
 type ChannelAttributionDraft = { kind: ChannelOrderAttributionInput['kind']; quote: string }
 
@@ -79,6 +84,13 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
   const [payment, setPayment] = useState('KBZPay')
   const [attributions, setAttributions] = useState(emptyChannelAttributions)
   const [reviewedDraft, setReviewedDraft] = useState<ChannelOrderDraft | null>(null)
+  // The AI's ORIGINAL proposal, held apart from reviewedDraft on purpose. reviewedDraft is the
+  // live mapping and invalidateReview() clears it on every keystroke; these two survive that,
+  // because the whole value of the correction is the difference between what AI proposed and
+  // what the operator accepted. Clearing them alongside reviewedDraft is exactly the bug this
+  // replaces -- the signal used to be destroyed by the first edit that made it interesting.
+  const [aiProposedDraft, setAiProposedDraft] = useState<ChannelOrderDraft | null>(null)
+  const [aiGeneration, setAiGeneration] = useState<OrderIntakeGeneration | null>(null)
   const [mappingField, setMappingField] = useState<ChannelOrderField>('customer')
   const [manualOpen, setManualOpen] = useState(false)
   const [aiBusy, setAiBusy] = useState(false)
@@ -150,6 +162,8 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
     setAiBusy(true)
     setAiIssue('')
     setReviewedDraft(null)
+    setAiProposedDraft(null)
+    setAiGeneration(null)
     try {
       const response = await prepareManagedOrderIntakeDraft({ identity, sourceLabel: requestSourceLabel, message: requestMessage })
       const draft = await buildManagedChannelOrderDraft({
@@ -173,6 +187,8 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       if (draft.payment) setPayment(draft.payment)
       setAttributions(nextAttributions)
       setReviewedDraft(draft)
+      setAiProposedDraft(draft)
+      setAiGeneration(readManagedIntakeGeneration(response))
       setAiPrepared(true)
       const ready = channelOrderDraftIsReady(draft)
       setManualOpen(!ready)
@@ -192,6 +208,14 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
 
   function useReviewedDraft() {
     if (!reviewedDraft || !channelOrderDraftIsReady(reviewedDraft)) return
+    // Acceptance is the only moment both halves of the pair exist and are final. Digest-only:
+    // captureOrderIntakeCorrection writes field NAMES and counts, never the message or the values.
+    captureOrderIntakeCorrection(window.localStorage, {
+      generation: aiGeneration,
+      proposed: aiProposedDraft,
+      accepted: reviewedDraft,
+      acceptedAt: new Date(),
+    })
     onUse(reviewedDraft)
     setSourceLabel('')
     setMessage('')
@@ -203,6 +227,8 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
     setAiIssue('')
     setAiPrepared(false)
     setReviewedDraft(null)
+    setAiProposedDraft(null)
+    setAiGeneration(null)
     onAcceptedFocus()
   }
 
