@@ -4089,3 +4089,10 @@
   .website-editor-panel { height: auto; min-height: 0; }
   .website-editor-scroll { overflow: visible; }
 }
+
+/* Design phase 2 - item 2: de-brand merchant surfaces. The site preview
+   header shows the merchant's site name as a wordmark, not a ">_" terminal
+   prompt (glyph span removed in SitePreview.tsx; the old
+   .preview-site-header > strong > span rules are now inert). siteName is
+   owner data: natural case, zero tracking, Myanmar-safe line-height. */
+.preview-site-header > strong { font-size: var(--font-size-display); font-weight: var(--font-weight-black); letter-spacing: 0; line-height: 1.3; text-transform: none; }
