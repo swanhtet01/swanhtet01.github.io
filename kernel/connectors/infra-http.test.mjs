@@ -31,6 +31,17 @@ test('infra-http blocks IPv4-metadata-address embedded in IPv6 via every known b
   for (const u of blocked) assert.ok(await validateUrl(u), `should block ${u}`)
 })
 
+test('infra-http blocks a private IPv4 disguised as a 6to4 address, but not a public one', async () => {
+  // 6to4 (2002::/16) carries its IPv4 in bits 16-47, not the low 32 bits, so the /96 extractor
+  // cannot see it and it needs its own check. Deprecated by RFC 7526 yet still parsed as valid
+  // IPv6, so it stays a usable disguise. The public case is the one that proves the check
+  // discriminates rather than blanket-blocking the whole 2002::/16 range.
+  assert.ok(await validateUrl('https://[2002:a9fe:a9fe::]/'))   // 169.254.169.254, cloud metadata
+  assert.ok(await validateUrl('https://[2002:7f00:1::]/'))      // 127.0.0.1, loopback
+  assert.ok(await validateUrl('https://[2002:c0a8:1:1::1]/'))   // 192.168.0.1, private
+  assert.equal(await validateUrl('https://[2002:0808:0808::]/'), null) // 8.8.8.8, public — allowed
+})
+
 test('infra-http does not false-positive on ordinary global-unicast IPv6 literals', async () => {
   // Their low 32 bits are not embedded IPv4 metadata — the general extractor is scoped to the
   // three known /96 embedding prefixes (::/96, ::ffff:0:0/96, 64:ff9b::/96) so these must pass.

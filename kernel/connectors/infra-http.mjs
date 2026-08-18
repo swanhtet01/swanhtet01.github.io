@@ -66,6 +66,14 @@ function embeddedV4(ip) {
   const ok = (zero5 && (f === 0 || f === 0xffff)) || (a === 0x64 && b === 0xff9b && c === 0 && d === 0 && e === 0 && f === 0)
   return ok ? `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}` : null
 }
+// 6to4 (2002::/16, RFC 3056) carries its IPv4 in bits 16-47 — groups 1-2, not the low 32 bits — so
+// the /96 extractor above cannot see it. Deprecated (RFC 7526) but still parsed by net.isIP() and
+// still a usable disguise for a blocked address, e.g. 2002:a9fe:a9fe:: for 169.254.169.254.
+function sixToFourV4(ip) {
+  const g = expandV6(ip)
+  if (!g || g[0] !== 0x2002) return null
+  return `${g[1] >> 8}.${g[1] & 255}.${g[2] >> 8}.${g[2] & 255}`
+}
 function isBlockedIp(ip) {
   const v = isIP(ip)
   if (v === 4) return V4_BLOCKED.some((c) => inV4(ip, c))
@@ -75,6 +83,7 @@ function isBlockedIp(ip) {
     if (/^f[cd]/.test(lo)) return true        // fc00::/7 unique-local
     if (/^fe[89ab]/.test(lo)) return true     // fe80::/10 link-local
     const v4 = embeddedV4(lo); if (v4) return isBlockedIp(v4) // v4-mapped / v4-compatible / NAT64
+    const relayed = sixToFourV4(lo); if (relayed) return isBlockedIp(relayed) // 6to4
     return false
   }
   return false
