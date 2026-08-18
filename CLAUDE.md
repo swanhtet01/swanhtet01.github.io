@@ -105,8 +105,8 @@ actor string — actor strings are display copy and will be rewritten.
    `claude/supermega-dev-ceo-aije17`; do not re-chase them:
    - **SSRF IPv6 gap** — real, fixed (`cdb7c1d6`). NAT64 `64:ff9b::/96` and the
      v4-compatible/uncompressed v4-mapped forms bypassed the connector guard;
-     an embedded-IPv4 extractor now covers all three /96 prefixes. Known
-     residual: 6to4 (`2002::/16`) embeds at a different bit position.
+     an embedded-IPv4 extractor now covers all three /96 prefixes, and 6to4
+     (`2002::/16`, a different bit position) is covered too (`c406c7f4`).
    - **Plant→Shop SKU binding** — real, fixed (`f78aa5cd`). Two BOM rows could
      map to one Shop SKU and each read the full on-hand, a 2× availability
      overstatement on the requirements screen. Now unique per plan in the TS
