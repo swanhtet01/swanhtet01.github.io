@@ -33,6 +33,17 @@
 // install in isolation, before this item's activity call existed to block it. With the activity
 // call now chained on every provisioning attempt, a second run is a genuine no-op: recorded
 // shift progress is preserved rather than being silently reset by a fresh reinstall.
+//
+// TEMPLATE-EXPANSION.md queue item 8: after the activity call, provisionLocalPlantWorkingSample
+// now also calls provisionPlantBusinessTemplateOrder for any template that ships a `plan` --
+// today only bakery. It imports the reviewed BOM/routing, confirms availability, records one
+// calibration per routed work centre, and releases the order, each as its own
+// mutateProductionWorkspace('order-execution') transition, entirely under
+// ACT-GUIDED-SAMPLE-ORDER- prefixed proofs. This file proves the released order carries exactly
+// 5 materials and 4 costed operations, that no inspection or batch release command exists in the
+// chain, that isGuidedSampleProduction still reads true (proving item 7's widened guard actually
+// accepts this real plan), and that a second provisioning run replays the whole chain as a true
+// no-op.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -60,6 +71,10 @@ const bundle = await build({
         productionWorkingSamplePackId, PRODUCTION_KEY,
       } from './production-workspace.ts'
       export { plantIndustryPack } from './plant-industry-packs.ts'
+      export { productionOrderExecutionForJob } from './production-order-portfolio.ts'
+      export {
+        projectPlantOrder, projectPlantOrderCostDrivers, projectPlantOrderFinancialCost,
+      } from './plant-order-foundation.ts'
       export {
         provisionLocalPlantWorkingSample, readLocalShopBusinessTemplateId,
       } from './product-onboarding-runtime.ts'
@@ -84,6 +99,8 @@ const {
   hasGuidedSampleProductionActivity, productionShiftOutput,
   productionWorkingSamplePackId, PRODUCTION_KEY,
   plantIndustryPack,
+  productionOrderExecutionForJob,
+  projectPlantOrder, projectPlantOrderCostDrivers, projectPlantOrderFinancialCost,
   provisionLocalPlantWorkingSample, readLocalShopBusinessTemplateId,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
@@ -136,7 +153,25 @@ check(
   'the opening issue replaces the generic seed placeholder',
 )
 
-check(bakery.plan === undefined, 'v1 does not populate a BOM/routing plan -- isGuidedSampleProduction stays true only while orderPortfolio/orderExecution/equipmentMaster are unset')
+check(Boolean(bakery.plan), 'the bakery template ships a BOM/routing plan (queue item 8)')
+check(bakery.plan.materials.length === 5, 'the plan carries exactly 5 BOM materials')
+check(bakery.plan.routing.length === 4, 'the plan carries exactly 4 routing operations')
+check(
+  bakery.plan.materials.every((material) => Boolean(material.standardCostPerUnitMmk)),
+  'every BOM material carries a standard MMK cost, or the financial-cost projection cannot report',
+)
+check(
+  bakery.plan.routing.every((step) => Boolean(step.standardCostPerMinuteMmk)),
+  'every routing step carries a standard MMK cost, or the financial-cost projection cannot report',
+)
+check(
+  bakery.plan.materials.every((material) => !material.shopSupply),
+  'no BOM material invents a Shop SKU the bakery catalog does not stock -- shopSupply stays unset',
+)
+check(
+  new Set(bakery.plan.routing.map((step) => step.workCentreId)).size === bakery.plan.workCentres.length,
+  'every declared work centre is actually used by a routing step',
+)
 
 check(Boolean(bakery.primaryMaterial?.ref?.trim()), 'the bakery template names a real primary material for the guided shift-activity seeder')
 check(bakery.primaryMaterial.ref !== 'MAT-PRIMARY-001' && bakery.primaryMaterial.ref !== 'Primary material', 'the primary material replaces the generic pack placeholder, not just relabels it')
@@ -265,8 +300,7 @@ function storeWithShopTemplate(templateId) {
   // ---- queue item 4: guided shift activity chained onto the same provisioning call ----------
   check(hasGuidedSampleProductionActivity(state), 'hasGuidedSampleProductionActivity is true after provisioning -- the shift-activity call actually ran')
   check(isGuidedSampleProduction(state), 'isGuidedSampleProduction is STILL true after the shift-activity call, not just after the jobs install')
-  check(state.orderPortfolio === undefined, 'no orderPortfolio was written -- no BOM/plan, no released batch')
-  check(state.orderExecution === undefined, 'no orderExecution was written -- no released batch')
+  check(state.orderExecution === undefined, 'the legacy single-order field was never written -- the portfolio write boundary is the only path used')
   check(state.equipmentMaster === undefined, 'no equipmentMaster was written')
   check(
     state.events.every((event) => event.kind !== 'shift_closed'),
@@ -285,6 +319,47 @@ function storeWithShopTemplate(templateId) {
   const shiftRef = guidedEvents.find((event) => event.kind === 'output_recorded')?.shiftRef
   const shift = productionShiftOutput(state, shiftRef ?? '')
   check(shift.goodUnits > 0 && shift.scrapUnits > 0, 'productionShiftOutput reports both good output and scrap for the running shift')
+
+  // ---- queue item 8: the released BOM/routing order chained onto the same provisioning call -
+  check(Boolean(state.orderPortfolio), 'an orderPortfolio was written -- the reviewed plan was applied')
+  const execution = productionOrderExecutionForJob(state, bakery.jobs[0].jobCode)
+  check(Boolean(execution), 'the order execution is retrievable for the primary bakery job')
+  const projection = projectPlantOrder(execution)
+  check(projection.status === 'released', 'the order projects as released, not just planned or ready')
+  check(Boolean(projection.orderRelease), 'a release_order command exists in the chain')
+  check(projection.plan?.materials.length === 5, 'the released plan carries exactly 5 materials')
+  check(projection.plan?.routing.length === 4, 'the released plan carries exactly 4 costed operations')
+  check(
+    projection.plan?.materials.every((material) => Boolean(material.standardCostPerUnitMmk)),
+    'every released material is costed',
+  )
+  check(
+    projection.plan?.routing.every((step) => Boolean(step.standardCostPerMinuteMmk)),
+    'every released operation is costed',
+  )
+  check(
+    Boolean(primaryJob) && projection.plan?.job.targetQuantity === primaryJob.target - primaryJob.output - (primaryJob.scrap ?? 0),
+    'the released plan\'s targetQuantity equals target - output - scrap on the CURRENT job record, not the template\'s literal target',
+  )
+  check(
+    execution.commands.every((command) => command.payload.proof.actionId.startsWith('ACT-GUIDED-SAMPLE-')),
+    'every command in the released order carries a guided-sample-prefixed proof',
+  )
+  check(
+    !execution.commands.some((command) => command.payload.kind === 'inspect_output' || command.payload.kind === 'release_batch'),
+    'no inspect_output or release_batch command exists -- a released ORDER is not a released BATCH',
+  )
+  const calibrations = execution.commands.filter((command) => command.payload.kind === 'record_calibration')
+  check(
+    calibrations.length === new Set(projection.plan?.routing.map((step) => step.workCentreId)).size,
+    'exactly one calibration command exists per distinct routed work centre',
+  )
+  const costDrivers = projectPlantOrderCostDrivers(projection)
+  check(costDrivers.materials.length === 5 && costDrivers.operations.length === 4, 'the cost-driver projection returns non-empty materials and operations')
+  const financialCost = projectPlantOrderFinancialCost(projection)
+  check(financialCost.status !== 'setup_required' && financialCost.missingRates.length === 0, 'the financial-cost projection is available, not setup_required')
+  check(financialCost.planned.totalMmk > 0, 'the financial-cost projection reports a nonzero planned total')
+  check(isGuidedSampleProduction(state), 'isGuidedSampleProduction is STILL true after the released order -- proving item 7\'s widened guard accepts a real plan')
 
   // ---- second run: report what actually happens rather than assume replay is a no-op --------
   // Before this item, installProductionWorkingSampleJobs accepted a second bakery run as a
@@ -308,6 +383,16 @@ function storeWithShopTemplate(templateId) {
   check(productionWorkingSamplePackId(stateAfterSecondRun) === 'bakery', 'the second run is still the bakery sample')
   check(isGuidedSampleProduction(stateAfterSecondRun), 'the second run is still a pure guided sample')
   check(hasGuidedSampleProductionActivity(stateAfterSecondRun), 'the second run still carries the guided-sample activity')
+  // Queue item 8's own chain (import_plan -> availability_check -> N calibrations ->
+  // release_order) is entirely idempotent on deterministic command ids, so the second run
+  // replays every command rather than rejecting or duplicating any of them -- the byte-identical
+  // check above already proves this for the whole workspace; this asserts it specifically for
+  // the order execution, so a future change that breaks JUST the order chain fails here by name.
+  const executionAfterSecondRun = productionOrderExecutionForJob(stateAfterSecondRun, bakery.jobs[0].jobCode)
+  check(
+    JSON.stringify(executionAfterSecondRun) === JSON.stringify(execution),
+    'the second run\'s order execution command chain is byte-identical to the first run\'s',
+  )
 }
 
 // ---- a non-bakery Shop falls back to the unchanged generic pack path -----------------------

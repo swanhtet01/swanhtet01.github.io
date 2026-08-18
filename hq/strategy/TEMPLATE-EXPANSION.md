@@ -322,18 +322,19 @@ they will.
 
 Each item is one branch → full gate → PR → read CI → squash merge.
 
-Status (2026-08-18): items 1-7 SHIPPED on `claude/supermega-dev-ceo-aije17`
-(`853ca7c8`, `bf4043e2`, `23b7d60e`, `89cc95c7`, item 6's commit, and item
-7's commit). Shop, Plant, and Ecommerce now all open on a believable bakery
-business end to end — catalog, counter sales, a pending order, appointment
-bookings (Shop); jobs, a named floor, and a running shift with recorded
-output/scrap (Plant); trade-specific storefront copy, hero-SKU ranking, and
-a per-trade fulfilment/payment mix on the one guided request (Ecommerce) —
-with Website already covered for free via its existing reuse of Shop's ids.
-Every acceptance point was verified directly against real state, not
-assumed. Corrections surfaced along the way and are recorded in their
-commits rather than silently fixed: a pre-existing bug in
-`productionWorkingSampleTransitionIsExact` that made
+Status (2026-08-18): items 1-8 SHIPPED on `claude/supermega-dev-ceo-aije17`
+(`853ca7c8`, `bf4043e2`, `23b7d60e`, `89cc95c7`, item 6's commit, item 7's
+commit, and item 8's commit). Shop, Plant, and Ecommerce now all open on a
+believable bakery business end to end — catalog, counter sales, a pending
+order, appointment bookings (Shop); jobs, a named floor, a running shift
+with recorded output/scrap, AND a released BOM/routing order with 5 costed
+materials and 4 costed operations on the primary job (Plant); trade-specific
+storefront copy, hero-SKU ranking, and a per-trade fulfilment/payment mix on
+the one guided request (Ecommerce) — with Website already covered for free
+via its existing reuse of Shop's ids. Every acceptance point was verified
+directly against real state, not assumed. Corrections surfaced along the
+way are recorded in their commits rather than silently fixed: a
+pre-existing bug in `productionWorkingSampleTransitionIsExact` that made
 `installProductionWorkingSampleJobs`'s own `machines`/`issue` parameters
 unreachable through the app's one write path (item 3); a behavior change to
 the second-provisioning-run story once shift activity exists (item 4); on
@@ -347,7 +348,7 @@ failure mode is a swallowed throw inside `buildGuidedSampleOrderRequest`
 that silently seeds zero requests rather than raising a visible error,
 closed by making a `delivery` entry's address unrepresentable-if-missing at
 the type level rather than trusting every future trade author to remember
-it (item 6); and, on the Plant side, `tools/plant_production_demo.test.mjs`
+it (item 6); on the Plant side, `tools/plant_production_demo.test.mjs`
 carries 24 pre-existing failures unrelated to and unaffected by item 7's
 guard change — including the exact acceptance test item 7's own text names
 (`:185-193`) — root-caused to a stale `packFloor()` test helper reading
@@ -355,9 +356,19 @@ guard change — including the exact acceptance test item 7's own text names
 in `plant-industry-packs.ts` has never had; confirmed via `git stash`
 before/after (same 24 test names, byte-identical failure set) and left
 unfixed as out of scope for item 7's own-PR-own-reasoning mandate — worth a
-future queue item of its own. Items 8+ below are unstarted; 11 is gated (needs
-a named customer); 8 now depends only on item 7 having shipped, not on any
-remaining blocker.
+future queue item of its own; and item 8's own queue text omitted two hard
+requirements only found by tracing source directly — `productionOrderExecutionAppendIsExact`
+(`production-workspace.ts`) requires the reviewed plan's `job.targetQuantity`
+to equal the job's CURRENT remaining quantity (`target - output - scrap`,
+recomputed fresh, not the template's literal 480), since item 4's guided
+shift activity has already recorded output/scrap against that same job by
+the time item 8 runs; and `releasePlantOrder` requires a current
+`record_calibration` command for every distinct work centre in a
+`buildPlantOrderControlledPlan`-built routing before it will release —
+missing either would have made the release silently fail closed. Items 9+
+below are unstarted; 10 is gated on item 7's outcome (shipped, but the
+founder has not asked for equipment in the demo) and 11 needs a named
+customer.
 
 1. **Wire Shop's sample activity into onboarding.** Call
    `rebaseWorkingSampleActivity` (`business-templates.ts:75`) then

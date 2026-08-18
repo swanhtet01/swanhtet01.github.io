@@ -27,13 +27,12 @@ export type PlantBusinessTemplateJob = {
   priority: ProductionJobPriority
 }
 
-// BOM + work centres + routing for jobs[0]. Deferred past v1: installProductionWorkingSampleJobs
-// writes no orderPortfolio/orderExecution, and isGuidedSampleProduction (production-workspace.ts)
-// returns false the moment either is set on the workspace -- so populating a plan here would make
-// the workspace non-replaceable and turn the guided shift-activity seeder into a silent no-op.
-// That is TEMPLATE-EXPANSION.md queue item 8's problem (it also needs queue item 7's widened
-// replaceability guard first). The type is declared now so the shape is fixed and item 8 does not
-// have to renegotiate it; PlantBusinessTemplate.plan stays unset until then.
+// BOM + work centres + routing for jobs[0]. installProductionWorkingSampleJobs itself still
+// writes no orderPortfolio/orderExecution -- the plan below is applied separately, as its own
+// chain of order-execution commands, by provisionLocalPlantWorkingSample
+// (product-onboarding-runtime.ts), after queue item 7 widened isGuidedSampleProduction
+// (production-workspace.ts) to accept a populated orderPortfolio whose every command proof
+// carries the guided-sample action prefix. See TEMPLATE-EXPANSION.md queue item 8.
 export type PlantBusinessTemplatePlan = {
   outputBatchSuffix: string
   materials: readonly PlantOrderMaterial[]
@@ -92,6 +91,35 @@ const plantBusinessTemplateSeeds: readonly PlantBusinessTemplate[] = [
       // Same pairing against CAKE-BIRTHDAY-1KG.
       { jobCode: 'JOB-BAKE-002', line: 'Bakery Line 02', product: 'Birthday cake 1kg', shopSku: 'CAKE-BIRTHDAY-1KG', target: 12, dueInDays: 4, priority: 'normal' },
     ],
+    // BOM + routing for jobs[0] (JOB-BAKE-001, the white sandwich loaf). Five real bakery
+    // ingredients by mass/volume per loaf, and four operations across three work centres --
+    // mixing, proofing, and a shared baking/packing centre. Every material and routing step
+    // carries a standard MMK cost so the cost-driver and financial-cost projections
+    // (plant-order-foundation.ts) have something to report the moment the order is released.
+    // shopSupply is deliberately left unset on every material: the bakery Shop catalog stocks
+    // finished goods (bread, cakes), not raw ingredients, so there is no real Shop SKU a
+    // flour/water/yeast/salt/butter line could map onto -- see TEMPLATE-EXPANSION.md section (b).
+    plan: {
+      outputBatchSuffix: 'BAKE-001',
+      materials: [
+        { materialId: 'MAT-BUTTER', name: 'Butter', unit: 'g', quantityPerUnitMilli: 15_000, standardCostPerUnitMmk: 12 },
+        { materialId: 'MAT-FLOUR', name: 'Bread flour', unit: 'kg', quantityPerUnitMilli: 380, standardCostPerUnitMmk: 2_800 },
+        { materialId: 'MAT-SALT', name: 'Salt', unit: 'g', quantityPerUnitMilli: 7_000, standardCostPerUnitMmk: 3 },
+        { materialId: 'MAT-WATER', name: 'Water', unit: 'l', quantityPerUnitMilli: 230, standardCostPerUnitMmk: 5 },
+        { materialId: 'MAT-YEAST', name: 'Instant yeast', unit: 'g', quantityPerUnitMilli: 6_000, standardCostPerUnitMmk: 25 },
+      ],
+      workCentres: [
+        { workCentreId: 'WC-BAKE', name: 'Baking and packing' },
+        { workCentreId: 'WC-MIX', name: 'Mixing' },
+        { workCentreId: 'WC-PROOF', name: 'Proofing' },
+      ],
+      routing: [
+        { operationId: 'OP-010', name: 'Mix dough', workCentreId: 'WC-MIX', workCentreName: 'Mixing', minutesPerUnitMilli: 1_500, standardCostPerMinuteMmk: 150 },
+        { operationId: 'OP-020', name: 'Proof dough', workCentreId: 'WC-PROOF', workCentreName: 'Proofing', minutesPerUnitMilli: 3_000, standardCostPerMinuteMmk: 80 },
+        { operationId: 'OP-030', name: 'Bake loaves', workCentreId: 'WC-BAKE', workCentreName: 'Baking and packing', minutesPerUnitMilli: 4_000, standardCostPerMinuteMmk: 200 },
+        { operationId: 'OP-040', name: 'Cool and pack', workCentreId: 'WC-BAKE', workCentreName: 'Baking and packing', minutesPerUnitMilli: 1_000, standardCostPerMinuteMmk: 100 },
+      ],
+    },
   },
 ] as const
 
@@ -189,6 +217,38 @@ export function validatePlantBusinessTemplates() {
     const materialRef = template.primaryMaterial.ref.trim()
     if (!materialRef || materialRef.length > 120) throw new Error(`${template.id} needs a primary material reference of 1 to 120 characters.`)
     if (!productionMaterialUnits.includes(template.primaryMaterial.unit)) throw new Error(`${template.id} primary material unit is invalid.`)
+
+    // The deferred BOM + routing plan for jobs[0] (TEMPLATE-EXPANSION.md queue item 8). Optional
+    // at the type level -- validated here only when present, so a future template can still ship
+    // jobs/floor without a plan the way this one did before item 8.
+    if (template.plan) {
+      const { outputBatchSuffix, materials, workCentres, routing } = template.plan
+      if (!/^[A-Z][A-Z0-9-]{2,79}$/.test(outputBatchSuffix)) throw new Error(`${template.id} plan.outputBatchSuffix is not a canonical identifier segment.`)
+
+      if (materials.length !== 5) throw new Error(`${template.id} plan must carry exactly 5 BOM materials.`)
+      const materialIds = materials.map((material) => material.materialId)
+      if (new Set(materialIds).size !== materialIds.length) throw new Error(`${template.id} plan repeats a BOM material id.`)
+      if (materialIds.some((id, index) => index > 0 && id <= materialIds[index - 1])) throw new Error(`${template.id} plan.materials must be in canonical ascending id order.`)
+      for (const material of materials) {
+        if (!material.standardCostPerUnitMmk) throw new Error(`${template.id} plan material ${material.materialId} needs a standard MMK cost, or the financial-cost projection cannot report.`)
+        if (material.shopSupply) throw new Error(`${template.id} plan material ${material.materialId} must not invent a Shop SKU the bakery catalog does not stock.`)
+      }
+
+      if (!workCentres.length) throw new Error(`${template.id} plan needs at least one work centre.`)
+      const workCentreIds = workCentres.map((centre) => centre.workCentreId)
+      if (new Set(workCentreIds).size !== workCentreIds.length) throw new Error(`${template.id} plan repeats a work-centre id.`)
+      if (workCentreIds.some((id, index) => index > 0 && id <= workCentreIds[index - 1])) throw new Error(`${template.id} plan.workCentres must be in canonical ascending id order.`)
+
+      if (routing.length !== 4) throw new Error(`${template.id} plan must carry exactly 4 routing operations.`)
+      const workCentreIdSet = new Set(workCentreIds)
+      const usedCentreIds = new Set<string>()
+      for (const step of routing) {
+        if (!workCentreIdSet.has(step.workCentreId)) throw new Error(`${template.id} plan routing step ${step.operationId} references an unknown work centre.`)
+        if (!step.standardCostPerMinuteMmk) throw new Error(`${template.id} plan routing step ${step.operationId} needs a standard MMK cost, or the financial-cost projection cannot report.`)
+        usedCentreIds.add(step.workCentreId)
+      }
+      if (usedCentreIds.size !== workCentreIds.length) throw new Error(`${template.id} plan declares a work centre no routing step uses.`)
+    }
   }
   if (templateIds.size !== 1) throw new Error('The Plant business template registry must carry exactly 1 template.')
   return plantBusinessTemplates
