@@ -5,6 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.svg" />
     <link rel="mask-icon" href="/favicon.svg" color="#0b745e" />
+    <!-- iOS "Add to Home Screen" does not read the manifest's icons at all -- it only
+         ever looks for this link. Without it, an installed iOS shortcut fell back to a
+         screenshot of the page instead of the brand mark. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuperMega</title>
