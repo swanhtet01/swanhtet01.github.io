@@ -9,11 +9,11 @@ const modulePath = resolve(root, 'showroom', 'src', 'products', 'shop', 'busines
 const moduleHref = pathToFileURL(modulePath).href
 const model = await import(moduleHref)
 
-const expectedTemplateIds = ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'spa', 'gym', 'school']
+const expectedTemplateIds = ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa', 'bakery']
 
-test('registry carries exactly the 11 supported Myanmar business types', () => {
+test('registry carries exactly the 10 supported Myanmar business types', () => {
   assert.deepEqual(model.shopBusinessTemplates.map((template) => template.id), expectedTemplateIds)
-  assert.equal(new Set(model.shopBusinessTemplates.map((template) => template.id)).size, 11)
+  assert.equal(new Set(model.shopBusinessTemplates.map((template) => template.id)).size, 10)
   assert.doesNotThrow(() => model.validateShopBusinessTemplates())
   for (const template of model.shopBusinessTemplates) {
     assert.ok(template.name.en.trim().length > 0, `${template.id} needs an English name`)
