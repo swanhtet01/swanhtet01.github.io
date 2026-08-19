@@ -759,10 +759,6 @@
   list-style: none;
 }
 
-.website-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-
 .website-disclosure > summary::before {
   color: var(--website-green);
   font-family: var(--website-mono);
@@ -1509,16 +1505,6 @@
   width: 100%;
 }
 
-.website-preview-frame.is-tablet {
-  width: 100%;
-  max-width: 768px;
-}
-
-.website-preview-frame.is-mobile {
-  width: 100%;
-  max-width: 390px;
-}
-
 .website-preview-site {
   min-height: 100%;
   display: flex;
@@ -1580,14 +1566,6 @@
   color: #101512;
 }
 
-.preview-site-header > i {
-  display: none;
-  color: #0b6b3a;
-  font-family: var(--website-mono);
-  font-size: 7px;
-  font-style: normal;
-}
-
 .preview-site-main {
   flex: 1;
 }
@@ -1622,24 +1600,6 @@
   color: #526057;
   font-size: clamp(11px, 1.45vw, 16px);
   line-height: 1.55;
-}
-
-.preview-hero > .preview-cta {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 24px;
-  border: 0;
-  border-radius: 4px;
-  padding: 0 13px;
-  background: #101512;
-  color: #f4f2eb;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 9px;
-  font-weight: var(--font-weight-bold);
-  text-decoration: none;
 }
 
 .preview-hero > .preview-cta > i {
@@ -1711,61 +1671,6 @@
   color: #93a098;
   font-family: var(--website-mono);
   font-size: 6px;
-}
-
-.website-preview-frame.is-tablet .preview-hero {
-  padding-block: 72px 58px;
-}
-
-.website-preview-frame.is-mobile .preview-site-header {
-  min-height: 50px;
-  padding-inline: 15px;
-}
-
-.website-preview-frame.is-mobile .preview-site-header > nav {
-  display: none;
-}
-
-.website-preview-frame.is-mobile .preview-site-header > i {
-  display: block;
-}
-
-.website-preview-frame.is-mobile .preview-hero {
-  padding: 54px 18px 46px;
-}
-
-.website-preview-frame.is-mobile .preview-hero > h1 {
-  margin-block: 10px 12px;
-  font-size: 38px;
-}
-
-.website-preview-frame.is-mobile .preview-hero > p {
-  font-size: 12px;
-}
-
-.website-preview-frame.is-mobile .preview-section-grid {
-  grid-template-columns: 1fr;
-}
-
-.website-preview-frame.is-mobile .preview-section-grid > article {
-  min-height: 145px;
-  border-right: 0;
-  padding: 24px 18px;
-}
-
-.website-preview-frame.is-mobile .preview-section-grid h2 {
-  font-size: 22px;
-}
-
-.website-preview-frame.is-mobile .preview-section-grid p {
-  font-size: 11px;
-}
-
-.website-preview-frame.is-mobile .preview-site-footer {
-  align-items: flex-start;
-  flex-direction: column;
-  justify-content: center;
-  padding: 12px 16px;
 }
 
 .website-notice {
@@ -1922,24 +1827,11 @@
 }
 
 @media (max-width: 640px) {
-  .website-business-controls > summary b { display: none; }
-  .website-business-controls > summary span { width: 100%; }
   .website-topbar {
     padding-inline: 12px;
   }
 
-  .website-brand,
-  .website-button,
-  .website-button.is-compact,
-  .website-text-button,
-  .website-preview-controls > button,
-  .website-inline-actions > button,
-  .website-navigation-actions > button {
-    min-height: 44px;
-  }
-
-  .website-product input:not([type="checkbox"]):not([type="radio"]),
-  .website-product select {
+  .website-brand {
     min-height: 44px;
   }
 
@@ -1982,6 +1874,192 @@
     overflow-x: auto;
   }
 
+  .website-mobile-pane-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .website-mobile-pane-controls > button {
+    min-height: 44px;
+  }
+
+  .website-main.mobile-pane-edit .website-preview-controls {
+    display: none;
+  }
+
+  .website-handoff-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .website-handoff-action > div:last-child {
+    align-items: end;
+    flex-wrap: wrap;
+  }
+
+  .website-handoff-action strong {
+    font-size: 14px;
+  }
+
+  .website-handoff-action p {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .website-handoff-controls label {
+    font-size: 12px;
+  }
+
+  .website-handoff-controls input,
+  .website-handoff-controls .website-button {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .website-handoff-controls label:first-child {
+    flex: 1 1 150px;
+  }
+
+  .website-handoff-controls label:first-child input {
+    width: 100%;
+  }
+
+}
+
+/* ============================================================================
+   Design phase 3 -- P3.3 (2026-08-20): live rules re-homed from the gen-one
+   region per hq/strategy/WEBSITE-CSS-PIN-CATALOGUE.md section 5 (the minimum
+   move list) and section 4 (the websiteMobileCss safe re-anchor). True moves,
+   byte-identical rule bodies: the catalogue's move semantics override
+   DESIGN-PROGRAM's copy-in-place model so the P3.0 hex ratchet stays at 60
+   (a copy would have added #0b6b3a/#101512/#f4f2eb occurrences). Placed at
+   the HEAD of the live region, where the movers keep preceding every
+   live-region rule exactly as they did from the gen-one region -- the later
+   overrides (.preview-hero > .preview-cta font-size 14px, the max-640
+   panel-head/navigation-row/editor-panel restyles, the max-900 frame
+   collapse) all still win. The gen-one region above now holds only
+   catalogued-dead rules plus unpinned base rules awaiting P3.4's per-chunk
+   diff-review. The two "verify slice" comment markers below are load-bearing:
+   tools/verify_app_build.mjs slices websiteMobileCss between them (the old
+   anchors -- gen-one's first `@media (max-width: 640px)` and its only
+   `@media (prefers-reduced-motion` -- moved with this batch, so the slice
+   is re-anchored in the same PR). Preview-frame hexes below are permanently
+   exempt from tokenization (phase-2 item 12 ruling). */
+
+.website-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.website-preview-frame.is-tablet {
+  width: 100%;
+  max-width: 768px;
+}
+
+.website-preview-frame.is-mobile {
+  width: 100%;
+  max-width: 390px;
+}
+
+.preview-site-header > i {
+  display: none;
+  color: #0b6b3a;
+  font-family: var(--website-mono);
+  font-size: 7px;
+  font-style: normal;
+}
+
+.preview-hero > .preview-cta {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0 13px;
+  background: #101512;
+  color: #f4f2eb;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.website-preview-frame.is-tablet .preview-hero {
+  padding-block: 72px 58px;
+}
+
+.website-preview-frame.is-mobile .preview-site-header {
+  min-height: 50px;
+  padding-inline: 15px;
+}
+
+.website-preview-frame.is-mobile .preview-site-header > nav {
+  display: none;
+}
+
+.website-preview-frame.is-mobile .preview-site-header > i {
+  display: block;
+}
+
+.website-preview-frame.is-mobile .preview-hero {
+  padding: 54px 18px 46px;
+}
+
+.website-preview-frame.is-mobile .preview-hero > h1 {
+  margin-block: 10px 12px;
+  font-size: 38px;
+}
+
+.website-preview-frame.is-mobile .preview-hero > p {
+  font-size: 12px;
+}
+
+.website-preview-frame.is-mobile .preview-section-grid {
+  grid-template-columns: 1fr;
+}
+
+.website-preview-frame.is-mobile .preview-section-grid > article {
+  min-height: 145px;
+  border-right: 0;
+  padding: 24px 18px;
+}
+
+.website-preview-frame.is-mobile .preview-section-grid h2 {
+  font-size: 22px;
+}
+
+.website-preview-frame.is-mobile .preview-section-grid p {
+  font-size: 11px;
+}
+
+.website-preview-frame.is-mobile .preview-site-footer {
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 16px;
+}
+
+/* Mobile review controls -- verify slice start (P3.3) */
+@media (max-width: 640px) {
+  .website-business-controls > summary b { display: none; }
+  .website-business-controls > summary span { width: 100%; }
+  .website-button,
+  .website-button.is-compact,
+  .website-text-button,
+  .website-preview-controls > button,
+  .website-inline-actions > button,
+  .website-navigation-actions > button {
+    min-height: 44px;
+  }
+
+  .website-product input:not([type="checkbox"]):not([type="radio"]),
+  .website-product select {
+    min-height: 44px;
+  }
+
   .website-heading {
     min-height: 0;
     align-items: flex-start;
@@ -1995,24 +2073,10 @@
     white-space: normal;
   }
 
-  .website-mobile-pane-controls {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .website-mobile-pane-controls > button {
-    min-height: 44px;
-  }
-
   .website-preview-controls {
     width: 100%;
     display: flex;
     flex-wrap: wrap;
-  }
-
-  .website-main.mobile-pane-edit .website-preview-controls {
-    display: none;
   }
 
   .website-preview-controls > span {
@@ -2073,43 +2137,6 @@
     flex-direction: column;
   }
 
-  .website-handoff-action {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .website-handoff-action > div:last-child {
-    align-items: end;
-    flex-wrap: wrap;
-  }
-
-  .website-handoff-action strong {
-    font-size: 14px;
-  }
-
-  .website-handoff-action p {
-    font-size: 12px;
-    line-height: 1.45;
-  }
-
-  .website-handoff-controls label {
-    font-size: 12px;
-  }
-
-  .website-handoff-controls input,
-  .website-handoff-controls .website-button {
-    min-height: 44px;
-    font-size: 12px;
-  }
-
-  .website-handoff-controls label:first-child {
-    flex: 1 1 150px;
-  }
-
-  .website-handoff-controls label:first-child input {
-    width: 100%;
-  }
-
   .website-publish-history > article {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -2136,6 +2163,7 @@
     margin-top: -58px;
   }
 }
+/* Mobile review controls -- verify slice end (P3.3) */
 
 @media (prefers-reduced-motion: reduce) {
   .website-preview-frame {
@@ -4101,22 +4129,22 @@
    Design phase 2 — item 12 repair: the inert --website-quiet duplicate.
    Three `.website-product` blocks declare this file's aliases at identical
    specificity (0,0,1,0): the phase-1 block at :1-69, the live "Task-first
-   workspace shell" block at :2147-2167, and this shell block at :3226-3233
+   workspace shell" block at :2175-2195, and this shell block at :3254-3261
    (which does not touch --website-quiet at all). For a property declared on
    the SAME selector more than once at equal specificity, the cascade takes
    the LAST one in source order — so :7's `var(--core-quiet, #5f6f67)` (the
-   WCAG-AA-fixing tokenization) loses to :2153's hardcoded `#5f6d65` in light
+   WCAG-AA-fixing tokenization) loses to :2181's hardcoded `#5f6d65` in light
    mode. (An earlier read of this bug named .theme-dark's #7a8a9c override at
    :42 as the second declaration; that is a different, higher-specificity
    selector -- .theme-dark .website-product -- that legitimately wins in dark
    mode on its own merits and was not the defect. The live light-mode
-   collision is between :7 and :2153, both bare `.website-product`.)
+   collision is between :7 and :2181, both bare `.website-product`.)
    #5f6d65 and #5f6f67 read as nearly the same grey, so this was never a
    visible regression -- but it is exactly the var()-resolves-at-declaration-
    site trap the shadow ramp hit once already (see the .theme-dark override
    at EOF of core-app.css), and it makes the token silently dead. Rule 6
-   fences deletion of the phase-1 "generation-one" block (:1-2145) until
-   phase 3's pin cataloguing, so :2153's `#5f6d65` stays byte-identical in
+   fences deletion of the phase-1 "generation-one" block (:1-2145; :1-1929 since P3.3 re-homed the live movers) until
+   phase 3's pin cataloguing, so :2181's `#5f6d65` stays byte-identical in
    place; this later same-specificity declaration is what actually wins the
    cascade and restores the token. */
 .website-product {
@@ -4128,7 +4156,7 @@
      The earlier bare `.website-product` blocks disagree on the twelve custom
      properties below (thirteen counting --website-quiet above): the gen-one
      block at :1-31 declares core aliases, the live "Task-first workspace
-     shell" block at :2147-2167 redeclares each as a literal 2,146 lines later
+     shell" block at :2175-2195 redeclares each as a literal 2,174 lines later (post-P3.3 numbering)
      and wins on cascade order — which is why token edits applied to the :1
      block silently no-op. This EOF block is now the single authoritative
      declaration site: it restates every disputed property with the value that
@@ -4143,49 +4171,49 @@
        - the parked-literal shape where the authored value DIFFERS from core:
          `var(--website-<name>-authored, <literal>)`. The --website-*-authored
          tokens are deliberately undefined, so each line computes to its
-         fallback — the exact :2147-2167 value — while the literal sits in the
+         fallback — the exact :2175-2195 value — while the literal sits in the
          P3.0 ratchet's var()-fallback carve-out. Actually retiring one of
          these literals onto a core token is a later batch's visual decision:
          make it by editing THIS block (it is unpinned); the originals above
          stay byte-identical in place (Rules 3 and 6). */
 
-  /* Overrides :2 (gen-one alias onto --core-bg) and :2148 (live literal, the
+  /* Overrides :2 (gen-one alias onto --core-bg) and :2176 (live literal, the
      pre-P3.2 winner; differs from --core-bg #f6f4ee, so the literal is parked). */
   --website-bg: var(--website-bg-authored, #f3f5f2);
-  /* Overrides :3 (gen-one alias) and :2149 (live literal #ffffff, the pre-P3.2
+  /* Overrides :3 (gen-one alias) and :2177 (live literal #ffffff, the pre-P3.2
      winner). --core-panel is #ffffff in light — token-equal, so the alias is
      value-preserving. */
   --website-panel: var(--core-panel, #ffffff);
-  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :2150
+  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :2178
      (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-panel-raised: var(--website-panel-raised-authored, #f7f9f7);
-  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :2151 (live
+  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :2179 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-ink: var(--website-ink-authored, #17211c);
-  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :2152 (live
+  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :2180 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-muted: var(--website-muted-authored, #4d5d54);
-  /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :2154
+  /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :2182
      (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-line: var(--website-line-authored, #dce3de);
   /* Overrides :9 (gen-one alias onto --core-line-strong, an rgba value) and
-     :2155 (live literal, the pre-P3.2 winner; differs from core, parked). */
+     :2183 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-line-strong: var(--website-line-strong-authored, #c7d1ca);
-  /* Overrides :10 (gen-one alias) and :2156 (live literal #0b745e, the
+  /* Overrides :10 (gen-one alias) and :2184 (live literal #0b745e, the
      pre-P3.2 winner). --core-green is #0b745e in light — token-equal, so the
      alias is value-preserving. */
   --website-green: var(--core-green, #0b745e);
   /* Overrides :11 (gen-one alias onto --core-green-soft, an rgba value) and
-     :2157 (live literal, the pre-P3.2 winner; differs from core, parked). */
+     :2185 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-green-soft: var(--website-green-soft-authored, #e8f4ef);
-  /* Overrides :15 (gen-one alias onto --core-warn #946200) and :2158 (live
+  /* Overrides :15 (gen-one alias onto --core-warn #946200) and :2186 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-warn: var(--website-warn-authored, #8a5a00);
-  /* Overrides :16 (gen-one alias onto --core-danger #b42336) and :2159 (live
+  /* Overrides :16 (gen-one alias onto --core-danger #b42336) and :2187 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-danger: var(--website-danger-authored, #aa273b);
-  /* Overrides :17 (gen-one literal mono stack) and :2162 (live alias onto
+  /* Overrides :17 (gen-one literal mono stack) and :2190 (live alias onto
      --website-sans, the pre-P3.2 winner — the de-terminal-look decision).
-     --website-sans itself is undisputed: it is declared only at :2160. */
+     --website-sans itself is undisputed: it is declared only at :2188. */
   --website-mono: var(--website-sans);
 }

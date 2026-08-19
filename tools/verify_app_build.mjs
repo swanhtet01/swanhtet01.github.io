@@ -3976,7 +3976,16 @@ if (!publishSource.includes('Create site file')
   || publishSource.includes('Review in Shop')
   || publishSource.includes('onPrepareCommerceHandoff')
   || publishSource.includes('website-handoff')) fail('website_publish_owns_order_intake_or_lost_site_action')
-const websiteMobileCss = websiteCssSource.slice(websiteCssSource.indexOf('@media (max-width: 640px)'), websiteCssSource.indexOf('@media (prefers-reduced-motion'))
+// P3.3 re-anchor (WEBSITE-CSS-PIN-CATALOGUE.md section 4): the old anchors -- the file's
+// FIRST '@media (max-width: 640px)' (gen-one :1924) and its ONLY '@media (prefers-reduced-motion'
+// (gen-one :2140) -- moved to the live region with the mobile block itself, so the slice now
+// hangs off two unique comment markers in the live region (the :2572 comment-anchor house
+// style). indexOf returning -1 on either marker would silently corrupt the slice, so both
+// are asserted first.
+const websiteMobileCssStart = websiteCssSource.indexOf('/* Mobile review controls -- verify slice start (P3.3) */')
+const websiteMobileCssEnd = websiteCssSource.indexOf('/* Mobile review controls -- verify slice end (P3.3) */')
+if (websiteMobileCssStart === -1 || websiteMobileCssEnd === -1 || websiteMobileCssEnd <= websiteMobileCssStart) fail('website_mobile_css_slice_anchors_missing')
+const websiteMobileCss = websiteCssSource.slice(websiteMobileCssStart, websiteMobileCssEnd)
 const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
 if (!websiteCssSource.includes('.website-inline-actions > button,\n  .website-navigation-actions > button {\n    min-width: 44px;')) fail('website_mobile_reorder_touch_target_undersized')
