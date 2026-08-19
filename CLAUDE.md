@@ -118,6 +118,14 @@ actor string — actor strings are display copy and will be rewritten.
      `acceptedCalculation` by design.
    - **Ecommerce intent coexistence** — already implemented correctly; the two
      cross-kind rules were merely untested, now pinned (`7bc16bb0`).
+   - **Shop guided-sale pilot-outcome metric** (found in a follow-up audit
+     cycle, not part of the original four, fixed `c56a6dc1`) — real. The
+     founder-facing "did this pilot complete a real counter sale" signal
+     matched dead text from before #355 split counter checkout into
+     `order_create` (reserve) + `order_settle` (paid and handed over); no
+     code path could ever satisfy it, so the metric was stuck reporting
+     failure regardless of real usage. Re-pointed at `order_settle`'s
+     code-generated, non-editable summary text.
 3. Founder-gated items stay parked until the founder acts: production
    activation runbook, v12/v13 to prod, pricing decisions, release dispatch.
 
