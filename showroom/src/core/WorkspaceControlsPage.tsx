@@ -665,11 +665,12 @@ export function WorkspaceControlsPage() {
         </section>
 
         <section className="core-panel">
-          {/* S3 PR1 customer points (accrual only — module boundary, the per-device managed
-              gap, and the guided-sample exclusion are documented in shop-loyalty.ts).
-              Balances are recomputed from recorded orders on every read; enabling this
-              stores only the device-local settings record. Redemption is a later PR. */}
-          <div><span className="core-eyebrow">Customer points</span><h2>Reward repeat customers at the counter.</h2><p>Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically. A sale earns points once it is paid and handed over, credited to the exact customer name on the order; Guest sales earn nothing. Counting only for now: redeeming points at a sale is not part of this yet, and another register or browser keeps its own setting.</p></div>
+          {/* S3 customer points (module boundary, the per-device managed gap, the
+              guided-sample exclusion, and the PR2 redemption design are documented in
+              shop-loyalty.ts). Balances are recomputed from recorded orders on every
+              read; enabling this stores only the device-local settings record, and
+              each redemption appends a spend row beside it. */}
+          <div><span className="core-eyebrow">Customer points</span><h2>Reward repeat customers at the counter.</h2><p>Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically. A sale earns points once it is paid and handed over, credited to the exact customer name on the order; Guest sales earn nothing. Points are redeemed as a discount recorded on the order — 1 point = 1 MMK, spent from a completed sale in Orders. Another register or browser keeps its own setting.</p></div>
           <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} scope={shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)} />
         </section>
 

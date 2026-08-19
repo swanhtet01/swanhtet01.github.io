@@ -5668,6 +5668,38 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_KEY = 'supermega.shop
   || !coreCssSource.includes('.shop-loyalty-chip')
   || !workspaceControlsPageSource.includes('Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically.')
   || !workspaceControlsPageSource.includes('updateShopLoyaltySettings(settings, { enabled, rateBasisPoints }')) fail('shop_loyalty_contract_missing')
+// Roadmap S3 PR2 — redemption + receipt balance line. The money side rides the
+// EXISTING credit-correction machinery (commerce.order.correction_recorded is
+// already in the managed vocabulary — zero server change; GL and daily close
+// already net corrections); the points side is a spend row in the scoped
+// loyalty record keyed by the SAME proof actionId. Pins:
+//   - the pure mutation exists, blocks over-redemption against the projected
+//     balance, and refuses sample-seeded proofs (actionId prefix, never actor);
+//   - balances subtract spend rows (accrual reduction via the credit
+//     correction PLUS the row subtraction are BOTH intended — coherence is
+//     pinned in tools/test_shop_loyalty.mjs);
+//   - a PR1 record without the redemptions key keeps validating (no silent
+//     invalidation of freshly shipped data) while validation stays exact-key;
+//   - the UI locks a redemption to credit/other on the order's own customer,
+//     computes the row against the PRE-correction state, and writes it only
+//     AFTER the correction lands (a refused correction spends nothing);
+//   - the receipt dialog shows the balance line without touching the printed
+//     artifact text.
+const receiptDialogSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ReceiptDialog.tsx'), 'utf8')
+if (!shopLoyaltySource.includes('export function redeemShopLoyaltyPoints(')
+  || !shopLoyaltySource.includes('if (input.points > available) return null')
+  || !shopLoyaltySource.includes('proof.actionId.startsWith(SAMPLE_ACTION_ID_PREFIX)) return null')
+  || !shopLoyaltySource.includes('balances.set(redemption.customer, (balances.get(redemption.customer) ?? 0) - redemption.points)')
+  || !shopLoyaltySource.includes("hasExactKeys(value, 'redemptions' in value ? [...baseKeys, 'redemptions'] : baseKeys)")
+  || !shopLoyaltySource.includes('new Set(redemptions.map((redemption) => redemption.actionId)).size !== redemptions.length')
+  || !shopLoyaltySource.includes('export function shopLoyaltyRedeemedPointsForOrder(')
+  || !coreSource.includes("{ orderId, kind: 'credit', reasonCode: 'other', listedAmountMmk: '', loyalty: { customer } }")
+  || !coreSource.includes('if (loyaltyRedemption && !nextLoyalty) {')
+  || !coreSource.includes('if (writeShopLoyaltySettings(loyaltyScope, nextLoyalty)) {')
+  || !coreSource.includes('Redeem points · ')
+  || !coreSource.includes('loyalty={receiptLoyalty}')
+  || !receiptDialogSource.includes('Points balance')
+  || !workspaceControlsPageSource.includes('Points are redeemed as a discount recorded on the order — 1 point = 1 MMK')) fail('shop_loyalty_redemption_contract_missing')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('supplierSourcingDraft')
