@@ -1,6 +1,7 @@
 # Low-end Android performance baseline (roadmap F2 — measurement pass)
 
-Date: 2026-08-19
+Date: 2026-08-19 (revised same day: the original "chooser" row actually
+measured the default-entry redirect — see the route-semantics note in Method)
 Status: measurement only. No optimization was performed in this pass; the
 roadmap's F2 verdict ("no measured low-end-device profile exists — measure
 first", `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §1 F2) is what this
@@ -32,6 +33,13 @@ node tools/perf/measure-android-baseline.mjs --runs 3 --out baseline.json
     between DevTools' Slow 3G and Fast 3G presets)
   - Viewport: 360×800 @ 3× DPR, mobile, Android 13 SM-A135F (Galaxy A13)
     user-agent string
+- Route semantics (verified in source): bare `/` is NOT the chooser.
+  `ProductHomeEntry` redirects it to the remembered product, defaulting to
+  Shop (`CoreShell.tsx` ~513–525, `DEFAULT_ENTRY_PRODUCT = 'commerce'` at
+  `CoreShell.tsx:93`), and a missing `?tab=` resolves to `counter`
+  (`commerce-tabs.ts:21–22`). So `/` is measured as its own row — it is the
+  real first-load path a fresh or returning-Shop user hits (redirect →
+  counter) — and the chooser screen is measured at `/?choose=1`.
 - Per run: fresh tab, HTTP cache disabled (`Network.setCacheDisabled`), cold
   navigation, then settle until main thread and network were both quiet for
   3 s (45 s cap). 3 runs per route; the table reports medians.
@@ -48,24 +56,31 @@ node tools/perf/measure-android-baseline.mjs --runs 3 --out baseline.json
 
 | Route | FCP (ms) | DCL (ms) | load (ms) | JS transfer (KB gz) | JS source (KB) | JS executed (KB) | Long tasks | Long-task total (ms) | Longest task (ms) | ScriptDuration (s) |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `/` (chooser) | 3,964 | 3,748 | 3,748 | 415 | 1,483 | 327 | 9 | 2,108 | 1,033 | 2.27 |
-| `/shop/?tab=counter` | 4,528 | 3,883 | 3,887 | 415 | 1,483 | 323 | 9 | 2,228 | 753 | 2.21 |
-| `/shop/?tab=orders` | 4,256 | 3,814 | 3,820 | 424 | 1,508 | 370 | 9 | 2,182 | 783 | 2.34 |
-| `/plant/` | 4,372 | 3,909 | 3,915 | 411 | 1,470 | 301 | 9 | 1,693 | 494 | 1.77 |
-| `/website/` | 4,240 | 3,770 | 3,771 | 330 | 1,150 | 292 | 6 | 1,143 | 341 | 1.16 |
-| `/ecommerce/` | 4,156 | 3,795 | 3,797 | 346 | 1,242 | 315 | 9 | 1,520 | 335 | 1.47 |
+| `/` (default entry: redirect → Shop counter) | 3,940 | 3,690 | 3,690 | 415 | 1,483 | 327 | 7 | 1,412 | 627 | 1.68 |
+| `/?choose=1` (chooser) | 4,052 | 3,677 | 3,678 | 261 | 926 | 213 | 4 | 819 | 314 | 0.77 |
+| `/shop/?tab=counter` | 4,088 | 3,724 | 3,726 | 415 | 1,483 | 323 | 7 | 1,767 | 745 | 1.75 |
+| `/shop/?tab=orders` | 4,100 | 3,742 | 3,742 | 424 | 1,508 | 370 | 8 | 2,031 | 758 | 2.27 |
+| `/plant/` | 4,056 | 3,710 | 3,711 | 411 | 1,470 | 301 | 8 | 1,358 | 463 | 1.52 |
+| `/website/` | 4,088 | 3,715 | 3,716 | 330 | 1,150 | 292 | 5 | 1,102 | 330 | 1.05 |
+| `/ecommerce/` | 4,168 | 3,748 | 3,749 | 346 | 1,242 | 315 | 8 | 1,394 | 331 | 1.34 |
 
-Run-to-run spread was modest (FCP within ±11% of the median on every route,
-within ±5% on four of six; full per-run triples in the appendix), so the
-medians are stable enough to rank against.
+Run-to-run spread in this run was tight (FCP within ±3% of the median on
+every route; full per-run triples in the appendix), so the medians are
+stable enough to rank against.
 
 Reading the shape: the 4 KB HTML shell arrives in well under a second at
 this throughput, yet FCP lands AFTER the load event on every route —
 `index.html` paints nothing; first paint waits for the entry chunk plus every
-eagerly-imported model chunk to download, parse, and execute. `load` (~3.8 s)
-covers only the modulepreloaded entry set (`index-*.js` 74 KB gz +
+eagerly-imported model chunk to download, parse, and execute. `load`
+(~3.7 s) covers only the modulepreloaded entry set (`index-*.js` 74 KB gz +
 `router-*.js` 13 KB gz + CSS 35 KB gz); the dynamic route/model chunks keep
-streaming after it, which is why FCP trails load by 200–650 ms.
+streaming after it, which is why FCP trails load by 250–450 ms.
+
+The chooser row is the tell: `/?choose=1` ships 37% less JS than the counter
+(261 vs 415 KB gz, 11 vs 22 scripts) yet paints in the same ~4.05 s. First
+paint on this profile is dominated by the serial critical path — HTML →
+entry chunk → dynamically imported model chunks, each dynamic-import hop
+paying the 400 ms RTT — not by total bytes.
 
 ## Chunk attribution
 
@@ -74,7 +89,7 @@ Named chunks map to sources via `showroom/vite.config.ts` `manualChunks`
 
 | Chunk | gz KB | src KB | Source |
 |---|---|---|---|
-| `core-app-*.js` | 100.0 | 393 | `src/core/CoreApp.tsx` + `OperationsPageRoute.tsx` |
+| `core-app-*.js` | 100.0 | 393 | `src/core/CoreApp.tsx` + `OperationsPageRoute.tsx` — loads on `/`, `/shop/*`, `/plant/`; NOT on the chooser, `/website/`, `/ecommerce/` |
 | `index-Dl7tVyPC.js` (entry) | 74.1 | 233 | main entry: react, react-dom, App, CoreShell |
 | `commerce-model-*.js` | 60.1 | 237 | `src/core/commerce-workspace.ts` |
 | `operating-models-*.js` | 50.3 | 201 | `production-workspace.ts`, `channel-order-intake.ts`, `managed-trial.ts`, `team-work.ts` |
@@ -84,67 +99,75 @@ Named chunks map to sources via `showroom/vite.config.ts` `manualChunks`
 | `website-model-*.js` | 11.2 | 39 | `src/products/website/website-model.ts` |
 | `index-BrCosHje.js` | 56.0 | 214 | `@supabase/supabase-js` — dynamically imported at `managed-trial.ts:2477`; did NOT load on any measured route (good) |
 
-The eager edge that defeats route splitting: the chooser and every product
-route render through `workspace-runtime.ts`, which statically imports
-`commerce-workspace.ts`, `production-workspace.ts`, and `managed-trial.ts`
-(`src/core/workspace-runtime.ts` lines 12/35/56). Route-level `lazy()`
-boundaries exist in `App.tsx` (lines 9–20), but the model layer rides along
-everywhere: `commerce-model` (60.1 KB gz), `operating-models` (50.3 KB gz),
-`operating-baseline` (26.2 KB gz), and `shop-ledger-accounts` (13.3 KB gz)
-all loaded on all six measured routes — including `/website/` and
-`/ecommerce/`, where `commerce-model` executes only 14% of its bytes and
-`operating-models` 8%.
+The eager edge that defeats route splitting: every measured surface —
+including the chooser — renders through `workspace-runtime.ts`, which
+statically imports `commerce-workspace.ts`, `production-workspace.ts`, and
+`managed-trial.ts` (`src/core/workspace-runtime.ts` lines 12/35/56).
+Route-level `lazy()` boundaries exist in `App.tsx` (lines 9–20), but the
+model layer rides along everywhere: `commerce-model` (60.1 KB gz),
+`operating-models` (50.3 KB gz), `operating-baseline` (26.2 KB gz), and
+`shop-ledger-accounts` (13.3 KB gz) all loaded on all seven measured rows.
+On the chooser — a menu of four product tiles — those model chunks plus
+`website-model` total ~161 KB gz (62% of its 261 KB transfer) and execute
+10–18% of their bytes; on `/website/` and `/ecommerce/`, `commerce-model`
+executes only 14% and `operating-models` 8%.
 
 ## The three worst measured findings
 
-1. **Every route ships (nearly) the whole app; the model layer is not
-   route-split.** 330–424 KB gz of JS per cold route; per-route coverage
-   shows 1,150–1,508 KB of JS source parsed but only 292–370 KB executed
-   (roughly 75–80% of loaded JS unexecuted at settle). Implicated chunks:
-   `commerce-model-*.js` (60.1 KB gz, 21% executed even on Shop routes, 14%
-   on Website/Ecommerce), `operating-models-*.js` (50.3 KB gz, 8–12%
-   executed), both dragged onto every route by `workspace-runtime.ts`'s
-   static imports. `shop-ledger-accounts-*.js` (13.3 KB gz) executes 7% on
-   every measured route. On a 400 kbit/s link the unexecuted freight alone
-   is multiple seconds of transfer.
+1. **Every surface ships the full model layer; routes are not model-split.**
+   330–424 KB gz of JS per cold product route, 261 KB gz even for the
+   chooser menu; per-route coverage shows 926–1,508 KB of JS source parsed
+   but only 213–370 KB executed (roughly 75–80% unexecuted at settle on
+   every row). Implicated chunks: `commerce-model-*.js` (60.1 KB gz, ≤22%
+   executed anywhere, 14% on the chooser and Website/Ecommerce) and
+   `operating-models-*.js` (50.3 KB gz, 8–12% executed), both dragged onto
+   every surface by `workspace-runtime.ts`'s static imports;
+   `shop-ledger-accounts-*.js` (13.3 KB gz) executes 7–12% everywhere. On a
+   400 kbit/s link the unexecuted freight alone is multiple seconds of
+   transfer.
 
-2. **First paint waits ~4 s and arrives after `load` on every route.**
-   Median FCP 3,964–4,528 ms while the HTML itself (4 KB) is on-screen-ready
-   in <1 s of network time; the blank-screen window is spent downloading and
-   executing 415 KB gz of JS. Implicated: the entry chunk
-   `index-Dl7tVyPC.js` (74.1 KB gz) plus `core-app-*.js` (100.0 KB gz —
-   the single largest chunk, 393 KB source, of which only 9% executes on the
-   chooser and counter) sit on the first-paint critical path for `/`,
-   `/shop/*`, and `/plant/`.
+2. **First paint waits ~4 s and arrives after `load` on every route — and
+   bytes are not the binding constraint.** Median FCP is 3,940–4,168 ms on
+   all seven rows while the HTML itself (4 KB) is on-screen-ready in <1 s of
+   network time. The chooser proves the mechanism: 261 KB gz vs the
+   counter's 415 KB gz, identical ~4.05 s FCP — the cost is the serial
+   chain of entry chunk (`index-Dl7tVyPC.js`, 74.1 KB gz) then
+   dynamic-import waterfall (each hop paying 400 ms RTT) then parse/execute
+   under ×6 CPU, with `core-app-*.js` (100.0 KB gz, the largest chunk, 9%
+   executed on the counter) on that path for `/`, `/shop/*`, and `/plant/`.
 
-3. **The counter — the Galaxy user's daily screen — is the slowest route.**
-   `/shop/?tab=counter` has the worst median FCP (4,528 ms) and the worst
-   long-task total (2,228 ms across 9 main-thread tasks ≥50 ms, longest
-   753 ms; the chooser's longest is 1,033 ms). During those windows the page
-   cannot respond to a tap. Implicated: boot-time execution concentrated in
-   `index-Dl7tVyPC.js` (103 KB of 233 KB executed) and
-   `commerce-model-*.js` (50 KB executed) under ×6 CPU — ScriptDuration
-   alone is 2.21 s of the ~4 s to first paint.
+3. **Shop work routes carry the heaviest main-thread boot — on the screens
+   a Galaxy user lives in.** `/shop/?tab=orders` has the worst long-task
+   totals (2,031 ms across 8 tasks ≥50 ms) and worst ScriptDuration
+   (2.27 s); the counter is close behind (1,767 ms; longest single task
+   745 ms median, during which the page cannot respond to a tap). The
+   chooser, by contrast, blocks for only 819 ms total. Implicated:
+   boot-time execution concentrated in `index-Dl7tVyPC.js` (~104 KB of
+   233 KB executed) plus `commerce-model-*.js` (50 KB executed) plus
+   `core-app-*.js` (35–65 KB executed of 393 KB) under ×6 CPU.
 
 ## What to optimize first (ranked, each item cites its number)
 
 1. **Cut the `workspace-runtime.ts` eager-model edge.** Making
    `commerce-workspace` / `production-workspace` imports lazy or per-product
    removes 110.4 KB gz (`commerce-model` 60.1 + `operating-models` 50.3)
-   from routes that execute ≤21% of it — ~27% of the chooser's 415 KB gz JS
-   transfer, worth ~2.2 s of raw transfer at 400 kbit/s before parse savings.
-   This is the highest-leverage single change and it is a dependency-graph
-   change, not a rewrite.
+   from surfaces that execute ≤22% of it — ~27% of the counter's 415 KB gz
+   JS transfer and 42% of the chooser's 261 KB gz, worth ~2.2 s of raw
+   transfer at 400 kbit/s before parse savings. Highest-leverage single
+   change, and it is a dependency-graph change, not a rewrite.
 2. **Split `core-app-*.js` (100.0 KB gz / 393 KB src).** Only 9% executes on
-   the chooser and counter, 17% on the orders tab — the monolithic
-   `CoreApp.tsx` carries every tab's UI to paint one tab. Tab-level splitting
-   directly attacks finding 3's 4,528 ms counter FCP.
-3. **Give `index.html` a real first paint.** FCP trails `load` on all six
-   routes (e.g. chooser: FCP 3,964 ms vs load 3,748 ms); a static app-shell
-   skeleton in the 4 KB HTML would move first visual feedback from ~4 s to
-   well under 1 s on this profile without changing any JS.
-4. **Break up boot long tasks.** Median longest task is 1,033 ms on `/` and
-   753 ms on the counter; 9 tasks ≥50 ms totalling 2.1–2.2 s block input
+   the counter and `/plant/`, 17% on the orders tab — the monolithic
+   `CoreApp.tsx` carries every tab's UI to paint one tab, and it sits on the
+   first-paint path of `/`, `/shop/*`, and `/plant/` (finding 2).
+3. **Give `index.html` a real first paint and flatten the import
+   waterfall.** FCP trails `load` on all seven rows (e.g. `/`: FCP 3,940 ms
+   vs load 3,690 ms), and the chooser's same-FCP-at-37%-less-JS datum shows
+   serial RTT hops + parse, not bytes, set the floor. A static app-shell
+   skeleton in the 4 KB HTML moves first visual feedback to well under 1 s
+   on this profile with no JS changes; `<link rel="modulepreload">` for the
+   route's known chunk chain removes 400 ms per eliminated hop.
+4. **Break up boot long tasks on the Shop routes.** 2,031 ms (orders) and
+   1,767 ms (counter) of ≥50 ms tasks, longest 745–758 ms, block input
    during boot. Worth doing after 1–2, since smaller chunks shrink these
    tasks for free first.
 
@@ -164,16 +187,22 @@ loads on any measured route), or `client-capability-plan` /
 - Coverage "executed bytes" is measured at post-load settle; code that runs
   on later interaction counts as unexecuted here. It measures boot cost, not
   dead code.
-- 3 runs per route; medians are stable (FCP within ±11% of the median,
-  worst route) but tails are not characterized.
+- 3 runs per route; medians are stable in this run (FCP within ±3% of the
+  median; an earlier same-day run of the same build showed up to ±11%) but
+  tails are not characterized.
+- `/` was measured with cold `localStorage`, so its redirect lands on the
+  default product (Shop counter). A returning user whose last product was
+  Plant/Website/Ecommerce redirects there instead; those targets are
+  covered by their own rows.
 
 ## Appendix — per-run raw triples (FCP ms / load ms / long-task total ms)
 
 | Route | run 1 | run 2 | run 3 |
 |---|---|---|---|
-| `/` | 3964 / 3748 / 2108 | 4128 / 3819 / 1767 | 3960 / 3746 / 2163 |
-| `/shop/?tab=counter` | 4528 / 3887 / 2228 | 4704 / 4015 / 1958 | 4056 / 3648 / 2780 |
-| `/shop/?tab=orders` | 4148 / 3820 / 2715 | 4256 / 3845 / 2058 | 4424 / 3789 / 2182 |
-| `/plant/` | 4788 / 4100 / 2220 | 4260 / 3829 / 1693 | 4372 / 3915 / 1538 |
-| `/website/` | 4184 / 3776 / 995 | 4240 / 3771 / 1263 | 4352 / 3765 / 1143 |
-| `/ecommerce/` | 4156 / 3741 / 1520 | 4492 / 3931 / 1775 | 4016 / 3797 / 1297 |
+| `/` | 3940 / 3740 / 1647 | 3848 / 3690 / 1345 | 4040 / 3651 / 1412 |
+| `/?choose=1` | 4052 / 3688 / 819 | 4052 / 3678 / 811 | 4092 / 3675 / 936 |
+| `/shop/?tab=counter` | 4088 / 3726 / 1767 | 4036 / 3726 / 1800 | 4112 / 3753 / 1683 |
+| `/shop/?tab=orders` | 4068 / 3729 / 2031 | 4100 / 3742 / 1911 | 4104 / 3795 / 2033 |
+| `/plant/` | 4056 / 3711 / 1358 | 4064 / 3726 / 1280 | 4032 / 3696 / 1531 |
+| `/website/` | 4104 / 3763 / 1102 | 4036 / 3702 / 1031 | 4088 / 3716 / 1246 |
+| `/ecommerce/` | 4168 / 3749 / 1415 | 4184 / 3756 / 1394 | 4108 / 3746 / 1364 |

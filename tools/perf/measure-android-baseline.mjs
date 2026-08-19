@@ -42,8 +42,13 @@ const NET = {
 const DEVICE = { width: 360, height: 800, deviceScaleFactor: 3, mobile: true }
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 13; SM-A135F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'
+// NOTE: bare '/' is NOT the chooser — ProductHomeEntry (CoreShell.tsx
+// ~513-525) redirects it to the remembered product, defaulting to /shop/
+// (counter tab). The chooser only renders at /?choose=1. '/' is kept as its
+// own row because that redirect chain IS the real first-load path.
 const DEFAULT_ROUTES = [
   '/',
+  '/?choose=1',
   '/shop/?tab=counter',
   '/shop/?tab=orders',
   '/plant/',
