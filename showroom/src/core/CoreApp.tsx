@@ -42,6 +42,7 @@ import {
   type PendingAccountableAction,
 } from './workspace-runtime'
 import { formatTime } from './team-work'
+import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -1157,7 +1158,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
             const quantity = cart[item.sku] ?? 0
             const artKind = Math.max(0, items.indexOf(item)) % 5
             return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
-              <ShopProductArtwork kind={artKind} />
+              <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} sku={item.sku} />
               <span className="shop-product-copy"><strong>{item.name}</strong>{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
@@ -6031,7 +6032,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
       : null
     return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
-      <span role="rowheader"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span>
+      <span role="rowheader"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={item.name} sku={item.sku} /><span className="stock-row-copy"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
       <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
       <span role="cell">{item.reorderAt}</span>
       <span role="cell">{formatMoney(item.price)}</span>
