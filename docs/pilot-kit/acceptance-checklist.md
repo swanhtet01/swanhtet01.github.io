@@ -1,6 +1,6 @@
-# Shop pilot acceptance checklist — the five-day evidence plan
+# Shop pilot rehearsal checklist — the five-day preparation plan
 
-The readiness ledger requires acceptance evidence (`acceptanceEvidenceRequired`) before the founder decision `bounded-managed-pilot-rehearsal` can be prepared, and the Shop work order's required proof names "a named operator, baseline, and five-day evidence plan". This checklist is that plan, day by day. The five days, their proofs, the four start gates, and the five required measurements are taken verbatim from the pilot handoff generator (tools/create_shop_pilot_handoff.mjs), so the paper plan and the generated private handoff can never disagree.
+**This is the preparation plan, not the work order's acceptance evidence itself.** The Shop work order's full required proof (`hq/portfolio.json`) is "one authenticated order-to-close and return-exception pilot **on isolated hosted tenant**; named operator, baseline, and five-day evidence plan" — this checklist produces the named operator, the baseline, and a full five-day rehearsal of the plan, all on the browser-local working sample. It does NOT produce the authenticated hosted-tenant run itself; see [README.md](README.md)'s boundary section for why that is a separate, founder-only step this kit does not perform. The readiness ledger's `acceptanceEvidenceRequired` flag (part of the founder decision `bounded-managed-pilot-rehearsal`) is likewise only partially addressed here — this checklist prepares the operator and process, it does not by itself constitute the hosted acceptance evidence that flag names. The five days, their proofs, the four start gates, and the five required measurements are taken verbatim from the pilot handoff generator (tools/create_shop_pilot_handoff.mjs), so the paper plan and the generated private handoff can never disagree.
 
 ## Before day 1 — start gates
 
@@ -90,16 +90,17 @@ The handoff contract requires exactly these, and the daily records above produce
 
 ## Boundary for all five days
 
-Nothing on the readiness contract's does-not-authorize list ever happens during the pilot: `customer_message`, `payment`, `stock_move`, `production_database_change`, `production_deploy`, `managed_product_activation`, `hosted_scheduler_activation`. The app's own gate states the same boundary: `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
+Nothing on the readiness contract's does-not-authorize list ever happens during these five days: `customer_message`, `payment`, `stock_move`, `production_database_change`, `production_deploy`, `managed_product_activation`, `hosted_scheduler_activation`. The app's own gate states the same boundary: `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
 
-A hosted rehearsal is not part of these five days. If the founder separately approves the decision `bounded-managed-pilot-rehearsal`, that rehearsal runs on an isolated `preview_branch`, is bounded by `maximumLifetimeHours` of 24, starts with no production data, and is deleted after evidence (`delete_preview_branch_after_evidence`).
+**These five days do not, by themselves, close the Shop work order's gate.** That gate requires the pilot to be run authenticated on an isolated hosted/managed tenant (`hq/portfolio.json`'s `shop-managed-order-close-pilot`) — a separate, later, founder-only step this checklist prepares for but does not perform. Do not present a completed local rehearsal as if it were that hosted evidence run. Separately and not the same thing: if the founder approves the distinct decision `bounded-managed-pilot-rehearsal` (self-serve infrastructure proof, not this named-operator pilot), that rehearsal runs on an isolated `preview_branch`, is bounded by `maximumLifetimeHours` of 24, starts with no production data, and is deleted after evidence (`delete_preview_branch_after_evidence`).
 
 ## Mapping to the readiness contract
 
 | Contract requirement | Satisfied by |
 | --- | --- |
-| Shop work order's own gate — "named operator, baseline, and five-day evidence plan" (`hq/portfolio.json`) | Baseline form section 1 (named business and operator) plus the `namedOperatorAuthorized` gate, and this checklist's daily evidence |
+| Shop work order's gate, operator/baseline/rehearsal portion — "named operator, baseline, and five-day evidence plan" (`hq/portfolio.json`) | Baseline form section 1 (named business and operator) plus the `namedOperatorAuthorized` gate, and this checklist's daily evidence |
+| Shop work order's gate, hosted-tenant portion — "one authenticated order-to-close and return-exception pilot on isolated hosted tenant" (`hq/portfolio.json`) | **NOT satisfied by this kit.** Founder-only: provisioning and running the pilot on that tenant is a separate step this document does not perform |
 | `measuredBaselineRequired` (readiness ledger operator block) | Baseline form sections 3 through 5 |
-| `acceptanceEvidenceRequired` (readiness ledger operator block) | This checklist's daily records, the five required measurements, and the day 5 operator decision |
+| `acceptanceEvidenceRequired` (readiness ledger operator block) | Prepared, not fully satisfied: this checklist's daily records, the five required measurements, and the day 5 operator decision are the rehearsal evidence; the flag's own hosted acceptance run is the step above, not part of this kit |
 | `approve_preview_branch_target` (decision input) | Founder-only; nothing in this kit performs it |
 | `approve_self_serve_activation_window` (decision input) | Founder-only, and unrelated to this named-operator pilot; nothing in this kit performs it |
