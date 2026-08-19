@@ -1455,7 +1455,25 @@
    anchors -- gen-one's first `@media (max-width: 640px)` and its only
    `@media (prefers-reduced-motion` -- moved with this batch, so the slice
    is re-anchored in the same PR). Preview-frame hexes below are permanently
-   exempt from tokenization (phase-2 item 12 ruling). */
+   exempt from tokenization (phase-2 item 12 ruling).
+
+   P3.4 (2026-08-20): the catalogued-dead remainder is deleted -- 625 source
+   lines across two family-contiguous chunks (chunk 1: the workspace-chrome
+   families incl. the live-region Task-first-era rules section 6 of the
+   catalogue under-enumerated; chunk 2: the handoff family and the emptied
+   gen-one max-640 block). Family-contiguous, not region-contiguous: the
+   theme surface contract fails a chunk that deletes a family's .theme-dark
+   override while any of its light surfaces survives elsewhere, so each
+   family left whole. Every deleted selector was re-verified at zero TSX/TS
+   consumers immediately before deletion (dynamic is-, view-, theme-
+   construction checked). What remains above this comment (:1-1439) is the
+   gen-one base rules for still-rendered classes -- byte-identical originals
+   whose live-region successors win by cascade order -- plus four mixed
+   selector lists whose dead members ride alongside live ones; retiring
+   those is P3.9-attrition or consolidation work, not dead-rule deletion.
+   The hex ratchet stayed at 60: the dead rules carried rgba()/var() only,
+   so DESIGN-PROGRAM's "52 gen-one hex vanish with P3.4" expectation was
+   wrong -- those literals sit in the surviving base rules. */
 
 .website-disclosure > summary::-webkit-details-marker {
   display: none;
@@ -3504,22 +3522,22 @@
    Design phase 2 — item 12 repair: the inert --website-quiet duplicate.
    Three `.website-product` blocks declare this file's aliases at identical
    specificity (0,0,1,0): the phase-1 block at :1-69, the live "Task-first
-   workspace shell" block at :1685-1705, and this shell block at :2630-2637
+   workspace shell" block at :1703-1723, and this shell block at :2648-2655
    (which does not touch --website-quiet at all). For a property declared on
    the SAME selector more than once at equal specificity, the cascade takes
    the LAST one in source order — so :7's `var(--core-quiet, #5f6f67)` (the
-   WCAG-AA-fixing tokenization) loses to :1691's hardcoded `#5f6d65` in light
+   WCAG-AA-fixing tokenization) loses to :1709's hardcoded `#5f6d65` in light
    mode. (An earlier read of this bug named .theme-dark's #7a8a9c override at
    :42 as the second declaration; that is a different, higher-specificity
    selector -- .theme-dark .website-product -- that legitimately wins in dark
    mode on its own merits and was not the defect. The live light-mode
-   collision is between :7 and :1691, both bare `.website-product`.)
+   collision is between :7 and :1709, both bare `.website-product`.)
    #5f6d65 and #5f6f67 read as nearly the same grey, so this was never a
    visible regression -- but it is exactly the var()-resolves-at-declaration-
    site trap the shadow ramp hit once already (see the .theme-dark override
    at EOF of core-app.css), and it makes the token silently dead. Rule 6
-   fences deletion of the phase-1 "generation-one" block (:1-2145; :1-1929 since P3.3 re-homed the live movers) until
-   phase 3's pin cataloguing, so :1691's `#5f6d65` stays byte-identical in
+   fences deletion of the phase-1 "generation-one" block (:1-2145; :1-1929 since P3.3 re-homed the live movers; :1-1439 since P3.4 deleted the catalogued-dead remainder) until
+   phase 3's pin cataloguing, so :1709's `#5f6d65` stays byte-identical in
    place; this later same-specificity declaration is what actually wins the
    cascade and restores the token. */
 .website-product {
@@ -3531,7 +3549,7 @@
      The earlier bare `.website-product` blocks disagree on the twelve custom
      properties below (thirteen counting --website-quiet above): the gen-one
      block at :1-31 declares core aliases, the live "Task-first workspace
-     shell" block at :1685-1705 redeclares each as a literal 1,684 lines later (post-P3.3 numbering)
+     shell" block at :1703-1723 redeclares each as a literal 1,702 lines later (post-P3.4 numbering)
      and wins on cascade order — which is why token edits applied to the :1
      block silently no-op. This EOF block is now the single authoritative
      declaration site: it restates every disputed property with the value that
@@ -3546,49 +3564,49 @@
        - the parked-literal shape where the authored value DIFFERS from core:
          `var(--website-<name>-authored, <literal>)`. The --website-*-authored
          tokens are deliberately undefined, so each line computes to its
-         fallback — the exact :1685-1705 value — while the literal sits in the
+         fallback — the exact :1703-1723 value — while the literal sits in the
          P3.0 ratchet's var()-fallback carve-out. Actually retiring one of
          these literals onto a core token is a later batch's visual decision:
          make it by editing THIS block (it is unpinned); the originals above
          stay byte-identical in place (Rules 3 and 6). */
 
-  /* Overrides :2 (gen-one alias onto --core-bg) and :1686 (live literal, the
+  /* Overrides :2 (gen-one alias onto --core-bg) and :1704 (live literal, the
      pre-P3.2 winner; differs from --core-bg #f6f4ee, so the literal is parked). */
   --website-bg: var(--website-bg-authored, #f3f5f2);
-  /* Overrides :3 (gen-one alias) and :1687 (live literal #ffffff, the pre-P3.2
+  /* Overrides :3 (gen-one alias) and :1705 (live literal #ffffff, the pre-P3.2
      winner). --core-panel is #ffffff in light — token-equal, so the alias is
      value-preserving. */
   --website-panel: var(--core-panel, #ffffff);
-  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :1688
+  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :1706
      (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-panel-raised: var(--website-panel-raised-authored, #f7f9f7);
-  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :1689 (live
+  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :1707 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-ink: var(--website-ink-authored, #17211c);
-  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :1690 (live
+  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :1708 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-muted: var(--website-muted-authored, #4d5d54);
-  /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :1692
+  /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :1710
      (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-line: var(--website-line-authored, #dce3de);
   /* Overrides :9 (gen-one alias onto --core-line-strong, an rgba value) and
-     :1693 (live literal, the pre-P3.2 winner; differs from core, parked). */
+     :1711 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-line-strong: var(--website-line-strong-authored, #c7d1ca);
-  /* Overrides :10 (gen-one alias) and :1694 (live literal #0b745e, the
+  /* Overrides :10 (gen-one alias) and :1712 (live literal #0b745e, the
      pre-P3.2 winner). --core-green is #0b745e in light — token-equal, so the
      alias is value-preserving. */
   --website-green: var(--core-green, #0b745e);
   /* Overrides :11 (gen-one alias onto --core-green-soft, an rgba value) and
-     :1695 (live literal, the pre-P3.2 winner; differs from core, parked). */
+     :1713 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-green-soft: var(--website-green-soft-authored, #e8f4ef);
-  /* Overrides :15 (gen-one alias onto --core-warn #946200) and :1696 (live
+  /* Overrides :15 (gen-one alias onto --core-warn #946200) and :1714 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-warn: var(--website-warn-authored, #8a5a00);
-  /* Overrides :16 (gen-one alias onto --core-danger #b42336) and :1697 (live
+  /* Overrides :16 (gen-one alias onto --core-danger #b42336) and :1715 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-danger: var(--website-danger-authored, #aa273b);
-  /* Overrides :17 (gen-one literal mono stack) and :1700 (live alias onto
+  /* Overrides :17 (gen-one literal mono stack) and :1718 (live alias onto
      --website-sans, the pre-P3.2 winner — the de-terminal-look decision).
-     --website-sans itself is undisputed: it is declared only at :1698. */
+     --website-sans itself is undisputed: it is declared only at :1716. */
   --website-mono: var(--website-sans);
 }
