@@ -2618,3 +2618,34 @@ input, select, textarea { border-color: var(--core-field-line); }
   .mobile-nav.mobile-task-nav { grid-template-columns: repeat(5,minmax(0,1fr)); }
   .mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }
 }
+
+/* ============================================================================
+   Camera barcode scanning (Shop counter + catalog SKU entry).
+   The scan button sits beside the counter search input and inside the two
+   catalog SKU fields; the dialog hosts the live camera preview. Everything
+   consumes existing tokens; the only literals are the 44px touch-target
+   minimum the stylesheet already uses throughout, the 260px/38% search width
+   mirrored from the pinned .shop-item-search rule above (the row wrapper now
+   carries the width so the search input and the button share it), and the
+   near-black camera stage, which is deliberately theme-blind: a viewfinder is
+   dark while the sensor warms up in both themes, and no token means
+   "always-dark stage". var(--core-panel)/ink tokens flip with .theme-dark on
+   their own, so no dark overrides are needed here.
+   ========================================================================== */
+.shop-item-search-row { width: min(260px, 38%); display: flex; align-items: center; gap: var(--space-2); }
+.shop-item-search-row .shop-item-search { width: auto; flex: 1; min-width: 0; }
+@media (max-width: 1120px) { .shop-item-search-row { width: 100%; } }
+.sku-scan-row { display: flex; align-items: center; gap: var(--space-2); }
+.sku-scan-row input { flex: 1; min-width: 0; }
+.barcode-scan-button { flex: 0 0 auto; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--core-field-line); border-radius: var(--radius-md); padding: 0; background: var(--core-panel); color: var(--core-green); cursor: pointer; }
+.barcode-scan-button:hover, .barcode-scan-button:focus-visible { border-color: var(--core-green); background: var(--core-green-soft); }
+.barcode-scan-button:disabled { opacity: .52; cursor: not-allowed; }
+.barcode-scan-dialog { width: min(92vw, 420px); border: 1px solid var(--core-line-strong); border-radius: var(--radius-lg); padding: var(--space-4); background: var(--core-panel); color: var(--core-ink); box-shadow: var(--shadow-3); }
+.barcode-scan-dialog::backdrop { background: rgba(5, 8, 13, .72); }
+.barcode-scan-head { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
+.barcode-scan-head h2 { margin: 0; font-size: var(--font-size-lg); letter-spacing: -.01em; }
+.barcode-scan-video { width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius-md); object-fit: cover; background: #05080d; }
+.barcode-scan-hint, .barcode-scan-error { margin: var(--space-3) 0 0; font-size: var(--font-size-base); line-height: 1.5; }
+.barcode-scan-hint { color: var(--core-muted); }
+.barcode-scan-error { color: var(--core-danger); }
+.barcode-scan-actions { display: flex; justify-content: flex-end; margin-top: var(--space-4); }
