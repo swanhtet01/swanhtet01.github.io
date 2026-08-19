@@ -19094,7 +19094,13 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // inherited from either side's pre-merge number. Fresh `npm run app:build` measures
 // 2_998_482. Kept the existing 3_010_000 ceiling because it independently provides
 // ~11_518 bytes of real headroom over that number.
-if (bytes > 3_010_000) fail(`artifact_budget:${bytes}`)
+// RAISE 2026-08-19 (Shop mobile task nav + camera barcode scanning + product
+// photos, PR #459): CI's fresh dist/ measured 3_010_877 -- 877 bytes over the
+// old ceiling after three real product features (~600 source lines: shared
+// commerce-tabs module, BarcodeScanButton + dialog, product-image-store +
+// ProductPhoto surfaces). Raised to 3_030_000: covers the measured number with
+// ~19_123 bytes of headroom, same order of headroom the previous ceiling gave.
+if (bytes > 3_030_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
