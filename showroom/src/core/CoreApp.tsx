@@ -10,7 +10,9 @@ import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../product
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
 import { emitMetric } from '../analytics/metrics-collector'
+import { BarcodeScanButton } from './BarcodeScanButton'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
+import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
 import { bi } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
@@ -40,6 +42,7 @@ import {
   type PendingAccountableAction,
 } from './workspace-runtime'
 import { formatTime } from './team-work'
+import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -531,7 +534,6 @@ function productCanonicalPath(product: ProductId) {
   return product === 'commerce' ? '/shop/' : '/plant/'
 }
 
-type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'
 type ProductionTab = 'production' | 'control'
 
 export type ManagedTrialRequestPrefill = {
@@ -589,13 +591,8 @@ export function managedTrialRequestUrl(product: SetupProductId, templateId: stri
   return `https://supermega.dev/contact/?${query.toString()}${handoff ? `#${handoff}` : ''}`
 }
 
-const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
-  { id: 'today', label: 'Today' },
-  { id: 'counter', label: 'Sell' },
-  { id: 'orders', label: 'Orders' },
-  { id: 'inventory', label: 'Stock' },
-]
-
+// commerceTabs lives in ./commerce-tabs so the CoreShell mobile bottom bar can
+// render the same task list without importing this chunk-isolated module.
 const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'production', label: 'Jobs' },
   { id: 'control', label: 'Problems' },
@@ -978,7 +975,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const requestedRequestId = searchParams.get('request')
   const view = product
   const requestedTab = searchParams.get('tab')
-  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
+  const commerceTab = activeCommerceTab(requestedTab)
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
   const requestedTabIsCanonical = requestedTab === activeTab
@@ -1102,14 +1099,32 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
     setCart((current) => ({ ...current, [item.sku]: Math.min((current[item.sku] ?? 0) + 1, item.onHand) }))
   }
 
-  function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== 'Enter' || !normalizedQuery) return
+  // Single resolution path for every scan source. The Enter key (keyboard-wedge USB/BT
+  // scanners type the code and send Enter) and the camera scanner below both land here,
+  // so exact-SKU matching can never drift between the two.
+  function addScannedValue(value: string) {
+    const normalizedQuery = value.trim().toLocaleLowerCase()
+    if (!normalizedQuery) return false
+    const visibleItems = items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
     const exactSku = visibleItems.find((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
     const match = exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)
-    if (!match || match.onHand < 1) return
-    event.preventDefault()
+    if (!match || match.onHand < 1) return false
     addItem(match)
     setQuery('')
+    return true
+  }
+
+  function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter' || !normalizedQuery) return
+    if (addScannedValue(query)) event.preventDefault()
+  }
+
+  function addCameraScan(value: string) {
+    // Show the scanned code in the search box first: when it matches, addScannedValue
+    // clears it again in the same commit; when it does not match, the operator sees the
+    // exact code the camera read next to the "no matching item" state instead of nothing.
+    setQuery(value)
+    addScannedValue(value)
   }
 
   function clearSale() {
@@ -1136,14 +1151,14 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
-          <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item) => {
             const quantity = cart[item.sku] ?? 0
             const artKind = Math.max(0, items.indexOf(item)) % 5
             return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
-              <ShopProductArtwork kind={artKind} />
+              <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} sku={item.sku} />
               <span className="shop-product-copy"><strong>{item.name}</strong>{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
@@ -2590,7 +2605,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <div className="panel-head"><div><span className="core-eyebrow">Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with the first real inventory item. No browser demo orders, customers, or stock records are copied into this workspace.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
-        <div className="form-row"><label>SKU<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
+        <div className="form-row"><label>SKU<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
         <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
         <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
         <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
@@ -6017,7 +6032,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
       : null
     return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
-      <span role="rowheader"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span>
+      <span role="rowheader"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={item.name} sku={item.sku} /><span className="stock-row-copy"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
       <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
       <span role="cell">{item.reorderAt}</span>
       <span role="cell">{formatMoney(item.price)}</span>
@@ -6652,7 +6667,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <details className="compact-disclosure catalog-disclosure" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
-          <div className="form-row"><label>SKU<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
+          <div className="form-row"><label>SKU<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan the product barcode into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
           <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
           <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
           <div className="form-actions"><button className="core-button primary compact" disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>

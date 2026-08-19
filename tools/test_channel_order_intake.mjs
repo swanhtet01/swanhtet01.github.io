@@ -145,7 +145,9 @@ for (const [quantity, label] of [[0, 'zero'], [-1, 'negative'], [1.5, 'fractiona
     `a ${label} quantity is refused`,
   )
 }
-check(draftWith(honest, { channel: 'Telegram' }).blockers.includes('channel_invalid'), 'an unsupported channel is refused')
+check(draftWith(honest, { channel: 'WhatsApp' }).blockers.includes('channel_invalid'), 'an unsupported channel is refused')
+check(!draftWith(honest, { channel: 'Telegram' }).blockers.includes('channel_invalid'), 'Telegram is an accepted channel')
+check(!draftWith(honest, { channel: 'TikTok' }).blockers.includes('channel_invalid'), 'TikTok is an accepted channel')
 check(draftWith(honest, { payment: 'Bitcoin' }).blockers.includes('payment_invalid'), 'an unsupported payment method is refused')
 check(draftWith(honest, { message: '' }).blockers.includes('source_message_required'), 'a draft with no source message is refused')
 check(draftWith(honest, { sourceLabel: '' }).blockers.includes('source_label_required'), 'a draft with no source thread is refused')

@@ -99,8 +99,15 @@ actor string — actor strings are display copy and will be rewritten.
 
 ## Current queues (in priority order)
 
-1. Design phase 2 (`hq/strategy/DESIGN-PROGRAM.md`) — starts with the one-tap
-   cash sale.
+1. Design phase 2 (`hq/strategy/DESIGN-PROGRAM.md`) — **all 13 items SHIPPED
+   as of 2026-08-19** (do not re-chase; the "starts with the one-tap cash
+   sale" line below is what this file used to say before phase 2 closed).
+   Phase 3 is next: structural, each item "needs its own planning pass"
+   before implementation — do not blind-implement a phase 3 item from its
+   one-line queue description alone. Highest-leverage unblocked item: bottom-
+   nav work modes (item 1 shipped, so its prerequisite is clear; touches the
+   pinned `mobile-nav` markup at `tools/verify_app_build.mjs` ~1093 and
+   requires a full keyboard regression pass as acceptance criteria).
 2. ~~Verified correctness backlog~~ — all four items closed 2026-08-18 on
    `claude/supermega-dev-ceo-aije17`; do not re-chase them:
    - **SSRF IPv6 gap** — real, fixed (`cdb7c1d6`). NAT64 `64:ff9b::/96` and the

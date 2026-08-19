@@ -19,6 +19,10 @@ operational entrypoint is missing, not the whole rail). Grades below are not
 re-derived; treat any grade touching security, auditability, or the managed
 pilot as a floor, not a current reading, until a full re-grade pass is done.
 
+**Freshness note, 2026-08-19:** recommendation #4 below (section 8) is stale
+and its citation was wrong even when written — see the correction inline at
+that item. Do not resurrect it as open work without reading that note first.
+
 Grading key: A = provable today against an enterprise buyer's checklist.
 C = built or designed but not activated. F = absent with no plan.
 
@@ -161,9 +165,14 @@ and the kernel operations-report (7/30/90-day windows, kernel/README.md).
   implementation plan ready (30 named spans, redaction rules --
   hq/portfolio.json researchGates; hq/NOW.md R&D decisions) but zero
   packages installed and zero spans emitted.
-- No alerting: "alerts over the measured target states" is explicitly future
-  (kernel/README.md Next step 3). A failed live-health run today is a silent
-  red X in GitHub Actions.
+- No alerting over measured target states: "alerts over the measured target
+  states" is explicitly future (kernel/README.md Next step 3) -- this part
+  still holds. Narrower correction, 2026-08-19: a failed *live-health* run is
+  no longer a silent red X -- `supermega-public-live-health.yml`'s "Alert
+  owner on failed live verification" step files/comments a GitHub issue on
+  red, fail-open, since before this scorecard was written. See section 8
+  item 4 for the full correction; the remaining gap is metric-target
+  alerting (e.g. error-rate or latency thresholds), not live-health.
 - Analytics is adopt (implementation-steps-ready) but the no-PII MetricEvent
   aggregate schema has not passed founder PII review or shipped.
 
@@ -215,13 +224,29 @@ duplicates the deferred (dense-data-grid, realtime-broadcast) or rejected
    durable-workflows researchGate (managed persistence proven, callback auth
    satisfies the RLS tenant boundary, exactly-once order creation, lease
    check before workflow start).
-4. Live-health failure alerting on the existing founder-notify rail.
-   Why: the daily verifier exists but fails silently; the Resend email +
-   telegram founder-notify path already exists (OPS-738, AI-NATIVE 3.2), so
-   this is a workflow step, not a vendor. Cost: near zero. Gate: NEW
-   researchGate entry "alerting" -- conditions: notify-failure never blocks
-   or rolls back a release (fail-open for the alert, fail-closed for the
-   gate), founder-only recipient, no customer data in the payload.
+4. ~~Live-health failure alerting on the existing founder-notify rail.~~
+   **STALE as of 2026-08-19, and the citation was wrong when written.**
+   `.github/workflows/supermega-public-live-health.yml` already has an
+   "Alert owner on failed live verification" step: on a red run it opens (or
+   comments on an existing open) GitHub issue via the built-in
+   `GITHUB_TOKEN`, which reaches the owner through normal GitHub issue-
+   notification email. `continue-on-error: true` makes it fail-open exactly
+   as this recommendation asked (alert failure never blocks or rolls back
+   the release), and the payload is just the run URL and which surface
+   failed -- no customer data. The "daily verifier exists but fails
+   silently" premise no longer holds.
+   Separately, this recommendation's citation was never accurate: OPS-738
+   (`hq/WORKBOARD.md`) is `sendCustomerAcknowledgement`, a Resend email sent
+   to a *customer/lead* on delivery, not a founder alert -- and
+   AI-NATIVE-ARCHITECTURE.md sec 3.2 is the self-serve onboarding pipeline,
+   not an alerting rail. The real founder-facing notify path is
+   `kernel/alert.mjs` (`captureError`/`notify`, Telegram-only, already wired
+   into the money path in `kernel/connectors/payment-stripe.mjs`,
+   `kernel/api/stripe-webhook.mjs`, `kernel/api/brief.mjs`,
+   `kernel/api/workcells.mjs`) -- unrelated to OPS-738/Resend. The live-health
+   workflow uses neither path; it has its own simpler GitHub-issue mechanism,
+   which already satisfies the underlying need this recommendation asked for.
+   No `researchGate` entry is needed for this item.
 5. Scheduled hosted restore drills using the OPS-754 recovery proof.
    Why: backup that has never restored hosted is a hope, not a control;
    disposable Supabase preview branches are already the proven pattern
@@ -240,8 +265,9 @@ The three moves that raise the grade fastest:
    (managed-pilot-readiness.json founderDecision). One bounded action turns
    Reliability B -> A-, Auditability A- -> A, and unlocks the access ladder.
 2. Ship the observability floor: OTel local phase + error lane on the
-   MetricEvent beacon + live-health alerting (recs 1, 2, 4). D+ -> B, and it
-   feeds every scaling trigger in AI-NATIVE-ARCHITECTURE.md sec 5.
+   MetricEvent beacon (recs 1, 2 -- rec 4 is retired, already done; see
+   section 8 above). D+ -> B, and it feeds every scaling trigger in
+   AI-NATIVE-ARCHITECTURE.md sec 5.
 3. Walk the enterprise-capabilities sequence: verified-statements on the
    managed tenant, then staff-roles with a named operator (researchGates
    sequence; enterprise-staff-roles.ts header). Access control C+ -> B+ and

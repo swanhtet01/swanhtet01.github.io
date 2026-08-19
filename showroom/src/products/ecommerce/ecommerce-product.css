@@ -1933,3 +1933,14 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ============================================================================
+   Product photos (founder request 2026-08-19). When a Shop catalog item has a
+   device-local photo (core/product-image-store.ts), the storefront preview
+   card renders it in place of the generated artwork. The <img> reuses the
+   .storefront-product-art class so it inherits that rule's exact size, grid
+   placement, and radius (including the 64px phase-1 override above); this
+   only adds the photo-specific crop. The storefront preview is a deliberately
+   light document (see THEME_BLIND), so photos need no dark treatment.
+   ========================================================================== */
+.storefront-grid article > .storefront-product-photo { object-fit: cover; }

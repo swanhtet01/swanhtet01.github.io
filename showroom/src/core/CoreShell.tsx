@@ -4,6 +4,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { recordBehaviorSignal } from './behavior-trail'
+import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
 import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
 
@@ -374,6 +375,12 @@ export function CoreLayout() {
       ? [setupNavigation, productsNavigation]
       : [productsNavigation]
   const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []
+  // Design phase 3 "bottom-nav work modes", Shop slice: on phones the fixed
+  // bottom bar carries Shop's four task modes instead of the two-link product
+  // nav. Resolution of the active tab is shared with OperationsPage
+  // (activeCommerceTab), so the highlight matches the in-page toolbar even
+  // during the frame before that page canonicalizes a missing ?tab=.
+  const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(new URLSearchParams(location.search).get('tab')) : null
   const routeName = loginRoute
     ? 'Sign in'
     : sensitiveAccountRoute
@@ -454,7 +461,18 @@ export function CoreLayout() {
       </aside>
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link className="account-shell-link mobile-signup-topbar-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
-        {mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
+        {/* Shop's bottom bar is task navigation (all four links share the /shop/
+            pathname, so NavLink's pathname-based isActive would mark every tab
+            active — the highlight must come from the ?tab= param instead). Every
+            other route keeps the existing two-link product nav unchanged. The
+            fifth Products item is the only mobile door to /?choose=1 — the
+            sidebar is display:none at this breakpoint and the brand link
+            redirects to the last product, so removing it strands mobile Shop
+            users inside one product. It is a plain Link with no active state:
+            on /?choose=1 routeProduct is null and this bar never renders. */}
+        {routeProduct === 'commerce'
+          ? <nav className="mobile-nav mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{tab.label}</Link>)}<Link to="/?choose=1">Products</Link></nav>
+          : mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">
             <RouteErrorBoundary resetKey={location.pathname}><Outlet context={runtime} /></RouteErrorBoundary>

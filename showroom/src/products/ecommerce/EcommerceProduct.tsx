@@ -29,6 +29,7 @@ import {
   type ManagedIdentity,
   type ManagedStateRecord,
 } from '../../core/managed-trial'
+import { ProductPhoto } from '../../core/ProductPhoto'
 import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace'
 import {
   type EcommerceCartLine,
@@ -2193,7 +2194,7 @@ export function EcommerceProduct() {
                       data-requested={buyingCart.some((line) => line.sku === item.sku) ? 'true' : 'false'}
                       key={item.sku}
                     >
-                      <StorefrontProductArtwork sku={item.sku} />
+                      <ProductPhoto className="storefront-product-art storefront-product-photo" fallback={<StorefrontProductArtwork sku={item.sku} />} sku={item.sku} />
                       <small>{item.merchandising ? `${item.merchandising.featured ? 'Featured · ' : ''}${item.merchandising.collection}` : item.variant || item.sku}</small>
                       <strong>{displayName}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
