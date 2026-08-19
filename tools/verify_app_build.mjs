@@ -19162,7 +19162,8 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes('Storefront not saved,')
   || !pilotOutcomeSource.includes("metricId: 'shop-guided-sale-gap'")
   || !pilotOutcomeSource.includes("supermega.shop_guided_sale_outcome_source.v1")
-  || !pilotOutcomeSource.includes("action.evidenceReference.endsWith(' counter receipt')")
+  || !pilotOutcomeSource.includes("action.kind === 'order_settle'")
+  || !pilotOutcomeSource.includes("action.summary.includes(' · paid and handed over')")
   || !pilotOutcomeSource.includes("metricId: 'plant-guided-shift-close-gap'")
   || !pilotOutcomeSource.includes("supermega.plant_guided_shift_close_outcome_source.v1")
   || !pilotOutcomeSource.includes("event.kind === 'shift_closed'")
@@ -19232,11 +19233,15 @@ try {
   const guidedStartedAt = '2026-07-30T09:00:00.000Z'
   const guidedBaseline = outcome.buildShopGuidedSaleOutcomeMetric([], guidedStartedAt)
   if (guidedBaseline?.value !== 1 || guidedBaseline.unit !== 'gaps' || !guidedBaseline.sourceDigest.startsWith('sha256:')) fail('shop_guided_sale_baseline_invalid')
-  const oldCounterSale = { capturedAt: '2026-07-30T08:59:59.000Z', domain: 'commerce', kind: 'order_create', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-OLD counter receipt' }
-  const wrongAction = { capturedAt: '2026-07-30T09:01:00.000Z', domain: 'commerce', kind: 'order_status', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-WRONG counter receipt' }
+  const oldCounterSale = { capturedAt: '2026-07-30T08:59:59.000Z', domain: 'commerce', kind: 'order_settle', summary: 'Settle ORD-OLD · paid and handed over', evidenceReference: 'Order ORD-OLD' }
+  // A reserved-but-not-settled order (order_create, #355's explicit lifecycle step) must NOT
+  // count on its own -- this is the exact bug this metric had: order_create's summary/evidence
+  // text used to accidentally satisfy a stale filter meant for a "sale completed" signal that no
+  // code path had produced since #355 split creation from settlement.
+  const wrongAction = { capturedAt: '2026-07-30T09:01:00.000Z', domain: 'commerce', kind: 'order_create', summary: 'Create 18,500 MMK counter order', evidenceReference: 'Counter order ORD-WRONG' }
   const guidedBefore = outcome.buildShopGuidedSaleOutcomeMetric([oldCounterSale, wrongAction], guidedStartedAt)
   if (guidedBefore?.value !== 1 || guidedBefore.sourceDigest !== guidedBaseline.sourceDigest) fail('shop_guided_sale_unrelated_action_changed_metric')
-  const guidedSale = { capturedAt: '2026-07-30T09:02:00.000Z', domain: 'commerce', kind: 'order_create', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-NEW counter receipt' }
+  const guidedSale = { capturedAt: '2026-07-30T09:02:00.000Z', domain: 'commerce', kind: 'order_settle', summary: 'Settle ORD-NEW · paid and handed over', evidenceReference: 'Order ORD-NEW' }
   const guidedCurrent = outcome.buildShopGuidedSaleOutcomeMetric([oldCounterSale, wrongAction, guidedSale], guidedStartedAt)
   if (guidedCurrent?.value !== 0 || guidedCurrent.sourceDigest === guidedBaseline.sourceDigest || !guidedCurrent.detail.includes('1 owner-confirmed guided counter sale')) fail('shop_guided_sale_completion_invalid')
   const guidedStorageValues = new Map()
