@@ -19,6 +19,7 @@ import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/web
 import { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } from '../products/ecommerce/storefront-draft'
 import { managedTrialRequestUrl } from './CoreApp'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
+import { bi } from './i18n-actions'
 import {
   mergeManagedApprovals,
   toManagedApprovalRequest,
@@ -2080,7 +2081,7 @@ export function SettingsPage() {
                     const applied = demoWorkspace?.products.find((entry) => entry.product === product.product)?.status === 'applied'
                     const busy = preparedBusyProduct === product.product
                     const blocked = preparedBlockedProduct === product.product
-                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? 'Installed and ready' : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : 'Open'}</Link> : null}</section>
+                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? 'Installed and ready' : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : bi('Open')}</Link> : null}</section>
                   })}</div>
                   <p className="form-notice" aria-live="polite">{preparedNotice}</p>
                   {preparedBlockedEntry ? <div className="settings-step-actions" aria-label="Blocked installation recovery"><span>Keep the existing {preparedBlockedEntry.label} work, or use the recoverable reset controls before retrying.</span><div className="setup-action-group"><Link className="core-button" to={preparedBlockedEntry.demoPath}>Review {preparedBlockedEntry.label}</Link><a className="core-button primary" href="#controls">Open restore or reset controls</a></div></div> : null}
@@ -2101,7 +2102,7 @@ export function SettingsPage() {
           <label>Current record<input maxLength={180} required value={setup.currentRecord} onChange={(event) => updateSetup({ currentRecord: event.target.value })} placeholder="Chat, paper, sheet, system, or log." /></label>
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which actions need owner approval?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What proves the pilot works?" /></label></div>
-          <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save client setup</button></div>
+          <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">{bi('Back')}</button><button className="core-button primary" type="submit">Save client setup</button></div>
           {setup.savedAt ? <>
             <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Your AI memory preview is ready.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={aiMemoryFilename} href={aiMemoryHref}>Download AI memory</a>{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed AI</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</div></div>
             <section aria-label="AI memory preview" className="ai-memory-preview">
@@ -2229,7 +2230,7 @@ export function SettingsPage() {
                 <button className="core-button" onClick={saveLocalRestorePoint} type="button">Save restore point</button>
                 <a className="core-button" download={evidenceFilename} href={evidenceHref}>Export full evidence</a>
                 <label className="core-button">Load evidence backup<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadEvidenceRestorePoint(file) }} type="file" /></label>
-                {resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}
+                {resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">{bi('Cancel')}</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}
               </div>
             </section>
             {runtime.status !== 'enterprise' ? <section className="core-panel company-backup-panel">
