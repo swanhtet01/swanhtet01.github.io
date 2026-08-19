@@ -472,7 +472,19 @@ else {
     || webmanifest.short_name !== manifest.brand.name
     || webmanifest.description !== manifest.company.supporting
     || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
+  // Design phase 2 item 8: the vector favicon alone does not satisfy Chrome/Android
+  // installability (wants a raster PNG at 192/512) and iOS "Add to Home Screen" does
+  // not read the manifest at all -- both are checked here, not just icons[0].
+  const rasterIcons = webmanifest.icons?.filter((icon) => icon.type === 'image/png') ?? []
+  if (!rasterIcons.some((icon) => icon.sizes === '192x192' && icon.purpose === 'any')
+    || !rasterIcons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'any')
+    || !rasterIcons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'maskable')) fail('missing_pwa_raster_icons')
+  for (const icon of rasterIcons) {
+    if (!await exists(resolve(dist, icon.src.replace(/^\//, '')))) fail(`missing_manifest_icon_file:${icon.src}`)
+  }
 }
+if (!indexSource.includes('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
+  || !await exists(resolve(dist, 'apple-touch-icon.png'))) fail('missing_apple_touch_icon')
 if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
@@ -7727,6 +7739,26 @@ async function verifyPlantOrderRuntime() {
       && replenishmentPlan.summary.recommendedOrderUnits === 3
       && Object.values(replenishmentPlan.authority).every((allowed) => allowed === false),
     'shop_replenishment_status_or_authority_wrong')
+    // The well-formed fixture's Plant material links to a Shop SKU that genuinely
+    // exists, so a correct build must show zero unmatched demand here.
+    assertReplenishment(replenishmentPlan.unmatchedDemand.length === 0 && replenishmentPlan.summary.unmatchedSkuCount === 0,
+      'shop_replenishment_false_positive_unmatched_demand')
+    // A Plant material's Shop SKU is free text on its BOM row, never checked against a
+    // real Shop item -- if the item is later renamed or deleted, the SAME Plant demand
+    // that drove the assertions above must not silently vanish: it has to surface as
+    // unmatched, naming the sku, the material and quantity actually needed (a "Shop
+    // stock unit" count is meaningless for a sku that never resolved), and the jobs
+    // that need it.
+    const commerceWithoutLinkedItem = commerce.validateCommerceState({ ...mrpPurchaseOrder, items: [], purchaseOrders: [] })
+    const orphanedReplenishmentPlan = replenishment.projectShopReplenishment(commerceWithoutLinkedItem, productionForReplenishment)
+    const orphanedDemand = orphanedReplenishmentPlan.unmatchedDemand.find((entry) => entry.sku === 'SKU-RM-BAG')
+    assertReplenishment(orphanedReplenishmentPlan.rows.length === 0
+      && orphanedDemand?.materialName === 'Filter media'
+      && orphanedDemand.unit === 'kg'
+      && orphanedDemand.requiredQuantityMilli === 30_000
+      && orphanedDemand.jobIds.join(',') === 'JOB-401,JOB-402'
+      && orphanedReplenishmentPlan.summary.unmatchedSkuCount === 1,
+    'shop_replenishment_orphaned_plant_demand_not_surfaced')
     assertReplenishment(replenishment.validateShopReplenishment(replenishmentPlan, mrpPurchaseOrder, productionForReplenishment).digest === replenishmentPlan.digest,
       'shop_replenishment_current_packet_rejected')
     const tamperedReplenishment = structuredClone(replenishmentPlan)
@@ -18871,37 +18903,16 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk), the General Ledger MVP (FREE_FOREVER local projection: shop-ledger-accounts/-journal/-monthly-statement + ShopMonthlyStatement surface + accounting-handoff v4 ledger section; ~20KB net across the ledger chunk and owner statement), and the self-serve claim-code activation panel + inline trial terms (ManagedLoginPage activation flow, trial-terms.ts seven clauses at the signup checkbox; ~4KB — the customer path the activation window opens onto), and the restore deletion preview (FREE_FOREVER: planCompanyRestore plus the plan-driven restore write in core/company-backup.ts, and the backup-age line, deletion sentence and acknowledgement in CompanyBackupPanel; ~1.8KB across the company-backup and settings chunks — restore deletes every resettable key the snapshot does not carry, so this is the only thing standing between an owner and the appointment book they saved after the backup was taken), and order-intake correction capture (core/order-intake-correction-capture.ts wired into ChannelOrderIntake; ~3.2KB spread across the lazy intake chunk and the service-worker manifest — the digest-only record of which fields an operator had to fix on an AI-proposed channel order, which is the only moment that signal exists and was previously discarded by the first edit that made it worth having).
-// ...and the appointment-book durability guard (core/shop-service-scheduling.ts
-// mutateShopServiceSchedule: exclusive Web Lock, validate-before-write, and read-back
-// confirmation, matching what mutateCommerceWorkspace already gives the counter; ~0.3KB).
-// The book was previously written with a bare setItem, so a quota or private-mode
-// rejection looked like a saved booking and two tabs could overwrite each other. For an
-// appointment trade the book IS the business, so this is bytes well spent.
-// Measured together at 2_889_453 on the 2026-08-18 pilot-safety integration, up 6_535
-// from main. Note this exceeds every ceiling the three branches carried individually
-// (2_885/2_886/2_887_000), so a merge that took the highest of them would have failed:
-// re-measure after combining, never inherit the largest number.
-// ...and local analytics persistence (analytics/metrics-collector.ts: the reserved
-// supermega.hq.local-metrics.v1 key is finally written, bounded to 500 events, with a
-// closed-shape validator on read; ~0.95KB, measured 2_890_408). The collector kept events
-// in a module array, so every reload erased them and a month-long pilot would have
-// produced no measurable evidence at all. Deliberately not portable in a backup: these
-// counters describe THIS device.
-// ...and the restore deletion split (core/company-backup.ts planCompanyRestore now separates
-// clearedByDesign from losingOwnerWork, and CompanyBackupPanel warns only on the latter;
-// ~0.8KB, measured 2_891_184). Non-portable keys are cleared on EVERY restore because a
-// backup can never carry them, so counting them as "records you saved" fired the
-// acknowledgement every single time -- and an alarm that always sounds is one the owner
-// learns to click past, on the one restore that would really cost a day of appointments.
-// MERGE MEASUREMENT 2026-08-19: pilot-safety branch combined with main through 3ee3b03d
-// measures 2_904_676 -- 5_324 under the 2_910_000 main raised for the design phase-2 wave.
-// The ceiling is left at main's figure rather than tightened to the combined total: main
-// chose that headroom for design work still in flight, and shrinking it here would fail
-// their next commit for a reason belonging to this branch. Neither side's pre-merge number
-// was correct on its own (this branch had 2_892_000, main 2_910_000) -- re-measure after
-// combining, never inherit either figure.
-if (bytes > 2_910_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk), the General Ledger MVP (FREE_FOREVER local projection: shop-ledger-accounts/-journal/-monthly-statement + ShopMonthlyStatement surface + accounting-handoff v4 ledger section; ~20KB net across the ledger chunk and owner statement), and the self-serve claim-code activation panel + inline trial terms (ManagedLoginPage activation flow, trial-terms.ts seven clauses at the signup checkbox; ~4KB — the customer path the activation window opens onto), and the restore deletion preview (FREE_FOREVER: planCompanyRestore plus the plan-driven restore write in core/company-backup.ts, and the backup-age line, deletion sentence and acknowledgement in CompanyBackupPanel; ~1.8KB across the company-backup and settings chunks — restore deletes every resettable key the snapshot does not carry, so this is the only thing standing between an owner and the appointment book they saved after the backup was taken), and order-intake correction capture (core/order-intake-correction-capture.ts wired into ChannelOrderIntake; ~3.2KB spread across the lazy intake chunk and the service-worker manifest — the digest-only record of which fields an operator had to fix on an AI-proposed channel order, which is the only moment that signal exists and was previously discarded by the first edit that made it worth having), and the design phase-1 foundation (2026-08 tribunal: token ramps + on-accent/field-line/scroll-accent tokens, WCAG contrast overrides, Myanmar script stacks with :lang(my) line-height guard, money-path type floor, 561-840px touch targets, light-theme tile art — ~6KB of appended CSS across the three islands), the design phase-2 wave (the one-review 'Paid & handed over' settle path, the 'Close the day' section lifted out of the policy accordion, cart money total, status-pill semantics, de-branded merchant surfaces, zero-flash theme restore, theme-toggle SVG icons, primary-button spec normalization, font-weight ramp collapse), and the PWA raster icon set (design phase-2 item 8: icon-192/icon-512/icon-512-maskable/apple-touch-icon PNGs -- the vector favicon alone does not satisfy Chrome/Android installability or iOS home-screen icons; ~11.7KB of binary assets, not app code).
+// MERGE MEASUREMENT 2026-08-19 (feat/persist-local-metrics x origin/main, PWA-icons wave):
+// combined this branch's local-metrics/restore-preview/order-intake-correction work with
+// main's design phase-2 completion through the PWA icon set. Fresh `npm run app:build`
+// measures 2_925_417 -- neither side's pre-merge number was correct on its own (this
+// branch carried 2_910_000, main carried 2_930_000). Kept main's 2_930_000 ceiling
+// because it independently provides ~4_583 bytes of real headroom over the remeasured
+// total, not because it was the larger figure -- re-measure after every combine, never
+// inherit either side's number on faith.
+if (bytes > 2_930_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

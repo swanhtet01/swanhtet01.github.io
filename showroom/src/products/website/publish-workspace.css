@@ -97,7 +97,7 @@
   background: var(--website-panel);
   color: var(--website-muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
 }
 
 .publish-flow-nav button[aria-current="step"] .publish-flow-step-number {
@@ -127,7 +127,7 @@
 .publish-flow-step-label small {
   color: var(--website-muted);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .publish-flow-boundary {
@@ -202,7 +202,7 @@
   background: var(--website-panel-raised);
   color: var(--website-muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-publish-workspace .publish-flow-revision code {
@@ -234,7 +234,7 @@
   border-radius: 999px;
   padding: 0 7px;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
 }
 
 .website-publish-workspace .website-check-list > article.is-passed {
@@ -457,7 +457,7 @@
   cursor: pointer;
   color: var(--website-ink);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
 }
 
 .website-go-live-option ol {
@@ -567,7 +567,7 @@
   gap: 6px;
   color: var(--website-muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-release-config > details {
@@ -583,7 +583,7 @@
   cursor: pointer;
   color: var(--website-ink);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
 }
 
 .website-release-options {
@@ -610,7 +610,7 @@
   gap: 9px;
   color: var(--website-ink);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   line-height: 1.4;
 }
 
@@ -648,14 +648,14 @@
 .website-release-summary dt {
   color: var(--website-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .website-release-summary dd {
   margin: 2px 0 0;
   color: var(--website-ink);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
 }
 
 .website-release-action {

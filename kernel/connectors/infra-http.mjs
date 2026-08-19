@@ -40,6 +40,29 @@ function inV4(ip, cidr) {
   return (ipToLong(ip) & mask) === (ipToLong(base) & mask)
 }
 const V4_BLOCKED = ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.168.0.0/16', '198.18.0.0/15', '224.0.0.0/4', '240.0.0.0/4']
+// Expands any valid IPv6 literal to its 8 four-hex-digit groups, resolving both `::`
+// compression and a trailing embedded IPv4 dotted tail (e.g. ::ffff:127.0.0.1). Returns
+// null for anything malformed rather than guessing.
+function expandIPv6(raw) {
+  let ip = raw.toLowerCase()
+  const dotted = ip.match(/(\d+\.\d+\.\d+\.\d+)$/)
+  if (dotted) {
+    const octets = dotted[1].split('.').map(Number)
+    if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) return null
+    const hex1 = ((octets[0] << 8) | octets[1]).toString(16)
+    const hex2 = ((octets[2] << 8) | octets[3]).toString(16)
+    ip = ip.slice(0, -dotted[1].length) + hex1 + ':' + hex2
+  }
+  const halves = ip.split('::')
+  if (halves.length > 2) return null
+  const head = halves[0] ? halves[0].split(':').filter(Boolean) : []
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':').filter(Boolean) : []
+  if (halves.length === 1) { if (head.length !== 8) return null; return head.map((g) => g.padStart(4, '0')) }
+  const missing = 8 - head.length - tail.length
+  if (missing < 0) return null
+  const groups = [...head, ...Array(missing).fill('0'), ...tail]
+  return groups.length === 8 ? groups.map((g) => g.padStart(4, '0')) : null
+}
 function isBlockedIp(ip) {
   const v = isIP(ip)
   if (v === 4) return V4_BLOCKED.some((c) => inV4(ip, c))
@@ -48,7 +71,15 @@ function isBlockedIp(ip) {
     if (lo === '::1' || lo === '::') return true
     if (/^f[cd]/.test(lo)) return true        // fc00::/7 unique-local
     if (/^fe[89ab]/.test(lo)) return true     // fe80::/10 link-local
-    const m = lo.match(/(?:::ffff:)(\d+\.\d+\.\d+\.\d+)$/); if (m) return isBlockedIp(m[1]) // v4-mapped
+    // v4-mapped (::ffff:0:0/96): catch BOTH the dotted-decimal tail (::ffff:127.0.0.1)
+    // and the plain-hex tail (::ffff:7f00:1, or fully expanded with no ::) — the
+    // dotted-only regex this replaced let the hex form of the exact same address
+    // through unblocked.
+    const groups = expandIPv6(lo)
+    if (groups && groups.slice(0, 5).every((g) => g === '0000') && groups[5] === 'ffff') {
+      const hi = parseInt(groups[6], 16), low = parseInt(groups[7], 16)
+      return isBlockedIp([(hi >> 8) & 255, hi & 255, (low >> 8) & 255, low & 255].join('.'))
+    }
     return false
   }
   return false

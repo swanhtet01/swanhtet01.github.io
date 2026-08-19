@@ -29,21 +29,21 @@
 
 .vision-hero { padding: 30px 0 76px; }
 .vision-hero nav { display: flex; justify-content: space-between; gap: 20px; color: var(--vision-muted); font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }
-.vision-hero nav a { color: var(--vision-ink); font-weight: 800; text-decoration: none; }
+.vision-hero nav a { color: var(--vision-ink); font-weight: var(--font-weight-black); text-decoration: none; }
 .vision-hero-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 64px; align-items: end; padding-top: 88px; }
 .vision-kicker,
-.vision-section-heading p { margin: 0 0 14px; color: var(--vision-accent); font-size: .78rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
-.vision-hero h1 { max-width: 760px; margin: 0; font-size: clamp(2.8rem, 7vw, 6.5rem); font-weight: 720; letter-spacing: -.065em; line-height: .92; text-wrap: balance; }
+.vision-section-heading p { margin: 0 0 14px; color: var(--vision-accent); font-size: .78rem; font-weight: var(--font-weight-black); letter-spacing: .13em; text-transform: uppercase; }
+.vision-hero h1 { max-width: 760px; margin: 0; font-size: clamp(2.8rem, 7vw, 6.5rem); font-weight: var(--font-weight-bold); letter-spacing: -.065em; line-height: .92; text-wrap: balance; }
 .vision-lede { max-width: 690px; margin: 30px 0 0; color: var(--vision-muted); font-size: clamp(1.05rem, 2vw, 1.35rem); line-height: 1.65; }
 .vision-boundary { display: flex; gap: 12px; align-items: baseline; max-width: 720px; margin-top: 28px; border-left: 3px solid var(--vision-warn); padding: 4px 0 4px 16px; color: var(--vision-muted); }
 .vision-boundary strong { flex: 0 0 auto; color: var(--vision-warn); }
 
 .vision-proof-card { border: 1px solid var(--vision-line); border-radius: 22px; padding: 26px; background: linear-gradient(160deg, rgba(19, 54, 62, .92), rgba(8, 28, 34, .92)); box-shadow: 0 28px 80px rgba(0, 0, 0, .25); }
-.vision-proof-card > span { color: var(--vision-accent); font-size: .75rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.vision-proof-card > span { color: var(--vision-accent); font-size: .75rem; font-weight: var(--font-weight-black); letter-spacing: .1em; text-transform: uppercase; }
 .vision-proof-card dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 26px 0 16px; }
 .vision-proof-card dl div { border-top: 1px solid var(--vision-line); padding-top: 12px; }
 .vision-proof-card dt { color: var(--vision-muted); font-size: .72rem; }
-.vision-proof-card dd { margin: 3px 0 0; color: var(--vision-ink); font-size: 1.65rem; font-weight: 750; }
+.vision-proof-card dd { margin: 3px 0 0; color: var(--vision-ink); font-size: 1.65rem; font-weight: var(--font-weight-bold); }
 .vision-proof-card small { display: block; color: var(--vision-muted); }
 .vision-proof-card code { display: block; margin-top: 24px; overflow-wrap: anywhere; color: var(--vision-muted); font-size: .7rem; }
 
@@ -51,7 +51,7 @@
 .vision-section-heading { display: grid; grid-template-columns: minmax(160px, .4fr) minmax(0, 1fr); gap: 30px; align-items: start; }
 .vision-section h2 { max-width: 760px; margin: 0; font-size: clamp(2rem, 4.5vw, 4rem); letter-spacing: -.045em; line-height: 1.02; text-wrap: balance; }
 .vision-capability-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 44px 0 0; padding: 0; list-style: none; }
-.vision-capability-grid li { min-height: 112px; border: 1px solid var(--vision-line); border-radius: 16px; padding: 22px; background: rgba(13, 36, 43, .58); font-weight: 700; }
+.vision-capability-grid li { min-height: 112px; border: 1px solid var(--vision-line); border-radius: 16px; padding: 22px; background: rgba(13, 36, 43, .58); font-weight: var(--font-weight-bold); }
 
 .vision-pilot ol { display: grid; gap: 1px; margin: 48px 0 0; padding: 0; list-style: none; background: var(--vision-line); }
 .vision-pilot li { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 18px; align-items: start; padding: 24px; background: var(--vision-bg); }
@@ -64,7 +64,7 @@
 .vision-footer { display: flex; justify-content: space-between; gap: 24px; align-items: center; border-top: 1px solid var(--vision-line); padding: 34px 0 48px; }
 .vision-footer div { display: grid; gap: 3px; }
 .vision-footer span { color: var(--vision-muted); font-size: .82rem; }
-.vision-footer a { color: var(--vision-accent); font-weight: 700; text-underline-offset: 4px; }
+.vision-footer a { color: var(--vision-accent); font-weight: var(--font-weight-bold); text-underline-offset: 4px; }
 
 @media (max-width: 760px) {
   .vision-hero-grid,

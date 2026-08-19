@@ -61,7 +61,7 @@
      dark mode, where the literal measured 3.07:1 on the themed panel behind it. */
   color: var(--core-muted);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-workspace-switch select,
@@ -75,7 +75,7 @@
   color: #17231d;
   font: inherit;
   font-size: 13px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
 
@@ -193,7 +193,7 @@
      4.2:1 here was taken against the page ground rather than the card. */
   color: #6b786f;
   font-size: 9px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-transform: uppercase;
 }
@@ -218,7 +218,7 @@
 .ecommerce-today-source span {
   color: #345444;
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-today-source small {
@@ -252,7 +252,7 @@
 .ecommerce-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
 .ecommerce-business-controls > summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-business-controls > summary small { overflow: hidden; color: var(--core-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 10px; font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-business-controls-content { display: grid; gap: 10px; padding: 10px; }
 .ecommerce-business-controls-content > .ecommerce-ai-desk,
 .ecommerce-business-controls-content > .ecommerce-ops-cockpit { margin: 0; }
@@ -318,7 +318,7 @@
   overflow: hidden;
   color: #66746b;
   font-size: 8px;
-  font-weight: 780;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -348,7 +348,7 @@
 .ecommerce-ai-agent-queue small {
   color: #66746b;
   font-size: 8px;
-  font-weight: 780;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-transform: uppercase;
 }
@@ -412,7 +412,7 @@
 .ecommerce-order-import-workspace > summary span,
 .ecommerce-enterprise-controls > summary span {
   font-size: 13px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
 }
 
 .ecommerce-order-import-workspace > summary small,
@@ -427,7 +427,7 @@
   content: '+';
   color: #0b745e;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-order-import-workspace[open] > summary::after,
@@ -483,7 +483,7 @@
 .ecommerce-order-intake-guide small {
   color: #4655a5;
   font-size: 9px;
-  font-weight: 820;
+  font-weight: var(--font-weight-black);
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -515,7 +515,7 @@
 .ecommerce-order-repair-checklist small {
   color: #9a4b0b;
   font-size: 9px;
-  font-weight: 820;
+  font-weight: var(--font-weight-black);
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -539,7 +539,7 @@
   margin-top: 10px;
   color: #4655a5;
   font-size: 11px;
-  font-weight: 780;
+  font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-order-import-field textarea {
@@ -564,7 +564,7 @@
   background: #fff;
   color: #4655a5;
   font-size: 11px;
-  font-weight: 780;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
 
@@ -636,7 +636,7 @@
   background: #fff;
   color: #2f3d36;
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-request-filter button[aria-pressed="true"] {
@@ -740,7 +740,7 @@
 .ecommerce-ops-cockpit-rows small {
   color: #66746b;
   font-size: 8px;
-  font-weight: 780;
+  font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-transform: uppercase;
 }
@@ -1038,7 +1038,7 @@
   color: #fff;
   font: inherit;
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--font-weight-black);
   cursor: pointer;
 }
 
@@ -1151,7 +1151,7 @@
   color: #7a5142;
   font: inherit;
   font-size: 11px;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
 
@@ -1201,13 +1201,13 @@
   gap: 5px;
   color: #56665d;
   font-size: 9px;
-  font-weight: 720;
+  font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-buying-body > form label small {
   color: #66746b;
   font-size: 8px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .ecommerce-buying-body > form input,
@@ -1551,7 +1551,7 @@
   gap: 5px;
   color: #34443b;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-return-form input,

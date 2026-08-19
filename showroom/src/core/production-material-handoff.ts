@@ -25,6 +25,11 @@ export type ProductionMaterialRequirement = {
   fulfilledQuantityMilli: number
   remainingQuantityMilli: number
   status: 'fulfilled' | 'mapping_required' | 'ready_to_issue' | 'covered_by_open_po' | 'supply_at_risk' | 'shortage'
+  // The Shop SKU this material's BOM row names, whether or not it currently resolves
+  // to exactly one Shop item. shopSupply below is only populated on a clean match --
+  // this stays populated even when status is 'mapping_required', so a typo'd or
+  // since-deleted SKU is still nameable rather than discarded once the match fails.
+  attemptedShopSku: string | null
   shopSupply: null | {
     sku: string
     itemName: string
@@ -218,8 +223,8 @@ export function projectProductionMaterialRequirements(
     const remainingQuantityMilli = Math.max(material.requiredQuantityMilli - fulfilledQuantityMilli, 0)
     const mapping = material.shopSupply
     const matchingItems = mapping ? commerce.items.filter((item) => item.sku === mapping.sku) : []
-    if (!remainingQuantityMilli) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'fulfilled', shopSupply: mapping && matchingItems.length === 1 ? { sku: mapping.sku, itemName: matchingItems[0].name, materialQuantityMilliPerStockUnit: mapping.materialQuantityMilliPerStockUnit, onHandStockUnits: matchingItems[0].onHand, onHandQuantityMilli: safeProduct(matchingItems[0].onHand, mapping.materialQuantityMilliPerStockUnit, `on-hand supply for ${material.materialId}`), protectedStockUnits: matchingItems[0].reorderAt, protectedStockQuantityMilli: safeProduct(matchingItems[0].reorderAt, mapping.materialQuantityMilliPerStockUnit, `protected stock for ${material.materialId}`), availableToIssueStockUnits: Math.max(matchingItems[0].onHand - matchingItems[0].reorderAt, 0), availableToIssueQuantityMilli: safeProduct(Math.max(matchingItems[0].onHand - matchingItems[0].reorderAt, 0), mapping.materialQuantityMilliPerStockUnit, `available stock for ${material.materialId}`), openPurchaseOrderStockUnits: 0, openPurchaseOrderQuantityMilli: 0, atRiskPurchaseOrderStockUnits: 0, atRiskPurchaseOrderQuantityMilli: 0, requiredStockUnits: 0, requiredSupplyStockUnits: 0, suggestedIssueStockUnits: 0, suggestedExpediteStockUnits: 0, suggestedOrderStockUnits: 0, nextExpectedAt: null } : null }
-    if (!mapping || matchingItems.length !== 1) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'mapping_required', shopSupply: null }
+    if (!remainingQuantityMilli) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'fulfilled', attemptedShopSku: mapping?.sku ?? null, shopSupply: mapping && matchingItems.length === 1 ? { sku: mapping.sku, itemName: matchingItems[0].name, materialQuantityMilliPerStockUnit: mapping.materialQuantityMilliPerStockUnit, onHandStockUnits: matchingItems[0].onHand, onHandQuantityMilli: safeProduct(matchingItems[0].onHand, mapping.materialQuantityMilliPerStockUnit, `on-hand supply for ${material.materialId}`), protectedStockUnits: matchingItems[0].reorderAt, protectedStockQuantityMilli: safeProduct(matchingItems[0].reorderAt, mapping.materialQuantityMilliPerStockUnit, `protected stock for ${material.materialId}`), availableToIssueStockUnits: Math.max(matchingItems[0].onHand - matchingItems[0].reorderAt, 0), availableToIssueQuantityMilli: safeProduct(Math.max(matchingItems[0].onHand - matchingItems[0].reorderAt, 0), mapping.materialQuantityMilliPerStockUnit, `available stock for ${material.materialId}`), openPurchaseOrderStockUnits: 0, openPurchaseOrderQuantityMilli: 0, atRiskPurchaseOrderStockUnits: 0, atRiskPurchaseOrderQuantityMilli: 0, requiredStockUnits: 0, requiredSupplyStockUnits: 0, suggestedIssueStockUnits: 0, suggestedExpediteStockUnits: 0, suggestedOrderStockUnits: 0, nextExpectedAt: null } : null }
+    if (!mapping || matchingItems.length !== 1) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'mapping_required', attemptedShopSku: mapping?.sku ?? null, shopSupply: null }
     const item = matchingItems[0]
     const openOrders = purchaseOrders.filter((order) => order.sku === mapping.sku && order.remaining > 0 && order.status !== 'cancelled')
     const effectiveFromMs = plan.effectiveFrom ? Date.parse(plan.effectiveFrom) : null
@@ -251,6 +256,7 @@ export function projectProductionMaterialRequirements(
     return {
       materialId: material.materialId, materialName: material.name, unit: material.unit,
       requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status,
+      attemptedShopSku: mapping.sku,
       shopSupply: {
         sku: mapping.sku, itemName: item.name, materialQuantityMilliPerStockUnit: mapping.materialQuantityMilliPerStockUnit,
         onHandStockUnits: item.onHand, onHandQuantityMilli, protectedStockUnits, protectedStockQuantityMilli,
