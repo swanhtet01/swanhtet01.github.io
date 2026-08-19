@@ -7,6 +7,7 @@ import {
   listCompanyAgents,
   MAX_CYCLE_ROLE_BUDGET,
 } from './agent-company.mjs'
+import { notifyDetailed } from './alert.mjs'
 import {
   getCompanyWorkOrder,
   listCompanyWorkOrders,
@@ -26,6 +27,7 @@ import {
   listCachedResponseRecords,
   putCachedResponse,
   releaseActivityClaim,
+  transitionCachedResponse,
 } from './store.mjs'
 import { resolveCeoOutcomeActionAuthority } from './supermega-hq-authority.mjs'
 
@@ -1856,6 +1858,153 @@ async function buildCeoOutcomeOperations(clientId, cutoff, nowMs, options = {}) 
   }
 }
 
+// ---------- founder alerting over the measured target states ----------
+// The operations report has no scheduled builder: it is computed only on request (the console
+// `operations-report` API action and the read-only company_operations_status tool), so this report
+// build is the only place a target breach is ever measured — the alert therefore lives here and
+// covers every production call site at once. Everything below is best-effort: an alert failure or
+// alert-state store failure must never affect the report response, and without owner Telegram
+// tokens the whole path is a silent no-op that performs no I/O (fail closed, like alert.mjs).
+export const COMPANY_OPERATIONS_ALERT_STATE_CONTRACT = 'supermega.company-operations-alert-state.v1'
+const OPERATIONS_ALERT_STATE_PREFIX = 'company-operations-alert:'
+const OPERATIONS_ALERT_STATUSES = new Set(['alerted', 'clear'])
+// While an identical breach set persists, re-ping the founder at most once per interval instead of
+// on every report request; a changed breach set alerts immediately.
+const OPERATIONS_ALERT_REPEAT_MINUTES = 360
+
+// Dedupe state lives in the cache-backed record store (getCachedResponse/putCachedResponse →
+// supermega_ai_cache): the control-record prefixes in store.mjs are a fixed registered set that
+// this module cannot extend, and this record is deliberately expendable — it carries no authority,
+// and losing it (cache eviction/truncation) costs at most one repeated founder alert. Because the
+// supabase insert path cannot replace an existing row, every update of an existing record goes
+// through transitionCachedResponse, a compare-and-swap on the previous status + planHash — which
+// also means two concurrent report requests cannot both claim the same alert.
+const operationsAlertStateKey = (clientId, windowDays) => `${OPERATIONS_ALERT_STATE_PREFIX}${clientId}:${windowDays}`
+
+// Per-process mirror of the last alert state. The durable record is the source of truth across
+// instances; the mirror covers the two gaps a cache-backed store leaves — reads that throw and
+// writes that silently fail — so one process never re-pings on every report request while the
+// durable copy is stale or absent. Tradeoff: with the durable store down, each serverless instance
+// may still send one alert per breach set — accepted as better than either silence or spam.
+const operationsAlertMemory = new Map()
+
+// `status` and `planHash` exist for transitionCachedResponse's CAS contract; planHash binds the
+// swap to the exact version that was read.
+function operationsAlertState(report, status, missed) {
+  const body = {
+    clientId: report.clientId,
+    windowDays: report.windowDays,
+    status,
+    signature: missed.map((target) => target.id).join(','),
+    updatedAt: exactIso(report.generatedAt) || new Date().toISOString(),
+  }
+  return {
+    contract: COMPANY_OPERATIONS_ALERT_STATE_CONTRACT,
+    ...body,
+    breachedTargetIds: missed.map((target) => target.id),
+    planHash: sha256(stableStringify(body)),
+  }
+}
+
+function validOperationsAlertState(value, clientId, windowDays) {
+  if (!isRecord(value)
+    || value.contract !== COMPANY_OPERATIONS_ALERT_STATE_CONTRACT
+    || value.clientId !== clientId
+    || value.windowDays !== windowDays
+    || !OPERATIONS_ALERT_STATUSES.has(value.status)
+    || typeof value.signature !== 'string'
+    || (value.status === 'clear') !== (value.signature === '')
+    || !HASH_RE.test(String(value.planHash || ''))
+    || !exactIso(value.updatedAt)) return null
+  return value
+}
+
+function formatMissedTarget(target) {
+  const value = Number.isFinite(target.value) ? target.value : 'unmeasured'
+  const bound = target.direction === 'max' ? '<=' : '>='
+  return `- ${target.id}: ${value} vs target ${bound} ${target.target} (sample ${target.sample})`
+}
+
+// Mirrors the configured-check inside alert.mjs `notifyDetailed` so an unconfigured deploy does no
+// state-store I/O before the transport would refuse anyway. Deliberately NOT shared from alert.mjs:
+// that file sits in the scheduled function's eager import closure, whose exact byte count is pinned
+// against digest-bound hq/portfolio.json by kernel/scripts/verify-function-footprint.mjs and only
+// moves through the founder-gated readiness cascade. Keep in sync with notifyDetailed's env reads.
+function telegramAlertsConfigured(env) {
+  return Boolean(String(env.TELEGRAM_BOT_TOKEN || '').trim()
+    && String(env.TELEGRAM_ALERT_CHAT_ID || env.TELEGRAM_CHAT_ID || '').trim())
+}
+
+async function alertOnMissedOperationsTargets(report, options = {}) {
+  const env = options.env || process.env
+  if (!telegramAlertsConfigured(env)) return
+  const readState = options.getOperationsAlertState || getCachedResponse
+  const insertState = options.putOperationsAlertState || putCachedResponse
+  const transitionState = options.transitionOperationsAlertState || transitionCachedResponse
+  const missed = report.targets.filter((target) => target.state === 'missed')
+  const key = operationsAlertStateKey(report.clientId, report.windowDays)
+  const signature = missed.map((target) => target.id).join(',')
+
+  let durablePrevious = null
+  try { durablePrevious = validOperationsAlertState(await readState(key), report.clientId, report.windowDays) }
+  catch { /* fall back to the per-process mirror */ }
+  const mirrored = validOperationsAlertState(operationsAlertMemory.get(key), report.clientId, report.windowDays)
+  const previous = durablePrevious && mirrored
+    ? (mirrored.updatedAt > durablePrevious.updatedAt ? mirrored : durablePrevious)
+    : durablePrevious || mirrored
+
+  // 'stored' | 'raced' | 'unavailable'. Raced means another request CAS-claimed this state first;
+  // unavailable means the durable store could not confirm the write (fail open: still alert once
+  // per process — the mirror carries the dedupe until the store recovers).
+  const persist = async (next, expected) => {
+    try {
+      if (expected) {
+        const result = await transitionState(key, { status: expected.status, planHash: expected.planHash }, next)
+        if (result?.updated === true) return 'stored'
+        return result?.reason === 'transition_conflict' ? 'raced' : 'unavailable'
+      }
+      return (await insertState(key, next)) ? 'stored' : 'unavailable'
+    } catch { return 'unavailable' }
+  }
+
+  if (!missed.length) {
+    // Recovered: clear the stored breach set so the SAME breach ids re-alert if they come back.
+    if (previous?.status === 'alerted') {
+      const cleared = operationsAlertState(report, 'clear', [])
+      if (await persist(cleared, durablePrevious) !== 'raced') operationsAlertMemory.set(key, cleared)
+    }
+    return
+  }
+
+  if (previous?.status === 'alerted' && previous.signature === signature) {
+    const lastAlerted = parseTime(previous.updatedAt)
+    const nowMs = parseTime(report.generatedAt) ?? Date.now()
+    if (lastAlerted !== null && nowMs - lastAlerted < OPERATIONS_ALERT_REPEAT_MINUTES * 60000) return
+  }
+
+  // Claim the alert BEFORE sending so concurrent report requests observing the same breach cannot
+  // both ping the founder (the CAS transition admits exactly one of them).
+  const next = operationsAlertState(report, 'alerted', missed)
+  if (await persist(next, durablePrevious) === 'raced') return
+  operationsAlertMemory.set(key, next)
+
+  // Metadata only: target ids, measured values, and configured targets — never customer data,
+  // evidence, model output, or secrets.
+  const text = [
+    `SuperMega ops | client ${report.clientId} | ${report.windowDays}d window | ${missed.length}/${report.targets.length} operating targets missed`,
+    ...missed.map(formatMissedTarget),
+  ].join('\n')
+  const delivery = await notifyDetailed(text, { env, fetch: options.fetch })
+  // 'sent' and 'uncertain' both keep the claim (an uncertain transport may have delivered; the
+  // repeat interval retries it later). A definite rejection releases the claim — best-effort —
+  // so the next report request retries immediately.
+  if (delivery.ok !== true && delivery.status === 'failed') {
+    const released = operationsAlertState(report, 'clear', [])
+    operationsAlertMemory.set(key, released)
+    await persist(released, next)
+  }
+}
+
 export async function buildCompanyOperationsReport(input, options = {}) {
   const fields = onlyFields(input, REPORT_FIELDS)
   if (!fields.ok) return fields
@@ -1936,7 +2085,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     deliveryMissing: outcomes.delivery.counts.missing,
   }
 
-  return {
+  const report = {
     ok: true,
     mode: 'operations_report',
     clientId,
@@ -1973,6 +2122,10 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     },
     orders,
   }
+  // Founder breach alert — awaited so a serverless response cannot orphan the send, but any
+  // failure inside is swallowed: alerting must never affect the report response.
+  try { await alertOnMissedOperationsTargets(report, options) } catch { /* fail-open */ }
+  return report
 }
 
 export default {
