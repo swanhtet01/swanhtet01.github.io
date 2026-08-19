@@ -14,6 +14,9 @@ import {
   type LocalWorkspaceBackup,
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
+import { PaymentQrSettingsControls } from './PaymentQr'
+import { paymentQrScopeForWorkspace } from './payment-qr-store'
+import { useManagedIdentity } from './workspace-runtime'
 import { loadCommerceWorkspace } from './commerce-workspace'
 import { loadProductionWorkspace, productionMaintenanceDueQueue } from './production-workspace'
 import { projectShopOrderProductionStatus } from './shop-production-status'
@@ -448,6 +451,12 @@ function backupFilename(backup: LocalWorkspaceBackup | null) {
 
 export function WorkspaceControlsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  // Payment QR records are workspace-scoped (payment-qr-store.ts money-path note):
+  // the settings upload must write under the same scope the counter reads, or the
+  // uploaded QR would never show — and an unscoped write could surface at another
+  // company's counter. Same identity resolution as CoreApp.
+  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const paymentQrScope = paymentQrScopeForWorkspace(managedIdentity?.workspaceId)
   const [searchParams] = useSearchParams()
   const [currentBackup, setCurrentBackup] = useState<LocalWorkspaceBackup | null>(collectCurrentBackup)
   const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadRestorePoint)
@@ -532,6 +541,15 @@ export function WorkspaceControlsPage() {
       }
       const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')
       await resetCommerceOrderDraftRecovery()
+      // IndexedDB stores are not localStorage keys and would otherwise survive this
+      // reset (Codex P1, PR #465): a handed-over device could show the previous
+      // owner's merchant payment QR — a real money misdirection — or their product
+      // photos. Both deletions are best-effort by contract (they resolve, never
+      // reject) so a blocked database cannot abort the reset.
+      const { deleteAllPaymentQrData } = await import('./payment-qr-store')
+      await deleteAllPaymentQrData()
+      const { deleteAllProductImageData } = await import('./product-image-store')
+      await deleteAllProductImageData()
       listLocalWorkspaceStorageKeys(window.localStorage).forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
@@ -569,6 +587,15 @@ export function WorkspaceControlsPage() {
             <Link className="core-button" to="/settings/?view=cross-product#controls">Order and production status</Link>
             <Link className="core-button" to="/settings/?view=local-metrics#controls">Session metrics</Link>
           </div>
+        </section>
+
+        <section className="core-panel">
+          {/* S2 merchant payment QR (display-only — boundary documented in payment-qr-store.ts).
+              The image is stored in this device's IndexedDB only: it is never uploaded, and it
+              is not part of workspace backups by construction (the backup snapshots registered
+              localStorage keys; this store is invisible to it, like product photos). */}
+          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (Wave MMQR, MyanMyanPay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
+          <PaymentQrSettingsControls scope={paymentQrScope} />
         </section>
 
         <section className="core-panel trial-control-panel">

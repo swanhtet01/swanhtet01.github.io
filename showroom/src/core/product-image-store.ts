@@ -220,3 +220,28 @@ export async function downscaleProductPhoto(source: Blob): Promise<Blob> {
     bitmap.close()
   }
 }
+
+/**
+ * Deletes the entire product-image database. "Reset this device"
+ * (WorkspaceControlsPage) calls this so a handed-over or re-purposed device does
+ * not keep the previous workspace's photos after its records are gone — this
+ * store is not in localStorage, so the reset's key sweep never sees it.
+ * Best-effort: resolves (never rejects) so a blocked deletion cannot abort the
+ * reset flow; 'blocked' still deletes as soon as other tabs close.
+ */
+export function deleteAllProductImageData(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!productImagesSupported()) {
+      resolve()
+      return
+    }
+    try {
+      const request = indexedDB.deleteDatabase(DB_NAME)
+      request.onsuccess = () => resolve()
+      request.onerror = () => resolve()
+      request.onblocked = () => resolve()
+    } catch {
+      resolve()
+    }
+  })
+}

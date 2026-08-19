@@ -28,8 +28,8 @@ infra required first.
 
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
-| S1 | Camera barcode scanning (Loyverse/Square both ship it; phone-only shops have no USB scanner) | Counter search input at `CoreApp.tsx` ~1139 already handles keyboard-wedge scanners via exact-SKU-match-on-Enter (`addSearchMatch` ~1105); nothing invokes the camera. Native `BarcodeDetector` API covers Android Chrome offline, zero dependencies | **BUILD** (2026-08-19) |
-| S2 | Merchant payment QR at checkout (Wave MMQR / MyanMyanPay let one QR take KBZPay/WavePay/AYA/CB) | `payment.method` is a display string only (`business-templates.ts:32`, `commerce-workspace.ts` ~1416 `manual_qr`); no QR image exists anywhere; cashier has nothing to show a customer to scan | NOW — owner uploads their own static merchant QR in Settings, shown at amount-due. No payment API, no gate |
+| S1 | Camera barcode scanning (Loyverse/Square both ship it; phone-only shops have no USB scanner) | Counter search input at `CoreApp.tsx` ~1139 already handles keyboard-wedge scanners via exact-SKU-match-on-Enter (`addSearchMatch` ~1105); nothing invokes the camera. Native `BarcodeDetector` API covers Android Chrome offline, zero dependencies | **SHIPPED 2026-08-19** (#459): `BarcodeScanButton.tsx`, counter + both catalog SKU fields; camera feeds the same `addScannedValue` path as Enter. Open: on-device camera smoke test (founder, any Android phone) |
+| S2 | Merchant payment QR at checkout (Wave MMQR / MyanMyanPay let one QR take KBZPay/WavePay/AYA/CB) | `payment.method` is a display string only (`business-templates.ts:32`, `commerce-workspace.ts` ~1416 `manual_qr`); no QR image exists anywhere; cashier has nothing to show a customer to scan | IN BUILD (2026-08-19) — owner uploads their own static merchant QR in Settings, shown at amount-due. No payment API, no gate |
 | S3 | Loyalty points (Loyverse's flagship small-shop draw) | Zero `loyalty` matches in `showroom/src`. NOT the rejected CRM non-goal (`portfolio.json` nonGoals) — a points ledger keyed off the existing order `customer` field is narrow | NOW (medium) |
 | S4 | Direct ESC/POS printing for driverless BT thermal printers (~$15 Myanmar-common units) | `ReceiptDialog.tsx` ~20-46 does blob-HTML + `window.print()` — fine with OS print services, dead-end for raw-byte thermal printers | FD-adjacent: buildable client-side via Web Bluetooth but unverifiable without real hardware; needs a founder-run device test |
 | S5 | Multi-register / staff sessions | Already built (`enterprise-staff-roles.ts`, 10 roles) and deliberately parked behind the staff-roles researchGate sequence (`portfolio.json` ~309) | FD — sequencing decision, not an engineering gap. Do not build further |
@@ -38,8 +38,8 @@ infra required first.
 
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
-| E1 | Product photos (Shopify/Wix/TikTok Shop are photo-first; our storefront is text-only) | `CommerceStorefrontMerchandising` (`commerce-workspace.ts` ~1059-1065) and `StorefrontPreviewItem` (`storefront-model.ts` ~20-27) have no image field at all | **BUILD** (2026-08-19): IndexedDB blob store + optional `imageId` reference, downscale-on-ingest — "unlimited" photos without touching the 5MB localStorage budget |
-| E2 | Channel list is stale for Myanmar 2026 (Facebook VPN-only; Telegram/TikTok commerce growing) | `channel-order-intake.ts:5` hardcodes `['Messenger', 'Viber', 'Phone']`; no Telegram/TikTok option; not verifier-pinned | NOW (small) — add Telegram + TikTok to the const, default copy, error copy |
+| E1 | Product photos (Shopify/Wix/TikTok Shop are photo-first; our storefront is text-only) | `CommerceStorefrontMerchandising` (`commerce-workspace.ts` ~1059-1065) and `StorefrontPreviewItem` (`storefront-model.ts` ~20-27) have no image field at all | **SHIPPED 2026-08-19** (#459): `product-image-store.ts` IndexedDB store, downscale-on-ingest; inventory rows + counter tiles + storefront preview. One deliberate deviation from this row's sketch: NO `imageId` on the workspace record — the deployed managed backend enforces exact-field item contracts (`commerce_runtime.py` `_ITEM_FIELDS`), so the SKU→photo binding lives in IndexedDB next to the blob |
+| E2 | Channel list is stale for Myanmar 2026 (Facebook VPN-only; Telegram/TikTok commerce growing) | `channel-order-intake.ts:5` hardcodes `['Messenger', 'Viber', 'Phone']`; no Telegram/TikTok option; not verifier-pinned | **SHIPPED 2026-08-19** (#459): Telegram + TikTok in the manual intake const + copy + contract test; the managed AI enum deliberately untouched (extending it requires re-running the golden-set eval) |
 | E3 | Abandoned-cart / follow-up messaging | No expiry/reminder logic in `storefront-request.ts`; recovery requires outbound messaging infra that does not exist | FD — hosted messaging, credential, founder consent. Parked |
 
 ### Plant
@@ -59,7 +59,7 @@ infra required first.
 
 | # | Item | State | Status |
 |---|---|---|---|
-| F1 | Bottom-nav work modes — Shop's Today/Sell/Orders/Stock as the mobile bottom bar instead of the 2-link stub | Scoped + in build this cycle (design phase 3 item; plan on file) | **BUILD** (2026-08-19) |
+| F1 | Bottom-nav work modes — Shop's Today/Sell/Orders/Stock as the mobile bottom bar instead of the 2-link stub | Scoped + in build this cycle (design phase 3 item; plan on file) | **SHIPPED 2026-08-19** (#459): 4 task tabs + Products door (verifier-pinned — only ≤840px path to `/?choose=1`) via shared `commerce-tabs.ts`. Open: on-device keyboard/touch pass |
 | F2 | Low-end Android ("Galaxy") performance pass | Weight normalization + system-font stacks shipped in design phase 2; no measured low-end-device profile exists. Needs a real-device or throttled-CPU Lighthouse baseline before optimizing further — measure first | NOW (measure), then targeted |
 | F3 | Design phase 3 remainder (`DESIGN-PROGRAM.md`): selling-surface IA, ecommerce literal retirement, px→rem, stylelint CI | Queued, each needs its own planning pass | NOW, sequenced |
 
