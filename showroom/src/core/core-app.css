@@ -2620,6 +2620,28 @@ input, select, textarea { border-color: var(--core-field-line); }
 }
 
 /* ============================================================================
+   Design phase 3 — P3.7 batch 1: keyboard pass on the EXISTING two-link bar.
+   The generic .mobile-nav (Plant, Website, Ecommerce, and setup routes) clips
+   the global :focus-visible ring exactly the way the Shop task bar did: the
+   bar is overflow: hidden, each link fills its full grid cell, and the ring
+   sits 2px OUTSIDE the box — so Tab focus was invisible along the bar's fixed
+   edges. Same remedy as the task variant above: pull the ring inside the box.
+   The offset is rem, not px, deliberately: the px ratchet in
+   tools/check_css_contracts.mjs sits exactly at its ceiling (2435), P3.6c
+   closed the px audit with only the kept families (borders/radii/shadows/44px
+   targets/media bounds) remaining, and -0.1875rem paints identically to -3px
+   at the default root while scaling with OS font size — which a focus inset
+   may safely do. There is no media guard for the same reason: an @media
+   (max-width: 840px) prelude would itself add a live px token, and the rule
+   is inert everywhere the bar is display: none — it can only ever style the
+   bar the ≤840px block above has made visible. aria-current="page" on the
+   active item needs no rule here: the bar renders NavLinks, and react-router
+   stamps aria-current on the active one; the .active class pinned above
+   carries the visual state.
+   ========================================================================== */
+.mobile-nav a:focus-visible { outline-offset: -0.1875rem; }
+
+/* ============================================================================
    Camera barcode scanning (Shop counter + catalog SKU entry).
    The scan button sits beside the counter search input and inside the two
    catalog SKU fields; the dialog hosts the live camera preview. Everything

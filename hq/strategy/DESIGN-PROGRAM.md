@@ -121,7 +121,8 @@ NavLink — pathname-only isActive would light all tabs); the Products door is
 verifier-pinned because it is the ONLY ≤840px path to `/?choose=1`. Plant's
 2-tab slice is the natural follow-up once wanted — the mechanism is built.
 Keyboard verification was by static analysis (no browser in the build
-sandbox); an on-device pass remains open. Remaining phase-3 items:
+sandbox); the on-device pass was CLOSED by P3.7 batch 1 (2026-08-20 — see
+the P3.7 SHIPPED note below for the browser evidence). Remaining phase-3 items:
 selling-surface IA (ops consoles behind an Operations
 area; plain-language lead lines added BEFORE pinned compliance litanies);
 Plant UX pass (parked until Plant enters the sales path); geometry
@@ -537,6 +538,38 @@ redesign risk; (2) the work-mode strip itself.
 **Estimate:** 2 PRs; (1) is half a day, (2) is 2-3 days — it is a product
 design decision, not a refactor, and should go to the founder as a probe
 screenshot before the PR opens.
+
+**P3.7 SHIPPED (2026-08-20).** Batch (2) was already on main as the Shop
+slice (Today/Sell/Orders/Stock + Products door, pins verify:1114-1122);
+batch (1) landed as ONE EOF-appended CSS rule and zero TSX changes. The
+generic two-link `.mobile-nav` (Plant, Website, Ecommerce, setup routes)
+clipped the global :focus-visible ring exactly the way the Shop task bar
+did — overflow: hidden bar, each link fills its grid cell, ring 2px outside
+the box — so keyboard focus was invisible along the bar's fixed edges. Same
+remedy as the task variant: `.mobile-nav a:focus-visible { outline-offset:
+-0.1875rem; }`. The offset is rem, not px, and the rule carries NO media
+guard, both deliberately: the px ratchet sits exactly at its 2435 core
+ceiling (a fresh `@media (max-width: 840px)` prelude would itself have
+added a live px token — the first verify run proved it, 2436 > 2435),
+P3.6c closed the px audit with only the kept families remaining, and
+-0.1875rem paints identically to -3px at the default root. The bare rule
+is inert wherever the bar is display: none, so it can only ever style the
+bar the ≤840px block has made visible. aria-current needed no
+code: the bar renders NavLinks and react-router stamps aria-current="page"
+on the active item — the acceptance work was PROVING it, which also closes
+the on-device pass the Shop slice left open. Browser evidence (real
+browser, 375x812, both themes): aria-current moves with navigation on the
+generic bar (Plant→Website) and across all four Shop ?tab= modes;
+tab order runs skip link → topbar → bottom bar → main; the ring paints
+solid, inset, on every bar link under keyboard modality (light
+rgb(11,116,94) = --core-focus, dark rgba(86,240,193,.48)) and correctly
+does NOT paint on pointer focus; every bar link computes min-height 44px
+(actual 63px); padding-bottom: env(safe-area-inset-bottom) is live in the
+CSSOM; at 1280px the bar is display:none and the sidebar keeps its original
+outside 2px ring — desktop untouched. Esc/arrow: N/A, the strip does not
+scroll (five fixed minmax(0,1fr) columns, no overflow scrolling). The
+:1085-1100 markup contract and the Shop-slice pins were not touched.
+Plant's 2-tab slice stays parked with the Plant UX pass.
 
 ### P3.8 — Selling-surface IA
 
