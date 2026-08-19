@@ -994,3 +994,242 @@ test('operations report distinguishes no evidence, collecting evidence, and boun
   assert.equal((await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 31 })).reason, 'company_operations_invalid_window')
   assert.equal((await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30, raw: true })).reason, 'company_operations_unknown_field')
 })
+
+function alertHarness(clientId) {
+  const orders = Array.from({ length: 5 }, (_, index) => order({
+    workOrderId: `company-order:${String(index + 1).repeat(40)}`,
+    clientId,
+    cycleId: `cycle-${index + 1}`,
+    createdAt: `2026-07-1${index + 1}T00:00:00.000Z`,
+    startedAt: `2026-07-1${index + 1}T00:10:00.000Z`,
+    completedAt: `2026-07-1${index + 1}T00:20:00.000Z`,
+  }))
+  const evaluations = new Map(orders.map((item) => [
+    `company-work-order-evaluation:${item.workOrderId}`,
+    {
+      evaluationId: `company-evaluation:${item.workOrderId.split(':').pop()}`,
+      workOrderId: item.workOrderId,
+      clientId: item.clientId,
+      verdict: 'accepted',
+      checks: { accurate: true, complete: true, usable: true, boundarySafe: true },
+      evaluatedAt: item.completedAt,
+      evaluationHash: 'f'.repeat(64),
+    },
+  ]))
+  const alertState = new Map()
+  const claims = new Map()
+  const sends = []
+  const harness = {
+    sends,
+    alertState,
+    claims,
+    stateReads: 0,
+    evaluated: false,
+    options: (patch = {}) => ({
+      listCompanyWorkOrders: async () => ({ ok: true, workOrders: orders.map(({ result, evidence, ...item }) => item) }),
+      getCompanyWorkOrder: async ({ workOrderId }) => ({ ok: true, workOrder: structuredClone(orders.find((item) => item.workOrderId === workOrderId)) }),
+      getEvaluation: async (key) => (harness.evaluated ? evaluations.get(key) || null : null),
+      getOperationsAlertState: async (key) => { harness.stateReads += 1; return structuredClone(alertState.get(key) || null) },
+      putOperationsAlertState: async (key, value) => {
+        if (alertState.has(key)) return null
+        alertState.set(key, structuredClone(value))
+        return true
+      },
+      transitionOperationsAlertState: async (key, expected, value) => {
+        const current = alertState.get(key)
+        if (!current || current.status !== expected.status || current.planHash !== expected.planHash) {
+          return { updated: false, durable: true, reason: 'transition_conflict' }
+        }
+        alertState.set(key, structuredClone(value))
+        return { updated: true, durable: true }
+      },
+      claimOperationsAlertInit: async ({ id }) => {
+        if (claims.has(id)) return { fresh: false, durable: true }
+        claims.set(id, true)
+        return { fresh: true, durable: true }
+      },
+      releaseOperationsAlertInit: async (id) => claims.delete(id),
+      env: { TELEGRAM_BOT_TOKEN: 'unit-test-token', TELEGRAM_ALERT_CHAT_ID: '1001' },
+      fetch: async (url, init) => { sends.push(JSON.parse(init.body)); return { ok: true } },
+      now: () => '2026-07-15T00:00:00.000Z',
+      ...patch,
+    }),
+  }
+  return harness
+}
+
+test('operations report alerts the founder once per breach set with metadata only', async () => {
+  const clientId = 'client-alert-dedupe'
+  const harness = alertHarness(clientId)
+  const first = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(first.ok, true)
+  assert.equal(harness.sends.length, 1)
+  assert.equal(harness.sends[0].chat_id, '1001')
+  assert.match(harness.sends[0].text, /evaluation_coverage_rate: 0 vs target >= 1/)
+  assert.match(harness.sends[0].text, new RegExp(`client ${clientId}`))
+  assert.match(harness.sends[0].text, /30d window/)
+  assert.doesNotMatch(harness.sends[0].text, /model output|anthropic|private|e{64}/)
+  const stored = harness.alertState.get(`company-operations-alert:${clientId}:30`)
+  assert.equal(stored.contract, 'supermega.company-operations-alert-state.v1')
+  assert.equal(stored.status, 'alerted')
+  assert.equal(stored.signature, 'evaluation_coverage_rate')
+  assert.deepEqual(stored.breachedTargetIds, ['evaluation_coverage_rate'])
+  assert.equal(stored.updatedAt, '2026-07-15T00:00:00.000Z')
+  assert.match(String(stored.planHash), /^[a-f0-9]{64}$/)
+
+  const second = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(second.ok, true)
+  assert.equal(harness.sends.length, 1)
+
+  const afterInterval = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options({
+    now: () => '2026-07-15T07:00:00.000Z',
+  }))
+  assert.equal(afterInterval.ok, true)
+  assert.equal(harness.sends.length, 2)
+})
+
+test('operations alert clears on recovery and alerts again when the same breach returns', async () => {
+  const clientId = 'client-alert-recovery'
+  const harness = alertHarness(clientId)
+  await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(harness.sends.length, 1)
+
+  harness.evaluated = true
+  const recovered = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(recovered.readiness, 'meeting_targets')
+  assert.equal(harness.sends.length, 1)
+  assert.equal(harness.alertState.get(`company-operations-alert:${clientId}:30`).status, 'clear')
+  assert.equal(harness.alertState.get(`company-operations-alert:${clientId}:30`).signature, '')
+
+  harness.evaluated = false
+  const rebroken = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(rebroken.ok, true)
+  assert.equal(harness.sends.length, 2)
+})
+
+test('operations report survives alert transport failure and retries only a definite rejection', async () => {
+  const clientId = 'client-alert-transport'
+  const harness = alertHarness(clientId)
+  let attempts = 0
+  const rejecting = harness.options({ fetch: async () => { attempts += 1; return { ok: false } } })
+  const rejected = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, rejecting)
+  assert.equal(rejected.ok, true)
+  assert.equal(attempts, 1)
+  // A definite rejection releases the claim so the next report request retries immediately.
+  assert.equal(harness.alertState.get(`company-operations-alert:${clientId}:30`).status, 'clear')
+  const retried = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, rejecting)
+  assert.equal(retried.ok, true)
+  assert.equal(attempts, 2)
+
+  const throwing = harness.options({ fetch: async () => { attempts += 1; throw new Error('transport down') } })
+  const uncertain = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, throwing)
+  assert.equal(uncertain.ok, true)
+  assert.equal(attempts, 3)
+  assert.equal(harness.alertState.get(`company-operations-alert:${clientId}:30`).status, 'alerted')
+  assert.equal(harness.alertState.get(`company-operations-alert:${clientId}:30`).signature, 'evaluation_coverage_rate')
+  const deduped = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, throwing)
+  assert.equal(deduped.ok, true)
+  assert.equal(attempts, 3)
+})
+
+test('operations alert claim races defer to the winner and silent write failures still alert once', async () => {
+  const racedClientId = 'client-alert-race'
+  const raced = alertHarness(racedClientId)
+  raced.alertState.set(`company-operations-alert:${racedClientId}:30`, {
+    contract: 'supermega.company-operations-alert-state.v1',
+    clientId: racedClientId,
+    windowDays: 30,
+    status: 'clear',
+    signature: '',
+    breachedTargetIds: [],
+    updatedAt: '2026-07-14T00:00:00.000Z',
+    planHash: 'd'.repeat(64),
+  })
+  const lost = await buildCompanyOperationsReport({ clientId: racedClientId, windowDays: 30 }, raced.options({
+    transitionOperationsAlertState: async () => ({ updated: false, durable: true, reason: 'transition_conflict' }),
+  }))
+  assert.equal(lost.ok, true)
+  assert.equal(raced.sends.length, 0)
+
+  // Durable reads keep returning null while writes silently fail (store.mjs put paths swallow
+  // errors): alert once, then the per-process mirror dedupes.
+  const clientId = 'client-alert-write-null'
+  const harness = alertHarness(clientId)
+  const silentWrites = () => harness.options({ putOperationsAlertState: async () => null })
+  const first = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, silentWrites())
+  assert.equal(first.ok, true)
+  assert.equal(harness.sends.length, 1)
+  assert.equal(harness.alertState.size, 0)
+  const second = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, silentWrites())
+  assert.equal(second.ok, true)
+  assert.equal(harness.sends.length, 1)
+})
+
+test('two concurrent first-breach reports send exactly one alert under every store write semantic', async () => {
+  const writeSemantics = {
+    // supabase: insert-only; an existing key 409s and is swallowed to null (conflict and outage
+    // are indistinguishable to the caller)
+    'client-alert-conc-supabase': (alertState) => async (key, value) => {
+      if (alertState.has(key)) return null
+      alertState.set(key, structuredClone(value))
+      return true
+    },
+    // postgres: on conflict do update — the upsert always "succeeds"
+    'client-alert-conc-postgres': (alertState) => async (key, value) => { alertState.set(key, structuredClone(value)); return true },
+    // memory: unconditional overwrite
+    'client-alert-conc-memory': (alertState) => async (key, value) => { alertState.set(key, structuredClone(value)); return true },
+  }
+  for (const [clientId, semantics] of Object.entries(writeSemantics)) {
+    const harness = alertHarness(clientId)
+    const options = () => harness.options({ putOperationsAlertState: semantics(harness.alertState) })
+    const [left, right] = await Promise.all([
+      buildCompanyOperationsReport({ clientId, windowDays: 30 }, options()),
+      buildCompanyOperationsReport({ clientId, windowDays: 30 }, options()),
+    ])
+    assert.equal(left.ok, true, clientId)
+    assert.equal(right.ok, true, clientId)
+    assert.equal(harness.sends.length, 1, clientId)
+    assert.equal(harness.claims.size, 1, clientId)
+  }
+
+  // A definitively lost creation claim skips the send; an unavailable claim store fails open.
+  const lostClientId = 'client-alert-claim-lost'
+  const lost = alertHarness(lostClientId)
+  const lostReport = await buildCompanyOperationsReport({ clientId: lostClientId, windowDays: 30 }, lost.options({
+    claimOperationsAlertInit: async () => ({ fresh: false, durable: true }),
+  }))
+  assert.equal(lostReport.ok, true)
+  assert.equal(lost.sends.length, 0)
+
+  const downClientId = 'client-alert-claim-down'
+  const down = alertHarness(downClientId)
+  const downReport = await buildCompanyOperationsReport({ clientId: downClientId, windowDays: 30 }, down.options({
+    claimOperationsAlertInit: async () => ({ fresh: false, durable: false, reason: 'claim_store_unavailable' }),
+  }))
+  assert.equal(downReport.ok, true)
+  assert.equal(down.sends.length, 1)
+})
+
+test('operations alert is a silent no-op without owner tokens and dedupes in memory when state storage fails', async () => {
+  const unconfiguredClientId = 'client-alert-unconfigured'
+  const unconfigured = alertHarness(unconfiguredClientId)
+  const report = await buildCompanyOperationsReport({ clientId: unconfiguredClientId, windowDays: 30 }, unconfigured.options({ env: {} }))
+  assert.equal(report.ok, true)
+  assert.equal(unconfigured.sends.length, 0)
+  assert.equal(unconfigured.stateReads, 0)
+  assert.equal(unconfigured.alertState.size, 0)
+
+  const clientId = 'client-alert-state-down'
+  const harness = alertHarness(clientId)
+  const failingState = () => harness.options({
+    getOperationsAlertState: async () => { throw new Error('state store down') },
+    putOperationsAlertState: async () => { throw new Error('state store down') },
+    transitionOperationsAlertState: async () => { throw new Error('state store down') },
+  })
+  const first = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, failingState())
+  assert.equal(first.ok, true)
+  assert.equal(harness.sends.length, 1)
+  const second = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, failingState())
+  assert.equal(second.ok, true)
+  assert.equal(harness.sends.length, 1)
+})

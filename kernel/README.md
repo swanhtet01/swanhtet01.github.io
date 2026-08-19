@@ -176,6 +176,13 @@ boundary compliance, evaluation coverage, and accepted evaluations. Readiness st
 until each target has at least five relevant samples. These are operator targets, not a contractual
 customer SLA or retained customer proof.
 
+When a report is built with any target `missed`, a metadata-only founder Telegram alert lists the
+breached target ids with measured vs target values (never customer data, evidence, or output). An
+identical breach set re-pings at most every 6 hours; a changed set alerts immediately, and recovery
+clears the stored state so the same ids alert again if they return. Dedupe state is a durable
+compare-and-swap record; alerting is best-effort and can never affect the report response, and
+without `TELEGRAM_BOT_TOKEN` + a chat id it is a silent no-op with no I/O.
+
 ### Guided Operator
 
 The operator CLI is a thin client over the same protected API and durable queue. It does not add a
@@ -263,8 +270,9 @@ in recovery instead of being retried blindly.
    customer session.
 2. After that proof, add operator recovery, then SSO/MFA where a tenant requires it. Owner-issued
    tenant sessions, targeted revocation, and customer-code acceptance are already live.
-3. Then add an opt-in durable dispatcher, bounded evidence-retention sweeper, and alerts over the
-   measured target states. Do not introduce recursive delegation.
+3. Then add an opt-in durable dispatcher and bounded evidence-retention sweeper (alerts over the
+   measured target states shipped: see the operations-report section). Do not introduce recursive
+   delegation.
 4. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation
    provisioner. A matching bootstrap-only Supabase database URL applies the schema automatically;
    pre-applying `supabase/workcell-client.sql` remains the fallback.
