@@ -265,8 +265,9 @@ The three moves that raise the grade fastest:
    (managed-pilot-readiness.json founderDecision). One bounded action turns
    Reliability B -> A-, Auditability A- -> A, and unlocks the access ladder.
 2. Ship the observability floor: OTel local phase + error lane on the
-   MetricEvent beacon + live-health alerting (recs 1, 2, 4). D+ -> B, and it
-   feeds every scaling trigger in AI-NATIVE-ARCHITECTURE.md sec 5.
+   MetricEvent beacon (recs 1, 2 -- rec 4 is retired, already done; see
+   section 8 above). D+ -> B, and it feeds every scaling trigger in
+   AI-NATIVE-ARCHITECTURE.md sec 5.
 3. Walk the enterprise-capabilities sequence: verified-statements on the
    managed tenant, then staff-roles with a named operator (researchGates
    sequence; enterprise-staff-roles.ts header). Access control C+ -> B+ and
