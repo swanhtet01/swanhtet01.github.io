@@ -14,6 +14,7 @@
 
 import crypto from 'node:crypto'
 import { register } from './registry.mjs'
+import { validateUrl } from './infra-http.mjs'
 
 /**
  * send — POST a JSON payload to any URL with optional HMAC-SHA256 signature.
@@ -34,6 +35,12 @@ export async function send(url, payload, { secret, signatureHeader = 'X-Supermeg
   let parsed
   try { parsed = new URL(target) } catch { return { ok: false, reason: 'webhook_bad_url' } }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { ok: false, reason: 'webhook_bad_scheme' }
+  // SSRF hardening shared with infra-http.mjs: blocks loopback/private/link-local/CGNAT/cloud-metadata
+  // hosts — including DNS-rebinding, where a public hostname resolves to a blocked address — using the
+  // SAME validator the infra-http connector relies on, so both outbound-reaching connectors enforce one
+  // hardened policy instead of two divergent ones.
+  const ssrfErr = await validateUrl(target)
+  if (ssrfErr) return { ok: false, reason: `webhook_blocked_url: ${ssrfErr}` }
   let body
   try { body = JSON.stringify(payload ?? {}) } catch { return { ok: false, reason: 'webhook_unserializable_payload' } }
   const sigSecret = secret || process.env.WEBHOOK_HMAC_SECRET || ''

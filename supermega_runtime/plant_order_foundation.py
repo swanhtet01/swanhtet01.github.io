@@ -308,6 +308,11 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
     ids = [row["materialId"] for row in result]
     _unique(ids, f"{field} material IDs")
     _sorted(ids, f"{field} material IDs")
+    # Two BOM lines pointed at one Shop SKU is how the requirements screen double-counts that
+    # SKU's on-hand supply: each row reads the same full on-hand figure with no awareness of the
+    # other row's claim on it. Reject the ambiguous mapping at authoring time instead.
+    skus = [row["shopSupply"]["sku"] for row in result if "shopSupply" in row]
+    _unique(skus, f"{field} Shop SKUs")
     return result
 
 

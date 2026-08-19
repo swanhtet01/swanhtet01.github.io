@@ -1,0 +1,27 @@
+# Optional local OpenTelemetry collector for Phase A
+# (hq/research/opentelemetry-implementation-plan-2026-08.md, step 6.8).
+#
+# This file is opt-in and local-only — nothing in the app starts it
+# automatically, and the runtime's default behaviour (no `OTEL_LOCAL` env
+# var) never tries to reach it. To use it:
+#
+#   docker compose -f docker-compose.telemetry.yml up -d
+#   OTEL_LOCAL=1 npm run dev            # (or however you run supermega_runtime)
+#
+# Jaeger UI:        http://localhost:16686
+# OTLP gRPC ingest:  localhost:4317  (the default OTEL_EXPORTER_OTLP_ENDPOINT
+#                     supermega_runtime.telemetry.tracing falls back to)
+#
+# No customer workspace data is ever expected here even during local
+# development: RedactingSpanProcessor scrubs every span before it reaches
+# this (or any) exporter — see supermega_runtime/telemetry/redact.py.
+services:
+  supermega-jaeger:
+    image: jaegertracing/all-in-one:1.65
+    container_name: supermega-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP gRPC
+    restart: unless-stopped

@@ -70,7 +70,9 @@ function resolvePython() {
 function isolatedEnvironment(uiUrl) {
   return {
     ...process.env,
+    ANTHROPIC_API_KEY: '',
     OPENAI_API_KEY: '',
+    SUPERMEGA_ORDER_INTAKE_PROVIDER: '',
     CRON_SECRET: '',
     SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS: '',
     SUPERMEGA_CLOUD_TASKS_WORKER_URL: '',

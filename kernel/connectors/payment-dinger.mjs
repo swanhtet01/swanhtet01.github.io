@@ -18,8 +18,10 @@
 // Auth: HTTP Bearer. Authorization: 'Bearer ' + DINGER_API_KEY.
 //
 // Capabilities:
-//   checkStatus({ transactionId }) — GET /api/v2/transaction/<id> (poll a transaction's state).
-//   createPayment({ amount, method }) — POST /api/v2/payment (open a payment; method = wallet rail).
+//   checkStatus({ transactionId, orderId }) — GET /api/v2/transaction/<id> (poll a transaction's
+//     state; orderId is required so a call can be reconciled against the original attempt).
+//   createPayment({ amount, method, orderId }) — POST /api/v2/payment (open a payment; method =
+//     wallet rail; orderId is your caller-chosen order/reference id, required).
 
 import { register } from './registry.mjs'
 
@@ -59,18 +61,28 @@ function dingerUrl(apiPath) {
  * GET /api/v2/transaction/<transactionId> returns the transaction record (status, amount, method,
  * timestamps). Read-only — a good liveness probe and the way to confirm a payment settled.
  *
+ * orderId is required on every call (same param name, validation and error-message style as the
+ * orderId the four sibling Myanmar wallet connectors — KBZPay/WavePay/AYAPay/CBPay — require on
+ * their create + status-check calls) so a retried/timed-out createPayment can still be reconciled
+ * against the original attempt even when the caller never received Dinger's transactionId back.
+ *
  * @param {object} [payload]
  * @param {string} [payload.transactionId]  the Dinger transaction id to look up (required).
- * @returns {Promise<{ ok:boolean, status?:number, transaction?:object, reason?:string }>}
+ * @param {string} [payload.orderId]        your caller-chosen order/reference id, the same one
+ *                                           passed to createPayment (required).
+ * @returns {Promise<{ ok:boolean, status?:number, transaction?:object, orderId?:string, reason?:string }>}
  */
 export async function checkStatus(_input = {}) {
-  const { transactionId } = _input || {}
+  const { transactionId, orderId } = _input || {}
   if (!configured()) return { ok: false, reason: 'payment-dinger_not_configured' }
   const id = String(transactionId || '').trim()
+  const ord = String(orderId || '').trim()
   if (!id) return { ok: false, reason: 'payment-dinger_missing_transaction_id' }
+  if (!ord) return { ok: false, reason: 'payment-dinger_missing_orderId' }
 
   try {
-    const res = await fetch(dingerUrl(`/api/v2/transaction/${encodeURIComponent(id)}`), {
+    const url = `${dingerUrl(`/api/v2/transaction/${encodeURIComponent(id)}`)}?orderId=${encodeURIComponent(ord)}`
+    const res = await fetch(url, {
       method: 'GET',
       headers: {
         authorization: authHeader(),
@@ -85,7 +97,7 @@ export async function checkStatus(_input = {}) {
       const reason = data?.message || data?.error || `http_${res.status}`
       return { ok: false, status: res.status, reason: `payment-dinger_${String(reason)}`.slice(0, 200) }
     }
-    return { ok: true, status: res.status, transaction: data }
+    return { ok: true, status: res.status, transaction: data, orderId: ord }
   } catch (e) {
     return { ok: false, reason: String(e?.message || 'payment-dinger_error').slice(0, 200) }
   }
@@ -94,23 +106,33 @@ export async function checkStatus(_input = {}) {
 /**
  * createPayment — open a payment against the configured merchant.
  *
- * POST /api/v2/payment with the amount and the wallet rail (method, e.g. 'KBZPay' | 'WavePay' |
- * 'AYAPay' | 'CBPay'). Dinger returns the created transaction (id, pay url / deep link, status).
+ * POST /api/v2/payment with the amount, the wallet rail (method, e.g. 'KBZPay' | 'WavePay' |
+ * 'AYAPay' | 'CBPay') and the caller's own orderId. Dinger returns the created transaction (id,
+ * pay url / deep link, status).
+ *
+ * orderId is required (same param name, validation and error-message style as the orderId the
+ * four sibling Myanmar wallet connectors — KBZPay/WavePay/AYAPay/CBPay — require on their
+ * create-payment calls) so a retried/timed-out call can be reconciled against the original
+ * attempt via checkStatus even if Dinger's own transactionId was never received.
  *
  * @param {object} [payload]
- * @param {number|string} [payload.amount]  the amount to charge (required).
- * @param {string}        [payload.method]  the wallet rail to use (required).
- * @returns {Promise<{ ok:boolean, status?:number, payment?:object, reason?:string }>}
+ * @param {number|string} [payload.amount]   the amount to charge (required).
+ * @param {string}        [payload.method]   the wallet rail to use (required).
+ * @param {string}        [payload.orderId]  your caller-chosen order/reference id, unique per
+ *                                            transaction (required).
+ * @returns {Promise<{ ok:boolean, status?:number, payment?:object, orderId?:string, reason?:string }>}
  */
 export async function createPayment(_input = {}) {
-  const { amount, method } = _input || {}
+  const { amount, method, orderId } = _input || {}
   if (!configured()) return { ok: false, reason: 'payment-dinger_not_configured' }
   const amt = String(amount ?? '').trim()
   const rail = String(method || '').trim()
+  const ord = String(orderId || '').trim()
   if (!amt) return { ok: false, reason: 'payment-dinger_missing_amount' }
   if (!rail) return { ok: false, reason: 'payment-dinger_missing_method' }
+  if (!ord) return { ok: false, reason: 'payment-dinger_missing_orderId' }
 
-  const body = { merchantId: merchantId(), amount: amt, method: rail }
+  const body = { merchantId: merchantId(), amount: amt, method: rail, orderId: ord }
 
   try {
     const res = await fetch(dingerUrl('/api/v2/payment'), {
@@ -129,7 +151,7 @@ export async function createPayment(_input = {}) {
       const reason = data?.message || data?.error || `http_${res.status}`
       return { ok: false, status: res.status, reason: `payment-dinger_${String(reason)}`.slice(0, 200) }
     }
-    return { ok: true, status: res.status, payment: data }
+    return { ok: true, status: res.status, payment: data, orderId: ord }
   } catch (e) {
     return { ok: false, reason: String(e?.message || 'payment-dinger_error').slice(0, 200) }
   }

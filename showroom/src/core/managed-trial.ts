@@ -44,6 +44,43 @@ const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
+const ALL_ZERO_HEX = /^0+$/
+
+/**
+ * Opaque random hex for a W3C trace/span id — never derived from request
+ * content, so it carries nothing a redaction rule would need to catch (see
+ * hq/research/opentelemetry-implementation-plan-2026-08.md section 3,
+ * "Request / trace / span IDs ... Opaque identifiers; no customer content").
+ */
+function randomHex(chars: number): string {
+  let hex = ''
+  while (hex.length < chars) hex += crypto.randomUUID().replace(/-/g, '')
+  return hex.slice(0, chars)
+}
+
+/**
+ * Build one W3C `traceparent` header (`00-{32 hex trace id}-{16 hex span
+ * id}-01`) so FastAPI's OpenTelemetry instrumentation continues the same
+ * trace server-side — see `supermega_runtime/telemetry/tracing.py`,
+ * `instrument_fastapi_app`, which extracts this header automatically.
+ */
+function buildTraceparent(): { traceId: string; header: string } {
+  let traceId = randomHex(32)
+  if (ALL_ZERO_HEX.test(traceId)) traceId = randomHex(32)
+  let spanId = randomHex(16)
+  if (ALL_ZERO_HEX.test(spanId)) spanId = randomHex(16)
+  return { traceId, header: `00-${traceId}-${spanId}-01` }
+}
+
+/** Attach a fresh `traceparent` header to one outbound FastAPI request. */
+function withTraceHeaders(headers: Headers): Headers {
+  const { traceId, header } = buildTraceparent()
+  headers.set('traceparent', header)
+  if (BUILD_ENV.DEV) {
+    console.debug(`[supermega] trace ${traceId}`)
+  }
+  return headers
+}
 
 export type ManagedIdentity = {
   userId: string
@@ -2680,10 +2717,10 @@ export function beginManagedAccountSetup(): Promise<ManagedAccountSetup> {
 
 async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorkspaceSignIn> {
   const response = await fetch('/api/trial/v1/workspaces', {
-    headers: {
+    headers: withTraceHeaders(new Headers({
       accept: 'application/json',
       authorization: `Bearer ${session.access_token}`,
-    },
+    })),
   })
   if (!response.ok) throw await parseError(response)
   const workspaces = parseWorkspaceDirectory(await response.json())
@@ -2873,11 +2910,11 @@ export async function requestSelfServeWorkspace(
   const name = normalizeSelfServeBusinessName(businessName)
   const response = await fetch('/api/trial/v1/workspaces', {
     method: 'POST',
-    headers: {
+    headers: withTraceHeaders(new Headers({
       accept: 'application/json',
       authorization: `Bearer ${session.access_token}`,
       'content-type': 'application/json',
-    },
+    })),
     body: JSON.stringify({ claimCode: claim, businessName: name }),
   })
   if (!response.ok) throw await parseError(response)
@@ -2961,6 +2998,7 @@ async function authorizedRequest<T>(
   headers.set('authorization', `Bearer ${session.access_token}`)
   headers.set('x-supermega-workspace-id', workspaceId)
   if (init.body) headers.set('content-type', 'application/json')
+  withTraceHeaders(headers)
   const response = await fetch(path, { ...init, headers })
   if (response.status === 401 && retry) {
     const supabase = await authClient()
@@ -3715,7 +3753,7 @@ export async function saveManagedCommerceCommand(request: {
   evidence: ManagedCommandEvidence
   eventType: ManagedCommerceEvent
   expectedVersion: number
-  identity?: ManagedIdentity
+  identity: ManagedIdentity
   state: Record<string, unknown>
 }) {
   const counterOrderIntent = request.eventType === 'commerce.order.created'
@@ -3796,7 +3834,7 @@ export async function saveManagedProductionCommand(request: {
   evidence: ManagedCommandEvidence
   eventType: ManagedProductionEvent
   expectedVersion: number
-  identity?: ManagedIdentity
+  identity: ManagedIdentity
   state: Record<string, unknown>
 }) {
   const productionJobIntent = request.eventType === 'production.job.created'
@@ -3848,18 +3886,29 @@ export async function saveManagedWebsiteCommand(request: {
   return response.result
 }
 
-export async function createManagedApproval(request: ManagedApprovalRequest) {
-  const response = await authorizedRequest<{ approval: ManagedApprovalRecord }>('/api/trial/v1/approvals', {
-    method: 'POST',
-    body: JSON.stringify(request),
-  })
+export async function createManagedApproval(request: ManagedApprovalRequest, expectedIdentity: ManagedIdentity) {
+  const response = await authorizedRequest<{ approval: ManagedApprovalRecord }>(
+    '/api/trial/v1/approvals',
+    {
+      method: 'POST',
+      body: JSON.stringify(request),
+    },
+    true,
+    expectedIdentity,
+  )
   return response.approval
 }
 
-export async function decideManagedApproval(approvalId: string, decision: ManagedApprovalDecision) {
+export async function decideManagedApproval(
+  approvalId: string,
+  decision: ManagedApprovalDecision,
+  expectedIdentity: ManagedIdentity,
+) {
   const response = await authorizedRequest<{ approval: ManagedApprovalRecord }>(
     `/api/trial/v1/approvals/${encodeURIComponent(approvalId)}/decision`,
     { method: 'POST', body: JSON.stringify(decision) },
+    true,
+    expectedIdentity,
   )
   return response.approval
 }

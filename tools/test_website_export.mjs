@@ -124,4 +124,27 @@ checks += 1
 
 check(validateWebsiteArtifactForExport(englishArtifact).length === 0, 'the seeded workspace exports cleanly')
 
+// --- an artifact with colliding flattened anchors is rejected, not coalesced -
+// createPageTargets (below) de-duplicates colliding flattened anchors with a
+// numeric suffix so the exported HTML still renders. That is the right call for
+// a page that is already in the artifact, but it means the artifact validator
+// must refuse a workspace whose distinct ready slugs would collide in the first
+// place -- otherwise a raw '#checkout-info' CTA silently resolves to whichever
+// of the two colliding pages export happened to process first.
+const baseWorkspace = createInitialWorkspace()
+const collidingAnchorWorkspace = {
+  ...baseWorkspace,
+  pages: [
+    baseWorkspace.pages[0],
+    { ...baseWorkspace.pages[1], slug: '/checkout-info' },
+    { ...baseWorkspace.pages[2], slug: '/checkout/info' },
+  ],
+}
+assert.throws(
+  () => createWebsiteArtifact(collidingAnchorWorkspace),
+  /could not be retained safely/,
+  'two ready pages whose slugs flatten to the same anchor are rejected, not silently coalesced',
+)
+checks += 1
+
 console.log(`website export contract: ${checks} checks passed`)

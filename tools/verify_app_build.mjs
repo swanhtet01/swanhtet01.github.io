@@ -173,6 +173,7 @@ const pilotOutcomeUiSource = await readFile(resolve(root, 'showroom', 'src', 'co
 const pilotOutcomeHookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'useLocalPilotOutcome.ts'), 'utf8')
 const companyBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'company-backup.ts'), 'utf8')
 const companyBackupUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'CompanyBackupPanel.tsx'), 'utf8')
+const workspaceStatusPanelSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'WorkspaceStatusPanel.tsx'), 'utf8')
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
@@ -307,7 +308,14 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
   || !shopServiceScheduleSource.includes('registerShopServiceResource')
   || !shopServiceScheduleSource.includes('Bookings ${first.id} and ${second.id} overlap.')
-  || !shopServiceScheduleUiSource.includes('Hold appointment')
+  // The schedule words belong to the pack: a restaurant books reservations and a
+  // school books classes. A literal "appointment" in the UI is the regression.
+  || !shopServiceScheduleSource.includes('export function shopScheduleVocabulary(')
+  || !shopServiceScheduleUiSource.includes('shopScheduleVocabulary(schedule?.industryPackId ?? ')
+  || !shopServiceScheduleUiSource.includes('{vocabulary.holdAction}')
+  || shopServiceScheduleUiSource.split('\n').some((line) => !line.trimStart().startsWith('//') && /appointment/i.test(line))
+  || !shopServiceScheduleUiSource.includes('const agenda = projection.upcoming.length ? projection.upcoming : projection.today')
+  || !shopServiceScheduleUiSource.includes('{agenda.length ? agenda.slice(0, 12).map((booking) => {')
   || !shopServiceScheduleUiSource.includes('Services and resources')
   || !shopServiceScheduleUiSource.includes('Nothing is sent to the customer or an external calendar.')
   || !shopServiceScheduleUiSource.includes('const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)')
@@ -1205,7 +1213,19 @@ if (!productHomePageContract.includes('title="Switch product"')
   || productHomePageContract.includes('customerTracks')
   || productHomePageContract.includes('templatesFor(product.setupProduct)')
   || productHomePageContract.includes('HQ')
-  || productHomePageContract.includes('Operations')) fail('first_run_product_launcher_missing')
+  || productHomePageContract.includes('Operations')
+  // Setup-aware home page: each product card shows its workspace name when started,
+  // and new clients get a "start with Shop" nudge when nothing has been set up yet.
+  || !productHomePageContract.includes('readProductSetup(window.localStorage')
+  || !productHomePageContract.includes('product-track-workspace')
+  || !productHomePageContract.includes('platform-start-nudge')
+  || !productHomePageContract.includes('data-active={workspaceName ? true : undefined}')
+  || !productHomePageContract.includes('nextSetupStep')
+  || !productHomePageContract.includes('STEP_SUGGESTIONS')
+  || !productHomePageContract.includes('clientSetupPath')
+  || !coreCssSource.includes('.platform-start-nudge {')
+  || !coreCssSource.includes('.platform-start-link {')
+  || !coreCssSource.includes('.product-track-workspace {')) fail('first_run_product_launcher_missing')
 if (!coreShellSource.includes("const LAST_PRODUCT_KEY = 'supermega.last-product.v1'")
   || !coreShellSource.includes("const DEFAULT_ENTRY_PRODUCT: ClientSolutionId = 'commerce'")
   || !coreShellSource.includes("return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'")
@@ -1264,6 +1284,17 @@ if (productHomePageContract.includes('<details')
   || productHomePageContract.includes('managedReadiness')
   || productHomePageContract.includes('Today across SuperMega')
   || productHomePageContract.includes('Support helper')) fail('product_home_still_contains_setup_or_dashboard')
+if (!workspaceStatusPanelSource.includes('export function WorkspaceStatusPanel()')
+  || !workspaceStatusPanelSource.includes('buildOperationalReport')
+  || !workspaceStatusPanelSource.includes("entry.severity !== 'ready'")
+  || !workspaceStatusPanelSource.includes('className="wsp-panel"')
+  || !coreShellSource.includes("lazy(() => import('./WorkspaceStatusPanel')")
+  || !productHomePageContract.includes('<WorkspaceStatusPanel />')
+  || !coreCssSource.includes('.wsp-panel {')
+  || !coreCssSource.includes('.wsp-item {')
+  || !coreCssSource.includes('.wsp-critical {')
+  || !coreCssSource.includes('.wsp-warning {')
+  || !coreCssSource.includes('.wsp-action {')) fail('workspace_status_panel_wiring_missing')
 if (!companyBriefRuntimeSource.includes('supermega.managed_company_brief.v1')
   || !companyBriefRuntimeSource.includes('validate_commerce_state')
   || !companyBriefRuntimeSource.includes('validate_production_state')
@@ -1541,7 +1572,7 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('async function requestManagedEcommerceOrderQueueApproval()')
   || !settingsPageSource.includes('async function prepareManagedEcommerceOrderQueueImportPlan()')
   || !settingsPageSource.includes('async function runManagedEcommerceOrderQueueApplyPreflight()')
-  || !settingsPageSource.includes('createManagedApproval(request)')
+  || !settingsPageSource.includes('createManagedApproval(request,')
   || !settingsPageSource.includes('Managed Shop queue import plan prepared with zero external writes. Apply still requires a decided human approval record and managed write gates.')
   || !settingsPageSource.includes('Managed Shop queue import plan failed. No Shop import ran.')
   || !settingsPageSource.includes('Managed Ecommerce apply preflight passed with zero external writes. The future Shop queue apply must use the approved digest and idempotency key.')
@@ -2794,7 +2825,8 @@ if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v2")
   || !storefrontDraftSource.includes('reconcileStorefrontSelection')
   || ['customerReference', 'requestLedger', 'payment', 'fulfilment', 'phone', 'address'].some((marker) => storefrontDraftSource.includes(marker))) fail('ecommerce_storefront_draft_contract_missing_or_contains_request_data')
 if (!localMerchandisingImportSource.includes('export async function activateLocalEcommerceWorkingSample')
-  || !localMerchandisingImportSource.includes('await matchesWorkingSample(current, catalog.items)')
+  || !localMerchandisingImportSource.includes('await matchesWorkingSample(current, catalog.items, workingSampleSkus, trade)')
+  || !localMerchandisingImportSource.includes('isGuidedSampleBuyingState(parsed)')
   || !localMerchandisingImportSource.includes("LOCAL_ECOMMERCE_BUYING_STATE_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'")
   || !localMerchandisingImportSource.includes('validateCommerceState(JSON.parse(commerceRaw)).storefrontRequests ?? []).length')
   || !localMerchandisingImportSource.includes('replaceExistingDraft: true')
@@ -2853,8 +2885,8 @@ if (!localWorkspaceBackupSource.includes("LOCAL_WORKSPACE_BACKUP_CONTRACT = 'sup
   || !localWorkspaceStorageSource.includes('export function listLocalWorkspaceStorageKeys(')
   || !localWorkspaceBackupSource.includes('export function restoreLocalWorkspaceBackupFromEvidence(')
   || !localWorkspaceBackupSource.includes("evidence.version !== 24")
-  || !localWorkspaceBackupSource.includes('export function applyLocalWorkspaceBackup(')
-  || !localWorkspaceBackupSource.includes('Object.entries(previous.records).forEach')
+  || !localWorkspaceBackupSource.includes('export async function applyLocalWorkspaceBackup(')
+  || !localWorkspaceBackupSource.includes('for (const [key, raw] of Object.entries(previous.records))')
   || !settingsPageSource.includes('localWorkspaceBackup, behaviorTrail')
   || !settingsPageSource.includes("version: 24, exportedAt")
   || !settingsPageSource.includes('Save restore point')
@@ -6212,6 +6244,7 @@ if (coreSource.includes('Math.min(quantity')
   || !productionJobsContract.includes('quantity > selectedRemaining')) fail('production_output_limit_missing_or_silently_clamped')
 if (!productionPageContract.includes('persisted with attributed Plant evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
 if (!workspaceRuntimeSource.includes("addEventListener('storage', refreshFromStorage)") || !workspaceRuntimeSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
+if (!workspaceRuntimeSource.includes('if (event.key !== COMMERCE_KEY) return')) fail('commerce_cross_tab_refresh_missing')
 if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('returnFocus?.isConnected') || !coreSource.includes('previousFocus.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('currently ${productionMachineStateLabels[machine.state]}') || !coreSource.includes('requestAnimationFrame(() => machineTriggerRef.current?.focus())')) fail('production_confirmation_accessibility_missing')
 if (!productionPageContract.includes('className="plant-today"')
   || !productionPageContract.includes("data-state={plantTodayState}")
@@ -7173,7 +7206,7 @@ async function verifyShopServiceScheduleRuntime() {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts')).href}?shop-service-schedule-verify=${Date.now()}`)
     const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
     let state = model.createShopServiceSchedule()
-    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
+    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'retail', 'shop_service_schedule_seed_invalid')
     // Floors, not fixed counts. These read `=== 2` when every pack shipped exactly two
     // generic entries; the assertion's own name says the contract is "the seed is USEFUL",
     // i.e. enough to book one appointment against two different resources. The spa, gym and
@@ -7261,8 +7294,8 @@ async function verifyShopBusinessTemplateRuntime() {
     const onboardingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?shop-business-template-import-verify=${Date.now()}`)
     const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-business-template-commerce-verify=${Date.now()}`)
     assert(model.validateShopBusinessTemplates() === model.shopBusinessTemplates, 'shop_business_template_registry_invalid')
-    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,restaurant,beauty-spa'
-      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 9, 'shop_business_template_catalog_wrong')
+    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,restaurant,beauty-spa,bakery'
+      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 10, 'shop_business_template_catalog_wrong')
     const commerceUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
     assert(model.shopBusinessTemplateUnits.length === commerceUnits.size && model.shopBusinessTemplateUnits.every((unit) => commerceUnits.has(unit)), 'shop_business_template_unit_set_drifted')
     for (const template of model.shopBusinessTemplates) {
@@ -7298,6 +7331,13 @@ async function verifyShopBusinessTemplateRuntime() {
         capturedAt: '2026-08-03T09:00:00.000Z',
       })
       assert(installed && commerceModel.commerceWorkingSampleCatalogId(installed) === template.id, `shop_business_template_${template.id}_install_failed`)
+      const withActivity = commerceModel.installCommerceWorkingSampleActivity(installed, {
+        sampleId: template.id,
+        sampleName: template.name.en,
+        counterSales: template.counterSales,
+        pendingOrder: template.pendingOrder,
+      })
+      assert(withActivity && withActivity.orders.filter((order) => order.id.startsWith('SETUP-SAMPLE-')).length === template.counterSales.length + 1, `shop_business_template_${template.id}_activity_install_failed`)
     }
     const reimported = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-determinism=${Date.now()}`)
     assert(JSON.stringify(reimported.shopBusinessTemplates) === JSON.stringify(model.shopBusinessTemplates), 'shop_business_template_output_not_deterministic')
@@ -11072,6 +11112,30 @@ async function verifyWebsiteRuntime() {
     assert(firstContentEdit.ok && !staleContentEdit.ok && afterContentRace.ok && afterContentRace.workspace.siteName === 'First tab edit', 'website_stale_content_edit_overwrote_current_state')
     assert(afterContentRace.ok && model.getCurrentApproval(afterContentRace.workspace) === null && model.getCurrentPublish(afterContentRace.workspace) === null, 'website_content_change_did_not_stale_release')
 
+    // A consequential action (evidence/approval/publish) always bumps revision but only bumps
+    // contentRevision when siteName/pages actually changed. mutateWebsiteWorkspace's staleness
+    // guard deliberately still lets a second write land when only revision (not contentRevision)
+    // has diverged -- see the comment on that guard in website-model.ts for why (concurrent,
+    // non-conflicting evidence writes -- covered below -- must both survive).
+    const guardValues = new Map(values)
+    const guardStorage = { getItem: (key) => guardValues.get(key) ?? null, setItem: (key, value) => guardValues.set(key, String(value)), removeItem: (key) => guardValues.delete(key) }
+    const beforeGuardRace = afterContentRace.workspace
+    const revisionOnlyAdvance = await model.mutateWebsiteWorkspace(
+      (current) => model.recordWebsiteEvidence(current, {
+        actionId: 'evidence-revision-only-runtime',
+        capturedAt: at(2500),
+        kind: 'content',
+        finding: 'Copy reviewed again after the content race',
+        reference: 'CONTENT-REVIEW-2',
+        verifiedBy: 'OP-OWNER',
+      }),
+      beforeGuardRace.revision,
+      beforeGuardRace.contentRevision,
+      guardStorage,
+      locks,
+    )
+    assert(revisionOnlyAdvance.ok && revisionOnlyAdvance.workspace.revision === beforeGuardRace.revision + 1 && revisionOnlyAdvance.workspace.contentRevision === beforeGuardRace.contentRevision, 'website_evidence_did_not_advance_revision_alone')
+
     const beforeFailure = values.get(model.WEBSITE_STORAGE_KEY)
     const failingStorage = { getItem: storage.getItem, setItem: () => { throw new Error('quota') } }
     const failedWrite = await model.mutateWebsiteWorkspace(
@@ -11186,11 +11250,11 @@ async function verifyWebsiteOrderCompletionRuntime() {
       sku: 'SM-CARE-01',
       quantity: 1,
     })
-    const pending = handoffContract.writeWebsiteEcommerceHandoff(pendingHandoff, workspace)
+    const pending = await handoffContract.writeWebsiteEcommerceHandoff(pendingHandoff, workspace)
     assert(pending?.schema === 'website_ecommerce_handoff_store.v1' && pending.audit.length === 0 && !pending.draft && !pending.order, 'runtime_v1_pending_invalid')
-    const accepted = handoffContract.acceptWebsiteEcommerceHandoff(pendingHandoff.id, 'OP-OWNER')
+    const accepted = await handoffContract.acceptWebsiteEcommerceHandoff(pendingHandoff.id, 'OP-OWNER')
     assert(accepted?.schema === 'website_ecommerce_handoff_store.v1' && accepted.audit.length === 1 && !accepted.draft && !accepted.order, 'runtime_v1_acceptance_invalid')
-    const drafted = handoffContract.createWebsiteOrderDraft(pendingHandoff.id, {
+    const drafted = await handoffContract.createWebsiteOrderDraft(pendingHandoff.id, {
       sku: 'SM-CARE-01',
       itemName: 'Family care set',
       variant: 'Standard bundle',
@@ -11215,7 +11279,7 @@ async function verifyWebsiteOrderCompletionRuntime() {
     assert(exactRetry?.order?.id === completed.order.id && localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY) === v3Raw && exactRetry.audit.length === 2, 'runtime_exact_retry_not_idempotent')
     const conflictingRetry = await handoffContract.completeWebsiteOrderDraft(drafted.draft.id, { ...input, paymentMethod: 'manual_bank_transfer' })
     assert(conflictingRetry === null && localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY) === v3Raw, 'runtime_conflicting_retry_overwrote_record')
-    assert(lockRequests === 3, 'runtime_completion_lock_missing')
+    assert(lockRequests === 6, 'runtime_completion_lock_missing')
 
     localStorage.setItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY, v2Raw)
     const changedSource = websiteModel.applyWebsiteWorkspaceUpdate(workspace, (current) => ({ ...current, siteName: 'Changed Website source' }))
@@ -16053,6 +16117,30 @@ async function verifyStorefrontRuntime() {
       )
     } catch { duplicateCancellationRejected = true }
     buyingAssert(duplicateCancellationRejected, 'ecommerce_duplicate_cancellation_request_was_accepted')
+    // The same-kind duplicate rules above are only half the coexistence matrix. These two cover the
+    // cross-kind exclusions, which nothing exercised before: every branch above records onto the same
+    // `recordedBuying` base, so an amendment never met a cancellation or a reschedule. Both rules are
+    // enforced in validateEcommerceBuyingState and were correct -- these pin them against regression.
+    let amendmentAfterCancellationRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderAmendment(
+        cancellationBuyingState,
+        replacementRequest,
+        amendmentIntent,
+        cancellationBuyingState.headDigest,
+      )
+    } catch { amendmentAfterCancellationRejected = true }
+    buyingAssert(amendmentAfterCancellationRejected, 'ecommerce_cancellation_and_replacement_workflow_coexisted')
+    let rescheduleAfterAmendmentRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderReschedule(
+        amendedBuyingState,
+        rescheduleRequest,
+        rescheduleIntent,
+        amendedBuyingState.headDigest,
+      )
+    } catch { rescheduleAfterAmendmentRejected = true }
+    buyingAssert(rescheduleAfterAmendmentRejected, 'ecommerce_two_replacement_workflows_coexisted')
     const acknowledgementGoldenState = commerce.validateCommerceState({
       schema: 'supermega.commerce.workspace.v2',
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 8, reorderAt: 2, price: 100 }],
@@ -17607,12 +17695,16 @@ async function verifyProductionRuntime() {
       jobs: [...base.jobs, completedHeldJob],
       machines: [...base.machines, { id: 'MC-2', name: 'Unobserved machine', state: 'running' }],
     })
-    const handoffHoldProof = proof('ACT-HANDOFF-HOLD', 3_000)
-    const handoffHeld = model.placeProductionQualityHold(handoffBase, 'JOB-1', handoffHoldProof)
-    const handoffOutputProof = proof('ACT-HANDOFF-OUTPUT', 3_050)
-    const handoffOutput = model.recordProductionOutput(handoffHeld, 'JOB-1', 5, shiftRef, handoffOutputProof)
-    const handoffScrapProof = proof('ACT-HANDOFF-SCRAP', 3_075)
+    // Output and scrap must be recorded before the hold is placed -- a job's output/scrap
+    // guards now correctly reject writes against an already-held job (quality holds can no
+    // longer be bypassed), so this fixture models the realistic sequence: a job runs partially,
+    // THEN gets held, not the other way around. Timestamps stay in the same relative order.
+    const handoffOutputProof = proof('ACT-HANDOFF-OUTPUT', 3_000)
+    const handoffOutput = model.recordProductionOutput(handoffBase, 'JOB-1', 5, shiftRef, handoffOutputProof)
+    const handoffScrapProof = proof('ACT-HANDOFF-SCRAP', 3_050)
     const handoffOutputAndScrap = model.recordProductionScrap(handoffOutput, 'JOB-1', 2, shiftRef, handoffScrapProof)
+    const handoffHoldProof = proof('ACT-HANDOFF-HOLD', 3_075)
+    const handoffHeld = model.placeProductionQualityHold(handoffOutputAndScrap, 'JOB-1', handoffHoldProof)
     const handoffHighZProblem = {
       ...issue,
       id: 'ISS-Z',
@@ -17620,7 +17712,7 @@ async function verifyProductionRuntime() {
       summary: 'Seal review is required before the next shift.',
     }
     const handoffHighZProof = proof('ACT-HANDOFF-HIGH-Z', 3_100)
-    const handoffWithHighZ = model.openProductionIssue(handoffOutputAndScrap, handoffHighZProblem, handoffHighZProof)
+    const handoffWithHighZ = model.openProductionIssue(handoffHeld, handoffHighZProblem, handoffHighZProof)
     const handoffHighUnicodeProblem = {
       ...handoffHighZProblem,
       id: 'ISS-Á',
@@ -18703,6 +18795,30 @@ async function verifyOperationalReportRuntime() {
     let tamperedExportRejected = false
     try { await model.validateOperationalReportExport(tamperedExport) } catch { tamperedExportRejected = true }
     assert(tamperedExportRejected, 'operational_report_tampered_master_data_accepted')
+    const productionWithUrgentIssue = production.openProductionIssue(
+      productionState,
+      {
+        id: 'ISS-ROUTE-001', status: 'open', createdAt: '2026-07-29T11:00:00.000Z',
+        area: 'Line 01', summary: 'Route regression check issue', kind: 'quality',
+        severity: 'high', owner: 'Quality lead', dueAt: '2026-08-05T11:00:00.000Z',
+        containment: 'Line stopped pending review.',
+      },
+      { actionId: 'ACT-ROUTE-ISSUE-001', capturedAt: '2026-07-29T11:30:00.000Z', actor: 'Quality lead', reason: 'Route regression check.', evidenceReference: 'ROUTE-001' },
+    )
+    assert(productionWithUrgentIssue !== null, 'plant_route_regression_issue_rejected')
+    const urgentProductionReport = model.buildOperationalReport({
+      mode: 'local', allowedProducts: ['production'],
+      sources: [{ surface: 'production', mode: 'sample', revision: productionWithUrgentIssue.revision, updatedAt: null }],
+      production: productionWithUrgentIssue, now,
+    })
+    assert(urgentProductionReport.entries.some((entry) => entry.id === 'production.urgent_issues' && entry.route === '/plant/?tab=control'), 'plant_urgent_issues_route_wrong')
+    assert(report.entries.some((entry) => entry.id === 'production.open_jobs' && entry.route === '/plant/?tab=production'), 'plant_open_jobs_route_wrong')
+    const emptyProductionReport = model.buildOperationalReport({
+      mode: 'local', allowedProducts: ['production'],
+      sources: [{ surface: 'production', mode: 'sample', revision: 0, updatedAt: null }],
+      production: production.createEmptyProduction(), now,
+    })
+    assert(emptyProductionReport.entries.some((entry) => entry.id === 'production.ready' && entry.route === '/plant/?tab=production'), 'plant_ready_route_wrong')
   } catch (error) {
     fail(`operational_report_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -18849,6 +18965,22 @@ async function verifyBehaviorTrailRuntime() {
     model.recordBehaviorSignal(storage, signal)
     const recorded = model.readBehaviorTrail(storage)
     assert(recorded.length === 1 && recorded[0].event === 'data_setup_opened' && recorded[0].route === '/ecommerce/', 'behavior_activation_signal_not_deduplicated')
+
+    const jobEntries = [
+      { id: 'J-1', event: 'agent_job_chosen', product: 'commerce', route: '/shop/', detail: 'Open counter for next sale', createdAt: '2026-08-03T08:00:00.000Z' },
+      { id: 'J-2', event: 'agent_job_chosen', product: 'commerce', route: '/shop/', detail: 'Open counter for next sale', createdAt: '2026-08-03T09:00:00.000Z' },
+      { id: 'J-3', event: 'agent_job_chosen', product: 'commerce', route: '/shop/?tab=inventory', detail: 'Reorder low stock', createdAt: '2026-08-03T10:00:00.000Z' },
+      { id: 'J-4', event: 'agent_job_chosen', product: 'production', route: '/plant/', detail: 'Record shift output', createdAt: '2026-08-03T11:00:00.000Z' },
+    ]
+    const prefs = model.summarizeBehaviorPreferences(jobEntries)
+    assert(prefs.contract === 'supermega.behavior_preference.v1'
+      && prefs.chosenSignals === 4
+      && prefs.productCount === 2
+      && prefs.preferred?.detail === 'Open counter for next sale'
+      && prefs.preferred?.chosenCount === 2
+      && prefs.latest?.detail === 'Record shift output', 'behavior_preference_summary_wrong')
+    const emptyPrefs = model.summarizeBehaviorPreferences([])
+    assert(emptyPrefs.chosenSignals === 0 && emptyPrefs.preferred === null && emptyPrefs.latest === null, 'behavior_empty_preference_summary_wrong')
   } catch (error) {
     fail(`behavior_trail_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -18886,8 +19018,35 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk), the General Ledger MVP (FREE_FOREVER local projection: shop-ledger-accounts/-journal/-monthly-statement + ShopMonthlyStatement surface + accounting-handoff v4 ledger section; ~20KB net across the ledger chunk and owner statement), and the self-serve claim-code activation panel + inline trial terms (ManagedLoginPage activation flow, trial-terms.ts seven clauses at the signup checkbox; ~4KB — the customer path the activation window opens onto), and the design phase-1 foundation (2026-08 tribunal: token ramps + on-accent/field-line/scroll-accent tokens, WCAG contrast overrides, Myanmar script stacks with :lang(my) line-height guard, money-path type floor, 561-840px touch targets, light-theme tile art — ~6KB of appended CSS across the three islands), the design phase-2 wave (the one-review 'Paid & handed over' settle path, the 'Close the day' section lifted out of the policy accordion, cart money total, status-pill semantics, de-branded merchant surfaces), and the PWA raster icon set (design phase-2 item 8: icon-192/icon-512/icon-512-maskable/apple-touch-icon PNGs -- the vector favicon alone does not satisfy Chrome/Android installability or iOS home-screen icons; ~11.7KB of binary assets, not app code).
-if (bytes > 2_930_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), CEO operating brief view (OPS-187), the self-serve activation door reframe + trial terms acceptance field (OPS-748), the client error lane on the hostname-gated beacon (core/client-error-reporter.ts, scorecard sec 6 rec 2; ~1.9KB in the entry chunk), the General Ledger MVP (FREE_FOREVER local projection: shop-ledger-accounts/-journal/-monthly-statement + ShopMonthlyStatement surface + accounting-handoff v4 ledger section; ~20KB net across the ledger chunk and owner statement), and the self-serve claim-code activation panel + inline trial terms (ManagedLoginPage activation flow, trial-terms.ts seven clauses at the signup checkbox; ~4KB — the customer path the activation window opens onto).
+// Raised again for pack-aware Shop schedule vocabulary (scheduleVocabulary + shopScheduleVocabulary,
+// so a restaurant books reservations rather than a generic "appointment") and realistic guided-sample
+// bookings per pack (createShopServiceScheduleDemo), carried forward from claude/supermega-dev-ceo-aije17
+// because main had not yet absorbed them. Also covers the OpenTelemetry Phase A frontend traceparent
+// injection (managed-trial.ts) — negligible size, no bundle-visible instrumentation beyond it since the
+// rest of Phase A is backend-only (supermega_runtime/telemetry/).
+// Raised again after merging main (Beauty spa template, billing dashboards, General Ledger MVP landing
+// together with two new WorkspaceControlsPage views — Plant maintenance-due, Ecommerce stale-request
+// follow-up — and the Plant certificate of conformance feature) pushed the measured total to 2,929,574.
+// Raised again for the bakery Shop business template (10th industry), the wired-up guided-sample
+// activity (Shop counter sales/pending order, Shop appointment book), and — from this merge of main —
+// the design phase-1 foundation (2026-08 tribunal: token ramps, WCAG contrast overrides, Myanmar script
+// stacks, money-path type floor, touch targets, light-theme tile art) plus the design phase-2 wave (the
+// one-review 'Paid & handed over' settle path, 'Close the day' lifted out of the policy accordion, cart
+// money total, status-pill semantics, de-branded merchant surfaces) pushed the measured total to
+// 2,954,266.
+// Raised again for TEMPLATE-EXPANSION.md queue items 1-9 (Shop counter sales/pending order/appointment
+// activity; Plant jobs+floor+shift-activity+released BOM/routing order for both bakery and fashion;
+// Ecommerce trade storefront copy, hero-SKU ranking, and per-trade fulfilment/payment mix) merged with
+// this branch's second absorption of main — the design phase-2 wave through the PWA raster icon set
+// (icon-192/icon-512/icon-512-maskable/apple-touch-icon PNGs, ~11.7KB of binary assets not app code),
+// the EN/MY action-verb infrastructure + shared confirm gate, login/signup field-level error notices,
+// the theme-toggle SVG sun/moon icons, the primary-button token normalization, the font-weight ramp
+// collapse, zero-flash theme restore, and the Ecommerce order coexistence contract test. Combining both
+// branches' independent work pushed a fresh measurement to 2,990,162. See CLAUDE.md: this budget is
+// expected to trip on any fresh dist/ after real product/design work lands — raise it, never shrink
+// product code to fit an old number.
+if (bytes > 3_010_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -18980,7 +19139,9 @@ if (!workspaceControlsArtifactPath) fail('workspace_controls_chunk_artifact_miss
 else {
   const workspaceControlsArtifact = await readFile(workspaceControlsArtifactPath, 'utf8')
   const workspaceControlsBytes = (await stat(workspaceControlsArtifactPath)).size
-  if (workspaceControlsBytes > 31_000
+  // Raised from 31_000 after adding the Plant maintenance-due and Ecommerce stale-request
+  // follow-up views (measured 37,093 bytes) plus main's own new ledger-related views in this chunk.
+  if (workspaceControlsBytes > 38_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')
@@ -19001,7 +19162,8 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes('Storefront not saved,')
   || !pilotOutcomeSource.includes("metricId: 'shop-guided-sale-gap'")
   || !pilotOutcomeSource.includes("supermega.shop_guided_sale_outcome_source.v1")
-  || !pilotOutcomeSource.includes("action.evidenceReference.endsWith(' counter receipt')")
+  || !pilotOutcomeSource.includes("action.kind === 'order_settle'")
+  || !pilotOutcomeSource.includes("action.summary.includes(' · paid and handed over')")
   || !pilotOutcomeSource.includes("metricId: 'plant-guided-shift-close-gap'")
   || !pilotOutcomeSource.includes("supermega.plant_guided_shift_close_outcome_source.v1")
   || !pilotOutcomeSource.includes("event.kind === 'shift_closed'")
@@ -19071,11 +19233,15 @@ try {
   const guidedStartedAt = '2026-07-30T09:00:00.000Z'
   const guidedBaseline = outcome.buildShopGuidedSaleOutcomeMetric([], guidedStartedAt)
   if (guidedBaseline?.value !== 1 || guidedBaseline.unit !== 'gaps' || !guidedBaseline.sourceDigest.startsWith('sha256:')) fail('shop_guided_sale_baseline_invalid')
-  const oldCounterSale = { capturedAt: '2026-07-30T08:59:59.000Z', domain: 'commerce', kind: 'order_create', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-OLD counter receipt' }
-  const wrongAction = { capturedAt: '2026-07-30T09:01:00.000Z', domain: 'commerce', kind: 'order_status', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-WRONG counter receipt' }
+  const oldCounterSale = { capturedAt: '2026-07-30T08:59:59.000Z', domain: 'commerce', kind: 'order_settle', summary: 'Settle ORD-OLD · paid and handed over', evidenceReference: 'Order ORD-OLD' }
+  // A reserved-but-not-settled order (order_create, #355's explicit lifecycle step) must NOT
+  // count on its own -- this is the exact bug this metric had: order_create's summary/evidence
+  // text used to accidentally satisfy a stale filter meant for a "sale completed" signal that no
+  // code path had produced since #355 split creation from settlement.
+  const wrongAction = { capturedAt: '2026-07-30T09:01:00.000Z', domain: 'commerce', kind: 'order_create', summary: 'Create 18,500 MMK counter order', evidenceReference: 'Counter order ORD-WRONG' }
   const guidedBefore = outcome.buildShopGuidedSaleOutcomeMetric([oldCounterSale, wrongAction], guidedStartedAt)
   if (guidedBefore?.value !== 1 || guidedBefore.sourceDigest !== guidedBaseline.sourceDigest) fail('shop_guided_sale_unrelated_action_changed_metric')
-  const guidedSale = { capturedAt: '2026-07-30T09:02:00.000Z', domain: 'commerce', kind: 'order_create', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-NEW counter receipt' }
+  const guidedSale = { capturedAt: '2026-07-30T09:02:00.000Z', domain: 'commerce', kind: 'order_settle', summary: 'Settle ORD-NEW · paid and handed over', evidenceReference: 'Order ORD-NEW' }
   const guidedCurrent = outcome.buildShopGuidedSaleOutcomeMetric([oldCounterSale, wrongAction, guidedSale], guidedStartedAt)
   if (guidedCurrent?.value !== 0 || guidedCurrent.sourceDigest === guidedBaseline.sourceDigest || !guidedCurrent.detail.includes('1 owner-confirmed guided counter sale')) fail('shop_guided_sale_completion_invalid')
   const guidedStorageValues = new Map()
@@ -19377,7 +19543,7 @@ try {
   if (recoverableRows.some(([key]) => recoveryTarget.getItem(key) !== null)
     || recoveryTarget.getItem('supermega.auth.session.v1') !== 'auth-kept'
     || recoveryTarget.getItem('unrelated.browser.state') !== 'unrelated-kept') fail('local_workspace_reset_boundary_invalid')
-  localBackup.applyLocalWorkspaceBackup(recoveryTarget, recoveryPoint)
+  await localBackup.applyLocalWorkspaceBackup(recoveryTarget, recoveryPoint)
   if (recoverableRows.some(([key, value]) => recoveryTarget.getItem(key) !== value)
     || recoveryTarget.getItem('supermega.auth.session.v1') !== 'auth-kept'
     || recoveryTarget.getItem('unrelated.browser.state') !== 'unrelated-kept') fail('local_workspace_restore_round_trip_invalid')

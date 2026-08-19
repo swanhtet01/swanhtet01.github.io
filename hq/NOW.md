@@ -33,7 +33,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
-- HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
+- HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 14 files/324,497 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
@@ -83,5 +83,11 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
-2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
+1. Land the reviewed branch and promote it.
+2. Fund one isolated branch; finish the four OPS-001 gates — recovery and exact
+   restore, Storage denial, a server-only backend login role, tenant separation.
+3. Enable managed writes for one named Shop operator; measure setup time, daily
+   completion, review effort, recovery.
+4. Then open sign-up: an identity, a workspace bound to it, four products reading
+   it — the unactivated `app_private` v10 model, not new architecture.
+5. Custom work and further SaaS follow one client carried through a portal.

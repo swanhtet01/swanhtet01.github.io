@@ -1896,7 +1896,9 @@ export async function recordPaymentEvent(provider, eventId, meta = {}) {
         [p, e, meta.ref || null, amount, meta.currency || null],
       )
       return { fresh: r.length > 0 }
-    } catch { /* fall through to in-memory */ }
+    } catch {
+      if (!warnedPaymentEventsTable) { warnedPaymentEventsTable = true; console.warn('[store] supermega_payment_events durable dedup failed — using per-instance dedup') }
+    }
   } else if (mode === 'supabase') {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/supermega_payment_events?on_conflict=provider,event_id`, {

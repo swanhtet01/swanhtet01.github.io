@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react'
 
 import {
+  COMMERCE_KEY,
   commerceWorkspaceCanWrite,
   createEmptyCommerce,
   loadCommerceWorkspace,
@@ -465,6 +466,22 @@ export function useStoredState<T>(key: string, seed: T, normalize?: (value: T) =
     }
   }, [key, normalizedState, persist])
 
+  useEffect(() => {
+    function refreshFromStorage(event: StorageEvent) {
+      if (event.key !== key) return
+      try {
+        const stored = window.localStorage.getItem(key)
+        if (!stored) return
+        const value = JSON.parse(stored) as T
+        setState(normalize ? normalize(value) : value)
+      } catch {
+        // Ignore a malformed payload written by another tab.
+      }
+    }
+    window.addEventListener('storage', refreshFromStorage)
+    return () => window.removeEventListener('storage', refreshFromStorage)
+  }, [key, normalize])
+
   return [normalizedState, setState] as const
 }
 
@@ -545,6 +562,19 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       })
     return () => { active = false }
   }, [managedIdentity, updateSyncStatus])
+
+  useEffect(() => {
+    if (managedIdentity) return undefined
+    function refreshFromStorage(event: StorageEvent) {
+      if (event.key !== COMMERCE_KEY) return
+      const local = loadCommerceWorkspace()
+      const next = { state: local.state, mode: 'local' as const, workspaceId: '', version: null, error: local.error, writeReady: !local.error && commerceWorkspaceCanWrite() }
+      snapshotRef.current = next
+      setLocalSnapshot(next)
+    }
+    window.addEventListener('storage', refreshFromStorage)
+    return () => window.removeEventListener('storage', refreshFromStorage)
+  }, [managedIdentity])
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -671,6 +701,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         evidence,
         eventType,
         expectedVersion: current.version,
+        identity: managedIdentity,
         state: candidate as unknown as Record<string, unknown>,
       })
       if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the write was confirmed.')

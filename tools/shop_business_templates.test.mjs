@@ -9,11 +9,11 @@ const modulePath = resolve(root, 'showroom', 'src', 'products', 'shop', 'busines
 const moduleHref = pathToFileURL(modulePath).href
 const model = await import(moduleHref)
 
-const expectedTemplateIds = ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts']
+const expectedTemplateIds = ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa', 'bakery']
 
-test('registry carries exactly the 7 supported Myanmar business types', () => {
+test('registry carries exactly the 10 supported Myanmar business types', () => {
   assert.deepEqual(model.shopBusinessTemplates.map((template) => template.id), expectedTemplateIds)
-  assert.equal(new Set(model.shopBusinessTemplates.map((template) => template.id)).size, 7)
+  assert.equal(new Set(model.shopBusinessTemplates.map((template) => template.id)).size, 10)
   assert.doesNotThrow(() => model.validateShopBusinessTemplates())
   for (const template of model.shopBusinessTemplates) {
     assert.ok(template.name.en.trim().length > 0, `${template.id} needs an English name`)
@@ -128,6 +128,47 @@ test('catalog installs into a fresh commerce workspace as a working sample', asy
       assert.equal(stored.reorderAt, item.reorderAt)
       assert.equal(stored.price, item.priceMmk)
     }
+  }
+})
+
+test('working sample activity installs counterSales and pendingOrder for every business template', async () => {
+  const commerce = await import(pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href)
+  for (const template of model.shopBusinessTemplates) {
+    const withCatalog = commerce.installCommerceWorkingSampleCatalog(commerce.createSeedCommerce(), {
+      sampleId: template.id,
+      sampleName: template.name.en,
+      items: model.shopBusinessTemplateCommerceItems(template.id),
+      capturedAt: '2026-08-03T09:00:00.000Z',
+    })
+    assert.ok(withCatalog, `${template.id} catalog must install before activity`)
+
+    const withActivity = commerce.installCommerceWorkingSampleActivity(withCatalog, {
+      sampleId: template.id,
+      sampleName: template.name.en,
+      counterSales: template.counterSales,
+      pendingOrder: template.pendingOrder,
+    })
+    assert.ok(withActivity !== null, `${template.id} activity install must succeed`)
+
+    const sampleOrders = withActivity.orders.filter((o) => o.id.startsWith('SETUP-SAMPLE-'))
+    assert.equal(sampleOrders.length, template.counterSales.length + 1, `${template.id} must have ${template.counterSales.length + 1} sample orders`)
+    assert.equal(
+      sampleOrders.filter((o) => o.status === 'completed').length,
+      template.counterSales.length,
+      `${template.id} counter sales must all be completed`,
+    )
+    assert.ok(sampleOrders.some((o) => o.status === 'confirmed'), `${template.id} must have a confirmed pending order`)
+
+    // Idempotent replay: calling again with the same data returns non-null.
+    assert.ok(
+      commerce.installCommerceWorkingSampleActivity(withActivity, {
+        sampleId: template.id,
+        sampleName: template.name.en,
+        counterSales: template.counterSales,
+        pendingOrder: template.pendingOrder,
+      }) !== null,
+      `${template.id} idempotent activity replay must return current state`,
+    )
   }
 })
 

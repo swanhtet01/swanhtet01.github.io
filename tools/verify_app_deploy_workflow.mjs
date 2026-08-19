@@ -36,6 +36,7 @@ const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), '
 const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
 const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
+const appShell = await readFile(resolve(root, 'showroom/index.html'), 'utf8')
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
 const schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority)
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
@@ -160,12 +161,13 @@ async function verifyCanonicalPythonBundle() {
     ]) {
       await copyFile(resolve(root, relativePath), resolve(bundleRoot, relativePath))
     }
+    const overridePython = process.env.SUPERMEGA_LOCAL_PYTHON?.trim()
     const localPython = process.platform === 'win32'
       ? resolve(root, '.venv/Scripts/python.exe')
       : resolve(root, '.venv/bin/python')
-    const python = existsSync(localPython)
+    const python = overridePython || (existsSync(localPython)
       ? localPython
-      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3'))
+      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')))
     return spawnSync(
       python,
       ['-c', [
@@ -240,12 +242,46 @@ requireContract('app build contract',
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
-requireContract('canonical SPA routes use one filesystem-first fallback',
-  config.routes?.length === 3
-  && config.routes[0]?.src === '/api/(.*)' && config.routes[0]?.dest === '/api/app.py'
-  && config.routes[1]?.handle === 'filesystem'
-  && config.routes[2]?.src === '/(.*)' && config.routes[2]?.dest === '/index.html')
-requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
+  config.routes?.length === 4
+  && config.routes[0]?.src === '/(.*)' && config.routes[0]?.continue === true && !config.routes[0]?.dest
+  && config.routes[1]?.src === '/api/(.*)' && config.routes[1]?.dest === '/api/app.py'
+  && config.routes[2]?.handle === 'filesystem'
+  && config.routes[3]?.src === '/(.*)' && config.routes[3]?.dest === '/index.html')
+// The app keeps a client's catalog, orders, and evidence in browser storage. It
+// shipped with no response headers at all while the kernel already had a full
+// set, so it was framable and ran under no content policy.
+const appSecurityHeaders = config.routes?.[0]?.headers || {}
+const appPolicy = String(appSecurityHeaders['Content-Security-Policy'] || '')
+requireContract('app is served with a security header floor',
+  appSecurityHeaders['X-Frame-Options'] === 'DENY'
+  && appSecurityHeaders['X-Content-Type-Options'] === 'nosniff'
+  && appSecurityHeaders['Referrer-Policy'] === 'no-referrer'
+  && String(appSecurityHeaders['Permissions-Policy'] || '').includes('camera=()')
+  && generator.includes('appContentSecurityPolicy'))
+requireContract('app content policy refuses framing, injection and unexpected egress',
+  [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    // The built shell emits no inline script, so this exception is never needed
+    // and its absence is the property worth pinning.
+    "script-src 'self'",
+    "connect-src 'self' https://*.supabase.co",
+  ].every((directive) => appPolicy.includes(directive))
+  && !/script-src[^;]*unsafe-(inline|eval)/.test(appPolicy))
+// frame-ancestors is ignored in a meta policy, so the shell carries the rest as
+// a second layer and the header remains the only place framing is refused.
+const appShellPolicy = /http-equiv="Content-Security-Policy"\s*\n?\s*content="([^"]*)"/.exec(appShell)?.[1] || ''
+requireContract('app shell carries the same policy for hosts that cannot set headers',
+  appShellPolicy.includes("default-src 'self'")
+  && appShellPolicy.includes("script-src 'self'")
+  && appShellPolicy.includes("connect-src 'self' https://*.supabase.co")
+  && !/script-src[^;]*unsafe-(inline|eval)/.test(appShellPolicy)
+  && !appShellPolicy.includes('frame-ancestors'))
+requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger non-mutating review gates',

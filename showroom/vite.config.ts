@@ -4,9 +4,13 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 const projectRoot = realpathSync(dirname(fileURLToPath(import.meta.url)))
 const localApi = process.env.SUPERMEGA_LOCAL_API?.trim()
+// Opt-in bundle visualization: `npm run build:analyze` (or ANALYZE=1 npm run build).
+// Never runs by default, so app:build / app:verify stay unaffected.
+const shouldAnalyzeBundle = process.env.ANALYZE === '1'
 const apiProxy: Record<string, { target: string; changeOrigin: boolean }> = localApi
   ? { '/api': { target: localApi, changeOrigin: true } }
   : {}
@@ -62,7 +66,18 @@ export default defineConfig({
   root: projectRoot,
   publicDir: resolve(projectRoot, 'public-app'),
   cacheDir: resolve(projectRoot, 'node_modules/.vite'),
-  plugins: [react(), localHealthPlugin()],
+  plugins: [
+    react(),
+    localHealthPlugin(),
+    shouldAnalyzeBundle
+      ? visualizer({
+          filename: resolve(projectRoot, 'dist/bundle-stats.html'),
+          gzipSize: true,
+          brotliSize: true,
+          template: 'treemap',
+        })
+      : null,
+  ],
   server: { proxy: apiProxy },
   preview: { proxy: apiProxy },
   build: {

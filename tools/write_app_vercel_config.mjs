@@ -59,6 +59,28 @@ const appProjectLink = {
 mkdirSync('.vercel', { recursive: true })
 writeFileSync('.vercel/project.json', `${JSON.stringify(appProjectLink, null, 2)}\n`)
 
+// `frame-ancestors` is ignored in a <meta> policy, so the header is the only
+// place clickjacking is actually refused; index.html carries the rest as a
+// second layer for any host that cannot set headers.
+export const appContentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self'",
+  // React sets inline style attributes in eleven places; scripts need no such
+  // exception, so 'unsafe-inline' stays off script-src where it would matter.
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self'",
+  // Same-origin /api plus the managed-trial Supabase project. Nothing else.
+  "connect-src 'self' https://*.supabase.co",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  'upgrade-insecure-requests',
+].join('; ')
+
 const appConfig = {
   $schema: 'https://openapi.vercel.sh/vercel.json',
   version: 2,
@@ -76,6 +98,24 @@ const appConfig = {
   buildCommand: 'npm run app:build',
   outputDirectory: 'showroom/dist',
   routes: [
+    // The app holds a client's catalog, orders, and evidence in browser storage,
+    // so it is served with the same header floor the kernel already had. Legacy
+    // `routes` cannot coexist with a top-level `headers` block, so the headers
+    // ride a continuing catch-all the way kernel/vercel.json does.
+    // Every value here is verified against the built shell: it emits no inline
+    // script and no inline style, all fetches are same-origin /api, and the only
+    // cross-origin runtime call is the Supabase client.
+    {
+      src: '/(.*)',
+      headers: {
+        'Content-Security-Policy': appContentSecurityPolicy,
+        'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+      },
+      continue: true,
+    },
     { src: '/api/(.*)', dest: '/api/app.py' },
     { handle: 'filesystem' },
     { src: '/(.*)', dest: '/index.html' },

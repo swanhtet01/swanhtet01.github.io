@@ -179,6 +179,10 @@ function exact(value: unknown, field: string, fields: string[]) {
   return value
 }
 
+// The opening import's real capacity, shared with the setup form so the UI cannot
+// refuse a catalog the engine would accept.
+export const MAX_SHOP_INVENTORY_STOCK_UNITS = 1_000
+
 function array(value: unknown, field: string, minimum: number, maximum: number) {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) {
     throw new Error(`${field} must contain between ${minimum} and ${maximum} items.`)

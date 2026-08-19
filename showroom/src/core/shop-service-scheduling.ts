@@ -4,6 +4,15 @@ const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1'
 
 export type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'
 
+// A restaurant books reservations and a school books classes. Calling both an
+// "appointment" is the fastest way to make a working schedule read as a generic
+// template, so the words belong to the pack rather than to the screen.
+export type ShopScheduleVocabulary = {
+  plural: string
+  singular: string
+  holdAction: string
+}
+
 export type ShopIndustryPack = {
   id: ShopIndustryPackId
   name: string
@@ -16,6 +25,7 @@ export type ShopIndustryPack = {
   workflowTemplateId: 'social-commerce' | 'retail-wholesale' | 'restaurant-ordering'
   entryPoint: 'Walk-in' | 'Phone'
   capabilities: readonly string[]
+  scheduleVocabulary: ShopScheduleVocabulary
   services: readonly Omit<ShopService, 'active'>[]
   resources: readonly Omit<ShopServiceResource, 'active'>[]
 }
@@ -110,6 +120,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'retail-wholesale',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Purchasing', 'Returns', 'Pickup schedule'],
+    scheduleVocabulary: { plural: 'Pickups', singular: 'pickup', holdAction: 'Hold a pickup window' },
     services: [
       { id: 'service-personal-shopping', name: 'Personal shopping', nameMy: 'အထူးဝယ်ယူ ကူညီမှု', durationMinutes: 30, priceMmk: 15_000 },
       { id: 'service-pickup-window', name: 'Pickup window', nameMy: 'ပစ္စည်းလာယူချိန်', durationMinutes: 15, priceMmk: 5_000 },
@@ -128,6 +139,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'restaurant-ordering',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Daily close', 'Collection schedule'],
+    scheduleVocabulary: { plural: 'Collections', singular: 'collection', holdAction: 'Hold a collection slot' },
     services: [
       { id: 'service-catering-consultation', name: 'Catering consultation', nameMy: 'ပွဲအတွက် တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 20_000 },
       { id: 'service-preorder-collection', name: 'Preorder collection', nameMy: 'ကြိုတင်မှာယူ လာယူချိန်', durationMinutes: 15, priceMmk: 5_000 },
@@ -146,6 +158,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'restaurant-ordering',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Reservations'],
+    scheduleVocabulary: { plural: 'Reservations', singular: 'reservation', holdAction: 'Hold a table' },
     services: [
       { id: 'service-table-reservation', name: 'Table reservation deposit', nameMy: 'စားပွဲ ကြိုတင်စရန်', durationMinutes: 90, priceMmk: 10_000 },
       { id: 'service-event-consultation', name: 'Private event consultation', nameMy: 'ကိုယ်ပိုင်ပွဲ တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 45, priceMmk: 25_000 },
@@ -168,6 +181,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Appointments', 'Service resources'],
+    scheduleVocabulary: { plural: 'Appointments', singular: 'appointment', holdAction: 'Hold an appointment' },
     services: [
       { id: 'service-consultation', name: 'Consultation', nameMy: 'အလှအပ တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 20_000 },
       { id: 'service-session', name: 'Traditional Myanmar massage', nameMy: 'မြန်မာ့ရိုးရာ အနှိပ်', durationMinutes: 60, priceMmk: 45_000 },
@@ -194,6 +208,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Training schedule', 'Staff resources'],
+    scheduleVocabulary: { plural: 'Sessions', singular: 'session', holdAction: 'Hold a session' },
     services: [
       { id: 'service-fitness-consultation', name: 'Fitness consultation', nameMy: 'ကြံ့ခိုင်ရေး တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 15_000 },
       { id: 'service-personal-training', name: 'Personal training', nameMy: 'တစ်ဦးချင်း လေ့ကျင့်ရေး', durationMinutes: 60, priceMmk: 30_000 },
@@ -218,6 +233,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Class schedule', 'Teacher resources'],
+    scheduleVocabulary: { plural: 'Classes', singular: 'class', holdAction: 'Hold a class' },
     services: [
       { id: 'service-enrollment-consultation', name: 'Enrollment consultation', nameMy: 'ကျောင်းအပ် တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 10_000 },
       { id: 'service-placement-test', name: 'Placement test', nameMy: 'အဆင့်စစ်ဆေးမှု', durationMinutes: 45, priceMmk: 5_000 },
@@ -239,6 +255,14 @@ export function shopIndustryPack(id: ShopIndustryPackId) {
   const pack = shopIndustryPacks.find((candidate) => candidate.id === id)
   if (!pack) throw new Error('Choose a supported Shop industry pack.')
   return pack
+}
+
+const fallbackScheduleVocabulary: ShopScheduleVocabulary = { plural: 'Bookings', singular: 'booking', holdAction: 'Hold a booking' }
+
+// The schedule screen reads this while rendering, so an unrecognised pack has to
+// degrade to neutral wording rather than throw and blank the panel.
+export function shopScheduleVocabulary(id: string): ShopScheduleVocabulary {
+  return shopIndustryPacks.find((candidate) => candidate.id === id)?.scheduleVocabulary ?? fallbackScheduleVocabulary
 }
 
 function boundedText(value: string, label: string, maximum = 160) {
@@ -277,7 +301,7 @@ function proofRecord(proof: ShopServiceScheduleProof) {
   }
 }
 
-export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = 'spa'): ShopServiceSchedule {
+export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = 'retail'): ShopServiceSchedule {
   const pack = shopIndustryPack(industryPackId)
   return {
     schema: SHOP_SERVICE_SCHEDULE_SCHEMA,
@@ -496,4 +520,91 @@ export function provisionEmptyShopServiceSchedule(state: ShopServiceSchedule, in
     throw new Error('Existing appointment evidence was preserved. Reset that local demo before replacing its industry pack.')
   }
   return createShopServiceSchedule(industryPackId)
+}
+
+export const GUIDED_SAMPLE_SCHEDULE_ACTOR = 'Guided sample'
+
+type GuidedSampleBookingPlan = {
+  customerName: string
+  contact: string
+  note: string
+}
+
+const guidedSampleBookingPlans: Record<ShopIndustryPackId, readonly [GuidedSampleBookingPlan, GuidedSampleBookingPlan, GuidedSampleBookingPlan]> = {
+  retail: [
+    { customerName: 'Ma Thandar', contact: '09 450 210 331', note: 'Weekly personal shopping visit.' },
+    { customerName: 'U Kyaw Zin', contact: '09 795 114 208', note: 'Bulk order pickup window.' },
+    { customerName: 'Daw Khin Mar', contact: '09 262 448 190', note: 'Reserved pickup for phone order.' },
+  ],
+  cafe: [
+    { customerName: 'Ko Aung Myat', contact: '09 421 077 615', note: 'Office catering tasting.' },
+    { customerName: 'Ma Ei Phyu', contact: '09 970 333 484', note: 'Birthday cake collection.' },
+    { customerName: 'U Tun Lin', contact: '09 253 901 772', note: 'Large preorder for meeting.' },
+  ],
+  restaurant: [
+    { customerName: 'Daw Nilar', contact: '09 799 442 156', note: 'Family lunch table for six.' },
+    { customerName: 'U Zaw Htet', contact: '09 448 015 923', note: 'Anniversary dinner reservation.' },
+    { customerName: 'Ma Su Myat', contact: '09 664 270 388', note: 'Private event walkthrough.' },
+  ],
+  spa: [
+    { customerName: 'Ma Hnin Wai', contact: '09 450 623 917', note: 'First-visit consultation.' },
+    { customerName: 'Daw Aye Aye', contact: '09 262 380 445', note: 'Monthly standard treatment.' },
+    { customerName: 'Ko Thiha', contact: '09 977 105 236', note: 'Gift-voucher treatment.' },
+  ],
+  gym: [
+    { customerName: 'Ko Nay Lin', contact: '09 421 908 350', note: 'Program review consultation.' },
+    { customerName: 'Ma Phyo Thiri', contact: '09 795 663 128', note: 'Personal training session.' },
+    { customerName: 'U Min Khant', contact: '09 448 237 566', note: 'Strength session with trainer.' },
+  ],
+  school: [
+    { customerName: 'Ma Yoon Nadi', contact: '09 970 481 259', note: 'New student enrollment talk.' },
+    { customerName: 'Ko Htet Aung', contact: '09 253 774 016', note: 'Weekend class session.' },
+    { customerName: 'Daw Mya Sandar', contact: '09 664 590 843', note: 'Parent consultation booking.' },
+  ],
+}
+
+function guidedSampleProof(planningDayUtcStart: number, step: number, reason: string): ShopServiceScheduleProof {
+  return {
+    actor: GUIDED_SAMPLE_SCHEDULE_ACTOR,
+    reason,
+    happenedAt: new Date(planningDayUtcStart + step * 60_000).toISOString(),
+  }
+}
+
+export function isGuidedSampleShopSchedule(state: ShopServiceSchedule) {
+  validateShopServiceSchedule(state)
+  if (!state.events.length) return true
+  return state.events.every((event) => event.actor === GUIDED_SAMPLE_SCHEDULE_ACTOR)
+}
+
+export function createShopServiceScheduleDemo(industryPackId: ShopIndustryPackId, planningDay: string): ShopServiceSchedule {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(planningDay) || !Number.isFinite(Date.parse(`${planningDay}T00:00:00.000Z`))) {
+    throw new Error('Planning day must be an exact YYYY-MM-DD date.')
+  }
+  const pack = shopIndustryPack(industryPackId)
+  const dayStart = Date.parse(`${planningDay}T00:00:00.000Z`)
+  const plans = guidedSampleBookingPlans[pack.id]
+  // Local demo times, Myanmar day: 08:00, 09:30, and 14:00 MMT expressed as UTC.
+  const slots = [
+    { plan: plans[0], serviceIndex: 0, resourceIndex: 0, startsAt: `${planningDay}T01:30:00.000Z`, advances: 3 },
+    { plan: plans[1], serviceIndex: 1, resourceIndex: 0, startsAt: `${planningDay}T03:00:00.000Z`, advances: 2 },
+    { plan: plans[2], serviceIndex: 1, resourceIndex: 1, startsAt: `${planningDay}T07:30:00.000Z`, advances: 1 },
+  ] as const
+  let state = createShopServiceSchedule(pack.id)
+  let step = 0
+  for (const slot of slots) {
+    state = scheduleShopServiceBooking(state, {
+      customerName: slot.plan.customerName,
+      contact: slot.plan.contact,
+      serviceId: state.services[slot.serviceIndex].id,
+      resourceId: state.resources[slot.resourceIndex].id,
+      startsAt: slot.startsAt,
+      note: slot.plan.note,
+    }, guidedSampleProof(dayStart, step += 1, `Guided sample appointment for the ${pack.name} demo schedule.`))
+    const bookingId = state.bookings[state.bookings.length - 1].id
+    for (let advance = 0; advance < slot.advances; advance += 1) {
+      state = advanceShopServiceBooking(state, bookingId, guidedSampleProof(dayStart, step += 1, 'Guided sample status walk-through.'))
+    }
+  }
+  return validateShopServiceSchedule(state)
 }

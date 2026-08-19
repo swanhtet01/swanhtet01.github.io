@@ -33,7 +33,7 @@ function check(condition, label) {
 
 const SCHEMA = 'supermega.ecommerce.buying.v2'
 
-function makeBuying(requests = [], returnIntents = [], cancellationIntents = []) {
+function makeBuying(requests = [], returnIntents = [], cancellationIntents = [], cancellationDecisions = []) {
   return {
     schema: SCHEMA,
     scope: 'test',
@@ -44,10 +44,25 @@ function makeBuying(requests = [], returnIntents = [], cancellationIntents = [])
     supportIntents: [],
     correctionIntents: [],
     cancellationIntents,
-    cancellationDecisions: [],
+    cancellationDecisions,
     amendmentIntents: [],
     rescheduleIntents: [],
     events: [],
+  }
+}
+
+function makeCancellationDecision(intentId) {
+  return {
+    schema: 'supermega.ecommerce.cancellation-decision.v1',
+    state: 'kept_by_shop',
+    scope: 'test',
+    id: `DEC-${intentId}`,
+    idempotencyKey: `dec-${intentId}`,
+    createdAt: '2026-08-11T11:00:00.000Z',
+    intentId,
+    intentDigest: 'sha256:abc',
+    orderId: 'ORD-001',
+    sourceRequestId: 'REQ-001',
   }
 }
 
@@ -224,6 +239,22 @@ function makeCancel(id, extra = {}) {
 {
   const r = projectEcommercePipelineSummary(makeBuying([], [makeReturn('RET-001')]))
   check(r.averageRequestValueMmk === 0, 'averageRequestValueMmk = 0 when no requests')
+}
+
+// 15. A cancellation intent with a matching decision is excluded from pendingCancellationIntents
+{
+  const r = projectEcommercePipelineSummary(makeBuying(
+    [], [], [makeCancel('CAN-001')], [makeCancellationDecision('CAN-001')],
+  ))
+  check(r.pendingCancellationIntents === 0, 'decided cancellation intent excluded from pending count')
+}
+
+// 16. Only the decided cancellation intent is excluded, others remain pending
+{
+  const r = projectEcommercePipelineSummary(makeBuying(
+    [], [], [makeCancel('CAN-001'), makeCancel('CAN-002')], [makeCancellationDecision('CAN-001')],
+  ))
+  check(r.pendingCancellationIntents === 1, 'only the undecided cancellation intent remains pending')
 }
 
 console.log(`ecommerce pipeline summary: ${checks} checks passed`)

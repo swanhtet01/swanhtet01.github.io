@@ -1,12 +1,14 @@
-import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { recordBehaviorSignal } from './behavior-trail'
 import type { ClientSolutionId } from './client-onboarding'
+import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
+const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -469,6 +471,20 @@ export function CoreLayout() {
   )
 }
 
+const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
+  Shop: 'commerce',
+  Plant: 'production',
+  Website: 'website',
+  Ecommerce: 'ecommerce',
+}
+
+const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
+  ['commerce', 'Shop', 'build your catalog and complete your first sale'],
+  ['ecommerce', 'Ecommerce', 'receive online orders that flow into Shop'],
+  ['production', 'Plant', 'link production runs to your Shop stock'],
+  ['website', 'Website', 'give your business a public face'],
+]
+
 const customerProducts = [
   ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
   ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
@@ -492,22 +508,46 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 }
 
 export function ProductHomePage() {
+  const productSetups = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    return {
+      commerce: readProductSetup(window.localStorage, 'commerce'),
+      production: readProductSetup(window.localStorage, 'production'),
+      website: readProductSetup(window.localStorage, 'website'),
+      ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
+    }
+  }, [])
+  const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
+  const nextSetupStep = (() => {
+    if (!productSetups) return null
+    return STEP_SUGGESTIONS.find(([id]) => !productSetups[id]?.startedAt) ?? null
+  })()
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
+      {!anyStarted ? (
+        <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — set it up once, and it connects to all other products through one catalog and order flow.</p>
+      ) : nextSetupStep ? (
+        <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
+      ) : null}
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
-          return <Link aria-label={`Open ${name} workspace`} className="product-track-card" key={name} to={path}>
+          const setupKey = PRODUCT_SETUP_KEY[name]
+          const setup = productSetups?.[setupKey]
+          const workspaceName = setup?.startedAt ? setup.workspace : null
+          return <Link aria-label={`Open ${name} workspace`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
                 <small>{job}</small>
                 <h2>{name}</h2>
                 <p>{outcome}</p>
+                {workspaceName ? <span className="product-track-workspace">{workspaceName}</span> : null}
               </span>
               <strong className="product-track-open">Open {name} <span aria-hidden="true">→</span></strong>
             </Link>
         })}
       </nav>
+      <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense>
       <p className="product-home-note">Your product workspaces stay separate. Opening a sample does not change another product.</p>
     </div>
   )

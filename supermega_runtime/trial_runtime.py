@@ -56,6 +56,8 @@ from supermega_runtime.plant_equipment_import import (
     PlantEquipmentImportError,
     validate_plant_equipment_import,
 )
+from supermega_runtime.telemetry import schema as telemetry_schema
+from supermega_runtime.telemetry.tracing import domain_span
 from supermega_runtime.production_material_handoff import (
     production_material_requests,
     require_shop_issue_before_plant_progress,
@@ -555,6 +557,40 @@ def _approval_response(approval: ApprovalRecord) -> dict[str, Any]:
 
 def _command_response(result: CommandResult) -> dict[str, Any]:
     return {"result": result.to_dict()}
+
+
+def _command_domain_span_name(surface: str, event_type: str) -> str | None:
+    """Map a generic `/commands` request to one of the plan's named workflow spans.
+
+    Plan section 6 step 9 names five multi-step workflows to wrap with a
+    manual domain span: shop order confirm, plant job release, ecommerce
+    request submit, AI invocation, and worker cycle. This runtime has no
+    per-workflow command function — every surface writes through one
+    generic `store.apply_command`, keyed by `(surface, event_type)` — so the
+    mapping lives here instead, at the one call site all of them share.
+
+    * `commerce.order.created` is Shop's actual order-confirmation event: an
+      order in this codebase is created directly into the `confirmed` state
+      (see `commerce_runtime._ORDER_STATUSES`), so there is no separate
+      `commerce.order.intake` step to distinguish it from — this is the
+      `shop.order.confirm` span.
+    * `production.job.created` is the point a job's BOM/routing versions are
+      locked and it becomes workable — `plant.job.release`.
+    * `commerce.storefront_request.received` is the event that durably
+      records an Ecommerce buyer's submitted request into the Shop-facing
+      state — `ecommerce.request.submit`.
+
+    AI invocation and worker cycle are not reachable from this endpoint;
+    see `order_intake_provider.py` and the Phase A report for those.
+    """
+
+    if surface == "commerce" and event_type == "commerce.order.created":
+        return telemetry_schema.SHOP_ORDER_CONFIRM
+    if surface == "production" and event_type == "production.job.created":
+        return telemetry_schema.PLANT_JOB_RELEASE
+    if surface == "commerce" and event_type == "commerce.storefront_request.received":
+        return telemetry_schema.ECOMMERCE_REQUEST_SUBMIT
+    return None
 
 
 def _company_brief_context(
@@ -2255,8 +2291,10 @@ def create_trial_router(
 
             related_surfaces = ("commerce",)
             state_precondition = require_current_shop_demand
-        result = _invoke(
-            lambda: store.apply_command(
+        domain_span_name = _command_domain_span_name(body.surface, body.event_type)
+
+        def apply() -> CommandResult:
+            return store.apply_command(
                 principal,
                 command_id=body.command_id,
                 surface=body.surface,
@@ -2266,7 +2304,12 @@ def create_trial_router(
                 related_surfaces=related_surfaces,
                 state_precondition=state_precondition,
             )
-        )
+
+        if domain_span_name is None:
+            result = _invoke(apply)
+        else:
+            with domain_span(domain_span_name, surface=body.surface, event_type=body.event_type):
+                result = _invoke(apply)
         return _command_response(result)
 
     @router.post("/approvals")
