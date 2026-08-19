@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 import os
@@ -62,6 +62,7 @@ def _env_schema_version(default: int = 12) -> int:
 # rejects any database whose app_private schema is not EXACTLY this.
 BILLING_SCHEMA_VERSION = _env_schema_version()
 BILLING_EVENT_RESULT_CONTRACT = "supermega.managed_billing_event.v1"
+BILLING_OVERDUE_REPORT_CONTRACT = "supermega.managed_billing_overdue_report.v1"
 BILLING_STATE_CONTRACT = "supermega.managed_billing_state.v1"
 INVOICE_PACKET_CONTRACT = "supermega.managed-billing.invoice-packet.v1"
 MANAGED_BILLING_CONTRACT = "supermega.managed-billing.v1"
@@ -1322,11 +1323,113 @@ class BillingLedger:
         finally:
             connection.close()
 
-    def get_billing_state(self, workspace_id: str) -> dict[str, Any]:
+    @staticmethod
+    def _stored_invoice_core(row: Any) -> Mapping[str, Any] | None:
+        """The sealed invoice core inside a stored billing_invoices payload, or
+        None when the stored payload does not carry one (never guessed)."""
+
+        packet = _row_json(row, "payload_json", 4)
+        invoice = packet.get("invoice") if isinstance(packet, Mapping) else None
+        return invoice if isinstance(invoice, Mapping) else None
+
+    def _overdue_report(
+        self, cursor: Any, workspace: str, invoice_rows: Sequence[Any], as_of: datetime
+    ) -> dict[str, Any]:
+        """READ-ONLY overdue projection over the invoices and billing_events
+        already recorded by founder actions (first-month lifecycle: the rail
+        stores dueDate but nothing computed overdue -- silent revenue leakage).
+
+        Pure projection: no auto-charge, no sends, no new event types, no
+        mutation. Only 'issued' invoices can be overdue -- paid means a
+        founder-confirmed payment event exists, void means the receivable was
+        cancelled. Outstanding is the sealed total net of every recorded refund
+        for the exact invoice digest, reusing _prior_refund_total so the
+        replay-proof cumulative-refund arithmetic has exactly one home. An
+        invoice whose stored payload has no parseable ISO dueDate (or sealed
+        amount) is excluded WITH a note rather than guessed at.
+        """
+
+        as_of_date = as_of.astimezone(timezone.utc).date()
+        entries: list[dict[str, Any]] = []
+        excluded: list[dict[str, str]] = []
+        for row in invoice_rows:
+            if str(_row_value(row, "status", 1)) != "issued":
+                # paid: a billing.payment.confirmed event settled it.
+                # void: the receivable was cancelled. Neither is outstanding.
+                continue
+            invoice_id = str(_row_value(row, "invoice_id", 0))
+            invoice = self._stored_invoice_core(row)
+            schedule = invoice.get("issuedToPayBy") if invoice is not None else None
+            due_raw = schedule.get("dueDate") if isinstance(schedule, Mapping) else None
+            due_date = None
+            if isinstance(due_raw, str):
+                try:
+                    due_date = date.fromisoformat(due_raw)
+                except ValueError:
+                    due_date = None
+            if due_date is None:
+                excluded.append(
+                    {
+                        "invoiceId": invoice_id,
+                        "note": "Stored invoice has no parseable ISO-8601 dueDate; overdue status is not guessed.",
+                    }
+                )
+                continue
+            amount = invoice.get("amount") if invoice is not None else None
+            total = amount.get("totalMinor") if isinstance(amount, Mapping) else None
+            currency = amount.get("currency") if isinstance(amount, Mapping) else None
+            if not isinstance(total, int) or isinstance(total, bool) or not isinstance(currency, str):
+                excluded.append(
+                    {
+                        "invoiceId": invoice_id,
+                        "note": "Stored invoice has no sealed integer amount; outstanding is not guessed.",
+                    }
+                )
+                continue
+            days_overdue = (as_of_date - due_date).days
+            if days_overdue <= 0:
+                # Due today (or later) is not yet overdue; overdue starts the
+                # day after dueDate.
+                continue
+            digest = f"sha256:{_row_value(row, 'invoice_digest', 2)}"
+            refunded = self._prior_refund_total(cursor, workspace, digest)
+            entries.append(
+                {
+                    "invoiceId": invoice_id,
+                    "invoiceDigest": digest,
+                    "dueDate": due_raw,
+                    "daysOverdue": days_overdue,
+                    "currency": currency,
+                    "totalMinor": total,
+                    "refundedMinor": refunded,
+                    "outstandingMinor": max(total - refunded, 0),
+                }
+            )
+        entries.sort(key=lambda entry: (-entry["daysOverdue"], entry["invoiceId"]))
+        totals: dict[str, int] = {}
+        for entry in entries:
+            totals[entry["currency"]] = totals.get(entry["currency"], 0) + entry["outstandingMinor"]
+        return {
+            "contract": BILLING_OVERDUE_REPORT_CONTRACT,
+            "asOf": _timestamp_text(as_of),
+            "overdueInvoices": entries,
+            "excluded": excluded,
+            "totalOutstandingMinorByCurrency": totals,
+        }
+
+    def get_billing_state(
+        self, workspace_id: str, *, as_of: datetime | None = None
+    ) -> dict[str, Any]:
         """Read the billing projection for one tenant. Read-only; the only
-        place premiumUnlocked is derived is billing_entitlements.status."""
+        place premiumUnlocked is derived is billing_entitlements.status. The
+        result carries the overdue report projected as of ``as_of`` (UTC now
+        when omitted; must be timezone-aware when supplied)."""
 
         workspace = _workspace_id(workspace_id)
+        if as_of is None:
+            as_of = datetime.now(timezone.utc)
+        if not isinstance(as_of, datetime) or as_of.tzinfo is None:
+            raise BillingRailError("Overdue report reference time must be timezone-aware.")
         connection = self._connect()
         try:
             with connection.transaction():
@@ -1335,7 +1438,7 @@ class BillingLedger:
                     self._assert_schema(cursor, require_write_privilege=False)
                     cursor.execute(
                         """
-                        select invoice_id, status, invoice_digest, revision
+                        select invoice_id, status, invoice_digest, revision, payload_json
                         from app_private.billing_invoices
                         where workspace_id = %s
                         order by invoice_id
@@ -1343,6 +1446,7 @@ class BillingLedger:
                         (workspace,),
                     )
                     invoice_rows = list(cursor.fetchall() or [])
+                    overdue_report = self._overdue_report(cursor, workspace, invoice_rows, as_of)
                     entitlement = self._entitlement_row(cursor, workspace)
                     cursor.execute(
                         """
@@ -1384,6 +1488,7 @@ class BillingLedger:
                     ),
                 },
                 "premiumUnlocked": entitlement_status == "granted",
+                "overdueReport": overdue_report,
                 "eventCount": event_count,
                 "localProjectionTrusted": False,
                 "externalWritesPerformed": False,
@@ -1600,6 +1705,7 @@ if __name__ == "__main__":
 __all__ = [
     "BILLING_EVENT_RESULT_CONTRACT",
     "BILLING_EVENT_TYPES",
+    "BILLING_OVERDUE_REPORT_CONTRACT",
     "BILLING_SCHEMA_VERSION",
     "BILLING_STATE_CONTRACT",
     "BillingLedger",

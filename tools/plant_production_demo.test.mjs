@@ -78,13 +78,12 @@ const PLANNING_DAY = '2026-08-07'
 const INSTALLED_AT = `${PLANNING_DAY}T01:00:00.000Z`
 const SHIFT_REF = `${PLANNING_DAY} Day`
 
-function packFloor(pack) {
-  return {
-    machines: pack.setup.machines.map((machine) => ({ ...machine })),
-    issue: { ...pack.setup.issue },
-  }
-}
-
+// Industry packs are generic and install onto the shared seed floor: the pack setup carries
+// no machines or opening issue of its own (see plant-industry-packs.ts -- setup is prefixes,
+// material, and work centre only). Per-trade floors belong to plant BUSINESS templates, whose
+// provisioning path hands installProductionWorkingSampleJobs its own machines/issue (covered
+// by tools/test_plant_business_templates.mjs). This mirrors the generic pack call in
+// product-onboarding-runtime.ts's provisionLocalPlantWorkingSample.
 function installedSample(pack) {
   const jobs = [
     {
@@ -113,7 +112,6 @@ function installedSample(pack) {
     sampleName: pack.name,
     jobs,
     capturedAt: INSTALLED_AT,
-    ...packFloor(pack),
   })
   assert.ok(installed, `${pack.id} working sample must install`)
   return installed
@@ -325,34 +323,75 @@ test('guided evidence never lands after the records it follows', () => {
   }
 })
 
-// A sewing floor showing a mixer and a press, reporting temperature drift, is
-// visibly not the client's factory. The equipment travels with the pack.
-test('every pack installs its own equipment and opening issue', () => {
-  const seededNames = new Set()
+// A generic industry pack has no floor of its own: every pack installs onto the shared seed
+// floor (Mixer 01 / Press 02 / Finishing 01, temperature-drift issue). Only a plant BUSINESS
+// template hands installProductionWorkingSampleJobs a trade-specific floor through the
+// constructor's optional machines/issue parameters -- so both halves are proven here: the
+// generic default and the caller-supplied floor actually travelling with the install.
+const CUSTOM_FLOOR = {
+  machines: [
+    { id: 'OV-01', name: 'Deck oven 01', state: 'running' },
+    { id: 'MX-01', name: 'Spiral mixer 01', state: 'attention' },
+    { id: 'PF-01', name: 'Proofer 01', state: 'running' },
+  ],
+  issue: { area: 'Spiral mixer 01', summary: 'Dough temperature runs high on the second batch' },
+}
+
+function installedSampleWithFloor(pack, floor) {
+  return installProductionWorkingSampleJobs(createSeedProduction(), {
+    sampleId: pack.id,
+    sampleName: pack.name,
+    jobs: [{
+      id: `${pack.setup.outputPrefix}-101`,
+      line: `${pack.setup.workCentrePrefix}-1`,
+      product: `${pack.name} demo order A`,
+      target: 200,
+      output: 0,
+      owner: 'Demo owner',
+      priority: 'normal',
+      dueAt: '2026-08-21T10:00:00.000Z',
+    }],
+    capturedAt: INSTALLED_AT,
+    machines: floor.machines.map((machine) => ({ ...machine })),
+    issue: { ...floor.issue },
+  })
+}
+
+test('generic packs install onto the seed floor and a caller-supplied floor travels with the install', () => {
+  const seed = createSeedProduction()
   for (const pack of plantIndustryPacks) {
     const state = installedSample(pack)
     assert.deepEqual(
-      state.machines.map((machine) => ({ id: machine.id, name: machine.name, state: machine.state })),
-      pack.setup.machines.map((machine) => ({ ...machine })),
-      `${pack.id} must install its own equipment`,
+      state.machines,
+      seed.machines,
+      `${pack.id} must install onto the shared seed floor`,
     )
     const issue = state.issues.find((candidate) => candidate.kind === 'quality')
-    assert.ok(issue, `${pack.id} must keep an opening quality issue`)
-    assert.equal(issue.area, pack.setup.issue.area)
-    assert.equal(issue.summary, pack.setup.issue.summary)
-    // The issue names a real place on that floor, so the area has to be one of
-    // the machines or lines the same pack just installed.
-    const floorNames = new Set([...pack.setup.machines.map((machine) => machine.name), pack.setup.workCentreName])
-    assert.ok(floorNames.has(issue.area), `${pack.id} issue area ${issue.area} is not on its own floor`)
-    const signature = JSON.stringify(pack.setup.machines)
-    assert.ok(!seededNames.has(signature), `${pack.id} reuses another pack's equipment`)
-    seededNames.add(signature)
+    assert.ok(issue, `${pack.id} must keep the seed opening quality issue`)
+    assert.equal(issue.area, seed.issues[0].area)
+    assert.equal(issue.summary, seed.issues[0].summary)
   }
+
+  // A business-template-style caller may hand over its own equipment and opening issue.
+  const withFloor = installedSampleWithFloor(plantIndustryPacks[0], CUSTOM_FLOOR)
+  assert.ok(withFloor, 'a caller-supplied floor must install')
+  validateProductionState(withFloor)
+  assert.deepEqual(
+    withFloor.machines.map((machine) => ({ id: machine.id, name: machine.name, state: machine.state })),
+    CUSTOM_FLOOR.machines,
+  )
+  const customIssue = withFloor.issues.find((candidate) => candidate.kind === 'quality')
+  assert.ok(customIssue, 'the caller-supplied opening issue must be present')
+  assert.equal(customIssue.area, CUSTOM_FLOOR.issue.area)
+  assert.equal(customIssue.summary, CUSTOM_FLOOR.issue.summary)
+  // The issue names a real place on the floor the same install just set up.
+  assert.ok(CUSTOM_FLOOR.machines.some((machine) => machine.name === customIssue.area))
 })
 
 test('switching packs replaces the previous floor instead of refusing', () => {
   const [first, second] = plantIndustryPacks
-  const installed = installedSample(first)
+  const installed = installedSampleWithFloor(first, CUSTOM_FLOOR)
+  assert.ok(installed, 'the first pack must install with its caller-supplied floor')
   const switched = installProductionWorkingSampleJobs(installed, {
     sampleId: second.id,
     sampleName: second.name,
@@ -367,15 +406,14 @@ test('switching packs replaces the previous floor instead of refusing', () => {
       dueAt: '2026-08-21T10:00:00.000Z',
     }],
     capturedAt: INSTALLED_AT,
-    ...packFloor(second),
   })
   assert.ok(switched, 'a pure sample must accept a different pack')
   validateProductionState(switched)
-  assert.deepEqual(
-    switched.machines.map((machine) => machine.name),
-    second.setup.machines.map((machine) => machine.name),
-  )
-  assert.equal(switched.issues.find((issue) => issue.kind === 'quality').area, second.setup.issue.area)
+  // The previous caller's floor must not leak into the next pack: with no floor of
+  // its own, the switched install lands back on the shared seed floor.
+  const seed = createSeedProduction()
+  assert.deepEqual(switched.machines, seed.machines)
+  assert.equal(switched.issues.find((issue) => issue.kind === 'quality').summary, seed.issues[0].summary)
 })
 
 test('a recorded machine change still blocks a sample install', () => {
@@ -406,7 +444,6 @@ test('a recorded machine change still blocks a sample install', () => {
       dueAt: '2026-09-01T10:00:00.000Z',
     }],
     capturedAt: INSTALLED_AT,
-    ...packFloor(pack),
   }), null)
 })
 
@@ -481,6 +518,7 @@ test('a fully-specified quality issue closes successfully once complete CAPA evi
     correctiveAction: 'Replaced blade, recalibrated gap, and ran capability study.',
     verificationResult: 'Three-hour production run confirms dimension is within specification.',
     effectivenessOwner: 'Quality lead',
+    effectivenessDue: '2026-09-15T10:00:00.000Z',
   })
   assert.ok(capa, 'CAPA evidence must build from valid inputs')
   assert.equal(capa.contract, PRODUCTION_QUALITY_CAPA_SCHEMA)
@@ -533,6 +571,7 @@ test('a second occurrence of the same failure mode records prior issue IDs in CA
     correctiveAction: 'Temperature setpoint adjusted and held for one hour.',
     verificationResult: 'Ten consecutive packs passed tensile test.',
     effectivenessOwner: 'Quality lead',
+    effectivenessDue: '2026-09-15T10:00:00.000Z',
   })
   assert.ok(capa1)
   assert.deepEqual(capa1.priorIssueIds, [], 'first occurrence has no history')
@@ -566,6 +605,7 @@ test('a second occurrence of the same failure mode records prior issue IDs in CA
     correctiveAction: 'Sensor replaced and recalibrated.',
     verificationResult: 'Twenty consecutive packs passed tensile test.',
     effectivenessOwner: 'Quality lead',
+    effectivenessDue: '2026-09-16T10:00:00.000Z',
   })
   assert.ok(capa2, 'second CAPA must build')
   assert.equal(capa2.recurrenceKey, capa1.recurrenceKey, 'same failure mode must yield the same recurrence key')

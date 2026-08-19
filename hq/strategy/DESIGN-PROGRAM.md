@@ -122,6 +122,329 @@ convergence by attrition; px→rem for OS font scaling + a stylelint check
 failing CI on consumed-but-undefined properties and new hex literals (must be
 wired into app:verify or it never runs).
 
+The loose list above is now scoped: execute from the phase-3 execution plan
+below. (The verify:1072 mobile-nav reference above has drifted; the pinned
+markup contract now lives at verify:1085-1100 — see P3.7.)
+
+## Phase 3 execution plan (scoped 2026-08-19 against main @ 3aa567af)
+
+Every count below was measured on current source, not carried forward from
+the tribunal. Line numbers are main @ 3aa567af; re-verify them before
+editing — this file's own history shows drift (the phase-3 list's
+"verify:1072" is already :1085-1100).
+
+Measured baselines (occurrences, not lines):
+
+| file | hex | px |
+|---|---|---|
+| showroom/src/core/core-app.css | 104 | 3,053 |
+| showroom/src/products/ecommerce/ecommerce-product.css | 129 (112 in live declarations, 17 in comments) | 449 |
+| showroom/src/products/website/website-product.css | 82 (52 in the gen-one region :1-2145, 30 live) | 954 (497 gen-one, 457 live) |
+| showroom/src/products/website/publish-workspace.css | 1 | 237 |
+
+Standing judge rules restated, with current status:
+
+- **No big-bang sweeps.** Every batch below is a single-PR unit that leaves
+  the app shippable.
+- **Deletion only after pin cataloguing.** P3.1 IS the catalogue; P3.4 is
+  the only batch that deletes, and it depends on P3.1-P3.3.
+- **One-tap-sale gates bottom-nav.** The gate is SATISFIED: 'Paid & handed
+  over' shipped in PR #436 (CoreApp.tsx:6799 renders the settle button,
+  :3900 writes the one-review summary). P3.7 is unblocked.
+- Plant UX pass stays PARKED (Plant is not in the sales path). Not scoped
+  here; re-open its planning pass when that changes.
+
+Ordering DAG (independent lanes may run in parallel; nothing inside a lane
+may reorder):
+
+    P3.0 (ratchet check)  ── before any CSS-touching batch lands after it
+    P3.1 → P3.2 → P3.3 → P3.4          (website lane)
+    P3.5a → P3.5b → P3.5c → P3.5d      (ecommerce lane, independent)
+    P3.0 → P3.6a → P3.6b → P3.6c       (px→rem lane; needs the ratchet first)
+    P3.7, P3.8                          (TSX-side, independent of CSS lanes)
+    P3.9                                (standing rule, never its own PR)
+
+### P3.0 — CSS contract check (build the ratchet first)
+
+**What the phase-3 list called "a stylelint check".** Do NOT add stylelint.
+Evidence: no stylelint dependency or config exists anywhere
+(showroom/package.json devDependencies: eslint family, postcss,
+autoprefixer only; root package.json has none). The repo convention for
+exactly this kind of check is a hand-rolled .mjs verifier —
+tools/test_theme_surface_contract.mjs already parses these same CSS files
+with its own scanner and enforces a THEME_BLIND staleness contract. A
+stylelint install buys a dependency, a config dialect, and a plugin
+(stylelint-value-no-unknown-custom-properties) to express two rules a
+50-line script states directly. Build `tools/check_css_contracts.mjs`:
+
+1. **Consumed-but-undefined custom properties.** Current violation count
+   across the four CSS files: exactly ONE — `var(--core-border,
+   rgba(127,127,127,0.35))` at core-app.css:1208, consumed nowhere-defined
+   but carrying a fallback. Decide the semantics in the PR: fail on
+   fallback-less consumption only (then :1208 passes and the rule is green
+   from day one), and separately fix :1208 to `--core-line` or define
+   `--core-border`. Fallback-less is the right severity: the shadow-ramp
+   and --website-quiet incidents were both *silent* dead tokens.
+2. **Hex-literal ratchet.** Per-file baseline = the table above; fail if a
+   file's count EXCEEDS its recorded baseline; lower the baseline
+   automatically (write the new floor) whenever a batch retires literals.
+   A ratchet, not a ban — attrition tightens it, and it never demands a
+   sweep. Two required carve-outs, both live today: hex inside `var()`
+   fallbacks (website-product.css:4123 `var(--core-quiet, #5f6f67)` is the
+   item-12 repair) and hex inside comments (17 of ecommerce's 129 are
+   documentation, e.g. :21, :77, :198-199).
+
+**Wiring (or it never runs):** CI's only entry is showroom-ci.yml:133 →
+`npm run app:build:checked` → `npm run app:verify`. Append the step to the
+app:verify chain in root package.json (637 steps today → 638; the
+"~637 steps" expectation in verify recipes moves with it).
+tools/run_app_verify.mjs derives its step list from that same chain string,
+so no runner change is needed.
+
+**Pins to lockstep:** none — new file, one package.json chain edit.
+**Estimate:** 1 PR, half a day including the baseline-file format decision.
+
+### P3.1 — Website pin catalogue (prerequisite for the whole website lane)
+
+The gen-one region is website-product.css **:1-2145** (fenced by Binding
+Rule 6 and the in-file comment at :4100-4121; file total 4,124 lines).
+Measured pin exposure in tools/verify_app_build.mjs (37 unique string pins
+against websiteCssSource + 3 slice anchors + regex pins):
+
+- **5 pins resolve ONLY inside the gen-one region**: `max-width: 768px`,
+  `max-width: 390px` (verify:295-298,
+  website_responsive_preview_not_dimensionally_bounded),
+  `.preview-site-header > i {`, `color: #0b6b3a;` (verify:3572-3573),
+  `@media (prefers-reduced-motion` (slice marker, see next).
+- **The websiteMobileCss slice is entirely dead-anchored**: verify:3957
+  slices from the FIRST `@media (max-width: 640px)` (:1924, gen-one) to
+  `@media (prefers-reduced-motion` (:2140, gen-one only) — so the
+  mobile-review-controls checks at verify:3958-3959 are validated against
+  gen-one bytes, lines 1924-2139.
+- **4 pins occur in both regions** (`.website-preview-frame.is-tablet`,
+  `.is-mobile`, `display: none`, `@media (max-width: 640px)`) — safe to
+  includes() but their FIRST occurrence moves on deletion, which matters
+  for every indexOf-based anchor.
+- 19 pins are live-only; **9 are escaped/regex pins my string scan could
+  not resolve** — classifying those 9 by hand is part of this batch, plus
+  the regex pins (e.g. verify:2299 `/\.website-today\s*\{\s*order:\s*1;/`)
+  and the two live-safe slice anchors (embeddedWebsiteCss ← :3225,
+  websiteUnifiedCss ← lastIndexOf at :3295).
+- tools/test_theme_surface_contract.mjs reads this file too (:48) and
+  exempts .website-preview-frame/-stage/-site (:79-81); its scanner and
+  staleness checks see every deleted selector.
+
+**Critical correction to the "~2,100 dead lines" framing: the region is not
+uniformly dead.** `.website-preview-frame.is-tablet/.is-mobile` dimensional
+bounds exist ONLY at :1512-1519 inside the region, and SitePreview.tsx:29
+renders `website-preview-frame is-{device}` today — those rules are live.
+Likewise `.website-preview-controls` (WebsiteProduct.tsx:1365) is styled by
+the :1924-2139 mobile block. The review doc's number is a ceiling, not an
+inventory. Deliverable: a rule-by-rule disposition table (live / dead /
+dead-but-pinned) for :1-2145, produced by cross-referencing every selector
+against rendered class names, committed beside this doc. No source edits.
+**Estimate:** 1 PR (doc-only), 1 focused day. Tedious, not hard, and
+everything in the website lane is wrong without it.
+
+### P3.2 — `.website-product` triplication reconciliation (DESIGN-REVIEW prerequisite)
+
+Four same-specificity `.website-product` blocks: :1-69 (gen-one aliases),
+:2147-2167 (live "Task-first workspace shell", hardcoded literals incl.
+`#5f6d65` at :2153), :3226-3233 (shared-shell), :4122-4124 (item-12 EOF
+repair of --website-quiet). DESIGN-REVIEW-2026-08-18.md finding 1: any
+tokenization applied to the :1 block silently no-ops. The :4122 repair
+proved the pattern: an EOF-appended `.website-product` block wins the
+cascade at equal specificity, pinned originals stay byte-identical
+(Binding Rule 3). Batch: consolidate ALL custom-property declarations the
+three earlier blocks disagree on into one EOF block (extending :4122's),
+each line commented with which block it overrides; re-check the two
+phase-1 claims DESIGN-REVIEW flagged (--website-green-dark's missing
+.theme-dark counterpart, review "Rule 4 latent"; the 44-site contrast
+claim). No deletions.
+**Pins to lockstep:** none if strictly EOF-append; run the full theme
+contract (Rule 4 mirroring for every consolidated property).
+**Estimate:** 1 PR, half a day.
+
+### P3.3 — Re-home live rules, re-anchor dead-anchored pins
+
+Move the genuinely-live rules P3.1 classified (at minimum :1512-1519
+preview-frame bounds and the live members of the :1924-2139 mobile block)
+into the live region, and in the SAME PR re-point the five dead-only pins
+and the websiteMobileCss slice markers in verify_app_build.mjs at the new
+locations. This is the one batch where verifier edits and source moves
+MUST land together — either alone is red. The gen-one originals stay in
+place (byte-identical) until P3.4; the moved copies win by cascade order
+exactly like P3.2.
+**Pins to lockstep:** verify:295-298, :3572-3573, :3957-3959, plus
+whatever P3.1's table adds; expect first-occurrence shifts for the 4
+both-region pins.
+**Estimate:** 1 PR, 1 day including a mobile-viewport probe pass
+(dev server + getComputedStyle, per the recipe below).
+
+### P3.4 — Delete the catalogued-dead remainder
+
+Only after P3.1-P3.3 are on main. Delete rows marked dead in the
+disposition table, in 2-3 region-contiguous PRs (roughly :1-1511,
+:1520-1923, :2140-2145 boundaries fall out of P3.3's actual moves) — not
+one sweep, so a regression bisects to a third of the region. After each
+chunk: full verify + theme contract (its scanner sees every removed
+selector) + the P3.0 ratchet floor drops (gen-one region carries 52 hex
+and 497 px that vanish with it). Expect the dist artifact budget to move
+DOWN; do not "reclaim" the headroom in the same PR.
+**Pins to lockstep:** none if P3.3 was complete — that is the test of the
+catalogue. Any red here means the catalogue missed a pin: stop, fix the
+catalogue, re-run.
+**Estimate:** 2-3 PRs, half a day each.
+
+### P3.5 — Ecommerce literal retirement (independent lane)
+
+129 hex occurrences in ecommerce-product.css = 17 in comments (keep; they
+are the file's own audit trail) + **112 in live declarations**, bucketed by
+selector family: cockpit/ops 41, preview/storefront 24, buying-workspace
+15, today-card 7, merchandising/save 4, other 21. Frequency spine: #fff ×19,
+#66746b ×18, #17231d ×17, #0b745e ×9 (≡ --core-green), #4655a5 ×5 (AI-desk
+indigo), #56665d ×4 (≡ --core-muted light), plus ~40 singleton pastel tints
+(the cockpit family: #f5faf6, #f2f8fb, #fff8ed, …).
+
+Constraints that shape the batches:
+
+- The 25→201 theme-contract regression (this doc, top) came from flipping
+  the cockpit/buying family. THEME_BLIND
+  (tools/test_theme_surface_contract.mjs:64-86) currently exempts
+  .ecommerce-today, ten cockpit tints, the preview frames, and the
+  buying-workspace nests — un-exempting any surface REQUIRES deleting its
+  THEME_BLIND entry (staleness check), so exemption stays the default and
+  each retirement is per-surface and deliberate.
+- verify:3388 PINS a hex: the `.ecommerce-buying-body {` block must
+  contain `color: #17231d;`. Retiring that literal edits the pin in
+  lockstep or the buying-body stays literal.
+- Preview-frame CONTENT stays exempt permanently (phase-2 item 12 ruling).
+- color-mix precedent already exists in core-app.css (:139, :222, :495…),
+  so there is no compat question.
+
+Batches:
+
+- **P3.5a — token-equal substitutions.** Literals that ARE a token's exact
+  value on an already-token-safe surface: #0b745e→var(--core-green),
+  #56665d→var(--core-muted), #17231d/#fff where the surface already sits
+  on themed panels (the :1462 comment marks one such block). Byte-identical
+  rendering in light; zero THEME_BLIND changes. ~30-40 occurrences.
+- **P3.5b — cockpit tints → color-mix.** One PR per 2-3 cockpit families.
+  Recompute each pastel as `color-mix(in srgb, var(--core-green|accent) N%,
+  var(--core-panel))` with N chosen so the LIGHT value matches the current
+  hex (probe with getComputedStyle, not eyeballs). THEME_BLIND entries
+  STAY — the cards remain deliberately light — but the tint now derives
+  from tokens, so a future brand-accent change propagates. ~41 occurrences,
+  3 PRs.
+- **P3.5c — buying-workspace family, LAST.** Blocked on closing the
+  contract blind spot DESIGN-REVIEW flagged: OPAQUE_ALPHA=0.9 classifies
+  .ecommerce-request-lab (core-app.css:1594, rgba .72) as a tint, so the
+  surface hosting `color: #17231d` (ecommerce-product.css:1086) is
+  uncovered. First extend the contract to cover it, then retire the 15
+  occurrences, editing verify:3388 in lockstep.
+- **P3.5d — the ~21 "other" + today-card + merch stragglers**, same
+  per-surface discipline.
+
+**Estimate:** 6 PRs, 2-4 h each; P3.5b's color-mix matching is the slow
+part. Do not start P3.5c until the contract extension is green on main.
+
+### P3.6 — px→rem for OS font scaling
+
+4,693 px occurrences across the four files; 497 sit in the gen-one region
+and are cheaper to delete (P3.4) than to convert — so the website-lane
+ordering feeds this lane's denominator. The real constraint is the
+verifier: **381 CSS string pins in verify_app_build.mjs, 67 of which
+contain a px value** (e.g. `top: 54px;` verify:3072, `font-size: 12px`
+verify:3010, the 44px touch-target family at verify:1073-1074, :3960).
+Every batch converts one declaration family and edits its pins in the same
+PR.
+
+Scope discipline (this is NOT "all px becomes rem"):
+
+- **Convert:** font-size (the OS-font-scaling payoff), then line-height-
+  adjacent spacing where text reflow matters. core-app.css:1208 already
+  uses 0.86rem — precedent exists.
+- **Keep px:** 1px borders/hairlines, radii (converge via P3.9 instead),
+  shadows, the 44px touch-target minimums (WCAG target size is physical,
+  and the pins encode them as px — converting buys nothing and churns 67
+  pins).
+- Batches: **P3.6a** core-app.css font-size declarations (the --font-size-*
+  ramp tokens themselves flip to rem here, converting every consumer in
+  one move — check the 9px/10px micro-label deviation comments before
+  touching them); **P3.6b** ecommerce + publish font-sizes; **P3.6c**
+  website live-region font-sizes (post-P3.4 so the gen-one region is
+  gone). P3.0's ratchet gains a px-count column in P3.6a so the floor
+  tracks the lane.
+
+**Estimate:** 3 PRs, 1 day each; the pin edits, not the conversions, are
+the work. Honest risk: rem flips surface rounding differences on Android
+WebView — every batch needs a 375px probe pass.
+
+### P3.7 — Bottom-nav work modes (gate satisfied)
+
+Gate evidence: one-tap sale shipped (PR #436; CoreApp.tsx:6799, :3900).
+The pinned markup contract is verify:1085-1100
+(client_setup_navigation_separation_missing) — NOT :1072 as the phase-3
+list said. It pins, verbatim: `mobileNavigation.length > 0 ? <nav
+className="mobile-nav"`, `aria-label="Current product navigation"`, the
+2-column grid-template-columns string, and two BANS (no `aria-label=
+"Mobile product navigation"`, no `.mobile-nav a:first-child { display:
+none; }`). Route drift is separately pinned at verify:1086
+(shop,plant,website,ecommerce). Work modes therefore EXTEND: add
+data-mode/aria-current attributes and any mode strip as new markup around
+the pinned expressions, style via EOF-appended CSS, never rewrite the
+pinned lines. Acceptance criteria are in the phase-3 list and are not
+negotiable: aria-current on the active item + full keyboard regression
+(tab order, focus visibility at the 44px targets, Esc/arrow behavior if a
+mode strip scrolls).
+**Batches:** (1) aria-current + keyboard pass on the EXISTING nav — small,
+independently shippable, satisfies half the acceptance criteria before any
+redesign risk; (2) the work-mode strip itself.
+**Estimate:** 2 PRs; (1) is half a day, (2) is 2-3 days — it is a product
+design decision, not a refactor, and should go to the founder as a probe
+screenshot before the PR opens.
+
+### P3.8 — Selling-surface IA
+
+"Ops consoles behind an Operations area" = the ten cockpit surfaces pinned
+at verify:1006-1019 plus .ecommerce-enterprise-controls (verify:711) and
+the AI desk (verify:587-589). Those pins check CSS selector EXISTENCE and
+TSX strings — regrouping components behind an Operations disclosure keeps
+every class name and pinned string present, so the IA move is pin-safe by
+construction. The litany rule works the same way: the pinned compliance
+strings (verify:945, :1748, :1852, :3961, :3963, :5348, :5475, and the
+'Review only' status pins at :837, :2105, :2366, :2431) are includes()
+checks — plain-language lead lines are ADDED BEFORE them in the JSX, never
+edits to them.
+**Batches:** (1) lead lines above litanies (copy-only, one PR, founder
+reviews the actual sentences — they are customer-facing); (2) Operations
+regrouping for Ecommerce; (3) same for Shop if (2) proves out.
+**Estimate:** 3 PRs; (1) half a day, (2)-(3) 1-2 days each. (2) needs the
+same founder-probe-first treatment as P3.7's strip.
+
+### P3.9 — Geometry convergence by attrition (standing rule, not a PR)
+
+core-app.css carries 15+ distinct radius values (8px ×35, 10px ×33, 9px
+×24, 12px ×14, 7px ×12, 6px ×9, 5px ×9, …) against the ramp
+--radius-sm/md/lg/pill = 6/10/14/999px (core-app.css:55-58). The rule: any
+batch above that touches a declaration whose radius is EXACTLY a ramp
+value (6, 10, 14, 999) converts it to the token in passing; off-ramp
+values (5, 7, 8, 9, 12, 16, 18) are VISUAL decisions — they convert only
+when a batch is already restyling that surface and says so in the PR. No
+standalone geometry PR ever; the 9px→10px class of change is exactly the
+big-bang sweep the judges banned. Progress metric: the distinct-value
+count in this table, re-measured whenever this doc is next revised.
+
+### Phase-3 exit
+
+Phase 3 is done when: ecommerce live-declaration hex = preview-frame
+exemptions only; website-product.css has one `.website-product` block and
+no gen-one region; the P3.0 ratchet floors equal the exemption counts;
+font-size is rem-based in all four files; bottom-nav modes and the
+Operations IA shipped with their acceptance criteria; and the radius
+distinct-value count is falling batch-over-batch. Re-grade against the
+tribunal rubric then — not before.
+
 ## Verification recipe for design PRs
 
 Per batch: `node tools/run_app_verify.mjs --only verify_app_build.mjs --only

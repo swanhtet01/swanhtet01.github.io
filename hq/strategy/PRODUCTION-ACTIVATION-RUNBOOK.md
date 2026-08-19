@@ -4,7 +4,7 @@ Status: READY — the self-serve end-to-end proof is complete (six-for-six,
 `hq/readiness/self-serve-pilot-proof.json`, approvalId
 `self-serve-proof-v11c-20260816`), so the env names and ordering below are
 proof-confirmed. Nothing here is executed by writing it; only the founder runs
-these steps. Author: tech lead. Date: 2026-08-16 (updated 2026-08-17).
+these steps. Author: tech lead. Date: 2026-08-16 (updated 2026-08-19).
 
 This is the single consolidated `production_activation` decision. Every
 technical proof it depends on is done on isolated infrastructure; this
@@ -86,6 +86,7 @@ exact store configuration through the production connection path):
 - Schema: v11 is additive; no rollback needed. If ever required, a v12 revokes.
 - The paired release rollback (stale-verifier auto-revert) still protects the
   app itself independently of these env flags.
+- Code: for a bug found after a release already went green, see section 6.
 
 ## 4. What you should NOT do
 
@@ -105,6 +106,32 @@ on that tenant. Baseline auto-measured; operator self-named per the self-serve
 gate redefinition. That evidence is what turns "self-serve works" into "one
 proven paying pilot," and it feeds the enterprise ladder (verified-statements →
 staff-roles) and the scaling triggers.
+
+## 6. Post-release rollback (bug found after a green release)
+
+The release workflow auto-reverts only inside its own run. If customers hit a
+bug after a release already went green, roll the pair back yourself:
+
+1. Identify the last-good commit: `git log --oneline` on main, or the Actions
+   history of "SuperMega - Coordinated Verified Release" — every run is bound
+   to the full 40-char SHA it shipped.
+2. Open that last-good GREEN run and click "Re-run all jobs". The re-run
+   replays the original inputs — `release_commit` = that full 40-char SHA plus
+   the confirmation `DEPLOY SUPERMEGA PAIRED PRODUCTION` — at the original
+   commit, so the guards pass. Do NOT dispatch a fresh run pointing at an old
+   SHA: the workflow rejects any `release_commit` that is not the current head
+   of main. The owner lock (`github.actor` must be swanhtet01) still applies.
+   If the run is too old to re-run (GitHub allows ~30 days), revert on main
+   and release the revert commit through the normal dispatch instead.
+3. The re-run re-deploys BOTH app.supermega.dev and supermega.dev as a pair at
+   the old commit, through the full verify chain — recent green runs took
+   about 5 minutes (hard timeout 35).
+4. A redeploy does NOT touch env vars — the workflow reads and verifies the
+   Vercel values as they are NOW. If the bug is env-related, fix the variable
+   in the Vercel dashboard and redeploy; rolling the code back will not help.
+5. After rollback, main still carries the bad commit and stays ahead of
+   production. Fix forward on main, then release the fixed commit through the
+   normal dispatch.
 
 ---
 
