@@ -52,7 +52,7 @@ const PUBLISH_CSS = 'showroom/src/products/website/publish-workspace.css'
 // token, a color-mix() of tokens, or a var() fallback) instead of widening the budget.
 const HEX_CEILINGS = new Map([
   ['showroom/src/core/core-app.css', 99],
-  ['showroom/src/products/ecommerce/ecommerce-product.css', 112],
+  ['showroom/src/products/ecommerce/ecommerce-product.css', 111],
   ['showroom/src/products/website/website-product.css', 60],
   ['showroom/src/products/website/publish-workspace.css', 1],
 ])
