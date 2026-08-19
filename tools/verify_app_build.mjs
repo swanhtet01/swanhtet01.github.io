@@ -5695,6 +5695,11 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   || !shopLoyaltySource.includes('return input.points <= available')
   || !shopLoyaltySource.includes('export function shopLoyaltyRedeemedPointsForOrder(')
   || !shopLoyaltySource.includes('.startsWith(SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX)) continue')
+  // Points spent = the LISTED before-tax amount (the UI locks listedAmountMmk
+  // to the points chosen); deriving from the tax-inclusive totalMmk would
+  // over-spend by the tax in tax-exclusive workspaces (post-#472 audit).
+  || !shopLoyaltySource.includes('spent += listed')
+  || shopLoyaltySource.includes('spent += correction.calculation.totalMmk')
   || !shopLoyaltySource.includes('balances.set(customer, (balances.get(customer) ?? 0) + points - spent)')
   || shopLoyaltySource.includes('redemptions')
   || !coreSource.includes("{ orderId, kind: 'credit', reasonCode: 'other', listedAmountMmk: '', loyalty: { customer } }")

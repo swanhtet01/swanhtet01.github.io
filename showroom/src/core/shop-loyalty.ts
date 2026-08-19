@@ -199,9 +199,13 @@ export type ShopLoyaltyOrderView = {
    * mirrors what commerceOrderAdjustedTotal in commerce-workspace.ts reads,
    * plus the correction's actionId: a credit correction whose actionId starts
    * with SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX IS a points spend (module
-   * header), so the projection subtracts it 1 point = 1 MMK.
+   * header). Points map to the correction's LISTED (before-tax) amount —
+   * the UI locks listedAmountMmk to the points chosen — while money math
+   * (orderAdjustedTotal) uses the tax-inclusive totalMmk; summing totalMmk
+   * as the spend would over-subtract points by the tax in tax-exclusive
+   * workspaces (found in a post-merge audit of PR #472).
    */
-  corrections?: readonly { kind: string; actionId?: string; calculation: { totalMmk: number } }[]
+  corrections?: readonly { kind: string; actionId?: string; calculation: { totalMmk: number; listedAmountMmk?: number } }[]
 }
 
 export type ShopLoyaltyStateView = {
@@ -480,8 +484,13 @@ export function shopLoyaltyRedeemedPointsForOrder(order: ShopLoyaltyOrderView | 
   for (const correction of order?.corrections ?? []) {
     if (!isRecord(correction) || correction.kind !== 'credit') continue
     if (typeof correction.actionId !== 'string' || !correction.actionId.startsWith(SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX)) continue
-    if (!isRecord(correction.calculation) || !Number.isSafeInteger(correction.calculation.totalMmk) || correction.calculation.totalMmk < 1) continue
-    spent += correction.calculation.totalMmk
+    // Points spent = the correction's LISTED (before-tax) amount, which the
+    // redemption UI locks to the points chosen — never the tax-inclusive
+    // totalMmk (see the OrderView note; totalMmk here would over-spend the
+    // customer's points by the tax amount in tax-exclusive workspaces).
+    const listed = isRecord(correction.calculation) ? correction.calculation.listedAmountMmk : undefined
+    if (typeof listed !== 'number' || !Number.isSafeInteger(listed) || listed < 1) continue
+    spent += listed
   }
   return spent
 }
