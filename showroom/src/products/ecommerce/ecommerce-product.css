@@ -10,7 +10,7 @@
 
 .ecommerce-heading h1 {
   margin: 5px 0 4px;
-  font-size: clamp(32px, 3.3vw, 46px);
+  font-size: clamp(2rem, 3.3vw, 2.875rem);
   line-height: .98;
   letter-spacing: -.045em;
 }
@@ -22,7 +22,7 @@
      sits on the ordinary page shell (already theme-aware), unlike the cockpit/buying-
      workspace cards elsewhere in this file, so it is safe to flip with the theme. */
   color: var(--core-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -63,7 +63,7 @@
   /* --core-muted is #56665d in light, so this is byte-identical there and only changes
      dark mode, where the literal measured 3.07:1 on the themed panel behind it. */
   color: var(--core-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
 }
 
@@ -81,7 +81,7 @@
   background: var(--core-panel);
   color: var(--core-ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
@@ -135,7 +135,7 @@
 }
 
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > .core-eyebrow { grid-area: eyebrow; }
-.ecommerce-today[data-density="compact"] .ecommerce-today-priority > h2 { grid-area: headline; font-size: clamp(20px, 2vw, 27px); }
+.ecommerce-today[data-density="compact"] .ecommerce-today-priority > h2 { grid-area: headline; font-size: clamp(1.25rem, 2vw, 1.6875rem); }
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > p { grid-area: summary; margin-bottom: 0; }
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > .core-button { grid-area: action; min-width: 132px; }
 
@@ -157,7 +157,7 @@
      text on a white card: measured 1.07:1, against 16.22:1 for this literal. Until the card
      itself becomes theme-aware, the text on it must be theme-blind too. */
   color: #17231d;
-  font-size: clamp(22px, 2.4vw, 34px);
+  font-size: clamp(1.375rem, 2.4vw, 2.125rem);
   line-height: 1.04;
   letter-spacing: -.035em;
 }
@@ -166,7 +166,7 @@
   max-width: 590px;
   margin: 0 0 4px;
   color: #5f6f66;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.48;
 }
 
@@ -199,7 +199,7 @@
      var(--core-quiet) resolves to #7a8a9c in dark and drops to 3.53:1. An earlier reading of
      4.2:1 here was taken against the page ground rather than the card. */
   color: #6b786f;
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -208,7 +208,7 @@
 .ecommerce-today-metrics strong {
   overflow: hidden;
   color: #17231d;
-  font-size: 13px;
+  font-size: 0.8125rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -224,7 +224,7 @@
 
 .ecommerce-today-source span {
   color: #345444;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
 }
 
@@ -253,13 +253,13 @@
 }
 
 .ecommerce-business-controls > summary::-webkit-details-marker { display: none; }
-.ecommerce-business-controls > summary::after { content: '+'; flex: 0 0 auto; color: var(--core-green); font-family: var(--core-mono); font-size: 16px; }
+.ecommerce-business-controls > summary::after { content: '+'; flex: 0 0 auto; color: var(--core-green); font-family: var(--core-mono); font-size: 1rem; }
 .ecommerce-business-controls[open] > summary { border-bottom: 1px solid var(--core-line); }
 .ecommerce-business-controls[open] > summary::after { content: '\2212'; }
 .ecommerce-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
-.ecommerce-business-controls > summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.ecommerce-business-controls > summary small { overflow: hidden; color: var(--core-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 10px; font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary strong { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary small { overflow: hidden; color: var(--core-muted); font-size: 0.5625rem; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 0.625rem; font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-business-controls-content { display: grid; gap: 10px; padding: 10px; }
 .ecommerce-business-controls-content > .ecommerce-ai-desk,
 .ecommerce-business-controls-content > .ecommerce-ops-cockpit { margin: 0; }
@@ -285,7 +285,7 @@
 .ecommerce-ai-desk h2 {
   margin: 0;
   color: #17231d;
-  font-size: 17px;
+  font-size: 1.0625rem;
   line-height: 1.2;
 }
 
@@ -293,7 +293,7 @@
   max-width: 680px;
   margin: 0;
   color: #66746b;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -324,7 +324,7 @@
 .ecommerce-ai-desk-queue small {
   overflow: hidden;
   color: #66746b;
-  font-size: 8px;
+  font-size: 0.5rem;
   font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-overflow: ellipsis;
@@ -335,7 +335,7 @@
 .ecommerce-ai-desk-queue strong {
   overflow: hidden;
   color: #17231d;
-  font-size: 10px;
+  font-size: 0.625rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -354,7 +354,7 @@
 
 .ecommerce-ai-agent-queue small {
   color: #66746b;
-  font-size: 8px;
+  font-size: 0.5rem;
   font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -363,7 +363,7 @@
 .ecommerce-ai-agent-queue strong {
   min-width: 0;
   color: #17231d;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -418,14 +418,14 @@
 
 .ecommerce-order-import-workspace > summary span,
 .ecommerce-enterprise-controls > summary span {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: var(--font-weight-black);
 }
 
 .ecommerce-order-import-workspace > summary small,
 .ecommerce-enterprise-controls > summary small {
   color: #66746b;
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-align: right;
 }
 
@@ -433,7 +433,7 @@
 .ecommerce-enterprise-controls > summary::after {
   content: '+';
   color: #0b745e;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: var(--font-weight-bold);
 }
 
@@ -489,7 +489,7 @@
 
 .ecommerce-order-intake-guide small {
   color: #4655a5;
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: var(--font-weight-black);
   letter-spacing: 0;
   text-transform: uppercase;
@@ -498,7 +498,7 @@
 .ecommerce-order-intake-guide strong {
   overflow-wrap: anywhere;
   color: #17231d;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.3;
 }
 
@@ -521,7 +521,7 @@
 
 .ecommerce-order-repair-checklist small {
   color: #9a4b0b;
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: var(--font-weight-black);
   letter-spacing: 0;
   text-transform: uppercase;
@@ -530,14 +530,14 @@
 .ecommerce-order-repair-checklist strong {
   overflow-wrap: anywhere;
   color: #352211;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.3;
 }
 
 .ecommerce-order-import-notice {
   margin-top: 8px !important;
   color: #4655a5 !important;
-  font-size: 12px !important;
+  font-size: 0.75rem !important;
 }
 
 .ecommerce-order-import-field {
@@ -545,7 +545,7 @@
   gap: 5px;
   margin-top: 10px;
   color: #4655a5;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
 }
 
@@ -556,7 +556,7 @@
   padding: 8px;
   background: #fff;
   color: #17231d;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ecommerce-order-import-upload {
@@ -570,7 +570,7 @@
   padding: 0 10px;
   background: #fff;
   color: #4655a5;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
@@ -593,7 +593,7 @@
   margin: 6px 0 0 !important;
   overflow-wrap: anywhere;
   color: #4655a5 !important;
-  font-size: 11px !important;
+  font-size: 0.6875rem !important;
 }
 
 .ecommerce-order-import-review {
@@ -605,7 +605,7 @@
   padding: 8px;
   background: #fff;
   color: #293044;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ecommerce-order-import-review.ready {
@@ -642,7 +642,7 @@
   padding: 6px 10px;
   background: #fff;
   color: #2f3d36;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-bold);
 }
 
@@ -658,7 +658,7 @@
   padding: 10px 12px;
   background: #fff;
   color: #293044;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -691,7 +691,7 @@
   padding: 10px 12px;
   background: #fff;
   color: #293044;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -714,13 +714,13 @@
 .ecommerce-ops-cockpit h2 {
   margin: 2px 0 4px;
   color: #17231d;
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1.2;
 }
 
 .ecommerce-ops-cockpit p {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -745,7 +745,7 @@
 
 .ecommerce-ops-cockpit-rows small {
   color: #66746b;
-  font-size: 8px;
+  font-size: 0.5rem;
   font-weight: var(--font-weight-bold);
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -754,7 +754,7 @@
 .ecommerce-ops-cockpit-rows strong {
   min-width: 0;
   color: #17231d;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -825,19 +825,19 @@
 }
 
 .ecommerce-save-bar strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .ecommerce-save-bar small {
   color: #66746b;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
 .ecommerce-save-bar .text-link {
   width: fit-content;
   margin-top: 3px;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ecommerce-save-actions {
@@ -854,7 +854,7 @@
   min-height: 18px;
   margin: 4px 2px 0;
   color: #66746b;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.4;
 }
 
@@ -865,7 +865,7 @@
   padding: 9px 10px;
   background: rgba(177, 113, 0, .06);
   color: #695018;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -888,12 +888,12 @@
 }
 
 .ecommerce-product-autopilot strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .ecommerce-product-autopilot small {
   color: #66746b;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.35;
 }
 
@@ -916,7 +916,7 @@
 .ecommerce-product-autopilot-rows b {
   overflow: hidden;
   color: #17261f;
-  font-size: 12px;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -941,12 +941,12 @@
 }
 
 .ecommerce-merchandising-status strong {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ecommerce-merchandising-status small {
   color: #66746b;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.35;
 }
 
@@ -956,7 +956,7 @@
   padding: 4px 7px;
   background: rgba(11, 116, 94, .1);
   color: #075c4b;
-  font-size: 9px;
+  font-size: 0.5625rem;
   letter-spacing: .04em;
   text-transform: uppercase;
 }
@@ -980,12 +980,12 @@
 }
 
 .ecommerce-preview-gate strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .ecommerce-preview-gate small {
   color: #66746b;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
@@ -1043,7 +1043,7 @@
   background: #0b745e;
   color: #fff;
   font: inherit;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--font-weight-black);
   cursor: pointer;
 }
@@ -1118,7 +1118,7 @@
 
 .ecommerce-cart-line strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1126,7 +1126,7 @@
 .ecommerce-cart-line small {
   overflow: hidden;
   color: #66746b;
-  font-size: 9px;
+  font-size: 0.5625rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1140,12 +1140,12 @@
   background: #fff;
   color: #17231d;
   font: inherit;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ecommerce-cart-line > b {
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ecommerce-cart-line > button {
@@ -1156,7 +1156,7 @@
   background: transparent;
   color: #7a5142;
   font: inherit;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
   cursor: pointer;
 }
@@ -1169,7 +1169,7 @@
   min-height: 46px;
   padding: 8px 10px;
   background: rgba(11, 116, 94, .05);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ecommerce-cart-empty {
@@ -1184,13 +1184,13 @@
 }
 
 .ecommerce-cart-empty strong {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ecommerce-cart-empty p {
   margin: 0;
   color: #66746b;
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.45;
 }
 
@@ -1206,13 +1206,13 @@
   display: grid;
   gap: 5px;
   color: #56665d;
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: var(--font-weight-bold);
 }
 
 .ecommerce-buying-body > form label small {
   color: #66746b;
-  font-size: 8px;
+  font-size: 0.5rem;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1226,7 +1226,7 @@
   background: #fff;
   color: #17231d;
   font: inherit;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ecommerce-buying-body > form > .core-button {
@@ -1247,7 +1247,7 @@
   min-width: 0;
   overflow: visible;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
   text-overflow: clip;
@@ -1267,12 +1267,12 @@
 
 .ecommerce-quote-receipt > p {
   color: #43564c;
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .ecommerce-quote-receipt > small {
   color: #52645a;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -1296,7 +1296,7 @@
 
 .ecommerce-quote-boundaries b {
   overflow-wrap: anywhere;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.35;
 }
 
@@ -1322,12 +1322,12 @@
 
 .ecommerce-stale-quote strong {
   color: #694b12;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ecommerce-stale-quote small {
   color: #75684f;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.4;
 }
 
@@ -1370,20 +1370,20 @@
 .ecommerce-order-tracking-head strong,
 .ecommerce-order-history article strong {
   color: #17231d;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ecommerce-order-tracking-head small,
 .ecommerce-order-tracking > p,
 .ecommerce-order-history article small {
   color: #66746b;
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.4;
 }
 
 .ecommerce-order-tracking-head b {
   color: #0b745e;
-  font-size: 10px;
+  font-size: 0.625rem;
   text-transform: uppercase;
 }
 
@@ -1415,7 +1415,7 @@
 
 .ecommerce-order-history article > span > b {
   color: #17231d;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ecommerce-order-history article > div {
@@ -1455,7 +1455,7 @@
 }
 
 .ecommerce-after-purchase > summary strong {
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 /* This block sits on the themed panel, so its light-theme literals carried straight into
@@ -1466,13 +1466,13 @@
 .ecommerce-after-purchase > summary small,
 .ecommerce-after-purchase > div p {
   color: var(--core-quiet);
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.4;
 }
 
 .ecommerce-after-purchase > summary b {
   color: var(--core-green);
-  font-size: 9px;
+  font-size: 0.5625rem;
   text-transform: uppercase;
 }
 
@@ -1526,13 +1526,13 @@
 .ecommerce-return-status strong,
 .ecommerce-return-form strong {
   color: #17231d;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ecommerce-return-status small,
 .ecommerce-return-form small {
   color: #66746b;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.4;
 }
 
@@ -1556,7 +1556,7 @@
   display: grid;
   gap: 5px;
   color: #34443b;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--font-weight-bold);
 }
 
@@ -1571,7 +1571,7 @@
   background: #fff;
   color: #17231d;
   font: inherit;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ecommerce-return-form textarea {
@@ -1599,15 +1599,15 @@
   .ecommerce-return-form input,
   .ecommerce-return-form select,
   .ecommerce-return-form textarea {
-    font-size: 16px;
+    font-size: 1rem;
   }
 
   .ecommerce-heading h1 {
-    font-size: 30px;
+    font-size: 1.875rem;
   }
 
   .ecommerce-heading p {
-    font-size: 13px;
+    font-size: 0.8125rem;
   }
 
   .ecommerce-business-controls > summary b { display: none; }
@@ -1867,15 +1867,15 @@
 @media (max-width: 840px) {
   .ecommerce-order-import-upload {
     min-height: 44px;
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 
   .storefront-request-button {
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 
   .ecommerce-cart-line > button {
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 }
 

@@ -59,9 +59,9 @@ const PUBLISH_CSS = 'showroom/src/products/website/publish-workspace.css'
 // instead of widening the budget.
 const CEILINGS = new Map([
   ['showroom/src/core/core-app.css', { hex: 99, px: 2435 }],
-  ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 111, px: 440 }],
-  ['showroom/src/products/website/website-product.css', { hex: 60, px: 818 }],
-  ['showroom/src/products/website/publish-workspace.css', { hex: 1, px: 237 }],
+  ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 111, px: 349 }],
+  ['showroom/src/products/website/website-product.css', { hex: 60, px: 658 }],
+  ['showroom/src/products/website/publish-workspace.css', { hex: 1, px: 195 }],
 ])
 
 // What "the same cascade" means for rule 2, per scanned file. index.css is loaded

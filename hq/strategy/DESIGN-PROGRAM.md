@@ -431,6 +431,35 @@ byte-identical light/dark at default root; at root 20px converted core
 selectors scale ×1.25 while the pinned ecommerce `font-size: 12px`
 family stays fixed — that delta is the batch's payoff, not a regression.
 
+**P3.6b SHIPPED 2026-08-20** (branch `design/p3-6b-island-px-to-rem`): the
+product islands follow core. ecommerce-product.css 85 plain declarations
++ 6 clamp() px bounds (3 calls), website-product.css 144 plain + 16
+clamp() bounds (8 calls), publish-workspace.css 40 plain + 2 clamp()
+bounds (1 call) — 293 sites, exact N/16 at the verified 16px root.
+vision-product.css needed nothing: its 11 font-sizes were born rem. Pin
+exposure re-measured before editing (the P3.6a grep re-run, plus the
+other verifiers that read these sheets): still exactly TWO font-size
+pins — verify:3032 ecommerce `font-size: 12px` → `0.75rem` and
+verify:3967 publish `font-size: 16px` → `1rem`, both lockstepped with
+in-file comments. Every other px pin on these sheets (the 44px
+touch-target families, `top: 54px`, `scroll-margin-top: 112px`, media
+bounds) is a non-font-size family the plan keeps px; the conversion
+never touched them. The publish/website 16px iOS-zoom input floors
+converted value-preserving to `1rem` like P3.6a's. The ratchet
+re-stamped its own px floors by exactly the converted token counts:
+ecommerce 440→349, website 818→658, publish 237→195 (core stays 2435).
+Dev-server proof: computed font-sizes byte-identical light/dark at the
+default root on representative selectors per file; at root 20px every
+probed converted selector scales exactly ×1.25 (e.g. ecommerce 12→15,
+website 19→23.75, publish 13→16.25) while the px control stays fixed.
+Control provenance: the ecommerce 12px family P3.6a used as its control
+was converted by this very batch, so the control is index.css's
+`.route-error strong` (17px) — the LAST px font-size family in the app,
+out of P3.6b's scope, measured on a synthesized node because the error
+boundary does not render in a healthy app. A 375px pass confirmed the
+mobile overrides: input floor computes 16px, the mobile heading override
+computes 30px (1.875rem), no WebView-style rounding drift at either root.
+
 ### P3.7 — Bottom-nav work modes (gate satisfied)
 
 Gate evidence: one-tap sale shipped (PR #436; CoreApp.tsx:6799, :3900).
