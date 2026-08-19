@@ -45,7 +45,7 @@ import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
-import { readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
+import { SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyRedemptionAllowed, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -809,6 +809,14 @@ type CommerceCorrectionDraft = {
   reasonCode: CommerceCorrectionReasonCode
   listedAmountMmk: string
   sourceIntent?: EcommerceCorrectionIntent
+  /**
+   * Present when this draft is a POINTS REDEMPTION (S3 PR2): the credit
+   * correction stays the money authority, and a redemption row keyed by the
+   * same actionId records the points spent (shop-loyalty.ts module header).
+   * kind/reasonCode are locked to credit/other; listedAmountMmk IS the points
+   * (1 point = 1 MMK before tax).
+   */
+  loyalty?: { customer: string }
 }
 
 function formatTaxRate(rateBasisPoints: number) {
@@ -1737,13 +1745,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const defaultReceiptLocationId = managedInventoryProjection?.locations.find((location) => /main/i.test(location.name))?.id
     ?? managedInventoryProjection?.locations[0]?.id
     ?? ''
-  // S3 PR1 customer points. Settings are read once per mount: they are edited on the
+  // S3 customer points. Settings are read once per mount (they are edited on the
   // separate Workspace-controls route, so navigating back here remounts this page and
-  // picks the change up — the same lifecycle every other device-local read on this page
-  // uses. Balances are a pure projection over the same commerce state the counter renders;
-  // client-master names are added at zero so a known customer with no points yet still
-  // gets an exact-match chip instead of silence.
-  const shopLoyaltySettings = useMemo(() => readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)), [managedIdentity])
+  // picks the change up). Balances — including redeemed spends, which live as
+  // prefixed corrections inside the commerce state itself (PR2) — are a pure
+  // projection over the same commerce state the counter renders, so a redemption
+  // refreshes every chip through the ordinary state update with no extra epoch.
+  // Client-master names are added at zero so a known customer with no points yet
+  // still gets an exact-match chip instead of silence.
+  const shopLoyaltySettings = useMemo(
+    () => readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)),
+    [managedIdentity],
+  )
   const shopLoyaltyPoints = useMemo(() => {
     if (!shopLoyaltySettings?.enabled) return null
     const balances = shopLoyaltyBalances(commerce, shopLoyaltySettings)
@@ -1752,6 +1765,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     return balances
   }, [commerce, managedInventoryProjection, shopLoyaltySettings])
+  // S3 PR2 receipt lines: the named customer's balance, plus any points already
+  // redeemed against this order. Display-only — the printed artifact text stays
+  // byte-identical to what the settle recorded.
+  const receiptLoyalty = useMemo(() => {
+    if (!receiptAck || !shopLoyaltySettings?.enabled || !shopLoyaltyPoints) return null
+    const customer = receiptAck.customer.trim()
+    if (!customer || customer === 'Guest') return null
+    return {
+      balancePoints: shopLoyaltyDisplayPoints(shopLoyaltyPoints.get(customer) ?? 0),
+      redeemedPoints: shopLoyaltyRedeemedPointsForOrder(commerce.orders.find((order) => order.id === receiptAck.orderId)),
+    }
+  }, [commerce.orders, receiptAck, shopLoyaltyPoints, shopLoyaltySettings])
   const purchaseOrderDraftOrder = purchaseOrderDraft?.mode === 'receive'
     ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderDraft.purchaseOrderId)
     : undefined
@@ -3056,7 +3081,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function queueAction(
-    action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>,
+    // actionIdPrefix lets a caller mark the resulting proof's actionId with a
+    // structural, greppable prefix (e.g. the loyalty redemption marker) — the
+    // repo identifies record kinds by actionId prefix, never by display copy.
+    action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'> & { actionIdPrefix?: string },
     returnFocus?: HTMLElement | null,
   ): boolean {
     if (!commerceCanWrite) {
@@ -3076,7 +3104,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         : document.activeElement instanceof HTMLElement ? document.activeElement : null
     setActionTrigger(trigger)
     if (action.kind === 'order_create' && orderComposerRef.current?.open) orderComposerRef.current.close()
-    setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
+    const { actionIdPrefix, ...queued } = action
+    setPendingAction({ ...queued, id: actionIdPrefix ? `${actionIdPrefix}${commandUuid().toUpperCase()}` : uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
     return true
   }
@@ -4466,6 +4495,28 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
   }
 
+  // S3 PR2: a points redemption is the correction editor in a locked shape —
+  // credit/other, amount = points (1 point = 1 MMK before tax) — plus a
+  // redemption row written next to the loyalty settings after the correction
+  // lands (shop-loyalty.ts module header).
+  function openRedemptionEditor(orderId: string) {
+    if (pendingAction || returnDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+      setNotice('Finish or close the current Shop action before redeeming points.')
+      return
+    }
+    const expectation = commerceOrderCorrectionExpectation(commerce, orderId)
+    const customer = commerce.orders.find((order) => order.id === orderId)?.customer.trim() ?? ''
+    const availablePoints = shopLoyaltyDisplayPoints(shopLoyaltyPoints?.get(customer) ?? 0)
+    if (!expectation || !shopLoyaltySettings?.enabled || !customer || customer === 'Guest' || availablePoints < 1) {
+      setNotice('Redeeming points needs an unclosed completed order for a named customer with a positive points balance.')
+      return
+    }
+    setCorrectionDraft((current) => current?.orderId === orderId
+      ? current
+      : { orderId, kind: 'credit', reasonCode: 'other', listedAmountMmk: '', loyalty: { customer } })
+    requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
+  }
+
   function cancelCorrectionEditor() {
     const orderId = correctionDraft?.orderId
     setCorrectionDraft(null)
@@ -4499,6 +4550,21 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`${sourceIntent.id} no longer matches the current Shop correction review. Nothing was prepared.`)
       return
     }
+    const loyaltyRedemption = correctionDraft.loyalty
+    if (loyaltyRedemption) {
+      // S3 PR2 gate at review time: a redemption stays a credit/other note for
+      // the order's own customer, within the points they currently hold. The
+      // same gate re-runs structurally inside redeemShopLoyaltyPoints at apply
+      // time against the then-current state.
+      const availablePoints = shopLoyaltyDisplayPoints(shopLoyaltyPoints?.get(loyaltyRedemption.customer) ?? 0)
+      if (correctionDraft.kind !== 'credit'
+        || correctionDraft.reasonCode !== 'other'
+        || correctionDraftOrder.customer.trim() !== loyaltyRedemption.customer
+        || correctionCalculation.listedAmountMmk > availablePoints) {
+        setNotice(`Points redemption must stay a credit within ${loyaltyRedemption.customer}’s ${availablePoints.toLocaleString()} available points.`)
+        return
+      }
+    }
     const input = {
       orderId: correctionDraft.orderId,
       kind: correctionDraft.kind,
@@ -4508,14 +4574,25 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     queueAction({
       kind: 'order_correction',
       subjectId: input.orderId,
-      summary: `Record ${input.kind} note for ${input.orderId}`,
+      // The prefix IS the spend record: the projection recognises this
+      // correction as redeemed points from its actionId alone (shop-loyalty.ts
+      // module header) — one atomic commerce write, nothing else to persist.
+      ...(loyaltyRedemption ? { actionIdPrefix: SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX } : {}),
+      summary: loyaltyRedemption
+        ? `Redeem ${input.listedAmountMmk.toLocaleString()} points for ${loyaltyRedemption.customer}`
+        : `Record ${input.kind} note for ${input.orderId}`,
       ...(sourceIntent ? {
         reasonSuggestion: sourceIntent.reason.slice(0, 180),
         evidenceReferenceSuggestion: sourceIntent.evidenceReference,
         evidenceReferenceLocked: true,
+      } : loyaltyRedemption ? {
+        reasonSuggestion: `Redeem ${input.listedAmountMmk.toLocaleString()} customer points as a credit note (1 point = 1 MMK).`,
+        evidenceReferenceSuggestion: `Points redemption · ${input.orderId}`,
       } : {}),
-      before: `Original invoice preserved · corrected balance ${formatMoney(correctionReviewExpectation.currentBalanceMmk)}`,
-      after: `${input.kind} ${formatMoney(correctionCalculation.totalMmk)} · corrected balance ${formatMoney(balanceAfter)} · external posting not performed`,
+      before: loyaltyRedemption
+        ? `${loyaltyRedemption.customer} holds ${shopLoyaltyDisplayPoints(shopLoyaltyPoints?.get(loyaltyRedemption.customer) ?? 0).toLocaleString()} points · corrected balance ${formatMoney(correctionReviewExpectation.currentBalanceMmk)}`
+        : `Original invoice preserved · corrected balance ${formatMoney(correctionReviewExpectation.currentBalanceMmk)}`,
+      after: `${loyaltyRedemption ? `${input.listedAmountMmk.toLocaleString()} points spent · ` : ''}${input.kind} ${formatMoney(correctionCalculation.totalMmk)} · corrected balance ${formatMoney(balanceAfter)} · external posting not performed`,
       apply: async (action) => {
         if (sourceIntent) {
           const { readEcommerceBuyingState } = await import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -4526,6 +4603,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           }
         }
         const proof = commerceActionProof(action)
+        // S3 PR2: the correction IS the spend (its actionId carries the
+        // redemption prefix — see queueAction above), so the redemption is
+        // ONE atomic commerce write: a refused correction spends nothing, a
+        // landed one is subtracted by the projection from state alone, on
+        // every device the state syncs to. This re-check guards the gap
+        // between review and apply — the balance the operator saw may have
+        // changed underneath the review dialog.
+        if (loyaltyRedemption && !shopLoyaltyRedemptionAllowed(
+          readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)),
+          commerceRef.current,
+          { customer: loyaltyRedemption.customer, orderId: input.orderId, points: input.listedAmountMmk },
+        )) {
+          throw new ShopReviewRequiredError(`${loyaltyRedemption.customer}’s points balance changed during review. No credit was recorded and no points were spent.`)
+        }
         await mutateCommerce(
           'commerce.order.correction_recorded',
           action.commandId,
@@ -6320,8 +6411,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return { orderId: next.orderId, sku: next.sku, quantity: next.quantity, disposition: next.disposition }
     })}
     onOpenCorrection={openCorrectionEditor}
+    onOpenRedemption={openRedemptionEditor}
     onOpenReturn={openReturnEditor}
     onReviewCorrection={reviewOrderCorrection}
+    loyaltyPoints={shopLoyaltyPoints}
     onReviewReturn={reviewOrderReturn}
     onReviewSupportOpen={reviewSupportCaseOpen}
     onReviewSupportReopen={reviewSupportReopen}
@@ -6530,7 +6623,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </div> : null}
     </details> : null}
   </section>
-  <Suspense fallback={null}><ReceiptDialog ack={receiptAck} onClose={() => setReceiptAck(null)} paymentQrScope={paymentQrScope} /></Suspense>
+  <Suspense fallback={null}><ReceiptDialog ack={receiptAck} loyalty={receiptLoyalty} onClose={() => setReceiptAck(null)} paymentQrScope={paymentQrScope} /></Suspense>
   {actionGate}</div>
 
   if (tab === 'inventory') return <div className="operation-module">
@@ -6875,9 +6968,11 @@ function ClosedOrderHistory({
   disabled,
   onCancelCorrection,
   onCancelReturn,
+  loyaltyPoints,
   onChangeCorrection,
   onChangeReturn,
   onOpenCorrection,
+  onOpenRedemption,
   onOpenReturn,
   onReviewCorrection,
   onReviewReturn,
@@ -6918,9 +7013,11 @@ function ClosedOrderHistory({
   disabled: boolean
   onCancelCorrection: () => void
   onCancelReturn: () => void
+  loyaltyPoints: ReadonlyMap<string, number> | null
   onChangeCorrection: (patch: Partial<CommerceCorrectionDraft>) => void
   onChangeReturn: (patch: Partial<CommerceReturnDraft>) => void
   onOpenCorrection: (orderId: string) => void
+  onOpenRedemption: (orderId: string) => void
   onOpenReturn: (orderId: string) => void
   onReviewCorrection: (event: FormEvent) => void
   onReviewReturn: (event: FormEvent) => void
@@ -7013,6 +7110,12 @@ function ClosedOrderHistory({
       const selectedLine = draftedLine ?? availableLines[0]
       const returnable = canReturn(order.id)
       const correctable = canCorrect(order.id)
+      // S3 PR2: the redemption affordance appears only while points are on
+      // (loyaltyPoints is null otherwise) for a named customer with a positive
+      // balance, on an order corrections can still reach.
+      const redeeming = Boolean(activeCorrectionDraft?.loyalty)
+      const loyaltyBalance = shopLoyaltyDisplayPoints(loyaltyPoints?.get(order.customer.trim()) ?? 0)
+      const redeemable = correctable && order.customer.trim() !== 'Guest' && loyaltyBalance > 0
       const adjustedTotal = commerceOrderAdjustedTotal(order) ?? order.total
       const acknowledgement = acknowledgementDownloads.get(order.id)
       return <article className={editing || correcting ? 'is-returning' : undefined} key={order.id}>
@@ -7043,14 +7146,22 @@ function ClosedOrderHistory({
           ref={(node) => { onReturnTrigger(order.id, node) }}
           type="button"
         >{editing ? 'Close return' : 'Record return'}</button> : null}
-        {order.status === 'completed' && (correctable || correcting) ? <button
-          aria-expanded={correcting}
+        {order.status === 'completed' && ((correctable && !redeeming) || (correcting && !redeeming)) ? <button
+          aria-expanded={correcting && !redeeming}
           className="text-link"
           disabled={disabled || editing}
           onClick={() => correcting ? onCancelCorrection() : onOpenCorrection(order.id)}
           ref={(node) => { onCorrectionTrigger(order.id, node) }}
           type="button"
-        >{correcting ? 'Close correction' : 'Correct invoice'}</button> : null}
+        >{correcting && !redeeming ? 'Close correction' : 'Correct invoice'}</button> : null}
+        {order.status === 'completed' && (redeemable || redeeming) ? <button
+          aria-expanded={redeeming}
+          className="text-link"
+          disabled={disabled || editing || (correcting && !redeeming)}
+          onClick={() => redeeming ? onCancelCorrection() : onOpenRedemption(order.id)}
+          ref={redeeming ? (node) => { onCorrectionTrigger(order.id, node) } : undefined}
+          type="button"
+        >{redeeming ? 'Close redemption' : `Redeem points · ${loyaltyBalance.toLocaleString()}`}</button> : null}
       </div>
       {order.returns?.length ? <div className="order-return-records" role="list">
         {order.returns.map((record) => <div key={record.actionId} role="listitem">
@@ -7121,13 +7232,17 @@ function ClosedOrderHistory({
         <label>Resolution note<textarea disabled={disabled} id={`support-resolution-${activeSupportResolution.caseId}`} maxLength={300} onChange={(event) => onChangeSupportResolution({ note: event.target.value })} required rows={2} value={activeSupportResolution.note} /></label>
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
       </form> : null}
-      {activeCorrectionDraft ? <form aria-label={`Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">Correction note</span><strong>{order.id}</strong><small>{activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
-        <label>Type<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
-        <label>Reason<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
-        <label>Amount before tax<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
+      {activeCorrectionDraft ? <form aria-label={activeCorrectionDraft.loyalty ? `Redeem points on ${order.id}` : `Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
+        <div className="order-return-copy"><span className="core-eyebrow">{activeCorrectionDraft.loyalty ? 'Redeem points' : 'Correction note'}</span><strong>{order.id}</strong><small>{activeCorrectionDraft.loyalty ? `${activeCorrectionDraft.loyalty.customer} holds ${loyaltyBalance.toLocaleString()} points. Points are redeemed as a credit note on this order — 1 point = 1 MMK.` : activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
+        {activeCorrectionDraft.loyalty
+          ? <small role="note">Credit note · reason “other” — locked for points redemption</small>
+          : <>
+            <label>Type<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
+            <label>Reason<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
+          </>}
+        <label>{activeCorrectionDraft.loyalty ? 'Points to redeem' : 'Amount before tax'}<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" max={activeCorrectionDraft.loyalty ? loyaltyBalance : undefined} min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
         {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} type="submit">Review correction</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} type="submit">{activeCorrectionDraft.loyalty ? 'Review redemption' : 'Review correction'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
       </form> : null}
     </article>})}</div>
     {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">

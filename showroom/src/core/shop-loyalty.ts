@@ -1,13 +1,47 @@
-// Shop customer loyalty points — settings store and accrual projection.
+// Shop customer loyalty points — settings store, accrual projection, redemption.
 //
-// WHAT THIS IS (roadmap item S3 PR1, hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md).
+// WHAT THIS IS (roadmap item S3, hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md).
 // Loyverse's flagship small-shop draw, scoped to the narrow shape the roadmap
 // approved: a points ledger keyed off the existing order `customer` field —
-// NOT the rejected CRM non-goal. This PR is accrual-only: an opt-in settings
+// NOT the rejected CRM non-goal. PR1 shipped accrual: an opt-in settings
 // record on this device, plus a pure projection that computes balances from
-// the commerce workspace that already exists. PR2 adds redemption (spending
-// points against a sale, receipt line); nothing here reserves, spends, or
-// prints a point.
+// the commerce workspace that already exists. PR2 (this revision) adds
+// redemption — spending points against a completed sale — and the receipt
+// balance line.
+//
+// HOW REDEMPTION MOVES MONEY (PR2 design decision). A redemption is recorded
+// as a CREDIT ORDER CORRECTION on the completed, reconciled sale
+// (recordCommerceOrderCorrection, event `commerce.order.correction_recorded`)
+// — machinery the GL and daily close already net, and an event the deployed
+// managed backend already accepts, so redemption syncs with ZERO server
+// change. The checkout-time-discount alternative was investigated and
+// rejected on contract grounds: `promotionDecision` must recompute exactly
+// from the synced, code-keyed, percent-based promotionPolicies records, which
+// cannot honestly carry a per-customer fixed-MMK points spend. So the shape
+// is Loyverse-adjacent, not identical: the cashier settles the sale, then
+// redeems points as money back recorded on that order. 1 POINT = 1 MMK of
+// listed (before-tax) credit — the simplest honest rule; the correction's tax
+// treatment follows the order's own tax snapshot exactly like every other
+// credit note.
+//
+// THE SPEND IS DERIVED FROM THE CORRECTION ITSELF — NO SECOND RECORD (Codex
+// P1, PR #472). A first draft stored a redemption row here next to the
+// settings, written after the correction landed; that pairing is not atomic
+// (a refused localStorage write after a committed correction left the points
+// re-spendable for another credit), and rows were per-device while
+// corrections sync. Instead, a redemption's accountable action carries the
+// structural actionId prefix `ACT-LOYREDEEM-` (the same identify-by-actionId-
+// prefix pattern the guided-sample rule mandates — never display copy), and
+// the balance projection subtracts every CREDIT correction whose actionId
+// carries that prefix, 1 point = 1 MMK of listed credit. One atomic commerce
+// write is the entire redemption: there is no second store to disagree, a
+// refused correction spends nothing by construction, and in managed mode the
+// spend travels with the synced state to every device. Both effects of the
+// correction are intentional and tested: the credit reduces the order's own
+// accrual (the customer effectively paid less) AND its prefixed actionId
+// subtracts the points spent — see the coherence checks in
+// tools/test_shop_loyalty.mjs. The stored settings record keeps the exact
+// PR1 shape; nothing about redemption is persisted outside CommerceState.
 //
 // WHY THE SETTINGS ARE NOT IN CommerceState. The deployed managed backend
 // validates full state snapshots with exact-field contracts
@@ -109,6 +143,21 @@ export type ShopLoyaltyRatePeriod = {
   effectiveAt: string
 }
 
+/**
+ * The structural marker for a points redemption: the accountable action (and
+ * therefore the correction's proof actionId) is generated with this prefix,
+ * so the projection can recognise a spend from CommerceState alone. Identify
+ * by actionId prefix, never by reason/evidence display copy — the same rule
+ * guided-sample records follow.
+ */
+export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX = 'ACT-LOYREDEEM-'
+
+export type ShopLoyaltyRedemptionInput = {
+  customer: string
+  orderId: string
+  points: number
+}
+
 export type ShopLoyaltySettings = {
   schema: typeof SHOP_LOYALTY_SCHEMA
   enabled: boolean
@@ -134,6 +183,8 @@ export type ShopLoyaltySettingsInput = {
 // declared structurally so this module never imports the 10k-line commerce
 // workspace (and the Node contract test can feed plain fixtures).
 export type ShopLoyaltyOrderView = {
+  /** Present on every real CommerceOrder; redemption requires it to bind the spend to one order. */
+  id?: string
   customer: string
   total: number
   status: string
@@ -145,9 +196,12 @@ export type ShopLoyaltyOrderView = {
    * after completion). Corrections exist precisely on calculated, reconciled,
    * COMPLETED orders — the accruing population — so accrual must use the
    * corrected balance, not the original total (Codex P1, PR #469). The shape
-   * mirrors what commerceOrderAdjustedTotal in commerce-workspace.ts reads.
+   * mirrors what commerceOrderAdjustedTotal in commerce-workspace.ts reads,
+   * plus the correction's actionId: a credit correction whose actionId starts
+   * with SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX IS a points spend (module
+   * header), so the projection subtracts it 1 point = 1 MMK.
    */
-  corrections?: readonly { kind: string; calculation: { totalMmk: number } }[]
+  corrections?: readonly { kind: string; actionId?: string; calculation: { totalMmk: number } }[]
 }
 
 export type ShopLoyaltyStateView = {
@@ -191,6 +245,10 @@ function validRatePeriod(value: unknown): value is ShopLoyaltyRatePeriod {
     && hasExactKeys(value, ['rateBasisPoints', 'effectiveAt'])
     && validRateBasisPoints(value.rateBasisPoints)
     && validTimestamp(value.effectiveAt)
+}
+
+function validRedemptionPoints(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 1
 }
 
 /** Throws on anything that is not an exact, internally consistent settings record. */
@@ -374,18 +432,34 @@ export function shopLoyaltyBalances(state: ShopLoyaltyStateView, settings: ShopL
     if (order.status !== 'completed' || order.paymentStatus !== 'reconciled') continue
     if (typeof order.paymentReconciliationActionId === 'string'
       && order.paymentReconciliationActionId.startsWith(SAMPLE_ACTION_ID_PREFIX)) continue
-    const settledAtMs = order.paymentReconciledAt ? Date.parse(order.paymentReconciledAt) : Number.NaN
-    if (!Number.isFinite(settledAtMs) || settledAtMs < enabledAtMs) continue
     const customer = eligibleCustomer(order.customer)
     if (!customer) continue
-    // Corrections change what the order actually earned (returns and price
-    // reductions subtract, extra charges add); a structurally broken
-    // correction chain earns nothing rather than guessing.
+    // Spends are DERIVED from the order's own prefixed credit corrections
+    // (module header) — no second store, so a spend can never be lost while
+    // its credit survives, and in managed mode it syncs with the state. A
+    // spend counts on EVERY eligible sale, including one settled before
+    // enabledAt or with a broken settlement timestamp — those gates below
+    // guard what an order EARNS, and skipping a spend with them would let the
+    // same points redeem twice.
+    const spent = shopLoyaltyRedeemedPointsForOrder(order)
+    // Accrual gates: settled at/after enablement, and a structurally sound
+    // correction chain — corrections change what the order actually earned
+    // (returns and price reductions subtract, extra charges add), so a broken
+    // chain earns nothing rather than guessing.
+    const settledAtMs = order.paymentReconciledAt ? Date.parse(order.paymentReconciledAt) : Number.NaN
     const adjustedTotal = orderAdjustedTotal(order)
-    if (adjustedTotal === null) continue
-    const points = shopLoyaltyPointsForAmount(adjustedTotal, rateBasisPointsAt(settings, settledAtMs))
-    if (points < 1) continue
-    balances.set(customer, (balances.get(customer) ?? 0) + points)
+    const points = Number.isFinite(settledAtMs) && settledAtMs >= enabledAtMs && adjustedTotal !== null
+      ? shopLoyaltyPointsForAmount(adjustedTotal, rateBasisPointsAt(settings, settledAtMs))
+      : 0
+    if (points < 1 && spent < 1) continue
+    // Deliberate coherence: the credit correction a redemption records ALSO
+    // reduces this order's adjustedTotal above, so redeeming N points lowers
+    // the balance by N plus the small accrual the credited money would have
+    // earned — both effects are correct and pinned in the contract test. The
+    // internal value may go below zero (e.g. a later pricing-error credit
+    // shrank an order after its points were spent); the counter never shows a
+    // negative because every display path goes through shopLoyaltyDisplayPoints.
+    balances.set(customer, (balances.get(customer) ?? 0) + points - spent)
   }
   return balances
 }
@@ -393,4 +467,58 @@ export function shopLoyaltyBalances(state: ShopLoyaltyStateView, settings: ShopL
 /** What the counter shows: never below zero, whatever the internal arithmetic held. */
 export function shopLoyaltyDisplayPoints(points: number): number {
   return Number.isFinite(points) ? Math.max(0, Math.trunc(points)) : 0
+}
+
+/**
+ * Points already redeemed against one order, derived from the order's own
+ * credit corrections whose actionId carries the redemption prefix — the
+ * receipt's redemption line and the balance projection's spend source.
+ * 1 point = 1 MMK of listed credit; malformed correction records count zero.
+ */
+export function shopLoyaltyRedeemedPointsForOrder(order: ShopLoyaltyOrderView | null | undefined): number {
+  let spent = 0
+  for (const correction of order?.corrections ?? []) {
+    if (!isRecord(correction) || correction.kind !== 'credit') continue
+    if (typeof correction.actionId !== 'string' || !correction.actionId.startsWith(SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX)) continue
+    if (!isRecord(correction.calculation) || !Number.isSafeInteger(correction.calculation.totalMmk) || correction.calculation.totalMmk < 1) continue
+    spent += correction.calculation.totalMmk
+  }
+  return spent
+}
+
+/**
+ * Pure pre-flight gate for a points redemption — run against the commerce
+ * state as it stands IMMEDIATELY before the credit correction is applied.
+ * Returns true only when points are on, the customer is a named non-Guest
+ * owner of a real (non-sample) completed+reconciled sale, and the spend fits
+ * inside the customer's current projected balance. The spend itself is the
+ * correction: its accountable action carries
+ * SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, so once it lands the projection
+ * recognises it from CommerceState alone — there is nothing else to write,
+ * and a refused correction spends nothing by construction (module header;
+ * Codex P1, PR #472). Idempotency is the correction machinery's own actionId
+ * replay handling — one atomic write, one dedup authority.
+ */
+export function shopLoyaltyRedemptionAllowed(
+  current: ShopLoyaltySettings | null,
+  state: ShopLoyaltyStateView,
+  input: ShopLoyaltyRedemptionInput,
+): boolean {
+  if (!current?.enabled || current.enabledAt === null) return false
+  const customer = eligibleCustomer(input?.customer)
+  if (!customer || customer !== input.customer) return false
+  if (!validRedemptionPoints(input?.points)) return false
+  if (typeof input?.orderId !== 'string' || !input.orderId.trim() || input.orderId !== input.orderId.trim() || input.orderId.length > 160) return false
+  // The spend binds to one real settled sale owned by the redeeming customer.
+  // Sample-seeded orders are excluded the same way accrual excludes them —
+  // by actionId prefix, never by actor string.
+  const order = (state?.orders ?? []).find((candidate) => candidate.id === input.orderId)
+  if (!order
+    || order.status !== 'completed'
+    || order.paymentStatus !== 'reconciled'
+    || (typeof order.paymentReconciliationActionId === 'string'
+      && order.paymentReconciliationActionId.startsWith(SAMPLE_ACTION_ID_PREFIX))
+    || eligibleCustomer(order.customer) !== customer) return false
+  const available = shopLoyaltyBalances(state, current).get(customer) ?? 0
+  return input.points <= available
 }

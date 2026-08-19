@@ -46,8 +46,15 @@ function openPrintWindow(ack: CommerceOrderAcknowledgement) {
   }
 }
 
-export function ReceiptDialog({ ack, onClose, paymentQrScope }: {
+export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
   ack: CommerceOrderAcknowledgement | null
+  /**
+   * S3 PR2 customer points, display-only: the named customer's current balance
+   * and any points already redeemed against this order (shop-loyalty.ts).
+   * Null when points are off or the customer is Guest/blank. The printed and
+   * copied artifact text is untouched — these lines exist only in the dialog.
+   */
+  loyalty?: { balancePoints: number; redeemedPoints: number } | null
   onClose: () => void
   paymentQrScope: string
 }) {
@@ -101,6 +108,8 @@ export function ReceiptDialog({ ack, onClose, paymentQrScope }: {
           {hasDeliveryFee ? <div><span>Delivery</span><span>{mmk(ack.delivery.feeMmk ?? 0)}</span></div> : null}
           {hasTax ? <div><span>Tax{ack.tax.code ? ` (${ack.tax.code})` : ''}</span><span>{mmk(ack.tax.taxMmk ?? 0)}</span></div> : null}
           <div className="receipt-total-row"><strong>Total</strong><strong>{mmk(ack.totalMmk)}</strong></div>
+          {loyalty && loyalty.redeemedPoints > 0 ? <div><span>Points redeemed</span><span>−{loyalty.redeemedPoints.toLocaleString()}</span></div> : null}
+          {loyalty ? <div><span>Points balance</span><span>{loyalty.balancePoints.toLocaleString()}</span></div> : null}
         </div>
         <div className="receipt-dialog-payment">
           <strong>{ack.payment.method}</strong>
