@@ -2598,8 +2598,10 @@ input, select, textarea { border-color: var(--core-field-line); }
 /* ============================================================================
    Design phase 3 — bottom-nav work modes, Shop slice. On phones the fixed
    bottom bar carries Shop's four task modes (Today / Sell / Orders / Stock,
-   CoreShell renders them from the shared commerce-tabs module) instead of the
-   two-link product nav, so a counter operator reaches any task in one tap.
+   CoreShell renders them from the shared commerce-tabs module) plus the
+   Products door (the only mobile path to /?choose=1 at this breakpoint)
+   instead of the two-link product nav, so a counter operator reaches any
+   task in one tap without losing the way out to the other products.
    The pinned 2-column .mobile-nav rule above stays byte-identical; this later
    compound selector (0,2,0 over 0,1,0, and later in source order) wins the
    cascade for the task variant only — Plant, Website, Ecommerce, and setup
@@ -2613,6 +2615,6 @@ input, select, textarea { border-color: var(--core-field-line); }
    Pulling it inside the box keeps keyboard focus visible on all four tabs.
    ========================================================================== */
 @media (max-width: 840px) {
-  .mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .mobile-nav.mobile-task-nav { grid-template-columns: repeat(5,minmax(0,1fr)); }
   .mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }
 }

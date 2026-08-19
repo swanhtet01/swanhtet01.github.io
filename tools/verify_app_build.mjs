@@ -1101,19 +1101,24 @@ if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settin
   || coreCssSource.includes('.mobile-nav a:first-child { display: none; }')) fail('client_setup_navigation_separation_missing')
 // Design phase 3 "bottom-nav work modes", Shop slice: on phones the Shop bottom
 // bar carries the four task modes from the shared commerce-tabs module (CoreApp
-// is chunk-isolated, so the shell must consume the module, never a hand copy).
-// All four links share the /shop/ pathname, so the active highlight must come
-// from the ?tab= param via the shared activeCommerceTab resolution — a NavLink
-// here would mark every tab active at once. The 4-column grid is a later
-// higher-specificity override; the pinned 2-column .mobile-nav rule stays
-// byte-identical and every other route keeps the two-link product nav.
+// is chunk-isolated, so the shell must consume the module, never a hand copy)
+// plus the Products door. All four task links share the /shop/ pathname, so the
+// active highlight must come from the ?tab= param via the shared
+// activeCommerceTab resolution — a NavLink here would mark every tab active at
+// once. The 5-column grid is a later higher-specificity override; the pinned
+// 2-column .mobile-nav rule stays byte-identical and every other route keeps
+// the two-link product nav. The Products door pin is load-bearing: at <=840px
+// the sidebar is display:none and the brand link redirects to the last
+// product, so this link is the ONLY mobile path out of Shop to /?choose=1 —
+// dropping it strands mobile Shop users inside one product.
 if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from './commerce-tabs'")
   || !coreShellSource.includes("const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(")
   || !coreShellSource.includes('<nav className="mobile-nav mobile-task-nav" aria-label="Shop task shortcuts">')
   || !coreShellSource.includes('{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? \'page\' : undefined}')
   || !coreShellSource.includes('to={`/shop/?tab=${tab.id}`}')
+  || !coreShellSource.includes('<Link to="/?choose=1">Products</Link></nav>')
   || coreShellSource.includes('mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <NavLink')
-  || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(5,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }')) fail('shop_mobile_task_nav_missing')
 if (!coreShellSource.includes("theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
   || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
