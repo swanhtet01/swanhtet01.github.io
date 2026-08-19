@@ -105,9 +105,17 @@ block, and the shipped cart sticky bar does not stick at ≤840px).
 ## Phase 3 (structural; needs its own planning pass each)
 
 Full ecommerce literal retirement (129 hex → tokens + color-mix cockpit
-tints); bottom-nav work modes (ONLY after item 1 ships; keep pinned
-'mobile-nav' markup verify:1072; aria-current + full keyboard regression are
-acceptance criteria); selling-surface IA (ops consoles behind an Operations
+tints); ~~bottom-nav work modes~~ **Shop slice SHIPPED 2026-08-19**
+(`claude/supermega-dev-ceo-aije17`, commits `40ef87ee` + `ba60c931`): Shop's
+mobile bar carries Today/Sell/Orders/Stock + a Products door via the shared
+`commerce-tabs.ts` module; pinned 2-column `.mobile-nav` CSS untouched
+(EOF-appended 5-column override); active state comes from `?tab=` (Link, not
+NavLink — pathname-only isActive would light all tabs); the Products door is
+verifier-pinned because it is the ONLY ≤840px path to `/?choose=1`. Plant's
+2-tab slice is the natural follow-up once wanted — the mechanism is built.
+Keyboard verification was by static analysis (no browser in the build
+sandbox); an on-device pass remains open. Remaining phase-3 items:
+selling-surface IA (ops consoles behind an Operations
 area; plain-language lead lines added BEFORE pinned compliance litanies);
 Plant UX pass (parked until Plant enters the sales path); geometry
 convergence by attrition; px→rem for OS font scaling + a stylelint check
