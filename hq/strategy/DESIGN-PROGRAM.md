@@ -264,6 +264,24 @@ claim). No deletions.
 **Pins to lockstep:** none if strictly EOF-append; run the full theme
 contract (Rule 4 mirroring for every consolidated property).
 **Estimate:** 1 PR, half a day.
+**SHIPPED 2026-08-19** (branch `design/p3-2-website-triplication`): the EOF
+block now restates all 12 disputed properties (13 with `--website-quiet`)
+with the values that already won the cascade, so resolved styles are
+byte-identical in both themes (dev-server getComputedStyle probes, light and
+dark). Panel and green take the item-12 core-alias shape (authored literal =
+core light value, so the alias is value-preserving); the other nine park
+their authored literal as a var() fallback behind a deliberately-undefined
+`--website-*-authored` token (P3.0 carve-out — the ratchet stays at 60,
+zero live hex added). Strictly EOF-append: zero verifier edits, exactly as
+the pin catalogue predicted. Re-checks: (1) `--website-green-dark` is STILL
+Rule-4-latent — its only consumers (:3427-3428) are a light-mode hover whose
+dark variant is overridden with a literal at :3442-3444, so no dark
+counterpart was added; adding one is a visual decision for whichever batch
+gains a real dark-mode consumer. (2) The phase-1 "44 text sites" quiet claim
+re-measures at 41 `var(--website-quiet)` sites today (28 gen-one, 13 live);
+light resolution was `#5f6d65` before item-12 and `#5f6f67` (--core-quiet,
+5.31:1) since — the claimed "3.66:1 → 5.31:1" delta remains unsubstantiated,
+as DESIGN-REVIEW concluded (the live value was already passing).
 
 ### P3.3 — Re-home live rules, re-anchor dead-anchored pins
 
