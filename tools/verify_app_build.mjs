@@ -19195,7 +19195,10 @@ else {
   const workspaceControlsBytes = (await stat(workspaceControlsArtifactPath)).size
   // Raised from 31_000 after adding the Plant maintenance-due and Ecommerce stale-request
   // follow-up views (measured 37,093 bytes) plus main's own new ledger-related views in this chunk.
-  if (workspaceControlsBytes > 38_000
+  // Raised from 38_000 on 2026-08-19: the S2 merchant payment QR settings section
+  // (PaymentQr settings controls + section copy) measured 38,010 bytes — 10 bytes over.
+  // Real product surface, same raise-on-value rule as the artifact byte budget.
+  if (workspaceControlsBytes > 40_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')

@@ -43,6 +43,7 @@ import {
 } from './workspace-runtime'
 import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
+import { PaymentQrButton } from './PaymentQr'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -1177,6 +1178,12 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
         {unitCount ? <><div className="shop-sale-details">
           <label>Customer <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
           <fieldset><legend>Payment</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
+          {/* S2 merchant payment QR: display-only (see payment-qr-store.ts). At a Myanmar
+              counter the customer pays a non-cash sale by scanning the owner's static
+              merchant QR and typing the amount, so the affordance lives exactly here —
+              non-cash method chosen, amount due on screen. No payment API, no status
+              write; confirming money arrived stays the manual flow in Orders. */}
+          {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} settingsHint /> : null}
         </div>
         <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review order'}<span aria-hidden="true">→</span></button><small>Confirm to create the order. Finish payment and handoff in Orders.</small></footer></> : null}
       </aside>

@@ -14,6 +14,7 @@ import {
   type LocalWorkspaceBackup,
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
+import { PaymentQrSettingsControls } from './PaymentQr'
 import { loadCommerceWorkspace } from './commerce-workspace'
 import { loadProductionWorkspace, productionMaintenanceDueQueue } from './production-workspace'
 import { projectShopOrderProductionStatus } from './shop-production-status'
@@ -569,6 +570,15 @@ export function WorkspaceControlsPage() {
             <Link className="core-button" to="/settings/?view=cross-product#controls">Order and production status</Link>
             <Link className="core-button" to="/settings/?view=local-metrics#controls">Session metrics</Link>
           </div>
+        </section>
+
+        <section className="core-panel">
+          {/* S2 merchant payment QR (display-only — boundary documented in payment-qr-store.ts).
+              The image is stored in this device's IndexedDB only: it is never uploaded, and it
+              is not part of workspace backups by construction (the backup snapshots registered
+              localStorage keys; this store is invisible to it, like product photos). */}
+          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (Wave MMQR, MyanMyanPay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
+          <PaymentQrSettingsControls />
         </section>
 
         <section className="core-panel trial-control-panel">

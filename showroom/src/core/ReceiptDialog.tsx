@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 import { type CommerceOrderAcknowledgement, commerceOrderAcknowledgementText } from './commerce-workspace'
+import { PaymentQrButton } from './PaymentQr'
 
 function formatReceiptDate(iso: string) {
   try {
@@ -108,6 +109,10 @@ export function ReceiptDialog({ ack, onClose }: {
           {ack.payment.status !== 'reconciled' && ack.payment.dueAt
             ? <small>Due {formatReceiptDate(ack.payment.dueAt)}</small>
             : null}
+          {/* S2 merchant payment QR: while payment is still pending, the cashier can show
+              the owner's stored merchant QR for this method with the amount due (display
+              only — see payment-qr-store.ts; renders nothing when no QR is stored). */}
+          {ack.payment.status !== 'reconciled' ? <PaymentQrButton amountDue={mmk(ack.totalMmk)} method={ack.payment.method} /> : null}
         </div>
         {ack.delivery?.fulfilment ? <div className="receipt-dialog-delivery">
           <strong>{ack.delivery.fulfilment}</strong>

@@ -2675,3 +2675,36 @@ input, select, textarea { border-color: var(--core-field-line); }
    and the empty auto column collapses. */
 .data-row:not(.table-head) > span[role="rowheader"] { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-2); align-items: center; }
 .data-row:not(.table-head) > span[role="rowheader"] > .stock-row-copy { min-width: 0; display: grid; grid-column: 2; gap: 2px; }
+
+/* ============================================================================
+   Merchant payment QR (roadmap S2, 2026-08-19). Display-only surfaces backed by
+   payment-qr-store.ts: the settings upload rows (WorkspaceControlsPage), the
+   counter/receipt "Show payment QR" button, and the scan dialog with the amount
+   due shown big. Tokens only — every color flips with .theme-dark on its own,
+   so no dark overrides are needed. The dialog backdrop rgba mirrors the pinned
+   .barcode-scan-dialog::backdrop; control sizes reuse the stylesheet's existing
+   44px touch-target convention; the amount-due size derives from the type ramp
+   (no new literal) because nothing in the ramp is copy-across-the-counter big.
+   ========================================================================== */
+.payment-qr-show { width: 100%; justify-content: center; }
+.payment-qr-settings-hint { color: var(--core-muted); font-size: var(--font-size-xs); line-height: 1.5; }
+.payment-qr-settings-hint .text-link { display: inline; min-height: 0; font-size: inherit; }
+.payment-qr-dialog { width: min(92vw, 420px); border: 1px solid var(--core-line-strong); border-radius: var(--radius-lg); padding: var(--space-4); background: var(--core-panel); color: var(--core-ink); box-shadow: var(--shadow-3); }
+.payment-qr-dialog::backdrop { background: rgba(5, 8, 13, .72); }
+.payment-qr-head { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
+.payment-qr-head h2 { margin: 0; font-size: var(--font-size-lg); letter-spacing: -.01em; }
+.payment-qr-image { width: 100%; max-height: 56vh; object-fit: contain; border-radius: var(--radius-md); }
+.payment-qr-amount { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); border-top: 1px solid var(--core-line); margin-top: var(--space-3); padding-top: var(--space-3); }
+.payment-qr-amount small { color: var(--core-muted); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
+.payment-qr-amount strong { font-size: calc(var(--font-size-xl) * 2); font-weight: var(--font-weight-black); letter-spacing: -.02em; line-height: 1.1; }
+.payment-qr-boundary { margin: var(--space-3) 0 0; color: var(--core-muted); font-size: var(--font-size-base); line-height: 1.5; }
+.payment-qr-actions { display: flex; justify-content: flex-end; margin-top: var(--space-4); }
+.payment-qr-methods { display: grid; gap: var(--space-3); }
+.payment-qr-method { display: flex; align-items: flex-start; gap: var(--space-3); }
+.payment-qr-method-frame { width: 72px; height: 72px; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; overflow: hidden; box-sizing: border-box; border: 1px dashed var(--core-field-line); border-radius: var(--radius-md); padding: 0; background: var(--core-panel-raised); color: var(--core-quiet); cursor: pointer; }
+.payment-qr-method-frame:disabled { cursor: default; opacity: .55; }
+.payment-qr-method-frame img { width: 100%; height: 100%; object-fit: contain; }
+.payment-qr-method-placeholder { font-size: var(--font-size-xl); line-height: 1; }
+.payment-qr-method-copy { display: grid; justify-items: start; gap: var(--space-1); min-width: 0; }
+.payment-qr-method-copy small { color: var(--core-muted); font-size: var(--font-size-sm); line-height: 1.5; }
+.payment-qr-method-issue { color: var(--core-warn); font-size: var(--font-size-xs); line-height: 1.35; }
