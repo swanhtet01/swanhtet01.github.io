@@ -411,6 +411,26 @@ Scope discipline (this is NOT "all px becomes rem"):
 the work. Honest risk: rem flips surface rounding differences on Android
 WebView — every batch needs a 375px probe pass.
 
+**P3.6a SHIPPED 2026-08-20** (branch `design/p3-6a-px-to-rem`): all 8
+`--font-size-*` ramp definitions plus 589 plain `font-size: <N>px`
+declarations and 18 clamp() px bounds in core-app.css converted to rem
+(exact N/16, 4-decimal max — root 16px verified: nothing sets an html
+font-size anywhere). Pin exposure measured, not assumed: exactly ONE
+core-app.css font-size pin existed (verify `actionChangeCssContract`
+`font-size: 12px`, the `.action-change-flow dd` rule) and moved in
+lockstep to `0.75rem`; the other font-size pins target ecommerce/publish
+sources (P3.6b) and no `--font-size-*` or font-size clamp pin exists. The
+9-10px micro-label floors and the mobile `input` 16px iOS-zoom floor
+converted value-preserving (their comments still read in px = value at
+default root). The P3.0 ratchet gained its px column here as planned:
+`check_css_contracts.mjs` CEILINGS now carries `{ hex, px }` per file
+(px counted outside comments, deliberately NO var()-fallback carve-out),
+floors stamped at measured post-batch counts (core 2435, ecommerce 440,
+website 818, publish 237). Dev-server proof: computed font-sizes
+byte-identical light/dark at default root; at root 20px converted core
+selectors scale ×1.25 while the pinned ecommerce `font-size: 12px`
+family stays fixed — that delta is the batch's payoff, not a regression.
+
 ### P3.7 — Bottom-nav work modes (gate satisfied)
 
 Gate evidence: one-tap sale shipped (PR #436; CoreApp.tsx:6799, :3900).

@@ -1,10 +1,15 @@
-// CSS contract check -- the two rules scoped as P3.0 in hq/strategy/DESIGN-PROGRAM.md.
+// CSS contract check -- the two rules scoped as P3.0 in hq/strategy/DESIGN-PROGRAM.md,
+// plus the px column P3.6a added so the px->rem lane's floor tracks the lane.
 //
-// 1. HEX-LITERAL RATCHET. Every batch of the literal-retirement programme lowers the number
-//    of raw hex colours in a stylesheet; nothing may raise it again in between. Each file's
-//    current count is recorded in HEX_CEILINGS below and a file FAILS when it exceeds its
-//    ceiling. This is a ratchet, not a ban: attrition tightens it and it never demands a
-//    sweep. Two carve-outs, both live in the stylesheets today, keep the metric honest:
+// 1. LITERAL RATCHETS (hex and px). Every batch of the literal-retirement programme lowers
+//    the number of raw hex colours -- and, since P3.6a, raw px lengths -- in a stylesheet;
+//    nothing may raise either again in between. Each file's current counts are recorded in
+//    CEILINGS below and a file FAILS when it exceeds a ceiling. These are ratchets, not
+//    bans: attrition tightens them and they never demand a sweep. The px column counts px
+//    occurrences outside comments only -- unlike hex there is no var()-fallback carve-out,
+//    because a px length inside a fallback still renders as px when the token is undefined,
+//    which is exactly the OS-font-scaling miss the px->rem lane exists to retire. Hex
+//    carve-outs, both live in the stylesheets today, keep that metric honest:
 //      - hex inside a var() fallback is EXEMPT: `var(--core-quiet, #5f6f67)` (the item-12
 //        --website-quiet repair at the foot of website-product.css) is the sanctioned shape
 //        for a literal -- the token wins whenever it is defined, so the literal is inert.
@@ -40,21 +45,23 @@ const ECOMMERCE_CSS = 'showroom/src/products/ecommerce/ecommerce-product.css'
 const WEBSITE_CSS = 'showroom/src/products/website/website-product.css'
 const PUBLISH_CSS = 'showroom/src/products/website/publish-workspace.css'
 
-// Per-file ceilings on LIVE hex occurrences (raw hex minus the two carve-outs above).
-// Measured 2026-08-19 against the raw counts in DESIGN-PROGRAM.md's P3.0 table
+// Per-file ceilings on LIVE occurrences (raw counts minus the carve-outs above). Hex
+// measured 2026-08-19 against the raw counts in DESIGN-PROGRAM.md's P3.0 table
 // (core 104 raw - 5 in comments; ecommerce 129 - 17 in comments; website 82 - 12 in
-// comments - 10 in var() fallbacks; publish-workspace 1).
+// comments - 10 in var() fallbacks; publish-workspace 1). Px measured 2026-08-20 with
+// this file's own scanner, after P3.6a converted core-app.css font-sizes to rem.
 //
 // HOW THIS TABLE CHANGES. It only goes DOWN, and the tool does the writing: when a run
-// measures fewer live hexes than a ceiling, it rewrites that number below in place --
+// measures fewer live hexes or px than a ceiling, it rewrites that number below in place --
 // commit the change with the batch that retired the literals. Raising a number by hand is
 // the one forbidden move; if this check fails, retire the literal you just added (use a
-// token, a color-mix() of tokens, or a var() fallback) instead of widening the budget.
-const HEX_CEILINGS = new Map([
-  ['showroom/src/core/core-app.css', 99],
-  ['showroom/src/products/ecommerce/ecommerce-product.css', 111],
-  ['showroom/src/products/website/website-product.css', 60],
-  ['showroom/src/products/website/publish-workspace.css', 1],
+// token, a color-mix() of tokens, a var() fallback for hex, or rem for a px length)
+// instead of widening the budget.
+const CEILINGS = new Map([
+  ['showroom/src/core/core-app.css', { hex: 99, px: 2435 }],
+  ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 111, px: 440 }],
+  ['showroom/src/products/website/website-product.css', { hex: 60, px: 818 }],
+  ['showroom/src/products/website/publish-workspace.css', { hex: 1, px: 237 }],
 ])
 
 // What "the same cascade" means for rule 2, per scanned file. index.css is loaded
@@ -87,6 +94,7 @@ function lineOf(source, index) {
 // --- scanners ---------------------------------------------------------------------------
 
 const HEX_TOKEN = /#[0-9a-fA-F]{3,8}\b/g
+const PX_TOKEN = /-?\d*\.?\d+px\b/g
 
 function commentSpans(source) {
   const spans = []
@@ -153,6 +161,19 @@ function hexAudit(source) {
   return { live, inComments, inFallbacks, vars }
 }
 
+// Raw px occurrences, comments excluded. Deliberately NO var()-fallback carve-out (see the
+// header): a px fallback still paints px when its token is missing, so it stays counted.
+function pxAudit(source) {
+  const comments = commentSpans(source)
+  const live = []
+  let inComments = 0
+  for (const match of source.matchAll(PX_TOKEN)) {
+    if (inSpans(match.index, comments)) { inComments += 1; continue }
+    live.push(match.index)
+  }
+  return { live, inComments }
+}
+
 // --- scanner probes ---------------------------------------------------------------------
 
 // Pins the classification rules so they cannot quietly narrow: [css, live, inComments,
@@ -172,6 +193,23 @@ for (const [css, live, inComments, inFallbacks] of HEX_PROBES) {
   check(
     audit.live.length === live && audit.inComments === inComments && audit.inFallbacks === inFallbacks,
     `hex classification of \`${css}\` is live=${live} comments=${inComments} fallbacks=${inFallbacks}, got live=${audit.live.length} comments=${audit.inComments} fallbacks=${audit.inFallbacks}`,
+  )
+}
+
+// Pins the px classification rules: [css, live, inComments]. rem never counts, px inside a
+// comment never counts, a var() fallback px DOES count, and 16px inside clamp() counts.
+const PX_PROBES = [
+  ['a { font-size: 12px; }', 1, 0],
+  ['a { font-size: 0.75rem; margin: 0; }', 0, 0],
+  ['/* was 12px */ a { font-size: 0.75rem; padding: 4px 8px; }', 2, 1],
+  ['a { width: var(--w, 4px); font-size: clamp(16px, 2vw, 2rem); }', 2, 0],
+  ['a { letter-spacing: -.14em; line-height: 1.5; border: 1px solid #000; }', 1, 0],
+]
+for (const [css, live, inComments] of PX_PROBES) {
+  const audit = pxAudit(css)
+  check(
+    audit.live.length === live && audit.inComments === inComments,
+    `px classification of \`${css}\` is live=${live} comments=${inComments}, got live=${audit.live.length} comments=${audit.inComments}`,
   )
 }
 
@@ -229,11 +267,11 @@ check(
 const selfSource = readFileSync(SELF, 'utf8')
 const escapeForRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 check(
-  JSON.stringify([...HEX_CEILINGS.keys()].sort()) === JSON.stringify([...CASCADES.keys()].sort()),
-  'HEX_CEILINGS and CASCADES cover the same stylesheets',
+  JSON.stringify([...CEILINGS.keys()].sort()) === JSON.stringify([...CASCADES.keys()].sort()),
+  'CEILINGS and CASCADES cover the same stylesheets',
 )
-for (const path of HEX_CEILINGS.keys()) {
-  const anchors = selfSource.match(new RegExp(`\\['${escapeForRegex(path)}', \\d+\\]`, 'g')) ?? []
+for (const path of CEILINGS.keys()) {
+  const anchors = selfSource.match(new RegExp(`\\['${escapeForRegex(path)}', \\{ hex: \\d+, px: \\d+ \\}\\]`, 'g')) ?? []
   check(anchors.length === 1, `exactly one rewritable ceiling row for ${path}, got ${anchors.length}`)
 }
 
@@ -249,19 +287,28 @@ const ratchetOffenders = []
 const lowerings = []
 const undefinedOffenders = []
 let liveHexTotal = 0
+let livePxTotal = 0
 let varUseTotal = 0
 
 for (const [path, cascade] of CASCADES) {
   const source = read(path)
   const audit = hexAudit(source)
-  const ceiling = HEX_CEILINGS.get(path)
+  const px = pxAudit(source)
+  const ceiling = CEILINGS.get(path)
   liveHexTotal += audit.live.length
+  livePxTotal += px.live.length
   varUseTotal += audit.vars.length
 
-  if (audit.live.length > ceiling) {
-    ratchetOffenders.push({ path, count: audit.live.length, ceiling, lines: audit.live.map((index) => lineOf(source, index)) })
-  } else if (audit.live.length < ceiling) {
-    lowerings.push({ path, from: ceiling, to: audit.live.length })
+  if (audit.live.length > ceiling.hex) {
+    ratchetOffenders.push({ path, kind: 'hex', count: audit.live.length, ceiling: ceiling.hex, lines: audit.live.map((index) => lineOf(source, index)) })
+  } else if (audit.live.length < ceiling.hex) {
+    lowerings.push({ path, kind: 'hex', from: ceiling.hex, to: audit.live.length })
+  }
+
+  if (px.live.length > ceiling.px) {
+    ratchetOffenders.push({ path, kind: 'px', count: px.live.length, ceiling: ceiling.px, lines: px.live.map((index) => lineOf(source, index)).slice(0, 40) })
+  } else if (px.live.length < ceiling.px) {
+    lowerings.push({ path, kind: 'px', from: ceiling.px, to: px.live.length })
   }
 
   const defined = new Set(cascade.flatMap((entry) => [...definitionsByFile.get(entry)]))
@@ -279,10 +326,10 @@ check(varUseTotal > 1500, `the scan saw the stylesheets' var() corpus, got ${var
 check(
   ratchetOffenders.length === 0,
   ratchetOffenders.length === 0
-    ? 'no stylesheet exceeds its live-hex ceiling'
-    : `hex-literal ratchet exceeded:\n${ratchetOffenders
-        .map((entry) => `    ${entry.path}: ${entry.count} live hex literals, ceiling ${entry.ceiling} (lines ${entry.lines.join(', ')})`)
-        .join('\n')}\n  Retire the literal you added: use a token, a color-mix() of tokens, or park it as a var() fallback. Never raise a ceiling.`,
+    ? 'no stylesheet exceeds its live-hex or live-px ceiling'
+    : `literal ratchet exceeded:\n${ratchetOffenders
+        .map((entry) => `    ${entry.path}: ${entry.count} live ${entry.kind} literals, ceiling ${entry.ceiling} (lines ${entry.lines.join(', ')})`)
+        .join('\n')}\n  Retire the literal you added: use a token, a color-mix() of tokens, a var() fallback (hex), or rem (px lengths -- font sizes especially). Never raise a ceiling.`,
 )
 
 check(
@@ -298,15 +345,18 @@ check(
 // say so loudly enough that the re-stamped file gets committed with the batch.
 if (lowerings.length) {
   let next = selfSource
-  for (const { path, from, to } of lowerings) {
-    next = next.replace(new RegExp(`(\\['${escapeForRegex(path)}', )${from}(\\])`), `$1${to}$2`)
+  for (const { path, kind, from, to } of lowerings) {
+    const pattern = kind === 'hex'
+      ? new RegExp(`(\\['${escapeForRegex(path)}', \\{ hex: )${from}(, px: \\d+ \\}\\])`)
+      : new RegExp(`(\\['${escapeForRegex(path)}', \\{ hex: \\d+, px: )${from}( \\}\\])`)
+    next = next.replace(pattern, `$1${to}$2`)
   }
   check(next !== selfSource, 'ceiling lowering rewrote this file')
   writeFileSync(SELF, next)
-  for (const { path, from, to } of lowerings) console.log(`css contracts: hex ceiling for ${path} lowered ${from} -> ${to}`)
+  for (const { path, kind, from, to } of lowerings) console.log(`css contracts: ${kind} ceiling for ${path} lowered ${from} -> ${to}`)
   console.log('css contracts: NEW FLOORS WRITTEN to tools/check_css_contracts.mjs -- commit this file with the batch that retired the literals')
 }
 
 console.log(
-  `css contracts: ${checks} checks passed (${liveHexTotal} live hex under ${[...HEX_CEILINGS.values()].reduce((a, b) => a + b, 0)} ceiling across ${CASCADES.size} stylesheets, ${varUseTotal} var() consumptions all resolving, ${lowerings.length} ceilings lowered)`,
+  `css contracts: ${checks} checks passed (${liveHexTotal} live hex under ${[...CEILINGS.values()].reduce((a, b) => a + b.hex, 0)} ceiling and ${livePxTotal} live px under ${[...CEILINGS.values()].reduce((a, b) => a + b.px, 0)} ceiling across ${CASCADES.size} stylesheets, ${varUseTotal} var() consumptions all resolving, ${lowerings.length} ceilings lowered)`,
 )

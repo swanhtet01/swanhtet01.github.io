@@ -4096,7 +4096,7 @@ if (actionChangeCssStart < 0
   || !coreCssSource.includes('.action-change-flow { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));')
   || !coreCssSource.includes('.action-change-flow { grid-template-columns: 1fr; }')
   || !actionChangeCssContract.includes('overflow-wrap: anywhere')
-  || !actionChangeCssContract.includes('font-size: 12px')
+  || !actionChangeCssContract.includes('font-size: 0.75rem') // P3.6a lockstep: was 'font-size: 12px'; the px->rem batch converts the dd size and this pin moves with it (12px = 0.75rem at the 16px root)
   || !actionChangeCssContract.includes('line-height: 1.5')) fail('accountable_confirmation_delta_unreadable')
 const stockTabletCssStart = coreCssSource.indexOf('@media (max-width: 760px)')
 const stockTabletCssEnd = coreCssSource.indexOf('@media (max-width: 560px)', stockTabletCssStart)
