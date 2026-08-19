@@ -1878,7 +1878,9 @@ const OPERATIONS_ALERT_REPEAT_MINUTES = 360
 // and losing it (cache eviction/truncation) costs at most one repeated founder alert. Because the
 // supabase insert path cannot replace an existing row, every update of an existing record goes
 // through transitionCachedResponse, a compare-and-swap on the previous status + planHash — which
-// also means two concurrent report requests cannot both claim the same alert.
+// also means two concurrent report requests cannot both claim the same alert. First-time creation
+// (no record yet) is arbitrated by an insert-if-absent claimActivity claim instead, because none
+// of putCachedResponse's three modes can detect a lost create race (see the claim comment below).
 const operationsAlertStateKey = (clientId, windowDays) => `${OPERATIONS_ALERT_STATE_PREFIX}${clientId}:${windowDays}`
 
 // Per-process mirror of the last alert state. The durable record is the source of truth across
@@ -1941,6 +1943,8 @@ async function alertOnMissedOperationsTargets(report, options = {}) {
   const readState = options.getOperationsAlertState || getCachedResponse
   const insertState = options.putOperationsAlertState || putCachedResponse
   const transitionState = options.transitionOperationsAlertState || transitionCachedResponse
+  const claimInit = options.claimOperationsAlertInit || claimActivity
+  const releaseInit = options.releaseOperationsAlertInit || releaseActivityClaim
   const missed = report.targets.filter((target) => target.state === 'missed')
   const key = operationsAlertStateKey(report.clientId, report.windowDays)
   const signature = missed.map((target) => target.id).join(',')
@@ -1983,9 +1987,27 @@ async function alertOnMissedOperationsTargets(report, options = {}) {
   }
 
   // Claim the alert BEFORE sending so concurrent report requests observing the same breach cannot
-  // both ping the founder (the CAS transition admits exactly one of them).
+  // both ping the founder. With a prior durable record, the CAS transition admits exactly one
+  // contender. With NO prior record, putCachedResponse cannot arbitrate (memory overwrites,
+  // postgres upserts, and the supabase insert returns null for conflict and outage alike), so
+  // first-time creation is admitted by an insert-if-absent activity claim instead — deterministic
+  // over client, window, breach set, and UTC day. A definite duplicate claim is a lost race and
+  // skips the send; an unavailable claim store fails open (the per-process mirror still dedupes),
+  // and the UTC-day component bounds the blast radius of an evicted state record or a crashed
+  // winner to at most one silent day before the same breach set can alert again.
   const next = operationsAlertState(report, 'alerted', missed)
-  if (await persist(next, durablePrevious) === 'raced') return
+  let initClaimId = null
+  if (durablePrevious) {
+    if (await persist(next, durablePrevious) === 'raced') return
+  } else {
+    const day = next.updatedAt.slice(0, 10)
+    initClaimId = `company-operations-alert-init:${sha256(`${report.clientId}|${report.windowDays}|${signature}`).slice(0, 40)}:${day}`
+    let claim = null
+    try { claim = await claimInit({ id: initClaimId, kind: 'company_operations_alert_init', ref: key }) }
+    catch { claim = null }
+    if (claim?.fresh !== true && claim?.durable === true) return
+    await persist(next, null)
+  }
   operationsAlertMemory.set(key, next)
 
   // Metadata only: target ids, measured values, and configured targets — never customer data,
@@ -2002,6 +2024,7 @@ async function alertOnMissedOperationsTargets(report, options = {}) {
     const released = operationsAlertState(report, 'clear', [])
     operationsAlertMemory.set(key, released)
     await persist(released, next)
+    if (initClaimId) { try { await releaseInit(initClaimId) } catch { /* best-effort */ } }
   }
 }
 

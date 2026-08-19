@@ -1017,10 +1017,12 @@ function alertHarness(clientId) {
     },
   ]))
   const alertState = new Map()
+  const claims = new Map()
   const sends = []
   const harness = {
     sends,
     alertState,
+    claims,
     stateReads: 0,
     evaluated: false,
     options: (patch = {}) => ({
@@ -1041,6 +1043,12 @@ function alertHarness(clientId) {
         alertState.set(key, structuredClone(value))
         return { updated: true, durable: true }
       },
+      claimOperationsAlertInit: async ({ id }) => {
+        if (claims.has(id)) return { fresh: false, durable: true }
+        claims.set(id, true)
+        return { fresh: true, durable: true }
+      },
+      releaseOperationsAlertInit: async (id) => claims.delete(id),
       env: { TELEGRAM_BOT_TOKEN: 'unit-test-token', TELEGRAM_ALERT_CHAT_ID: '1001' },
       fetch: async (url, init) => { sends.push(JSON.parse(init.body)); return { ok: true } },
       now: () => '2026-07-15T00:00:00.000Z',
@@ -1155,6 +1163,51 @@ test('operations alert claim races defer to the winner and silent write failures
   const second = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, silentWrites())
   assert.equal(second.ok, true)
   assert.equal(harness.sends.length, 1)
+})
+
+test('two concurrent first-breach reports send exactly one alert under every store write semantic', async () => {
+  const writeSemantics = {
+    // supabase: insert-only; an existing key 409s and is swallowed to null (conflict and outage
+    // are indistinguishable to the caller)
+    'client-alert-conc-supabase': (alertState) => async (key, value) => {
+      if (alertState.has(key)) return null
+      alertState.set(key, structuredClone(value))
+      return true
+    },
+    // postgres: on conflict do update — the upsert always "succeeds"
+    'client-alert-conc-postgres': (alertState) => async (key, value) => { alertState.set(key, structuredClone(value)); return true },
+    // memory: unconditional overwrite
+    'client-alert-conc-memory': (alertState) => async (key, value) => { alertState.set(key, structuredClone(value)); return true },
+  }
+  for (const [clientId, semantics] of Object.entries(writeSemantics)) {
+    const harness = alertHarness(clientId)
+    const options = () => harness.options({ putOperationsAlertState: semantics(harness.alertState) })
+    const [left, right] = await Promise.all([
+      buildCompanyOperationsReport({ clientId, windowDays: 30 }, options()),
+      buildCompanyOperationsReport({ clientId, windowDays: 30 }, options()),
+    ])
+    assert.equal(left.ok, true, clientId)
+    assert.equal(right.ok, true, clientId)
+    assert.equal(harness.sends.length, 1, clientId)
+    assert.equal(harness.claims.size, 1, clientId)
+  }
+
+  // A definitively lost creation claim skips the send; an unavailable claim store fails open.
+  const lostClientId = 'client-alert-claim-lost'
+  const lost = alertHarness(lostClientId)
+  const lostReport = await buildCompanyOperationsReport({ clientId: lostClientId, windowDays: 30 }, lost.options({
+    claimOperationsAlertInit: async () => ({ fresh: false, durable: true }),
+  }))
+  assert.equal(lostReport.ok, true)
+  assert.equal(lost.sends.length, 0)
+
+  const downClientId = 'client-alert-claim-down'
+  const down = alertHarness(downClientId)
+  const downReport = await buildCompanyOperationsReport({ clientId: downClientId, windowDays: 30 }, down.options({
+    claimOperationsAlertInit: async () => ({ fresh: false, durable: false, reason: 'claim_store_unavailable' }),
+  }))
+  assert.equal(downReport.ok, true)
+  assert.equal(down.sends.length, 1)
 })
 
 test('operations alert is a silent no-op without owner tokens and dedupes in memory when state storage fails', async () => {
