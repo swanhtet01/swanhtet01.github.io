@@ -444,6 +444,12 @@ const commerceSupportServiceActionLabels: Record<CommerceSupportServiceEventKind
 
 type ProductId = 'commerce' | 'production'
 
+// Hand-maintained duplicate of the canonical ecommerceCancellationMatchesCurrentShop
+// export in ecommerce-buying-lifecycle.ts (kept local rather than statically imported
+// so this file's deliberate dynamic-import code-splitting boundary for that module is
+// not broken). Currently byte-identical logic, confirmed by a real regression test --
+// see tools/test_ecommerce_order_coexistence.mjs. If you change this function, change
+// the canonical one too, or the two will silently drift.
 function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intent: EcommerceCancellationIntent) {
   const order = state.orders.find((candidate) => candidate.id === intent.orderId)
   const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)

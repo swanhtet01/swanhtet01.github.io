@@ -2311,6 +2311,11 @@ export function validateEcommerceCancellationIntent(value: unknown): EcommerceCa
   }
 }
 
+// CoreApp.tsx hand-maintains its own copy of this exact check (module-local, so its
+// dynamic-import code-splitting boundary for this file stays intact) rather than
+// importing it directly. Currently byte-identical logic, confirmed by a real
+// regression test -- see tools/test_ecommerce_order_coexistence.mjs. If you change
+// this function, change CoreApp.tsx's copy too, or the two will silently drift.
 export function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intentValue: EcommerceCancellationIntent) {
   const intent = validateEcommerceCancellationIntent(intentValue)
   const order = state.orders.find((candidate) => candidate.id === intent.orderId)
