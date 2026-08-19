@@ -9,12 +9,34 @@
 //
 // Security model:
 //   - HTTPS only, and the host (plus EVERY redirect hop) must not resolve to a private/loopback/
-//     link-local/CGNAT/cloud-metadata address — SSRF-hardened against DNS-rebinding + redirect bypass.
+//     link-local/CGNAT/cloud-metadata address at validation time — hardened against the redirect
+//     bypass (each hop is independently validated before being followed).
 //   - Request bodies capped at 512 KB.
 //   - Response bodies capped at 512 KB.
 //   - Redirects manually followed + re-validated, capped at 5.
 //   - Timeout: configurable, max 30 s, default 10 s.
 //   - No credentials stored — callers pass Authorization headers per-call.
+//
+// KNOWN GAP, not yet closed (found and verified 2026-08-19, not a false positive): validateUrl()
+// resolves the hostname via dns.lookup() and checks THAT address; the fetch() call a few lines
+// later does its OWN, independent DNS resolution inside Node's built-in undici, with nothing
+// pinning the connection to the address validateUrl() actually checked. An attacker controlling
+// DNS for the target host with a TTL=0 record can answer differently between the two lookups
+// (classic DNS-rebinding TOCTOU): validateUrl sees a public IP and passes, then fetch() connects
+// to whatever the second, unchecked lookup returns -- including 169.254.169.254 or 127.0.0.1. The
+// same gap reopens on every redirect hop for the same reason. Reachable via kernel/tools.mjs's
+// web_get, i.e. directly from agent-supplied URLs.
+// The correct fix is to resolve once, then force the actual TCP connection to that exact address
+// for both the initial request and every redirect hop (undici's Agent accepts a connect.lookup
+// override for exactly this). Not implemented here: this sandbox's Node build (v22.22.2) has no
+// node:undici built-in (CI/production run Node 24, per .github/workflows/*.yml, where behavior
+// could differ), and kernel/ currently has zero npm production dependencies (package.json is one
+// of CLAUDE.md's digest-bound files, so adding one requires the rehearsal cascade, which this
+// session's PG17 blocker makes impossible to complete safely right now). Shipping an unverified
+// pin-the-IP rewrite of this connector's core request path -- in a security-critical file, without
+// being able to test it against the actual runtime it deploys to -- would be worse than leaving
+// this documented. Fix this properly once either dependency addition is unblocked or a Node
+// built-in / http.Agent-based approach can be verified against Node 24.
 //
 // Capabilities:
 //   request({ url, method, headers, body, timeout })  -> { ok, status, headers, body, text }

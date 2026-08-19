@@ -128,6 +128,28 @@ actor string — actor strings are display copy and will be rewritten.
      code-generated, non-editable summary text.
 3. Founder-gated items stay parked until the founder acts: production
    activation runbook, v12/v13 to prod, pricing decisions, release dispatch.
+4. **Open, verified, NOT yet fixed** — do not re-diagnose, the finding is
+   solid; the blocker is tooling/environment, not uncertainty:
+   - **`infra-http.mjs` DNS-rebinding TOCTOU gap** (found in a backend audit
+     cycle 2026-08-19, documented in-file at the top of
+     `kernel/connectors/infra-http.mjs`). `validateUrl()`'s `dns.lookup()` and
+     the later `fetch()`'s own independent resolution are two separate
+     lookups with nothing pinning the connection to the validated address — a
+     TTL=0 attacker-controlled DNS record can answer differently between
+     them and land the actual connection on a private/metadata address,
+     reopening on every redirect hop too. Reachable via `kernel/tools.mjs`'s
+     `web_get` (agent-supplied URLs). The correct fix (pin the resolved IP
+     via undici's `Agent({ connect: { lookup } })`) could not be safely
+     implemented or tested this session: this sandbox's Node build (v22.22.2)
+     has no `node:undici` built-in while CI/production run Node 24 (may
+     differ), and `kernel/`'s `package.json` currently has zero production
+     dependencies — adding one is a digest-bound-file change requiring the
+     rehearsal cascade, which the standing PG17 blocker (see the gate
+     section above) makes impossible to complete right now. Do not ship an
+     unverified rewrite of this connector's core request path to close this
+     — fix it once either PG17 access unblocks the rehearsal cascade for a
+     real dependency addition, or a Node-24-verified `http.Agent`-based
+     approach can be tested against the actual deploy target.
 
 `hq/NOW.md` / `hq/WORKBOARD.md` carry an older live-state snapshot and are
 verifier-pinned; do not treat their coordination notes as current direction.

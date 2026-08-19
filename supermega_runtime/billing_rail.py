@@ -623,15 +623,25 @@ class BillingLedger:
         refunded past its total across multiple references -- each passing the
         per-refund check independently -- contradicting the guard's own stated
         invariant. Runs inside the held advisory lock, so no concurrent refund
-        can slip between this read and the append."""
+        can slip between this read and the append.
+
+        The invoiceDigest predicate is pushed into SQL so a workspace's entire
+        refund history (unbounded, grows across every invoice over the life of
+        the workspace) is not transferred and re-parsed in Python on every
+        single refund -- only this one invoice's rows cross the wire. The
+        Python-side filter below is kept as a defense-in-depth check, not
+        removed: it costs nothing once the row set is already narrow, and it
+        means this method stays correct even against a connection/fixture that
+        does not (yet) honor the new predicate."""
         cursor.execute(
             """
             select payload_json
             from app_private.billing_events
             where workspace_id = %s
               and event_type = 'billing.refund.recorded'
+              and payload_json ->> 'invoiceDigest' = %s
             """,
-            (workspace_id,),
+            (workspace_id, invoice_digest),
         )
         total = 0
         for row in cursor.fetchall():
