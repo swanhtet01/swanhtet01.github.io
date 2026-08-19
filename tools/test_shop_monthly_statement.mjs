@@ -115,6 +115,77 @@ check(statement.tiesToAgingBriefs === true, 'the statement reports that it ties 
   check(emptyStatement.pnl.keptBeforeOtherCostsMmk === 0, 'empty ledger → kept before other costs is zero')
   check(emptyStatement.balance.customersOweYouMmk === 0 && emptyStatement.balance.youOweSuppliersMmk === 0, 'empty ledger → nothing owed either way')
   check(emptyStatement.tiesToAgingBriefs === true, 'empty ledger trivially ties (0 = 0)')
+  check(emptyStatement.correctionsOutstanding?.correctionsOwedToYouMmk === 0
+    && emptyStatement.correctionsOutstanding?.correctionsYouOweMmk === 0,
+  'empty ledger → corrections outstanding both zero (section hidden)')
+}
+
+// 7. THE INVISIBLE-MONEY CASE: a debit correction on a fully PAID order posts
+// DR correction_receivable (the customer owes MORE), but AR aging and
+// "Customers owe you" both read only payment-pending orders / the
+// accounts_receivable role -- so without a dedicated surface the 1,200 MMK is
+// booked correctly and shown nowhere. correctionsOutstanding surfaces it.
+{
+  const debitState = {
+    orders: [
+      { id: 'ORD-PAID-DEBIT', customer: 'U Kyaw', payment: 'Cash', total: 20000, paymentStatus: 'reconciled', refundStatus: 'none', status: 'completed', createdAt: '2026-07-15T04:00:00.000Z', paymentReconciledAt: '2026-07-15T05:00:00.000Z', paymentReconciliationActionId: 'ACT-RECON-D1', paymentReconciledBy: 'Swan', paymentEvidenceReference: 'EV-RECON-D1', calculation: cal(20000, 0),
+        corrections: [{ documentId: 'CORR-DEBIT-1', kind: 'debit', createdAt: '2026-07-17T03:00:00.000Z', actor: 'Swan', evidenceReference: 'EV-CORR-D1', sourceCalculationDigest: DIGEST, calculation: { subtotalMmk: 1000, taxMmk: 200, totalMmk: 1200 } }] },
+    ],
+    closes: [
+      { id: 'CLOSE-DEBIT', businessDate: '2026-07-15', orderIds: ['ORD-PAID-DEBIT'], total: 20000, actionId: 'ACT-CLOSE-D1', operator: 'Swan', evidenceReference: 'EV-CLOSE-D1' },
+    ],
+    purchaseOrders: [],
+  }
+  const debitJournal = buildShopLedgerJournal(debitState)
+  check(debitJournal !== null, 'debit-correction journal builds')
+  const debitAr = projectShopArAgingSummary(debitState, ASOF)
+  const debitAp = projectShopApAgingSummary(debitState, ASOF)
+  const debitStatement = projectShopMonthlyStatement(debitJournal, debitAr, debitAp, { asOf: ASOF })
+  check(debitAr.totalOutstandingMmk === 0, `paid order → AR aging shows nothing, got ${debitAr.totalOutstandingMmk}`)
+  check(debitStatement.balance.customersOweYouMmk === 0, '"Customers owe you" stays untouched at 0 (visibility-only change)')
+  check(debitStatement.correctionsOutstanding?.correctionsOwedToYouMmk === 1200,
+    `debit correction on a paid order surfaces 1200 MMK owed to you, got ${debitStatement.correctionsOutstanding?.correctionsOwedToYouMmk}`)
+  check(debitStatement.correctionsOutstanding?.correctionsYouOweMmk === 0,
+    'a debit correction posts nothing on the payable side')
+  check(debitStatement.tiesToAgingBriefs === true, 'the existing tie-out is not modified by the corrections surface')
+  const debitTb = computeLedgerTrialBalance(debitJournal)
+  check(debitStatement.correctionsOutstanding?.correctionsOwedToYouMmk === ledgerRoleBalanceMmk(debitTb, 'correction_receivable'),
+    'the surfaced amount is exactly the correction_receivable role balance, no new computation')
+}
+
+// 8. A credit correction surfaces on the payable side. The base fixture's
+// CORR-1 (1,000 + 200 tax) posts CR correction_payable 1,200.
+{
+  check(statement.correctionsOutstanding?.correctionsYouOweMmk === 1200,
+    `credit correction surfaces 1200 MMK you owe back, got ${statement.correctionsOutstanding?.correctionsYouOweMmk}`)
+  check(statement.correctionsOutstanding?.correctionsOwedToYouMmk === 0,
+    'no debit corrections in the base fixture → nothing owed to you')
+  const tb = computeLedgerTrialBalance(journal)
+  check(statement.correctionsOutstanding?.correctionsYouOweMmk === ledgerRoleBalanceMmk(tb, 'correction_payable'),
+    'the payable surface is exactly the correction_payable role balance')
+  // The existing tie-out and its inputs are untouched by the new section.
+  check(statement.balance.customersOweYouMmk === arAging.totalOutstandingMmk && statement.tiesToAgingBriefs === true,
+    'adding the corrections surface leaves the AR tie-out exactly as before')
+}
+
+// 9. A ledger with activity but zero corrections keeps both fields at zero so
+// the owner surface hides the section.
+{
+  const noCorrectionState = {
+    orders: [
+      { id: 'ORD-PLAIN', customer: 'Ma Aye', payment: 'Cash', total: 8000, paymentStatus: 'reconciled', refundStatus: 'none', status: 'completed', createdAt: '2026-07-15T06:00:00.000Z', calculation: cal(8000, 0) },
+    ],
+    closes: [
+      { id: 'CLOSE-PLAIN', businessDate: '2026-07-15', orderIds: ['ORD-PLAIN'], total: 8000, actionId: 'ACT-CLOSE-P1', operator: 'Swan', evidenceReference: 'EV-CLOSE-P1' },
+    ],
+    purchaseOrders: [],
+  }
+  const plainJournal = buildShopLedgerJournal(noCorrectionState)
+  const plainStatement = projectShopMonthlyStatement(plainJournal, projectShopArAgingSummary(noCorrectionState, ASOF), projectShopApAgingSummary(noCorrectionState, ASOF), { asOf: ASOF })
+  check(plainStatement.hasActivity === true, 'the no-correction fixture has activity')
+  check(plainStatement.correctionsOutstanding?.correctionsOwedToYouMmk === 0
+    && plainStatement.correctionsOutstanding?.correctionsYouOweMmk === 0,
+  'no corrections → both outstanding fields are zero (section hidden)')
 }
 
 console.log(JSON.stringify({ ok: true, checks }))

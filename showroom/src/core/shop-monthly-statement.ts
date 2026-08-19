@@ -44,6 +44,19 @@ export type ShopTillVarianceOwner = {
   tillDifferenceMmk: number // positive = the till was short under this owner
 }
 
+// Outstanding invoice-correction balances, surfaced so the money is visible.
+// A debit correction books DR correction_receivable (the customer owes MORE
+// than the original invoice); a credit correction books CR correction_payable
+// (the shop owes the customer back). Neither role feeds "Customers owe you"
+// (accounts_receivable) or the AR aging brief, so without this section a
+// correction on an already-paid order is booked correctly but shown nowhere.
+// VISIBILITY ONLY: this reads the existing role balances verbatim -- how these
+// balances are settled or cleared is deliberately out of scope here.
+export type ShopCorrectionsOutstanding = {
+  correctionsOwedToYouMmk: number // correction_receivable position balance
+  correctionsYouOweMmk: number // correction_payable position balance
+}
+
 export type ShopMonthlyStatement = {
   schema: typeof SHOP_MONTHLY_STATEMENT_SCHEMA
   currency: 'MMK'
@@ -55,6 +68,7 @@ export type ShopMonthlyStatement = {
   entryCount: number
   pnl: ShopMonthlyStatementPnl
   balance: ShopMonthlyStatementBalance
+  correctionsOutstanding: ShopCorrectionsOutstanding
   tillVarianceOwners: ShopTillVarianceOwner[]
   tiesToAgingBriefs: boolean
 }
@@ -128,6 +142,10 @@ export function projectShopMonthlyStatement(
   const customersOweYouMmk = ledgerRoleBalanceMmk(positionBalance, 'accounts_receivable')
   const youOweSuppliersMmk = ledgerRoleBalanceMmk(positionBalance, 'accounts_payable')
   const taxCollectedNotPaidMmk = ledgerRoleBalanceMmk(positionBalance, 'tax_payable')
+  // Corrections outstanding read the SAME position balance, alongside -- never
+  // inside -- customersOweYouMmk, so the AR/AP tie-out below is untouched.
+  const correctionsOwedToYouMmk = ledgerRoleBalanceMmk(positionBalance, 'correction_receivable')
+  const correctionsYouOweMmk = ledgerRoleBalanceMmk(positionBalance, 'correction_payable')
 
   const tiesToAgingBriefs = customersOweYouMmk === arAging.totalOutstandingMmk
     && youOweSuppliersMmk === apAging.totalPayableMmk
@@ -149,6 +167,7 @@ export function projectShopMonthlyStatement(
       youOweSuppliersMmk,
       taxCollectedNotPaidMmk,
     },
+    correctionsOutstanding: { correctionsOwedToYouMmk, correctionsYouOweMmk },
     tillVarianceOwners: tillVarianceOwners(periodEntries),
     tiesToAgingBriefs,
   }

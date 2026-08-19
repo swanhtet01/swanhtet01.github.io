@@ -87,6 +87,21 @@ export function ShopMonthlyStatement({ statement, download = null }: ShopMonthly
       <small className="panel-note">&ldquo;Customers owe you&rdquo; and &ldquo;You owe suppliers&rdquo; match your receivables and payables reports exactly.</small>
     </div>
 
+    {statement.correctionsOutstanding.correctionsOwedToYouMmk !== 0 || statement.correctionsOutstanding.correctionsYouOweMmk !== 0 ? <div className="statement-block" aria-label="Invoice corrections outstanding">
+      <h3>Invoice corrections outstanding</h3>
+      <div className="statement-rows">
+        {statement.correctionsOutstanding.correctionsOwedToYouMmk !== 0 ? <span className="statement-row">
+          <small>Invoice corrections owed to you</small>
+          <b>{formatMmk(statement.correctionsOutstanding.correctionsOwedToYouMmk)}</b>
+        </span> : null}
+        {statement.correctionsOutstanding.correctionsYouOweMmk !== 0 ? <span className="statement-row">
+          <small>Invoice corrections you owe</small>
+          <b>{formatMmk(statement.correctionsOutstanding.correctionsYouOweMmk)}</b>
+        </span> : null}
+      </div>
+      <small className="panel-note">From corrected invoices. These amounts are not part of &ldquo;Customers owe you&rdquo; or &ldquo;You owe suppliers&rdquo; &mdash; they are shown here on their own so the money stays visible.</small>
+    </div> : null}
+
     {statement.tillVarianceOwners.length ? <div className="statement-block" aria-label="Till differences by operator">
       <h3>Till differences by operator</h3>
       <div className="statement-rows">
