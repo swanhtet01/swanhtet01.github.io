@@ -6312,6 +6312,41 @@ if (!productionJobsContract.includes('Jobs to finish')
   || !productionJobsContract.includes('Results are append-only.')
   || !productionJobsContract.includes('{job.id} · {job.product} · {job.line}')
   || !coreSource.includes('No active jobs. Add a job below to start recording output.')) fail('production_jobs_not_task_first')
+// Plant visual job board (roadmap P1): the Jobs panel offers a keyboard-reachable
+// list ⇄ board toggle (aria-pressed, list stays the default), the toggle persists
+// per device under a key registered in BOTH storage lifecycle registries, and the
+// board is display-and-navigation only — due-date lanes over the same pre-sorted
+// activeJobs, cards opening the same Record output / Change plan actions the list
+// offers. Prefix pins where growth is expected.
+if (!coreSource.includes("const PLANT_JOB_VIEW_KEY = 'supermega.plant.job-view.v1'")
+  || !coreSource.includes("useStoredState<PlantJobView>(PLANT_JOB_VIEW_KEY, 'list', normalizePlantJobView)")
+  || !coreSource.includes("return value === 'board' ? 'board' : 'list'")
+  || !productionJobsContract.includes('className="plant-job-view-toggle"')
+  || !productionJobsContract.includes("aria-pressed={plantJobView === 'list'}")
+  || !productionJobsContract.includes("aria-pressed={plantJobView === 'board'}")
+  || !productionJobsContract.includes("{plantJobView === 'board'")
+  || !productionJobsContract.includes('<PlantJobBoard disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock}')
+  || !coreSource.includes('function PlantJobBoard(')
+  || !coreSource.includes('function plantJobBoardLaneId(')
+  // Lane boundaries are EXCLUSIVE at the upper edge: a midnight deadline displays
+  // with the next day's date, so it belongs to the next lane (PR #484 review).
+  || !coreSource.includes("if (due < endOfToday.getTime()) return 'today'")
+  || !coreSource.includes("if (due < endOfWeek.getTime()) return 'week'")
+  || !coreSource.includes('function PlantJobActionLinks(')
+  || !coreSource.includes('function plantJobAccounting(')
+  || !coreSource.includes("['overdue', 'Overdue'],")
+  || !coreSource.includes("['today', 'Today'],")
+  || !coreSource.includes("['week', 'This week'],")
+  || !coreSource.includes("['later', 'Later'],")
+  || !coreSource.includes("['undated', 'No due date'],")
+  || !coreSource.includes('aria-label="Job board grouped by due date"')
+  || !coreSource.includes('className="plant-job-board-lane" data-lane={id}')
+  || !localWorkspaceStorageSource.includes("'supermega.plant.job-view.v1'")
+  || !companyBackupSource.includes("'supermega.plant.job-view.v1'")
+  || !coreCssSource.includes('.plant-job-view-toggle {')
+  || !coreCssSource.includes('.plant-job-board {')
+  || !coreCssSource.includes('.plant-job-board-lane {')
+  || !coreCssSource.includes('.plant-job-card {')) fail('plant_job_board_view_missing')
 if (!productionPageContract.includes('const outputJobSelectRef = useRef<HTMLSelectElement>(null)')
   || !productionPageContract.includes('const [outputOpen, setOutputOpen] = useState(false)')
   || !productionPageContract.includes('const [materialGuideOpen, setMaterialGuideOpen] = useState(false)')

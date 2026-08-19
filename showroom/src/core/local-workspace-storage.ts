@@ -40,6 +40,11 @@ const exactWorkspaceKeys = new Set([
   // Analytics Step 6 persistence target. Device-local usage data — not a business record, not portable.
   // Registered here so "Reset this device" actually erases it instead of leaving stale counters behind.
   'supermega.hq.local-metrics.v1',
+  // Plant "Jobs to finish" view preference (list vs due-date board, CoreApp.tsx). A UI preference
+  // about THIS device, not a business record — registered so a device reset clears it, and
+  // deliberately NOT portable in company-backup.ts, the same classification as the local metrics
+  // key above.
+  'supermega.plant.job-view.v1',
   // Order-intake correction evidence: digest-only records of where AI got a channel order wrong and
   // the operator fixed it. It holds no message text and no corrected values, but it is still a record
   // OF this shop's messages, so "Reset this device" must reach it — a shop that asks for a clean
