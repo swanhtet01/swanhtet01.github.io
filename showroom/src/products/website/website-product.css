@@ -57,8 +57,6 @@
   background: #090f16;
   color: var(--website-ink);
 }
-.theme-dark .website-topbar { background: rgba(6,10,15,.9); }
-.theme-dark .website-sidebar { background: rgba(7,11,17,.96); }
 .theme-dark .website-panel-actions { background: var(--website-panel); }
 .theme-dark .website-preview-toolbar { background: var(--website-panel); }
 .theme-dark .website-notice { border-color: rgba(86,240,193,.2); background: rgba(12,18,26,.96); }
@@ -94,36 +92,6 @@
   background: rgba(11, 116, 94, .18);
 }
 
-.website-skip {
-  position: fixed;
-  z-index: 100;
-  top: -64px;
-  left: 18px;
-  border: 1px solid var(--website-green);
-  border-radius: 5px;
-  padding: 9px 12px;
-  background: var(--website-panel);
-  color: var(--website-ink);
-  font-size: 11px;
-  text-decoration: none;
-}
-
-.website-skip:focus {
-  top: 10px;
-}
-
-.website-topbar {
-  height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  border-bottom: 1px solid var(--website-line);
-  padding: 0 18px;
-  background: rgba(246, 244, 238, .92);
-  backdrop-filter: blur(18px);
-}
-
 .website-brand,
 .website-runtime,
 .website-preview-controls,
@@ -131,51 +99,6 @@
 .website-gate-actions {
   display: flex;
   align-items: center;
-}
-
-.website-brand {
-  min-width: 0;
-  gap: 9px;
-  color: inherit;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.website-brand > span {
-  color: var(--website-green);
-  font-family: var(--website-mono);
-  font-size: 18px;
-  font-weight: var(--font-weight-black);
-  letter-spacing: -.14em;
-}
-
-.website-brand > strong {
-  font-size: 10px;
-  font-weight: var(--font-weight-black);
-  letter-spacing: .11em;
-}
-
-.website-brand > i {
-  color: var(--website-quiet);
-  font-style: normal;
-}
-
-.website-brand > b {
-  color: var(--website-muted);
-  font-family: var(--website-mono);
-  font-size: 9px;
-  letter-spacing: .08em;
-}
-
-.website-runtime {
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.website-runtime > small {
-  color: var(--website-quiet);
-  font-family: var(--website-mono);
-  font-size: 8px;
 }
 
 .website-local-badge,
@@ -196,12 +119,6 @@
   white-space: nowrap;
 }
 
-.website-local-badge {
-  border-color: rgba(11, 116, 94, .2);
-  background: var(--website-green-soft);
-  color: var(--website-green);
-}
-
 .website-local-badge > i,
 .website-status::before {
   width: 5px;
@@ -217,153 +134,6 @@
   grid-template-columns: 224px minmax(0, 1fr);
 }
 
-.website-sidebar {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--website-line);
-  padding: 17px 13px 14px;
-  background: rgba(238, 244, 239, .96);
-}
-
-.website-site-record {
-  display: grid;
-  gap: 4px;
-  border-bottom: 1px solid var(--website-line);
-  padding: 0 8px 15px;
-}
-
-.website-site-record > span,
-.website-page-index > header > span {
-  color: var(--website-quiet);
-  font-family: var(--website-mono);
-  font-size: 7px;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: .09em;
-  text-transform: uppercase;
-}
-
-.website-site-record > strong {
-  overflow: hidden;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.website-site-record > small {
-  color: var(--website-quiet);
-  font-size: 8px;
-}
-
-.website-page-index {
-  min-height: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  margin-top: 20px;
-}
-
-.website-page-index > header {
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 7px;
-}
-
-.website-page-index > header > button {
-  width: 23px;
-  height: 23px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--website-line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--website-green);
-  font-family: var(--website-mono);
-  line-height: 1;
-}
-
-.website-page-index > header > button:hover {
-  border-color: var(--website-green);
-  background: var(--website-green-soft);
-}
-
-.website-page-index > div {
-  min-height: 0;
-  overflow: auto;
-  scrollbar-color: rgba(11, 116, 94, .26) transparent;
-}
-
-.website-page-index > div > button {
-  width: 100%;
-  min-height: 50px;
-  display: grid;
-  grid-template-columns: 7px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  border: 0;
-  border-bottom: 1px solid var(--website-line);
-  padding: 6px 7px;
-  background: transparent;
-  color: var(--website-ink);
-  text-align: left;
-}
-
-.website-page-index > div > button:hover,
-.website-page-index > div > button[aria-current="true"] {
-  background: rgba(11, 116, 94, .07);
-}
-
-.website-page-index > div > button > i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--website-quiet);
-}
-
-.website-page-index > div > button > i.is-ready {
-  background: var(--website-green);
-  box-shadow: none;
-}
-
-.website-page-index > div > button > span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.website-page-index > div > button strong,
-.website-page-index > div > button small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.website-page-index > div > button strong {
-  font-size: 10px;
-}
-
-.website-page-index > div > button small {
-  color: var(--website-quiet);
-  font-family: var(--website-mono);
-  font-size: 7px;
-}
-
-.website-page-index > div > button b {
-  color: var(--website-quiet);
-  font-family: var(--website-mono);
-  font-size: 7px;
-}
-
-.website-sidebar-foot {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px;
-  border-top: 1px solid var(--website-line);
-  padding: 13px 7px 0;
-}
-
 .website-sidebar-foot > span,
 .website-boundary-note > span,
 .website-empty > span,
@@ -372,13 +142,6 @@
   font-family: var(--website-mono);
   font-size: 11px;
   font-weight: var(--font-weight-black);
-}
-
-.website-sidebar-foot > p {
-  margin: 0;
-  color: var(--website-quiet);
-  font-size: 8px;
-  line-height: 1.5;
 }
 
 .website-main {
@@ -399,27 +162,6 @@
 
 .website-heading > div:first-child {
   min-width: 0;
-}
-
-.website-mobile-pane-controls {
-  display: none;
-}
-
-.website-mobile-pane-controls > button {
-  min-height: 34px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  padding: 0 13px;
-  background: transparent;
-  color: var(--website-quiet);
-  font-size: 10px;
-  font-weight: var(--font-weight-bold);
-}
-
-.website-mobile-pane-controls > button[aria-pressed="true"] {
-  border-color: rgba(11, 116, 94, .2);
-  background: var(--website-green-soft);
-  color: var(--website-green);
 }
 
 .website-eyebrow {
@@ -1296,71 +1038,6 @@
   font-size: 7px;
 }
 
-.website-handoff-action {
-  min-height: 58px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border-top: 1px solid var(--website-line);
-  padding: 10px 11px;
-}
-
-.website-handoff-action > div:first-child {
-  flex: 1 1 260px;
-  min-width: 0;
-}
-
-.website-handoff-action > div:last-child {
-  display: flex;
-  flex: 1 1 260px;
-  flex-wrap: wrap;
-  align-items: end;
-  justify-content: flex-end;
-  min-width: 0;
-  gap: 6px;
-}
-
-.website-handoff-controls label {
-  display: grid;
-  gap: 3px;
-  color: var(--website-muted);
-  font-size: 9px;
-  font-weight: var(--font-weight-bold);
-}
-
-.website-handoff-controls input {
-  width: 104px;
-  min-height: 40px;
-  border: 1px solid var(--website-line-strong);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, .88);
-  color: var(--website-ink);
-  padding: 0 8px;
-  font: 650 11px/1.2 var(--website-sans);
-}
-
-.website-handoff-controls label:nth-child(2) input {
-  width: 58px;
-}
-
-.website-handoff-action strong {
-  font-size: 9px;
-}
-
-.website-handoff-action p {
-  margin: 4px 0 0;
-  color: var(--website-muted);
-  font-size: 7px;
-}
-
-.website-handoff-action a {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
-}
-
 .website-publish-history {
   border-top: 1px solid var(--website-line);
   padding: 0 10px;
@@ -1723,57 +1400,9 @@
     overflow: visible;
   }
 
-  .website-topbar {
-    position: sticky;
-    z-index: 40;
-    top: 0;
-  }
-
   .website-shell {
     height: auto;
     display: block;
-  }
-
-  .website-sidebar {
-    min-height: 0;
-    display: grid;
-    grid-template-columns: 180px minmax(280px, .75fr) minmax(310px, 1fr);
-    gap: 10px;
-    border-right: 0;
-    border-bottom: 1px solid var(--website-line);
-    padding: 10px 12px;
-  }
-
-  .website-site-record {
-    align-content: center;
-    border-right: 1px solid var(--website-line);
-    border-bottom: 0;
-    padding: 0 12px 0 0;
-  }
-
-  .website-page-index {
-    margin: 0;
-  }
-
-  .website-page-index > header {
-    display: none;
-  }
-
-  .website-page-index > div {
-    display: flex;
-    overflow-x: auto;
-  }
-
-  .website-page-index > div > button {
-    width: 125px;
-    min-width: 125px;
-    min-height: 44px;
-    border-right: 1px solid var(--website-line);
-    border-bottom: 0;
-  }
-
-  .website-sidebar-foot {
-    display: none;
   }
 
   .website-main {
@@ -1786,28 +1415,10 @@
     min-height: 78px;
   }
 
-  .website-mobile-pane-controls {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    border: 1px solid var(--website-line);
-    border-radius: 6px;
-    padding: 3px;
-    background: var(--website-panel);
-  }
-
   .website-workspace-grid,
   .website-workspace-grid.view-publish {
     display: grid;
     grid-template-columns: 1fr;
-  }
-
-  .website-workspace-grid.mobile-pane-edit > .website-preview-panel {
-    display: none;
-  }
-
-  .website-workspace-grid.mobile-pane-preview > :not(.website-preview-panel) {
-    display: none;
   }
 
   .website-editor-panel,
@@ -1824,107 +1435,6 @@
     max-width: none;
     margin: -52px auto 10px;
   }
-}
-
-@media (max-width: 640px) {
-  .website-topbar {
-    padding-inline: 12px;
-  }
-
-  .website-brand {
-    min-height: 44px;
-  }
-
-  .website-brand > i,
-  .website-brand > b,
-  .website-runtime > small {
-    display: none;
-  }
-
-  .website-local-badge {
-    padding-inline: 6px;
-  }
-
-  .website-sidebar {
-    width: 100%;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 7px;
-    overflow: hidden;
-  }
-
-  .website-site-record {
-    display: none;
-  }
-
-  .website-page-index > div > button {
-    width: 112px;
-    min-width: 112px;
-  }
-
-  .website-page-index,
-  .website-page-index > div {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .website-page-index > div {
-    overflow-x: auto;
-  }
-
-  .website-mobile-pane-controls {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .website-mobile-pane-controls > button {
-    min-height: 44px;
-  }
-
-  .website-main.mobile-pane-edit .website-preview-controls {
-    display: none;
-  }
-
-  .website-handoff-action {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .website-handoff-action > div:last-child {
-    align-items: end;
-    flex-wrap: wrap;
-  }
-
-  .website-handoff-action strong {
-    font-size: 14px;
-  }
-
-  .website-handoff-action p {
-    font-size: 12px;
-    line-height: 1.45;
-  }
-
-  .website-handoff-controls label {
-    font-size: 12px;
-  }
-
-  .website-handoff-controls input,
-  .website-handoff-controls .website-button {
-    min-height: 44px;
-    font-size: 12px;
-  }
-
-  .website-handoff-controls label:first-child {
-    flex: 1 1 150px;
-  }
-
-  .website-handoff-controls label:first-child input {
-    width: 100%;
-  }
-
 }
 
 /* ============================================================================
@@ -1945,7 +1455,25 @@
    anchors -- gen-one's first `@media (max-width: 640px)` and its only
    `@media (prefers-reduced-motion` -- moved with this batch, so the slice
    is re-anchored in the same PR). Preview-frame hexes below are permanently
-   exempt from tokenization (phase-2 item 12 ruling). */
+   exempt from tokenization (phase-2 item 12 ruling).
+
+   P3.4 (2026-08-20): the catalogued-dead remainder is deleted -- 625 source
+   lines across two family-contiguous chunks (chunk 1: the workspace-chrome
+   families incl. the live-region Task-first-era rules section 6 of the
+   catalogue under-enumerated; chunk 2: the handoff family and the emptied
+   gen-one max-640 block). Family-contiguous, not region-contiguous: the
+   theme surface contract fails a chunk that deletes a family's .theme-dark
+   override while any of its light surfaces survives elsewhere, so each
+   family left whole. Every deleted selector was re-verified at zero TSX/TS
+   consumers immediately before deletion (dynamic is-, view-, theme-
+   construction checked). What remains above this comment (:1-1439) is the
+   gen-one base rules for still-rendered classes -- byte-identical originals
+   whose live-region successors win by cascade order -- plus four mixed
+   selector lists whose dead members ride alongside live ones; retiring
+   those is P3.9-attrition or consolidation work, not dead-rule deletion.
+   The hex ratchet stayed at 60: the dead rules carried rgba()/var() only,
+   so DESIGN-PROGRAM's "52 gen-one hex vanish with P3.4" expectation was
+   wrong -- those literals sit in the surviving base rules. */
 
 .website-disclosure > summary::-webkit-details-marker {
   display: none;
@@ -2220,81 +1748,6 @@
 .website-publish-history code,
 .website-preview-toolbar code {
   font-family: var(--website-code);
-}
-
-.website-skip {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-}
-
-.website-topbar {
-  height: 64px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 20px;
-  padding: 0 24px;
-  background: rgba(255, 255, 255, .96);
-  backdrop-filter: blur(12px);
-}
-
-.website-brand {
-  min-height: 44px;
-  gap: 10px;
-}
-
-.website-brand > span {
-  font-size: 19px;
-}
-
-.website-brand > strong {
-  font-size: 12px;
-  letter-spacing: .08em;
-}
-
-.website-brand > b {
-  border-left: 1px solid var(--website-line);
-  padding-left: 10px;
-  color: var(--website-ink);
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.website-site-summary {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.website-site-summary > strong {
-  overflow: hidden;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.website-product-label,
-.website-runtime-label-short {
-  display: none;
-}
-
-.website-site-summary > small {
-  flex: 0 0 auto;
-  color: var(--website-quiet);
-}
-
-.website-runtime {
-  gap: 10px;
-}
-
-.website-runtime > small {
-  color: var(--website-quiet);
-  font-family: inherit;
-  font-size: 12px;
 }
 
 .website-local-badge,
@@ -2961,55 +2414,6 @@
     overflow: visible;
   }
 
-  .website-topbar {
-    position: sticky;
-    z-index: 40;
-    top: 0;
-    height: 58px;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 10px;
-    padding: 0 14px;
-  }
-
-  .website-brand {
-    min-height: 44px;
-  }
-
-  .website-site-summary > small,
-  .website-runtime > small {
-    display: none;
-  }
-
-  .website-brand > b {
-    display: none;
-  }
-
-  .website-site-summary {
-    display: block;
-  }
-
-  .website-product-label,
-  .website-runtime-label-short {
-    display: inline;
-  }
-
-  .website-site-label,
-  .website-runtime-label {
-    display: none;
-  }
-
-  .website-site-summary > strong {
-    display: block;
-    font-size: 13px;
-    text-align: center;
-  }
-
-  .website-local-badge {
-    min-height: 30px;
-    padding-inline: 8px;
-    font-size: 11px;
-  }
-
   .website-shell {
     height: auto;
   }
@@ -3164,16 +2568,6 @@
 }
 
 @media (max-width: 640px) {
-  .website-brand > b {
-    display: none;
-  }
-
-  .website-local-badge {
-    max-width: 108px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .website-panel-head {
     min-height: 0;
@@ -4109,7 +3503,6 @@
 .website-lead-list article small { font-size: var(--font-size-sm); }
 .website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
 .website-business-controls > summary small, .website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
-.website-page-index > div > button small { font-size: var(--font-size-xs); }
 
 /* Design phase 1: un-trap the editor scroll on phones — mirrors the
    site-settings opt-out; only the preview iframe genuinely needs a viewport. */
@@ -4129,22 +3522,22 @@
    Design phase 2 — item 12 repair: the inert --website-quiet duplicate.
    Three `.website-product` blocks declare this file's aliases at identical
    specificity (0,0,1,0): the phase-1 block at :1-69, the live "Task-first
-   workspace shell" block at :2175-2195, and this shell block at :3254-3261
+   workspace shell" block at :1703-1723, and this shell block at :2648-2655
    (which does not touch --website-quiet at all). For a property declared on
    the SAME selector more than once at equal specificity, the cascade takes
    the LAST one in source order — so :7's `var(--core-quiet, #5f6f67)` (the
-   WCAG-AA-fixing tokenization) loses to :2181's hardcoded `#5f6d65` in light
+   WCAG-AA-fixing tokenization) loses to :1709's hardcoded `#5f6d65` in light
    mode. (An earlier read of this bug named .theme-dark's #7a8a9c override at
    :42 as the second declaration; that is a different, higher-specificity
    selector -- .theme-dark .website-product -- that legitimately wins in dark
    mode on its own merits and was not the defect. The live light-mode
-   collision is between :7 and :2181, both bare `.website-product`.)
+   collision is between :7 and :1709, both bare `.website-product`.)
    #5f6d65 and #5f6f67 read as nearly the same grey, so this was never a
    visible regression -- but it is exactly the var()-resolves-at-declaration-
    site trap the shadow ramp hit once already (see the .theme-dark override
    at EOF of core-app.css), and it makes the token silently dead. Rule 6
-   fences deletion of the phase-1 "generation-one" block (:1-2145; :1-1929 since P3.3 re-homed the live movers) until
-   phase 3's pin cataloguing, so :2181's `#5f6d65` stays byte-identical in
+   fences deletion of the phase-1 "generation-one" block (:1-2145; :1-1929 since P3.3 re-homed the live movers; :1-1439 since P3.4 deleted the catalogued-dead remainder) until
+   phase 3's pin cataloguing, so :1709's `#5f6d65` stays byte-identical in
    place; this later same-specificity declaration is what actually wins the
    cascade and restores the token. */
 .website-product {
@@ -4156,7 +3549,7 @@
      The earlier bare `.website-product` blocks disagree on the twelve custom
      properties below (thirteen counting --website-quiet above): the gen-one
      block at :1-31 declares core aliases, the live "Task-first workspace
-     shell" block at :2175-2195 redeclares each as a literal 2,174 lines later (post-P3.3 numbering)
+     shell" block at :1703-1723 redeclares each as a literal 1,702 lines later (post-P3.4 numbering)
      and wins on cascade order — which is why token edits applied to the :1
      block silently no-op. This EOF block is now the single authoritative
      declaration site: it restates every disputed property with the value that
@@ -4171,49 +3564,49 @@
        - the parked-literal shape where the authored value DIFFERS from core:
          `var(--website-<name>-authored, <literal>)`. The --website-*-authored
          tokens are deliberately undefined, so each line computes to its
-         fallback — the exact :2175-2195 value — while the literal sits in the
+         fallback — the exact :1703-1723 value — while the literal sits in the
          P3.0 ratchet's var()-fallback carve-out. Actually retiring one of
          these literals onto a core token is a later batch's visual decision:
          make it by editing THIS block (it is unpinned); the originals above
          stay byte-identical in place (Rules 3 and 6). */
 
-  /* Overrides :2 (gen-one alias onto --core-bg) and :2176 (live literal, the
+  /* Overrides :2 (gen-one alias onto --core-bg) and :1704 (live literal, the
      pre-P3.2 winner; differs from --core-bg #f6f4ee, so the literal is parked). */
   --website-bg: var(--website-bg-authored, #f3f5f2);
-  /* Overrides :3 (gen-one alias) and :2177 (live literal #ffffff, the pre-P3.2
+  /* Overrides :3 (gen-one alias) and :1705 (live literal #ffffff, the pre-P3.2
      winner). --core-panel is #ffffff in light — token-equal, so the alias is
      value-preserving. */
   --website-panel: var(--core-panel, #ffffff);
-  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :2178
+  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :1706
      (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-panel-raised: var(--website-panel-raised-authored, #f7f9f7);
-  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :2179 (live
+  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :1707 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-ink: var(--website-ink-authored, #17211c);
-  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :2180 (live
+  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :1708 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-muted: var(--website-muted-authored, #4d5d54);
-  /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :2182
+  /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :1710
      (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-line: var(--website-line-authored, #dce3de);
   /* Overrides :9 (gen-one alias onto --core-line-strong, an rgba value) and
-     :2183 (live literal, the pre-P3.2 winner; differs from core, parked). */
+     :1711 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-line-strong: var(--website-line-strong-authored, #c7d1ca);
-  /* Overrides :10 (gen-one alias) and :2184 (live literal #0b745e, the
+  /* Overrides :10 (gen-one alias) and :1712 (live literal #0b745e, the
      pre-P3.2 winner). --core-green is #0b745e in light — token-equal, so the
      alias is value-preserving. */
   --website-green: var(--core-green, #0b745e);
   /* Overrides :11 (gen-one alias onto --core-green-soft, an rgba value) and
-     :2185 (live literal, the pre-P3.2 winner; differs from core, parked). */
+     :1713 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-green-soft: var(--website-green-soft-authored, #e8f4ef);
-  /* Overrides :15 (gen-one alias onto --core-warn #946200) and :2186 (live
+  /* Overrides :15 (gen-one alias onto --core-warn #946200) and :1714 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-warn: var(--website-warn-authored, #8a5a00);
-  /* Overrides :16 (gen-one alias onto --core-danger #b42336) and :2187 (live
+  /* Overrides :16 (gen-one alias onto --core-danger #b42336) and :1715 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-danger: var(--website-danger-authored, #aa273b);
-  /* Overrides :17 (gen-one literal mono stack) and :2190 (live alias onto
+  /* Overrides :17 (gen-one literal mono stack) and :1718 (live alias onto
      --website-sans, the pre-P3.2 winner — the de-terminal-look decision).
-     --website-sans itself is undisputed: it is declared only at :2188. */
+     --website-sans itself is undisputed: it is declared only at :1716. */
   --website-mono: var(--website-sans);
 }
