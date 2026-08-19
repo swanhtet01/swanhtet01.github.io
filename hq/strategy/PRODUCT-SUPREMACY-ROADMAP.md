@@ -108,15 +108,20 @@ Messenger bot, unreviewed external actions, CRM/workflow-suite duplication.
 
 ## 3. Sequence (this cycle → next)
 
-1. Land this cycle's three builds: S1 barcode, E1 photos, F1 bottom-nav —
-   each behind the full local gate, PR'd and merged separately.
-2. E2 channel refresh (small, ships with or right after this batch).
-3. S2 merchant payment QR (small-medium, next batch; pairs naturally with S1
-   in the counter flow).
-4. F2 measurement pass: throttled-CPU profile of the counter flow on a
-   Galaxy-class profile; fix what the numbers name, not what taste guesses.
-5. S3 loyalty + P1 job board: next medium items after the above are green.
-6. AI item 1 (order-intake eval) can run in parallel any time — it is
+Items 1-5 of the original sequence all SHIPPED 2026-08-19 (S1/E1/F1/E2 #459,
+S2 #465, S3 PR1+PR2 #469/#472/#482, P1 #484, F2 measured #481) — see the
+status column in §1 for each. The operative forward sequence is now:
+
+1. F2 follow-through, citing the measured baseline
+   (`ANDROID-PERFORMANCE-BASELINE.md`): flatten the entry→dynamic-import
+   waterfall (modulepreload) and split the eager model layer out of
+   `workspace-runtime.ts`'s static imports. Needs its own planning pass —
+   those imports are load-bearing for every product surface.
+2. P2 Plant shop-floor scanning (reuses `BarcodeScanButton`, small-medium).
+3. E1 photo follow-through if wanted: photos in the exported/published site
+   are a separate decision (published markup is built by `website-export.ts`,
+   untouched so far).
+4. AI item 1 (order-intake eval) can run in parallel any time — it is
    server-only and spends no hosted gate.
-7. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
-   decisions, E3 messaging infra, hosted anything.
+5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
+   decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
