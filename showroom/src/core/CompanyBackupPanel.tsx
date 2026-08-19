@@ -4,8 +4,11 @@ import {
   COMPANY_BACKUP_MAX_FILE_BYTES,
   createEncryptedCompanyBackup,
   inspectEncryptedCompanyBackup,
+  planCompanyRestore,
   restoreCompanyBackup,
+  summarizeCompanyStorageKeys,
   type CompanyBackupInspection,
+  type CompanyRestorePlan,
 } from './company-backup'
 import { lockedCapabilityNotice } from './capability-tiers'
 
@@ -17,6 +20,27 @@ function formatBackupDate(value: string): string {
   }
 }
 
+/** How old the backup is, because that age is what decides which records are about to be deleted. */
+function backupAgeSentence(value: string): string {
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000)
+  if (!Number.isFinite(days)) return 'This backup has no readable date.'
+  if (days < 0) return 'This backup is dated in the future. Check the date on this device.'
+  if (days === 0) return 'This backup was saved today.'
+  if (days === 1) return 'This backup was saved yesterday.'
+  return `This backup was saved ${days} days ago.`
+}
+
+/**
+ * Written for an owner whose first language is not English: what goes, how many, and where to look.
+ * A count alone after the write -- which is all this panel used to give -- cannot be acted on.
+ */
+function deletionSentence(plan: CompanyRestorePlan): string {
+  const total = plan.losingOwnerWork.length
+  if (total === 0) return 'Nothing saved on this device will be deleted.'
+  const where = summarizeCompanyStorageKeys(plan.losingOwnerWork).map((item) => `${item.count} in ${item.label}`).join(', ')
+  return `Restoring deletes ${total} ${total === 1 ? 'record' : 'records'} you saved after this backup: ${where}. This backup does not hold them. Download a new backup first if you want to keep them.`
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
@@ -26,9 +50,20 @@ export function CompanyBackupPanel() {
   const [confirmation, setConfirmation] = useState('')
   const [backupFile, setBackupFile] = useState<File | null>(null)
   const [inspection, setInspection] = useState<CompanyBackupInspection | null>(null)
+  const [plan, setPlan] = useState<CompanyRestorePlan | null>(null)
+  const [deletionAcknowledged, setDeletionAcknowledged] = useState(false)
   const [busyAction, setBusyAction] = useState<'download' | 'inspect' | 'restore' | null>(null)
   const [restoreArmed, setRestoreArmed] = useState(false)
   const [notice, setNotice] = useState('Encrypted locally. Nothing is uploaded, sent, or written to a company account.')
+
+  // The plan is only true for the storage it was read from, so anything that could change which
+  // backup is in play drops it. Restore stays closed until a fresh inspection produces a new one.
+  function clearInspection() {
+    setInspection(null)
+    setPlan(null)
+    setDeletionAcknowledged(false)
+    setRestoreArmed(false)
+  }
 
   async function downloadBackup() {
     if (passphrase !== confirmation) {
@@ -45,8 +80,7 @@ export function CompanyBackupPanel() {
       anchor.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 0)
       setConfirmation('')
-      setInspection(null)
-      setRestoreArmed(false)
+      clearInspection()
       setNotice(`Encrypted company backup downloaded with ${result.envelope.recordCount} records. Keep the file and password separately.`)
     } catch (error) {
       setNotice(errorMessage(error, 'The encrypted backup could not be created.'))
@@ -65,11 +99,14 @@ export function CompanyBackupPanel() {
       return
     }
     setBusyAction('inspect')
-    setInspection(null)
-    setRestoreArmed(false)
+    clearInspection()
     try {
       const checked = await inspectEncryptedCompanyBackup(await backupFile.text(), passphrase)
+      // Planned before the inspection is published, so a plan we cannot compute leaves restore
+      // unavailable rather than offering a write whose deletions were never shown.
+      const restorePlan = planCompanyRestore(window.localStorage, checked)
       setInspection(checked)
+      setPlan(restorePlan)
       setNotice('Backup integrity passed. Review the summary before restoring this browser.')
     } catch (error) {
       setNotice(errorMessage(error, 'The encrypted backup could not be inspected. Nothing was restored.'))
@@ -79,8 +116,12 @@ export function CompanyBackupPanel() {
   }
 
   async function restoreBackup() {
-    if (!inspection) {
+    if (!inspection || !plan) {
       setNotice('Inspect the encrypted backup before restoring it.')
+      return
+    }
+    if (plan.losingOwnerWork.length > 0 && !deletionAcknowledged) {
+      setNotice('Tick the box to confirm the newer records will be deleted. Nothing was restored.')
       return
     }
     setBusyAction('restore')
@@ -103,9 +144,9 @@ export function CompanyBackupPanel() {
     </div>
       <div className="company-backup-boundary" role="note"><strong>Customer-owned and encrypted</strong><span>AES-GCM encryption with a password you choose. Auth sessions, company account IDs, and credentials are excluded. SuperMega cannot recover a lost password.</span></div>
     <div className="company-backup-fields">
-      <label>Backup password<input autoComplete="new-password" maxLength={256} minLength={12} onChange={(event) => { setPassphrase(event.target.value); setInspection(null); setRestoreArmed(false) }} placeholder="At least 12 characters" type="password" value={passphrase} /></label>
+      <label>Backup password<input autoComplete="new-password" maxLength={256} minLength={12} onChange={(event) => { setPassphrase(event.target.value); clearInspection() }} placeholder="At least 12 characters" type="password" value={passphrase} /></label>
       <label>Confirm for download<input autoComplete="new-password" maxLength={256} minLength={12} onChange={(event) => setConfirmation(event.target.value)} placeholder="Repeat before download" type="password" value={confirmation} /></label>
-      <label>Encrypted backup file<input accept="application/json,.json" onChange={(event) => { setBackupFile(event.target.files?.[0] ?? null); setInspection(null); setRestoreArmed(false) }} type="file" /></label>
+      <label>Encrypted backup file<input accept="application/json,.json" onChange={(event) => { setBackupFile(event.target.files?.[0] ?? null); clearInspection() }} type="file" /></label>
     </div>
     <div className="company-backup-actions">
       <button className="core-button" disabled={busyAction !== null || passphrase.length < 12 || confirmation.length < 12} onClick={() => void downloadBackup()} type="button">{busyAction === 'download' ? 'Encrypting...' : 'Download encrypted backup'}</button>
@@ -115,7 +156,9 @@ export function CompanyBackupPanel() {
       <div><span className="core-eyebrow">Integrity passed</span><strong>{inspection.recordCount} records from {formatBackupDate(inspection.exportedAt)}</strong><small>{inspection.snapshotDigest.slice(0, 22)}...</small></div>
       <div className="company-backup-categories">{inspection.categories.map((category) => <span key={category.label}><small>{category.label}</small><strong>{category.count}</strong></span>)}</div>
       <p>This replaces current free-mode company records in this browser. It never restores auth, company account identity, or credentials.</p>
-      <div className="company-backup-actions">{restoreArmed ? <><button className="text-link" disabled={busyAction !== null} onClick={() => setRestoreArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={busyAction !== null} onClick={() => void restoreBackup()} type="button">{busyAction === 'restore' ? 'Restoring...' : 'Confirm restore'}</button></> : <button className="core-button" disabled={busyAction !== null} onClick={() => setRestoreArmed(true)} type="button">Restore this backup</button>}</div>
+      <p>{backupAgeSentence(inspection.exportedAt)} {plan ? deletionSentence(plan) : ''}</p>
+      {plan && plan.losingOwnerWork.length > 0 ? <label className="website-intake-confirm"><input checked={deletionAcknowledged} disabled={busyAction !== null} onChange={(event) => setDeletionAcknowledged(event.target.checked)} type="checkbox" /><span>I understand these {plan.losingOwnerWork.length} newer {plan.losingOwnerWork.length === 1 ? 'record' : 'records'} will be deleted.</span></label> : null}
+      <div className="company-backup-actions">{restoreArmed ? <><button className="text-link" disabled={busyAction !== null} onClick={() => setRestoreArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={busyAction !== null} onClick={() => void restoreBackup()} type="button">{busyAction === 'restore' ? 'Restoring...' : 'Confirm restore'}</button></> : <button className="core-button" disabled={busyAction !== null || !plan || (plan.losingOwnerWork.length > 0 && !deletionAcknowledged)} onClick={() => setRestoreArmed(true)} type="button">Restore this backup</button>}</div>
     </div> : null}
     <p aria-live="polite" className="form-notice company-backup-notice" role="status">{notice}</p>
   </section>

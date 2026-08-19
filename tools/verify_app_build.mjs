@@ -142,6 +142,7 @@ const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', '
 const operationalReportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts'), 'utf8')
 const sharedMasterDataSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shared-master-data.ts'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
+const metricsCollectorSource = await readFile(resolve(root, 'showroom', 'src', 'analytics', 'metrics-collector.ts'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
 const plantOrderPythonSource = await readFile(resolve(root, 'supermega_runtime', 'plant_order_foundation.py'), 'utf8')
@@ -3994,6 +3995,22 @@ if (!channelOrderUiSource.includes('Turn one message into an order draft')
   || !channelOrderUiSource.includes('className="channel-intake-disclosure"')
   || !channelOrderUiSource.includes('channelOrderDraftIsReady')) fail('channel_order_intake_ui_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => channelOrderUiSource.includes(marker))) fail('channel_order_intake_ui_crossed_network_boundary')
+// Wiring contracts. Each module below has its own passing checks, but nothing imported the
+// CALL SITE, so deleting the one line that joins module to app left the entire gate green
+// while the feature silently stopped happening: metrics persistence, the durable appointment
+// write, the AI-vs-accepted correction record, and the only two business metrics the pilot
+// produces. Source-string assertions are this repo's mechanism for pinning a call site (see
+// shopServiceScheduleUiSource above); every literal here was confirmed present before it was
+// asserted, and every contract was mutation-tested by deleting the line it pins.
+if (!shopServiceScheduleUiSource.includes('mutateShopServiceSchedule(planShopServiceScheduleWrite(')
+  || shopServiceScheduleUiSource.includes('persistLocal(next)')) fail('shop_service_schedule_durable_write_contract_missing')
+if (!metricsCollectorSource.includes('writeStoredMetrics(SESSION_EVENTS)')
+  || !metricsCollectorSource.includes('if (SESSION_EVENTS.length === 0) SESSION_EVENTS.push(...readStoredMetrics())')) fail('local_metrics_persistence_wiring_missing')
+if (!channelOrderUiSource.includes('const [aiProposedDraft, setAiProposedDraft] = useState<ChannelOrderDraft | null>(null)')
+  || !channelOrderUiSource.includes('proposed: aiProposedDraft,')
+  || !channelOrderUiSource.includes('captureOrderIntakeCorrection(window.localStorage, {')) fail('order_intake_correction_capture_wiring_missing')
+if (!coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })")
+  || !coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })")) fail('pilot_business_metric_emission_missing')
 if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
   || !coreSource.includes("data-order-receipt=\"view\"")
   || !coreSource.includes('onViewReceipt={setReceiptAck}')
@@ -19023,13 +19040,13 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // so a restaurant books reservations rather than a generic "appointment") and realistic guided-sample
 // bookings per pack (createShopServiceScheduleDemo), carried forward from claude/supermega-dev-ceo-aije17
 // because main had not yet absorbed them. Also covers the OpenTelemetry Phase A frontend traceparent
-// injection (managed-trial.ts) — negligible size, no bundle-visible instrumentation beyond it since the
+// injection (managed-trial.ts) -- negligible size, no bundle-visible instrumentation beyond it since the
 // rest of Phase A is backend-only (supermega_runtime/telemetry/).
 // Raised again after merging main (Beauty spa template, billing dashboards, General Ledger MVP landing
-// together with two new WorkspaceControlsPage views — Plant maintenance-due, Ecommerce stale-request
-// follow-up — and the Plant certificate of conformance feature) pushed the measured total to 2,929,574.
+// together with two new WorkspaceControlsPage views -- Plant maintenance-due, Ecommerce stale-request
+// follow-up -- and the Plant certificate of conformance feature) pushed the measured total to 2,929,574.
 // Raised again for the bakery Shop business template (10th industry), the wired-up guided-sample
-// activity (Shop counter sales/pending order, Shop appointment book), and — from this merge of main —
+// activity (Shop counter sales/pending order, Shop appointment book), and -- from this merge of main --
 // the design phase-1 foundation (2026-08 tribunal: token ramps, WCAG contrast overrides, Myanmar script
 // stacks, money-path type floor, touch targets, light-theme tile art) plus the design phase-2 wave (the
 // one-review 'Paid & handed over' settle path, 'Close the day' lifted out of the policy accordion, cart
@@ -19038,14 +19055,22 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // Raised again for TEMPLATE-EXPANSION.md queue items 1-9 (Shop counter sales/pending order/appointment
 // activity; Plant jobs+floor+shift-activity+released BOM/routing order for both bakery and fashion;
 // Ecommerce trade storefront copy, hero-SKU ranking, and per-trade fulfilment/payment mix) merged with
-// this branch's second absorption of main — the design phase-2 wave through the PWA raster icon set
+// this branch's second absorption of main -- the design phase-2 wave through the PWA raster icon set
 // (icon-192/icon-512/icon-512-maskable/apple-touch-icon PNGs, ~11.7KB of binary assets not app code),
 // the EN/MY action-verb infrastructure + shared confirm gate, login/signup field-level error notices,
 // the theme-toggle SVG sun/moon icons, the primary-button token normalization, the font-weight ramp
 // collapse, zero-flash theme restore, and the Ecommerce order coexistence contract test. Combining both
 // branches' independent work pushed a fresh measurement to 2,990,162. See CLAUDE.md: this budget is
-// expected to trip on any fresh dist/ after real product/design work lands — raise it, never shrink
+// expected to trip on any fresh dist/ after real product/design work lands -- raise it, never shrink
 // product code to fit an old number.
+// MERGE MEASUREMENT 2026-08-19 (feat/persist-local-metrics second absorption of main, through PR #421 +
+// #451): combined this branch's local-metrics persistence, order-intake correction capture, and restore
+// deletion preview (planCompanyRestore in core/company-backup.ts, plan-driven restore write, backup-age
+// line + deletion sentence + acknowledgement in CompanyBackupPanel) with everything main had absorbed
+// above -- fresh `npm run app:build` measurement below, computed after resolving this conflict, never
+// inherited from either side's pre-merge number. Fresh `npm run app:build` measures
+// 2_998_482. Kept the existing 3_010_000 ceiling because it independently provides
+// ~11_518 bytes of real headroom over that number.
 if (bytes > 3_010_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')

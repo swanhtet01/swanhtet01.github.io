@@ -12,6 +12,8 @@ import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   advanceShopServiceBooking,
   cancelShopServiceBooking,
+  mutateShopServiceSchedule,
+  planShopServiceScheduleWrite,
   projectShopServiceSchedule,
   readShopServiceSchedule,
   registerShopService,
@@ -109,18 +111,36 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
     return () => { active = false }
   }, [])
 
+  // Used only where a managed server copy is already authoritative and a failed
+  // local write is survivable. Owner-originated changes go through commit().
   function persistLocal(next: ShopServiceSchedule) {
     window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
   }
 
   function commit(next: ShopServiceSchedule, message: string) {
+    const baseRevision = schedule?.revision ?? null
     setSchedule(next)
-    try {
-      persistLocal(next)
-      setNotice(message)
-    } catch {
-      setNotice(`The ${vocabulary.singular} changed in memory but could not be saved on this device. Do not close this page until local storage is available.`)
-    }
+    // The book is written under an exclusive lock, validated, and read back, so
+    // a quota or private-mode rejection can no longer look like a saved booking.
+    void mutateShopServiceSchedule(planShopServiceScheduleWrite(baseRevision, next))
+      .then((result) => {
+        if (result.ok) {
+          setNotice(message)
+          return
+        }
+        // The refused change already advanced the on-screen book, so put the
+        // stored truth back. Without this the guard only survives ONE
+        // collision: the phantom revision would match storage by coincidence on
+        // the next change, and that change would overwrite the other tab's book
+        // exactly as if no guard existed.
+        try {
+          setSchedule(readShopServiceSchedule(window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)))
+        } catch {
+          // Storage is unreadable; the notice already tells them to reload, and
+          // showing a stale book is better than showing none.
+        }
+        setNotice(`${result.error} The schedule below was reloaded from this device.`)
+      })
     const identity = managedIdentityRef.current
     const expectedVersion = managedVersionRef.current
     if (!identity || expectedVersion === null) return
