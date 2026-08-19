@@ -345,11 +345,12 @@ it. No price, no pressure language.
 >
 > What it does today, for free, for as long as you use it:
 >
-> - Hold a table for a booking, with the host and the table zone written
->   down — and a second booking on the same table at the same time is
->   refused outright.
-> - Take a reservation deposit at the counter, so a held table is money on
->   the record, not just a name in a diary.
+> - Hold a table for a booking — the table zone or the host, with the
+>   customer's name, contact, and a note — and a second booking on that
+>   same table at the same time is refused outright.
+> - Take a reservation deposit at the counter as its own recorded sale —
+>   two records, the held table and the money, both with a name on them,
+>   instead of one line in a diary.
 > - Follow each booking from held to confirmed to checked-in to completed,
 >   with who moved it and why kept at every step — so the evening shift
 >   reads the record, not the diary.
@@ -378,7 +379,15 @@ the chargeable SKU `REST-SVC-DEPOSIT`, bookings move `held` → `confirmed`
 → `checked_in` → `completed` with each step appending an event with actor
 and reason (`advanceShopServiceBooking`), and a second booking on the same
 table zone in the same window is refused. Daily close — `shop-daily-close`
-row. **Deliberately absent:** no counter or ring-up bullet at all, and no
+row. Two honesty bounds, per PR #476 review: a booking holds exactly one
+resource (`ShopServiceBooking` has a single `resourceId`, and the form's
+own copy is "Shop blocks overlapping bookings for the same staff member,
+room, or equipment.") — so the bullet says "the table zone or the host",
+never both on one booking, and the overlap refusal covers the booked
+resource only; and the deposit is a separately charged counter SKU with
+no link on the booking record (the panel's own notice: "payment remain
+separate human-approved actions") — so the bullet sells two attributable
+records, never a deposit attached to the hold. **Deliberately absent:** no counter or ring-up bullet at all, and no
 speed claim of any kind — the restaurant card's own instruction is "Do not
 pitch counter speed here yet", per (e).11's ban on speed pitches and
 tap-count comparisons. Note: (e).11 was written when the one-tap cash sale
@@ -594,15 +603,19 @@ attributable stock count. No expiry or batch claim — (e).6 forbids it.)*
 > A family of twelve books two tables for Saturday — and the only record is
 > a name in a diary the evening shift has not read.
 >
-> SuperMega holds the table with a host, a table zone, a deposit and a
-> written reason behind it — and it refuses a second booking on the same
-> table at the same time. The evening shift reads the record, not the diary.
+> SuperMega holds the table on the schedule, with the customer's name, the
+> time and a written note — and it refuses a second booking on that same
+> table at the same time. Take the deposit at the counter as its own
+> recorded sale. Two records, both with a name on them — and the evening
+> shift reads the record, not the diary.
 >
 > Try the restaurant sample free, no account: [link]
 
-*(Grounded in the restaurant card only: reservations with host and table
-zone, the chargeable deposit, double-booking refused. No counter-speed
-claim — the card and (e).11 forbid it.)*
+*(Grounded in the restaurant card only: reservations with the table zone
+or the host as the booked resource — one resource per booking — the
+deposit as a separately charged counter SKU, double-booking on the booked
+resource refused. See the honesty bounds in (c).3. No counter-speed claim
+— the card and (e).11 forbid it.)*
 
 **8. Trade-specific — hardware**
 
