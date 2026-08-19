@@ -369,6 +369,46 @@ class FakeBillingCursor:
         return list(self.rows)
 
 
+def seed_refund_event(
+    database: FakeBillingDatabase,
+    *,
+    reference: str,
+    digest: object = None,
+    amount_minor: object = None,
+    payload_json: str | None = None,
+) -> None:
+    """Append a billing.refund.recorded event straight into the fake log.
+
+    The ledger API only records refunds against paid invoices, but both the
+    overdue report and _prior_refund_total are defined as pure projections
+    over WHATEVER the append-only billing_events log contains, so their
+    arithmetic is exercised against a directly seeded history. The
+    (workspace_id, command_id) dict key mirrors the table's primary key:
+    replaying the same command never appends a second row, exactly like the
+    real replay path. payload_json overrides the whole payload for
+    malformed-row cases."""
+
+    if payload_json is None:
+        payload_json = json.dumps(
+            {
+                "invoiceDigest": digest,
+                "amountMinor": amount_minor,
+                "channelCategory": "mobile_money",
+                "refundReference": reference,
+                "evidence": founder_evidence(f"refund-{reference}", reference),
+            }
+        )
+    database.events[(WORKSPACE_ID, f"seeded-refund:{reference}")] = {
+        "event_id": f"seeded-refund:{reference}",
+        "command_fingerprint": "seeded",
+        "event_type": "billing.refund.recorded",
+        "actor_id": "Swan Htet",
+        "payload_json": payload_json,
+        "result_json": json.dumps({"status": "refund_recorded"}),
+        "created_at": NOW,
+    }
+
+
 class BillingEvidenceValidationTests(unittest.TestCase):
     def test_exact_proof_shape_is_required(self) -> None:
         valid = founder_evidence("issue-0001", "viber:handover:2026-08-17")
@@ -812,6 +852,146 @@ class BillingLedgerTests(unittest.TestCase):
         self.assertEqual(self.database.invoices, {})
 
 
+class RefundDigestScopingTests(unittest.TestCase):
+    """The invoiceDigest scope of _prior_refund_total is enforced TWICE on
+    purpose: the predicate is pushed into the SQL (so only one invoice's
+    refund rows ever cross the wire) AND re-applied row-by-row in Python (so
+    the cumulative-refund bound stays correct even against a transport that
+    does not honor the predicate). FakeBillingCursor's refund branch is
+    exactly such a transport -- it returns EVERY billing.refund.recorded
+    event for the workspace regardless of digest -- so the ledger-level tests
+    here prove the Python filter is live defense-in-depth, not dead code."""
+
+    SECOND_INVOICE_ID = "INV-TEST-0002"
+
+    def setUp(self) -> None:
+        self.database = FakeBillingDatabase()
+        self.ledger = BillingLedger(DATABASE_URL, connection_factory=self.database.connect)
+        self.digest = _digest(sample_invoice_core())
+
+    def issue_and_pay(self, packet: dict[str, object], invoice_id: str, suffix: str) -> None:
+        self.ledger.issue_invoice(
+            packet,
+            workspace_id=WORKSPACE_ID,
+            evidence=founder_evidence(f"issue-{suffix}", "viber:handover:2026-08-17"),
+        )
+        self.ledger.confirm_payment(
+            workspace_id=WORKSPACE_ID,
+            invoice_id=invoice_id,
+            expected_revision=1,
+            payment_reference=f"KBZ-2026-08-17-{suffix}",
+            channel_category="mobile_money",
+            paid_at="2026-08-17T03:30:00.000Z",
+            evidence=founder_evidence(f"confirm-{suffix}", f"KBZ-2026-08-17-{suffix}"),
+        )
+
+    def record_refund(self, digest: str, amount_minor: int, reference: str) -> dict[str, object]:
+        return self.ledger.record_refund(
+            workspace_id=WORKSPACE_ID,
+            invoice_digest=digest,
+            amount_minor=amount_minor,
+            channel_category="mobile_money",
+            refund_reference=reference,
+            evidence=founder_evidence(f"refund-{reference}", reference),
+        )
+
+    def test_prior_refund_query_binds_the_digest_as_a_sql_parameter(self) -> None:
+        self.issue_and_pay(sample_packet(), INVOICE_ID, "0001")
+        self.record_refund(self.digest, 1000, "WAVE-REFUND-0001")
+        refund_selects = [
+            (sql, values)
+            for sql, values in self.database.statements
+            if sql.startswith("select") and "billing.refund.recorded" in sql
+        ]
+        self.assertTrue(refund_selects, self.database.statements)
+        for sql, values in refund_selects:
+            # The fake lowercases recorded SQL, so the JSON key reads
+            # 'invoicedigest' here; the predicate itself is what matters.
+            self.assertIn("payload_json ->> 'invoicedigest' = %s", sql)
+            # The digest travels as a bind parameter, never interpolated.
+            self.assertEqual(values, (WORKSPACE_ID, self.digest))
+
+    def test_python_side_filter_excludes_rows_a_lax_transport_returns(self) -> None:
+        foreign_digest = _digest({"fixture": "a different sealed invoice"})
+        seed_refund_event(
+            self.database, reference="WAVE-REFUND-OWN-0001", digest=self.digest, amount_minor=40000
+        )
+        seed_refund_event(
+            self.database,
+            reference="WAVE-REFUND-FOREIGN-0001",
+            digest=foreign_digest,
+            amount_minor=99999,
+        )
+        # Defensive row parsing: non-mapping payloads and non-int amounts
+        # (bool included) never count toward the total.
+        seed_refund_event(
+            self.database,
+            reference="WAVE-REFUND-JUNK-0001",
+            payload_json=json.dumps(["not", "a", "packet"]),
+        )
+        seed_refund_event(
+            self.database, reference="WAVE-REFUND-BOOL-0001", digest=self.digest, amount_minor=True
+        )
+        seed_refund_event(
+            self.database,
+            reference="WAVE-REFUND-STRING-0001",
+            digest=self.digest,
+            amount_minor="5000",
+        )
+
+        # First pin the premise this test rests on: FakeBillingCursor ignores
+        # the digest predicate and hands back EVERY refund row for the
+        # workspace. If the fake ever gains predicate fidelity, this fails
+        # loudly instead of the filter assertions going vacuously green.
+        cursor = FakeBillingCursor(self.database)
+        cursor.execute(
+            """
+            select payload_json
+            from app_private.billing_events
+            where workspace_id = %s
+              and event_type = 'billing.refund.recorded'
+              and payload_json ->> 'invoiceDigest' = %s
+            """,
+            (WORKSPACE_ID, self.digest),
+        )
+        self.assertEqual(len(cursor.fetchall()), 5)
+
+        # Any sum other than the digest-scoped one means the Python filter
+        # has gone dead.
+        self.assertEqual(
+            BillingLedger._prior_refund_total(cursor, WORKSPACE_ID, self.digest), 40000
+        )
+        self.assertEqual(
+            BillingLedger._prior_refund_total(cursor, WORKSPACE_ID, foreign_digest), 99999
+        )
+
+    def test_refund_totals_never_cross_contaminate_between_digests(self) -> None:
+        self.issue_and_pay(sample_packet(), INVOICE_ID, "0001")
+        variant = packet_variant(self.SECOND_INVOICE_ID, "2026-08-31")
+        variant_digest = str(variant["invoiceDigest"])
+        self.assertNotEqual(variant_digest, self.digest)
+        self.issue_and_pay(variant, self.SECOND_INVOICE_ID, "0002")
+
+        # Fully refund the first invoice.
+        first = self.record_refund(self.digest, 125000, "WAVE-REFUND-A-0001")
+        self.assertEqual(first["status"], "refund_recorded")
+        # The second invoice's full refund must still fit: if the first
+        # invoice's refunds leaked into this digest's cumulative sum (the
+        # fake DOES return them), this would be rejected as an over-refund.
+        second = self.record_refund(variant_digest, 125000, "WAVE-REFUND-B-0001")
+        self.assertEqual(second["status"], "refund_recorded")
+
+        # Both invoices are now individually exhausted -- one more minor unit
+        # against either digest is an over-refund.
+        for digest, reference in (
+            (self.digest, "WAVE-REFUND-A-0002"),
+            (variant_digest, "WAVE-REFUND-B-0002"),
+        ):
+            with self.subTest(digest=digest[:16]):
+                with self.assertRaises(BillingRailConflict):
+                    self.record_refund(digest, 1, reference)
+
+
 class OverdueReportTests(unittest.TestCase):
     """READ-ONLY overdue projection carried by get_billing_state (first-month
     lifecycle fix: the rail stored dueDate but nothing ever computed overdue).
@@ -845,32 +1025,9 @@ class OverdueReportTests(unittest.TestCase):
         return self.ledger.get_billing_state(WORKSPACE_ID, as_of=as_of)["overdueReport"]
 
     def seed_refund_event(self, amount_minor: int, reference: str) -> None:
-        """Append a billing.refund.recorded event straight into the fake log.
-
-        The ledger API only records refunds against paid invoices (and a paid
-        invoice never shows in the overdue report), but the report is defined
-        as a pure projection over WHATEVER the append-only billing_events log
-        contains, so the netting arithmetic is exercised against a directly
-        seeded history. The (workspace_id, command_id) dict key mirrors the
-        table's primary key: replaying the same command never appends a second
-        row, exactly like the real replay path."""
-
-        payload = {
-            "invoiceDigest": self.digest,
-            "amountMinor": amount_minor,
-            "channelCategory": "mobile_money",
-            "refundReference": reference,
-            "evidence": founder_evidence(f"refund-{reference}", reference),
-        }
-        self.database.events[(WORKSPACE_ID, f"seeded-refund:{reference}")] = {
-            "event_id": f"seeded-refund:{reference}",
-            "command_fingerprint": "seeded",
-            "event_type": "billing.refund.recorded",
-            "actor_id": "Swan Htet",
-            "payload_json": json.dumps(payload),
-            "result_json": json.dumps({"status": "refund_recorded"}),
-            "created_at": NOW,
-        }
+        seed_refund_event(
+            self.database, reference=reference, digest=self.digest, amount_minor=amount_minor
+        )
 
     def test_overdue_invoice_appears_with_days_and_amount_and_no_mutation(self) -> None:
         self.issue()

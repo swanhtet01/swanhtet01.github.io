@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
 import json
 import os
@@ -9,6 +10,8 @@ from urllib.error import HTTPError, URLError
 
 from supermega_runtime.order_intake import OrderIntakeCatalogItem
 from supermega_runtime.order_intake_provider import (
+    COMPANY_DAILY_BUDGET_DEFAULT_UNITS,
+    COMPANY_DAILY_BUDGET_HARD_MAX_UNITS,
     DEFAULT_ANTHROPIC_ORDER_INTAKE_MODEL,
     DEFAULT_ORDER_INTAKE_MODEL,
     MAX_ORDER_INTAKE_PROVIDER_RESPONSE_BYTES,
@@ -17,6 +20,8 @@ from supermega_runtime.order_intake_provider import (
     OpenAIOrderIntakeProvider,
     OrderIntakeBudgetReservation,
     OrderIntakeProviderError,
+    PostgresOrderIntakeBudget,
+    UnavailableOrderIntakeBudget,
     _anthropic_transport,
     _openai_transport,
     order_intake_provider_from_environment,
@@ -508,9 +513,19 @@ class AnthropicOrderIntakeProviderTests(unittest.IsolatedAsyncioTestCase):
 
 
 class OrderIntakeProviderSelectionTests(unittest.TestCase):
-    def selected(self, environment: dict[str, str]) -> object:
+    # OPS-762: no DSN-shaped literals in tests; assembled from parts.
+    BUDGET_DATABASE_URL = "://".join(("postgresql", "order-intake-budget-fixture"))
+
+    def selected(
+        self, environment: dict[str, str]
+    ) -> AnthropicOrderIntakeProvider | OpenAIOrderIntakeProvider | None:
         with patch.dict(os.environ, environment, clear=True):
-            return order_intake_provider_from_environment()
+            provider = order_intake_provider_from_environment()
+        if provider is not None:
+            self.assertIsInstance(
+                provider, (AnthropicOrderIntakeProvider, OpenAIOrderIntakeProvider)
+            )
+        return provider  # type: ignore[return-value]
 
     def test_absent_keys_stay_unconfigured_without_network_io(self) -> None:
         self.assertIsNone(self.selected({}))
@@ -556,6 +571,121 @@ class OrderIntakeProviderSelectionTests(unittest.TestCase):
                 "SUPERMEGA_ORDER_INTAKE_PROVIDER": "mistral",
                 "ANTHROPIC_API_KEY": "anthropic-key",
             })
+
+    def test_explicit_provider_value_is_trimmed_and_case_insensitive(self) -> None:
+        self.assertIsInstance(
+            self.selected({
+                "SUPERMEGA_ORDER_INTAKE_PROVIDER": "  OPENAI  ",
+                "OPENAI_API_KEY": "openai-key",
+                "ANTHROPIC_API_KEY": "anthropic-key",
+            }),
+            OpenAIOrderIntakeProvider,
+        )
+        self.assertIsInstance(
+            self.selected({
+                "SUPERMEGA_ORDER_INTAKE_PROVIDER": "\tANTHROPIC\n",
+                "ANTHROPIC_API_KEY": "anthropic-key",
+            }),
+            AnthropicOrderIntakeProvider,
+        )
+
+    def test_explicit_openai_without_its_key_stays_unconfigured(self) -> None:
+        # The mirror of the explicit-anthropic-without-key case above: an
+        # explicit choice whose key is absent yields None, never a silent
+        # fallback to the other configured provider.
+        self.assertIsNone(
+            self.selected({
+                "SUPERMEGA_ORDER_INTAKE_PROVIDER": "openai",
+                "ANTHROPIC_API_KEY": "anthropic-key",
+            })
+        )
+
+    def test_selection_never_performs_network_io(self) -> None:
+        # Fail closed and stay offline: selecting (or declining to select) a
+        # provider is pure environment inspection. build_opener is the single
+        # seam both transports go through, so an untouched mock proves no
+        # request was even constructed.
+        permutations: tuple[dict[str, str], ...] = (
+            {},
+            {"OPENAI_API_KEY": "openai-key"},
+            {"ANTHROPIC_API_KEY": "anthropic-key"},
+            {"OPENAI_API_KEY": "openai-key", "ANTHROPIC_API_KEY": "anthropic-key"},
+            {"SUPERMEGA_ORDER_INTAKE_PROVIDER": "openai", "OPENAI_API_KEY": "openai-key"},
+            {"SUPERMEGA_ORDER_INTAKE_PROVIDER": "anthropic", "ANTHROPIC_API_KEY": "anthropic-key"},
+            {"SUPERMEGA_ORDER_INTAKE_PROVIDER": "openai"},
+            # The hosted + database branch constructs a PostgresOrderIntakeBudget;
+            # its __init__ only stores strings, and selecting it must stay that
+            # lazy -- no connection, no DNS, nothing.
+            {
+                "VERCEL": "1",
+                "SUPERMEGA_DATABASE_URL": self.BUDGET_DATABASE_URL,
+                "OPENAI_API_KEY": "openai-key",
+            },
+        )
+        with patch("supermega_runtime.order_intake_provider.build_opener") as build_opener:
+            for environment in permutations:
+                with self.subTest(environment=sorted(environment)):
+                    self.selected(environment)
+            build_opener.assert_not_called()
+
+    def test_local_selection_wires_a_bounded_in_memory_budget(self) -> None:
+        for environment in (
+            {"OPENAI_API_KEY": "openai-key"},
+            {"ANTHROPIC_API_KEY": "anthropic-key"},
+        ):
+            with self.subTest(environment=sorted(environment)):
+                provider = self.selected(environment)
+                budget = provider._budget  # type: ignore[union-attr]
+                self.assertIsInstance(budget, InMemoryOrderIntakeBudget)
+                self.assertEqual(budget.cap_units, COMPANY_DAILY_BUDGET_DEFAULT_UNITS)
+        for raw_cap, expected in (
+            ("9000000", COMPANY_DAILY_BUDGET_HARD_MAX_UNITS),
+            ("not-a-number", COMPANY_DAILY_BUDGET_DEFAULT_UNITS),
+            ("-5", COMPANY_DAILY_BUDGET_DEFAULT_UNITS),
+        ):
+            with self.subTest(raw_cap=raw_cap):
+                provider = self.selected({
+                    "ANTHROPIC_API_KEY": "anthropic-key",
+                    "SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS": raw_cap,
+                })
+                budget = provider._budget  # type: ignore[union-attr]
+                self.assertIsInstance(budget, InMemoryOrderIntakeBudget)
+                self.assertEqual(budget.cap_units, expected)
+
+    def test_hosted_selection_with_database_wires_the_durable_budget(self) -> None:
+        provider = self.selected({
+            "VERCEL": "1",
+            "SUPERMEGA_DATABASE_URL": self.BUDGET_DATABASE_URL,
+            "OPENAI_API_KEY": "openai-key",
+        })
+        self.assertIsInstance(provider._budget, PostgresOrderIntakeBudget)  # type: ignore[union-attr]
+
+    def test_hosted_runtime_without_budget_database_fails_closed(self) -> None:
+        # Hosted runtimes must never fall back to the process-local budget:
+        # with no SUPERMEGA_DATABASE_URL the provider is still selected, but
+        # a generate() call is refused at admission -- proven end to end by an
+        # untouched build_opener, the single seam both transports go through.
+        for hosted_marker, key_env, provider_type in (
+            ({"VERCEL": "1"}, {"ANTHROPIC_API_KEY": "anthropic-key"}, AnthropicOrderIntakeProvider),
+            ({"NODE_ENV": "Production"}, {"OPENAI_API_KEY": "openai-key"}, OpenAIOrderIntakeProvider),
+        ):
+            with self.subTest(hosted_marker=sorted(hosted_marker)):
+                provider = self.selected({**hosted_marker, **key_env})
+                self.assertIsInstance(provider, provider_type)
+                self.assertIsInstance(provider._budget, UnavailableOrderIntakeBudget)  # type: ignore[union-attr]
+                with patch("supermega_runtime.order_intake_provider.build_opener") as build_opener:
+                    with self.assertRaisesRegex(
+                        OrderIntakeProviderError, "order_intake_budget_store_unavailable"
+                    ):
+                        asyncio.run(
+                            provider.generate(  # type: ignore[union-attr]
+                                message=MESSAGE,
+                                catalog=CATALOG,
+                                workspace_id="workspace-a",
+                                actor_id="actor-a",
+                            )
+                        )
+                    build_opener.assert_not_called()
 
     def test_selected_provider_uses_its_own_default_model(self) -> None:
         anthropic_provider = self.selected({"ANTHROPIC_API_KEY": "anthropic-key"})
