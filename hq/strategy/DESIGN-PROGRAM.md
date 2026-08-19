@@ -1,8 +1,19 @@
 # Design program — tribunal verdict and phased redesign queue
 
-Status: phase 1 SHIPPED (PR #431, 2026-08-18). This document is the
-agent-facing source of truth for the remaining design work; any agent
-(Claude, Codex, or other) picking up a design item executes from here.
+Status: phase 1 SHIPPED (PR #431, 2026-08-18). Phase 2 items 1-11 and 13
+SHIPPED (batches 0-8 on main, 2026-08-19). Item 12 ("narrow ecommerce
+tokenization") SHIPPED on `claude/supermega-dev-ceo-aije17` (PR #452):
+fixed the dead `--website-quiet` token (a same-specificity cascade
+collision this doc's own review had misdiagnosed once already — see
+`DESIGN-REVIEW-2026-08-18.md`) and tokenized the 2 Ecommerce surfaces that
+were genuinely safe to move (page-header text, the workspace-switch
+`<select>`s). The other ~100+ hex literals in `ecommerce-product.css` are
+deliberately exempt — preview-frame content, or the cockpit/buying-workspace
+family a prior flip attempt regressed 25→201 failures on — and stay as-is;
+do not re-attempt converting them without re-reading that history first.
+All 13 phase-2 items are now closed. This document is the agent-facing
+source of truth for the remaining design work; any agent (Claude, Codex, or
+other) picking up a design item executes from here.
 Origin: a 6-audit, 3-judge design tribunal (2026-08-18) benchmarking all four
 products against Square POS, Loyverse, Odoo MRP/Katana, Shopify, and Wix,
 judged through Polaris-coherence, accessibility, and emerging-market-adoption
