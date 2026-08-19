@@ -178,14 +178,29 @@ applies it to GTM.
 
 ---
 
-## (c) Drafted trial-invitation email
-
-**DRAFT — NOT SENT, PENDING FOUNDER REVIEW.**
+## (c) Drafted trial-invitation emails — four trade drafts
 
 Grounded in `MARKETING-POSITIONING.md` (a), (b), and the free-forever list.
 Honest about local/no-account status per `SELF-SERVE-ONBOARDING-SPEC.md` (no
 hosted self-serve signup exists yet — this points at the local product only).
 No pressure language, no invented statistics, no fake testimonials, no price.
+
+Four drafts follow: the original generic draft (usable as-is for a mini-mart
+or any other trade), then three trade-specific variants — pharmacy,
+restaurant, hardware — added 2026-08-19. Each variant reuses the generic
+draft's opening, closing, and setup-link boundary text verbatim. Two things
+change per variant and both need founder review as new claims: the middle
+capability bullets, and a trade-specific clause inserted into the sample-shop
+line naming the staged sample that trade's template actually ships (the
+clinic wholesale order, the family table booking, the site-delivery order).
+Every changed line is traceable to that trade's own card in
+`MARKETING-POSITIONING.md` (c). The
+`[trade-specific setup link]` placeholder mechanism documented after the
+generic draft applies to every draft in this section.
+
+### (c).1 Generic — mini-mart and any other trade (original draft, unchanged)
+
+**DRAFT — NOT SENT, PENDING FOUNDER REVIEW.**
 
 > **Subject: A free till and daily-close tool for [business name] — no account, works offline**
 >
@@ -252,13 +267,198 @@ the specific trade a prospect is being personalized for, never the bare
 `/shop/` route, whenever this template is actually filled in for a real
 send.
 
+This mechanism note applies to all four drafts in this section: for the
+variants below, `shopBusinessTemplateSetupPath` is called with `pharmacy`,
+`restaurant`, or `hardware` as the `ShopBusinessTemplateId`.
+
+### (c).2 Pharmacy variant
+
+**DRAFT — NOT SENT, PENDING FOUNDER REVIEW.**
+
+> **Subject: A free till and daily-close tool for [business name] — no account, works offline**
+>
+> Hello [owner name],
+>
+> I'm reaching out because [business name] looks like a pharmacy — is that
+> right?
+>
+> I've been building a free tool called SuperMega for shop owners like you.
+> It runs on your own phone or laptop, needs no account to try, and keeps
+> working even when the internet is down, because your records stay on your
+> own device.
+>
+> What it does today, for free, for as long as you use it:
+>
+> - Ring up a sale — cash, KBZPay, or WavePay — and watch your stock update
+>   on its own.
+> - Keep who moved each box, when, and why on the record — so when a clinic
+>   account or an inspector asks about stock, the answer is a record with a
+>   name on it, not a memory.
+> - Count your stock without stopping trade, with the expected number, the
+>   counted number, and any difference kept as one record.
+> - Count your drawer at the end of the day against what the day should
+>   hold, and keep a note of any difference.
+>
+> It comes with a sample pharmacy already loaded — including a sample clinic
+> wholesale order — so you can see how it works before you type anything of
+> your own in.
+>
+> You can try it here, right now, with no sign-up: [trade-specific setup link]
+>
+> If you'd like to talk it through first, or you're not sure it fits your
+> shop, just reply to this email — I'm happy to explain more or answer
+> questions.
+>
+> Thank you for your time,
+> [Founder name]
+> SuperMega — supermega.dev
+
+**Why each claim is safe:** the who/when/why stock record and the
+expected/counted/difference count are the pharmacy card,
+`MARKETING-POSITIONING.md` (c).2 — stock movements are evidenced events
+carrying `actionId`, `capturedAt`, `actor`, `reason` and
+`evidenceReference`, and a stock count records expected, counted and the
+difference as one attributable record. The clinic wholesale sample order
+ships in the `pharmacy` template (the card's "repeat trade account is set
+up before the owner types anything"); it is presented as a sample, never
+as a customer, per (e).15 there. Counter sale — `shop-counter` row;
+counting without stopping trade — `shop-inventory` row; daily close —
+`shop-daily-close` row. **Deliberately absent:** no expiry, batch, or lot
+claim — Shop has none, and (e).6 of the positioning doc forbids claiming
+it. No price, no pressure language.
+
+### (c).3 Restaurant variant
+
+**DRAFT — NOT SENT, PENDING FOUNDER REVIEW.**
+
+> **Subject: A free till and daily-close tool for [business name] — no account, works offline**
+>
+> Hello [owner name],
+>
+> I'm reaching out because [business name] looks like a restaurant — is
+> that right?
+>
+> I've been building a free tool called SuperMega for shop owners like you.
+> It runs on your own phone or laptop, needs no account to try, and keeps
+> working even when the internet is down, because your records stay on your
+> own device.
+>
+> What it does today, for free, for as long as you use it:
+>
+> - Hold a table for a booking — the table zone or the host, with the
+>   customer's name, contact, and a note — and a second booking on that
+>   same table at the same time is refused outright.
+> - Take a reservation deposit at the counter as its own recorded sale —
+>   two records, the held table and the money, both with a name on them,
+>   instead of one line in a diary.
+> - Follow each booking from held to confirmed to checked-in to completed,
+>   with who moved it and why kept at every step — so the evening shift
+>   reads the record, not the diary.
+> - Count your drawer at the end of the day against what the day should
+>   hold, and keep a note of any difference.
+>
+> It comes with a sample restaurant already loaded — including a sample
+> family table booking — so you can see how it works before you type
+> anything of your own in.
+>
+> You can try it here, right now, with no sign-up: [trade-specific setup link]
+>
+> If you'd like to talk it through first, or you're not sure it fits your
+> shop, just reply to this email — I'm happy to explain more or answer
+> questions.
+>
+> Thank you for your time,
+> [Founder name]
+> SuperMega — supermega.dev
+
+**Why each claim is safe:** all three booking bullets are the restaurant
+card, `MARKETING-POSITIONING.md` (c).8 — the restaurant pack speaks
+"Reservations" / "Hold a table" with a host and a table zone as bookable
+resources (`core/shop-service-scheduling.ts`), the reservation deposit is
+the chargeable SKU `REST-SVC-DEPOSIT`, bookings move `held` → `confirmed`
+→ `checked_in` → `completed` with each step appending an event with actor
+and reason (`advanceShopServiceBooking`), and a second booking on the same
+table zone in the same window is refused. Daily close — `shop-daily-close`
+row. Two honesty bounds, per PR #476 review: a booking holds exactly one
+resource (`ShopServiceBooking` has a single `resourceId`, and the form's
+own copy is "Shop blocks overlapping bookings for the same staff member,
+room, or equipment.") — so the bullet says "the table zone or the host",
+never both on one booking, and the overlap refusal covers the booked
+resource only; and the deposit is a separately charged counter SKU with
+no link on the booking record (the panel's own notice: "payment remain
+separate human-approved actions") — so the bullet sells two attributable
+records, never a deposit attached to the hold. **Deliberately absent:** no counter or ring-up bullet at all, and no
+speed claim of any kind — the restaurant card's own instruction is "Do not
+pitch counter speed here yet", per (e).11's ban on speed pitches and
+tap-count comparisons. Note: (e).11 was written when the one-tap cash sale
+was queued; it has since shipped (design phase 2 item 1, PR #436 per
+`DESIGN-PROGRAM.md`), but (e) is binding as written until the founder
+updates the positioning doc — so this draft still makes no speed claim.
+No price, no pressure language.
+
+### (c).4 Hardware variant
+
+**DRAFT — NOT SENT, PENDING FOUNDER REVIEW.**
+
+> **Subject: A free till and daily-close tool for [business name] — no account, works offline**
+>
+> Hello [owner name],
+>
+> I'm reaching out because [business name] looks like a hardware and
+> construction supply shop — is that right?
+>
+> I've been building a free tool called SuperMega for shop owners like you.
+> It runs on your own phone or laptop, needs no account to try, and keeps
+> working even when the internet is down, because your records stay on your
+> own device.
+>
+> What it does today, for free, for as long as you use it:
+>
+> - Ring up a sale — cash, KBZPay, or WavePay — and watch your stock update
+>   on its own.
+> - Take a bulk order with a promised time and a pickup-or-delivery choice,
+>   so a foreman's site delivery is a recorded promise, not a phone memory.
+> - See who still owes you, how much, and how long it has been owed — from
+>   current to long overdue, with the most-overdue customer named.
+> - Give a regular account a credit limit and payment terms, and put an
+>   account on hold when it needs it.
+> - Count your drawer at the end of the day against what the day should
+>   hold, and keep a note of any difference.
+>
+> It comes with a sample hardware shop already loaded — including a sample
+> site-delivery order — so you can see how it works before you type
+> anything of your own in.
+>
+> You can try it here, right now, with no sign-up: [trade-specific setup link]
+>
+> If you'd like to talk it through first, or you're not sure it fits your
+> shop, just reply to this email — I'm happy to explain more or answer
+> questions.
+>
+> Thank you for your time,
+> [Founder name]
+> SuperMega — supermega.dev
+
+**Why each claim is safe:** the order, ageing, and credit bullets are the
+hardware card, `MARKETING-POSITIONING.md` (c).5 — orders carry a
+fulfilment method (pickup or delivery) and a promised time, and the
+`hardware` template's staged sample order is a site delivery with a
+loading note; money owed is aged into the `current` / `1_7` / `8_30` /
+`31_60` / `over_60` day buckets with the most-overdue customer named
+(`core/shop-ar-aging-summary.ts`); and a customer can carry a credit
+policy with a limit, payment terms, and an active/hold status
+(`core/shop-customer-credit-policy-summary.ts`). Counter sale —
+`shop-counter` row; daily close — `shop-daily-close` row. No price, no
+invented statistics, no pressure language.
+
 ---
 
 ## (d) Drafted one-touch follow-up email
 
 **DRAFT — NOT SENT, PENDING FOUNDER REVIEW.**
 
-Sent only after a founder has approved and sent the initial email above, and
+Sent only after a founder has approved and sent one of the four initial
+emails above (the follow-up is trade-agnostic and serves all four), and
 only once — consistent with the do-not-say list's ban on pressure language
 (`upgrade`, `trial ends`, `expires`, `only`, `unlock now` are forbidden in
 product copy; this follow-up avoids the same spirit of manufactured urgency
@@ -374,6 +574,64 @@ there.
 >
 > Built for shops like yours. Try the mini-mart sample free: [link]
 
+### Three trade-specific post drafts (added 2026-08-19)
+
+All DRAFT — NOT POSTED, PENDING FOUNDER REVIEW, same as the five above.
+Each is grounded solely in its trade's card in `MARKETING-POSITIONING.md`
+(c) — the same cards behind the email variants in (c).2–(c).4 — and the
+`[link]` in each must be the trade-specific setup link built by
+`shopBusinessTemplateSetupPath` for that trade (see the mechanism note in
+(c)), never the bare `/shop/` route.
+
+**6. Trade-specific — pharmacy**
+
+> A clinic account or an inspector asks who moved that box of stock, and on
+> whose word. In most shops, the answer is a memory.
+>
+> In SuperMega, every stock movement carries a name, a time and a reason —
+> and a stock count keeps the expected number, the counted number and the
+> difference as one record. Not to catch anyone out. So the answer is on
+> paper, not in your head.
+>
+> Try the pharmacy sample free, no account: [link]
+
+*(Grounded in the pharmacy card only: evidenced stock movements and the
+attributable stock count. No expiry or batch claim — (e).6 forbids it.)*
+
+**7. Trade-specific — restaurant**
+
+> A family of twelve books two tables for Saturday — and the only record is
+> a name in a diary the evening shift has not read.
+>
+> SuperMega holds the table on the schedule, with the customer's name, the
+> time and a written note — and it refuses a second booking on that same
+> table at the same time. Take the deposit at the counter as its own
+> recorded sale. Two records, both with a name on them — and the evening
+> shift reads the record, not the diary.
+>
+> Try the restaurant sample free, no account: [link]
+
+*(Grounded in the restaurant card only: reservations with the table zone
+or the host as the booked resource — one resource per booking — the
+deposit as a separately charged counter SKU, double-booking on the booked
+resource refused. See the honesty bounds in (c).3. No counter-speed claim
+— the card and (e).11 forbid it.)*
+
+**8. Trade-specific — hardware**
+
+> Twenty bags of cement, on site before the pour, on the workshop's account
+> — and last month's bill still open.
+>
+> SuperMega takes the order with a promised delivery time, then shows you
+> exactly who still owes you, how much, and how late — with the most-overdue
+> customer named. A regular account can carry a credit limit, and go on hold
+> when it has to.
+>
+> Try the hardware sample free, no account: [link]
+
+*(Grounded in the hardware card only: fulfilment method and promised time,
+aged receivables, customer credit policy. No price, no amounts.)*
+
 ---
 
 ## (f) What's needed from the founder before ANY of this goes live
@@ -390,8 +648,9 @@ platform.
   says which businesses, if any, may actually be approached.
 - [ ] **Approve the outreach copy.** Before any email or message is sent,
   the founder reviews and signs off on the exact text — including any
-  edits made per business, if personalized — not just the template in (c)
-  and (d).
+  edits made per business, if personalized — not just the templates in (c)
+  (four trade drafts as of 2026-08-19: generic/mini-mart, pharmacy,
+  restaurant, hardware), (d), and the trade-specific post drafts in (e).
 - [ ] **Connect a real sending email identity and confirm consent to send
   under it.** The founder decides which address sends outreach, confirms
   they consent to messages going out under their name/brand, and this
