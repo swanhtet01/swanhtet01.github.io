@@ -6321,6 +6321,10 @@ if (!coreSource.includes("const PLANT_JOB_VIEW_KEY = 'supermega.plant.job-view.v
   || !productionJobsContract.includes('<PlantJobBoard disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock}')
   || !coreSource.includes('function PlantJobBoard(')
   || !coreSource.includes('function plantJobBoardLaneId(')
+  // Lane boundaries are EXCLUSIVE at the upper edge: a midnight deadline displays
+  // with the next day's date, so it belongs to the next lane (PR #484 review).
+  || !coreSource.includes("if (due < endOfToday.getTime()) return 'today'")
+  || !coreSource.includes("if (due < endOfWeek.getTime()) return 'week'")
   || !coreSource.includes('function PlantJobActionLinks(')
   || !coreSource.includes('function plantJobAccounting(')
   || !coreSource.includes("['overdue', 'Overdue'],")

@@ -9637,14 +9637,18 @@ function plantJobBoardLaneId(job: ProductionJob, now: number): PlantJobBoardLane
   if (!Number.isFinite(due)) return 'undated'
   // Same boundary as JobList's overdue marker: due at or before "now" is overdue.
   if (due <= now) return 'overdue'
+  // EXCLUSIVE upper bounds: the datetime-local inputs accept midnight deadlines,
+  // and a deadline exactly at local midnight displays with the NEXT day's date
+  // (formatIssueDue), so it must group with that day — tomorrow 00:00 is not
+  // "Today", and the first instant of day 8 is not "This week".
   const endOfToday = new Date(now)
   endOfToday.setHours(24, 0, 0, 0)
-  if (due <= endOfToday.getTime()) return 'today'
+  if (due < endOfToday.getTime()) return 'today'
   // setDate, not fixed 24h arithmetic, so the 7-day boundary stays on local
   // midnight across a DST transition.
   const endOfWeek = new Date(endOfToday)
   endOfWeek.setDate(endOfWeek.getDate() + 6)
-  if (due <= endOfWeek.getTime()) return 'week'
+  if (due < endOfWeek.getTime()) return 'week'
   return 'later'
 }
 
