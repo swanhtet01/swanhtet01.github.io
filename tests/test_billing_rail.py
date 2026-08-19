@@ -24,6 +24,7 @@ from unittest.mock import patch
 import supermega_runtime.trial_store as trial_store_module
 from supermega_runtime.billing_rail import (
     BILLING_EVENT_RESULT_CONTRACT,
+    BILLING_OVERDUE_REPORT_CONTRACT,
     BILLING_STATE_CONTRACT,
     CONFIRM_BILLING_ACTION_PHRASE,
     INVOICE_PACKET_CONTRACT,
@@ -104,6 +105,26 @@ def sample_packet() -> dict[str, object]:
             "taxDecided": False,
         },
     }
+
+
+def packet_variant(invoice_id: str, due_date: str) -> dict[str, object]:
+    """A second sealed packet: the fixture economics with a different invoice
+    id and dueDate, digest and control projection re-derived so the packet
+    still validates end to end."""
+
+    core = sample_invoice_core()
+    core["invoiceId"] = invoice_id
+    core["issuedToPayBy"] = {"issuedAt": "2026-08-01T03:30:00.000Z", "dueDate": due_date}
+    digest = _digest(core)
+    packet = sample_packet()
+    packet["invoice"] = core
+    packet["invoiceDigest"] = digest
+    packet["proposedControlRecord"] = dict(packet["proposedControlRecord"])
+    packet["proposedControlRecord"]["record_key"] = (
+        f"managed-billing-invoice:{WORKSPACE_ID}:{invoice_id}"
+    )
+    packet["proposedControlRecord"]["plan_hash"] = digest[len("sha256:"):]
+    return packet
 
 
 def founder_evidence(action_id: str, reference: str, reason: str = "Founder verified this transition.") -> dict[str, str]:
@@ -791,6 +812,183 @@ class BillingLedgerTests(unittest.TestCase):
         self.assertEqual(self.database.invoices, {})
 
 
+class OverdueReportTests(unittest.TestCase):
+    """READ-ONLY overdue projection carried by get_billing_state (first-month
+    lifecycle fix: the rail stored dueDate but nothing ever computed overdue).
+    Pure projection over the recorded invoices and billing_events -- these
+    tests also prove the report path issues no mutating statement."""
+
+    def setUp(self) -> None:
+        self.database = FakeBillingDatabase()
+        self.ledger = BillingLedger(DATABASE_URL, connection_factory=self.database.connect)
+        self.digest = _digest(sample_invoice_core())
+
+    def issue(self, packet: dict[str, object] | None = None, action_id: str = "issue-0001") -> dict[str, object]:
+        return self.ledger.issue_invoice(
+            packet if packet is not None else sample_packet(),
+            workspace_id=WORKSPACE_ID,
+            evidence=founder_evidence(action_id, "viber:handover:2026-08-17"),
+        )
+
+    def confirm(self, expected_revision: int = 1) -> dict[str, object]:
+        return self.ledger.confirm_payment(
+            workspace_id=WORKSPACE_ID,
+            invoice_id=INVOICE_ID,
+            expected_revision=expected_revision,
+            payment_reference="KBZ-2026-08-17-0001",
+            channel_category="mobile_money",
+            paid_at="2026-08-17T03:30:00.000Z",
+            evidence=founder_evidence("confirm-0001", "KBZ-2026-08-17-0001"),
+        )
+
+    def report(self, as_of: datetime = NOW) -> dict[str, object]:
+        return self.ledger.get_billing_state(WORKSPACE_ID, as_of=as_of)["overdueReport"]
+
+    def seed_refund_event(self, amount_minor: int, reference: str) -> None:
+        """Append a billing.refund.recorded event straight into the fake log.
+
+        The ledger API only records refunds against paid invoices (and a paid
+        invoice never shows in the overdue report), but the report is defined
+        as a pure projection over WHATEVER the append-only billing_events log
+        contains, so the netting arithmetic is exercised against a directly
+        seeded history. The (workspace_id, command_id) dict key mirrors the
+        table's primary key: replaying the same command never appends a second
+        row, exactly like the real replay path."""
+
+        payload = {
+            "invoiceDigest": self.digest,
+            "amountMinor": amount_minor,
+            "channelCategory": "mobile_money",
+            "refundReference": reference,
+            "evidence": founder_evidence(f"refund-{reference}", reference),
+        }
+        self.database.events[(WORKSPACE_ID, f"seeded-refund:{reference}")] = {
+            "event_id": f"seeded-refund:{reference}",
+            "command_fingerprint": "seeded",
+            "event_type": "billing.refund.recorded",
+            "actor_id": "Swan Htet",
+            "payload_json": json.dumps(payload),
+            "result_json": json.dumps({"status": "refund_recorded"}),
+            "created_at": NOW,
+        }
+
+    def test_overdue_invoice_appears_with_days_and_amount_and_no_mutation(self) -> None:
+        self.issue()
+        before = len(self.database.statements)
+        report = self.report()
+        report_statements = self.database.statements[before:]
+        # NO mutation: the report path is selects inside one read-only
+        # transaction, nothing else.
+        self.assertTrue(
+            all(
+                sql.startswith(("select", "set transaction")) for sql, _params in report_statements
+            ),
+            report_statements,
+        )
+        self.assertEqual(report["contract"], BILLING_OVERDUE_REPORT_CONTRACT)
+        self.assertEqual(report["asOf"], CAPTURED_AT)
+        self.assertEqual(
+            report["overdueInvoices"],
+            [
+                {
+                    "invoiceId": INVOICE_ID,
+                    "invoiceDigest": self.digest,
+                    "dueDate": "2026-08-15",
+                    "daysOverdue": 2,
+                    "currency": "MMK",
+                    "totalMinor": 125000,
+                    "refundedMinor": 0,
+                    "outstandingMinor": 125000,
+                }
+            ],
+        )
+        self.assertEqual(report["totalOutstandingMinorByCurrency"], {"MMK": 125000})
+        self.assertEqual(report["excluded"], [])
+
+    def test_due_today_is_not_yet_overdue(self) -> None:
+        self.issue()
+        due_day = self.report(as_of=datetime(2026, 8, 15, 23, 59, tzinfo=timezone.utc))
+        self.assertEqual(due_day["overdueInvoices"], [])
+        self.assertEqual(due_day["totalOutstandingMinorByCurrency"], {})
+        day_after = self.report(as_of=datetime(2026, 8, 16, 0, 30, tzinfo=timezone.utc))
+        self.assertEqual(day_after["overdueInvoices"][0]["daysOverdue"], 1)
+
+    def test_paid_and_void_invoices_are_not_overdue(self) -> None:
+        self.issue()
+        self.confirm()
+        self.issue(packet_variant("INV-TEST-0002", "2026-08-01"), action_id="issue-0002")
+        self.ledger.void_invoice(
+            workspace_id=WORKSPACE_ID,
+            invoice_id="INV-TEST-0002",
+            expected_revision=1,
+            evidence=founder_evidence("void-0002", "renegotiated"),
+        )
+        report = self.report()
+        self.assertEqual(report["overdueInvoices"], [])
+        self.assertEqual(report["totalOutstandingMinorByCurrency"], {})
+        self.assertEqual(report["excluded"], [])
+
+    def test_partially_refunded_invoice_shows_net_outstanding(self) -> None:
+        self.issue()
+        self.seed_refund_event(25000, "WAVE-REFUND-0001")
+        entry = self.report()["overdueInvoices"][0]
+        self.assertEqual(entry["refundedMinor"], 25000)
+        self.assertEqual(entry["outstandingMinor"], 100000)
+        self.assertEqual(
+            self.report()["totalOutstandingMinorByCurrency"], {"MMK": 100000}
+        )
+        # A second, distinct refund reference nets further.
+        self.seed_refund_event(10000, "WAVE-REFUND-0002")
+        entry = self.report()["overdueInvoices"][0]
+        self.assertEqual(entry["refundedMinor"], 35000)
+        self.assertEqual(entry["outstandingMinor"], 90000)
+
+    def test_replayed_or_duplicate_events_do_not_double_count(self) -> None:
+        first = self.issue()
+        replay = self.issue()
+        self.assertFalse(first["replayed"])
+        self.assertTrue(replay["replayed"])
+        report = self.report()
+        self.assertEqual(len(report["overdueInvoices"]), 1)
+        self.assertEqual(report["totalOutstandingMinorByCurrency"], {"MMK": 125000})
+        # Replaying the same refund command lands on the same primary key: one
+        # durable event, counted once.
+        self.seed_refund_event(25000, "WAVE-REFUND-0001")
+        self.seed_refund_event(25000, "WAVE-REFUND-0001")
+        entry = self.report()["overdueInvoices"][0]
+        self.assertEqual(entry["refundedMinor"], 25000)
+        self.assertEqual(entry["outstandingMinor"], 100000)
+
+    def test_unparseable_due_date_is_excluded_with_note(self) -> None:
+        # "TBD" passes packet validation (dueDate is canonical visible text,
+        # not a validated date), so the report must exclude it with a note
+        # rather than guess.
+        self.issue(packet_variant("INV-TEST-0003", "TBD"), action_id="issue-0003")
+        report = self.report()
+        self.assertEqual(report["overdueInvoices"], [])
+        self.assertEqual(report["totalOutstandingMinorByCurrency"], {})
+        self.assertEqual(len(report["excluded"]), 1)
+        self.assertEqual(report["excluded"][0]["invoiceId"], "INV-TEST-0003")
+        self.assertIn("dueDate", report["excluded"][0]["note"])
+
+    def test_sorted_most_overdue_first_with_currency_total(self) -> None:
+        self.issue()  # due 2026-08-15 -> 2 days overdue at NOW
+        self.issue(packet_variant("INV-TEST-0002", "2026-08-01"), action_id="issue-0002")
+        report = self.report()
+        self.assertEqual(
+            [entry["invoiceId"] for entry in report["overdueInvoices"]],
+            ["INV-TEST-0002", INVOICE_ID],
+        )
+        self.assertEqual(
+            [entry["daysOverdue"] for entry in report["overdueInvoices"]], [16, 2]
+        )
+        self.assertEqual(report["totalOutstandingMinorByCurrency"], {"MMK": 250000})
+
+    def test_naive_as_of_fails_closed(self) -> None:
+        with self.assertRaises(BillingRailError):
+            self.ledger.get_billing_state(WORKSPACE_ID, as_of=datetime(2026, 8, 17, 4, 0))
+
+
 class _ReadinessCursor:
     def __init__(self, connection: "_ReadinessConnection") -> None:
         self._connection = connection
@@ -1060,6 +1258,45 @@ class BillingRailCliTests(unittest.TestCase):
         self.assertFalse(result["premiumUnlocked"])
         self.assertEqual(result["entitlement"]["tier"], PREMIUM_TIER)
         self.assertEqual(result["entitlement"]["status"], "none")
+        self.assertEqual(result["overdueReport"]["contract"], BILLING_OVERDUE_REPORT_CONTRACT)
+        self.assertEqual(result["overdueReport"]["overdueInvoices"], [])
+        self.assertEqual(result["overdueReport"]["excluded"], [])
+        self.assertEqual(result["overdueReport"]["totalOutstandingMinorByCurrency"], {})
+
+    def test_status_cli_surfaces_the_overdue_report(self) -> None:
+        packet_file = self._write_json("packet.json", sample_packet())
+        evidence_file = self._write_json(
+            "evidence.json", founder_evidence("issue-0001", "viber:handover:2026-08-17")
+        )
+        code, _stdout = self.run_cli(
+            [
+                "issue-invoice",
+                "--database-url-file", self.database_url_file,
+                "--workspace-id", WORKSPACE_ID,
+                "--evidence-file", evidence_file,
+                "--confirm-billing-action", CONFIRM_BILLING_ACTION_PHRASE,
+                "--packet-file", packet_file,
+            ]
+        )
+        self.assertEqual(code, 0)
+        code, stdout = self.run_cli(
+            [
+                "status",
+                "--database-url-file", self.database_url_file,
+                "--workspace-id", WORKSPACE_ID,
+            ]
+        )
+        self.assertEqual(code, 0)
+        report = json.loads(stdout)["overdueReport"]
+        self.assertEqual(len(report["overdueInvoices"]), 1)
+        entry = report["overdueInvoices"][0]
+        self.assertEqual(entry["invoiceId"], INVOICE_ID)
+        self.assertEqual(entry["dueDate"], "2026-08-15")
+        # The CLI projects "as of now"; the fixture due date is in the past
+        # for any run after 2026-08-16, so only the lower bound is stable.
+        self.assertGreaterEqual(entry["daysOverdue"], 1)
+        self.assertEqual(entry["outstandingMinor"], 125000)
+        self.assertEqual(report["totalOutstandingMinorByCurrency"], {"MMK": 125000})
 
     def test_generic_exception_path_never_leaks_a_raw_driver_message(self) -> None:
         leaky_message = (
