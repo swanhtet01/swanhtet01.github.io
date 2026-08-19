@@ -1205,7 +1205,7 @@ textarea { min-height: 72px; resize: vertical; }
    the sentence at body weight so it reads as a promise rather than a field label. */
 .managed-login-panel label.signup-consent { grid-auto-flow: column; grid-template-columns: auto 1fr; align-items: start; gap: 8px; font-weight: var(--font-weight-semibold); line-height: 1.5; }
 .managed-login-panel label.signup-consent input { width: 20px; min-width: 20px; height: 20px; margin-top: 1px; }
-.managed-login-panel .signup-consent-terms { font-size: 0.86rem; line-height: 1.55; border: 1px solid var(--core-border, rgba(127,127,127,0.35)); border-radius: 10px; padding: 10px 14px; }
+.managed-login-panel .signup-consent-terms { font-size: 0.86rem; line-height: 1.55; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px 14px; }
 .managed-login-panel .signup-consent-terms summary { cursor: pointer; font-weight: var(--font-weight-semibold); }
 .managed-login-panel .signup-consent-terms ol { margin: 10px 0 2px; padding-left: 18px; display: grid; gap: 8px; }
 .account-inline-link { width: fit-content; min-height: 44px; display: inline-flex; align-items: center; color: var(--core-accent); font-size: 12px; font-weight: var(--font-weight-bold); text-decoration: none; }
