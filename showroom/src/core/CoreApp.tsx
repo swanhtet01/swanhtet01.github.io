@@ -45,6 +45,7 @@ import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
+import { readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints } from './shop-loyalty'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -1039,11 +1040,12 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, paymentQrScope, sampleCatalogActive }: {
+function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, sampleCatalogActive }: {
   disabled: boolean
   industryPack: ShopIndustryPack | null
   items: CommerceItem[]
   lowStockCount: number
+  loyaltyPoints: ReadonlyMap<string, number> | null
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
   paymentQrScope: string
@@ -1179,6 +1181,12 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
         </div>
         {unitCount ? <><div className="shop-sale-details">
           <label>Customer <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
+          {/* S3 PR1 loyalty balance chip. Renders ONLY for an exact match against a known
+              customer (a projected balance or a client-master name) while points are on —
+              loyaltyPoints is null when the device-local setting is off, so a shop that
+              never opted in sees nothing here. Balance is the pure projection in
+              shop-loyalty.ts; showing it changes no record. */}
+          {loyaltyPoints?.has(customer.trim()) && customer.trim() !== 'Guest' ? <p className="shop-loyalty-chip">{customer.trim()} · {shopLoyaltyDisplayPoints(loyaltyPoints.get(customer.trim()) ?? 0).toLocaleString()} pts</p> : null}
           <fieldset><legend>Payment</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
           {/* S2 merchant payment QR: display-only (see payment-qr-store.ts). At a Myanmar
               counter the customer pays a non-cash sale by scanning the owner's static
@@ -1729,6 +1737,21 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const defaultReceiptLocationId = managedInventoryProjection?.locations.find((location) => /main/i.test(location.name))?.id
     ?? managedInventoryProjection?.locations[0]?.id
     ?? ''
+  // S3 PR1 customer points. Settings are read once per mount: they are edited on the
+  // separate Workspace-controls route, so navigating back here remounts this page and
+  // picks the change up — the same lifecycle every other device-local read on this page
+  // uses. Balances are a pure projection over the same commerce state the counter renders;
+  // client-master names are added at zero so a known customer with no points yet still
+  // gets an exact-match chip instead of silence.
+  const shopLoyaltySettings = useMemo(() => readShopLoyaltySettings(), [])
+  const shopLoyaltyPoints = useMemo(() => {
+    if (!shopLoyaltySettings?.enabled) return null
+    const balances = shopLoyaltyBalances(commerce, shopLoyaltySettings)
+    for (const client of managedInventoryProjection?.clients ?? []) {
+      if (!balances.has(client.name)) balances.set(client.name, 0)
+    }
+    return balances
+  }, [commerce, managedInventoryProjection, shopLoyaltySettings])
   const purchaseOrderDraftOrder = purchaseOrderDraft?.mode === 'receive'
     ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderDraft.purchaseOrderId)
     : undefined
@@ -6064,7 +6087,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} sampleCatalogActive={shopSampleCatalogActive} />
     {actionGate}
   </div>
 

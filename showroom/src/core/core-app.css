@@ -2708,3 +2708,17 @@ input, select, textarea { border-color: var(--core-field-line); }
 .payment-qr-method-copy { display: grid; justify-items: start; gap: var(--space-1); min-width: 0; }
 .payment-qr-method-copy small { color: var(--core-muted); font-size: var(--font-size-sm); line-height: 1.5; }
 .payment-qr-method-issue { color: var(--core-warn); font-size: var(--font-size-xs); line-height: 1.35; }
+
+/* ============================================================================
+   Customer loyalty points (roadmap S3 PR1, 2026-08-19). Two surfaces backed by
+   shop-loyalty.ts: the counter balance chip (renders only for an exact known-
+   customer match while points are on — zero dead UI otherwise) and the
+   settings rate row in WorkspaceControlsPage. Tokens only; every color flips
+   with .theme-dark on its own, so no dark overrides are needed.
+   ========================================================================== */
+.shop-loyalty-chip { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; margin: 0; border: 1px solid var(--core-line); border-radius: var(--radius-pill); padding: var(--space-1) var(--space-3); background: var(--core-panel-raised); color: var(--core-ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); line-height: 1.4; }
+.loyalty-settings-controls { display: grid; gap: var(--space-3); }
+.loyalty-settings-row { display: flex; align-items: end; gap: var(--space-3); flex-wrap: wrap; }
+.loyalty-settings-row label { display: grid; gap: var(--space-1); color: var(--core-muted); font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); }
+.loyalty-settings-row input { min-height: 44px; max-width: 128px; border: 1px solid var(--core-field-line); border-radius: var(--radius-md); padding: 0 var(--space-3); background: var(--core-panel); color: var(--core-ink); font-size: var(--font-size-base); }
+.loyalty-settings-row .status-pill { margin-bottom: var(--space-2); }

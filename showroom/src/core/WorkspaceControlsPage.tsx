@@ -16,6 +16,15 @@ import {
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
 import { PaymentQrSettingsControls } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
+import {
+  SHOP_LOYALTY_DEFAULT_RATE_BASIS_POINTS,
+  SHOP_LOYALTY_MAX_RATE_BASIS_POINTS,
+  SHOP_LOYALTY_MIN_RATE_BASIS_POINTS,
+  readShopLoyaltySettings,
+  updateShopLoyaltySettings,
+  writeShopLoyaltySettings,
+  type ShopLoyaltySettings,
+} from './shop-loyalty'
 import { useManagedIdentity } from './workspace-runtime'
 import { loadCommerceWorkspace } from './commerce-workspace'
 import { loadProductionWorkspace, productionMaintenanceDueQueue } from './production-workspace'
@@ -427,6 +436,61 @@ function LocalMetricsView() {
   )
 }
 
+// Customer points settings (roadmap S3 PR1 — accrual only; boundary and the
+// per-device managed gap are documented in shop-loyalty.ts). Plain controls,
+// like the payment QR beside it: the record is device-local, but every change
+// still writes a proof-carrying, actionId-idempotent record through
+// updateShopLoyaltySettings, so the settings history stays auditable.
+function LoyaltySettingsControls({ actor }: { actor: string }) {
+  const [settings, setSettings] = useState<ShopLoyaltySettings | null>(readShopLoyaltySettings)
+  const [rateText, setRateText] = useState(() => String((settings?.rateBasisPoints ?? SHOP_LOYALTY_DEFAULT_RATE_BASIS_POINTS) / 10))
+  const [issue, setIssue] = useState('')
+  const minPerThousand = SHOP_LOYALTY_MIN_RATE_BASIS_POINTS / 10
+  const maxPerThousand = SHOP_LOYALTY_MAX_RATE_BASIS_POINTS / 10
+  const parsedPerThousand = /^\d+$/.test(rateText.trim()) ? Number(rateText.trim()) : Number.NaN
+  const rateBasisPoints = Number.isSafeInteger(parsedPerThousand) && parsedPerThousand >= minPerThousand && parsedPerThousand <= maxPerThousand
+    ? parsedPerThousand * 10
+    : null
+
+  function applyChange(enabled: boolean) {
+    if (rateBasisPoints === null) {
+      setIssue(`Choose between ${minPerThousand} and ${maxPerThousand} points for every 1,000 MMK.`)
+      return
+    }
+    const next = updateShopLoyaltySettings(settings, { enabled, rateBasisPoints }, {
+      actionId: `LOYALTY-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+      capturedAt: new Date().toISOString(),
+      actor,
+      reason: enabled
+        ? `Set customer points to ${rateBasisPoints} basis points of each settled sale.`
+        : 'Turn customer points off on this device.',
+      evidenceReference: 'Workspace controls · Customer points',
+    })
+    if (!next || !writeShopLoyaltySettings(next)) {
+      setIssue('This browser could not save the points setting. Nothing changed.')
+      return
+    }
+    setSettings(next)
+    setIssue('')
+  }
+
+  return <div className="loyalty-settings-controls">
+    <div className="loyalty-settings-row">
+      <label>Points for every 1,000 MMK<input inputMode="numeric" max={maxPerThousand} min={minPerThousand} onChange={(event) => setRateText(event.target.value)} type="number" value={rateText} /></label>
+      <span className={`status-pill ${settings?.enabled ? 'approved' : 'pending'}`}>{settings?.enabled ? `On since ${settings.enabledAt?.slice(0, 10) ?? ''}` : 'Off'}</span>
+    </div>
+    <div className="trial-actions">
+      {settings?.enabled
+        ? <>
+          <button className="core-button" disabled={rateBasisPoints === null || rateBasisPoints === settings.rateBasisPoints} onClick={() => applyChange(true)} type="button">Save rate</button>
+          <button className="text-link danger-text" onClick={() => applyChange(false)} type="button">Turn points off</button>
+        </>
+        : <button className="core-button primary" disabled={rateBasisPoints === null} onClick={() => applyChange(true)} type="button">Turn points on</button>}
+    </div>
+    {issue ? <p aria-live="polite" className="form-notice" role="status">{issue}</p> : null}
+  </div>
+}
+
 function loadRestorePoint() {
   if (typeof window === 'undefined') return null
   try {
@@ -596,6 +660,15 @@ export function WorkspaceControlsPage() {
               localStorage keys; this store is invisible to it, like product photos). */}
           <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (Wave MMQR, MyanMyanPay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
           <PaymentQrSettingsControls scope={paymentQrScope} />
+        </section>
+
+        <section className="core-panel">
+          {/* S3 PR1 customer points (accrual only — module boundary, the per-device managed
+              gap, and the guided-sample exclusion are documented in shop-loyalty.ts).
+              Balances are recomputed from recorded orders on every read; enabling this
+              stores only the device-local settings record. Redemption is a later PR. */}
+          <div><span className="core-eyebrow">Customer points</span><h2>Reward repeat customers at the counter.</h2><p>Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically. A sale earns points once it is paid and handed over, credited to the exact customer name on the order; Guest sales earn nothing. Counting only for now: redeeming points at a sale is not part of this yet, and another register or browser keeps its own setting.</p></div>
+          <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} />
         </section>
 
         <section className="core-panel trial-control-panel">

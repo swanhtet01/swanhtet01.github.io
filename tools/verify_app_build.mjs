@@ -5621,6 +5621,33 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !coreCssSource.includes('.shop-mobile-cart')
   || !coreCssSource.includes('.shop-current-sale.is-open')) fail('shop_counter_direct_demo_missing')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
+// Roadmap S3 PR1 — customer loyalty points, accrual only (shop-loyalty.ts).
+// Pins the boundaries that make a points ledger safe in this codebase:
+//   - balances stay a pure projection over the DEVICE-LOCAL key (the managed
+//     state contract cannot carry a new CommerceState field — module header);
+//   - a sale credits only once completed AND reconciled, at/after enabledAt;
+//   - guided samples never earn a balance (ACT-DEMO- actionId prefix, per
+//     CLAUDE.md sample rule) and Guest/blank customers never accrue;
+//   - the module performs no network IO, and the counter chip renders only on
+//     an exact known-customer match while points are on (zero dead UI);
+//   - the settings panel keeps its honest device-local copy and writes through
+//     the proof-carrying, actionId-idempotent mutation.
+// The dedicated contract test (tools/test_shop_loyalty.mjs) could not join the
+// app:verify chain in the PR that created it — that needs a digest-bound
+// package.json edit — so these pins carry the gate coverage until it is wired.
+const shopLoyaltySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-loyalty.ts'), 'utf8')
+if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_KEY = 'supermega.shop.loyalty.v1'")
+  || !shopLoyaltySource.includes("const SAMPLE_ACTION_ID_PREFIX = 'ACT-DEMO-'")
+  || !shopLoyaltySource.includes("const GUEST_CUSTOMER = 'Guest'")
+  || !shopLoyaltySource.includes("if (order.status !== 'completed' || order.paymentStatus !== 'reconciled') continue")
+  || !shopLoyaltySource.includes('settledAtMs < enabledAtMs) continue')
+  || !shopLoyaltySource.includes('.startsWith(SAMPLE_ACTION_ID_PREFIX)) continue')
+  || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => shopLoyaltySource.includes(marker))
+  || !shopCounterContract.includes('className="shop-loyalty-chip"')
+  || !shopCounterContract.includes('loyaltyPoints?.has(customer.trim())')
+  || !coreCssSource.includes('.shop-loyalty-chip')
+  || !workspaceControlsPageSource.includes('Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically.')
+  || !workspaceControlsPageSource.includes('updateShopLoyaltySettings(settings, { enabled, rateBasisPoints }')) fail('shop_loyalty_contract_missing')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('supplierSourcingDraft')
@@ -19100,7 +19127,13 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // commerce-tabs module, BarcodeScanButton + dialog, product-image-store +
 // ProductPhoto surfaces). Raised to 3_030_000: covers the measured number with
 // ~19_123 bytes of headroom, same order of headroom the previous ceiling gave.
-if (bytes > 3_030_000) fail(`artifact_budget:${bytes}`)
+// RAISE 2026-08-19 (S3 PR1 customer loyalty points): fresh dist/ measured
+// 3_031_176 -- 1_176 bytes over -- after one real product feature (the
+// shop-loyalty settings store + pure balance projection, the counter balance
+// chip, and the settings panel). Raised to 3_050_000: covers the measured
+// number with ~18_824 bytes of headroom, the same order of headroom the
+// previous two ceilings gave.
+if (bytes > 3_050_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -19198,7 +19231,10 @@ else {
   // Raised from 38_000 on 2026-08-19: the S2 merchant payment QR settings section
   // (PaymentQr settings controls + section copy) measured 38,010 bytes — 10 bytes over.
   // Real product surface, same raise-on-value rule as the artifact byte budget.
-  if (workspaceControlsBytes > 40_000
+  // Raised from 40_000 on 2026-08-19 (S3 PR1): the customer-points settings section
+  // (LoyaltySettingsControls + honest device-local copy) measured 41,350 bytes.
+  // Real product surface, same raise-on-value rule.
+  if (workspaceControlsBytes > 44_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')
