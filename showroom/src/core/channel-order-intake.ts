@@ -2,7 +2,7 @@ export const CHANNEL_ORDER_DRAFT_SCHEMA = 'supermega.channel_order_draft.v1' as 
 export const CHANNEL_ORDER_MESSAGE_MAX = 4_000
 export const CHANNEL_ORDER_QUOTE_MAX = 280
 
-export const channelOrderChannels = ['Messenger', 'Viber', 'Phone'] as const
+export const channelOrderChannels = ['Messenger', 'Viber', 'Telegram', 'TikTok', 'Phone'] as const
 export const channelOrderPayments = ['KBZPay', 'WavePay', 'Cash on delivery', 'Cash', 'Card'] as const
 export const channelOrderFields = ['customer', 'sku', 'quantity', 'payment'] as const
 
@@ -102,9 +102,14 @@ async function sha256Reference(value: string) {
   return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
 
+// telegram/tiktok are forward-compat: the managed AI contract
+// (supermega_runtime/order_intake.py OrderIntakeChannel) does not emit them
+// yet; extending that server enum requires re-running the golden-set eval.
 const managedChannels: Record<string, ChannelOrderChannel> = {
   messenger: 'Messenger',
   viber: 'Viber',
+  telegram: 'Telegram',
+  tiktok: 'TikTok',
   phone: 'Phone',
 }
 

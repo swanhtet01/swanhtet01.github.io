@@ -46,7 +46,7 @@ function channelDraftBlockerLabel(blocker: string) {
   if (blocker === 'source_label_required') return 'Add a message ID or approved sample label.'
   if (blocker === 'source_message_required') return 'Paste one approved or synthetic message.'
   if (blocker === 'source_message_too_long') return `Keep the single message under ${CHANNEL_ORDER_MESSAGE_MAX.toLocaleString()} characters.`
-  if (blocker === 'channel_invalid') return 'Choose Messenger, Viber, or Phone.'
+  if (blocker === 'channel_invalid') return 'Choose Messenger, Viber, Telegram, TikTok, or Phone.'
   if (blocker === 'customer_required') return 'Add a customer reference.'
   if (blocker === 'sku_required') return 'Choose a catalog item.'
   if (blocker === 'sku_unknown') return 'The selected item is not in the current catalog.'
