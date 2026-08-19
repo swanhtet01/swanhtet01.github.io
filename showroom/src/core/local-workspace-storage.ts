@@ -55,6 +55,13 @@ const workspaceKeyPrefixes = [
   'supermega.website.workspace.recovery.v1.',
   'supermega.website.release-foundation.v1:',
   'supermega.ecommerce.buying_lifecycle.v1.',
+  // Customer loyalty points settings (shop-loyalty.ts), one record per workspace scope
+  // ('managed:<id>' / 'local' -- see shopLoyaltyStorageKey). Device-local by design (the
+  // managed state contract cannot carry a new key; module header) but still a business
+  // record: it holds when points were turned on and the append-only rate history, which is
+  // what makes every projected balance auditable. Registered so reset clears every scope
+  // and backups carry them.
+  'supermega.shop.loyalty.v1.',
 ]
 
 type WorkspaceStorageReader = Pick<Storage, 'key' | 'length'>
