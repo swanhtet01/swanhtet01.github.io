@@ -374,6 +374,11 @@ Batches:
 **Estimate:** 6 PRs, 2-4 h each; P3.5b's color-mix matching is the slow
 part. Do not start P3.5c until the contract extension is green on main.
 
+**P3.5b/c/d CLOSED by evidence (2026-08-20).** PR #467's exhaustive interval
+math proved no color-mix of existing tokens reproduces the cockpit pastels,
+and the #fff conversions would flip THEME_BLIND cards in dark — the lane is
+closed with an honest zero; the ecommerce ratchet ceiling stands at 111.
+
 ### P3.6 — px→rem for OS font scaling
 
 4,693 px occurrences across the four files; 497 sit in the gen-one region
