@@ -24,7 +24,10 @@ jobs:
   verify-live:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # The app-live verifier walks every canonical route plus the built asset
+    # graph with retry backoff, so the job budget covers public + app + database
+    # checks even on a slow network day.
+    timeout-minutes: 12
     steps:
       - name: Checkout current release contract
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,6 +46,36 @@ jobs:
           EXPECTED_RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || '' }}
         run: npm run public:verify:live
 
+      # Same daily cadence for the app real users reached at go-live. Mirrors
+      # the release workflow's post-promotion invocation: after a coordinated
+      # release the exact commit is asserted, and on the daily schedule the
+      # verifier runs in availability_and_contract scope (no release context
+      # required).
+      - name: Verify current app release
+        env:
+          APP_BASE_URL: https://app.supermega.dev
+          EXPECTED_RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || '' }}
+        run: npm run app:verify:live
+
+      # Unauthenticated reachability ping for the production database endpoint.
+      # No key or secret is sent, so Supabase answering 401 is the expected
+      # healthy response: any HTTP answer proves the endpoint is reachable, and
+      # only a network failure or a platform 5xx fails this step.
+      - name: Verify production database reachability
+        run: |
+          status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --retry 3 --retry-delay 5 --retry-all-errors https://zvtzwcimpvvtkowflhda.supabase.co/rest/v1/ || true)"
+          echo "Supabase REST endpoint answered HTTP ${status:-000}"
+          case "${status:-000}" in
+            000)
+              echo "::error::Production database reachability check failed: no HTTP response from Supabase."
+              exit 1
+              ;;
+            5*)
+              echo "::error::Production database reachability check failed: Supabase answered HTTP $status."
+              exit 1
+              ;;
+          esac
+
       # Failure alert on the GitHub-native rail. Before this step a failed daily
       # health run was a silent red X. Workflows here hold no notify secrets (only
       # VERCEL_TOKEN exists), so instead of inventing a new secret requirement the
@@ -60,7 +93,7 @@ jobs:
           TRIGGER: ${{ github.event_name }}
         run: |
           title='Live health check failing on supermega.dev'
-          body="$(printf 'Automated alert from .github/workflows/supermega-public-live-health.yml: live verification of https://supermega.dev failed.\n\nTrigger: %s\nRun: %s\n\nThis alert is fail-open and never blocks or rolls back a release. Close this issue once the check is green again.' "$TRIGGER" "$RUN_URL")"
+          body="$(printf 'Automated alert from .github/workflows/supermega-public-live-health.yml: live verification failed for at least one production surface (public site https://supermega.dev, app https://app.supermega.dev, or the production database endpoint). Open the run to see which step went red.\n\nTrigger: %s\nRun: %s\n\nThis alert is fail-open and never blocks or rolls back a release. Close this issue once the check is green again.' "$TRIGGER" "$RUN_URL")"
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty")"
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
