@@ -2628,9 +2628,11 @@ input, select, textarea { border-color: var(--core-field-line); }
    mirrored from the pinned .shop-item-search rule above (the row wrapper now
    carries the width so the search input and the button share it), and the
    near-black camera stage, which is deliberately theme-blind: a viewfinder is
-   dark while the sensor warms up in both themes, and no token means
-   "always-dark stage". var(--core-panel)/ink tokens flip with .theme-dark on
-   their own, so no dark overrides are needed here.
+   dark while the sensor warms up in both themes. The stage hex is parked as a
+   var() fallback (var(--barcode-stage, #05080d) — the check_css_contracts.mjs
+   sanctioned shape for a deliberate literal; the property is intentionally
+   undefined, so the fallback always applies). var(--core-panel)/ink tokens
+   flip with .theme-dark on their own, so no dark overrides are needed here.
    ========================================================================== */
 .shop-item-search-row { width: min(260px, 38%); display: flex; align-items: center; gap: var(--space-2); }
 .shop-item-search-row .shop-item-search { width: auto; flex: 1; min-width: 0; }
@@ -2644,7 +2646,7 @@ input, select, textarea { border-color: var(--core-field-line); }
 .barcode-scan-dialog::backdrop { background: rgba(5, 8, 13, .72); }
 .barcode-scan-head { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
 .barcode-scan-head h2 { margin: 0; font-size: var(--font-size-lg); letter-spacing: -.01em; }
-.barcode-scan-video { width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius-md); object-fit: cover; background: #05080d; }
+.barcode-scan-video { width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius-md); object-fit: cover; background: var(--barcode-stage, #05080d); }
 .barcode-scan-hint, .barcode-scan-error { margin: var(--space-3) 0 0; font-size: var(--font-size-base); line-height: 1.5; }
 .barcode-scan-hint { color: var(--core-muted); }
 .barcode-scan-error { color: var(--core-danger); }
