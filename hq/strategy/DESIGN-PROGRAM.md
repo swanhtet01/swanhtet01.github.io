@@ -539,8 +539,8 @@ redesign risk; (2) the work-mode strip itself.
 design decision, not a refactor, and should go to the founder as a probe
 screenshot before the PR opens.
 
-**P3.7 SHIPPED (2026-08-20).** Batch (2) was already on main as the Shop
-slice (Today/Sell/Orders/Stock + Products door, pins verify:1114-1122);
+**P3.7 SHIPPED (2026-08-20, PR #486).** Batch (2) was already on main as
+the Shop slice (Today/Sell/Orders/Stock + Products door, verify:1114-1122);
 batch (1) landed as ONE EOF-appended CSS rule and zero TSX changes. The
 generic two-link `.mobile-nav` (Plant, Website, Ecommerce, setup routes)
 clipped the global :focus-visible ring exactly the way the Shop task bar
