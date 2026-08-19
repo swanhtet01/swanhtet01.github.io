@@ -1,5 +1,12 @@
 # Website CSS pin catalogue (P3.1)
 
+> **Execution record (2026-08-19): P3.3 and P3.4 have EXECUTED and are on
+> main.** Sections 1-7 below are the historical analysis this execution was
+> judged against — their line numbers are frozen at main @ 7965b621 (4,124
+> lines; the file is 3,612 lines today). What happened, what deviated, and
+> the post-deletion state are recorded in §8. Nothing in this catalogue
+> authorizes deleting the surviving gen-one remainder (:1-1439) — see §8.
+
 Authoritative disposition record for every `websiteCssSource` pin in
 `tools/verify_app_build.mjs`, measured 2026-08-19 against main @ 7965b621
 (branch `design/p3-1-website-pin-catalogue`). Verify line numbers are from
@@ -381,3 +388,59 @@ This shrinks P3.3's verifier diff to one site (plus optional comment-marker
 modernization per §4.3) and makes P3.4's safety argument purely: "every
 pinned string still has a live-region match" — which §2 shows is already true
 for everything except the five §2.5/§2.1 movers and the slice.
+
+## 8. Execution record (added 2026-08-19, after P3.4 merged to main)
+
+The catalogue's predictions were executed and held:
+
+- **P3.3 shipped** (#468, `7f87d0ab`): the §5 minimum move list re-homed as
+  true MOVES (byte-identical rule bodies) at the head of the live region —
+  moves, not DESIGN-PROGRAM's copy-in-place model, so the P3.0 hex ratchet
+  stayed at 60 (a copy would have duplicated `#0b6b3a` and the preview-frame
+  literals). §7 confirmed in practice: zero verifier edits for the five
+  gen-one-anchored content pins; the one mandatory lockstep edit re-anchored
+  the `websiteMobileCss` slice on two unique comment markers
+  (`/* Mobile review controls -- verify slice start (P3.3) */` /
+  `... end (P3.3) */`, today at CSS :1573/:1694) — exactly the §4.3
+  recommendation.
+- **P3.4 shipped** as two FAMILY-contiguous chunks (`0633f757` workspace
+  chrome, including the §6 live-region companions; `134a6be4` handoff family
+  plus the emptied gen-one max-640 block) and a close-out (`1be73e86`) — net
+  625 source lines deleted, zero pin reds. The §7 safety argument was the
+  test, and it passed. Family-contiguous instead of the plan's
+  region-contiguous chunking: the theme surface contract fails a chunk that
+  deletes a family's `.theme-dark` override while any of its light surfaces
+  survives elsewhere.
+- **The hex ratchet did NOT drop.** The dead rules carried rgba()/var()
+  only; DESIGN-PROGRAM's "52 gen-one hex vanish with P3.4" expectation was
+  wrong — those literals sit in the surviving gen-one base rules.
+
+Post-deletion state (re-measured 2026-08-19 against main @ `ed7a78ca`; the
+file is 3,612 lines):
+
+- **The gen-one remainder is :1-1439** (the P3.3 banner at :1440 opens the
+  live region; the Rule 6 fence comment now sits at :3539). A fresh scan of
+  every class token in :1-1439 against `showroom/src/**/*.{tsx,ts}`
+  (dynamic `is-`/`view-`/`theme-` construction included) finds 85 tokens,
+  81 with TSX consumers. The 4 zero-consumer tokens all ride MIXED selector
+  lists beside live members: `.website-brand`/`.website-runtime` (:95, with
+  live `.website-preview-controls` and others), `.website-local-badge`
+  (:104 and :122, with live `.website-status`), `.website-sidebar-foot >
+  span` (:137, with live `.website-boundary-note > span` and others) — plus
+  the live-region riders `.website-brand > span` (:1745) and
+  `.website-local-badge` (:1753). Removing a rider is a consolidation edit
+  to a live rule (P3.9 attrition), NOT dead-rule deletion.
+- **Known dead strays in the live region** (under-enumerated by §6, left by
+  chunk 2; for a later consolidation batch, not this lane): standalone rules
+  `.website-handoff-controls label` (:2336-2338) and
+  `.website-handoff-controls input` (:2340-2342) — zero TSX consumers, no
+  surviving `.theme-dark` family member, unpinned — and the mixed-list
+  riders `.website-handoff-action strong` (:2243) / `.website-handoff-action
+  p` (:2259). Deleting the standalone pair shifts every in-file line-number
+  audit ref below :2336; renumber those refs in the same commit (house rule
+  since chunk 2).
+- **The website lane's dead-code deletion is COMPLETE.** §5's warning now
+  describes the whole remainder: :1-1439 holds only live-consumed base rules
+  (whose live-region successors win by cascade) and the mixed lists above.
+  Retiring any of it is P3.9 attrition/consolidation work with per-
+  declaration diff-review — there are no delete-a-region moves left.

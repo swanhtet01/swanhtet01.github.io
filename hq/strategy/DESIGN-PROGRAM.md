@@ -48,7 +48,14 @@ would pay for."
 6. Judges' standing overrules — do NOT resurrect: self-hosted Geist woff2
    (3G cost), big-bang geometry sweeps, immediate deletion of the ~2,100
    dead generation-one lines in `website-product.css` (fenced; delete only in
-   phase 3 after pin cataloguing), a full icon language.
+   phase 3 after pin cataloguing — **condition satisfied and EXECUTED**:
+   P3.1 catalogued every pin (#464), P3.3 re-homed the live movers (#468),
+   P3.4 deleted the catalogued-dead remainder (`0633f757`, `134a6be4`,
+   close-out `1be73e86`). The fence still stands over what survives: the
+   gen-one remainder at :1-1439 is live base rules plus mixed selector
+   lists, NOT dead code — retire it only via P3.9 attrition/consolidation,
+   never as a deletion sweep; execution record in
+   `WEBSITE-CSS-PIN-CATALOGUE.md` §8), a full icon language.
 
 Shipped work has been reviewed: `DESIGN-REVIEW-2026-08-18.md`. Read it before
 taking another phase-2 item — two findings change what the next item should be
@@ -298,6 +305,15 @@ whatever P3.1's table adds; expect first-occurrence shifts for the 4
 both-region pins.
 **Estimate:** 1 PR, 1 day including a mobile-viewport probe pass
 (dev server + getComputedStyle, per the recipe below).
+**SHIPPED 2026-08-20** (#468, `7f87d0ab`): executed as true MOVES, not the
+copy-in-place model above — the catalogue's §7 measured all five
+gen-one-anchored pins as position-independent content pins, so byte-identical
+moves satisfied them with zero verifier edits and kept the P3.0 hex ratchet
+at 60 (a copy would have duplicated `#0b6b3a` and the preview-frame
+literals). The one mandatory lockstep edit landed as predicted: the
+`websiteMobileCss` slice was re-anchored on two unique comment markers
+(`/* Mobile review controls -- verify slice start/end (P3.3) */`), the
+catalogue §4.3 house-style recommendation.
 
 ### P3.4 — Delete the catalogued-dead remainder
 
@@ -313,6 +329,22 @@ DOWN; do not "reclaim" the headroom in the same PR.
 catalogue. Any red here means the catalogue missed a pin: stop, fix the
 catalogue, re-run.
 **Estimate:** 2-3 PRs, half a day each.
+**SHIPPED 2026-08-20** (chunk 1 `0633f757`, chunk 2 `134a6be4`, close-out
+`1be73e86`): net 625 source lines deleted, zero pin reds — the catalogue's
+safety argument held, which was the test. Two deviations from the plan
+above, both evidence-forced. (1) Chunks were FAMILY-contiguous, not
+region-contiguous: the theme surface contract fails a chunk that deletes a
+family's `.theme-dark` override while any of its light surfaces survives
+elsewhere, so each zero-consumer family (workspace chrome incl. the
+catalogue-§6 live-region companions; then handoff plus the emptied gen-one
+max-640 block) left whole. (2) The ratchet floor did NOT drop and the "52
+gen-one hex vanish" expectation above was wrong — the dead rules carried
+rgba()/var() only; the hex literals sit in the surviving gen-one base rules.
+What remains at :1-1439 is base rules for still-rendered classes (their
+live-region successors win by cascade) plus mixed selector lists with dead
+riders — P3.9 attrition/consolidation territory, not deletion. The website
+lane (P3.1 → P3.4) is CLOSED; post-deletion state and known live-region
+strays are recorded in `WEBSITE-CSS-PIN-CATALOGUE.md` §8.
 
 ### P3.5 — Ecommerce literal retirement (independent lane)
 
