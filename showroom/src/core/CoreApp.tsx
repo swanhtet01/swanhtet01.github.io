@@ -45,7 +45,7 @@ import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
-import { readShopLoyaltySettings, redeemShopLoyaltyPoints, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyScopeForWorkspace, writeShopLoyaltySettings } from './shop-loyalty'
+import { SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyRedemptionAllowed, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -1747,15 +1747,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ?? ''
   // S3 customer points. Settings are read once per mount (they are edited on the
   // separate Workspace-controls route, so navigating back here remounts this page and
-  // picks the change up) and re-read after a redemption on THIS page writes a new
-  // spend row (shopLoyaltyEpoch bump — PR2). Balances are a pure projection over the
-  // same commerce state the counter renders; client-master names are added at zero so
-  // a known customer with no points yet still gets an exact-match chip instead of silence.
-  const [shopLoyaltyEpoch, setShopLoyaltyEpoch] = useState(0)
-  const shopLoyaltySettings = useMemo(() => {
-    void shopLoyaltyEpoch
-    return readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId))
-  }, [managedIdentity, shopLoyaltyEpoch])
+  // picks the change up). Balances — including redeemed spends, which live as
+  // prefixed corrections inside the commerce state itself (PR2) — are a pure
+  // projection over the same commerce state the counter renders, so a redemption
+  // refreshes every chip through the ordinary state update with no extra epoch.
+  // Client-master names are added at zero so a known customer with no points yet
+  // still gets an exact-match chip instead of silence.
+  const shopLoyaltySettings = useMemo(
+    () => readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)),
+    [managedIdentity],
+  )
   const shopLoyaltyPoints = useMemo(() => {
     if (!shopLoyaltySettings?.enabled) return null
     const balances = shopLoyaltyBalances(commerce, shopLoyaltySettings)
@@ -1773,9 +1774,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (!customer || customer === 'Guest') return null
     return {
       balancePoints: shopLoyaltyDisplayPoints(shopLoyaltyPoints.get(customer) ?? 0),
-      redeemedPoints: shopLoyaltyRedeemedPointsForOrder(shopLoyaltySettings, receiptAck.orderId),
+      redeemedPoints: shopLoyaltyRedeemedPointsForOrder(commerce.orders.find((order) => order.id === receiptAck.orderId)),
     }
-  }, [receiptAck, shopLoyaltyPoints, shopLoyaltySettings])
+  }, [commerce.orders, receiptAck, shopLoyaltyPoints, shopLoyaltySettings])
   const purchaseOrderDraftOrder = purchaseOrderDraft?.mode === 'receive'
     ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderDraft.purchaseOrderId)
     : undefined
@@ -3080,7 +3081,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function queueAction(
-    action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>,
+    // actionIdPrefix lets a caller mark the resulting proof's actionId with a
+    // structural, greppable prefix (e.g. the loyalty redemption marker) — the
+    // repo identifies record kinds by actionId prefix, never by display copy.
+    action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'> & { actionIdPrefix?: string },
     returnFocus?: HTMLElement | null,
   ): boolean {
     if (!commerceCanWrite) {
@@ -3100,7 +3104,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         : document.activeElement instanceof HTMLElement ? document.activeElement : null
     setActionTrigger(trigger)
     if (action.kind === 'order_create' && orderComposerRef.current?.open) orderComposerRef.current.close()
-    setPendingAction({ ...action, id: uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
+    const { actionIdPrefix, ...queued } = action
+    setPendingAction({ ...queued, id: actionIdPrefix ? `${actionIdPrefix}${commandUuid().toUpperCase()}` : uid('ACT'), commandId: commandUuid(), domain: 'commerce' })
     setNotice('Review the change, accountable operator, and evidence before it is applied.')
     return true
   }
@@ -4569,6 +4574,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     queueAction({
       kind: 'order_correction',
       subjectId: input.orderId,
+      // The prefix IS the spend record: the projection recognises this
+      // correction as redeemed points from its actionId alone (shop-loyalty.ts
+      // module header) — one atomic commerce write, nothing else to persist.
+      ...(loyaltyRedemption ? { actionIdPrefix: SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX } : {}),
       summary: loyaltyRedemption
         ? `Redeem ${input.listedAmountMmk.toLocaleString()} points for ${loyaltyRedemption.customer}`
         : `Record ${input.kind} note for ${input.orderId}`,
@@ -4594,21 +4603,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           }
         }
         const proof = commerceActionProof(action)
-        // S3 PR2 ordering: compute the redemption row against the CURRENT
-        // loyalty record and the PRE-correction commerce state (the balance
-        // the customer actually holds), but write it only AFTER the credit
-        // correction lands — a refused correction (mutateCommerce throws on a
-        // null transition) must never spend points.
-        const loyaltyScope = shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)
-        const nextLoyalty = loyaltyRedemption
-          ? redeemShopLoyaltyPoints(
-            readShopLoyaltySettings(loyaltyScope),
-            commerceRef.current,
-            { customer: loyaltyRedemption.customer, orderId: input.orderId, points: input.listedAmountMmk },
-            proof,
-          )
-          : null
-        if (loyaltyRedemption && !nextLoyalty) {
+        // S3 PR2: the correction IS the spend (its actionId carries the
+        // redemption prefix — see queueAction above), so the redemption is
+        // ONE atomic commerce write: a refused correction spends nothing, a
+        // landed one is subtracted by the projection from state alone, on
+        // every device the state syncs to. This re-check guards the gap
+        // between review and apply — the balance the operator saw may have
+        // changed underneath the review dialog.
+        if (loyaltyRedemption && !shopLoyaltyRedemptionAllowed(
+          readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)),
+          commerceRef.current,
+          { customer: loyaltyRedemption.customer, orderId: input.orderId, points: input.listedAmountMmk },
+        )) {
           throw new ShopReviewRequiredError(`${loyaltyRedemption.customer}’s points balance changed during review. No credit was recorded and no points were spent.`)
         }
         await mutateCommerce(
@@ -4617,13 +4623,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           proof,
           (current) => recordCommerceOrderCorrection(current, input, proof, correctionReviewExpectation),
         )
-        if (nextLoyalty) {
-          if (writeShopLoyaltySettings(loyaltyScope, nextLoyalty)) {
-            setShopLoyaltyEpoch((epoch) => epoch + 1)
-          } else {
-            setNotice(`The credit note was recorded but this browser could not save the points spend. ${loyaltyRedemption?.customer ?? 'The customer'} keeps the points — note evidence ${proof.actionId} before redeeming again.`)
-          }
-        }
         setCorrectionDraft(null)
       },
     }, correctionTriggerRefs.current.get(input.orderId))

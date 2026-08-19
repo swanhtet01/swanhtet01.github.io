@@ -28,16 +28,18 @@
 //      is by state-machine invariant a cancelled order, outside the credit
 //      set — and the seeded workspace must always project ZERO balances
 //      (CLAUDE.md: guided samples never earn a product its counters).
-//   5. REDEMPTION (PR2) spends points against a completed sale as the loyalty
-//      side of a credit order correction: the spend row shares the
-//      correction proof's actionId (idempotent replay), is BLOCKED beyond the
-//      projected balance and for Guest/blank/unknown/mismatched customers or
-//      disabled settings, and subtracts from the balance. BOTH effects of the
-//      paired correction are intended and pinned: the credit reduces the
-//      order's own accrual AND the row subtracts the points spent. A PR1
-//      record without the redemptions key must keep validating (no silent
-//      loss of freshly shipped data); a malformed or duplicated row still
-//      fails the whole record closed.
+//   5. REDEMPTION (PR2) is DERIVED from CommerceState, never stored here: a
+//      spend is a credit correction whose actionId carries
+//      SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX (one atomic commerce write —
+//      Codex P1, PR #472: a stored row paired non-atomically with the
+//      correction could double-spend, and rows were per-device while
+//      corrections sync). The projection subtracts spends on every eligible
+//      sale — including pre-enablement orders, or skipping them would let the
+//      same points redeem twice — and the pre-flight gate blocks
+//      over-redemption and Guest/blank/unknown/mismatched customers. BOTH
+//      effects of the correction are intended and pinned: the credit reduces
+//      the order's own accrual AND its prefix subtracts the points spent.
+//      The stored settings record keeps the exact PR1 shape.
 //
 // WIRING NOTE: every gate step is an npm script named in package.json's
 // app:verify chain, and package.json is digest-bound (rehearsal cascade), so
@@ -59,12 +61,12 @@ const bundle = await build({
         SHOP_LOYALTY_KEY, SHOP_LOYALTY_SCHEMA,
         SHOP_LOYALTY_DEFAULT_RATE_BASIS_POINTS,
         SHOP_LOYALTY_MIN_RATE_BASIS_POINTS, SHOP_LOYALTY_MAX_RATE_BASIS_POINTS,
-        SHOP_LOYALTY_MAX_REDEMPTIONS,
+        SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX,
         validateShopLoyaltySettings, readShopLoyaltySettings, writeShopLoyaltySettings,
         updateShopLoyaltySettings, shopLoyaltyPointsForAmount, shopLoyaltyBalances,
         shopLoyaltyDisplayPoints, shopLoyaltyScopeForWorkspace, shopLoyaltyStorageKey,
         shopLoyaltyCurrentRateBasisPoints,
-        redeemShopLoyaltyPoints, shopLoyaltyRedeemedPointsForOrder,
+        shopLoyaltyRedemptionAllowed, shopLoyaltyRedeemedPointsForOrder,
       } from './shop-loyalty.ts'
       export { createSeedCommerce } from './commerce-workspace.ts'
       export { isLocalWorkspaceKey } from './local-workspace-storage.ts'
@@ -85,12 +87,12 @@ const {
   SHOP_LOYALTY_SCHEMA,
   SHOP_LOYALTY_DEFAULT_RATE_BASIS_POINTS,
   SHOP_LOYALTY_MIN_RATE_BASIS_POINTS, SHOP_LOYALTY_MAX_RATE_BASIS_POINTS,
-  SHOP_LOYALTY_MAX_REDEMPTIONS,
+  SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX,
   validateShopLoyaltySettings, readShopLoyaltySettings, writeShopLoyaltySettings,
   updateShopLoyaltySettings, shopLoyaltyPointsForAmount, shopLoyaltyBalances,
   shopLoyaltyDisplayPoints, shopLoyaltyScopeForWorkspace, shopLoyaltyStorageKey,
   shopLoyaltyCurrentRateBasisPoints,
-  redeemShopLoyaltyPoints, shopLoyaltyRedeemedPointsForOrder,
+  shopLoyaltyRedemptionAllowed, shopLoyaltyRedeemedPointsForOrder,
   createSeedCommerce, isLocalWorkspaceKey, isPortableCompanyStorageKey,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
@@ -306,92 +308,59 @@ const preSeedSettings = validateShopLoyaltySettings({
 check(shopLoyaltyBalances(seedState, preSeedSettings).size === 0, 'the seeded workspace projects ZERO balances even under an enablement predating the seed')
 check(shopLoyaltyBalances(seedState, settings).size === 0, 'the seeded workspace projects zero balances under a normal enablement')
 
-// --- PR2: redemption row validation — exact keys, fail-closed, PR1 compatible ------------
-const redemptionRow = (overrides = {}) => ({
-  actionId: 'ACT-REDEEM-1',
-  capturedAt: '2026-08-16T05:00:00.000Z',
-  customer: 'Ma Aye',
-  orderId: 'ORD-1',
-  points: 50,
-  ...overrides,
-})
+// --- PR2: redemption is DERIVED from prefixed credit corrections ------------------------
+// The spend is the correction itself: an accountable action generated with
+// SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX records a credit correction whose
+// actionId the projection recognises — one atomic commerce write, no second
+// store (Codex P1, PR #472). The stored settings record keeps the exact PR1
+// shape: a redemptions key is now an unknown key and must REJECT.
+rejects({ ...goodSettings, redemptions: [] }, 'a redemptions key is rejected — spends live in CommerceState, not the settings record')
+check(SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX === 'ACT-LOYREDEEM-', 'the redemption marker is a stable actionId prefix (never display copy)')
 
-check(validateShopLoyaltySettings(goodSettings).redemptions.length === 0, 'a PR1 record WITHOUT the redemptions key still validates and normalises to an empty spend history')
-check(validateShopLoyaltySettings({ ...goodSettings, redemptions: [] }).redemptions.length === 0, 'an explicit empty redemptions array validates')
-check(validateShopLoyaltySettings({ ...goodSettings, redemptions: [redemptionRow()] }).redemptions[0].points === 50, 'a well-formed redemption row round-trips through validation')
-rejects({ ...goodSettings, redemptions: 'none' }, 'a non-array redemptions value is rejected')
-rejects({ ...goodSettings, redemptions: [{ ...redemptionRow(), extra: 1 }] }, 'an extra redemption key is rejected — exact keys only')
-rejects({ ...goodSettings, redemptions: [(() => { const { points: _p, ...rest } = redemptionRow(); return rest })()] }, 'a missing redemption key is rejected')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ customer: 'Guest' })] }, 'a Guest redemption row is rejected — anonymous points can never be spent')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ customer: ' Ma Aye ' })] }, 'an untrimmed customer is rejected — the exact credit-policy key only')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ points: 0 })] }, 'a zero-point redemption is rejected')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ points: 50.5 })] }, 'a fractional redemption is rejected')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ points: -50 })] }, 'a negative redemption is rejected — a spend can never mint points')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ capturedAt: 'not-a-date' })] }, 'a garbage redemption timestamp is rejected')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ actionId: '  ' })] }, 'a blank redemption actionId is rejected')
-rejects({ ...goodSettings, redemptions: [redemptionRow({ orderId: ' ORD-1' })] }, 'an untrimmed orderId is rejected')
-rejects({ ...goodSettings, redemptions: [redemptionRow(), redemptionRow({ points: 60 })] }, 'duplicate redemption actionIds are rejected — a doubled row would double-spend')
-rejects({
-  ...goodSettings,
-  redemptions: Array.from({ length: SHOP_LOYALTY_MAX_REDEMPTIONS + 1 }, (_, index) => redemptionRow({ actionId: `ACT-REDEEM-${index}` })),
-}, 'the redemption history cap is enforced')
+const spend = (points, overrides = {}) => ({ kind: 'credit', actionId: `ACT-LOYREDEEM-${points}-X`, calculation: { totalMmk: points }, ...overrides })
 
-// A settings change never touches the spend history.
-const withSpend = validateShopLoyaltySettings({ ...goodSettings, redemptions: [redemptionRow()] })
-const spendPreserved = updateShopLoyaltySettings(withSpend, { enabled: false, rateBasisPoints: 100 }, proof({ actionId: 'LOYALTY-TEST-5', capturedAt: '2026-08-22T04:00:00.000Z' }))
-check(spendPreserved?.redemptions.length === 1 && spendPreserved.redemptions[0].actionId === 'ACT-REDEEM-1', 'disabling points preserves the redemption history — the spend record survives every settings change')
-const spendStorage = makeStorage()
-check(writeShopLoyaltySettings('local', withSpend, spendStorage) === true
-  && readShopLoyaltySettings('local', spendStorage)?.redemptions.length === 1, 'a record with redemptions round-trips through scoped storage')
-check(readShopLoyaltySettings('managed:ws-alpha', spendStorage) === null, 'redemptions written under one scope are invisible to another — spend isolation is the scoped record itself')
+// Receipt line derivation.
+check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [spend(50)] })) === 50, 'the receipt line sums prefixed credit corrections on the order')
+check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [spend(50), spend(20, { actionId: 'ACT-LOYREDEEM-20-Y' })] })) === 70, 'multiple spends on one order sum')
+check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'credit', actionId: 'ACT-ORDINARY-1', calculation: { totalMmk: 50 } }] })) === 0, 'an ordinary credit correction is NOT a spend — only the prefix marks one')
+check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'debit', actionId: 'ACT-LOYREDEEM-BAD', calculation: { totalMmk: 50 } }] })) === 0, 'a debit can never be a spend')
+check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'credit', calculation: { totalMmk: 50 } }] })) === 0, 'a correction without an actionId is not a spend')
+check(shopLoyaltyRedeemedPointsForOrder(order()) === 0, 'no corrections, no redemption line')
+check(shopLoyaltyRedeemedPointsForOrder(null) === 0, 'no order, no redemption line')
 
-// --- PR2: the redemption mutation ---------------------------------------------------------
-// `settings` (1%, enabledAt 2026-08-10) and the order() fixture (24,000 MMK
-// settled 2026-08-15 → 240 points) come from the projection section above.
-const redeemProof = (overrides = {}) => proof({
-  actionId: 'ACT-CORRECTION-77',
-  capturedAt: '2026-08-16T09:00:00.000Z',
-  reason: 'Redeem 50 customer points as a credit note (1 point = 1 MMK).',
-  ...overrides,
-})
+// Balance projection subtracts spends, coherently with the accrual reduction.
+// Redeeming 50 points records a 50 MMK prefixed credit on the order. The
+// order's accrual drops to floor(23,950 × 1%) = 239 (the customer effectively
+// paid less) AND the spend subtracts 50. Balance = 239 − 50 = 189.
+const redeemedOrder = order({ id: 'ORD-1', corrections: [spend(50)] })
+check(shopLoyaltyBalances({ orders: [redeemedOrder] }, settings).get('Ma Aye') === 189, 'coherence: the prefixed credit reduces accrual (240 → 239) AND subtracts the spend (− 50) — balance 189')
+check(shopLoyaltyBalances({ orders: [order({ id: 'ORD-1', corrections: [{ kind: 'credit', actionId: 'ACT-ORDINARY-1', calculation: { totalMmk: 50 } }] })] }, settings).get('Ma Aye') === 239, 'an ordinary credit only reduces accrual — no spend subtraction without the prefix')
+// A spend must survive the accrual gates: an order settled BEFORE enablement
+// earns nothing, but points redeemed against it are still spent.
+const preEnablementSpend = order({ id: 'ORD-0', paymentReconciledAt: '2026-08-01T00:00:00.000Z', corrections: [spend(30)] })
+check(shopLoyaltyBalances({ orders: [order(), preEnablementSpend] }, settings).get('Ma Aye') === 210, 'a spend on a pre-enablement order still subtracts (240 accrued elsewhere − 30 spent) — skipping it would let the same points redeem twice')
+check(shopLoyaltyBalances({ orders: [preEnablementSpend] }, settings).get('Ma Aye') === -30, 'a spend with no surviving accrual projects negative internally (display clamps at zero)')
+check(shopLoyaltyDisplayPoints(shopLoyaltyBalances({ orders: [preEnablementSpend] }, settings).get('Ma Aye') ?? 0) === 0, 'the counter never shows a negative balance')
+// Sample orders stay fully outside the ledger, spends included.
+check(shopLoyaltyBalances({ orders: [order({ paymentReconciliationActionId: 'ACT-DEMO-PAY-1', corrections: [spend(10)] })] }, settings).size === 0, 'a sample-seeded order contributes neither accrual nor spends')
+
+// --- PR2: the redemption pre-flight gate ---------------------------------------------------
 const redeemState = { orders: [order({ id: 'ORD-1' })] }
-const redeemed = redeemShopLoyaltyPoints(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 50 }, redeemProof())
-check(redeemed?.redemptions.length === 1
-  && redeemed.redemptions[0].actionId === 'ACT-CORRECTION-77'
-  && redeemed.redemptions[0].capturedAt === redeemProof().capturedAt
-  && redeemed.redemptions[0].customer === 'Ma Aye'
-  && redeemed.redemptions[0].orderId === 'ORD-1'
-  && redeemed.redemptions[0].points === 50, 'a valid redemption appends one row carrying the correction proof actionId')
-check(shopLoyaltyBalances(redeemState, redeemed).get('Ma Aye') === 190, 'the redemption row subtracts from the balance (240 − 50)')
-check(redeemShopLoyaltyPoints(redeemed, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 50 }, redeemProof()) === redeemed, 'replaying the identical redemption returns the record UNCHANGED — idempotent on the shared actionId')
-check(redeemShopLoyaltyPoints(redeemed, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 60 }, redeemProof()) === null, 'reusing the actionId for a DIFFERENT spend is refused')
-check(redeemShopLoyaltyPoints(redeemed, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 191 }, redeemProof({ actionId: 'ACT-CORRECTION-78' })) === null, 'over-redemption is blocked: the remaining balance is 190')
-check(redeemShopLoyaltyPoints(redeemed, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 190 }, redeemProof({ actionId: 'ACT-CORRECTION-78' }))?.redemptions.length === 2, 'spending the exact remaining balance is allowed')
-check(redeemShopLoyaltyPoints(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 241 }, redeemProof()) === null, 'over-redemption is blocked against the projected accrual (240)')
-check(redeemShopLoyaltyPoints(null, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'no settings, no redemption')
-check(redeemShopLoyaltyPoints({ ...settings, enabled: false }, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'disabled settings block redemption entirely')
-check(redeemShopLoyaltyPoints(settings, redeemState, { customer: 'Guest', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'Guest can never redeem')
-check(redeemShopLoyaltyPoints(settings, redeemState, { customer: '   ', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'a blank customer can never redeem')
-check(redeemShopLoyaltyPoints(settings, redeemState, { customer: 'U Kyaw', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'an unknown customer (no balance, not the order owner) is blocked')
-check(redeemShopLoyaltyPoints(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-MISSING', points: 10 }, redeemProof()) === null, 'a redemption must bind to an existing order')
-check(redeemShopLoyaltyPoints(settings, { orders: [order({ id: 'ORD-1', status: 'ready' })] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'a not-yet-completed order cannot carry a redemption')
-check(redeemShopLoyaltyPoints(settings, { orders: [order({ id: 'ORD-1', paymentStatus: 'pending' })] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'an unpaid order cannot carry a redemption')
-check(redeemShopLoyaltyPoints(settings, { orders: [order({ id: 'ORD-1' }), order({ id: 'ORD-2', customer: 'U Kyaw' })] }, { customer: 'Ma Aye', orderId: 'ORD-2', points: 10 }, redeemProof()) === null, 'a customer cannot redeem against another customer\'s order')
-check(redeemShopLoyaltyPoints(settings, { orders: [order({ id: 'ORD-1', paymentReconciliationActionId: 'ACT-DEMO-PAY-1' }), order({ id: 'ORD-2' })] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }, redeemProof()) === null, 'a sample-seeded order can never carry a redemption (actionId prefix, never actor)')
-check(redeemShopLoyaltyPoints(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }, redeemProof({ actionId: 'ACT-DEMO-REDEEM-1' })) === null, 'a sample-seeded proof can never record a spend — guided samples move no points')
-check(redeemShopLoyaltyPoints(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 0 }, redeemProof()) === null, 'a zero-point spend is refused')
-
-// --- PR2: bookkeeping coherence — both effects of the paired correction ------------------
-// Redeeming 50 points records a 50 MMK credit correction on the order. After
-// it lands: the order's accrual drops to floor(23,950 × 1%) = 239 (the
-// customer effectively paid less) AND the row subtracts the 50 points spent.
-// Balance = 239 − 50 = 189. Neither effect double-counts the other.
-const correctedState = { orders: [order({ id: 'ORD-1', corrections: [{ kind: 'credit', calculation: { totalMmk: 50 } }] })] }
-check(shopLoyaltyBalances(correctedState, redeemed).get('Ma Aye') === 189, 'coherence: credit correction reduces accrual (240 → 239) AND the row subtracts the spend (− 50) — balance 189')
-check(shopLoyaltyBalances({ orders: [] }, redeemed).get('Ma Aye') === -50, 'a spend row with no surviving accrual projects negative internally (display clamps at zero)')
-check(shopLoyaltyDisplayPoints(shopLoyaltyBalances({ orders: [] }, redeemed).get('Ma Aye') ?? 0) === 0, 'the counter never shows a negative balance')
-check(shopLoyaltyRedeemedPointsForOrder(redeemed, 'ORD-1') === 50, 'the receipt line sums the points redeemed against one order')
-check(shopLoyaltyRedeemedPointsForOrder(redeemed, 'ORD-2') === 0, 'another order shows no redemption')
-check(shopLoyaltyRedeemedPointsForOrder(null, 'ORD-1') === 0, 'no record, no redemption line')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 240 }) === true, 'spending the exact projected balance is allowed')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 241 }) === false, 'over-redemption is blocked against the projected balance (240)')
+check(shopLoyaltyRedemptionAllowed(settings, { orders: [redeemedOrder] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 190 }) === false, 'the gate sees prior spends: after redeeming 50, only 189 remain')
+check(shopLoyaltyRedemptionAllowed(settings, { orders: [redeemedOrder] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 189 }) === true, 'the exact remaining balance is spendable')
+check(shopLoyaltyRedemptionAllowed(null, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }) === false, 'no settings, no redemption')
+check(shopLoyaltyRedemptionAllowed({ ...settings, enabled: false }, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }) === false, 'disabled settings block redemption entirely')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: 'Guest', orderId: 'ORD-1', points: 10 }) === false, 'Guest can never redeem')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: '   ', orderId: 'ORD-1', points: 10 }) === false, 'a blank customer can never redeem')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: 'U Kyaw', orderId: 'ORD-1', points: 10 }) === false, 'an unknown customer (no balance, not the order owner) is blocked')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-MISSING', points: 10 }) === false, 'a redemption must bind to an existing order')
+check(shopLoyaltyRedemptionAllowed(settings, { orders: [order({ id: 'ORD-1', status: 'ready' })] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }) === false, 'a not-yet-completed order cannot carry a redemption')
+check(shopLoyaltyRedemptionAllowed(settings, { orders: [order({ id: 'ORD-1', paymentStatus: 'pending' })] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }) === false, 'an unpaid order cannot carry a redemption')
+check(shopLoyaltyRedemptionAllowed(settings, { orders: [order({ id: 'ORD-1' }), order({ id: 'ORD-2', customer: 'U Kyaw' })] }, { customer: 'Ma Aye', orderId: 'ORD-2', points: 10 }) === false, "a customer cannot redeem against another customer's order")
+check(shopLoyaltyRedemptionAllowed(settings, { orders: [order({ id: 'ORD-1', paymentReconciliationActionId: 'ACT-DEMO-PAY-1' })] }, { customer: 'Ma Aye', orderId: 'ORD-1', points: 10 }) === false, 'a sample-seeded order can never carry a redemption (actionId prefix, never actor)')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 0 }) === false, 'a zero-point spend is refused')
+check(shopLoyaltyRedemptionAllowed(settings, redeemState, { customer: 'Ma Aye', orderId: 'ORD-1', points: 50.5 }) === false, 'a fractional spend is refused')
 
 console.log(`shop loyalty contract: ${checks} checks passed`)

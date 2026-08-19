@@ -5649,7 +5649,7 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_KEY = 'supermega.shop
   || !shopLoyaltySource.includes("const SAMPLE_ACTION_ID_PREFIX = 'ACT-DEMO-'")
   || !shopLoyaltySource.includes("const GUEST_CUSTOMER = 'Guest'")
   || !shopLoyaltySource.includes("if (order.status !== 'completed' || order.paymentStatus !== 'reconciled') continue")
-  || !shopLoyaltySource.includes('settledAtMs < enabledAtMs) continue')
+  || !shopLoyaltySource.includes('settledAtMs >= enabledAtMs && adjustedTotal !== null')
   || !shopLoyaltySource.includes('.startsWith(SAMPLE_ACTION_ID_PREFIX)) continue')
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => shopLoyaltySource.includes(marker))
   // PR #469 Codex P1 trio, all three load-bearing:
@@ -5661,7 +5661,7 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_KEY = 'supermega.shop
   //    on completed reconciled orders — the accruing population);
   // 3. at the rate in force when the order settled (append-only rate history,
   //    never the latest rate retroactively).
-  || !shopLoyaltySource.includes('const points = shopLoyaltyPointsForAmount(adjustedTotal, rateBasisPointsAt(settings, settledAtMs))')
+  || !shopLoyaltySource.includes('? shopLoyaltyPointsForAmount(adjustedTotal, rateBasisPointsAt(settings, settledAtMs))')
   || !coreSource.includes('readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId))')
   || !shopCounterContract.includes('className="shop-loyalty-chip"')
   || !shopCounterContract.includes('loyaltyPoints?.has(customer.trim())')
@@ -5671,31 +5671,35 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_KEY = 'supermega.shop
 // Roadmap S3 PR2 — redemption + receipt balance line. The money side rides the
 // EXISTING credit-correction machinery (commerce.order.correction_recorded is
 // already in the managed vocabulary — zero server change; GL and daily close
-// already net corrections); the points side is a spend row in the scoped
-// loyalty record keyed by the SAME proof actionId. Pins:
-//   - the pure mutation exists, blocks over-redemption against the projected
-//     balance, and refuses sample-seeded proofs (actionId prefix, never actor);
-//   - balances subtract spend rows (accrual reduction via the credit
-//     correction PLUS the row subtraction are BOTH intended — coherence is
-//     pinned in tools/test_shop_loyalty.mjs);
-//   - a PR1 record without the redemptions key keeps validating (no silent
-//     invalidation of freshly shipped data) while validation stays exact-key;
+// already net corrections); the SPEND IS THE CORRECTION ITSELF — its
+// accountable action carries SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, and
+// the projection recognises it from CommerceState alone (Codex P1, PR #472:
+// a stored row paired non-atomically with the correction could double-spend,
+// and rows were per-device while corrections sync). Pins:
+//   - the marker prefix is stable, and the pre-flight gate blocks
+//     over-redemption against the projected balance;
+//   - balances subtract derived spends on EVERY eligible sale (accrual
+//     reduction via the credit PLUS the spend subtraction are BOTH intended —
+//     coherence, pre-enablement spends, and sample exclusion are pinned in
+//     tools/test_shop_loyalty.mjs);
+//   - the stored settings record keeps the exact PR1 shape — nothing about
+//     redemption persists outside CommerceState;
 //   - the UI locks a redemption to credit/other on the order's own customer,
-//     computes the row against the PRE-correction state, and writes it only
-//     AFTER the correction lands (a refused correction spends nothing);
+//     marks the queued action with the prefix, and re-checks the balance at
+//     apply time (a refused correction spends nothing — one atomic write);
 //   - the receipt dialog shows the balance line without touching the printed
 //     artifact text.
 const receiptDialogSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ReceiptDialog.tsx'), 'utf8')
-if (!shopLoyaltySource.includes('export function redeemShopLoyaltyPoints(')
-  || !shopLoyaltySource.includes('if (input.points > available) return null')
-  || !shopLoyaltySource.includes('proof.actionId.startsWith(SAMPLE_ACTION_ID_PREFIX)) return null')
-  || !shopLoyaltySource.includes('balances.set(redemption.customer, (balances.get(redemption.customer) ?? 0) - redemption.points)')
-  || !shopLoyaltySource.includes("hasExactKeys(value, 'redemptions' in value ? [...baseKeys, 'redemptions'] : baseKeys)")
-  || !shopLoyaltySource.includes('new Set(redemptions.map((redemption) => redemption.actionId)).size !== redemptions.length')
+if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX = 'ACT-LOYREDEEM-'")
+  || !shopLoyaltySource.includes('export function shopLoyaltyRedemptionAllowed(')
+  || !shopLoyaltySource.includes('return input.points <= available')
   || !shopLoyaltySource.includes('export function shopLoyaltyRedeemedPointsForOrder(')
+  || !shopLoyaltySource.includes('.startsWith(SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX)) continue')
+  || !shopLoyaltySource.includes('balances.set(customer, (balances.get(customer) ?? 0) + points - spent)')
+  || shopLoyaltySource.includes('redemptions')
   || !coreSource.includes("{ orderId, kind: 'credit', reasonCode: 'other', listedAmountMmk: '', loyalty: { customer } }")
-  || !coreSource.includes('if (loyaltyRedemption && !nextLoyalty) {')
-  || !coreSource.includes('if (writeShopLoyaltySettings(loyaltyScope, nextLoyalty)) {')
+  || !coreSource.includes('actionIdPrefix: SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX')
+  || !coreSource.includes('if (loyaltyRedemption && !shopLoyaltyRedemptionAllowed(')
   || !coreSource.includes('Redeem points · ')
   || !coreSource.includes('loyalty={receiptLoyalty}')
   || !receiptDialogSource.includes('Points balance')
