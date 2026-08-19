@@ -16,29 +16,46 @@ test('infra-http permits a public IP literal over https', async () => {
   assert.equal(await validateUrl('https://1.1.1.1/'), null)
 })
 
-// The v4-mapped IPv6 form (::ffff:0:0/96) embeds an IPv4 address in its last 32 bits,
-// and that embedded address can be written in either dotted-decimal (::ffff:127.0.0.1)
-// or plain hex (::ffff:7f00:1) -- both resolve to the identical loopback/private
-// address at the network layer. A regex that only matched the dotted form let the hex
-// form of the same address straight through.
-test('infra-http blocks the hex form of a v4-mapped IPv6 private/loopback/metadata address', async () => {
+test('infra-http blocks IPv4-metadata-address embedded in IPv6 via every known bypass encoding', async () => {
+  // 169.254.169.254 (cloud metadata) smuggled through NAT64 / v4-compatible / v4-mapped forms —
+  // dotted-decimal and pure-hex alike. All parse as valid IPv6 (net.isIP === 6), so these are real
+  // reachable bypass strings, not just theoretical ones.
   const blocked = [
-    'https://[::ffff:7f00:1]/',            // 127.0.0.1, minimal hex form
-    'https://[::ffff:7F00:0001]/',         // same address, uppercase + leading zeros
-    'https://[0:0:0:0:0:ffff:7f00:1]/',    // same address, fully expanded (no ::)
-    'https://[::ffff:a9fe:a9fe]/',         // 169.254.169.254 -- cloud metadata, hex form
-    'https://[::ffff:a00:1]/',             // 10.0.0.1 -- private range, hex form
+    'https://[64:ff9b::a9fe:a9fe]/',              // NAT64, pure hex
+    'https://[64:ff9b::169.254.169.254]/',        // NAT64, dotted
+    'https://[::169.254.169.254]/',               // v4-compatible (deprecated), dotted
+    'https://[::a9fe:a9fe]/',                     // v4-compatible (deprecated), pure hex
+    'https://[::ffff:a9fe:a9fe]/',                // v4-mapped, pure hex
+    'https://[0:0:0:0:0:ffff:169.254.169.254]/',  // v4-mapped, full 8-group, no :: compression
+    'https://[::ffff:7f00:1]/',                   // v4-mapped, 127.0.0.1, minimal hex form
+    'https://[::ffff:7F00:0001]/',                // same address, uppercase + leading zeros
+    'https://[0:0:0:0:0:ffff:7f00:1]/',           // same address, fully expanded (no ::)
+    'https://[::ffff:a00:1]/',                    // v4-mapped, 10.0.0.1, hex form
   ]
   for (const u of blocked) assert.ok(await validateUrl(u), `should block ${u}`)
+})
+
+test('infra-http blocks a private IPv4 disguised as a 6to4 address, but not a public one', async () => {
+  // 6to4 (2002::/16) carries its IPv4 in bits 16-47, not the low 32 bits, so the /96 extractor
+  // cannot see it and it needs its own check. Deprecated by RFC 7526 yet still parsed as valid
+  // IPv6, so it stays a usable disguise. The public case is the one that proves the check
+  // discriminates rather than blanket-blocking the whole 2002::/16 range.
+  assert.ok(await validateUrl('https://[2002:a9fe:a9fe::]/'))   // 169.254.169.254, cloud metadata
+  assert.ok(await validateUrl('https://[2002:7f00:1::]/'))      // 127.0.0.1, loopback
+  assert.ok(await validateUrl('https://[2002:c0a8:1:1::1]/'))   // 192.168.0.1, private
+  assert.equal(await validateUrl('https://[2002:0808:0808::]/'), null) // 8.8.8.8, public — allowed
+})
+
+test('infra-http does not false-positive on ordinary global-unicast IPv6 literals', async () => {
+  // Their low 32 bits are not embedded IPv4 metadata — the general extractor is scoped to the
+  // three known /96 embedding prefixes (::/96, ::ffff:0:0/96, 64:ff9b::/96) so these must pass.
+  assert.equal(await validateUrl('https://[2606:4700:4700::1111]/'), null) // Cloudflare public DNS
+  assert.equal(await validateUrl('https://[2001:4860:4860::8888]/'), null) // Google public DNS
 })
 
 test('infra-http still permits a public v4-mapped IPv6 address (dotted or hex)', async () => {
   assert.equal(await validateUrl('https://[::ffff:8.8.8.8]/'), null)
   assert.equal(await validateUrl('https://[::ffff:808:808]/'), null) // 8.8.8.8 in hex
-})
-
-test('infra-http permits a real public IPv6 literal', async () => {
-  assert.equal(await validateUrl('https://[2606:4700:4700::1111]/'), null)
 })
 
 test('infra-http rejects a malformed IPv6-looking host without throwing', async () => {

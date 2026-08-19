@@ -105,9 +105,12 @@ test('daily budget atomically blocks concurrent calls, charges failures, preserv
 
   process.env.SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS = String(units * 3)
   process.env.VERCEL = '1'
+  // hostedRuntime() is read live (not snapshotted at module load), so the per-tenant spend
+  // reservation — which runs before the company-wide budget reservation — is the first
+  // checkpoint to see the hosted runtime and fail closed on the non-durable memory store.
   await assert.rejects(
     complete({ ...request, cacheKey: 'budget-hosted-memory-store' }),
-    /gateway_budget_store_unavailable/,
+    /gateway_durable_spend_required/,
     'a hosted runtime may not rely on a per-process budget map',
   )
   delete process.env.VERCEL

@@ -4241,6 +4241,14 @@ def _validate_shift_closed(
         for machine in current["machines"]
     ):
         raise TrialValidationError("shift close requires every maintenance record to be completed.")
+    if any(
+        project_plant_order(entry["execution"])["status"]
+        in {"inspection_due", "quality_hold", "ready_to_release"}
+        for entry in _production_order_entries(current)
+    ):
+        raise TrialValidationError(
+            "shift close requires every controlled order to clear inspection, quality hold, and batch release."
+        )
     expected_summary = (
         f"Closed shift {shift_ref} with {good_units} good, {scrap_units} scrap, "
         f"{len(output_events)} output entries, {len(material_events)} material entries"

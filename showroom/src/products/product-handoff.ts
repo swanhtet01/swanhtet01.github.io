@@ -1,6 +1,9 @@
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
+  WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
+} from './product-storage-keys.ts'
+import {
   getCurrentApproval,
   getCurrentPublish,
   readinessChecks,
@@ -10,7 +13,7 @@ import {
 } from './website/website-model.ts'
 
 export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }
-export const WEBSITE_ECOMMERCE_HANDOFF_KEY = 'supermega.website-ecommerce-handoff.v1'
+export { WEBSITE_ECOMMERCE_HANDOFF_KEY }
 
 type HandoffSource = {
   fingerprint: string
@@ -499,7 +502,7 @@ export function readWebsiteEcommerceHandoff(): WebsiteEcommerceHandoffContext | 
   }
 }
 
-export function writeWebsiteEcommerceHandoff(handoff: WebsiteEcommerceHandoff, workspace: WebsiteWorkspace) {
+function writeWebsiteEcommerceHandoffWithLock(handoff: WebsiteEcommerceHandoff, workspace: WebsiteWorkspace) {
   try {
     if (!isWebsiteEcommerceHandoff(handoff) || handoff.state !== 'pending_acceptance') return null
     const existingRaw = globalThis.localStorage?.getItem(WEBSITE_ECOMMERCE_HANDOFF_KEY)
@@ -525,7 +528,16 @@ export function writeWebsiteEcommerceHandoff(handoff: WebsiteEcommerceHandoff, w
   }
 }
 
-export function acceptWebsiteEcommerceHandoff(handoffId: string, operatorId: string) {
+export async function writeWebsiteEcommerceHandoff(handoff: WebsiteEcommerceHandoff, workspace: WebsiteWorkspace) {
+  try {
+    if (!globalThis.navigator?.locks) return null
+    return await globalThis.navigator.locks.request(handoffMutationLock, { mode: 'exclusive' }, () => writeWebsiteEcommerceHandoffWithLock(handoff, workspace))
+  } catch {
+    return null
+  }
+}
+
+function acceptWebsiteEcommerceHandoffWithLock(handoffId: string, operatorId: string) {
   try {
     if (!operatorIdPattern.test(operatorId)) return null
     const current = readWebsiteEcommerceHandoff()
@@ -567,7 +579,16 @@ export function acceptWebsiteEcommerceHandoff(handoffId: string, operatorId: str
   }
 }
 
-export function createWebsiteOrderDraft(handoffId: string, catalogItem: WebsiteOrderDraftCatalogItem) {
+export async function acceptWebsiteEcommerceHandoff(handoffId: string, operatorId: string) {
+  try {
+    if (!globalThis.navigator?.locks) return null
+    return await globalThis.navigator.locks.request(handoffMutationLock, { mode: 'exclusive' }, () => acceptWebsiteEcommerceHandoffWithLock(handoffId, operatorId))
+  } catch {
+    return null
+  }
+}
+
+function createWebsiteOrderDraftWithLock(handoffId: string, catalogItem: WebsiteOrderDraftCatalogItem) {
   try {
     const current = readWebsiteEcommerceHandoff()
     if (!current || current.handoff.id !== handoffId || current.handoff.state !== 'accepted') return null
@@ -618,6 +639,15 @@ export function createWebsiteOrderDraft(handoffId: string, catalogItem: WebsiteO
       && restored.draft.totalMmk === totalMmk
       ? restored
       : null
+  } catch {
+    return null
+  }
+}
+
+export async function createWebsiteOrderDraft(handoffId: string, catalogItem: WebsiteOrderDraftCatalogItem) {
+  try {
+    if (!globalThis.navigator?.locks) return null
+    return await globalThis.navigator.locks.request(handoffMutationLock, { mode: 'exclusive' }, () => createWebsiteOrderDraftWithLock(handoffId, catalogItem))
   } catch {
     return null
   }

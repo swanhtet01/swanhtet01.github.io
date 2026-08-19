@@ -215,6 +215,22 @@ details:not([open]) > :not(summary) { display: none; }
 .product-track-open { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; color: var(--core-green); font-size: 11px; white-space: nowrap; }
 .product-track-open span { font-size: 17px; }
 .product-home-note { margin: 0; color: var(--core-quiet); font-size: 10px; line-height: 1.5; text-align: center; }
+.platform-start-nudge { margin: 0; padding: 12px 16px; border-radius: var(--core-radius); border: 1px solid var(--core-line); background: var(--core-panel-raised); font-size: 12px; line-height: 1.5; color: var(--core-muted); }
+.platform-start-nudge strong { color: var(--core-ink); }
+.platform-start-link { color: var(--core-ink); font-weight: 780; text-underline-offset: 3px; }
+.platform-start-link:hover { color: var(--core-green); }
+.product-track-workspace { display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 4px; background: color-mix(in srgb, var(--core-green) 14%, transparent); color: var(--core-green); font-size: 10px; font-weight: 760; letter-spacing: .01em; }
+.product-track-card[data-active] { border-color: color-mix(in srgb, var(--core-green) 38%, transparent); }
+.wsp-panel { width: 100%; }
+.wsp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wsp-item { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--core-line); background: var(--core-panel); text-decoration: none; font-size: 13px; line-height: 1.4; }
+.wsp-item:hover { border-color: var(--core-ink); }
+.wsp-mark { display: block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.wsp-label { min-width: 0; color: var(--core-ink); }
+.wsp-arrow { color: var(--core-muted); font-size: 14px; }
+.wsp-critical { color: var(--core-danger); }
+.wsp-warning { color: var(--core-warn); }
+.wsp-action { color: var(--core-green); }
 .product-trial-context { min-height: 58px; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 16px; border: 1px solid rgba(11,116,94,.18); border-radius: 12px; padding: 8px 10px 8px 14px; background: linear-gradient(105deg, rgba(11,116,94,.09), rgba(255,255,255,.94)); }
 .product-trial-context > div:first-child { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 2px 9px; align-items: center; }
 .product-trial-context span { color: var(--core-green); font-family: var(--core-mono); font-size: 8px; font-weight: var(--font-weight-bold); letter-spacing: .07em; text-transform: uppercase; }
@@ -867,6 +883,12 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-business-name input { min-height: 50px; font-size: 15px; }
 .product-onboarding-business-type > summary small { color: var(--core-quiet); font-size: 9px; font-weight: var(--font-weight-semibold); }
 .product-onboarding-business-type > .demo-pack-select { margin-top: 8px; }
+.workspace-activity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.workspace-activity-grid article { display: grid; gap: 5px; justify-items: start; border: 1px solid var(--core-line); border-radius: 8px; padding: 9px 10px; }
+.workspace-activity-grid article strong { font-size: 12px; }
+.workspace-activity-grid article small { color: var(--core-quiet); font-size: 9px; line-height: 1.4; }
+.product-onboarding-capabilities { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.product-onboarding-capabilities li { border: 1px solid var(--core-line); border-radius: 999px; padding: 2px 8px; color: var(--core-quiet); font-size: 9px; font-weight: 600; }
 .product-onboarding-primary { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--core-line); padding-top: 13px; }
 .product-onboarding-primary .core-button { flex: 0 0 auto; }
 .product-onboarding-primary small { color: var(--core-quiet); font-size: 10px; line-height: 1.4; }
@@ -874,6 +896,18 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-help { margin: 0; color: var(--core-muted); font-size: 10px; }
 .product-onboarding-help a { color: var(--core-ink); font-weight: var(--font-weight-bold); text-underline-offset: 3px; }
 .product-onboarding-help a:hover { color: var(--core-green); }
+.product-onboarding-peer-name { color: var(--core-green); font-weight: 760; }
+.product-onboarding-owner-drift { border-left: 3px solid var(--core-green); padding-left: 10px; }
+.business-template-picker { display: grid; gap: 10px; }
+.business-template-picker-header { display: grid; gap: 4px; }
+.business-template-picker-header p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.5; }
+.business-template-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+.business-template-card { display: grid; gap: 2px; border: 1px solid var(--core-line); border-radius: 9px; padding: 10px 8px 8px; background: var(--core-panel-raised); cursor: pointer; text-align: center; transition: border-color .12s, background .12s; }
+.business-template-card:hover { border-color: var(--core-green); background: var(--core-green-soft); }
+.business-template-card[data-selected] { border-color: var(--core-green); background: var(--core-green-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--core-green) 22%, transparent); }
+.business-template-icon { font-size: 22px; line-height: 1; margin-bottom: 2px; }
+.business-template-name-en { color: var(--core-ink); font-size: 9px; font-weight: 760; line-height: 1.3; }
+.business-template-name-my { color: var(--core-quiet); font-size: 9px; line-height: 1.3; }
 .ai-setup-guide { display: grid; grid-template-columns: minmax(220px,1fr) minmax(300px,.9fr) auto; align-items: center; gap: 18px; border-top: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 14px 18px; background: var(--core-green-soft); }
 .ai-setup-guide-copy { min-width: 0; display: grid; gap: 4px; }
 .ai-setup-guide-copy h2 { margin: 0; font-size: 16px; line-height: 1.25; }
@@ -1820,6 +1854,9 @@ textarea { min-height: 72px; resize: vertical; }
   .product-onboarding-primary { align-items: stretch; flex-direction: column; }
   .product-onboarding-primary .core-button { width: 100%; }
   .product-onboarding-help a { min-height: 44px; display: inline-flex; align-items: center; }
+  .business-template-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; }
+  .business-template-card { padding: 8px 6px 6px; }
+  .business-template-icon { font-size: 18px; }
   .page-heading { align-items: flex-start; }
   .page-heading p { white-space: normal; }
   .operations-screen .page-heading { flex-direction: column; gap: 8px; }
@@ -2022,6 +2059,7 @@ textarea { min-height: 72px; resize: vertical; }
   .product-track-number { font-size: 9px; }
   .product-track-open { min-width: 30px; font-size: 0; }
   .product-track-open span { font-size: 18px; }
+  .platform-start-nudge { padding: 10px 14px; font-size: 11px; }
   .home-more > summary { min-height: 58px; padding-inline: 14px; }
   .home-more > summary small { max-width: 150px; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
   .home-more .command-grid { padding: 9px; }
@@ -2519,6 +2557,23 @@ input, select, textarea { border-color: var(--core-field-line); }
    the Myanmar display floor (line-height 1.3, zero tracking) applies.
    ========================================================================== */
 .storefront-preview > header span { font-family: inherit; font-size: var(--font-size-display); font-weight: var(--font-weight-black); letter-spacing: 0; line-height: 1.3; }
+
+/* ============================================================================
+   Design rule 4 repair: the phase-1 shadow ramp was declared on :root only.
+   --shadow-1/--shadow-3 carry a light-tuned green-black tint, and --shadow-2
+   fell into the exact trap the .theme-dark comment above documents: a var()
+   inside a custom property is substituted against the element it is DECLARED
+   on, so `--shadow-2: var(--core-shadow)` froze at the LIGHT --core-shadow and
+   never saw the dark remap below it. The phase-2 cart sticky bar is the ramp's
+   first consumer (ecommerce-product.css .ecommerce-cart-sticky-bar), so it was
+   rendering the light shadow in dark mode. Restated here, mirroring the dark
+   --core-shadow values, so every :root token has a .theme-dark counterpart.
+   ========================================================================== */
+.theme-dark {
+  --shadow-1: 0 8px 24px rgba(0, 0, 0, .38);
+  --shadow-2: var(--core-shadow);
+  --shadow-3: 0 30px 90px rgba(0, 0, 0, .55);
+}
 
 /* ============================================================================
    Design phase 2 — item 5: status-pill traffic-light semantics.

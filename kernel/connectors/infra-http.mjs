@@ -40,28 +40,39 @@ function inV4(ip, cidr) {
   return (ipToLong(ip) & mask) === (ipToLong(base) & mask)
 }
 const V4_BLOCKED = ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.168.0.0/16', '198.18.0.0/15', '224.0.0.0/4', '240.0.0.0/4']
-// Expands any valid IPv6 literal to its 8 four-hex-digit groups, resolving both `::`
-// compression and a trailing embedded IPv4 dotted tail (e.g. ::ffff:127.0.0.1). Returns
-// null for anything malformed rather than guessing.
-function expandIPv6(raw) {
-  let ip = raw.toLowerCase()
-  const dotted = ip.match(/(\d+\.\d+\.\d+\.\d+)$/)
-  if (dotted) {
-    const octets = dotted[1].split('.').map(Number)
-    if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) return null
-    const hex1 = ((octets[0] << 8) | octets[1]).toString(16)
-    const hex2 = ((octets[2] << 8) | octets[3]).toString(16)
-    ip = ip.slice(0, -dotted[1].length) + hex1 + ':' + hex2
-  }
-  const halves = ip.split('::')
-  if (halves.length > 2) return null
-  const head = halves[0] ? halves[0].split(':').filter(Boolean) : []
-  const tail = halves.length === 2 && halves[1] ? halves[1].split(':').filter(Boolean) : []
-  if (halves.length === 1) { if (head.length !== 8) return null; return head.map((g) => g.padStart(4, '0')) }
-  const missing = 8 - head.length - tail.length
-  if (missing < 0) return null
-  const groups = [...head, ...Array(missing).fill('0'), ...tail]
-  return groups.length === 8 ? groups.map((g) => g.padStart(4, '0')) : null
+
+// Expand a valid (net.isIP()===6) address into 8 numeric groups, folding a trailing dotted-decimal
+// IPv4 tail into hex first so :: compression resolves the same way regardless of notation.
+function expandV6(ip) {
+  const dotted = ip.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
+  const hex = dotted
+    ? ip.slice(0, dotted.index) + ((+dotted[1] << 8) | +dotted[2]).toString(16) + ':' + ((+dotted[3] << 8) | +dotted[4]).toString(16)
+    : ip
+  const [head, tail] = hex.split('::')
+  const headG = head ? head.split(':') : []
+  const tailG = hex.includes('::') && tail ? tail.split(':') : []
+  const groups = hex.includes('::') ? [...headG, ...Array(8 - headG.length - tailG.length).fill('0'), ...tailG] : headG
+  return groups.length === 8 ? groups.map((g) => parseInt(g, 16) || 0) : null
+}
+// Any IPv4 riding the low 32 bits of a known embedding prefix — v4-compatible (::a.b.c.d,
+// deprecated), v4-mapped (::ffff:a.b.c.d), or NAT64 (64:ff9b::a.b.c.d, RFC 6052) — caught whether
+// written as dotted-decimal or as pure hex groups (e.g. ::ffff:a9fe:a9fe / 64:ff9b::a9fe:a9fe).
+// Scoped to these three /96 prefixes so an ordinary global-unicast v6 address isn't misread as one.
+function embeddedV4(ip) {
+  const g = expandV6(ip)
+  if (!g) return null
+  const [a, b, c, d, e, f] = g
+  const zero5 = a === 0 && b === 0 && c === 0 && d === 0 && e === 0
+  const ok = (zero5 && (f === 0 || f === 0xffff)) || (a === 0x64 && b === 0xff9b && c === 0 && d === 0 && e === 0 && f === 0)
+  return ok ? `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}` : null
+}
+// 6to4 (2002::/16, RFC 3056) carries its IPv4 in bits 16-47 — groups 1-2, not the low 32 bits — so
+// the /96 extractor above cannot see it. Deprecated (RFC 7526) but still parsed by net.isIP() and
+// still a usable disguise for a blocked address, e.g. 2002:a9fe:a9fe:: for 169.254.169.254.
+function sixToFourV4(ip) {
+  const g = expandV6(ip)
+  if (!g || g[0] !== 0x2002) return null
+  return `${g[1] >> 8}.${g[1] & 255}.${g[2] >> 8}.${g[2] & 255}`
 }
 function isBlockedIp(ip) {
   const v = isIP(ip)
@@ -71,15 +82,8 @@ function isBlockedIp(ip) {
     if (lo === '::1' || lo === '::') return true
     if (/^f[cd]/.test(lo)) return true        // fc00::/7 unique-local
     if (/^fe[89ab]/.test(lo)) return true     // fe80::/10 link-local
-    // v4-mapped (::ffff:0:0/96): catch BOTH the dotted-decimal tail (::ffff:127.0.0.1)
-    // and the plain-hex tail (::ffff:7f00:1, or fully expanded with no ::) — the
-    // dotted-only regex this replaced let the hex form of the exact same address
-    // through unblocked.
-    const groups = expandIPv6(lo)
-    if (groups && groups.slice(0, 5).every((g) => g === '0000') && groups[5] === 'ffff') {
-      const hi = parseInt(groups[6], 16), low = parseInt(groups[7], 16)
-      return isBlockedIp([(hi >> 8) & 255, hi & 255, (low >> 8) & 255, low & 255].join('.'))
-    }
+    const v4 = embeddedV4(lo); if (v4) return isBlockedIp(v4) // v4-mapped / v4-compatible / NAT64
+    const relayed = sixToFourV4(lo); if (relayed) return isBlockedIp(relayed) // 6to4
     return false
   }
   return false

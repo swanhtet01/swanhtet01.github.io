@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import os
 import re
 import time
@@ -26,12 +27,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
 from supermega_runtime.commerce_runtime import reduce_commerce_state
 from supermega_runtime.order_intake_provider import (
-    OpenAIOrderIntakeProvider,
     OrderIntakeProviderError,
+    order_intake_provider_from_environment,
 )
 from supermega_runtime.production_runtime import reduce_production_state
-from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_identity
 from supermega_runtime.activation_email import send_self_serve_welcome_email
+from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_identity
+from supermega_runtime.telemetry.tracing import instrument_app as instrument_telemetry
 from supermega_runtime.trial_runtime import TrialSignupSession, create_trial_router
 from supermega_runtime.trial_store import (
     PostgresTrialStore,
@@ -1004,7 +1006,7 @@ def create_app() -> FastAPI:
         write_enabled=_flag("SUPERMEGA_TRIAL_WRITES_ENABLED"),
     )
     try:
-        order_intake_provider = OpenAIOrderIntakeProvider.from_environment()
+        order_intake_provider = order_intake_provider_from_environment()
     except OrderIntakeProviderError:
         order_intake_provider = None
     app = FastAPI(
@@ -1029,8 +1031,24 @@ def create_app() -> FastAPI:
             "x-supermega-actor-kind",
             "x-supermega-identity-timestamp",
             "x-supermega-identity-signature",
+            "traceparent",
+            "tracestate",
         ],
     )
+
+    # OpenTelemetry Phase A (local-only; see
+    # hq/research/opentelemetry-implementation-plan-2026-08.md). Additive
+    # instrumentation only: every step inside `instrument_telemetry` is
+    # individually defensive and degrades to a no-op rather than breaking
+    # app startup or request handling if a dependency is missing or
+    # disabled. Must run before other middleware registration so the
+    # customer-content scope wraps the full request lifecycle.
+    try:
+        instrument_telemetry(app)
+    except Exception:  # pragma: no cover - instrumentation must never break the API
+        logging.getLogger("supermega.telemetry").exception(
+            "supermega.telemetry: instrumentation failed to attach; continuing without tracing."
+        )
 
     @app.middleware("http")
     async def api_security_headers(request: Request, call_next):

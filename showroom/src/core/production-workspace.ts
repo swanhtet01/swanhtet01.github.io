@@ -12,6 +12,7 @@ export const PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop
 export const PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1' as const
 export const PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace.v1' as const
 export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v1' as const
+export const PRODUCTION_CERTIFICATE_OF_CONFORMANCE_SCHEMA = 'supermega.production.certificate-of-conformance.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -2106,11 +2107,22 @@ function productionWorkingSampleTransitionIsExact(current: ProductionState, cand
   const reasonMatch = /^Seed the (.+) working sample\.$/.exec(sampleEvents[0]?.reason ?? '')
   if (!capturedAt || !reasonMatch
     || sampleEvents.some((event) => event.createdAt !== capturedAt || event.reason !== sampleEvents[0].reason)) return false
+  // Re-derived from the candidate itself, not compared against a fixed reference: this check is
+  // a STRUCTURAL invariant (only installProductionWorkingSampleJobs's own construction pattern
+  // can explain the delta from `current`), the same way the jobs above are re-verified without
+  // being compared to any canonical job list. Leaving machines/issue out of this recompute (as
+  // an earlier version of this function did) forced every candidate to match the generic seed
+  // floor byte-for-byte, which silently made installProductionWorkingSampleJobs's own machines
+  // and issue parameters unusable through this write boundary -- the only path app code actually
+  // calls. A pack that hands over its own floor was never reachable in the running app.
+  const floorIssue = candidate.issues.find((issue) => issue.id === productionSeedAnchorIssueId)
   const expected = installProductionWorkingSampleJobs(current, {
     sampleId,
     sampleName: reasonMatch[1],
     jobs: candidate.jobs.map((job) => ({ ...job })),
     capturedAt,
+    machines: candidate.machines.map((machine) => ({ ...machine })),
+    issue: floorIssue ? { area: floorIssue.area, summary: floorIssue.summary } : undefined,
   })
   return Boolean(expected) && JSON.stringify(expected) === JSON.stringify(candidate)
 }
@@ -3042,6 +3054,129 @@ export function formatProductionRecallTrace(report: ProductionRecallTrace) {
   return `${JSON.stringify(report, null, 2)}\n`
 }
 
+/**
+ * A read-only Certificate of Conformance for one closed Plant job. It is a pure
+ * projection of buildProductionBatchGenealogy's own evidence — no new fact is
+ * derived or fabricated here.
+ *
+ * Eligibility (returns null otherwise):
+ * - The job must carry closure evidence (`genealogy.job.status === 'closed_short'`):
+ *   this is the only Plant job lifecycle event that records who closed the job,
+ *   when, and why. A job that merely reached its target without an explicit,
+ *   evidenced close (`status === 'complete'`) has no such accountable record to
+ *   certify against, so it is not eligible.
+ * - The job must carry no unresolved controlled-batch quality hold. A job-level
+ *   quality hold (`job.qualityHold`) can never coexist with `job.closure` — the
+ *   closure action itself is blocked while one is active — but a job bound to a
+ *   controlled execution plan (BOM/routing/quality) carries its own, separate
+ *   hold/release state. If that controlled plan still shows an unreleased
+ *   quality hold, a certificate would misrepresent the batch as clean, so it is
+ *   blocked.
+ */
+export function buildProductionCertificateOfConformance(state: ProductionState, jobId: string) {
+  const genealogy = buildProductionBatchGenealogy(state, jobId)
+  if (!genealogy) return null
+  if (genealogy.job.status !== 'closed_short' || !genealogy.closure) return null
+  const controlledExecution = genealogy.controlledExecution
+  const qualityReleaseStatus = controlledExecution?.batchRelease
+    ? 'released' as const
+    : controlledExecution?.qualityHold
+      ? 'held' as const
+      : controlledExecution
+        ? 'not_released' as const
+        : 'not_tracked' as const
+  if (qualityReleaseStatus === 'held') return null
+  const materialLots = [...new Set(genealogy.materialEntries.map((entry) => entry.materialLot).filter((lot): lot is string => Boolean(lot)))].sort()
+  const payload = {
+    schema: PRODUCTION_CERTIFICATE_OF_CONFORMANCE_SCHEMA,
+    sourceRevision: genealogy.sourceRevision,
+    sourceStateDigest: genealogy.sourceStateDigest,
+    genealogyDigest: genealogy.digest,
+    job: { ...genealogy.job },
+    closure: { ...genealogy.closure },
+    materialLots,
+    materialEntryCount: genealogy.materialEntries.length,
+    materialLotEntryCount: genealogy.evidenceCoverage.materialLotEntryCount,
+    outputEntryCount: genealogy.outputEntries.length,
+    qualityEvents: genealogy.qualityEvents.map((event) => ({ ...event })),
+    qualityReleaseStatus,
+    controlledExecution: controlledExecution ? {
+      planId: controlledExecution.planId,
+      outputBatchId: controlledExecution.outputBatchId,
+      batchRelease: controlledExecution.batchRelease ? {
+        id: controlledExecution.batchRelease.id,
+        inspectionId: controlledExecution.batchRelease.inspectionId,
+        proof: { ...controlledExecution.batchRelease.proof },
+      } : null,
+    } : null,
+    controls: {
+      issuesInventory: false,
+      changesEquipment: false,
+      postsCosting: false,
+      confirmsRegulatoryCompliance: false,
+      performsExternalAction: false,
+    },
+  }
+  return { ...payload, digest: plantOrderEvidenceDigest(payload) }
+}
+
+export type ProductionCertificateOfConformance = NonNullable<ReturnType<typeof buildProductionCertificateOfConformance>>
+
+export function formatProductionCertificateOfConformance(certificate: ProductionCertificateOfConformance) {
+  const { digest, ...payload } = certificate
+  if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production certificate of conformance digest does not match its evidence.')
+  return `${JSON.stringify(certificate, null, 2)}\n`
+}
+
+export function productionCertificateOfConformanceText(certificate: ProductionCertificateOfConformance) {
+  const lines = [
+    'SUPERMEGA CERTIFICATE OF CONFORMANCE',
+    'Read-only production record. Not a legal, regulatory, or contractual certification beyond the retained evidence listed below.',
+    '',
+    `Job / batch: ${handoffLine(certificate.job.id)}`,
+    `Product: ${handoffLine(certificate.job.product)}`,
+    `Line: ${handoffLine(certificate.job.line)}`,
+    `Owner: ${certificate.job.owner ? handoffLine(certificate.job.owner) : 'Not recorded'}`,
+    '',
+    'OUTPUT',
+    `Good units: ${certificate.job.goodUnits}`,
+    `Scrap units: ${certificate.job.scrapUnits}`,
+    `Target units: ${certificate.job.targetUnits}`,
+    `Units not produced at close: ${certificate.closure.remainingUnits}`,
+    '',
+    `Quality release status: ${certificate.qualityReleaseStatus === 'released' ? 'Released' : certificate.qualityReleaseStatus === 'not_released' ? 'Controlled batch recorded, not formally released' : 'No controlled batch execution bound to this job'}`,
+    ...(certificate.controlledExecution?.batchRelease ? [
+      `Batch release: ${certificate.controlledExecution.batchRelease.proof.capturedAt} by ${handoffLine(certificate.controlledExecution.batchRelease.proof.actor)} · evidence ${handoffLine(certificate.controlledExecution.batchRelease.proof.evidenceReference)} · action ${handoffLine(certificate.controlledExecution.batchRelease.proof.actionId)}`,
+    ] : []),
+    ...(certificate.controlledExecution?.outputBatchId ? [`Output batch ID: ${handoffLine(certificate.controlledExecution.outputBatchId)}`] : []),
+    '',
+    `Material lot traceability (${certificate.materialLots.length} lot${certificate.materialLots.length === 1 ? '' : 's'} · ${certificate.materialEntryCount} recorded ${certificate.materialEntryCount === 1 ? 'entry' : 'entries'})`,
+  ]
+  if (!certificate.materialLots.length) lines.push('- No material lot was recorded for this job.')
+  for (const lot of certificate.materialLots) lines.push(`- ${lot}`)
+  lines.push('', `Quality hold history during this job (${certificate.qualityEvents.length} event${certificate.qualityEvents.length === 1 ? '' : 's'})`)
+  if (!certificate.qualityEvents.length) lines.push('- No quality hold was placed on this job.')
+  for (const event of certificate.qualityEvents) {
+    lines.push(`- ${event.action === 'hold_placed' ? 'Held' : 'Released'} ${event.createdAt} by ${handoffLine(event.actor)} · ${handoffLine(event.reason)} · evidence ${handoffLine(event.evidenceReference)} · action ${handoffLine(event.actionId)}`)
+  }
+  lines.push(
+    '',
+    'CLOSURE',
+    `Closed: ${certificate.closure.closedAt} by ${handoffLine(certificate.closure.closedBy)}`,
+    `Shift: ${handoffLine(certificate.closure.shiftRef)}`,
+    `Reason: ${handoffLine(certificate.closure.reason)}`,
+    `Evidence: ${handoffLine(certificate.closure.evidenceReference)}`,
+    `Closure action: ${handoffLine(certificate.closure.actionId)}`,
+    '',
+    `Source Plant record revision: ${certificate.sourceRevision}`,
+    `Batch genealogy evidence digest: ${certificate.genealogyDigest}`,
+    `Document digest: ${certificate.digest}`,
+    '',
+    'This certificate reflects exactly the retained Plant record above. It issues no inventory, changes no equipment, posts no cost, and sends no message to any customer or external system.',
+  )
+  return lines.join('\n')
+}
+
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {
   if (!isRecord(job)) return null
   const jobPriority = job.priority
@@ -3115,6 +3250,11 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
   sampleName: string
   jobs: ProductionJob[]
   capturedAt: string
+  // The seed floor carries a mixer, a press, and a temperature-drift issue. On a
+  // sewing line or an assembly cell that is somebody else's factory, so a caller
+  // may hand over the equipment and opening issue that belong to its own pack.
+  machines?: ProductionMachine[]
+  issue?: { area: string; summary: string }
 }) {
   let source: ProductionState
   try { source = validateProductionState(stateValue) } catch { return null }
@@ -3143,13 +3283,18 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
   if (seedAnchor === null) return null
   const seed = createSeedProduction(seedAnchor)
   const seedWithoutJobs = validateProductionState({ ...seed, jobs: [] })
+  // Installing a sample is the only path that writes these, and every other way
+  // to touch a machine appends an event this comparison still rejects. So a
+  // previously installed pack's floor normalises back to the seed's rather than
+  // reading as tampering and refusing the next pack.
+  const withSeedFloor = (state: ProductionState) => ({ ...state, machines: seed.machines, issues: seed.issues })
   let base = source
   if (sampleEvents.length || sampleJobIds.size) {
     const baseRevision = source.revision - sampleEvents.length
     if (baseRevision < 0) return null
     try {
       base = validateProductionState({
-        ...source,
+        ...withSeedFloor(source),
         revision: baseRevision,
         jobs: source.jobs.filter((job) => !sampleJobIds.has(job.id)),
         events: source.events.filter((event) => !event.actionId.startsWith(productionWorkingSampleActionPrefix)),
@@ -3159,19 +3304,30 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
     }
     if (JSON.stringify(base) !== JSON.stringify(seed) && JSON.stringify(base) !== JSON.stringify(seedWithoutJobs)) return null
     base = seed
-  } else if (JSON.stringify(base) !== JSON.stringify(seed)) {
+  } else if (JSON.stringify(withSeedFloor(base)) !== JSON.stringify(seed)) {
     return null
   }
   if (requestedJobs.some((job) => base.jobs.some((existing) => existing.id === job.id))) return null
 
-  let next = seedWithoutJobs
+  const requestedMachines = Array.isArray(input.machines) && input.machines.length
+    ? input.machines.map((machine) => ({ ...machine }))
+    : seed.machines
+  const requestedIssues = input.issue
+    ? seed.issues.map((issue) => ({ ...issue, area: input.issue!.area, summary: input.issue!.summary }))
+    : seed.issues
+  let next: ProductionState
+  try {
+    next = validateProductionState({ ...seedWithoutJobs, machines: requestedMachines, issues: requestedIssues })
+  } catch {
+    return null
+  }
   for (const [index, job] of requestedJobs.entries()) {
     const registered = registerProductionJob(next, job, {
       actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,
       capturedAt: input.capturedAt,
-      actor: 'Demo setup',
+      actor: WORKING_SAMPLE_SETUP_ACTOR,
       reason: `Seed the ${sampleName} working sample.`,
-      evidenceReference: `DEMO-WORKING-SAMPLE-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
+      evidenceReference: `SETUP-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
     })
     if (!registered) return null
     next = registered
@@ -3306,6 +3462,7 @@ export function closeProductionJob(state: ProductionState, jobId: string, shiftR
   const latestJobEvent = state.events.find((event) => event.subjectId === jobId)
   if (!job
     || job.closure
+    || job.qualityHold
     || !Number.isSafeInteger(remainingUnits)
     || remainingUnits < 1
     || (latestJobEvent && timestampBefore(proof.capturedAt, latestJobEvent.createdAt))
@@ -3342,7 +3499,7 @@ export function recordProductionOutput(state: ProductionState, jobId: string, qu
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job || job.closure) return null
+  if (!job || job.closure || job.qualityHold) return null
   const nextOutput = job.output + quantity
   const scrap = job.scrap ?? 0
   const shiftOutput = productionShiftOutput(state, shiftRef)
@@ -3371,7 +3528,7 @@ export function recordProductionScrap(state: ProductionState, jobId: string, qua
   if (actionIdIsUsed(state, proof.actionId)) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job || job.closure) return null
+  if (!job || job.closure || job.qualityHold) return null
   const currentScrap = job.scrap ?? 0
   const nextScrap = currentScrap + quantity
   const shiftOutput = productionShiftOutput(state, shiftRef)
@@ -3417,7 +3574,7 @@ export function recordProductionMaterialConsumption(
   if (actionIdIsUsed(state, proof.actionId) || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const matchingJobs = state.jobs.filter((job) => job.id === jobId)
   const job = matchingJobs.length === 1 ? matchingJobs[0] : undefined
-  if (!job || job.closure || job.output + (job.scrap ?? 0) >= job.target) return null
+  if (!job || job.closure || job.qualityHold || job.output + (job.scrap ?? 0) >= job.target) return null
   const creationEvent = state.events.find((event) => event.kind === 'job_created' && event.subjectId === jobId)
   if (creationEvent && timestampBefore(proof.capturedAt, creationEvent.createdAt)) return null
   const event = eventFor(proof, {
@@ -3808,4 +3965,87 @@ export function completeProductionMaintenance(
     revision: next.revision + 1,
     events: [event, ...next.events],
   })
+}
+
+export const GUIDED_SAMPLE_PRODUCTION_ACTOR = 'Shift supervisor'
+const WORKING_SAMPLE_SETUP_ACTOR = 'Production planner'
+
+const guidedSampleActionPrefix = 'ACT-GUIDED-SAMPLE-'
+
+export function isGuidedSampleProduction(stateValue: ProductionState) {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return false }
+  // Controlled-order and equipment work append no events, so the event log alone
+  // cannot prove this workspace is still a pure sample. A released batch is the
+  // only Plant proof; treating such a workspace as replaceable would destroy it.
+  // The legacy single-order field and the equipment master stay hard bars regardless
+  // of content. A populated order portfolio is narrower: it is still replaceable when
+  // every retained entry's every command carries guided-sample proof end to end, since
+  // that is proof of the same guided walkthrough the event log already accepts below --
+  // not a human-authored plan or execution step.
+  if (state.orderExecution || state.equipmentMaster) return false
+  if (state.orderPortfolio && !productionOrderPortfolioEntries(state).every((entry) => entry.execution.commands
+    .every((command) => command.payload.proof.actionId.startsWith(guidedSampleActionPrefix)))) return false
+  return state.events.every((event) => event.actionId.startsWith(productionWorkingSampleActionPrefix)
+    || event.actionId.startsWith(guidedSampleActionPrefix))
+}
+
+export function hasGuidedSampleProductionActivity(stateValue: ProductionState) {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return false }
+  return state.events.some((event) => event.actionId.startsWith(guidedSampleActionPrefix))
+}
+
+export function appendGuidedSampleProductionActivity(stateValue: ProductionState, input: {
+  planningDay: string
+  materialRef: string
+  materialUnit: ProductionMaterialUnit
+}): ProductionState | null {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return null }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.planningDay) || !Number.isFinite(Date.parse(`${input.planningDay}T00:00:00.000Z`))) return null
+  // Nothing to seed is a legitimate no-op, not a failure: returning the exact input
+  // makes the write boundary report an unchanged replay rather than an error, so a
+  // caller can treat any { ok: false } as a real problem worth surfacing.
+  if (!isGuidedSampleProduction(state) || hasGuidedSampleProductionActivity(state)) return stateValue
+  const activeJobs = state.jobs
+    .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .sort(compareProductionJobSchedule)
+    .slice(0, 2)
+  if (!activeJobs.length) return stateValue
+  const shiftRef = `${input.planningDay} Day`
+  const latestEventAt = state.events.length ? Date.parse(state.events[0].createdAt) : 0
+  const base = latestEventAt ? latestEventAt + 60_000 : Date.parse(`${input.planningDay}T01:30:00.000Z`)
+  let step = 0
+  const proof = (reason: string): ProductionActionProof => ({
+    actionId: `${guidedSampleActionPrefix}${String(step += 1).padStart(3, '0')}`,
+    capturedAt: new Date(base + step * 90_000).toISOString(),
+    actor: GUIDED_SAMPLE_PRODUCTION_ACTOR,
+    reason,
+    evidenceReference: 'SHIFT-LOG-001',
+  })
+  const primary = activeJobs[0]
+  const primaryOutput = Math.max(1, Math.floor(primary.target * 0.4))
+  const primaryScrap = Math.max(1, Math.floor(primary.target * 0.02))
+  let next = recordProductionOutput(state, primary.id, primaryOutput, shiftRef, proof('Recorded good output for the running shift.'))
+  if (!next) return null
+  next = recordProductionScrap(next, primary.id, primaryScrap, shiftRef, proof('Recorded scrap against the same shift.'))
+  if (!next) return null
+  next = recordProductionMaterialConsumption(
+    next,
+    primary.id,
+    input.materialRef,
+    undefined,
+    primaryOutput * 2,
+    input.materialUnit,
+    shiftRef,
+    proof('Issued material against the recorded output.'),
+  )
+  if (!next) return null
+  const secondary = activeJobs[1]
+  if (secondary) {
+    next = recordProductionOutput(next, secondary.id, Math.max(1, Math.floor(secondary.target * 0.25)), shiftRef, proof('Recorded good output on the second active job.'))
+    if (!next) return null
+  }
+  try { return validateProductionState(next) } catch { return null }
 }

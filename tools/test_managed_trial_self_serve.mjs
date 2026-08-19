@@ -64,9 +64,9 @@ test('posts the normalized claim and business name to the workspaces endpoint', 
     assert.equal(calls.length, 1)
     assert.equal(calls[0].url, '/api/trial/v1/workspaces')
     assert.equal(calls[0].init.method, 'POST')
-    assert.equal(calls[0].init.headers.accept, 'application/json')
-    assert.equal(calls[0].init.headers.authorization, `Bearer ${session.access_token}`)
-    assert.equal(calls[0].init.headers['content-type'], 'application/json')
+    assert.equal(calls[0].init.headers.get('accept'), 'application/json')
+    assert.equal(calls[0].init.headers.get('authorization'), `Bearer ${session.access_token}`)
+    assert.equal(calls[0].init.headers.get('content-type'), 'application/json')
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       claimCode: CLAIM_CODE,
       businessName: BUSINESS_NAME,

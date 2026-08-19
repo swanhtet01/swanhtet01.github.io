@@ -367,7 +367,7 @@ test('production refuses a model dispatch when only an in-process budget is avai
   const gatewayUrl = new URL('./gateway.mjs', import.meta.url).href
   const script = `
     process.env.SUPERMEGA_GATEWAY_PERSIST='0';
-    process.env.SUPERMEGA_REQUIRE_DURABLE_SPEND='1';
+    process.env.NODE_ENV='production';
     process.env.ANTHROPIC_API_KEY='test';
     let calls=0;
     globalThis.fetch=async()=>{ calls+=1; throw new Error('provider_must_not_run') };

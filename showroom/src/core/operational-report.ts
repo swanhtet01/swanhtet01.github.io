@@ -325,9 +325,9 @@ function plantEntries(input: OperationalReportInput, source: OperationalSource) 
   const heldJobs = state.jobs.filter((job) => job.qualityHold && !job.closure).length
   const openMaintenance = productionMaintenanceRecords(state).filter((record) => !record.completion).length
   const openJobs = state.jobs.filter((job) => !job.closure && job.output < job.target).length
-  if (urgentIssues) entries.push(task(source, 'production', 'production.urgent_issues', 'critical', `Contain ${urgentIssues} urgent problem${urgentIssues === 1 ? '' : 's'}`, 'Resolve the highest-severity exception before release.', urgentIssues, '/plant/?tab=issues'))
-  if (heldJobs) entries.push(task(source, 'production', 'production.quality_holds', 'critical', `Review ${heldJobs} quality hold${heldJobs === 1 ? '' : 's'}`, 'Inspect, rework, or retain each hold with attributable evidence.', heldJobs, '/plant/?tab=issues'))
-  if (openMaintenance) entries.push(task(source, 'production', 'production.open_maintenance', 'warning', `Complete ${openMaintenance} maintenance record${openMaintenance === 1 ? '' : 's'}`, 'Record tested return to service before relying on the machine.', openMaintenance, '/plant/?tab=issues'))
+  if (urgentIssues) entries.push(task(source, 'production', 'production.urgent_issues', 'critical', `Contain ${urgentIssues} urgent problem${urgentIssues === 1 ? '' : 's'}`, 'Resolve the highest-severity exception before release.', urgentIssues, '/plant/?tab=control'))
+  if (heldJobs) entries.push(task(source, 'production', 'production.quality_holds', 'critical', `Review ${heldJobs} quality hold${heldJobs === 1 ? '' : 's'}`, 'Inspect, rework, or retain each hold with attributable evidence.', heldJobs, '/plant/?tab=control'))
+  if (openMaintenance) entries.push(task(source, 'production', 'production.open_maintenance', 'warning', `Complete ${openMaintenance} maintenance record${openMaintenance === 1 ? '' : 's'}`, 'Record tested return to service before relying on the machine.', openMaintenance, '/plant/?tab=control'))
   if (openJobs) entries.push(task(source, 'production', 'production.open_jobs', 'action', `Run ${openJobs} open job${openJobs === 1 ? '' : 's'}`, 'Record material, routed work, output, quality, and shift evidence.', openJobs, '/plant/?tab=production'))
   if (!entries.length) entries.push(task(source, 'production', 'production.ready', 'ready', 'Plant is ready for the next plan', 'Jobs, issues, quality holds, and maintenance have no derived exception.', 0, '/plant/?tab=production'))
   return entries

@@ -268,12 +268,16 @@ export function buildShopGuidedSaleOutcomeMetric(
 ): PilotOutcomeMetric | null {
   const startedAt = Date.parse(trialStartedAt)
   if (!Number.isFinite(startedAt)) return null
+  // Matches settleSale's queued action (CoreApp.tsx) -- the one-review "Paid & handed over"
+  // action that reconciles payment and advances the order to completed. kind and summary are
+  // both code-generated and never user-editable (only actor/reason/evidenceReference are, via
+  // ActionDetails), so they are the reliable signal here; evidenceReference is NOT locked for
+  // this action and must not be matched against. #355's order_create only reserves stock and
+  // never completes a sale on its own, so it cannot stand in for this signal.
   const completedSaleCount = actions.filter((action) => (
     action.domain === 'commerce'
-    && action.kind === 'order_create'
-    && action.summary.startsWith('Complete ')
-    && action.summary.endsWith(' sale')
-    && action.evidenceReference.endsWith(' counter receipt')
+    && action.kind === 'order_settle'
+    && action.summary.includes(' · paid and handed over')
     && Number.isFinite(Date.parse(action.capturedAt))
     && Date.parse(action.capturedAt) >= startedAt
   )).length

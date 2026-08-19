@@ -39,6 +39,11 @@ would pay for."
    dead generation-one lines in `website-product.css` (fenced; delete only in
    phase 3 after pin cataloguing), a full icon language.
 
+Shipped work has been reviewed: `DESIGN-REVIEW-2026-08-18.md`. Read it before
+taking another phase-2 item — two findings change what the next item should be
+(phase 1's website tokenization is inert behind a duplicate `.website-product`
+block, and the shipped cart sticky bar does not stick at ≤840px).
+
 ## Phase 2 queue (PR-sized; execute in order unless the founder redirects)
 
 1. **One-tap cash sale** — CoreApp.tsx `reviewCounterSale`/`queueAction`

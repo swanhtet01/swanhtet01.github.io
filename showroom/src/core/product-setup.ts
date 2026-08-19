@@ -1,9 +1,12 @@
-import siteManifest from '../../../site-manifest.json'
+// The explicit JSON attribute and file extension let Node load this module
+// directly, so the client setup registry can be exercised by a test rather
+// than only pinned as source text.
+import siteManifest from '../../../site-manifest.json' with { type: 'json' }
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
-} from '../products/product-handoff'
+} from '../products/product-storage-keys.ts'
 import type { ClientSolutionId } from './client-onboarding'
 
 export type SetupProductId = ClientSolutionId
@@ -170,6 +173,20 @@ function readProductSetupRegistry(storage: Pick<ProductSetupStorage, 'getItem'>)
 
 export function readProductSetup(storage: Pick<ProductSetupStorage, 'getItem'>, product: SetupProductId) {
   return readProductSetupRegistry(storage)[product] ?? null
+}
+
+export type StartedProductOwner = { product: SetupProductId; owner: string }
+
+// A client who changes who is accountable in one product leaves the others
+// naming someone else. Report the first such product so the difference can be
+// shown; correcting it is the client's decision, not an automatic rewrite.
+export function conflictingOwnerRecord(
+  startedElsewhere: StartedProductOwner[],
+  accountableOwner: string,
+): StartedProductOwner | null {
+  const owner = accountableOwner.trim()
+  if (!owner) return null
+  return startedElsewhere.find((entry) => entry.owner.trim() && entry.owner.trim() !== owner) ?? null
 }
 
 export function rememberProductSetup(storage: ProductSetupStorage, setup: SetupState) {

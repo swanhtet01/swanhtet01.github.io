@@ -151,4 +151,32 @@ rejects(
   'approving with only part of the evidence is refused',
 )
 
+// --- two different ready paths must not flatten to the same on-page anchor ---
+// The export step (website-export.ts createPageTargets) de-duplicates colliding
+// flattened anchors with a numeric suffix so the exported HTML still renders --
+// but that means /checkout-info and /checkout/info, which both flatten to the
+// anchor "checkout-info", would silently send a raw '#checkout-info' CTA to
+// whichever page export processed first. Readiness must catch the collision
+// itself, not just check that the raw slugs are distinct strings.
+const collidingWorkspace = {
+  ...fresh,
+  pages: [
+    fresh.pages[0],
+    { ...fresh.pages[1], slug: '/checkout-info' },
+    { ...fresh.pages[2], slug: '/checkout/info' },
+  ],
+}
+const collisionReadiness = readinessChecks(collidingWorkspace)
+const anchorCheck = collisionReadiness.find((entry) => entry.id === 'unique-anchors')
+check(Boolean(anchorCheck), 'readiness reports a unique-anchors check')
+check(anchorCheck?.passed === false, 'two ready paths that flatten to the same anchor fail readiness')
+check(
+  Boolean(anchorCheck?.detail.includes('/checkout-info') && anchorCheck.detail.includes('/checkout/info')),
+  `the failing detail names both colliding paths (got: ${anchorCheck?.detail})`,
+)
+check(
+  collisionReadiness.find((entry) => entry.id === 'unique-paths')?.passed === true,
+  'the raw slugs are still distinct strings, so unique-paths alone would have missed this',
+)
+
 console.log(`website publish gate contract: ${checks} checks passed`)

@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { shopBusinessTemplates } from '../products/shop/business-templates'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
@@ -10,6 +11,7 @@ import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
 import { emitMetric } from '../analytics/metrics-collector'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
+import { bi } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
   ACTION_KEY,
@@ -173,6 +175,7 @@ import type {
 import {
   buildProductionShiftHandoff,
   buildProductionBatchGenealogy,
+  buildProductionCertificateOfConformance,
   buildProductionQualityCorrectiveAction,
   isCapaEffectivenessOverdue,
   buildProductionRecallTrace,
@@ -183,7 +186,9 @@ import {
   endProductionDowntime,
   formatProductionShiftHandoff,
   formatProductionBatchGenealogy,
+  formatProductionCertificateOfConformance,
   formatProductionRecallTrace,
+  productionCertificateOfConformanceText,
   openProductionIssue,
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
@@ -231,6 +236,7 @@ import {
   type ProductionQualityCauseCategory,
   type ProductionQualityCorrectiveAction,
   type ProductionShiftHandoff,
+  type ProductionCertificateOfConformance,
 } from './production-workspace'
 import {
   projectShopProductionDemand,
@@ -443,6 +449,12 @@ const commerceSupportServiceActionLabels: Record<CommerceSupportServiceEventKind
 
 type ProductId = 'commerce' | 'production'
 
+// Hand-maintained duplicate of the canonical ecommerceCancellationMatchesCurrentShop
+// export in ecommerce-buying-lifecycle.ts (kept local rather than statically imported
+// so this file's deliberate dynamic-import code-splitting boundary for that module is
+// not broken). Currently byte-identical logic, confirmed by a real regression test --
+// see tools/test_ecommerce_order_coexistence.mjs. If you change this function, change
+// the canonical one too, or the two will silently drift.
 function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intent: EcommerceCancellationIntent) {
   const order = state.orders.find((candidate) => candidate.id === intent.orderId)
   const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
@@ -935,7 +947,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change'}</button></div>
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : bi(action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </dialog>
@@ -1304,7 +1316,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
-  const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce) === shopPack.id)
+  // The installed sample id is either an industry pack id or a business template id;
+  // comparing only the pack id reported a successful template install as "preserved".
+  const installedShopSampleId = commerceWorkingSampleCatalogId(commerce)
+  const shopSampleCatalogActive = Boolean(shopPack && installedShopSampleId && (
+    installedShopSampleId === shopPack.id
+    || shopBusinessTemplates.some((template) => template.id === installedShopSampleId && template.industryPackId === shopPack.id)
+  ))
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
@@ -3958,7 +3976,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function openReturnEditor(orderId: string) {
-    if (pendingAction || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+    if (pendingAction || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
       setNotice('Finish or cancel the current Shop help action before recording a return.')
       return
     }
@@ -7134,6 +7152,36 @@ function formatDowntimeDuration(durationMs: number) {
   return minutes ? `${hours} hr ${minutes} min` : `${hours} hr`
 }
 
+// Same technique as ReceiptDialog's openPrintWindow: a Blob-backed print view,
+// no PDF dependency. Read-only text; nothing here writes to Plant records.
+function openProductionCertificatePrintWindow(certificate: ProductionCertificateOfConformance) {
+  const text = productionCertificateOfConformanceText(certificate)
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Certificate ${certificate.job.id.replace(/[^A-Za-z0-9._-]/g, '-')}</title>
+  <style>
+    body { font-family: ui-monospace, 'Courier New', monospace; padding: 1rem 2rem; font-size: 0.9rem; line-height: 1.5; }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+    @media print { @page { margin: 1cm; } }
+  </style>
+</head>
+<body><pre>${escaped}</pre></body>
+</html>`
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (win) {
+    win.addEventListener('load', () => win.print())
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+  }
+}
+
 function productionJobPlanEventDetail(event: ProductionEvent) {
   const previousSchedule = event.fromJobPriority && event.fromJobDueAt
     ? `${productionJobPriorityLabels[event.fromJobPriority]} / ${formatIssueDue(event.fromJobDueAt)}`
@@ -7318,7 +7366,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedHoldJobId = holdableJobs.some((job) => job.id === holdJobId) ? holdJobId : holdableJobs[0]?.id ?? ''
   const selectedHoldJob = holdableJobs.find((job) => job.id === selectedHoldJobId)
   const activeJobs = production.jobs
-    .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .filter((job) => !job.closure && !job.qualityHold && job.output + (job.scrap ?? 0) < job.target)
     .sort(compareProductionJobSchedule)
   const completedJobs = production.jobs.filter((job) => Boolean(job.closure) || job.output + (job.scrap ?? 0) >= job.target)
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
@@ -7379,6 +7427,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionBatchGenealogy(report))}`,
     }
   }, [production, selectedGenealogyJobId])
+  const certificateOfConformance = useMemo(() => {
+    if (!selectedGenealogyJobId) return null
+    return buildProductionCertificateOfConformance(production, selectedGenealogyJobId)
+  }, [production, selectedGenealogyJobId])
+  const certificateOfConformanceDownload = useMemo(() => {
+    if (!certificateOfConformance) return null
+    return {
+      report: certificateOfConformance,
+      filename: `supermega-plant-certificate-${certificateOfConformance.job.id}-${certificateOfConformance.digest.slice(7, 15)}.json`,
+      href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionCertificateOfConformance(certificateOfConformance))}`,
+    }
+  }, [certificateOfConformance])
   const recallTraceDownload = useMemo(() => {
     const report = buildProductionRecallTrace(production, recallSearchId)
     if (!report) return null
@@ -8568,7 +8628,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function resolveIssue(issueId: string) {
     const issue = production.issues.find((candidate) => candidate.id === issueId)
     if (!issue || issue.status === 'resolved') return
-    if (issue.kind === 'quality') {
+    // Mirror the engine, which requires CAPA only for a fully specified quality
+    // issue. Demanding it for an incomplete legacy record forces six fields to
+    // dismiss a problem whose own owner, due time, and containment were never set.
+    if (issue.kind === 'quality' && Boolean(issue.severity && issue.owner && issue.dueAt && issue.containment)) {
       setQualityCorrectiveDraft({
         issueId,
         failureMode: issue.summary,
@@ -9194,6 +9257,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 <p className="panel-copy">{batchGenealogyDownload.report.shopDemandSource ? `${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length || 'Reorder'} Shop source ${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length === 1 ? 'order' : 'orders'} retained without customer details.` : 'No retained Shop-demand source exists for this legacy or manual job.'}</p>
                 <a className="core-button" download={batchGenealogyDownload.filename} href={batchGenealogyDownload.href}>Download batch genealogy</a>
                 <p className="panel-copy">Read-only evidence. It does not issue inventory, control equipment, post costs, issue a certificate, or contact another system.</p>
+                {certificateOfConformance ? <>
+                  <p className="panel-copy"><strong>Certificate of Conformance ready</strong> · closed {certificateOfConformance.closure.closedAt} by {certificateOfConformance.closure.closedBy} · {certificateOfConformance.materialLots.length} material {certificateOfConformance.materialLots.length === 1 ? 'lot' : 'lots'} traced · quality {certificateOfConformance.qualityReleaseStatus === 'released' ? 'released' : certificateOfConformance.qualityReleaseStatus === 'not_released' ? 'not formally released' : 'not tracked'}.</p>
+                  <div className="form-actions">
+                    <button className="core-button" onClick={() => openProductionCertificatePrintWindow(certificateOfConformance)} type="button">Print certificate</button>
+                    {certificateOfConformanceDownload ? <a className="core-button" download={certificateOfConformanceDownload.filename} href={certificateOfConformanceDownload.href}>Download certificate</a> : null}
+                  </div>
+                  <p className="panel-copy">Read-only Certificate of Conformance for this closed job. It issues no inventory, changes no equipment, posts no cost, and sends no message to any customer or external system.</p>
+                </> : <p className="panel-copy">A certificate becomes available once this job closes with recorded evidence and carries no unresolved controlled-batch quality hold.</p>}
               </> : null}
               <form className="core-form compact-form" onSubmit={(event) => { event.preventDefault(); setRecallSearchId(recallQuery.trim()) }}>
                 <label>Recall lot or output batch<input autoCapitalize="characters" maxLength={120} onChange={(event) => { setRecallQuery(event.target.value); setRecallSearchId('') }} placeholder="LOT-INPUT-001 or BATCH-OUTPUT-001" required spellCheck={false} value={recallQuery} /></label>

@@ -22,6 +22,7 @@ import {
   websiteInboxLeads,
   websiteLeadCounts,
   writeWebsiteLeadLedger,
+  WEBSITE_LEAD_LEDGER_KEY,
 } from './website-leads'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import {
@@ -318,6 +319,20 @@ export function WebsiteProduct() {
     next.delete('view')
     setSearchParams(next, { replace: true })
   }, [canReview, requestedView, searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    function refreshLeadLedgerFromStorage(event: StorageEvent) {
+      if (event.storageArea !== window.localStorage || event.key !== WEBSITE_LEAD_LEDGER_KEY) return
+      try {
+        setLocalLeadLedger(readWebsiteLeadLedger(window.localStorage))
+      } catch {
+        setLocalLeadLedger(emptyWebsiteLeadLedger())
+      }
+    }
+    window.addEventListener('storage', refreshLeadLedgerFromStorage)
+    return () => window.removeEventListener('storage', refreshLeadLedgerFromStorage)
+  }, [])
 
   useEffect(() => {
     if (headingFocusRequest > 0) headingRef.current?.focus()

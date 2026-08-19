@@ -1,4 +1,14 @@
 import { isLocalWorkspaceKey } from './local-workspace-storage.ts'
+import { COMMERCE_KEY, COMMERCE_LOCK } from './commerce-workspace.ts'
+import { PRODUCTION_KEY, PRODUCTION_LOCK } from './production-workspace.ts'
+
+// Same shape as commerce-workspace.ts / production-workspace.ts define locally for their own
+// lockManager parameters. Restore must take the same locks those modules take around a
+// read-modify-write, or a same-session restore can land mid-mutation and be silently overwritten
+// or silently overwrite it.
+type BackupLockManager = {
+  request: <T>(name: string, options: { mode: 'exclusive' }, callback: () => T | Promise<T>) => Promise<T>
+}
 
 export const COMPANY_BACKUP_CONTRACT = 'supermega.company_backup.v1'
 export const COMPANY_SNAPSHOT_CONTRACT = 'supermega.local_company_snapshot.v1'
@@ -495,10 +505,25 @@ export async function inspectEncryptedCompanyBackup(input: string, passphrase: s
   }
 }
 
-function restoreValues(storage: CompanyStorage, values: Map<string, string | null>): void {
+function lockNameForRestoreKey(key: string): string | null {
+  if (key === COMMERCE_KEY) return COMMERCE_LOCK
+  if (key === PRODUCTION_KEY) return PRODUCTION_LOCK
+  return null
+}
+
+function writeRestoreValue(storage: CompanyStorage, key: string, value: string | null): void {
+  if (value === null) storage.removeItem(key)
+  else storage.setItem(key, value)
+}
+
+async function restoreValues(storage: CompanyStorage, values: Map<string, string | null>, lockManager: BackupLockManager | undefined): Promise<void> {
   for (const [key, value] of values) {
-    if (value === null) storage.removeItem(key)
-    else storage.setItem(key, value)
+    const lockName = lockNameForRestoreKey(key)
+    if (lockName && lockManager?.request) {
+      await lockManager.request(lockName, { mode: 'exclusive' }, () => writeRestoreValue(storage, key, value))
+    } else {
+      writeRestoreValue(storage, key, value)
+    }
   }
 }
 
@@ -549,7 +574,11 @@ export function planCompanyRestore(storage: CompanyStorage, inspection: CompanyB
   return plan
 }
 
-export async function restoreCompanyBackup(storage: CompanyStorage, inspection: CompanyBackupInspection): Promise<CompanyRestoreResult> {
+export async function restoreCompanyBackup(
+  storage: CompanyStorage,
+  inspection: CompanyBackupInspection,
+  lockManager = globalThis.navigator?.locks as unknown as BackupLockManager | undefined,
+): Promise<CompanyRestoreResult> {
   if (!inspection || inspection.contract !== COMPANY_SNAPSHOT_CONTRACT || inspection.authRecordsIncluded !== false || inspection.managedWorkspaceRecordsIncluded !== false) {
     throw backupError('Inspect this encrypted backup before restoring it.')
   }
@@ -567,11 +596,11 @@ export async function restoreCompanyBackup(storage: CompanyStorage, inspection: 
   const previous = new Map(affectedKeys.map((key) => [key, storage.getItem(key)]))
   const target = new Map(affectedKeys.map((key) => [key, removing.has(key) ? null : incoming.get(key) ?? null]))
   try {
-    restoreValues(storage, target)
+    await restoreValues(storage, target, lockManager)
     if (!valuesMatch(storage, target)) throw backupError('The browser did not confirm every restored record.')
   } catch (error) {
     try {
-      restoreValues(storage, previous)
+      await restoreValues(storage, previous, lockManager)
       if (!valuesMatch(storage, previous)) throw backupError('Rollback verification failed.')
     } catch {
       throw backupError('Restore failed and the previous local state could not be verified. Stop using this browser and keep the backup file.')

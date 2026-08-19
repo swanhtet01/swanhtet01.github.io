@@ -99,7 +99,14 @@ _ENUM_FIELD_CANDIDATE_PATTERNS: dict[
     "channel": (
         re.compile(r"\bmessenger\b", re.IGNORECASE),
         re.compile(r"\bviber\b", re.IGNORECASE),
-        re.compile(r"\bphone\b", re.IGNORECASE),
+        # Do not count the "phone" inside "phone number" as a channel
+        # candidate -- a customer's own contact number is a routine part of an
+        # order message (the system prompt tells the model to keep it out of
+        # customer_reference for the same reason) and was false-firing the
+        # conflict guard whenever any negation appeared anywhere else in the
+        # message, nulling an unambiguous phone/Messenger/Viber channel.
+        # Mirrors the negative lookahead already guarding plain "cash" above.
+        re.compile(r"\bphone\b(?!\s+number)", re.IGNORECASE),
         re.compile(r"\bwebsite\b", re.IGNORECASE),
         re.compile(r"\bwalk[\s-]?in\b", re.IGNORECASE),
     ),

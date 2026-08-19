@@ -33,8 +33,13 @@ export function projectEcommercePipelineSummary(
   }
 
   const totalRequests = filteredRequests.length
+  // returnIntents has no resolution marker of its own — a return only resolves via a
+  // Shop CommerceOrder's .returns array (see projectEcommerceReturnOutcome), which this
+  // projection doesn't receive, so it cannot exclude resolved returns here.
   const pendingReturnIntents = buying.returnIntents.filter((r) => filter(r.createdAt)).length
-  const pendingCancellationIntents = buying.cancellationIntents.filter((c) => filter(c.createdAt)).length
+  const cancellationDecisionIntentIds = new Set(buying.cancellationDecisions.map((d) => d.intentId))
+  const pendingCancellationIntents = buying.cancellationIntents
+    .filter((c) => filter(c.createdAt) && !cancellationDecisionIntentIds.has(c.id)).length
 
   return {
     totalRequests,

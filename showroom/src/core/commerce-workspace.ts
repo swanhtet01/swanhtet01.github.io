@@ -2183,21 +2183,21 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
   const baselineProof: CommerceActionProof = {
     actionId: 'ACT-DEMO-CATALOG-BASELINE',
     capturedAt: new Date(now).toISOString(),
-    actor: 'Demo operator',
+    actor: 'Counter operator',
     reason: 'Anchor the seeded Shop catalog values.',
-    evidenceReference: 'DEMO-SEED-CATALOG',
+    evidenceReference: 'SEED-CATALOG',
   }
   return {
     schema: COMMERCE_WORKSPACE_SCHEMA,
     items,
     orders: [
-      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Demo operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Messenger delivery review #1042', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
-      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Demo operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Phone delivery review #1041', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
+      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Counter operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Messenger delivery review #1042', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
+      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Counter operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Phone delivery review #1041', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
       {
         id: 'ORD-1039',
         createdAt: completedOrderAt,
         customer: 'Daw Mya',
-        owner: 'Demo operator',
+        owner: 'Counter operator',
         channel: 'Counter',
         item: 'Personal care set',
         itemSku: 'SM-1004',
@@ -2206,9 +2206,9 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         paymentStatus: 'reconciled',
         paymentReconciledAt: completedPaymentAt,
         paymentReconciliationActionId: 'ACT-DEMO-PAY-1039',
-        paymentReconciledBy: 'Demo operator',
+        paymentReconciledBy: 'Counter operator',
         paymentReconciliationReason: 'Matched the counter settlement.',
-        paymentEvidenceReference: 'DEMO-SEED-PAY-1039',
+        paymentEvidenceReference: 'SEED-PAY-1039',
         refundStatus: 'none',
         fulfilment: 'pickup',
         fulfilmentReference: 'Counter handoff #1039',
@@ -2220,16 +2220,16 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         completion: {
           actionId: 'ACT-DEMO-COMPLETE-1039',
           capturedAt: completedFulfilmentAt,
-          actor: 'Demo operator',
+          actor: 'Counter operator',
           reason: 'Confirmed the counter handoff.',
-          evidenceReference: 'DEMO-SEED-FULFILMENT-1039',
+          evidenceReference: 'SEED-FULFILMENT-1039',
         },
       },
     ],
     movements: [
-      { id: 'MOV-ACT-DEMO-1042', actionId: 'ACT-DEMO-1042', createdAt: firstOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1042', kind: 'reserve', sku: 'SM-1001', quantityDelta: -2, orderId: 'ORD-1042' },
-      { id: 'MOV-ACT-DEMO-1041', actionId: 'ACT-DEMO-1041', createdAt: secondOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1041', kind: 'reserve', sku: 'SM-1003', quantityDelta: -1, orderId: 'ORD-1041' },
-      { id: 'MOV-ACT-DEMO-1039', actionId: 'ACT-DEMO-1039', createdAt: completedOrderAt, actor: 'Demo operator', reason: 'Seed a completed order with accountable payment and fulfilment proof.', evidenceReference: 'DEMO-SEED-ORD-1039', kind: 'reserve', sku: 'SM-1004', quantityDelta: -1, orderId: 'ORD-1039' },
+      { id: 'MOV-ACT-DEMO-1042', actionId: 'ACT-DEMO-1042', createdAt: firstOrderAt, actor: 'Counter operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'SEED-ORD-1042', kind: 'reserve', sku: 'SM-1001', quantityDelta: -2, orderId: 'ORD-1042' },
+      { id: 'MOV-ACT-DEMO-1041', actionId: 'ACT-DEMO-1041', createdAt: secondOrderAt, actor: 'Counter operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'SEED-ORD-1041', kind: 'reserve', sku: 'SM-1003', quantityDelta: -1, orderId: 'ORD-1041' },
+      { id: 'MOV-ACT-DEMO-1039', actionId: 'ACT-DEMO-1039', createdAt: completedOrderAt, actor: 'Counter operator', reason: 'Seed a completed order with accountable payment and fulfilment proof.', evidenceReference: 'SEED-ORD-1039', kind: 'reserve', sku: 'SM-1004', quantityDelta: -1, orderId: 'ORD-1039' },
     ],
     closes: [],
     catalogBaselines: items.map((item) => createCommerceCatalogBaseline(item, baselineProof)),
@@ -2247,7 +2247,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         ...baselineProof,
         actionId: 'ACT-DEMO-PROMOTION-WELCOME',
         reason: 'Approve the sample welcome promotion for Shop review.',
-        evidenceReference: 'DEMO-SEED-PROMOTION-WELCOME',
+        evidenceReference: 'SEED-PROMOTION-WELCOME',
       },
     }],
     shippingPolicies: [{
@@ -2263,7 +2263,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         ...baselineProof,
         actionId: 'ACT-DEMO-SHIPPING-YGN-CENTRAL',
         reason: 'Approve the sample Yangon central delivery policy.',
-        evidenceReference: 'DEMO-SEED-SHIPPING-YGN-CENTRAL',
+        evidenceReference: 'SEED-SHIPPING-YGN-CENTRAL',
       },
     }],
     paymentPolicies: [
@@ -2274,7 +2274,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         maximumOrderMmk: 5_000_000,
         instructions: 'Confirm the exact KBZPay reference in Shop before reconciliation.',
         status: 'active', effectiveFrom: baselineProof.capturedAt, effectiveUntil: null,
-        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-KBZPAY', reason: 'Approve manual KBZPay review for the sample store.', evidenceReference: 'DEMO-SEED-PAYMENT-KBZPAY' },
+        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-KBZPAY', reason: 'Approve manual KBZPay review for the sample store.', evidenceReference: 'SEED-PAYMENT-KBZPAY' },
       },
       {
         revision: 2,
@@ -2283,7 +2283,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         maximumOrderMmk: 500_000,
         instructions: 'Collect at delivery and reconcile the courier cash handoff in Shop.',
         status: 'active', effectiveFrom: baselineProof.capturedAt, effectiveUntil: null,
-        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-COD', reason: 'Approve bounded cash on delivery for the sample store.', evidenceReference: 'DEMO-SEED-PAYMENT-COD' },
+        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-COD', reason: 'Approve bounded cash on delivery for the sample store.', evidenceReference: 'SEED-PAYMENT-COD' },
       },
       {
         revision: 1,
@@ -2292,7 +2292,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         maximumOrderMmk: null,
         instructions: 'Collect and reconcile payment at the Shop pickup handoff.',
         status: 'active', effectiveFrom: baselineProof.capturedAt, effectiveUntil: null,
-        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-PICKUP', reason: 'Approve payment on pickup for the sample store.', evidenceReference: 'DEMO-SEED-PAYMENT-PICKUP' },
+        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-PICKUP', reason: 'Approve payment on pickup for the sample store.', evidenceReference: 'SEED-PAYMENT-PICKUP' },
       },
     ],
     websiteIntakes: [],
@@ -2310,7 +2310,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         ...baselineProof,
         actionId: 'ACT-DEMO-PURCHASE-BUDGET',
         reason: 'Approve a bounded sample stock-replenishment budget.',
-        evidenceReference: 'DEMO-SEED-PURCHASE-BUDGET',
+        evidenceReference: 'SEED-PURCHASE-BUDGET',
       },
     }],
     purchaseOrders: [{
@@ -2324,9 +2324,9 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
       creation: {
         actionId: 'ACT-DEMO-PO-1001',
         capturedAt: purchaseOrderAt,
-        actor: 'Demo buyer',
+        actor: 'Purchasing lead',
         reason: 'Replenish the low-stock cold drink pack.',
-        evidenceReference: 'DEMO-SEED-PO-1001',
+        evidenceReference: 'SEED-PO-1001',
       },
     }],
   }
@@ -5741,7 +5741,7 @@ export function commercePurchaseBudgetCommitment(state: CommerceState, envelope:
   return {
     committedMmk,
     availableMmk: envelope.ceilingMmk - committedMmk,
-    utilizationBasisPoints: Math.floor(committedMmk / envelope.ceilingMmk * 10_000),
+    utilizationBasisPoints: Number(BigInt(committedMmk) * 10_000n / BigInt(envelope.ceilingMmk)),
     openRequisitions,
     activePurchaseOrders,
   }
@@ -6412,6 +6412,12 @@ export type CommerceCatalogImportResult = {
 }
 
 const commerceWorkingSampleActionPrefix = 'ACT-DEMO-WORKING-SAMPLE-'
+// The catalog rows this writes are read by the client during a demo, so the
+// actor and evidence read as store setup rather than as scaffolding. The action
+// prefix above stays as it is: it identifies a replaceable sample and is never
+// displayed.
+const WORKING_SAMPLE_SETUP_ACTOR = 'Store manager'
+const commerceWorkingSampleOrderIdPrefix = 'SETUP-SAMPLE-'
 
 export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, input: {
   sampleId: string
@@ -6432,6 +6438,7 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
 
   const sampleBaselines = commerceCatalogBaselines(source).filter((baseline) => baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix))
   const sampleMovements = source.movements.filter((movement) => movement.actionId.startsWith(commerceWorkingSampleActionPrefix))
+  const sampleOrders = source.orders.filter((order) => order.id.startsWith(commerceWorkingSampleOrderIdPrefix))
   const sampleSkus = new Set([
     ...sampleBaselines.map((baseline) => baseline.sku),
     ...sampleMovements.map((movement) => movement.sku),
@@ -6442,15 +6449,17 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
   if (sampleSkus.size === requestedItems.length
     && sampleBaselines.length === requestedItems.length
     && sampleMovements.length === requestedItems.length
+    && !sampleOrders.length
     && sampleBaselines.every((baseline) => baseline.proof.actionId.startsWith(requestedPrefix))
     && sampleMovements.every((movement) => movement.actionId.startsWith(requestedPrefix))
     && JSON.stringify(currentSampleItems) === JSON.stringify(requestedItems)) return source
 
   let base = source
-  if (sampleSkus.size || sampleBaselines.length || sampleMovements.length) {
+  if (sampleSkus.size || sampleBaselines.length || sampleMovements.length || sampleOrders.length) {
     try {
       base = validateCommerceState({
         ...source,
+        orders: source.orders.filter((order) => !order.id.startsWith(commerceWorkingSampleOrderIdPrefix)),
         items: source.items.filter((item) => !sampleSkus.has(item.sku)),
         movements: source.movements.filter((movement) => !movement.actionId.startsWith(commerceWorkingSampleActionPrefix)),
         catalogBaselines: commerceCatalogBaselines(source).filter((baseline) => !baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix)),
@@ -6469,14 +6478,185 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
     const registered = registerCommerceItem(next, item, {
       actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,
       capturedAt: input.capturedAt,
-      actor: 'Demo setup',
+      actor: WORKING_SAMPLE_SETUP_ACTOR,
       reason: `Seed the ${sampleName} working sample.`,
-      evidenceReference: `DEMO-WORKING-SAMPLE-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
+      evidenceReference: `SETUP-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
     })
     if (!registered) return null
     next = registered
   }
   return next
+}
+
+export function installCommerceWorkingSampleActivity(stateValue: CommerceState, input: {
+  sampleId: string
+  sampleName: string
+  counterSales: readonly {
+    recordedAt: string
+    payment: string
+    lines: readonly { sku: string; quantity: number }[]
+  }[]
+  pendingOrder: {
+    customerName: string
+    requestedAt: string
+    promisedFor: string
+    lines: readonly { sku: string; quantity: number }[]
+  }
+}) {
+  let source: CommerceState
+  try { source = validateCommerceState(stateValue) } catch { return null }
+  const sampleId = optionalText(input?.sampleId)?.toLowerCase()
+  const sampleName = optionalText(input?.sampleName)
+  if (!sampleId || !sampleName
+    || !Array.isArray(input?.counterSales) || !input.counterSales.length
+    || !isRecord(input?.pendingOrder)) return null
+  if (commerceWorkingSampleCatalogId(source) !== sampleId) return null
+
+  const sampleIdUpper = sampleId.toUpperCase()
+  const activityPrefix = `${commerceWorkingSampleActionPrefix}${sampleIdUpper}-`
+  const saleOrderIds = input.counterSales.map((_, n) => `${commerceWorkingSampleOrderIdPrefix}${sampleIdUpper}-SALE-${n + 1}`)
+  const pendingOrderId = `${commerceWorkingSampleOrderIdPrefix}${sampleIdUpper}-ORDER`
+  const allExpectedIds = new Set([...saleOrderIds, pendingOrderId])
+
+  if (source.orders.filter((order) => allExpectedIds.has(order.id)).length === allExpectedIds.size) return source
+
+  const existingSampleOrderIds = new Set(
+    source.orders.filter((order) => order.id.startsWith(commerceWorkingSampleOrderIdPrefix)).map((order) => order.id),
+  )
+  let base = source
+  if (existingSampleOrderIds.size) {
+    try {
+      base = validateCommerceState({
+        ...source,
+        orders: source.orders.filter((order) => !existingSampleOrderIds.has(order.id)),
+        movements: source.movements.filter((movement) => !movement.orderId || !existingSampleOrderIds.has(movement.orderId)),
+      })
+    } catch { return null }
+  }
+
+  const itemBySku = new Map(base.items.map((item) => [item.sku, item]))
+  const newOrders: CommerceOrder[] = []
+  const newMovements: CommerceStockMovement[] = []
+  // Running total reserved per SKU across every sale and the pending order, so a sample that
+  // reserves the same item twice is checked against actual stock, not just each line alone.
+  const reservedQuantityBySku = new Map<string, number>()
+
+  for (const [n, sale] of input.counterSales.entries()) {
+    const saleNumber = n + 1
+    const orderId = saleOrderIds[n]
+    const reserveActionId = `${activityPrefix}SALE-${saleNumber}-RESERVE`
+    const completeActionId = `${activityPrefix}SALE-${saleNumber}-COMPLETE`
+    if (!validTimestamp(sale?.recordedAt) || !Array.isArray(sale?.lines) || !sale.lines.length) return null
+    const salePayment = optionalText(sale.payment)
+    if (!salePayment) return null
+    const orderLines: CommerceOrderLine[] = []
+    let orderQuantity = 0
+    let orderTotal = 0
+    for (const line of sale.lines) {
+      const item = itemBySku.get(line?.sku)
+      if (!item || !Number.isSafeInteger(line?.quantity) || line.quantity < 1) return null
+      const lineTotal = item.price * line.quantity
+      const nextQty = orderQuantity + line.quantity
+      const nextTotal = orderTotal + lineTotal
+      if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
+      orderQuantity = nextQty
+      orderTotal = nextTotal
+      orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+      const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
+      if (reservedSoFar === null || reservedSoFar > item.onHand) return null
+      reservedQuantityBySku.set(item.sku, reservedSoFar)
+    }
+    const completedAt = new Date(Date.parse(sale.recordedAt) + 15 * 60 * 1000).toISOString()
+    const reserveProof: CommerceActionProof = { actionId: reserveActionId, capturedAt: sale.recordedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample sale ${saleNumber}.`, evidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-RESERVE` }
+    newOrders.push({
+      id: orderId,
+      createdAt: sale.recordedAt,
+      customer: 'Walk-in customer',
+      owner: WORKING_SAMPLE_SETUP_ACTOR,
+      channel: 'Walk-in',
+      item: commerceOrderItemSummary(orderLines),
+      ...(orderLines.length === 1 ? { itemSku: orderLines[0].sku } : {}),
+      quantity: orderQuantity,
+      payment: salePayment,
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: 'pickup',
+      fulfilmentReference: `Counter ${orderId}`,
+      promisedAt: new Date(Date.parse(sale.recordedAt) + 30 * 60 * 1000).toISOString(),
+      lines: orderLines,
+      calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: orderTotal, taxMode: 'not_configured', taxMmk: 0, totalMmk: orderTotal },
+      total: orderTotal,
+      status: 'completed',
+      completion: { actionId: completeActionId, capturedAt: completedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Counter handoff for the ${sampleName} working sample.`, evidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-COMPLETE` },
+    })
+    for (const [lineIndex, line] of orderLines.entries()) {
+      newMovements.push(movementFor(reserveProof, { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId }, `line-${lineIndex + 1}`))
+    }
+  }
+
+  const { pendingOrder } = input
+  const pendingCustomer = optionalText(pendingOrder?.customerName)
+  if (!pendingCustomer
+    || !validTimestamp(pendingOrder?.requestedAt)
+    || !validTimestamp(pendingOrder?.promisedFor)
+    || !Array.isArray(pendingOrder?.lines)
+    || !pendingOrder.lines.length) return null
+  const pendingReserveActionId = `${activityPrefix}ORDER-RESERVE`
+  const pendingOrderLines: CommerceOrderLine[] = []
+  let pendingQuantity = 0
+  let pendingTotal = 0
+  for (const line of pendingOrder.lines) {
+    const item = itemBySku.get(line?.sku)
+    if (!item || !Number.isSafeInteger(line?.quantity) || line.quantity < 1) return null
+    const lineTotal = item.price * line.quantity
+    const nextQty = pendingQuantity + line.quantity
+    const nextTotal = pendingTotal + lineTotal
+    if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
+    pendingQuantity = nextQty
+    pendingTotal = nextTotal
+    pendingOrderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
+    if (reservedSoFar === null || reservedSoFar > item.onHand) return null
+    reservedQuantityBySku.set(item.sku, reservedSoFar)
+  }
+  const pendingReserveProof: CommerceActionProof = { actionId: pendingReserveActionId, capturedAt: pendingOrder.requestedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample pending order.`, evidenceReference: `SETUP-${sampleIdUpper}-ORDER-RESERVE` }
+  newOrders.push({
+    id: pendingOrderId,
+    createdAt: pendingOrder.requestedAt,
+    customer: pendingCustomer,
+    owner: WORKING_SAMPLE_SETUP_ACTOR,
+    channel: 'Phone',
+    item: commerceOrderItemSummary(pendingOrderLines),
+    ...(pendingOrderLines.length === 1 ? { itemSku: pendingOrderLines[0].sku } : {}),
+    quantity: pendingQuantity,
+    payment: 'Cash',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    fulfilment: 'pickup',
+    fulfilmentReference: `Order ${pendingOrderId}`,
+    promisedAt: pendingOrder.promisedFor,
+    lines: pendingOrderLines,
+    calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: pendingTotal, taxMode: 'not_configured', taxMmk: 0, totalMmk: pendingTotal },
+    total: pendingTotal,
+    status: 'confirmed',
+  })
+  for (const [lineIndex, line] of pendingOrderLines.entries()) {
+    newMovements.push(movementFor(pendingReserveProof, { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId: pendingOrderId }, `line-${lineIndex + 1}`))
+  }
+
+  const nextItems = base.items.map((item) => {
+    const reserved = reservedQuantityBySku.get(item.sku)
+    return reserved ? { ...item, onHand: item.onHand - reserved } : item
+  })
+
+  try {
+    return validateCommerceState({
+      ...base,
+      items: nextItems,
+      orders: [...base.orders, ...newOrders],
+      movements: [...base.movements, ...newMovements],
+    })
+  } catch { return null }
 }
 
 export function commerceWorkingSampleCatalogId(stateValue: CommerceState) {
@@ -6489,6 +6669,20 @@ export function commerceWorkingSampleCatalogId(stateValue: CommerceState) {
     return match ? [match[1].toLowerCase()] : []
   }))
   return sampleIds.size === 1 ? [...sampleIds][0] : null
+}
+
+export function commerceWorkingSampleSkus(stateValue: CommerceState) {
+  let state: CommerceState
+  try { state = validateCommerceState(stateValue) } catch { return [] }
+  const skus = new Set([
+    ...commerceCatalogBaselines(state)
+      .filter((baseline) => baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix))
+      .map((baseline) => baseline.sku),
+    ...state.movements
+      .filter((movement) => movement.actionId.startsWith(commerceWorkingSampleActionPrefix))
+      .map((movement) => movement.sku),
+  ])
+  return [...skus].sort((left, right) => left.localeCompare(right, 'en'))
 }
 
 export function importCommerceCatalog(stateValue: CommerceState, input: {
@@ -10390,6 +10584,16 @@ export function advanceCommerceOrder(
 ) {
   const current = validateCommerceState(state)
   const order = current.orders.find((candidate) => candidate.id === orderId)
+  if (order && proof && validProof(proof)) {
+    const advanceTargets: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
+    const replayed = (expectedStatus === 'confirmed' || expectedStatus === 'preparing')
+      ? order.status === advanceTargets[expectedStatus]
+        && order.advancementActionIds?.[order.advancementActionIds.length - 1] === proof.actionId
+      : expectedStatus === 'ready'
+        ? order.status === 'completed' && order.completion?.actionId === proof.actionId
+        : false
+    if (replayed) return current
+  }
   if (!order || order.status !== expectedStatus || order.status === 'completed' || order.status === 'cancelled') return null
   const currentStatus = order.status as 'confirmed' | 'preparing' | 'ready'
   if (order.status === 'ready' && order.paymentStatus !== 'reconciled') return null

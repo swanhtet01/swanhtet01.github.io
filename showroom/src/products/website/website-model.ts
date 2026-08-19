@@ -1,3 +1,4 @@
+import { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY } from '../product-storage-keys.ts'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   readStoredWebsiteLeads,
@@ -6,9 +7,8 @@ import {
   type WebsiteLeadLedger,
 } from './website-leads.ts'
 
+export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
-export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
-export const LEGACY_WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v1'
 export const WEBSITE_RECOVERY_INDEX_KEY = 'supermega.website.workspace.recovery.v1.index'
 export const WEBSITE_EDIT_SESSION_KEY = 'supermega.website.edit-session.v1'
 export const MAX_WEBSITE_PAGES = 4
@@ -481,6 +481,27 @@ function websiteImportContent(workspace: WebsiteWorkspace) {
   }
 }
 
+/**
+ * True when the workspace still holds exactly what a working-sample install put
+ * there: the marker's fingerprint still matches, and no review, release, publish
+ * or lead evidence has been recorded. Real owner work therefore still blocks a
+ * replacing import. Mirrors replaceableWebsiteWorkingSample in website-starter,
+ * which cannot be imported here without a cycle.
+ */
+export function isReplaceableWebsiteSampleWorkspace(workspace: WebsiteWorkspace) {
+  const marker = workspace.workingSample
+  const releaseRecords = workspace.releaseRecords ?? []
+  const workspaceLeads = workspace.leadLedger
+  return Boolean(marker
+    && marker.contentFingerprint === workspaceFingerprint(workspace)
+    && workspace.evidence.length === 0
+    && workspace.approvals.length === 0
+    && workspace.localPublishes.length === 0
+    && workspace.events.length === 0
+    && releaseRecords.every((record) => record.revision === 0)
+    && (!workspaceLeads || (workspaceLeads.revision === 0 && workspaceLeads.leads.length === 0)))
+}
+
 export function importWebsitePageDrafts(current: WebsiteWorkspace, input: {
   siteName: string
   pages: WebsitePageImportDraft[]
@@ -514,7 +535,11 @@ export function importWebsitePageDrafts(current: WebsiteWorkspace, input: {
   if (serialize(websiteImportContent(current)) === serialize(websiteImportContent(imported))) {
     return { workspace: current, created: 0, alreadyPresent: pages.length, replayed: true }
   }
-  if (serialize(current) !== serialize(createInitialWorkspace()) || !isWebsiteWorkspace(imported)) return null
+  // A pristine workspace or an untouched working sample may both be replaced by the
+  // client's own pages: onboarding installs the sample itself, so blocking on it
+  // would make the app's own setup prevent the client's first real import.
+  if ((serialize(current) !== serialize(createInitialWorkspace()) && !isReplaceableWebsiteSampleWorkspace(current))
+    || !isWebsiteWorkspace(imported)) return null
   return { workspace: imported, created: pages.length, alreadyPresent: 0, replayed: false }
 }
 
@@ -782,6 +807,7 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
   const uniqueSlugs = new Set(normalizedSlugs)
   const readyPaths = new Set(normalizedSlugs)
   const readyAnchors = new Set(normalizedSlugs.map(pageAnchorForSlug))
+  const anchorCollision = findAnchorCollision(normalizedSlugs)
   const visibleNavigation = workspace.pages.filter((page) => page.navigation.visible)
   const completePages = readyPages.filter((page) => pageIssues(page).length === 0)
   const destinationsAreSafe = readyPages.every((page) => {
@@ -824,6 +850,14 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
       label: 'Ready page paths are unique',
       detail: String(uniqueSlugs.size) + ' unique paths across ' + String(readyPages.length) + ' ready pages.',
       passed: uniqueSlugs.size === readyPages.length,
+    },
+    {
+      id: 'unique-anchors',
+      label: 'Ready page anchors do not collide',
+      detail: anchorCollision
+        ? 'Paths ' + anchorCollision[0] + ' and ' + anchorCollision[1] + ' both flatten to the same on-page anchor. Rename one path so their anchors differ.'
+        : String(readyAnchors.size) + ' unique anchors across ' + String(readyPages.length) + ' ready pages.',
+      passed: !anchorCollision,
     },
     {
       id: 'navigation',
@@ -1039,6 +1073,18 @@ export async function mutateWebsiteWorkspace(
     return await locks.request(WEBSITE_MUTATION_LOCK, { mode: 'exclusive' }, async () => {
       const loaded = loadWebsiteWorkspace(storage)
       if (!loaded.ok) return loaded
+      // Deliberately `&&`, not `||`: two evidence/approval writes computed against the same
+      // base revision (e.g. two QA checklist items submitted moments apart without an
+      // intervening reload) must both be able to land, since neither overwrites the other --
+      // evidence is append-only. `mutateWebsiteWorkspace` cannot tell "genuinely concurrent,
+      // non-conflicting write" apart from "a stale tab retrying after a real change" -- both
+      // present identically here (expectedRevision stale, expectedContentRevision still
+      // matching). An `||` here (tried and reverted -- see git history) closes the "changed in
+      // another tab" transparency gap for the stale-tab case, but breaks the legitimate
+      // concurrent-evidence case, which is the more common real-world path and was already
+      // tested before that change. A real fix needs a way to tell those two cases apart (e.g.
+      // per-evidence-kind idempotency instead of whole-workspace revision matching), not a
+      // blanket flip of this operator.
       if (loaded.workspace.revision !== expectedRevision
         && loaded.workspace.contentRevision !== expectedContentRevision) {
         return { ok: false, error: 'Website content changed in another tab. The current record was preserved; review the refreshed content revision.' }
@@ -1365,6 +1411,21 @@ function pageAnchorForSlug(value: string) {
   return normalized === '/' ? 'home' : normalized.slice(1).replaceAll('/', '-')
 }
 
+// Distinct slugs (e.g. /checkout-info and /checkout/info) can flatten to the
+// same anchor id via pageAnchorForSlug. Callers that only build a Set of
+// anchors silently coalesce that collision; this walks the slugs in order and
+// reports the first pair that collides so validation can name both of them.
+function findAnchorCollision(slugs: string[]): [string, string] | null {
+  const anchorToSlug = new Map<string, string>()
+  for (const slug of slugs) {
+    const anchor = pageAnchorForSlug(slug)
+    const existingSlug = anchorToSlug.get(anchor)
+    if (existingSlug !== undefined && existingSlug !== slug) return [existingSlug, slug]
+    anchorToSlug.set(anchor, slug)
+  }
+  return null
+}
+
 export function formatTimestamp(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Unknown time'
@@ -1682,6 +1743,7 @@ function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
   if (contentDigest !== 'site-' + canonicalDigest(content)) return false
   const slugs = value.pages.map((page) => page.slug)
   if (!hasUniqueStrings(slugs) || slugs.filter((slug) => slug === '/').length !== 1) return false
+  if (findAnchorCollision(slugs)) return false
   const readyPaths = new Set(slugs)
   const readyAnchors = new Set(slugs.map(pageAnchorForSlug))
   return value.pages

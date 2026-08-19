@@ -1,37 +1,74 @@
+// Explicit .ts extensions throughout this block: local-merchandising-import.ts now imports
+// readLocalShopBusinessTemplateId from this module, and verify_app_build.mjs imports THAT module
+// directly under node for its runtime checks, where an extensionless specifier does not resolve.
+// Vite tolerates either, so the omission only shows in CI -- see the identical note atop
+// local-merchandising-import.ts.
 import {
   clientDemoPresets,
   clientImportTemplate,
   createClientImportPreview,
-} from './client-onboarding'
+} from './client-onboarding.ts'
 import {
+  installCommerceWorkingSampleActivity,
   installCommerceWorkingSampleCatalog,
   commerceWorkingSampleCatalogId,
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
   type CommerceItem,
-} from './commerce-workspace'
-import { plantImportDueAt } from './managed-trial'
+} from './commerce-workspace.ts'
+import { plantImportDueAt } from './managed-trial.ts'
 import {
+  appendGuidedSampleProductionActivity,
+  GUIDED_SAMPLE_PRODUCTION_ACTOR,
   installProductionWorkingSampleJobs,
   mutateProductionWorkingSample,
+  mutateProductionWorkspace,
+  validateProductionState,
   type ProductionJob,
-} from './production-workspace'
+  type ProductionState,
+} from './production-workspace.ts'
+import {
+  productionOrderExecutionForJob,
+  upsertProductionOrderExecution,
+} from './production-order-portfolio.ts'
+import {
+  applyPlantOrderPlan,
+  buildPlantOrderControlledPlan,
+  checkPlantOrderAvailability,
+  createEmptyPlantOrderState,
+  plantOrderEvidenceDigest,
+  projectPlantOrder,
+  recordPlantOrderCalibration,
+  releasePlantOrder,
+  validatePlantOrderState,
+  type PlantOrderProof,
+  type PlantOrderState,
+  type PlantOrderTransitionResult,
+} from './plant-order-foundation.ts'
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   createShopServiceSchedule,
+  createShopServiceScheduleDemo,
+  isGuidedSampleShopSchedule,
   provisionEmptyShopServiceSchedule,
   readShopServiceSchedule,
   shopIndustryPack,
   type ShopIndustryPackId,
-} from './shop-service-scheduling'
-import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs'
-import { SETUP_KEY, normalizeSetup, type SetupState } from './product-setup'
+} from './shop-service-scheduling.ts'
+import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
+import { SETUP_KEY, normalizeSetup, type SetupState } from './product-setup.ts'
 import {
+  rebaseWorkingSampleActivity,
   shopBusinessTemplate,
   shopBusinessTemplateCatalogCsv,
   shopBusinessTemplates,
   type ShopBusinessTemplateId,
-} from '../products/shop/business-templates'
+} from '../products/shop/business-templates.ts'
+import {
+  plantBusinessTemplateForShopTemplateId,
+  plantBusinessTemplateJobs,
+  type PlantBusinessTemplate,
+} from '../products/plant/business-templates.ts'
 
 export function readLocalShopIndustryPackId() {
   if (typeof window === 'undefined') return clientDemoPresets[0].shopIndustryPackId
@@ -106,7 +143,7 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
 }
 
 /**
- * Install the industry pack's empty schedule, PRESERVING any appointment already taken.
+ * Install the industry pack's appointment book, PRESERVING any appointment already taken.
  *
  * provisionEmptyShopServiceSchedule refuses to overwrite a schedule that has bookings, and that
  * refusal is correct -- it is protecting a real customer's appointment. What was wrong is that
@@ -119,19 +156,38 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
  * type is deliberately unchanged so callers that read .industryPackId keep working, and when a
  * schedule is preserved that pack id is the correct answer anyway. The invariant stays where it
  * belongs, in provisionEmptyShopServiceSchedule.
+ *
+ * What is installed is the pack's guided sample day, not a blank book. A spa whose first screen
+ * is an empty diary has been handed a filing cabinet; three bookings partway through their day
+ * is the product working. The sample is replaceable by construction --
+ * isGuidedSampleShopSchedule holds for it -- and it books nothing a real customer would be
+ * charged for.
  */
-export function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
+export function provisionLocalShopIndustryPack(
+  industryPackId: ShopIndustryPackId,
+  planningDay = new Date().toISOString().slice(0, 10),
+) {
   const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
   if (!stored) {
-    const created = createShopServiceSchedule(industryPackId)
+    const created = createShopServiceScheduleDemo(industryPackId, planningDay)
     window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(created))
     return created
   }
   const current = readShopServiceSchedule(stored)
   try {
-    const next = provisionEmptyShopServiceSchedule(current, industryPackId)
-    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
-    return next
+    // The invariant still lives in provisionEmptyShopServiceSchedule and is still asked. What
+    // changed is WHAT is handed to it. A schedule carrying only guided-sample events is this
+    // function's own previous output, so it is reduced to the blank book it grew from before the
+    // question is put -- otherwise re-running setup on a seeded device could never move pack
+    // again. A schedule carrying a single event a human authored fails isGuidedSampleShopSchedule
+    // and is handed over INTACT, so the refusal fires and the appointment survives.
+    const replaceable = isGuidedSampleShopSchedule(current)
+      ? createShopServiceSchedule(current.industryPackId)
+      : current
+    const next = provisionEmptyShopServiceSchedule(replaceable, industryPackId)
+    const seeded = createShopServiceScheduleDemo(next.industryPackId, planningDay)
+    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(seeded))
+    return seeded
   } catch {
     // An appointment already exists. Keep it, keep its pack, and let onboarding continue so the
     // catalog still installs.
@@ -197,23 +253,266 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
   }))
   const commerceWorkspace = loadCommerceWorkspace()
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
+  const provisionedAt = new Date().toISOString()
+  // Authored once per provisioning run, not once per attempt, so the sales and the promise are
+  // shifted against the same instant the catalog is stamped with.
+  const activity = rebaseWorkingSampleActivity(template, provisionedAt)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
   const result = await mutateCommerceWorkspace((current) => {
     const next = installCommerceWorkingSampleCatalog(current, {
       sampleId: template.id,
       sampleName: template.name.en,
       items,
-      capturedAt: new Date().toISOString(),
+      capturedAt: provisionedAt,
     })
     if (!next) return current
-    disposition = next === current ? 'current' : 'installed'
-    return next
+    // The catalog alone is a price list, not a business: no takings, no order waiting. The sales
+    // and the pending order go in inside the SAME transition so the workspace is never written in
+    // the half-state a client would read as "it did not work".
+    //
+    // installCommerceWorkingSampleActivity fails closed and returns null. Treated exactly like the
+    // catalog result above -- return `current`, leave the disposition at 'preserved' -- so a
+    // failure abandons the whole transition instead of persisting a catalog the caller was told
+    // carried activity. 'preserved' is what ProductOnboardingPage turns into "nothing was
+    // overwritten", which is precisely true when the transition is abandoned.
+    const withActivity = installCommerceWorkingSampleActivity(next, {
+      sampleId: template.id,
+      sampleName: template.name.en,
+      counterSales: activity.counterSales,
+      pendingOrder: activity.pendingOrder,
+    })
+    if (!withActivity) return current
+    disposition = withActivity === current ? 'current' : 'installed'
+    return withActivity
   })
   if (!result.ok) throw new Error(result.error)
   return disposition
 }
 
+/**
+ * Builds and releases the reviewed BOM/routing order for a Plant business template's jobs[0]
+ * (TEMPLATE-EXPANSION.md queue item 8), entirely under guided-sample-prefixed proofs so
+ * isGuidedSampleProduction (production-workspace.ts, widened by queue item 7) keeps reading this
+ * workspace as a replaceable guided sample. Only called when businessTemplate.plan is set --
+ * unset for every template that has not shipped a plan yet, which must reach no code here at all.
+ *
+ * Applies import_plan -> availability_check -> one record_calibration per distinct work centre in
+ * the routing -> release_order, each as its OWN mutateProductionWorkspace('order-execution')
+ * call: that write boundary (productionOrderExecutionAppendIsExact) allows exactly one appended
+ * command per call, so the chain cannot be batched into a single transition.
+ *
+ * Every id and proof.capturedAt is derived deterministically from the job's own current record
+ * and the workspace's latest operating event -- never Date.now() or similar -- so a second
+ * provisioning run reproduces byte-identical command payloads and every step replays as a true
+ * no-op via applyPlantOrderPlan/etc.'s own idempotent-command-id handling; no special-casing
+ * needed here.
+ *
+ * job.targetQuantity on the built plan is target - output - (scrap ?? 0), read fresh from the
+ * CURRENT ProductionJob record inside the import_plan transition -- not the template's literal
+ * target. By the time this runs, appendGuidedSampleProductionActivity has already recorded output
+ * and scrap against that same job (see provisionLocalPlantWorkingSample below), and
+ * productionOrderExecutionAppendIsExact requires the plan's targetQuantity to equal exactly that
+ * remaining figure or the write is refused.
+ */
+async function provisionPlantBusinessTemplateOrder(businessTemplate: PlantBusinessTemplate) {
+  const plan = businessTemplate.plan
+  if (!plan) return
+  const templateJob = businessTemplate.jobs[0]
+  const jobId = templateJob.jobCode
+  const templateTag = businessTemplate.id.toUpperCase()
+  const outputBatchId = `${plantIndustryPack(businessTemplate.industryPackId).setup.outputPrefix}-${plan.outputBatchSuffix}`
+  // PlantOrderRoutingDraft carries workCentreName for the manual-entry form's display only --
+  // PlantOrderRoutingStep (what buildPlantOrderControlledPlan's routing actually validates
+  // against) does not have that field, and its exact-fields check rejects an extra one, so it
+  // is rebuilt field by field rather than spread.
+  const routing = plan.routing.map((step, index) => ({
+    operationId: step.operationId,
+    sequence: index + 1,
+    name: step.name,
+    workCentreId: step.workCentreId,
+    minutesPerUnitMilli: step.minutesPerUnitMilli,
+    ...(step.standardCostPerMinuteMmk === undefined ? {} : { standardCostPerMinuteMmk: step.standardCostPerMinuteMmk }),
+  }))
+  const workCentreIds = plan.workCentres.map((centre) => centre.workCentreId)
+  const planId = `PLN-${templateTag}-001`
+  // Shared between the reviewed plan and the availability check that reviews it -- both
+  // represent "what source data was this built from", so plant-order-foundation.ts requires the
+  // same digest string on each. Built from fixed template content, never runtime state, so a
+  // second provisioning run reproduces it exactly.
+  const sourceDigest = plantOrderEvidenceDigest({
+    schema: 'supermega.plant.template-order-source.v1',
+    templateId: businessTemplate.id,
+    jobId,
+    materials: plan.materials,
+    workCentres: plan.workCentres,
+    routing,
+  })
+
+  let step = 0
+  function nextProof(current: ProductionState, reason: string): PlantOrderProof {
+    step += 1
+    const base = Date.parse(current.events[0]?.createdAt ?? '')
+    return {
+      actionId: `ACT-GUIDED-SAMPLE-ORDER-${String(step).padStart(3, '0')}`,
+      capturedAt: new Date((Number.isFinite(base) ? base : Date.now()) + step * 60_000).toISOString(),
+      actor: GUIDED_SAMPLE_PRODUCTION_ACTOR,
+      reason,
+      evidenceReference: 'ORDER-REVIEW-001',
+    }
+  }
+
+  async function applyStep(
+    build: (currentExecution: PlantOrderState, current: ProductionState) => PlantOrderTransitionResult | null,
+  ) {
+    const result = await mutateProductionWorkspace((current) => {
+      const currentExecution = validatePlantOrderState(
+        productionOrderExecutionForJob(current, jobId) ?? createEmptyPlantOrderState(),
+      )
+      const applied = build(currentExecution, current)
+      if (!applied || applied.replayed) return current
+      return validateProductionState(upsertProductionOrderExecution(current, applied.state))
+    }, undefined, undefined, 'order-execution')
+    if (!result.ok) throw new Error(result.error)
+  }
+
+  // 1. Import the reviewed plan, with job.targetQuantity pinned to the job's current remaining
+  // quantity (see the function doc above).
+  await applyStep((currentExecution, current) => {
+    const productionJob = current.jobs.find((candidate) => candidate.id === jobId)
+    if (!productionJob || productionJob.closure || productionJob.qualityHold) return null
+    const remaining = productionJob.target - productionJob.output - (productionJob.scrap ?? 0)
+    if (remaining < 1) return null
+    const reviewedPlan = buildPlantOrderControlledPlan({
+      planId,
+      sourceDigest,
+      job: { jobId, product: productionJob.product, targetQuantity: remaining, outputBatchId },
+      materials: plan.materials.map((material) => ({ ...material })),
+      workCentres: plan.workCentres.map((centre) => ({ ...centre })),
+      routing,
+    })
+    return applyPlantOrderPlan(
+      currentExecution,
+      reviewedPlan,
+      nextProof(current, 'Reviewed BOM and routing imported for the starter production order.'),
+      currentExecution.headDigest,
+    )
+  })
+
+  // 2. Confirm material and work-centre capacity availability, generously above the reviewed
+  // requirement -- this is a guided sample walkthrough, not a real supply constraint.
+  await applyStep((currentExecution, current) => {
+    const reviewedPlan = projectPlantOrder(currentExecution).plan
+    if (!reviewedPlan) return null
+    const materials = reviewedPlan.materials.map((material) => ({
+      materialId: material.materialId,
+      inputLotId: `LOT-${material.materialId.slice('MAT-'.length)}-001`,
+      availableQuantityMilli: reviewedPlan.job.targetQuantity * material.quantityPerUnitMilli + 1_000,
+    }))
+    const requiredMinutesByCentre = new Map<string, number>()
+    for (const operation of reviewedPlan.routing) {
+      const required = reviewedPlan.job.targetQuantity * operation.minutesPerUnitMilli
+      requiredMinutesByCentre.set(operation.workCentreId, (requiredMinutesByCentre.get(operation.workCentreId) ?? 0) + required)
+    }
+    const workCentres = reviewedPlan.workCentres.map((centre) => ({
+      workCentreId: centre.workCentreId,
+      availableMinutes: Math.ceil((requiredMinutesByCentre.get(centre.workCentreId) ?? 0) / 1_000) + 500,
+    }))
+    return checkPlantOrderAvailability(currentExecution, {
+      checkId: `CHK-${templateTag}-001`,
+      sourceDigest,
+      materials,
+      workCentres,
+      proof: nextProof(current, 'Availability confirmed for materials and routed work-centre capacity.'),
+      expectedHeadDigest: currentExecution.headDigest,
+    })
+  })
+
+  // 3. One calibration per distinct routed work centre -- releasePlantOrder requires current
+  // calibration for every work centre in the routing before it will release a controlled plan.
+  for (const workCentreId of workCentreIds) {
+    const segment = workCentreId.slice('WC-'.length)
+    await applyStep((currentExecution, current) => {
+      const capturedProof = nextProof(current, `Work-centre calibration confirmed for ${workCentreId}.`)
+      const capturedAtMillis = Date.parse(capturedProof.capturedAt)
+      return recordPlantOrderCalibration(currentExecution, {
+        calibrationId: `CAL-${templateTag}-${segment}-001`,
+        workCentreId,
+        certificateId: `CERT-${templateTag}-${segment}-001`,
+        calibratedAt: new Date(capturedAtMillis - 24 * 60 * 60 * 1000).toISOString(),
+        validUntil: new Date(capturedAtMillis + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        standardReference: `${businessTemplate.name.en} equipment calibration standard`,
+        proof: capturedProof,
+        expectedHeadDigest: currentExecution.headDigest,
+      })
+    })
+  }
+
+  // 4. Release the order to the floor. This releases the ORDER (the plan/BOM/routing approved
+  // for production) -- never inspectPlantOrderOutput or releasePlantOrderBatch, which release a
+  // finished-goods BATCH and are Plant's proof counter. Per CLAUDE.md, a guided Plant sample
+  // never earns that counter.
+  await applyStep((currentExecution, current) => {
+    const availability = projectPlantOrder(currentExecution).latestAvailability
+    if (!availability) return null
+    return releasePlantOrder(currentExecution, {
+      releaseId: `REL-${templateTag}-001`,
+      availabilityCheckId: availability.checkId,
+      proof: nextProof(current, 'Order released to the floor after calibration and availability confirmation.'),
+      expectedHeadDigest: currentExecution.headDigest,
+    })
+  })
+}
+
 export async function provisionLocalPlantWorkingSample(industryPackId: PlantIndustryPackId, workflowTemplateId: string, owner: string) {
+  // A device whose Shop was set up on a trade that has a matching Plant business template (only
+  // bakery today -- see products/plant/business-templates.ts and TEMPLATE-EXPANSION.md section
+  // (d)) gets that trade's own jobs, floor, and opening issue instead of the generic pack CSV
+  // below. readLocalShopBusinessTemplateId returns null for a device with no Shop yet, a
+  // hand-imported catalog, or a trade with no Plant template, and null always falls through to
+  // the unchanged generic path -- this must never change behavior for those devices.
+  const businessTemplate = plantBusinessTemplateForShopTemplateId(readLocalShopBusinessTemplateId())
+  if (businessTemplate) {
+    const capturedAt = new Date().toISOString()
+    const jobs = plantBusinessTemplateJobs(businessTemplate, capturedAt, owner)
+    let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
+    const result = await mutateProductionWorkingSample((current) => {
+      const next = installProductionWorkingSampleJobs(current, {
+        sampleId: businessTemplate.id,
+        sampleName: businessTemplate.name.en,
+        jobs,
+        capturedAt,
+        machines: [...businessTemplate.machines],
+        issue: businessTemplate.openingIssue,
+      })
+      if (!next) return current
+      disposition = next === current ? 'current' : 'installed'
+      return next
+    })
+    if (!result.ok) throw new Error(result.error)
+    // Guided shift activity (good output, a little scrap, one material issue on up to 2 active
+    // jobs) goes in as its own locked transition, not chained into the mutateProductionWorkingSample
+    // call above: that call's write boundary (productionWorkingSampleTransitionIsExact) requires
+    // the candidate to carry exactly one event per job -- the jobs/floor seed events -- so appending
+    // the several extra events appendGuidedSampleProductionActivity writes would fail that check.
+    // appendGuidedSampleProductionActivity is itself a safe no-op (returns the unchanged input) once
+    // hasGuidedSampleProductionActivity is already true, so calling it on every provisioning run,
+    // not just the first, is correct.
+    const activityResult = await mutateProductionWorkspace((current) => appendGuidedSampleProductionActivity(current, {
+      planningDay: capturedAt.slice(0, 10),
+      materialRef: businessTemplate.primaryMaterial.ref,
+      materialUnit: businessTemplate.primaryMaterial.unit,
+    }))
+    if (!activityResult.ok) throw new Error(activityResult.error)
+    // Queue item 8: the reviewed BOM/routing/release order for this template's jobs[0], only
+    // when the template ships one (still just bakery -- see business-templates.ts). Its own
+    // locked order-execution transitions, for the same reason the activity call above is its
+    // own transition: this write boundary's invariant allows exactly one appended command per
+    // call. provisionPlantBusinessTemplateOrder is itself a safe no-op once every command has
+    // already been applied, so calling it on every provisioning run is correct.
+    await provisionPlantBusinessTemplateOrder(businessTemplate)
+    return disposition
+  }
+
   const pack = plantIndustryPack(industryPackId)
   const preview = await createClientImportPreview(
     clientImportTemplate('production', workflowTemplateId, { plantIndustryPackId: industryPackId }),

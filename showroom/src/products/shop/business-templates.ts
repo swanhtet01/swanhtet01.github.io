@@ -13,6 +13,7 @@ export type ShopBusinessTemplateId =
   | 'auto-parts'
   | 'restaurant'
   | 'beauty-spa'
+  | 'bakery'
 
 export type ShopBusinessTemplateUnit = CommerceProductionMaterialUnit
 
@@ -63,6 +64,34 @@ export type ShopBusinessTemplate = {
   catalog: readonly ShopBusinessTemplateItem[]
   counterSales: readonly ShopBusinessSampleSale[]
   pendingOrder: ShopBusinessSampleOrder
+}
+
+// Sample activity is authored at fixed instants so the intervals between the
+// records are reviewable. Installing those instants verbatim means a workspace
+// created later opens on a promise that is already overdue and takings that are
+// days old. Shift the whole set so the newest sale lands at provisioning time,
+// which keeps every authored interval and leaves the promise ahead of the
+// client rather than behind them.
+export function rebaseWorkingSampleActivity(
+  activity: Pick<ShopBusinessTemplate, 'counterSales' | 'pendingOrder'>,
+  provisionedAt: string,
+): Pick<ShopBusinessTemplate, 'counterSales' | 'pendingOrder'> {
+  const provisioned = Date.parse(provisionedAt)
+  const latest = Math.max(...activity.counterSales.map((sale) => Date.parse(sale.recordedAt)))
+  if (!Number.isFinite(provisioned) || !Number.isFinite(latest)) return activity
+  const shift = (value: string) => {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? new Date(parsed + provisioned - latest).toISOString() : value
+  }
+  const { pendingOrder } = activity
+  return {
+    counterSales: activity.counterSales.map((sale) => ({ ...sale, recordedAt: shift(sale.recordedAt) })),
+    pendingOrder: {
+      ...pendingOrder,
+      requestedAt: shift(pendingOrder.requestedAt),
+      promisedFor: shift(pendingOrder.promisedFor),
+    },
+  }
 }
 
 type ItemRow = readonly [sku: string, name: string, unit: ShopBusinessTemplateUnit, costMmk: number, priceMmk: number, openingStock: number, reorderAt: number]
@@ -409,6 +438,43 @@ const shopBusinessTemplateSeeds: readonly ShopBusinessTemplate[] = [
       lines: [{ sku: 'SPA-SVC-OIL', quantity: 3 }, { sku: 'SPA-SVC-FACIAL', quantity: 3 }, { sku: 'SPA-THANAKA', quantity: 3 }],
     },
   },
+  {
+    id: 'bakery',
+    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
+    name: { en: 'Bakery & patisserie', my: 'မုန့်ဖုတ်ဆိုင်' },
+    description: 'Fresh bread, cakes and pastries at the counter, with cake preorders held for a collection time.',
+    industryPackId: 'cafe',
+    workflowTemplateId: 'restaurant-ordering',
+    catalog: rows([
+      ['BREAD-WHITE', 'White sandwich loaf', 'pcs', 1_800, 3_000, 30, 10],
+      ['BREAD-WHOLEWHEAT', 'Whole wheat loaf', 'pcs', 2_200, 3_800, 20, 8],
+      ['BUN-COCONUT', 'Coconut bun', 'pcs', 500, 1_200, 60, 20],
+      ['CROISSANT-BUTTER', 'Butter croissant', 'pcs', 1_200, 2_500, 36, 12],
+      ['DONUT-GLAZED', 'Glazed donut', 'pcs', 700, 1_500, 48, 15],
+      ['CAKE-SLICE-CHOC', 'Chocolate cake slice', 'pcs', 1_800, 3_500, 24, 8],
+      ['CAKE-BIRTHDAY-1KG', 'Birthday cake 1kg', 'pcs', 18_000, 32_000, 6, 3],
+      ['COOKIE-BUTTER-BOX', 'Butter cookie box', 'pack', 3_500, 6_500, 25, 8],
+      ['TART-EGG', 'Egg tart', 'pcs', 900, 1_800, 40, 12],
+      ['PUFF-CURRY', 'Curry puff', 'pcs', 800, 1_600, 5, 15],
+      ['COFFEE-ICED', 'Iced coffee', 'pcs', 900, 2_200, 40, 15],
+      ['WATER-500ML', 'Drinking water 500ml', 'pcs', 300, 600, 50, 15],
+    ]),
+    counterSales: [
+      { id: 'bakery-sale-1', recordedAt: '2026-08-03T01:15:00.000Z', payment: 'Cash', lines: [{ sku: 'BREAD-WHITE', quantity: 2 }, { sku: 'CROISSANT-BUTTER', quantity: 3 }] },
+      { id: 'bakery-sale-2', recordedAt: '2026-08-03T05:00:00.000Z', payment: 'KBZPay', lines: [{ sku: 'CAKE-SLICE-CHOC', quantity: 2 }, { sku: 'COFFEE-ICED', quantity: 2 }] },
+      { id: 'bakery-sale-3', recordedAt: '2026-08-03T08:30:00.000Z', payment: 'Cash', lines: [{ sku: 'TART-EGG', quantity: 4 }, { sku: 'DONUT-GLAZED', quantity: 4 }] },
+    ],
+    pendingOrder: {
+      id: 'bakery-order-1',
+      customerName: 'Ma Ei Ei Phyu (birthday order)',
+      contact: '09-273-555-666',
+      requestedAt: '2026-08-03T06:00:00.000Z',
+      promisedFor: '2026-08-04T03:00:00.000Z',
+      status: 'pending',
+      note: "Daughter's birthday party for 15. Collect the cake and cookie boxes at 9:00.",
+      lines: [{ sku: 'CAKE-BIRTHDAY-1KG', quantity: 1 }, { sku: 'COOKIE-BUTTER-BOX', quantity: 2 }, { sku: 'BREAD-WHOLEWHEAT', quantity: 2 }],
+    },
+  },
 ] as const
 
 // Every industry pack offers bookable services that carry a price, and the appointment book has
@@ -580,6 +646,6 @@ export function validateShopBusinessTemplates() {
       if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) throw new Error(`${order.id} needs whole positive quantities.`)
     }
   }
-  if (templateIds.size !== 9) throw new Error('The Shop business template registry must carry exactly 9 templates.')
+  if (templateIds.size !== 10) throw new Error('The Shop business template registry must carry exactly 10 templates.')
   return shopBusinessTemplates
 }

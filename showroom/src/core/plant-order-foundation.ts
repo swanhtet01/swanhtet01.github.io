@@ -565,6 +565,10 @@ function validateMaterials(value: unknown, field: string): PlantOrderMaterial[] 
     return { materialId: identifier(row.materialId, `${rowField}.materialId`, 'MAT'), name: text(row.name, `${rowField}.name`), unit: unit as PlantOrderMaterial['unit'], quantityPerUnitMilli: integer(row.quantityPerUnitMilli, `${rowField}.quantityPerUnitMilli`, 1), ...(hasCost ? { standardCostPerUnitMmk: integer(row.standardCostPerUnitMmk, `${rowField}.standardCostPerUnitMmk`, 1) } : {}), ...(shopSupply ? { shopSupply: { sku: text(shopSupply.sku, `${rowField}.shopSupply.sku`, 80), materialQuantityMilliPerStockUnit: integer(shopSupply.materialQuantityMilliPerStockUnit, `${rowField}.shopSupply.materialQuantityMilliPerStockUnit`, 1) } } : {}) }
   })
   unique(rows.map((row) => row.materialId), `${field} material IDs`); sorted(rows.map((row) => row.materialId), `${field} material IDs`)
+  // Two BOM lines pointed at one Shop SKU is how the requirements screen double-counts that
+  // SKU's on-hand supply: each row reads the same full on-hand figure with no awareness of the
+  // other row's claim on it. Reject the ambiguous mapping at authoring time instead.
+  unique(rows.flatMap((row) => row.shopSupply ? [row.shopSupply.sku] : []), `${field} Shop SKUs`)
   return rows
 }
 

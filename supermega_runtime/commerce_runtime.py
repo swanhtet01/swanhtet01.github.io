@@ -5388,8 +5388,11 @@ def commerce_shop_demand_intelligence(
                     3,
                     max(0, int((as_of_time - returned_at).total_seconds() // (7 * 86_400))),
                 )
-                weekly[return_bucket] = safe_add(
-                    weekly[return_bucket], -returned_quantity, f"Weekly demand for {sku}"
+                weekly[return_bucket] = max(
+                    0,
+                    safe_add(
+                        weekly[return_bucket], -returned_quantity, f"Weekly demand for {sku}"
+                    ),
                 )
         net_units = max(0, gross_units - returned_units)
         forecast_weekly = (net_units + 3) // 4
@@ -10018,7 +10021,7 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
             and matching_items[0]["name"] == line["name"]
             and matching_items[0].get("variant") == line["variant"]
             and matching_items[0]["price"] == line["unitPriceMmk"]
-            and matching_items[0]["onHand"] >= 1
+            and matching_items[0]["onHand"] >= line["quantity"]
         )
 
     if (
