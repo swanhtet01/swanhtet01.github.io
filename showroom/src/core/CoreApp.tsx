@@ -45,7 +45,7 @@ import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
-import { readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints } from './shop-loyalty'
+import { readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -1743,7 +1743,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   // uses. Balances are a pure projection over the same commerce state the counter renders;
   // client-master names are added at zero so a known customer with no points yet still
   // gets an exact-match chip instead of silence.
-  const shopLoyaltySettings = useMemo(() => readShopLoyaltySettings(), [])
+  const shopLoyaltySettings = useMemo(() => readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)), [managedIdentity])
   const shopLoyaltyPoints = useMemo(() => {
     if (!shopLoyaltySettings?.enabled) return null
     const balances = shopLoyaltyBalances(commerce, shopLoyaltySettings)

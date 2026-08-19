@@ -21,6 +21,8 @@ import {
   SHOP_LOYALTY_MAX_RATE_BASIS_POINTS,
   SHOP_LOYALTY_MIN_RATE_BASIS_POINTS,
   readShopLoyaltySettings,
+  shopLoyaltyCurrentRateBasisPoints,
+  shopLoyaltyScopeForWorkspace,
   updateShopLoyaltySettings,
   writeShopLoyaltySettings,
   type ShopLoyaltySettings,
@@ -441,9 +443,9 @@ function LocalMetricsView() {
 // like the payment QR beside it: the record is device-local, but every change
 // still writes a proof-carrying, actionId-idempotent record through
 // updateShopLoyaltySettings, so the settings history stays auditable.
-function LoyaltySettingsControls({ actor }: { actor: string }) {
-  const [settings, setSettings] = useState<ShopLoyaltySettings | null>(readShopLoyaltySettings)
-  const [rateText, setRateText] = useState(() => String((settings?.rateBasisPoints ?? SHOP_LOYALTY_DEFAULT_RATE_BASIS_POINTS) / 10))
+function LoyaltySettingsControls({ actor, scope }: { actor: string; scope: string }) {
+  const [settings, setSettings] = useState<ShopLoyaltySettings | null>(() => readShopLoyaltySettings(scope))
+  const [rateText, setRateText] = useState(() => String((settings ? shopLoyaltyCurrentRateBasisPoints(settings) : SHOP_LOYALTY_DEFAULT_RATE_BASIS_POINTS) / 10))
   const [issue, setIssue] = useState('')
   const minPerThousand = SHOP_LOYALTY_MIN_RATE_BASIS_POINTS / 10
   const maxPerThousand = SHOP_LOYALTY_MAX_RATE_BASIS_POINTS / 10
@@ -466,7 +468,7 @@ function LoyaltySettingsControls({ actor }: { actor: string }) {
         : 'Turn customer points off on this device.',
       evidenceReference: 'Workspace controls · Customer points',
     })
-    if (!next || !writeShopLoyaltySettings(next)) {
+    if (!next || !writeShopLoyaltySettings(scope, next)) {
       setIssue('This browser could not save the points setting. Nothing changed.')
       return
     }
@@ -482,7 +484,7 @@ function LoyaltySettingsControls({ actor }: { actor: string }) {
     <div className="trial-actions">
       {settings?.enabled
         ? <>
-          <button className="core-button" disabled={rateBasisPoints === null || rateBasisPoints === settings.rateBasisPoints} onClick={() => applyChange(true)} type="button">Save rate</button>
+          <button className="core-button" disabled={rateBasisPoints === null || rateBasisPoints === shopLoyaltyCurrentRateBasisPoints(settings)} onClick={() => applyChange(true)} type="button">Save rate</button>
           <button className="text-link danger-text" onClick={() => applyChange(false)} type="button">Turn points off</button>
         </>
         : <button className="core-button primary" disabled={rateBasisPoints === null} onClick={() => applyChange(true)} type="button">Turn points on</button>}
@@ -668,7 +670,7 @@ export function WorkspaceControlsPage() {
               Balances are recomputed from recorded orders on every read; enabling this
               stores only the device-local settings record. Redemption is a later PR. */}
           <div><span className="core-eyebrow">Customer points</span><h2>Reward repeat customers at the counter.</h2><p>Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically. A sale earns points once it is paid and handed over, credited to the exact customer name on the order; Guest sales earn nothing. Counting only for now: redeeming points at a sale is not part of this yet, and another register or browser keeps its own setting.</p></div>
-          <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} />
+          <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} scope={shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)} />
         </section>
 
         <section className="core-panel trial-control-panel">

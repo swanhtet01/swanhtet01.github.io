@@ -15,11 +15,15 @@
 // `COMMERCE_EVENTS` set), and every staged sync intent carries the FULL
 // candidate state (`commerce-sync-outbox.ts` `candidateRaw`). Any new
 // CommerceState key would make the deployed runtime reject every managed sync
-// from a newer client. So the settings live under their own device-local
-// localStorage key, `supermega.shop.loyalty.v1`, registered with
-// local-workspace-storage.ts (reset reaches it) and classified PORTABLE in
-// company-backup.ts (points are an obligation-bearing business record — a
-// promise made to customers — so a restore must not silently delete it).
+// from a newer client. So the settings live under their own device-local,
+// WORKSPACE-SCOPED localStorage key family, `supermega.shop.loyalty.v1.<scope>`
+// (see shopLoyaltyStorageKey — one record per 'managed:<id>' / 'local' scope,
+// so one browser serving two companies can never leak one shop's enablement
+// or rates into the other's counter), registered as a prefix with
+// local-workspace-storage.ts (reset reaches every scope) and classified
+// PORTABLE in company-backup.ts (points are an obligation-bearing business
+// record — a promise made to customers — so a restore must not silently
+// delete it).
 //
 // DOCUMENTED MANAGED GAP. Because the settings are per device, two registers
 // of one managed shop can disagree about whether points are on and at what
@@ -93,10 +97,23 @@ export type ShopLoyaltyActionProof = {
   evidenceReference: string
 }
 
+/**
+ * One effective-dated accrual rate. Rates are append-only history, never a
+ * single mutable number: an order earns points at the rate that was in force
+ * when ITS payment was reconciled, so changing 1% to 2% cannot silently
+ * double every balance already promised to customers — and lowering a rate
+ * cannot retroactively confiscate earned points (Codex P1, PR #469).
+ */
+export type ShopLoyaltyRatePeriod = {
+  rateBasisPoints: number
+  effectiveAt: string
+}
+
 export type ShopLoyaltySettings = {
   schema: typeof SHOP_LOYALTY_SCHEMA
   enabled: boolean
-  rateBasisPoints: number
+  /** Append-only, ascending by effectiveAt, never empty. The LAST period is the current rate. */
+  ratePeriods: ShopLoyaltyRatePeriod[]
   /**
    * The FIRST enablement instant; accrual counts orders settled at or after
    * it. Deliberately stable across disable/re-enable cycles so toggling the
@@ -123,6 +140,14 @@ export type ShopLoyaltyOrderView = {
   paymentStatus: string
   paymentReconciledAt?: string
   paymentReconciliationActionId?: string
+  /**
+   * Order corrections (returns, price reductions, extra charges recorded
+   * after completion). Corrections exist precisely on calculated, reconciled,
+   * COMPLETED orders — the accruing population — so accrual must use the
+   * corrected balance, not the original total (Codex P1, PR #469). The shape
+   * mirrors what commerceOrderAdjustedTotal in commerce-workspace.ts reads.
+   */
+  corrections?: readonly { kind: string; calculation: { totalMmk: number } }[]
 }
 
 export type ShopLoyaltyStateView = {
@@ -161,15 +186,29 @@ export function validRateBasisPoints(value: unknown): value is number {
     && (value as number) <= SHOP_LOYALTY_MAX_RATE_BASIS_POINTS
 }
 
+function validRatePeriod(value: unknown): value is ShopLoyaltyRatePeriod {
+  return isRecord(value)
+    && hasExactKeys(value, ['rateBasisPoints', 'effectiveAt'])
+    && validRateBasisPoints(value.rateBasisPoints)
+    && validTimestamp(value.effectiveAt)
+}
+
 /** Throws on anything that is not an exact, internally consistent settings record. */
 export function validateShopLoyaltySettings(value: unknown): ShopLoyaltySettings {
-  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'enabled', 'rateBasisPoints', 'enabledAt', 'proof'])) {
-    throw new Error('Loyalty settings must carry exactly schema, enabled, rateBasisPoints, enabledAt, and proof.')
+  if (!isRecord(value) || !hasExactKeys(value, ['schema', 'enabled', 'ratePeriods', 'enabledAt', 'proof'])) {
+    throw new Error('Loyalty settings must carry exactly schema, enabled, ratePeriods, enabledAt, and proof.')
   }
   if (value.schema !== SHOP_LOYALTY_SCHEMA) throw new Error('Loyalty settings schema is not recognised.')
   if (typeof value.enabled !== 'boolean') throw new Error('Loyalty enabled must be a boolean.')
-  if (!validRateBasisPoints(value.rateBasisPoints)) {
-    throw new Error(`Loyalty rate must be a whole number between ${SHOP_LOYALTY_MIN_RATE_BASIS_POINTS} and ${SHOP_LOYALTY_MAX_RATE_BASIS_POINTS} basis points.`)
+  if (!Array.isArray(value.ratePeriods) || value.ratePeriods.length < 1 || value.ratePeriods.length > 400
+    || !value.ratePeriods.every(validRatePeriod)) {
+    throw new Error(`Loyalty ratePeriods must be 1 to 400 records of a whole-number rate between ${SHOP_LOYALTY_MIN_RATE_BASIS_POINTS} and ${SHOP_LOYALTY_MAX_RATE_BASIS_POINTS} basis points and a valid effectiveAt.`)
+  }
+  const periods = value.ratePeriods as ShopLoyaltyRatePeriod[]
+  for (let index = 1; index < periods.length; index += 1) {
+    if (Date.parse(periods[index].effectiveAt) < Date.parse(periods[index - 1].effectiveAt)) {
+      throw new Error('Loyalty ratePeriods must be ordered by effectiveAt — rate history is append-only.')
+    }
   }
   if (value.enabledAt !== null && !validTimestamp(value.enabledAt)) throw new Error('Loyalty enabledAt must be null or a valid timestamp.')
   if (value.enabled && value.enabledAt === null) throw new Error('Enabled loyalty settings must record when points were first turned on.')
@@ -177,10 +216,35 @@ export function validateShopLoyaltySettings(value: unknown): ShopLoyaltySettings
   return {
     schema: SHOP_LOYALTY_SCHEMA,
     enabled: value.enabled,
-    rateBasisPoints: value.rateBasisPoints,
+    ratePeriods: periods.map((period) => ({ ...period })),
     enabledAt: value.enabledAt,
     proof: { ...(value.proof as ShopLoyaltyActionProof) },
   }
+}
+
+/** The rate new sales earn right now: the last (most recent) period. */
+export function shopLoyaltyCurrentRateBasisPoints(settings: ShopLoyaltySettings): number {
+  return settings.ratePeriods[settings.ratePeriods.length - 1].rateBasisPoints
+}
+
+/**
+ * Storage scope — the same money-adjacent isolation the payment-QR store uses
+ * (Codex P1 on both PRs, same root cause): localStorage is per-origin, not
+ * per-workspace, so an unscoped key would hand one shop's enablement, rate
+ * history, and proof to every other company using this browser. 'managed:<id>'
+ * for a managed workspace, 'local' for the device-local one (one per browser
+ * by construction). The key family `supermega.shop.loyalty.v1.<scope>` is
+ * registered as a PREFIX in local-workspace-storage.ts and company-backup.ts,
+ * like the other scoped families.
+ */
+export function shopLoyaltyScopeForWorkspace(workspaceId?: string | null): string {
+  return workspaceId ? `managed:${workspaceId}` : 'local'
+}
+
+export function shopLoyaltyStorageKey(scope: string): string {
+  const trimmed = typeof scope === 'string' ? scope.trim() : ''
+  if (!trimmed || trimmed.length > 160) throw new Error('Loyalty settings need a valid workspace scope.')
+  return `${SHOP_LOYALTY_KEY}.${encodeURIComponent(trimmed)}`
 }
 
 type LoyaltyStorage = Pick<Storage, 'getItem' | 'setItem'>
@@ -194,9 +258,9 @@ function defaultStorage(): LoyaltyStorage | null {
 }
 
 /** Null when absent, malformed, or storage is unavailable — the feature degrades to off. */
-export function readShopLoyaltySettings(storage: LoyaltyStorage | null = defaultStorage()): ShopLoyaltySettings | null {
+export function readShopLoyaltySettings(scope: string, storage: LoyaltyStorage | null = defaultStorage()): ShopLoyaltySettings | null {
   try {
-    const raw = storage?.getItem(SHOP_LOYALTY_KEY)
+    const raw = storage?.getItem(shopLoyaltyStorageKey(scope))
     if (!raw) return null
     return validateShopLoyaltySettings(JSON.parse(raw))
   } catch {
@@ -204,11 +268,12 @@ export function readShopLoyaltySettings(storage: LoyaltyStorage | null = default
   }
 }
 
-/** Persists a validated record; returns false when storage refuses the write. */
-export function writeShopLoyaltySettings(settings: ShopLoyaltySettings, storage: LoyaltyStorage | null = defaultStorage()): boolean {
+/** Persists a validated record under its workspace scope; returns false when storage refuses the write. */
+export function writeShopLoyaltySettings(scope: string, settings: ShopLoyaltySettings, storage: LoyaltyStorage | null = defaultStorage()): boolean {
   const validated = validateShopLoyaltySettings(settings)
+  const key = shopLoyaltyStorageKey(scope)
   try {
-    storage?.setItem(SHOP_LOYALTY_KEY, JSON.stringify(validated))
+    storage?.setItem(key, JSON.stringify(validated))
     return storage !== null
   } catch {
     return false
@@ -230,13 +295,24 @@ export function updateShopLoyaltySettings(
   if (!validProof(proof)) return null
   if (typeof input?.enabled !== 'boolean' || !validRateBasisPoints(input?.rateBasisPoints)) return null
   if (current && current.proof.actionId === proof.actionId) {
-    return current.enabled === input.enabled && current.rateBasisPoints === input.rateBasisPoints ? current : null
+    return current.enabled === input.enabled
+      && shopLoyaltyCurrentRateBasisPoints(current) === input.rateBasisPoints
+      ? current
+      : null
   }
   const enabledAt = current?.enabledAt ?? (input.enabled ? proof.capturedAt : null)
+  // Rate history is append-only: a changed rate takes effect from THIS
+  // change's capturedAt forward; every earlier period keeps governing the
+  // orders settled while it was in force. An unchanged rate appends nothing.
+  const priorPeriods = current?.ratePeriods ?? []
+  const lastRate = priorPeriods.length > 0 ? priorPeriods[priorPeriods.length - 1].rateBasisPoints : null
+  const ratePeriods = lastRate === input.rateBasisPoints
+    ? priorPeriods.map((period) => ({ ...period }))
+    : [...priorPeriods.map((period) => ({ ...period })), { rateBasisPoints: input.rateBasisPoints, effectiveAt: proof.capturedAt }]
   return validateShopLoyaltySettings({
     schema: SHOP_LOYALTY_SCHEMA,
     enabled: input.enabled,
-    rateBasisPoints: input.rateBasisPoints,
+    ratePeriods,
     enabledAt,
     proof: { ...proof },
   })
@@ -261,6 +337,34 @@ function eligibleCustomer(customer: unknown): string | null {
  * or after enabledAt, for a named non-Guest customer, and not seeded sample
  * data. Refund reversal is structural — see the module header.
  */
+/**
+ * The money an order actually kept after its recorded corrections — the same
+ * arithmetic as commerceOrderAdjustedTotal in commerce-workspace.ts (credit
+ * subtracts, debit adds, null on any unsafe intermediate). Replicated
+ * structurally because this module deliberately never imports the commerce
+ * workspace (see the OrderView note); the contract test pins the behavior.
+ */
+function orderAdjustedTotal(order: ShopLoyaltyOrderView): number | null {
+  let total = order.total
+  for (const correction of order.corrections ?? []) {
+    if (!isRecord(correction) || !isRecord(correction.calculation) || !Number.isSafeInteger(correction.calculation.totalMmk)) return null
+    total += correction.kind === 'debit' ? correction.calculation.totalMmk : -correction.calculation.totalMmk
+    if (!Number.isSafeInteger(total) || total < 0) return null
+  }
+  return total
+}
+
+/** The rate in force when the order settled: the last period with effectiveAt <= settledAt. */
+function rateBasisPointsAt(settings: ShopLoyaltySettings, settledAtMs: number): number {
+  let rate = settings.ratePeriods[0].rateBasisPoints
+  for (const period of settings.ratePeriods) {
+    const effectiveMs = Date.parse(period.effectiveAt)
+    if (!Number.isFinite(effectiveMs) || effectiveMs > settledAtMs) break
+    rate = period.rateBasisPoints
+  }
+  return rate
+}
+
 export function shopLoyaltyBalances(state: ShopLoyaltyStateView, settings: ShopLoyaltySettings | null): Map<string, number> {
   const balances = new Map<string, number>()
   if (!settings?.enabled || settings.enabledAt === null) return balances
@@ -274,7 +378,12 @@ export function shopLoyaltyBalances(state: ShopLoyaltyStateView, settings: ShopL
     if (!Number.isFinite(settledAtMs) || settledAtMs < enabledAtMs) continue
     const customer = eligibleCustomer(order.customer)
     if (!customer) continue
-    const points = shopLoyaltyPointsForAmount(order.total, settings.rateBasisPoints)
+    // Corrections change what the order actually earned (returns and price
+    // reductions subtract, extra charges add); a structurally broken
+    // correction chain earns nothing rather than guessing.
+    const adjustedTotal = orderAdjustedTotal(order)
+    if (adjustedTotal === null) continue
+    const points = shopLoyaltyPointsForAmount(adjustedTotal, rateBasisPointsAt(settings, settledAtMs))
     if (points < 1) continue
     balances.set(customer, (balances.get(customer) ?? 0) + points)
   }

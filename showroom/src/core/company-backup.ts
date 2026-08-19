@@ -57,13 +57,6 @@ const portableExactKeys = new Set([
   // has ever taught the system. Carrying it is safe because the record is digest-only, so the
   // backup file gains no message text it did not already lack.
   'supermega.shop.order-intake-evidence.v1',
-  // Customer loyalty points settings (shop-loyalty.ts). PORTABLE, the opposite call from
-  // photos and payment QRs: this record is an obligation the shop has taken on -- customers
-  // were told points are counted from enabledAt at rateBasisPoints -- and every projected
-  // balance derives from it. A restore that dropped it would zero every customer's points
-  // while keeping the orders that earned them, which is exactly the silent-deletion shape
-  // this list exists to prevent.
-  'supermega.shop.loyalty.v1',
 ])
 
 /**
@@ -102,6 +95,13 @@ const portablePrefixes = [
   'supermega.website.release-foundation.v1:',
   'supermega.ecommerce.storefront_draft.v2.',
   'supermega.ecommerce.buying_lifecycle.v1.',
+  // Customer loyalty points settings (shop-loyalty.ts), one record per workspace scope.
+  // PORTABLE, the opposite call from photos and payment QRs: this record is an obligation
+  // the shop has taken on -- customers were told points are counted from enabledAt at the
+  // recorded rate history -- and every projected balance derives from it. A restore that
+  // dropped it would zero every customer's points while keeping the orders that earned
+  // them, which is exactly the silent-deletion shape this list exists to prevent.
+  'supermega.shop.loyalty.v1.',
 ]
 
 /** Same contract as deliberatelyNotPortableKeys, for the prefixed families. */

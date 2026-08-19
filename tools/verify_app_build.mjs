@@ -5643,6 +5643,17 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_KEY = 'supermega.shop
   || !shopLoyaltySource.includes('settledAtMs < enabledAtMs) continue')
   || !shopLoyaltySource.includes('.startsWith(SAMPLE_ACTION_ID_PREFIX)) continue')
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => shopLoyaltySource.includes(marker))
+  // PR #469 Codex P1 trio, all three load-bearing:
+  // 1. workspace-scoped storage — an unscoped key would leak one shop's
+  //    enablement and rates into every other company using the browser;
+  || !shopLoyaltySource.includes('export function shopLoyaltyScopeForWorkspace(')
+  || !shopLoyaltySource.includes('return `${SHOP_LOYALTY_KEY}.${encodeURIComponent(trimmed)}`')
+  // 2. accrual uses the corrected order balance (corrections exist precisely
+  //    on completed reconciled orders — the accruing population);
+  // 3. at the rate in force when the order settled (append-only rate history,
+  //    never the latest rate retroactively).
+  || !shopLoyaltySource.includes('const points = shopLoyaltyPointsForAmount(adjustedTotal, rateBasisPointsAt(settings, settledAtMs))')
+  || !coreSource.includes('readShopLoyaltySettings(shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId))')
   || !shopCounterContract.includes('className="shop-loyalty-chip"')
   || !shopCounterContract.includes('loyaltyPoints?.has(customer.trim())')
   || !coreCssSource.includes('.shop-loyalty-chip')
