@@ -15,12 +15,12 @@
 }
 
 .website-publish-workspace .publish-flow-header h2 {
-  font-size: clamp(19px, 2vw, 22px);
+  font-size: clamp(1.1875rem, 2vw, 1.375rem);
 }
 
 .website-publish-workspace .publish-flow-header p {
   max-width: 620px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .website-publish-workspace .website-button,
@@ -96,7 +96,7 @@
   border-radius: 8px;
   background: var(--website-panel);
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-black);
 }
 
@@ -120,13 +120,13 @@
 }
 
 .publish-flow-step-label strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.2;
 }
 
 .publish-flow-step-label small {
   color: var(--website-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -140,14 +140,14 @@
   padding: 8px 18px;
   background: var(--publish-surface);
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
 .publish-flow-boundary strong {
   flex: 0 0 auto;
   color: var(--publish-accent);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .website-publish-workspace.website-publish-panel .publish-flow-body {
@@ -177,19 +177,19 @@
 
 .website-publish-workspace .publish-flow-card > header h3 {
   margin-top: 0;
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 
 .website-publish-workspace .publish-flow-card > header p {
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .website-publish-workspace .website-step {
   min-width: 30px;
   min-height: 30px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .publish-flow-revision {
@@ -201,13 +201,13 @@
   padding: 10px 16px;
   background: var(--website-panel-raised);
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-bold);
 }
 
 .website-publish-workspace .publish-flow-revision code {
   color: var(--website-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .website-publish-workspace .website-check-list {
@@ -233,7 +233,7 @@
   height: 24px;
   border-radius: 999px;
   padding: 0 7px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-black);
 }
 
@@ -247,7 +247,7 @@
 .website-publish-workspace .website-approval-record strong,
 .website-publish-workspace .website-local-publish-action strong,
 .website-publish-workspace .website-publish-history strong {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .website-publish-workspace .website-check-list p,
@@ -255,7 +255,7 @@
 .website-publish-workspace .website-approval-record p,
 .website-publish-workspace .website-local-publish-action p,
 .website-publish-workspace .website-publish-history small {
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -267,13 +267,13 @@
   padding: 10px 12px;
   background: color-mix(in srgb, var(--website-warn) 6%, var(--website-panel));
   color: var(--website-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
 .publish-flow-gate-note strong {
   color: var(--website-ink);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .publish-flow-gate-note p {
@@ -296,7 +296,7 @@
 .website-publish-workspace .website-evidence-status > article > span,
 .website-publish-workspace .website-evidence-status small,
 .website-publish-workspace .website-approval-record small {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .website-publish-workspace .website-evidence-status small,
@@ -318,7 +318,7 @@
 .website-publish-workspace .website-evidence-form label,
 .website-publish-workspace .website-approval-form label {
   color: var(--website-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .website-publish-workspace .website-evidence-form .website-button {
@@ -347,7 +347,7 @@
 }
 
 .website-publish-workspace .website-gate-actions > small {
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
@@ -389,7 +389,7 @@
 
 .website-publish-workspace .website-publish-history code {
   max-width: 120px;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .website-publish-workspace .website-empty.compact {
@@ -411,7 +411,7 @@
   flex: 1;
   margin: 0;
   color: var(--website-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.4;
 }
 
@@ -435,13 +435,13 @@
 .website-go-live > header h4 {
   margin: 2px 0 0;
   color: var(--website-ink);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .website-go-live > header p {
   margin: 4px 0 0;
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -456,7 +456,7 @@
   align-items: center;
   cursor: pointer;
   color: var(--website-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-black);
 }
 
@@ -466,19 +466,19 @@
   margin: 0 0 10px;
   padding-left: 20px;
   color: var(--website-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
 .website-go-live-option ol code {
   color: var(--website-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .website-go-live-option p {
   margin: 0 0 12px;
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -497,7 +497,7 @@
 .website-release-loading {
   padding: 14px;
   color: var(--website-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .website-release-foundation > header,
@@ -517,14 +517,14 @@
 .website-release-foundation h4 {
   margin: 2px 0 0;
   color: var(--website-ink);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .website-release-foundation p,
 .website-release-foundation.is-locked small {
   margin: 4px 0 0;
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -540,7 +540,7 @@
   padding: 8px 14px;
   background: var(--publish-accent-soft);
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .website-release-boundary strong {
@@ -566,7 +566,7 @@
   display: grid;
   gap: 6px;
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-bold);
 }
 
@@ -582,7 +582,7 @@
   align-items: center;
   cursor: pointer;
   color: var(--website-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-black);
 }
 
@@ -609,7 +609,7 @@
   align-items: center;
   gap: 9px;
   color: var(--website-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-bold);
   line-height: 1.4;
 }
@@ -647,14 +647,14 @@
 
 .website-release-summary dt {
   color: var(--website-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
 }
 
 .website-release-summary dd {
   margin: 2px 0 0;
   color: var(--website-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-black);
 }
 
@@ -725,11 +725,11 @@
   }
 
   .publish-flow-step-label strong {
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 
   .publish-flow-step-label small {
-    font-size: 11px;
+    font-size: 0.6875rem;
   }
 
   .publish-flow-boundary {
@@ -750,7 +750,7 @@
   }
 
   .website-publish-workspace .publish-flow-card > header h3 {
-    font-size: 16px;
+    font-size: 1rem;
   }
 
   .website-publish-workspace .website-check-list,
@@ -780,7 +780,7 @@
   .website-publish-workspace input:not([type="checkbox"]):not([type="radio"]),
   .website-publish-workspace select {
     min-height: 48px;
-    font-size: 16px;
+    font-size: 1rem;
   }
 
   .website-publish-workspace .website-confirmation {
