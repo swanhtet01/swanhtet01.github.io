@@ -3029,6 +3029,8 @@ if (!ecommerceSource.includes('Stock, payment, delivery, and the final order sta
   || !ecommerceCssSource.includes('.storefront-grid article[data-featured="true"]')
   || !ecommerceSource.includes('<StorefrontProductArtwork sku={item.sku} />')
   || !ecommerceCssSource.includes('.storefront-product-art')
+  || !ecommerceCssSource.includes('.storefront-grid article:has(> .storefront-product-photo)') // photo-first preview card: photo-carrying items get the large-photo layout; removing it silently demotes photos back to 64px thumbnails
+  || !ecommerceCssSource.includes('aspect-ratio: 4 / 3') // the photo-first card's image box; without it photos collapse to intrinsic height
   || !ecommerceCssSource.includes('font-size: 0.75rem') // P3.6b lockstep: was 'font-size: 12px'; the px->rem batch converts every ecommerce font-size and this pin moves with it (12px = 0.75rem at the 16px root)
   || !coreShellSource.includes("['Ecommerce', 'Take online orders', 'Storefront, checkout, delivery, and Shop handoff.', '/ecommerce/']")
   || coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')

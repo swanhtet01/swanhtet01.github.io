@@ -1939,7 +1939,81 @@
    card renders it in place of the generated artwork. The <img> reuses the
    .storefront-product-art class so it inherits that rule's exact size, grid
    placement, and radius (including the 64px phase-1 override above); this
-   only adds the photo-specific crop. The storefront preview is a deliberately
+   only adds the photo-specific crop. In a :has()-capable browser the
+   photo-first block below re-places and re-sizes the photo; the 64px slot
+   described here is the no-:has() fallback floor and the shape of the
+   artwork card. The storefront preview is a deliberately
    light document (see THEME_BLIND), so photos need no dark treatment.
    ========================================================================== */
 .storefront-grid article > .storefront-product-photo { object-fit: cover; }
+
+/* ============================================================================
+   Photo-first storefront cards (2026-08-19). A card whose item carries a
+   device-local photo flips to the merchandising layout customers know from
+   commerce storefronts: a large photo box on top (fixed aspect ratio, cropped
+   by the object-fit rule above), name and price below, availability beside
+   them. Selected with :has() so the markup stays untouched: an item WITHOUT a
+   photo never matches and keeps the artwork card exactly as before — and so
+   does every card in a browser without :has(), which is the same graceful
+   floor (the 64px thumbnail layout). No colours are painted here, so the
+   theme-blind contract for .storefront-grid article is untouched. Lengths are
+   tokens/rem only (2.75rem = the 44px tap-target floor). This styles the
+   owner-side preview only; the published Website export builds its own
+   site-page markup and never renders .storefront-grid.
+   ========================================================================== */
+.storefront-grid article:has(> .storefront-product-photo) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto;
+}
+
+.storefront-grid article.has-request-action:has(> .storefront-product-photo) {
+  grid-template-rows: auto auto auto auto minmax(2.75rem, auto);
+}
+
+.storefront-grid article:has(> .storefront-product-photo) > .storefront-product-photo {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius-md);
+}
+
+.storefront-grid article:has(> .storefront-product-photo) > small {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.storefront-grid article:has(> .storefront-product-photo) > strong {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.storefront-grid article:has(> .storefront-product-photo) > span {
+  grid-column: 1;
+  grid-row: 4;
+}
+
+.storefront-grid article:has(> .storefront-product-photo) > b {
+  grid-column: 2;
+  grid-row: 3 / 5;
+  align-self: center;
+}
+
+.storefront-grid article:has(> .storefront-product-photo) > .storefront-request-button {
+  grid-column: 1 / -1;
+  grid-row: 5;
+}
+
+/* A tall photo card stretches its whole grid row, and the default
+   align-content: stretch then distributes that extra height into the NEIGHBOUR
+   card's auto rows, scattering its labels (measured 111px-tall <small> rows).
+   Anchor every card's content to the top — but only in a grid that actually
+   contains a photo card, so an all-artwork storefront (every store before its
+   first photo, and every browser without :has()) keeps today's rendering
+   pixel-identically. */
+.storefront-grid:has(article > .storefront-product-photo) article {
+  align-content: start;
+}
