@@ -44,6 +44,7 @@ import {
 import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
+import { paymentQrScopeForWorkspace } from './payment-qr-store'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -1038,13 +1039,14 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, sampleCatalogActive }: {
+function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, paymentQrScope, sampleCatalogActive }: {
   disabled: boolean
   industryPack: ShopIndustryPack | null
   items: CommerceItem[]
   lowStockCount: number
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
+  paymentQrScope: string
   sampleCatalogActive: boolean
 }) {
   const [restoredDraft] = useState(readShopCounterDraft)
@@ -1183,7 +1185,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
               merchant QR and typing the amount, so the affordance lives exactly here —
               non-cash method chosen, amount due on screen. No payment API, no status
               write; confirming money arrived stays the manual flow in Orders. */}
-          {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} settingsHint /> : null}
+          {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
         </div>
         <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review order'}<span aria-hidden="true">→</span></button><small>Confirm to create the order. Finish payment and handoff in Orders.</small></footer></> : null}
       </aside>
@@ -1349,6 +1351,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
+  // Money-path isolation (payment-qr-store.ts scope note): the QR lookup key must
+  // carry which company this browser is operating as, or a later workspace could
+  // show an earlier merchant's bank QR at its counter.
+  const paymentQrScope = paymentQrScopeForWorkspace(managedIdentity?.workspaceId)
   const ecommerceBuyingScope = managedIdentity ? `ecommerce:${managedIdentity.workspaceId}` : 'ecommerce:local'
   const commerceRef = useRef(commerce)
   useEffect(() => {
@@ -6058,7 +6064,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} sampleCatalogActive={shopSampleCatalogActive} />
     {actionGate}
   </div>
 
@@ -6501,7 +6507,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </div> : null}
     </details> : null}
   </section>
-  <Suspense fallback={null}><ReceiptDialog ack={receiptAck} onClose={() => setReceiptAck(null)} /></Suspense>
+  <Suspense fallback={null}><ReceiptDialog ack={receiptAck} onClose={() => setReceiptAck(null)} paymentQrScope={paymentQrScope} /></Suspense>
   {actionGate}</div>
 
   if (tab === 'inventory') return <div className="operation-module">

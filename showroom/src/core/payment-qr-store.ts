@@ -48,11 +48,25 @@
 // the JPEG product photos use: a QR is a high-contrast module grid, and lossless
 // encoding keeps its edges crisp for the customer's camera; screenshots (the dominant
 // source) compress well under PNG anyway.
+//
+// WORKSPACE SCOPE — MONEY-PATH ISOLATION (Codex P1, PR #465). IndexedDB is per-origin,
+// not per-workspace: without a scope, every company that ever uses this browser would
+// share one 'KBZPay' record, and a later merchant's counter could display an EARLIER
+// merchant's QR — sending a real customer's money to the wrong bank account. Every
+// record is therefore keyed by [scope, method], where scope is
+// `paymentQrScopeForWorkspace(workspaceId)`: 'managed:<workspaceId>' for a managed
+// company, 'local' for the device-local workspace (one per browser by construction —
+// see local-workspace-storage.ts). The same convention as the counter draft's
+// localCommerceOrderDraftScope. Scope is a REQUIRED argument end to end; no call site
+// can silently fall back to a shared key. "Reset this device" additionally deletes
+// this entire database (deleteAllPaymentQrData below) so a handed-over device cannot
+// carry the previous owner's payment route.
 
 const DB_NAME = 'supermega.payment-qr.v1'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'qr'
 const MAX_METHOD_LENGTH = 40
+const MAX_SCOPE_LENGTH = 160
 const MAX_EDGE_PX = 1280
 const MAX_SOURCE_BYTES = 64 * 1024 * 1024
 
@@ -64,21 +78,27 @@ const MAX_SOURCE_BYTES = 64 * 1024 * 1024
  */
 export const PAYMENT_QR_METHODS: readonly string[] = ['KBZPay', 'WavePay']
 
+/** The storage scope for a workspace: its managed id, or the device-local workspace. */
+export function paymentQrScopeForWorkspace(workspaceId?: string | null): string {
+  return workspaceId ? `managed:${workspaceId}` : 'local'
+}
+
 export type PaymentQrRecord = {
+  scope: string
   method: string
   imageId: string
   blob: Blob
   updatedAt: string
 }
 
-type PaymentQrListener = (method: string) => void
+type PaymentQrListener = (scope: string, method: string) => void
 
 const listeners = new Set<PaymentQrListener>()
 
-function notifyPaymentQrChange(method: string) {
+function notifyPaymentQrChange(scope: string, method: string) {
   for (const listener of [...listeners]) {
     try {
-      listener(method)
+      listener(scope, method)
     } catch {
       // One broken subscriber must not stop the rest from refreshing.
     }
@@ -108,6 +128,13 @@ function requireMethod(method: string): string {
   return method
 }
 
+function requireScope(scope: string): string {
+  if (typeof scope !== 'string' || !scope || scope !== scope.trim() || scope.length > MAX_SCOPE_LENGTH) {
+    throw new Error('A payment QR needs a valid workspace scope.')
+  }
+  return scope
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (!paymentQrSupported()) {
@@ -117,9 +144,14 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = () => {
       const database = request.result
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME, { keyPath: 'method' })
+      // v1 keyed records by method alone — the cross-workspace money-path bug this
+      // module's scope note describes. No v1 build was ever released (v2 landed inside
+      // the same PR), so v1 records are dropped, not migrated: a QR that cannot be
+      // attributed to a workspace must not be shown at any counter.
+      if (database.objectStoreNames.contains(STORE_NAME)) {
+        database.deleteObjectStore(STORE_NAME)
       }
+      database.createObjectStore(STORE_NAME, { keyPath: ['scope', 'method'] })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('QR storage could not be opened.'))
@@ -146,35 +178,39 @@ async function withQrStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectSt
 function parsePaymentQrRecord(value: unknown): PaymentQrRecord | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Partial<PaymentQrRecord>
+  if (typeof record.scope !== 'string' || !record.scope) return null
   if (typeof record.method !== 'string' || !record.method) return null
   if (typeof record.imageId !== 'string' || !record.imageId) return null
   if (typeof record.updatedAt !== 'string') return null
   if (!(record.blob instanceof Blob) || record.blob.size < 1) return null
-  return { method: record.method, imageId: record.imageId, blob: record.blob, updatedAt: record.updatedAt }
+  return { scope: record.scope, method: record.method, imageId: record.imageId, blob: record.blob, updatedAt: record.updatedAt }
 }
 
-/** Stores (or replaces) the QR for a payment method and returns the new image id. */
-export async function putPaymentQr(method: string, blob: Blob): Promise<string> {
-  const key = requireMethod(method)
+/** Stores (or replaces) the QR for a payment method in one workspace scope; returns the new image id. */
+export async function putPaymentQr(scope: string, method: string, blob: Blob): Promise<string> {
+  const scopeKey = requireScope(scope)
+  const methodKey = requireMethod(method)
   if (!(blob instanceof Blob) || blob.size < 1) throw new Error('The processed QR image is empty. Nothing was saved.')
   const imageId = `PAYQR-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
-  const record: PaymentQrRecord = { method: key, imageId, blob, updatedAt: new Date().toISOString() }
+  const record: PaymentQrRecord = { scope: scopeKey, method: methodKey, imageId, blob, updatedAt: new Date().toISOString() }
   await withQrStore('readwrite', (store) => store.put(record))
-  notifyPaymentQrChange(key)
+  notifyPaymentQrChange(scopeKey, methodKey)
   return imageId
 }
 
-/** The stored QR for a payment method, or null when there is none (or storage is unavailable). */
-export async function getPaymentQr(method: string): Promise<PaymentQrRecord | null> {
-  let key: string
+/** The stored QR for a method in one workspace scope, or null when there is none (or storage is unavailable). */
+export async function getPaymentQr(scope: string, method: string): Promise<PaymentQrRecord | null> {
+  let scopeKey: string
+  let methodKey: string
   try {
-    key = requireMethod(method)
+    scopeKey = requireScope(scope)
+    methodKey = requireMethod(method)
   } catch {
     return null
   }
   if (!paymentQrSupported()) return null
   try {
-    const value = await withQrStore<unknown>('readonly', (store) => store.get(key) as IDBRequest<unknown>)
+    const value = await withQrStore<unknown>('readonly', (store) => store.get([scopeKey, methodKey]) as IDBRequest<unknown>)
     return parsePaymentQrRecord(value)
   } catch {
     // A blocked or broken QR store must never break the counter or the receipt;
@@ -183,10 +219,35 @@ export async function getPaymentQr(method: string): Promise<PaymentQrRecord | nu
   }
 }
 
-export async function deletePaymentQr(method: string): Promise<void> {
-  const key = requireMethod(method)
-  await withQrStore('readwrite', (store) => store.delete(key) as IDBRequest<undefined>)
-  notifyPaymentQrChange(key)
+export async function deletePaymentQr(scope: string, method: string): Promise<void> {
+  const scopeKey = requireScope(scope)
+  const methodKey = requireMethod(method)
+  await withQrStore('readwrite', (store) => store.delete([scopeKey, methodKey]) as IDBRequest<undefined>)
+  notifyPaymentQrChange(scopeKey, methodKey)
+}
+
+/**
+ * Deletes the entire payment-QR database. "Reset this device" calls this so a
+ * handed-over or re-purposed device cannot show the previous owner's payment
+ * route at the next merchant's counter. Best-effort: resolves (never rejects)
+ * so a blocked deletion cannot abort the reset flow that localStorage clearing
+ * is part of; 'blocked' still deletes as soon as other tabs close.
+ */
+export function deleteAllPaymentQrData(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!paymentQrSupported()) {
+      resolve()
+      return
+    }
+    try {
+      const request = indexedDB.deleteDatabase(DB_NAME)
+      request.onsuccess = () => resolve()
+      request.onerror = () => resolve()
+      request.onblocked = () => resolve()
+    } catch {
+      resolve()
+    }
+  })
 }
 
 async function decodeImage(source: Blob): Promise<ImageBitmap> {

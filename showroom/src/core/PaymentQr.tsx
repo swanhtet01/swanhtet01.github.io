@@ -27,12 +27,13 @@ import { usePaymentQrImageUrl } from './use-payment-qr-image'
  * `settingsHint` (the counter) additionally renders a quiet pointer to the
  * settings upload when no QR is stored yet; elsewhere absence renders nothing.
  */
-export function PaymentQrButton({ amountDue, method, settingsHint }: {
+export function PaymentQrButton({ amountDue, method, scope, settingsHint }: {
   amountDue: string
   method: string
+  scope: string
   settingsHint?: boolean
 }) {
-  const url = usePaymentQrImageUrl(method)
+  const url = usePaymentQrImageUrl(scope, method)
   const [open, setOpen] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
 
@@ -73,8 +74,8 @@ export function PaymentQrButton({ amountDue, method, settingsHint }: {
   </>
 }
 
-function PaymentQrMethodControl({ method }: { method: string }) {
-  const url = usePaymentQrImageUrl(method)
+function PaymentQrMethodControl({ method, scope }: { method: string; scope: string }) {
+  const url = usePaymentQrImageUrl(scope, method)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [issue, setIssue] = useState('')
@@ -86,7 +87,7 @@ function PaymentQrMethodControl({ method }: { method: string }) {
     setBusy(true)
     setIssue('')
     try {
-      await putPaymentQr(method, await downscalePaymentQrImage(file))
+      await putPaymentQr(scope, method, await downscalePaymentQrImage(file))
     } catch (error) {
       setIssue(error instanceof Error && error.message ? error.message : 'The QR image could not be saved on this device.')
     } finally {
@@ -98,7 +99,7 @@ function PaymentQrMethodControl({ method }: { method: string }) {
     setBusy(true)
     setIssue('')
     try {
-      await deletePaymentQr(method)
+      await deletePaymentQr(scope, method)
     } catch {
       setIssue('The QR image could not be removed.')
     } finally {
@@ -133,11 +134,11 @@ function PaymentQrMethodControl({ method }: { method: string }) {
  * wallet simply uploads the same image to each method they accept. Renders an
  * explanatory notice instead of dead controls where IndexedDB is unavailable.
  */
-export function PaymentQrSettingsControls() {
+export function PaymentQrSettingsControls({ scope }: { scope: string }) {
   if (!paymentQrSupported()) {
     return <p className="form-notice">This browser cannot store images on the device, so a payment QR cannot be saved here. The counter keeps working without one.</p>
   }
   return <div className="payment-qr-methods">
-    {PAYMENT_QR_METHODS.map((method) => <PaymentQrMethodControl key={method} method={method} />)}
+    {PAYMENT_QR_METHODS.map((method) => <PaymentQrMethodControl key={method} method={method} scope={scope} />)}
   </div>
 }

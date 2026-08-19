@@ -46,9 +46,10 @@ function openPrintWindow(ack: CommerceOrderAcknowledgement) {
   }
 }
 
-export function ReceiptDialog({ ack, onClose }: {
+export function ReceiptDialog({ ack, onClose, paymentQrScope }: {
   ack: CommerceOrderAcknowledgement | null
   onClose: () => void
+  paymentQrScope: string
 }) {
   const ref = useRef<HTMLDialogElement>(null)
 
@@ -112,7 +113,7 @@ export function ReceiptDialog({ ack, onClose }: {
           {/* S2 merchant payment QR: while payment is still pending, the cashier can show
               the owner's stored merchant QR for this method with the amount due (display
               only — see payment-qr-store.ts; renders nothing when no QR is stored). */}
-          {ack.payment.status !== 'reconciled' ? <PaymentQrButton amountDue={mmk(ack.totalMmk)} method={ack.payment.method} /> : null}
+          {ack.payment.status !== 'reconciled' ? <PaymentQrButton amountDue={mmk(ack.totalMmk)} method={ack.payment.method} scope={paymentQrScope} /> : null}
         </div>
         {ack.delivery?.fulfilment ? <div className="receipt-dialog-delivery">
           <strong>{ack.delivery.fulfilment}</strong>
