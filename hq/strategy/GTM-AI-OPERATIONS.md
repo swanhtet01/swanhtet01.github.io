@@ -166,7 +166,8 @@ outbound message gets.
 | Draft social posts | Content drafting agent | None needed — a draft is not a post |
 | **Send a real email to a real business** | Founder | **Required, every time, per message or per approved batch — see checklist in (e)** |
 | **Post to a real social account** | Founder | **Required, every time, per post or per approved batch** |
-| **Fire a follow-up after an initial send** | Follow-up sequencing agent, on founder's standing approval of the sequence design | **Required once, to approve the sequence design; the individual follow-up still needs the founder to have approved the original send it follows** |
+| Draft a proposed follow-up after an approved initial send | Follow-up sequencing agent | None needed to draft — a draft is not a send, same as row above; requires the founder to have already approved the original send it follows |
+| **Send that follow-up** | Founder | **Required every time, the same per-message review as any other outbound email — the agent never sends its own draft, "approving the sequence design" once does not stand in for reviewing the actual follow-up text** |
 
 This mirrors the product's own `ProductionActionProof` discipline described
 in `CLAUDE.md`: an agent proposes, a human actor confirms, and nothing
@@ -211,7 +212,7 @@ No pressure language, no invented statistics, no fake testimonials, no price.
 > It comes with a sample [mini-mart / pharmacy / etc.] shop already loaded,
 > so you can see how it works before you type anything of your own in.
 >
-> You can try it here, right now, with no sign-up: https://app.supermega.dev/shop/
+> You can try it here, right now, with no sign-up: [trade-specific setup link]
 >
 > If you'd like to talk it through first, or you're not sure it fits your
 > shop, just reply to this email — I'm happy to explain more or answer
@@ -228,12 +229,28 @@ device-storage citations there. Counter sale / stock fall / KBZPay / WavePay
 Daily close — `shop-daily-close` row, quoted verbatim spirit ("charging for
 it would be charging for honesty," not repeated here but consistent with
 it). Accountant handoff — `shop-accounting-handoff` row. Sample shop already
-loaded — section (c) of the positioning doc, ten trade cards. The link points
-at the actual local app route (`app.supermega.dev/[product]/` per
-`site-manifest.json`), not a hosted signup that doesn't exist. No mention of
+loaded — section (c) of the positioning doc, ten trade cards. No mention of
 premium, AI intake, managed workspaces, or any capability gated per section
 (e) of the positioning doc. No price. No "trusted by," no invented user
 count, no testimonial.
+
+**[trade-specific setup link] is a placeholder to fill in, not a literal
+URL to use as-is** — this is the finding a reviewer correctly caught: the
+plain `app.supermega.dev/shop/` route opens the generic seed workspace, not
+the trade sample the email just promised (a pharmacy prospect would land on
+"Daily essentials basket" instead of pharmacy items). The app already has a
+canonical helper for exactly this, `shopBusinessTemplateSetupPath(id)`
+(`showroom/src/products/shop/business-templates.ts:559-561`), which builds
+`/settings/?product=shop&template=${id}` for a given
+`ShopBusinessTemplateId` (`bakery`, `pharmacy`, `mini-mart`, `fashion`,
+`hardware`, `tea-coffee`, `auto-parts`, `restaurant`, `beauty-spa`,
+`phone-electronics`) — that route (`SettingsEntry` in `App.tsx`, reading
+both `?product=` and `?template=`) is what actually resolves to
+`ProductOnboardingPage.tsx:105`'s trade selection. The content drafting
+agent must generate `https://app.supermega.dev` + that helper's path for
+the specific trade a prospect is being personalized for, never the bare
+`/shop/` route, whenever this template is actually filled in for a real
+send.
 
 ---
 
@@ -260,7 +277,7 @@ even though it is marketing copy rather than in-product copy).
 >
 > If you did have a chance to look, I'd genuinely like to hear what you
 > thought, good or not. And if you have two minutes, you're welcome to try
-> it here with no sign-up: https://app.supermega.dev/shop/
+> it here with no sign-up: [same trade-specific setup link as the initial email]
 >
 > Thank you,
 > [Founder name]
