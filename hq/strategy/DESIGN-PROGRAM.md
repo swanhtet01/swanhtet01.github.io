@@ -460,6 +460,28 @@ boundary does not render in a healthy app. A 375px pass confirmed the
 mobile overrides: input floor computes 16px, the mobile heading override
 computes 30px (1.875rem), no WebView-style rounding drift at either root.
 
+**P3.6c CLOSED — P3.6 COMPLETE (2026-08-20).** P3.6b had already converted
+the website font-sizes P3.6c was scoped for (gen-one region included), so
+the closeout is an audit, not a conversion. Full grep of every showroom CSS
+source file (core-app.css, ecommerce-product.css, website-product.css,
+publish-workspace.css, vision-product.css — born rem — and src/index.css)
+for `font-size: <N>px`: exactly THREE declarations remain, all in
+src/index.css's `.route-error` family (:56 `strong` 17px, :58
+`.route-error-data` 13px, :71 `details` 12px). Sanctioned exemption, two
+grounds, both already on record: the in-file comment at index.css:41-43 —
+this surface renders precisely when a stylesheet or chunk failed to
+arrive, so it deliberately depends on nothing, tokens or otherwise — and
+P3.6b designated `.route-error strong` as the app's last-px control for
+root-scaling probes; converting it would destroy the control. For
+completeness, so a future sweep does not reopen the lane: index.css:36
+carries one px font-size inside a `font:` shorthand (`font: 700 18px/1
+…`, the `.product-route-loading` spinner) — outside this audit's
+declaration pattern, same global-degraded-sheet rationale, same
+exemption. The P3.0 px ratchet floors stand as stamped by P3.6b (core
+2435 / ecommerce 349 / website 658 / publish 195 — all remaining px is
+in the non-font-size families the plan keeps: borders, radii, shadows,
+44px touch targets, media bounds).
+
 ### P3.7 — Bottom-nav work modes (gate satisfied)
 
 Gate evidence: one-tap sale shipped (PR #436; CoreApp.tsx:6799, :3900).
@@ -524,6 +546,140 @@ font-size is rem-based in all four files; bottom-nav modes and the
 Operations IA shipped with their acceptance criteria; and the radius
 distinct-value count is falling batch-over-batch. Re-grade against the
 tribunal rubric then — not before.
+
+## EN/MY composed labels — mechanism decision (item 6 batch 2) — BLOCKED
+
+Status: DESIGN NOTE ONLY (2026-08-20). Nothing here ships until the founder
+and a native Burmese speaker have answered the two questions at the end.
+
+Batch 1 (PR #456) applied `bi()` exact-match-only against the confirmed
+entries of `showroom/src/core/i18n-actions.ts` (infrastructure from #450;
+the table today measures 47 entries — 33 confirmed, 14
+pending_native_review) and landed exactly 3 sites, because nearly every
+real operator-facing label is COMPOSED: "Save client setup", "Open
+company", "Back to sign in". Batch 2 is therefore a mechanism decision,
+not more sweeping. Safety rule 1 of the table — unverified Burmese can
+never surface to an operator — is load-bearing; every option below keeps
+it.
+
+### Option A — `biCompose(verb, rest)`: verb-only gloss
+
+`biCompose('Save', 'client setup')` renders "Save client setup ·
+သိမ်းမည်" — the Burmese half carries only the verb.
+
+- (+) Zero new native review: only already-confirmed verbs render; the
+  pending gate is untouched.
+- (+) Covers every composed site immediately, including the parameterized
+  ones a table never can ("Open {name}" template cards).
+- (−) **The risk, stated plainly: the gloss names the action but not the
+  target.** "Save client setup · သိမ်းမည်" and "Save restore point ·
+  သိမ်းမည်" are IDENTICAL in the half a Burmese-first reader actually
+  reads. SettingsPage renders "Clear order packet" (:2194) and "Clear
+  packet" (:2200) on adjacent panels, and :2194 renders four
+  Download-family buttons in ONE action row — under Option A those all
+  gloss identically. A shop owner who trusts the Burmese half can
+  confidently tap the wrong button. That is worse than English-only,
+  which at least does not claim to inform.
+- (−) Code-mixing: the entries are complete verb-final clauses
+  (သိမ်းမည် ≈ "will save"). Appending a clause-final Burmese verb to an
+  untranslated English object is code-mixed output whose naturalness we
+  cannot judge from here.
+- (−) Sense drift: one English verb, several Burmese ones. "Save my claim
+  file" (download to disk) and "Save client setup" (persist a form) would
+  carry the same သိမ်းမည် even where natural Burmese would split them —
+  a mistranslation class that exact-match review never had.
+
+### Option B — full-phrase table entries per composed label
+
+Extend `ACTION_TRANSLATIONS` with whole composed strings, each
+native-reviewed, rendered by today's `bi()` unchanged.
+
+- (+) Correct by construction: the reviewed unit is exactly the string
+  the operator sees. No ambiguity, no code-mixing, no sense drift.
+- (+) Zero new mechanism; the confirmed/pending gate already enforces
+  review before render.
+- (−) Review volume. Measured from the PR #456 skip list: 14 distinct
+  static phrases on the Core surfaces alone (list below); the
+  Download/Record/Prepare/Run ops families add ~13 more distinct
+  phrases; and a fuller sweep finds stragglers the PR body folded away
+  ("Recover company access" SettingsPage.tsx:2151, the "Request managed
+  pilot/AI/trial" family, "Keep learning checkpoint"). Item 6's actual
+  hot-path scope (Shop counter, order actions, gates, close) multiplies
+  this — treat ~27 as the Core-surface floor, not the program total.
+  Every entry is a native-review line item.
+- (−) Cannot cover parameterized labels at all ("Open
+  {productDisplayName}" SettingsPage.tsx:2107, "Open {name}"
+  CoreShell.tsx:564).
+- (−) One covered site is verifier-pinned byte-identical
+  (`>Company login</Link>`, verify_app_build.mjs ~:1070, per the #456
+  body): converting it is a lockstep pin edit, not just a label swap.
+
+### Option C — verb-highlight hybrid
+
+Option A's composition plus typography that visually binds the English
+verb to the Burmese gloss (weight/underline pairing).
+
+- (+) Honest about partial translation — it shows WHICH word the Burmese
+  covers instead of implying the whole label is translated.
+- (−) Does not fix A's same-verb ambiguity; it only labels it. The two
+  Clear buttons still gloss identically.
+- (−) Invents a typographic convention that itself needs operator
+  education; none of the tribunal benchmarks (Square, Loyverse, Odoo,
+  Shopify, Wix) does anything like it.
+- (−) Longest render of the three on 375px buttons that are already the
+  app's longest ("Record owner approval request · မှတ်တမ်းတင်မည်").
+
+### Recommendation: B, scoped by traffic
+
+Option A's ambiguity failure sits exactly on the surfaces a Yangon shop
+owner touches most, and rule 1 exists because a wrong Burmese string is
+costlier than a missing one — the same logic rejects a right-verb,
+wrong-implication gloss as the default mechanism. Option C pays A's costs
+without fixing A's flaw. Option B is the only option whose failure mode
+is "not translated yet", which is the failure mode we already accept.
+
+Batch-2 coverage under B — the concrete skip list from the #456 body,
+located in source (14 phrases, one native-review packet). Account path
+first; it is the highest Burmese-first-traffic surface:
+
+1. "Back to sign in" — ManagedLoginPage.tsx:149
+2. "Find my company" — ManagedLoginPage.tsx:163; SettingsPage.tsx:2140
+3. "Open company" — ManagedLoginPage.tsx:142, :163; SettingsPage.tsx:2140, :2151
+4. "Open my Shop" — SignupPage.tsx:182
+5. "Company sign in" — SignupPage.tsx:241
+6. "Company login" — CoreShell.tsx:460 (verifier-pinned — lockstep edit)
+   plus the aria-label at CoreShell.tsx:463
+7. "Save client setup" — SettingsPage.tsx:2105
+8. "Save restore point" — SettingsPage.tsx:2230
+9. "Save my claim file" — SignupPage.tsx:164
+10. "Export full evidence" — SettingsPage.tsx:2231
+11. "Clear packet" — SettingsPage.tsx:2200
+12. "Clear order packet" — SettingsPage.tsx:2194
+13. "Load sample packet" — SettingsPage.tsx:2200
+14. "Load sample order packet" — SettingsPage.tsx:2194 (measured in
+    source; the #456 body folded it into the families line)
+
+Explicitly NOT batch 2 (stay English-only pending a later ruling): the
+Download/Record/Prepare/Run enterprise-console families
+(SettingsPage.tsx:2028, :2047, :2059, :2107, :2135, :2194, :2219 — ops
+traffic, not shop-owner traffic); parameterized "Open {name}"
+(CoreShell.tsx:564, SettingsPage.tsx:2107 — only a composition mechanism
+can cover these); busy-state ternaries ("Checking...", "Preparing
+plan...").
+
+### BLOCKED on native-speaker sign-off — two questions
+
+1. Review the 14 batch-2 phrase translations. Drafts enter the table as
+   pending_native_review (never rendered); each flips to confirmed only
+   on the native speaker's explicit sign-off, per rule 1.
+2. The Option-A question, asked straight: on a composed English label, is
+   a Burmese verb-only gloss helpful ("this is a save-type action") or
+   misleading ("saves — but saves WHAT?") for a Myanmar shop owner? If
+   the answer is "helpful and idiomatic", Option A can cover the ops
+   families and parameterized labels for free in a batch 3; if
+   "misleading", those stay English-only until someone phrases them.
+
+No implementation before both answers are recorded in this section.
 
 ## Verification recipe for design PRs
 
