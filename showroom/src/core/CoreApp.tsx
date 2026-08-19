@@ -11,6 +11,7 @@ import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
 import { emitMetric } from '../analytics/metrics-collector'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
+import { bi } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
   ACTION_KEY,
@@ -448,6 +449,12 @@ const commerceSupportServiceActionLabels: Record<CommerceSupportServiceEventKind
 
 type ProductId = 'commerce' | 'production'
 
+// Hand-maintained duplicate of the canonical ecommerceCancellationMatchesCurrentShop
+// export in ecommerce-buying-lifecycle.ts (kept local rather than statically imported
+// so this file's deliberate dynamic-import code-splitting boundary for that module is
+// not broken). Currently byte-identical logic, confirmed by a real regression test --
+// see tools/test_ecommerce_order_coexistence.mjs. If you change this function, change
+// the canonical one too, or the two will silently drift.
 function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intent: EcommerceCancellationIntent) {
   const order = state.orders.find((candidate) => candidate.id === intent.orderId)
   const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
@@ -940,7 +947,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change'}</button></div>
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : bi(action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </dialog>
@@ -2668,6 +2675,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
     <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, approved-vendor evidence, comparable quotes, delivery, quality, and exposure. Budget, sourcing, requisition, and independent PO approval stay separate. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    {/* A Plant material's Shop SKU is free text on its BOM row, never checked against
+        a real Shop item. A typo or a since-renamed/deleted item means Plant believes
+        it flagged real demand that then vanishes with no error on either side --
+        surface it here instead, naming the exact SKU and the Plant jobs that need it. */}
+    {shopReplenishment.unmatchedDemand.length ? <p className="form-notice" role="alert">
+      Plant demand does not match a Shop item for {shopReplenishment.unmatchedDemand.map((entry) => `"${entry.sku}" (${entry.materialName}, ${Number((entry.requiredQuantityMilli / 1000).toFixed(3))} ${entry.unit}, job${entry.jobIds.length === 1 ? '' : 's'} ${entry.jobIds.join(', ')})`).join('; ')}. Check the Shop SKU on that material's BOM row -- this demand is not included in the recommendations above.
+    </p> : null}
     {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · budget and review required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); const budget = approved?.budgetEnvelopeId ? purchaseBudgetEnvelopes.find((envelope) => envelope.id === approved.budgetEnvelopeId) : null; return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · ${budget?.budgetCode ?? 'legacy authority'} · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for review'}`}</small></span></div> })}</div></section> : null}
     {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
       <div className="supplier-performance-heading"><span className="core-eyebrow">Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>

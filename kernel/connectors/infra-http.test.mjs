@@ -27,6 +27,10 @@ test('infra-http blocks IPv4-metadata-address embedded in IPv6 via every known b
     'https://[::a9fe:a9fe]/',                     // v4-compatible (deprecated), pure hex
     'https://[::ffff:a9fe:a9fe]/',                // v4-mapped, pure hex
     'https://[0:0:0:0:0:ffff:169.254.169.254]/',  // v4-mapped, full 8-group, no :: compression
+    'https://[::ffff:7f00:1]/',                   // v4-mapped, 127.0.0.1, minimal hex form
+    'https://[::ffff:7F00:0001]/',                // same address, uppercase + leading zeros
+    'https://[0:0:0:0:0:ffff:7f00:1]/',           // same address, fully expanded (no ::)
+    'https://[::ffff:a00:1]/',                    // v4-mapped, 10.0.0.1, hex form
   ]
   for (const u of blocked) assert.ok(await validateUrl(u), `should block ${u}`)
 })
@@ -47,4 +51,13 @@ test('infra-http does not false-positive on ordinary global-unicast IPv6 literal
   // three known /96 embedding prefixes (::/96, ::ffff:0:0/96, 64:ff9b::/96) so these must pass.
   assert.equal(await validateUrl('https://[2606:4700:4700::1111]/'), null) // Cloudflare public DNS
   assert.equal(await validateUrl('https://[2001:4860:4860::8888]/'), null) // Google public DNS
+})
+
+test('infra-http still permits a public v4-mapped IPv6 address (dotted or hex)', async () => {
+  assert.equal(await validateUrl('https://[::ffff:8.8.8.8]/'), null)
+  assert.equal(await validateUrl('https://[::ffff:808:808]/'), null) // 8.8.8.8 in hex
+})
+
+test('infra-http rejects a malformed IPv6-looking host without throwing', async () => {
+  assert.ok(await validateUrl('https://[not:a:valid:address]/'))
 })

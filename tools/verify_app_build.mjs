@@ -479,7 +479,19 @@ else {
     || webmanifest.short_name !== manifest.brand.name
     || webmanifest.description !== manifest.company.supporting
     || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
+  // Design phase 2 item 8: the vector favicon alone does not satisfy Chrome/Android
+  // installability (wants a raster PNG at 192/512) and iOS "Add to Home Screen" does
+  // not read the manifest at all -- both are checked here, not just icons[0].
+  const rasterIcons = webmanifest.icons?.filter((icon) => icon.type === 'image/png') ?? []
+  if (!rasterIcons.some((icon) => icon.sizes === '192x192' && icon.purpose === 'any')
+    || !rasterIcons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'any')
+    || !rasterIcons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'maskable')) fail('missing_pwa_raster_icons')
+  for (const icon of rasterIcons) {
+    if (!await exists(resolve(dist, icon.src.replace(/^\//, '')))) fail(`missing_manifest_icon_file:${icon.src}`)
+  }
 }
+if (!indexSource.includes('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
+  || !await exists(resolve(dist, 'apple-touch-icon.png'))) fail('missing_apple_touch_icon')
 if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
@@ -7750,6 +7762,26 @@ async function verifyPlantOrderRuntime() {
       && replenishmentPlan.summary.recommendedOrderUnits === 3
       && Object.values(replenishmentPlan.authority).every((allowed) => allowed === false),
     'shop_replenishment_status_or_authority_wrong')
+    // The well-formed fixture's Plant material links to a Shop SKU that genuinely
+    // exists, so a correct build must show zero unmatched demand here.
+    assertReplenishment(replenishmentPlan.unmatchedDemand.length === 0 && replenishmentPlan.summary.unmatchedSkuCount === 0,
+      'shop_replenishment_false_positive_unmatched_demand')
+    // A Plant material's Shop SKU is free text on its BOM row, never checked against a
+    // real Shop item -- if the item is later renamed or deleted, the SAME Plant demand
+    // that drove the assertions above must not silently vanish: it has to surface as
+    // unmatched, naming the sku, the material and quantity actually needed (a "Shop
+    // stock unit" count is meaningless for a sku that never resolved), and the jobs
+    // that need it.
+    const commerceWithoutLinkedItem = commerce.validateCommerceState({ ...mrpPurchaseOrder, items: [], purchaseOrders: [] })
+    const orphanedReplenishmentPlan = replenishment.projectShopReplenishment(commerceWithoutLinkedItem, productionForReplenishment)
+    const orphanedDemand = orphanedReplenishmentPlan.unmatchedDemand.find((entry) => entry.sku === 'SKU-RM-BAG')
+    assertReplenishment(orphanedReplenishmentPlan.rows.length === 0
+      && orphanedDemand?.materialName === 'Filter media'
+      && orphanedDemand.unit === 'kg'
+      && orphanedDemand.requiredQuantityMilli === 30_000
+      && orphanedDemand.jobIds.join(',') === 'JOB-401,JOB-402'
+      && orphanedReplenishmentPlan.summary.unmatchedSkuCount === 1,
+    'shop_replenishment_orphaned_plant_demand_not_surfaced')
     assertReplenishment(replenishment.validateShopReplenishment(replenishmentPlan, mrpPurchaseOrder, productionForReplenishment).digest === replenishmentPlan.digest,
       'shop_replenishment_current_packet_rejected')
     const tamperedReplenishment = structuredClone(replenishmentPlan)
@@ -19002,9 +19034,19 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // stacks, money-path type floor, touch targets, light-theme tile art) plus the design phase-2 wave (the
 // one-review 'Paid & handed over' settle path, 'Close the day' lifted out of the policy accordion, cart
 // money total, status-pill semantics, de-branded merchant surfaces) pushed the measured total to
-// 2,954,266. See CLAUDE.md: this budget is expected to trip on any fresh dist/ after real
-// product/design work lands — raise it, never shrink product code to fit an old number.
-if (bytes > 2_985_000) fail(`artifact_budget:${bytes}`)
+// 2,954,266.
+// Raised again for TEMPLATE-EXPANSION.md queue items 1-9 (Shop counter sales/pending order/appointment
+// activity; Plant jobs+floor+shift-activity+released BOM/routing order for both bakery and fashion;
+// Ecommerce trade storefront copy, hero-SKU ranking, and per-trade fulfilment/payment mix) merged with
+// this branch's second absorption of main — the design phase-2 wave through the PWA raster icon set
+// (icon-192/icon-512/icon-512-maskable/apple-touch-icon PNGs, ~11.7KB of binary assets not app code),
+// the EN/MY action-verb infrastructure + shared confirm gate, login/signup field-level error notices,
+// the theme-toggle SVG sun/moon icons, the primary-button token normalization, the font-weight ramp
+// collapse, zero-flash theme restore, and the Ecommerce order coexistence contract test. Combining both
+// branches' independent work pushed a fresh measurement to 2,990,162. See CLAUDE.md: this budget is
+// expected to trip on any fresh dist/ after real product/design work lands — raise it, never shrink
+// product code to fit an old number.
+if (bytes > 3_010_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
