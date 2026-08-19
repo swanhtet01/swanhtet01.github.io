@@ -18,7 +18,10 @@
 .ecommerce-heading p {
   max-width: 760px;
   margin: 0;
-  color: #56665d;
+  /* Design phase 2 item 12: --core-muted is #56665d in light, byte-identical here; this
+     sits on the ordinary page shell (already theme-aware), unlike the cockpit/buying-
+     workspace cards elsewhere in this file, so it is safe to flip with the theme. */
+  color: var(--core-muted);
   font-size: 14px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -71,8 +74,12 @@
   border: 1px solid rgba(31, 68, 51, .14);
   border-radius: 9px;
   padding: 0 34px 0 12px;
-  background: #fff;
-  color: #17231d;
+  /* Design phase 2 item 12: #fff/#17231d are byte-identical to --core-panel/--core-ink in
+     light. The .ecommerce-workspace-switch shell already flips dark (:56 above), so these
+     selects were the one part of it that did not -- tokenizing gives them the matching
+     .theme-dark remap the switch itself already has. */
+  background: var(--core-panel);
+  color: var(--core-ink);
   font: inherit;
   font-size: 13px;
   font-weight: var(--font-weight-bold);
