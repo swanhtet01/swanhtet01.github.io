@@ -87,6 +87,10 @@ export const deliberatelyNotPortableKeys: readonly string[] = [
   // Analytics persistence (Step 6). Device-local usage counters; restoring them onto another device
   // would re-assert stale activity metrics from a different session, which is misleading.
   'supermega.hq.local-metrics.v1',
+  // Plant "Jobs to finish" view preference (list vs due-date board). A marker about how THIS
+  // device displays jobs, not a business record: a restored backup must not flip another
+  // device's chosen view. Same reasoning as the local metrics key above.
+  'supermega.plant.job-view.v1',
 ]
 
 const portablePrefixes = [

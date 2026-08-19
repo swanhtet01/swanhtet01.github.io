@@ -636,6 +636,18 @@ const productionJobPriorityLabels: Record<ProductionJobPriority, string> = {
   low: 'Low',
 }
 
+// Device-local view preference for the Plant "Jobs to finish" panel: list (default)
+// or the due-date board. Registered in local-workspace-storage.ts so "Reset this
+// device" clears it, and classified deliberately NOT portable in company-backup.ts —
+// the same call as supermega.hq.local-metrics.v1 — because it is a marker about how
+// THIS device displays jobs, not a business record a restored backup should re-assert.
+const PLANT_JOB_VIEW_KEY = 'supermega.plant.job-view.v1'
+type PlantJobView = 'list' | 'board'
+
+function normalizePlantJobView(value: PlantJobView): PlantJobView {
+  return value === 'board' ? 'board' : 'list'
+}
+
 const wrappedIssueDetail = { overflow: 'visible', overflowWrap: 'anywhere', textOverflow: 'clip', whiteSpace: 'normal' } as const
 
 function localDateTimeInputValue(value: Date) {
@@ -7402,6 +7414,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantOrderScope = `plant:${plantOrderScopeWorkspaceId}`
   const latestRecordedShiftRef = production.events.find((event) => Boolean(event.shiftRef?.trim()))?.shiftRef?.trim() ?? ''
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
+  const [plantJobView, setPlantJobView] = useStoredState<PlantJobView>(PLANT_JOB_VIEW_KEY, 'list', normalizePlantJobView)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState('')
   const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold && !job.closure)?.id ?? '')
@@ -9296,7 +9309,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
-        <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
+        <div aria-label="Jobs view" className="plant-job-view-toggle" role="group">
+          <button aria-pressed={plantJobView === 'list'} onClick={() => setPlantJobView('list')} type="button">List</button>
+          <button aria-pressed={plantJobView === 'board'} onClick={() => setPlantJobView('board')} type="button">Board</button>
+        </div>
+        {plantJobView === 'board'
+          ? <PlantJobBoard disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
+          : <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />}
         {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} suggested</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} active order units · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} below reorder · {nextShopDemand.sourceOrderIds.length || 'no'} source {nextShopDemand.sourceOrderIds.length === 1 ? 'order' : 'orders'}</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
@@ -9568,20 +9587,94 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   return null
 }
 
+// Shared between JobList and PlantJobBoard so the two renderings of the same job
+// cannot drift: one progress formula, one empty-state copy, one pair of action links.
+const PLANT_NO_ACTIVE_JOBS_COPY = 'No active jobs. Add a job below to start recording output.'
+
+function plantJobAccounting(job: ProductionJob) {
+  const scrap = job.scrap ?? 0
+  const accounted = job.output + scrap
+  return { scrap, accounted, progress: Math.min(100, Math.round((accounted / job.target) * 100)) }
+}
+
+function PlantJobActionLinks({ disabled, job, onOutput, onSchedule }: { disabled: boolean; job: ProductionJob; onOutput?: (job: ProductionJob, trigger: HTMLButtonElement) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
+  return <>
+    {onOutput ? <button aria-controls="plant-output-panel" className="text-link job-output-link" disabled={disabled} onClick={(event) => onOutput(job, event.currentTarget)} type="button">Record output</button> : null}
+    {onSchedule ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}
+  </>
+}
+
 function JobList({ disabled = false, jobs, now, onOutput, onSchedule }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onOutput?: (job: ProductionJob, trigger: HTMLButtonElement) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
-  if (!jobs.length) return <Empty>No active jobs. Add a job below to start recording output.</Empty>
+  if (!jobs.length) return <Empty>{PLANT_NO_ACTIVE_JOBS_COPY}</Empty>
   return <div className="job-list">{jobs.map((job) => {
-    const scrap = job.scrap ?? 0
-    const accounted = job.output + scrap
-    const progress = Math.min(100, Math.round((accounted / job.target) * 100))
+    const { scrap, accounted, progress } = plantJobAccounting(job)
     const scheduled = Boolean(job.priority && job.dueAt)
     const overdue = Boolean(!job.closure && job.dueAt && Date.parse(job.dueAt) <= now)
     const scheduleLabel = scheduled
       ? `${productionJobPriorityLabels[job.priority ?? 'normal']} · ${overdue ? 'OVERDUE ' : job.closure ? 'Was due ' : 'Due '}${formatIssueDue(job.dueAt ?? '')}`
       : 'Schedule not recorded · legacy job'
     const ownerLabel = job.owner ? `Owner ${job.owner}` : 'Owner not recorded · legacy job'
-    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{!job.closure && accounted < job.target && (onOutput || onSchedule) ? <div className="job-row-actions">{onOutput ? <button aria-controls="plant-output-panel" className="text-link job-output-link" disabled={disabled} onClick={(event) => onOutput(job, event.currentTarget)} type="button">Record output</button> : null}{onSchedule ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
+    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{!job.closure && accounted < job.target && (onOutput || onSchedule) ? <div className="job-row-actions"><PlantJobActionLinks disabled={disabled} job={job} onOutput={onOutput} onSchedule={onSchedule} /></div> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
   })}</div>
+}
+
+// Due-date lanes for the Plant job board, in render order: most urgent lane first.
+// "This week" is a rolling window — the 7 calendar days starting today — not a
+// locale calendar week, so the grouping reads the same on any day of the week.
+const plantJobBoardLanes = [
+  ['overdue', 'Overdue'],
+  ['today', 'Today'],
+  ['week', 'This week'],
+  ['later', 'Later'],
+  ['undated', 'No due date'],
+] as const
+
+type PlantJobBoardLaneId = (typeof plantJobBoardLanes)[number][0]
+
+function plantJobBoardLaneId(job: ProductionJob, now: number): PlantJobBoardLaneId {
+  if (!job.dueAt) return 'undated'
+  const due = Date.parse(job.dueAt)
+  if (!Number.isFinite(due)) return 'undated'
+  // Same boundary as JobList's overdue marker: due at or before "now" is overdue.
+  if (due <= now) return 'overdue'
+  const endOfToday = new Date(now)
+  endOfToday.setHours(24, 0, 0, 0)
+  if (due <= endOfToday.getTime()) return 'today'
+  // setDate, not fixed 24h arithmetic, so the 7-day boundary stays on local
+  // midnight across a DST transition.
+  const endOfWeek = new Date(endOfToday)
+  endOfWeek.setDate(endOfWeek.getDate() + 6)
+  if (due <= endOfWeek.getTime()) return 'week'
+  return 'later'
+}
+
+// Display-and-navigation board over the SAME jobs the list renders: no write, no
+// rescheduling, no drag-and-drop — moving a job between lanes is a domain write and
+// stays behind the accountable "Change plan" review the list also uses. Jobs arrive
+// pre-sorted by compareProductionJobSchedule, so each lane is priority-ordered.
+function PlantJobBoard({ disabled = false, jobs, now, onOutput, onSchedule }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onOutput?: (job: ProductionJob, trigger: HTMLButtonElement) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
+  if (!jobs.length) return <Empty>{PLANT_NO_ACTIVE_JOBS_COPY}</Empty>
+  const laneJobs = new Map<PlantJobBoardLaneId, ProductionJob[]>(plantJobBoardLanes.map(([id]) => [id, []]))
+  for (const job of jobs) laneJobs.get(plantJobBoardLaneId(job, now))?.push(job)
+  return <div aria-label="Job board grouped by due date" className="plant-job-board" role="group">
+    {plantJobBoardLanes.map(([id, label]) => {
+      const grouped = laneJobs.get(id) ?? []
+      return <section aria-label={`${label} · ${grouped.length} ${grouped.length === 1 ? 'job' : 'jobs'}`} className="plant-job-board-lane" data-lane={id} key={id}>
+        <header><strong>{label}</strong><span>{grouped.length}</span></header>
+        {grouped.length ? grouped.map((job) => {
+          const { scrap, accounted, progress } = plantJobAccounting(job)
+          const overdue = id === 'overdue'
+          return <article className={`plant-job-card${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'} key={job.id}>
+            <small>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</small>
+            <strong>{job.product}</strong>
+            <small className="plant-job-card-schedule">{job.priority && job.dueAt ? `${productionJobPriorityLabels[job.priority]} · ${overdue ? 'OVERDUE ' : 'Due '}${formatIssueDue(job.dueAt)}` : 'Schedule not recorded · legacy job'}</small>
+            <div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}</small></div>
+            {!job.closure && accounted < job.target && (onOutput || onSchedule) ? <div className="plant-job-card-actions"><PlantJobActionLinks disabled={disabled} job={job} onOutput={onOutput} onSchedule={onSchedule} /></div> : null}
+          </article>
+        }) : <p className="plant-job-board-empty">No jobs in this lane.</p>}
+      </section>
+    })}
+  </div>
 }
 
 function CompletedJobHistory({ jobs, now }: { jobs: ProductionJob[]; now: number }) {

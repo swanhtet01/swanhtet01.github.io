@@ -2722,3 +2722,54 @@ input, select, textarea { border-color: var(--core-field-line); }
 .loyalty-settings-row label { display: grid; gap: var(--space-1); color: var(--core-muted); font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); }
 .loyalty-settings-row input { min-height: 44px; max-width: 128px; border: 1px solid var(--core-field-line); border-radius: var(--radius-md); padding: 0 var(--space-3); background: var(--core-panel); color: var(--core-ink); font-size: var(--font-size-base); }
 .loyalty-settings-row .status-pill { margin-bottom: var(--space-2); }
+
+/* ============================================================================
+   Plant visual job board (roadmap P1, 2026-08-19). Display-and-navigation only:
+   the "Jobs to finish" panel gains a per-device list ⇄ board toggle (list stays
+   the default) and the board groups the SAME active jobs into due-date lanes —
+   Overdue / Today / This week / Later / No due date — priority-ordered within
+   each lane, cards opening the same Record output / Change plan actions the
+   list offers. No drag-and-drop: rescheduling is a domain write and stays
+   behind the accountable review. Scoped classes only — the shared .job-list /
+   .record-list / .order-list selectors above stay byte-identical. Tokens only:
+   every color flips with .theme-dark on its own, so no dark overrides are
+   needed; lengths are rem/tokens because the px ratchet in
+   check_css_contracts.mjs is exact (0.0625rem = the stylesheet's 1px hairline,
+   2.75rem = its 44px touch-target convention). The board scrolls horizontally
+   inside its own container on desktop and stacks to one column at the same
+   boundary as the stylesheet's 840px breakpoint (written 52.5em because the px
+   ratchet is exact; 52.5em x the 16px default root size = 840px — a user with a
+   non-default browser font size flips the board a little before the panel
+   around it, which degrades gracefully: one stacked column inside a still-wide
+   panel).
+   ========================================================================== */
+.plant-job-view-toggle { display: inline-flex; align-self: start; gap: var(--space-1); flex: 0 0 auto; border: 0.0625rem solid var(--core-line); border-radius: var(--radius-md); padding: var(--space-1); margin-bottom: var(--space-2); background: var(--core-panel-raised); }
+.plant-job-view-toggle button { min-height: 2rem; display: inline-flex; align-items: center; border: 0.0625rem solid transparent; border-radius: var(--radius-sm); padding: 0 var(--space-3); background: none; color: var(--core-muted); font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); cursor: pointer; }
+.plant-job-view-toggle button[aria-pressed="true"] { border-color: var(--core-line-strong); background: var(--core-panel); color: var(--core-ink); }
+.plant-job-view-toggle button:hover { color: var(--core-ink); }
+.job-panel .plant-job-board { flex: 1; }
+.plant-job-board { min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(10.5rem, 1fr)); gap: var(--space-2); align-items: start; overflow: auto; }
+.plant-job-board-lane { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); border: 0.0625rem solid var(--core-line); border-radius: var(--radius-md); padding: var(--space-2); background: var(--core-panel-raised); }
+.plant-job-board-lane > header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.plant-job-board-lane > header strong { color: var(--core-muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); letter-spacing: .06em; text-transform: uppercase; }
+.plant-job-board-lane > header span { color: var(--core-quiet); font-family: var(--core-mono); font-size: var(--font-size-xs); }
+.plant-job-board-lane[data-lane="overdue"] > header strong { color: var(--core-warn); }
+.plant-job-board-empty { margin: 0; color: var(--core-quiet); font-size: var(--font-size-xs); line-height: 1.4; }
+.plant-job-card { min-width: 0; display: grid; gap: var(--space-1); border: 0.0625rem solid var(--core-line); border-radius: var(--radius-sm); padding: var(--space-2); background: var(--core-panel); }
+.plant-job-card > small { color: var(--core-quiet); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.plant-job-card > strong { font-size: var(--font-size-base); overflow-wrap: anywhere; }
+.plant-job-card .plant-job-card-schedule { color: var(--core-green); font-family: var(--core-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); letter-spacing: .02em; }
+.plant-job-card[data-priority="urgent"] .plant-job-card-schedule, .plant-job-card.overdue .plant-job-card-schedule { color: var(--core-warn); }
+.plant-job-card[data-priority="low"] .plant-job-card-schedule, .plant-job-card[data-priority="legacy"] .plant-job-card-schedule { color: var(--core-quiet); }
+.plant-job-card .job-progress small { color: var(--core-quiet); font-size: var(--font-size-xs); }
+.plant-job-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.plant-job-card-actions .text-link { min-width: 0; justify-content: center; }
+.plant-job-card-actions .job-output-link { border: 0.0625rem solid var(--core-line-strong); border-radius: var(--radius-sm); padding-inline: var(--space-1); background: var(--core-green-soft); }
+@media (max-width: 52.5em) {
+  /* Parity with the pinned mobile-tier `.job-panel .job-list { flex: none; }`. */
+  .job-panel .plant-job-board { flex: none; }
+  .plant-job-view-toggle button { min-height: 2.75rem; }
+  .plant-job-board { grid-template-columns: minmax(0, 1fr); overflow: visible; }
+  .plant-job-card-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plant-job-card-actions .text-link { width: 100%; }
+}
