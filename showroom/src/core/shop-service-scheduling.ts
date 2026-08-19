@@ -633,6 +633,8 @@ export async function mutateShopServiceSchedule(
   } catch {
     return { ok: false, error: 'The appointment write lock failed. Nothing was applied.' }
   }
+}
+
 export const GUIDED_SAMPLE_SCHEDULE_ACTOR = 'Guided sample'
 
 type GuidedSampleBookingPlan = {
