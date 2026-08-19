@@ -317,7 +317,11 @@ check(shopLoyaltyBalances(seedState, settings).size === 0, 'the seeded workspace
 rejects({ ...goodSettings, redemptions: [] }, 'a redemptions key is rejected — spends live in CommerceState, not the settings record')
 check(SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX === 'ACT-LOYREDEEM-', 'the redemption marker is a stable actionId prefix (never display copy)')
 
-const spend = (points, overrides = {}) => ({ kind: 'credit', actionId: `ACT-LOYREDEEM-${points}-X`, calculation: { totalMmk: points }, ...overrides })
+// A redemption correction in a tax-exclusive workspace: the LISTED amount is
+// the points spent; totalMmk carries tax on top. The projection must use
+// listedAmountMmk — using totalMmk would over-spend by the tax (post-merge
+// audit finding on PR #472).
+const spend = (points, overrides = {}) => ({ kind: 'credit', actionId: `ACT-LOYREDEEM-${points}-X`, calculation: { listedAmountMmk: points, totalMmk: points + Math.ceil(points * 0.05) }, ...overrides })
 
 // Receipt line derivation.
 check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [spend(50)] })) === 50, 'the receipt line sums prefixed credit corrections on the order')
@@ -325,6 +329,8 @@ check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [spend(50), spend(2
 check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'credit', actionId: 'ACT-ORDINARY-1', calculation: { totalMmk: 50 } }] })) === 0, 'an ordinary credit correction is NOT a spend — only the prefix marks one')
 check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'debit', actionId: 'ACT-LOYREDEEM-BAD', calculation: { totalMmk: 50 } }] })) === 0, 'a debit can never be a spend')
 check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'credit', calculation: { totalMmk: 50 } }] })) === 0, 'a correction without an actionId is not a spend')
+check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'credit', actionId: 'ACT-LOYREDEEM-T', calculation: { listedAmountMmk: 50, totalMmk: 55 } }] })) === 50, 'points spent = the LISTED before-tax amount, never the tax-inclusive total')
+check(shopLoyaltyRedeemedPointsForOrder(order({ corrections: [{ kind: 'credit', actionId: 'ACT-LOYREDEEM-T2', calculation: { totalMmk: 55 } }] })) === 0, 'a prefixed credit without listedAmountMmk counts zero rather than guessing from the taxed total')
 check(shopLoyaltyRedeemedPointsForOrder(order()) === 0, 'no corrections, no redemption line')
 check(shopLoyaltyRedeemedPointsForOrder(null) === 0, 'no order, no redemption line')
 
