@@ -329,6 +329,14 @@ Batches:
   #56665d→var(--core-muted), #17231d/#fff where the surface already sits
   on themed panels (the :1462 comment marks one such block). Byte-identical
   rendering in light; zero THEME_BLIND changes. ~30-40 occurrences.
+  **DONE by attrition (2026-08-19).** Per-surface classification plus live
+  both-theme computed-style probes proved zero qualifying token-equal
+  substitutions remain — phase 2's per-surface work consumed them. The
+  ecommerce lane starts at P3.5b; its first cockpit PR should also delete
+  the dead `.ecommerce-ops-cockpit p` color declaration (`color: #526158`,
+  ecommerce-product.css:722 in the :720-725 rule — always overridden by
+  :1898, whose `font-size` also deadens :723; the rule's margin/line-height
+  declarations are still live, keep them).
 - **P3.5b — cockpit tints → color-mix.** One PR per 2-3 cockpit families.
   Recompute each pastel as `color-mix(in srgb, var(--core-green|accent) N%,
   var(--core-panel))` with N chosen so the LIGHT value matches the current
