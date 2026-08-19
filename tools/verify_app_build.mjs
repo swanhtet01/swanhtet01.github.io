@@ -53,7 +53,7 @@ let shopProcurementDecisionRuntimeChecks = 0
 let behaviorTrailRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -99,6 +99,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-product.css'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
   readFile(resolve(root, 'tools', 'ensure_supermega_scheduler.ps1'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-tabs.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
@@ -261,7 +262,7 @@ if (!shopTodayUiSource.includes('aria-label="Next Shop action"')
   || !shopTodayUiSource.includes('>Open next step</Link>')
   || shopTodayUiSource.includes('>Continue</Link>')
   || !shopTodayUiSource.includes('Shop safeguards')
-  || !coreSource.includes("type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'")
+  || !commerceTabsSource.includes("export type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'")
   || !coreSource.includes("if (tab === 'today')")
   || !coreSource.includes('<ShopToday')
   || !coreCssSource.includes('.shop-today-mission { min-height: 164px;')
@@ -1098,6 +1099,22 @@ if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settin
   || !coreCssSource.includes('overflow: hidden; border-top: 1px solid var(--core-line);')
   || coreShellSource.includes('aria-label="Mobile product navigation"')
   || coreCssSource.includes('.mobile-nav a:first-child { display: none; }')) fail('client_setup_navigation_separation_missing')
+// Design phase 3 "bottom-nav work modes", Shop slice: on phones the Shop bottom
+// bar carries the four task modes from the shared commerce-tabs module (CoreApp
+// is chunk-isolated, so the shell must consume the module, never a hand copy).
+// All four links share the /shop/ pathname, so the active highlight must come
+// from the ?tab= param via the shared activeCommerceTab resolution — a NavLink
+// here would mark every tab active at once. The 4-column grid is a later
+// higher-specificity override; the pinned 2-column .mobile-nav rule stays
+// byte-identical and every other route keeps the two-link product nav.
+if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from './commerce-tabs'")
+  || !coreShellSource.includes("const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(")
+  || !coreShellSource.includes('<nav className="mobile-nav mobile-task-nav" aria-label="Shop task shortcuts">')
+  || !coreShellSource.includes('{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? \'page\' : undefined}')
+  || !coreShellSource.includes('to={`/shop/?tab=${tab.id}`}')
+  || coreShellSource.includes('mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <NavLink')
+  || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }')) fail('shop_mobile_task_nav_missing')
 if (!coreShellSource.includes("theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
   || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
   || !coreCssSource.includes('.theme-dark {')
@@ -5541,7 +5558,7 @@ if (!commerceSource.includes("export type CommerceStockMovementKind = 'opening' 
   || !managedCommerceRuntime.includes('def _validate_counted(')
   || !managedCommerceRuntime.includes('expectedQuantity')
   || !managedCommerceRuntime.includes('countedQuantity')) fail('commerce_stock_count_contract_missing')
-const commerceTabsContract = coreSource.slice(coreSource.indexOf('const commerceTabs'), coreSource.indexOf('const productionTabs'))
+const commerceTabsContract = commerceTabsSource.slice(commerceTabsSource.indexOf('export const commerceTabs'), commerceTabsSource.indexOf('export function activeCommerceTab'))
 if (!commerceTabsContract.includes("{ id: 'today', label: 'Today' }") || !commerceTabsContract.includes("{ id: 'counter', label: 'Sell' }") || !commerceTabsContract.includes("{ id: 'orders', label: 'Orders' }") || !commerceTabsContract.includes("{ id: 'inventory', label: 'Stock' }") || (commerceTabsContract.match(/^\s*\{ id:/gm) || []).length !== 4) fail('commerce_today_sell_orders_stock_contract_changed')
 const counterConfirmationContract = coreSource.slice(coreSource.indexOf('function AccountableActionGate'), coreSource.indexOf('function ActionHistory'))
 if (!counterConfirmationContract.includes('isCounterConfirmation && !authenticatedActor')
@@ -6283,7 +6300,8 @@ if (!coreCssSource.includes('.plant-today[data-state="blocked"]')
   || !coreCssSource.includes('.production-history > .job-list, .production-history > .issue-list { max-height: 230px;')
   || !coreCssSource.includes('-webkit-line-clamp: 2')) fail('production_bounded_history_or_issue_readability_missing')
 if (!coreCssSource.includes('.action-history summary { min-height: 44px; }')) fail('production_mobile_history_touch_target_missing')
-if (!coreSource.includes("const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'")
+if (!coreSource.includes('const commerceTab = activeCommerceTab(requestedTab)')
+  || !commerceTabsSource.includes("return commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'")
   || !coreSource.includes("const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'")
   || !coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab")
   || !coreSource.includes("!requestedTabIsCanonical")) fail('product_default_tab_not_canonicalized')

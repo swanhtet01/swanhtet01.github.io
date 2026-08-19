@@ -11,6 +11,7 @@ import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
 import { emitMetric } from '../analytics/metrics-collector'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
+import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
 import { bi } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
@@ -531,7 +532,6 @@ function productCanonicalPath(product: ProductId) {
   return product === 'commerce' ? '/shop/' : '/plant/'
 }
 
-type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'
 type ProductionTab = 'production' | 'control'
 
 export type ManagedTrialRequestPrefill = {
@@ -589,13 +589,8 @@ export function managedTrialRequestUrl(product: SetupProductId, templateId: stri
   return `https://supermega.dev/contact/?${query.toString()}${handoff ? `#${handoff}` : ''}`
 }
 
-const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
-  { id: 'today', label: 'Today' },
-  { id: 'counter', label: 'Sell' },
-  { id: 'orders', label: 'Orders' },
-  { id: 'inventory', label: 'Stock' },
-]
-
+// commerceTabs lives in ./commerce-tabs so the CoreShell mobile bottom bar can
+// render the same task list without importing this chunk-isolated module.
 const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'production', label: 'Jobs' },
   { id: 'control', label: 'Problems' },
@@ -978,7 +973,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const requestedRequestId = searchParams.get('request')
   const view = product
   const requestedTab = searchParams.get('tab')
-  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
+  const commerceTab = activeCommerceTab(requestedTab)
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
   const requestedTabIsCanonical = requestedTab === activeTab
