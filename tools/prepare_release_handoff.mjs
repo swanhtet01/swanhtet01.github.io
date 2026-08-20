@@ -263,7 +263,10 @@ function run(file, args, { inherit = false, allowFailure = false } = {}) {
     encoding: 'utf8',
     env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
     maxBuffer: 16 * 1024 * 1024,
-    timeout: 10 * 60 * 1_000,
+    // The canonical Windows runner executes hundreds of gates serially on the
+    // Ally. Match the guarded production workflow's 35-minute hard bound so a
+    // complete green run is possible without permitting an unbounded process.
+    timeout: 35 * 60 * 1_000,
     windowsHide: true,
     stdio: inherit ? 'inherit' : undefined,
   })
