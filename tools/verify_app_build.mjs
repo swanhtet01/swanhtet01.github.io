@@ -35,6 +35,7 @@ let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let shopBusinessTemplateRuntimeChecks = 0
+let managedGuidedOnboardingCopyRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
 let shopOperatingFlowRuntimeChecks = 0
@@ -3045,7 +3046,13 @@ const productOutcomeIndex = productOnboardingPageSource.indexOf('First useful re
 const productWorkspaceIndex = productOnboardingPageSource.indexOf('onboardingJourney.actionLabel', productOutcomeIndex)
 const productBoundaryIndex = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.', productWorkspaceIndex)
 const productRepeatEntryIndex = productOnboardingPageSource.indexOf('if (workspaceStarted) {')
-const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce') {", productRepeatEntryIndex)
+// Pinned WITH their managedIdentity guards, so this contract also fails if a guard is removed.
+// The browser-local Shop and Plant provisioners write to window.localStorage, which a managed
+// workspace never reads; running them for a signed-in owner reported a trade catalog, or a job
+// and floor, as installed when it was not. See hq/research/MANAGED-TEMPLATE-PROVISIONING.md and
+// verifyManagedGuidedOnboardingCopyRuntime below.
+const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce' && !managedIdentity) {", productRepeatEntryIndex)
+const productPlantProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'production' && !managedIdentity) {", productRepeatEntryIndex)
 if (settingsAdvancedIndex < 0
   || settingsRestorePointIndex < settingsAdvancedIndex
   || !settingsPageSource.includes('className="setup-complete settings-restore-point"')
@@ -3055,7 +3062,8 @@ if (settingsAdvancedIndex < 0
   || productWorkspaceIndex < productOutcomeIndex
   || productBoundaryIndex < productWorkspaceIndex
   || productRepeatEntryIndex < 0
-  || productProvisioningIndex < productRepeatEntryIndex) fail('product_setup_primary_action_hierarchy_wrong')
+  || productProvisioningIndex < productRepeatEntryIndex
+  || productPlantProvisioningIndex < productProvisioningIndex) fail('product_setup_primary_action_hierarchy_wrong')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
@@ -5385,7 +5393,16 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes("firstTaskPath: '/plant/?tab=production'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/website/'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/ecommerce/'")
-  || !productOnboardingPageSource.includes('const onboardingJourney = onboardingJourneys[product]')
+  // The journey the screen advertises. A company account gets the browser-local journey with the
+  // managed overrides applied, because "Complete a sample sale" on "a realistic catalog and stock
+  // are ready" -- and "Run a sample production job" on "a scheduled job, materials, and line are
+  // ready" -- are false for it. There is no catalog to tap and no job to open. All three halves
+  // are pinned: the local journey is still the base, and each managed override is still applied
+  // on top of it.
+  || !productOnboardingPageSource.includes('const onboardingJourney = managedCommerce')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_SHOP_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_PLANT_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes(': onboardingJourneys[product]')
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
   || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup)')
@@ -7914,6 +7931,105 @@ async function verifyShopBusinessTemplateRuntime() {
     assertThrows(() => model.shopBusinessTemplate('unknown'), 'shop_business_unknown_template_accepted')
   } catch (error) {
     fail(`shop_business_template_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+// What a signed-in (managed) owner is told when she sets up Shop or Plant.
+//
+// This is the contract file for that screen, so the copy contract lives here beside the source
+// pins above rather than behind its own npm script. It is driven against the EXPORTED strings,
+// not a transcription of them: a transcription would pass while saying anything at all.
+//
+// The defect it locks out, measured end to end in hq/research/MANAGED-TEMPLATE-PROVISIONING.md
+// for Shop and re-measured the same way for Plant: startGuidedWorkspace ran the browser-local
+// provisioners for EVERY caller. They succeeded -- disposition 'installed', zero fetch calls --
+// against window.localStorage, which a managed workspace never reads, so the company workspace
+// stayed at version 0 and rendered 'managed-unprovisioned' while onboarding said otherwise.
+async function verifyManagedGuidedOnboardingCopyRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    managedGuidedOnboardingCopyRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts')).href}?managed-guided-onboarding-copy-verify=${Date.now()}`)
+
+    // Every claim of a completed install, in the wordings this product actually uses. A managed
+    // owner must not read any of them, because none of them are true for her.
+    const installClaims = [
+      /\binstalled\b/i,
+      /\bcatalog is ready\b/i,
+      /\bstarter data (is|was|has been) (added|installed|loaded)\b/i,
+      /\bsample records (are|were|have been) (added|created|installed)\b/i,
+      /\bwe (will )?add(ed)? realistic sample records\b/i,
+      /\byour catalog and stock are ready\b/i,
+      /\bsample (sale|production job)\b/i,
+      /\b(materials|line) are ready\b/i,
+    ]
+
+    for (const [label, copy] of [
+      ['managed_shop_notice', model.managedShopOnboardingNotice('Spa and beauty')],
+      ['managed_shop_hint', model.MANAGED_SHOP_ONBOARDING_HINT],
+      ['managed_shop_intro', model.MANAGED_SHOP_ONBOARDING_INTRO],
+      ['managed_shop_journey_outcome', model.MANAGED_SHOP_ONBOARDING_JOURNEY?.outcome],
+      ['managed_shop_journey_detail', model.MANAGED_SHOP_ONBOARDING_JOURNEY?.detail],
+      ['managed_shop_journey_action', model.MANAGED_SHOP_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_plant_notice', model.managedPlantOnboardingNotice('Food and beverage')],
+      ['managed_plant_hint', model.MANAGED_PLANT_ONBOARDING_HINT],
+      ['managed_plant_intro', model.MANAGED_PLANT_ONBOARDING_INTRO],
+      ['managed_plant_journey_outcome', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.outcome],
+      ['managed_plant_journey_detail', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.detail],
+      ['managed_plant_journey_action', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.actionLabel],
+    ]) {
+      assert(typeof copy === 'string' && copy.trim().length > 0, `${label}_missing`)
+      for (const claim of installClaims) assert(!claim.test(copy), `${label}_makes_install_claim:${claim}`)
+    }
+
+    // Shop: keeps the trade she picked, says plainly nothing was added, names the next step.
+    const shopNotice = model.managedShopOnboardingNotice('Spa and beauty')
+    assert(shopNotice.includes('Spa and beauty'), 'managed_shop_notice_drops_business_type')
+    assert(/first real item/i.test(shopNotice), 'managed_shop_notice_names_no_next_step')
+    assert(/nothing was added|no sample records|do not get sample records/i.test(shopNotice), 'managed_shop_notice_omits_the_absence')
+    assert(/Open Shop/i.test(shopNotice), 'managed_shop_notice_omits_destination')
+    assert(/first real item/i.test(model.MANAGED_SHOP_ONBOARDING_HINT), 'managed_shop_hint_hides_what_the_tap_does')
+    // Built from the argument, not a fixed string that happens to mention a spa.
+    assert(
+      model.managedShopOnboardingNotice('Bakery').includes('Bakery')
+      && !model.managedShopOnboardingNotice('Bakery').includes('Spa and beauty'),
+      'managed_shop_notice_ignores_business_type',
+    )
+
+    // Plant: the same three jobs, but it must name what a managed Plant ACTUALLY asks for next --
+    // one real job AND the machine that runs it, per CoreApp's "Create the real operating plan"
+    // boundary. Copy mirroring Shop's "first real item" would be a second, smaller lie about the
+    // very screen it routes her to, so "item" is refused outright.
+    const plantNotice = model.managedPlantOnboardingNotice('Food and beverage')
+    assert(plantNotice.includes('Food and beverage'), 'managed_plant_notice_drops_plant_type')
+    assert(/first real job/i.test(plantNotice), 'managed_plant_notice_names_no_next_step')
+    assert(/nothing was added|no jobs|do not get sample records/i.test(plantNotice), 'managed_plant_notice_omits_the_absence')
+    assert(/Open Plant/i.test(plantNotice), 'managed_plant_notice_omits_destination')
+    assert(!/\bitem\b/i.test(plantNotice), 'managed_plant_notice_promises_a_shop_item')
+    assert(/first real job/i.test(model.MANAGED_PLANT_ONBOARDING_HINT), 'managed_plant_hint_hides_what_the_tap_does')
+    assert(/machine/i.test(model.MANAGED_PLANT_ONBOARDING_JOURNEY.detail), 'managed_plant_journey_detail_omits_the_machine')
+    assert(!/\bitem\b/i.test(model.MANAGED_PLANT_ONBOARDING_JOURNEY.detail), 'managed_plant_journey_detail_promises_a_shop_item')
+    assert(
+      model.managedPlantOnboardingNotice('Apparel').includes('Apparel')
+      && !model.managedPlantOnboardingNotice('Apparel').includes('Food and beverage'),
+      'managed_plant_notice_ignores_plant_type',
+    )
+
+    // Neither journey may redirect her elsewhere: Shop and Plant each return their managed setup
+    // boundary before reading the requested tab, so the existing first-task paths already land
+    // her exactly where this copy promises.
+    assert(!('firstTaskPath' in model.MANAGED_SHOP_ONBOARDING_JOURNEY), 'managed_shop_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_PLANT_ONBOARDING_JOURNEY), 'managed_plant_journey_redirects')
+
+    // The two lanes must stay distinguishable. Copy-pasting Shop's wording into Plant is the
+    // most likely way this regresses, and it would read as correct.
+    assert(model.MANAGED_SHOP_ONBOARDING_HINT !== model.MANAGED_PLANT_ONBOARDING_HINT, 'managed_hints_are_identical')
+    assert(model.MANAGED_SHOP_ONBOARDING_INTRO !== model.MANAGED_PLANT_ONBOARDING_INTRO, 'managed_intros_are_identical')
+    assert(model.MANAGED_SHOP_ONBOARDING_JOURNEY.outcome !== model.MANAGED_PLANT_ONBOARDING_JOURNEY.outcome, 'managed_journey_outcomes_are_identical')
+  } catch (error) {
+    fail(`managed_guided_onboarding_copy_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -19639,6 +19755,7 @@ await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyShopServiceScheduleRuntime()
 await verifyShopBusinessTemplateRuntime()
+await verifyManagedGuidedOnboardingCopyRuntime()
 await verifyShopProductionDemandRuntime()
 await verifyShopDemandIntelligenceRuntime()
 try { await verifyDeviceImageStoreBlockedOpenRuntime() } catch (error) {
@@ -20313,4 +20430,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

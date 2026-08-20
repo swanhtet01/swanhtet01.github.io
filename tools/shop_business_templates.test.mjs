@@ -352,3 +352,128 @@ test('an order still open for payment reconciles with a present-clock proof', ()
   assert.ok(result !== null, 'an uncompleted order must accept a present-clock payment proof')
   assert.equal(result.orders.find((order) => order.id === pending.id).paymentStatus, 'reconciled')
 })
+
+// ==============================================================================================
+// The browser-local (signed-out) provisioning lane, executed end to end.
+//
+// Everything above drives the pure constructors. This block drives the REAL provisioner through
+// the REAL write boundary -- provisionLocalShopBusinessTemplateSample -> mutateCommerceWorkspace
+// -> window.localStorage -- because that is the lane a signed-out owner actually gets, and it is
+// the thing most likely to break silently while the managed lane is being made honest.
+//
+// Context: startGuidedWorkspace used to run these provisioners for EVERY caller, managed or not.
+// They write to window.localStorage, which a managed Shop never reads, so a signed-in owner was
+// told her trade catalog installed while the company workspace stayed at version 0 (measured in
+// hq/research/MANAGED-TEMPLATE-PROVISIONING.md). The guard that fixes that is pinned in
+// tools/verify_app_build.mjs. What is asserted HERE is the other half: that adding the guard
+// changed nothing whatsoever for the signed-out owner. These assertions were run against
+// unfixed origin/main first and were already green, so they lock existing behaviour rather than
+// describing new behaviour.
+const onboardingRuntime = await import(pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts')).href)
+
+function localStorageStub(entries = {}) {
+  const map = new Map(Object.entries(entries))
+  return {
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => { map.set(key, value) },
+    removeItem: (key) => { map.delete(key) },
+    map,
+  }
+}
+
+test('the browser-local lane still installs every trade catalog through the real write boundary', async () => {
+  // Discover the Commerce storage key by probing a real read rather than hardcoding it, the same
+  // way tools/test_plant_business_templates.mjs does.
+  const probe = { reads: [], getItem(key) { this.reads.push(key); return null }, setItem() {}, removeItem() {} }
+  onboardingRuntime.readLocalShopBusinessTemplateId(probe)
+  assert.ok(probe.reads.length > 0, 'trade detection reads from the store it is given')
+  const commerceKey = probe.reads[0]
+
+  const fetchCalls = []
+  const realFetch = globalThis.fetch
+  const realWindow = globalThis.window
+  const realLocalStorage = globalThis.localStorage
+  const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  globalThis.fetch = async (...args) => {
+    fetchCalls.push(String(args[0]))
+    throw new Error('the browser-local onboarding lane must not make network calls')
+  }
+  // Node's own `navigator` global is a read-only accessor (Node 21+), so it cannot be assigned.
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { locks: { request: async (_name, _options, callback) => callback() } },
+    configurable: true,
+  })
+
+  try {
+    // loadCommerceWorkspace() seeds the demo seed on empty storage before the template lands on
+    // top of it, so the installed catalog is the seed PLUS the template -- 20 items for a 15-item
+    // template. Derived here rather than hardcoded, so this stays a statement about the lane and
+    // not about today's seed size.
+    const seedItems = commerceModel.createSeedCommerce().items.length
+    assert.ok(seedItems > 0, `the demo seed still carries items, got ${seedItems}`)
+    assert.equal(model.shopBusinessTemplates.length, 10, 'all ten shipped trade templates are present')
+
+    for (const template of model.shopBusinessTemplates) {
+      const store = localStorageStub()
+      globalThis.window = { localStorage: store }
+      globalThis.localStorage = store
+
+      const disposition = await onboardingRuntime.provisionLocalShopBusinessTemplateSample(template.id)
+      assert.equal(disposition, 'installed', `${template.id}: a signed-out install still reports 'installed'`)
+
+      const written = store.map.get(commerceKey)
+      assert.ok(typeof written === 'string' && written.length > 0, `${template.id}: the browser-local Shop workspace was written`)
+      const stored = JSON.parse(written)
+      const state = stored.state ?? stored
+
+      assert.equal(
+        commerceModel.commerceWorkingSampleCatalogId(state), template.id,
+        `${template.id}: the installed catalog is stamped with this trade`,
+      )
+      assert.equal(
+        state.items.length, seedItems + template.catalog.length,
+        `${template.id}: the FULL template catalog landed -- expected ${seedItems} seed + ${template.catalog.length} template`,
+      )
+
+      for (const catalogItem of template.catalog) {
+        const item = state.items.find((candidate) => candidate.sku === catalogItem.sku)
+        assert.ok(item, `${template.id}: catalog item ${catalogItem.sku} landed`)
+        assert.equal(item.name, catalogItem.name, `${template.id}: ${catalogItem.sku} kept its name`)
+        assert.equal(item.price, catalogItem.priceMmk, `${template.id}: ${catalogItem.sku} kept its price`)
+        assert.equal(item.reorderAt, catalogItem.reorderAt, `${template.id}: ${catalogItem.sku} kept its reorder level`)
+
+        // Opening stock is evidenced as a movement, not written straight onto the item -- and the
+        // sample sales then draw against it, so onHand is opening MINUS what the sample sold.
+        // Both halves are asserted, because a regression that dropped the sales would still leave
+        // the opening movement looking right.
+        const movements = state.movements.filter((movement) => movement.sku === catalogItem.sku)
+        const opening = movements.filter((movement) => movement.kind === 'opening')
+        assert.equal(opening.length, 1, `${template.id}: ${catalogItem.sku} has exactly one opening movement`)
+        assert.equal(
+          opening[0].quantityDelta, catalogItem.openingStock,
+          `${template.id}: ${catalogItem.sku} opening movement is the template's opening stock`,
+        )
+        const expectedOnHand = movements.reduce((total, movement) => total + movement.quantityDelta, 0)
+        assert.equal(
+          item.onHand, expectedOnHand,
+          `${template.id}: ${catalogItem.sku} onHand reconciles to its own movements`,
+        )
+      }
+
+      // The sample activity is what turns a price list into a business the owner can see working.
+      assert.ok(state.orders.length > 0, `${template.id}: the sample activity still lands (orders)`)
+      assert.ok(
+        state.movements.length >= template.catalog.length,
+        `${template.id}: every template item still carries its opening stock movement`,
+      )
+      assert.ok(commerceModel.validateCommerceState(state), `${template.id}: the installed workspace is a valid commerce state`)
+    }
+
+    assert.equal(fetchCalls.length, 0, `the browser-local lane made no network calls, got ${JSON.stringify(fetchCalls)}`)
+  } finally {
+    globalThis.fetch = realFetch
+    globalThis.window = realWindow
+    globalThis.localStorage = realLocalStorage
+    if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator)
+  }
+})
