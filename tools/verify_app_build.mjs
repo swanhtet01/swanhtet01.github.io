@@ -4535,6 +4535,31 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
 if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !workspaceRuntimeSource.includes('result.version !== current.version + 1') || !workspaceRuntimeSource.includes('validateCommerceState(result.state)') || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'") || !workspaceRuntimeSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !workspaceRuntimeSource.includes('const latest = loadCommerceWorkspace()') || !workspaceRuntimeSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
 if ((workspaceRuntimeSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
 if (!workspaceRuntimeSource.includes('confirmation?: AccountableAction') || !workspaceRuntimeSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !workspaceRuntimeSource.includes('result.idempotent_replay') || !workspaceRuntimeSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
+// A frozen command proof blocks Cancel and Escape while the outcome is unknown. Once a submit has
+// come back with an error the outcome IS known -- nothing applied -- and the only remaining
+// control was "Retry same confirmation", which reuses the frozen timestamp and fails identically.
+// That left reloading the app as the operator's sole escape from the dialog.
+if (!coreSource.includes('const confirmationLocked = Boolean(action.confirmation) && !error')
+  || !coreSource.includes('disabled={busy || confirmationLocked} onClick={onCancel}')
+  || !coreSource.includes('if (!busy && !confirmationLocked) onCancel()')
+  || coreSource.includes('disabled={busy || Boolean(action.confirmation)} onClick={onCancel}')) fail('failed_confirmation_traps_operator_in_dialog')
+// Validator strings name array indexes and internal fields. Shop owners read this dialog at a
+// counter; the technical text stays available under a disclosure, never as the whole message.
+if (!coreSource.includes('function ownerFacingActionError(detail: string)')
+  || !coreSource.includes('{ownerFacingActionError(error)}')
+  || !coreSource.includes('className="action-error-detail"')
+  || !coreSource.includes('<summary>Technical detail</summary>')
+  || !coreCssSource.includes('.action-error-detail > summary { min-height: 2.75rem;')) fail('raw_validator_error_shown_to_shop_owner')
+// A completed order keeps payment at or before handover, so it can never accept a proof stamped
+// now. Offering "Reconcile payment" as its primary action promises what the transition refuses.
+if (!coreSource.includes("const reconcileIsPrimary = !settleSaleIsPrimary && needsPayment && order.status === 'ready'")
+  || !commerceSource.includes('(timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(order.completion.capturedAt) as bigint)) return null')) fail('completed_order_offers_a_payment_action_that_always_refuses')
+// The sample counter sales a trade template installs are money already taken. Staged 'pending'
+// they became permanently unclearable -- completed orders cannot be cancelled either -- and their
+// takings never reached a daily close.
+if (!commerceSource.includes('const paidAt = new Date(Date.parse(sale.recordedAt) + 5 * 60 * 1000).toISOString()')
+  || !commerceSource.includes('paymentReconciledAt: paidAt,')
+  || !commerceSource.includes('paymentReconciliationActionId: settleActionId,')) fail('working_sample_counter_sales_not_recorded_as_paid')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!commerceSource.includes('registerCommerceItem')
   || !commerceSource.includes('export function importCommerceCatalog')
@@ -19654,6 +19679,10 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // main's Shop close-anomaly projection, measures 3_076_280 bytes from a fresh
 // build. It remains 5_720 bytes below the existing 3_082_000 ceiling, so this
 // merge deliberately does not raise the artifact budget.
+// RE-MEASURED 2026-08-21 after integrating the day-one template reconciliation
+// fix with the Spa client journey: fresh dist/ is 3_080_236 bytes. The existing
+// ceiling remains unchanged; the separate initial-route and chunk limits below
+// continue to prevent hiding bundle growth inside this total.
 if (bytes > 3_082_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')

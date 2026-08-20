@@ -83,13 +83,27 @@ export function rebaseWorkingSampleActivity(
     const parsed = Date.parse(value)
     return Number.isFinite(parsed) ? new Date(parsed + provisioned - latest).toISOString() : value
   }
+  // Nothing already recorded may land after provisioning. An order requested in the future is
+  // refused by every accountable transition -- the owner presses the primary button and it does
+  // nothing -- until the clock catches up. Templates are authored by hand, so clamp here rather
+  // than trusting each one to keep its request instant behind its newest sale.
+  const clampToProvisioned = (value: string) => {
+    const parsed = Date.parse(value)
+    if (!Number.isFinite(parsed)) return value
+    const shifted = parsed + provisioned - latest
+    return new Date(Math.min(shifted, provisioned)).toISOString()
+  }
   const { pendingOrder } = activity
+  const requestedAt = clampToProvisioned(pendingOrder.requestedAt)
+  const promisedFor = shift(pendingOrder.promisedFor)
   return {
-    counterSales: activity.counterSales.map((sale) => ({ ...sale, recordedAt: shift(sale.recordedAt) })),
+    counterSales: activity.counterSales.map((sale) => ({ ...sale, recordedAt: clampToProvisioned(sale.recordedAt) })),
     pendingOrder: {
       ...pendingOrder,
-      requestedAt: shift(pendingOrder.requestedAt),
-      promisedFor: shift(pendingOrder.promisedFor),
+      requestedAt,
+      // The promise is the one instant that is meant to be ahead of the client. Keep the authored
+      // interval, but never let a clamped request overtake it.
+      promisedFor: Date.parse(promisedFor) > Date.parse(requestedAt) ? promisedFor : new Date(Date.parse(requestedAt) + 60 * 60 * 1000).toISOString(),
     },
   }
 }
@@ -245,7 +259,10 @@ const shopBusinessTemplateSeeds: readonly ShopBusinessTemplate[] = [
       id: 'fashion-order-1',
       customerName: 'Ma Thiri Win',
       contact: '09-799-666-777',
-      requestedAt: '2026-08-03T08:10:00.000Z',
+      // Must sit at or before the newest counter sale (07:50): rebaseWorkingSampleActivity anchors
+      // that sale to provisioning time, so a later request instant lands in the future and every
+      // payment action on the order silently refuses until the clock catches up.
+      requestedAt: '2026-08-03T06:40:00.000Z',
       promisedFor: '2026-08-06T04:00:00.000Z',
       status: 'pending',
       note: 'Uniform order for a tea shop team. Sizes confirmed by phone.',

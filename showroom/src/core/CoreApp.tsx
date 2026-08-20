@@ -892,6 +892,41 @@ function commerceOrderReturnLines(order: CommerceOrder) {
   })) ?? (order.itemSku ? [{ sku: order.itemSku, name: order.item, quantity: order.quantity }] : [])
 }
 
+// The record validators speak to engineers: 'orders[3].completion is outside the order
+// chronology.' A shop owner standing at a counter cannot act on an array index, and reading raw
+// internals makes a change that was correctly refused look like a broken app. Say what happened
+// and what it means for their money in their language, and keep the exact validator text one
+// disclosure away rather than swallowing it -- that string is what an engineer needs to diagnose.
+const ownerFacingActionErrors: readonly { match: RegExp; message: string }[] = [
+  {
+    match: /outside the .*chronology/i,
+    message: 'This would record the payment or handover out of order — a step would land before the one it follows. Nothing was changed, and the money already recorded is untouched.',
+  },
+  {
+    match: /\bdigest\b|\bhash\b|head digest/i,
+    message: 'The saved records did not match their own integrity check, so nothing was changed. Your existing records are untouched.',
+  },
+  {
+    match: /\bis invalid\b|\bmust be\b|\bcannot retain\b/i,
+    message: 'One of the details on this change did not pass the record checks, so nothing was changed.',
+  },
+]
+
+// Validator strings are recognisable by shape: an array index like `orders[3]` or a dotted
+// internal field path like `completion.capturedAt`. Most refusals in this app already raise
+// sentences written for the owner ('The Shop state changed ... Nothing was written.'), and
+// replacing those with a generic line would lose information rather than add it. Only rewrite
+// what actually reads as machine output.
+const technicalErrorShape = /\[\d+\]|\b[a-z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*\b/
+
+function ownerFacingActionError(detail: string) {
+  const known = ownerFacingActionErrors.find((entry) => entry.match.test(detail))
+  if (known) return known.message
+  return technicalErrorShape.test(detail)
+    ? 'This change was not applied, so nothing was recorded. Your existing records are untouched.'
+    : detail
+}
+
 function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
   action: PendingAccountableAction | null
   authenticatedActor?: { id: string; label: string }
@@ -934,6 +969,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
 
   if (!action) return null
   const isCounterConfirmation = action.presentation === 'counter'
+  // A frozen command proof normally blocks Cancel and Escape on purpose: the managed write may
+  // already have landed, so walking away could leave the operator believing nothing happened.
+  // That reasoning only holds while the outcome is unknown. Once a submit has come back with an
+  // error the outcome IS known -- nothing was applied -- and keeping the only exit as "Retry same
+  // confirmation" traps the operator in a dialog whose retry reuses the same frozen timestamp and
+  // therefore fails identically. Reloading the app was the sole escape. Let them dismiss it.
+  const confirmationLocked = Boolean(action.confirmation) && !error
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -960,7 +1002,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     }
   }
 
-  return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !action.confirmation) onCancel() }} ref={dialogRef}>
+  return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !confirmationLocked) onCancel() }} ref={dialogRef}>
     <div className="action-change"><span className="core-eyebrow">{isCounterConfirmation ? 'Review counter order' : 'Confirm change'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
@@ -970,8 +1012,14 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : bi(action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
-      {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
+      <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : bi(action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
+      {error
+        ? <div className="form-notice" data-action-gate="error" data-tone="error" role="alert">
+          <p>{ownerFacingActionError(error)}</p>
+          {action.confirmation ? <p>This confirmation keeps its original time stamp, so retrying it will refuse the same way. Cancel and start the change again.</p> : null}
+          <details className="action-error-detail"><summary>Technical detail</summary><code data-action-gate="error-detail">{error}</code></details>
+        </div>
+        : action.confirmation ? <p className="form-notice" role="status">This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.</p> : null}
     </form>
   </dialog>
 }
@@ -7050,7 +7098,12 @@ function OrderList({
     // any active unpaid order; payment-only reconciliation (pay-later customers)
     // stays reachable under More. Both remain the same recorded transitions.
     const settleSaleIsPrimary = needsPayment && active
-    const reconcileIsPrimary = !settleSaleIsPrimary && needsPayment && (order.status === 'ready' || order.status === 'completed')
+    // 'completed' is deliberately absent. The record keeps payment at or before handover, so a
+    // completed order cannot accept a payment proof stamped now -- offering it as the primary
+    // action promises the owner something the transition will always refuse. advanceCommerceOrder
+    // will not complete an unpaid order in the first place, so the app never reaches this state;
+    // only workspaces provisioned before the sample installer was fixed still carry it.
+    const reconcileIsPrimary = !settleSaleIsPrimary && needsPayment && order.status === 'ready'
     // No settle-sale guard needed here: a refund is only ever due on a cancelled
     // order, and the settle primary only shows on an active one.
     const settleRefundIsPrimary = !reconcileIsPrimary && order.refundStatus === 'due'
