@@ -428,7 +428,26 @@ mutation privilege, not merely decline to require them.**
    `INSERT`, `UPDATE`, or `DELETE` on any billing table is refused outright.
 3. Keep unconditional, exactly as today: the refusal of the two runtime role
    names, the read-only-transaction assertion, and the three `SELECT` checks.
-4. Only then gate the privileged-role assertion on `require_write_privilege`.
+4. ~~Only then gate the privileged-role assertion on `require_write_privilege`.~~
+   **WITHDRAWN 2026-08-20 — do NOT implement this step. It is unsafe, and it
+   was measured, not argued.** The v12 migration puts `force row level
+   security` on all three billing tables with no policies
+   (`20260817090000_private_trial_backend_v12_billing_rail.sql:221-226`, pinned
+   independently by `tests/test_database_activation_contract.py:337-341`), and
+   forced RLS is **not** bypassed by the table owner — only by
+   `rolsuper`/`rolbypassrls`, which is precisely what that assertion probes. On
+   a live PostgreSQL server, a `nosuperuser nobypassrls` role holding `SELECT`
+   on all three tables read **0 of 1** seeded rows. Gated, such a role would
+   connect cleanly and `get_billing_state` would report a paid-up workspace as
+   having no invoices, `entitlement.status: "none"`, `premiumUnlocked: false`
+   and an **empty overdue report** — a silent under-report of money owed. That
+   is strictly worse than a refusal, and it is the exact revenue leakage
+   `_overdue_report` exists to surface. The assertion therefore stays
+   unconditional, with its own distinct message.
+   **Consequence for A2's bounded read role:** it must be `BYPASSRLS` with no
+   mutation grant — it reads everything and mutates nothing. What bounds the
+   credential is the mutation refusal in step 2, not this assertion. Steps 1-3
+   stand as written and are implemented in PR #506.
 
 **This mirrors a pattern the file already contains.** The `runtime_role_denied`
 probe (`:500-512`) already does exactly this shape — `bool_and` over
