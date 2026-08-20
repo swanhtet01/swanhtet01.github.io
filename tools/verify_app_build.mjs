@@ -317,7 +317,11 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   // The schedule words belong to the pack: a restaurant books reservations and a
   // school books classes. A literal "appointment" in the UI is the regression.
   || !shopServiceScheduleSource.includes('export function shopScheduleVocabulary(')
+  || !shopServiceScheduleSource.includes('export function shopServiceSaleSku(')
   || !shopServiceScheduleUiSource.includes('shopScheduleVocabulary(schedule?.industryPackId ?? ')
+  || !shopServiceScheduleUiSource.includes('shopServiceSaleSku(schedule.industryPackId, booking.serviceId)')
+  || !shopServiceScheduleUiSource.includes('Charge at counter')
+  || !shopServiceScheduleUiSource.includes('shopCounterSearch: saleSku')
   || !shopServiceScheduleUiSource.includes('{vocabulary.holdAction}')
   || shopServiceScheduleUiSource.split('\n').some((line) => !line.trimStart().startsWith('//') && /appointment/i.test(line))
   || !shopServiceScheduleUiSource.includes('const agenda = projection.upcoming.length ? projection.upcoming : projection.today')
@@ -330,6 +334,8 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleUiSource.includes("scrollIntoView({ block: 'start' })")
   || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
   || !coreSource.includes("initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}")
+  || !coreSource.includes('const [query, setQuery] = useState(initialQuery)')
+  || !coreSource.includes('restoredDraft?.customer || initialCustomer')
   || !coreCssSource.includes('.service-booking-form')
   || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'supabase', 'openai', 'anthropic'].some((marker) => `${shopServiceScheduleSource}\n${shopServiceScheduleUiSource}`.toLowerCase().includes(marker.toLowerCase()))) fail('shop_service_schedule_crossed_external_boundary')
@@ -12001,8 +12007,11 @@ async function verifyCommerceRuntime() {
       items: cafeSampleItems,
       capturedAt: '2026-07-23T09:00:00.000Z',
     })
-    assert(cafeWorkingSample?.items.length === model.createSeedCommerce().items.length + 2
+    assert(cafeWorkingSample?.items.length === cafeSampleItems.length
       && cafeWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
+      && !cafeWorkingSample.items.some((item) => item.sku.startsWith('SM-'))
+      && cafeWorkingSample.orders.length === 0
+      && cafeWorkingSample.purchaseOrders.length === 0
       && model.commerceWorkingSampleCatalogId(cafeWorkingSample) === 'cafe',
     'commerce_working_sample_was_not_installed_or_identified')
     const replayedCafeWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {

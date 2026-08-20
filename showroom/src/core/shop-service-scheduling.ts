@@ -257,6 +257,26 @@ export function shopIndustryPack(id: ShopIndustryPackId) {
   return pack
 }
 
+// Appointment scheduling and counter sales remain separate accountable books. This map provides
+// only a navigation hint from a reviewed Spa service to its exact sellable catalog row; it never
+// creates an order, records payment, advances a booking, or guesses a custom service SKU.
+const spaServiceSaleSkus: Readonly<Record<string, string>> = {
+  'service-consultation': 'SPA-SVC-CONSULT',
+  'service-session': 'SPA-SVC-MASSAGE',
+  'service-oil-massage': 'SPA-SVC-OIL',
+  'service-foot-massage': 'SPA-SVC-FOOT',
+  'service-facial': 'SPA-SVC-FACIAL',
+  'service-body-scrub': 'SPA-SVC-SCRUB',
+  'service-herbal-steam': 'SPA-SVC-STEAM',
+}
+
+export function shopServiceSaleSku(industryPackId: ShopIndustryPackId, serviceId: string) {
+  if (industryPackId !== 'spa') return null
+  return Object.prototype.hasOwnProperty.call(spaServiceSaleSkus, serviceId)
+    ? spaServiceSaleSkus[serviceId] ?? null
+    : null
+}
+
 const fallbackScheduleVocabulary: ShopScheduleVocabulary = { plural: 'Bookings', singular: 'booking', holdAction: 'Hold a booking' }
 
 // The schedule screen reads this while rendering, so an unrecognised pack has to

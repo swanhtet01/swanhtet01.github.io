@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router'
 
 import {
   ManagedTrialError,
@@ -20,6 +21,7 @@ import {
   registerShopServiceResource,
   scheduleShopServiceBooking,
   shopScheduleVocabulary,
+  shopServiceSaleSku,
   type ShopServiceBookingStatus,
   type ShopServiceSchedule,
 } from './shop-service-scheduling'
@@ -283,10 +285,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
         {agenda.length ? agenda.slice(0, 12).map((booking) => {
           const service = serviceById.get(booking.serviceId)
           const resource = resourceById.get(booking.resourceId)
+          const saleSku = shopServiceSaleSku(schedule.industryPackId, booking.serviceId)
           return <article key={booking.id}>
             <time dateTime={booking.startsAt}><strong>{new Date(booking.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong><small>{new Date(booking.startsAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></time>
             <div><strong>{booking.customerName}</strong><small>{service?.name} · {resource?.name} · {booking.contact}</small>{booking.note ? <em>{booking.note}</em> : null}</div>
-            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
+            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{booking.status === 'checked_in' && saleSku ? <Link className="core-button compact" state={{ shopCounterCustomer: booking.customerName, shopCounterSearch: saleSku }} to="/shop/?tab=counter">Charge at counter</Link> : null}{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
           </article>
         }) : <p className="form-notice">Hold the first {vocabulary.singular} above. Nothing is sent to the customer or an external calendar.</p>}
       </section>

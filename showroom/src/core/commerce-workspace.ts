@@ -6468,9 +6468,35 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
       return null
     }
   }
-  const seedAnchor = commerceSeedAnchor(base)
+  const policySeedCapturedAt = (base.promotionPolicies ?? []).find(
+    (policy) => policy.proof.actionId === 'ACT-DEMO-PROMOTION-WELCOME',
+  )?.proof.capturedAt
+  const policySeedAnchor = policySeedCapturedAt ? Date.parse(policySeedCapturedAt) : Number.NaN
+  const seedAnchor = commerceSeedAnchor(base) ?? (Number.isFinite(policySeedAnchor) ? policySeedAnchor : null)
   if (seedAnchor === null) return null
-  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce(seedAnchor))) return null
+  const seed = createSeedCommerce(seedAnchor)
+  let cleanClientBase: CommerceState
+  try {
+    cleanClientBase = validateCommerceState({
+      ...seed,
+      items: [],
+      orders: [],
+      movements: [],
+      catalogBaselines: [],
+      purchaseBudgetEnvelopes: [],
+      purchaseOrders: [],
+    })
+  } catch {
+    return null
+  }
+  if (JSON.stringify(base) !== JSON.stringify(seed)
+    && JSON.stringify(base) !== JSON.stringify(cleanClientBase)) return null
+  // A selected client template is the workspace, not an extra category inside SuperMega's
+  // generic demo shop. Once the exact, untouched seed has been proven above, remove its products,
+  // orders, stock evidence, catalog baselines, and procurement example before registering the
+  // client rows. Reusable checkout policies remain available to Ecommerce. Any owner-modified
+  // workspace still fails the exact-seed comparison and is preserved unchanged.
+  base = cleanClientBase
   if (requestedItems.some((item) => base.items.some((existing) => existing.sku === item.sku))) return null
 
   let next = base

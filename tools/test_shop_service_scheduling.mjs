@@ -20,7 +20,7 @@ const bundle = await build({
   stdin: {
     contents: `export {
       createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
-      validateShopServiceSchedule, projectShopServiceSchedule,
+      validateShopServiceSchedule, projectShopServiceSchedule, shopServiceSaleSku,
     } from './shop-service-scheduling.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/scheduling-test-entry.ts',
@@ -35,7 +35,7 @@ const bundle = await build({
 
 const {
   createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
-  validateShopServiceSchedule, projectShopServiceSchedule,
+  validateShopServiceSchedule, projectShopServiceSchedule, shopServiceSaleSku,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -52,6 +52,10 @@ const schedule = createShopServiceSchedule('spa')
 check(schedule.services.length > 0, 'the spa pack ships services')
 check(schedule.resources.length > 0, 'and resources to deliver them')
 check(schedule.bookings.length === 0, 'with an empty appointment book')
+check(shopServiceSaleSku('spa', 'service-session') === 'SPA-SVC-MASSAGE', 'a reviewed Spa treatment maps to its exact counter SKU')
+check(shopServiceSaleSku('spa', 'service-herbal-steam') === 'SPA-SVC-STEAM', 'the Spa map includes the complete treatment menu')
+check(shopServiceSaleSku('spa', 'custom-service') === null, 'a custom Spa service is never guessed')
+check(shopServiceSaleSku('gym', 'service-session') === null, 'another industry never inherits the Spa mapping')
 
 const service = schedule.services[0]
 const resource = schedule.resources[0]

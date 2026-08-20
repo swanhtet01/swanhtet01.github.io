@@ -121,6 +121,10 @@ test('catalog installs into a fresh commerce workspace as a working sample', asy
     })
     assert.ok(installed, `${template.id} did not install`)
     assert.equal(commerce.commerceWorkingSampleCatalogId(installed), template.id)
+    assert.equal(installed.items.length, template.catalog.length, `${template.id} must not retain generic seed products`)
+    assert.ok(!installed.items.some((item) => item.sku.startsWith('SM-')), `${template.id} retained a generic seed SKU`)
+    assert.ok(!installed.orders.some((order) => /^ORD-10(?:39|41|42)$/.test(order.id)), `${template.id} retained generic seed orders`)
+    assert.equal(installed.purchaseOrders.length, 0, `${template.id} retained the generic procurement example`)
     for (const item of template.catalog) {
       const stored = installed.items.find((candidate) => candidate.sku === item.sku)
       assert.ok(stored, `${template.id} missing ${item.sku}`)

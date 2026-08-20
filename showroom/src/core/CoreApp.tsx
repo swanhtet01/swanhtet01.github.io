@@ -997,6 +997,8 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
   const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
   const ecommerceOrderRescheduleNavigationIntent = (location.state as { ecommerceOrderRescheduleIntent?: EcommerceOrderRescheduleIntent } | null)?.ecommerceOrderRescheduleIntent ?? null
+  const shopCounterSearch = (location.state as { shopCounterSearch?: string } | null)?.shopCounterSearch?.trim().slice(0, 80) ?? ''
+  const shopCounterCustomer = (location.state as { shopCounterCustomer?: string } | null)?.shopCounterCustomer?.trim().slice(0, 120) ?? ''
   const requestedSource = searchParams.get('source')
   const requestedRequestId = searchParams.get('request')
   const view = product
@@ -1032,7 +1034,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1063,9 +1065,11 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, productImageScope, sampleCatalogActive }: {
+function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, productImageScope, sampleCatalogActive }: {
   disabled: boolean
   industryPack: ShopIndustryPack | null
+  initialCustomer: string
+  initialQuery: string
   items: CommerceItem[]
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
@@ -1077,9 +1081,9 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoin
 }) {
   const [restoredDraft] = useState(readShopCounterDraft)
   const [cart, setCart] = useState<Record<string, number>>(() => restoredDraft?.cart ?? {})
-  const [customer, setCustomer] = useState(() => restoredDraft?.customer ?? '')
+  const [customer, setCustomer] = useState(() => restoredDraft?.customer || initialCustomer)
   const [payment, setPayment] = useState(() => restoredDraft?.payment ?? 'Cash')
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
   const [cartOpen, setCartOpen] = useState(false)
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -1354,7 +1358,7 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, shopCounterCustomer, shopCounterSearch, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
@@ -1365,6 +1369,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
   requestedSource: string | null
+  shopCounterCustomer: string
+  shopCounterSearch: string
   tab: CommerceTab
 }) {
   const navigate = useNavigate()
@@ -6301,7 +6307,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
     {actionGate}
   </div>
 
