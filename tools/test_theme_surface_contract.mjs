@@ -354,4 +354,73 @@ for (const [selector, reason] of UNCOVERED_LIGHT_SURFACES) {
   )
 }
 
-console.log(`theme surface contract: ${checks} checks passed (${surfacesScanned} light surfaces scanned, ${THEME_BLIND.size} documented exceptions, ${UNCOVERED_LIGHT_SURFACES.size} parked defects)`)
+// --- the banner-tint cascade trap, pinned -----------------------------------------------
+//
+// A defect this file's scan above CANNOT see, because it is not a light surface with a
+// missing dark counterpart -- it is a dark counterpart that exists and wins when it should
+// not.
+//
+// The Shop's storage and write banners paint their warning tint from plain 0-2-0 rules
+// (`.production-mode-banner[data-write="blocked"]`, `.storage-durability-banner[...]`).
+// `.theme-dark .production-mode-banner` is ALSO 0-2-0 and sat ~890 lines later in
+// core-app.css, so while it declared `background` and `border-color` it won on source order
+// alone and all three tints rendered as a plain untinted panel in dark mode -- measured in
+// the browser at #0d131b, byte-identical to an untinted banner, instead of amber or red.
+//
+// It never needed those two declarations: the banner's BASE rule already sets the same two
+// tokens (`var(--core-line)`, `var(--core-panel)`) and both retint themselves inside
+// .theme-dark, so the only declaration doing real work was the box-shadow. The fix removed
+// the redundant pair rather than escalating the tints to 0-3-0, because escalating repairs
+// the rules that exist today and leaves the trap armed for the next one anybody adds.
+//
+// So: a .theme-dark rule targeting the banner family may set anything EXCEPT the two
+// properties the tints use. Restoring either re-arms the trap silently -- nothing else in
+// this repo would notice, since the stylesheet still parses, the ratchets are unmoved and
+// the tint is translucent rather than a light surface the scan above reaches.
+const BANNER_FAMILY = ['.production-mode-banner', '.storage-durability-banner']
+const TINT_PROPERTIES = /(?:^|[;{\s])(?:background(?:-color)?|border-color)\s*:/
+
+const coreSource = readFileSync('showroom/src/core/core-app.css', 'utf8')
+  .replaceAll('\r\n', '\n')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+
+const bannerThemeRules = []
+for (const match of coreSource.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+  const prelude = match[1].trim()
+  if (!prelude || prelude.startsWith('@')) continue
+  for (const part of prelude.split(',')) {
+    const selector = part.trim().replace(/\s+/g, ' ')
+    if (!selector.startsWith('.theme-dark ')) continue
+    if (!BANNER_FAMILY.some((cls) => selector.includes(cls))) continue
+    bannerThemeRules.push({ selector, body: match[2] })
+  }
+}
+
+check(
+  bannerThemeRules.length > 0,
+  'the banner family still has a .theme-dark rule for this pin to hold to the contract',
+)
+for (const rule of bannerThemeRules) {
+  check(
+    !TINT_PROPERTIES.test(rule.body),
+    `"${rule.selector}" declares background or border-color. It is 0-2-0 and sits AFTER the banner tints, which are also 0-2-0, so it silently defeats them in dark mode -- the exact defect this pin exists for. Declare only what differs from the base rule; the base rule already sets both of these tokens and they retint themselves under .theme-dark.`,
+  )
+}
+
+// ...and the tints being protected must still exist, so the pin above cannot pass vacuously
+// once someone renames or deletes the rules it is guarding.
+const BANNER_TINTS = [
+  '.production-mode-banner[data-write="blocked"]',
+  '.storage-durability-banner[data-durability="evictable"]',
+  '.storage-durability-banner[data-durability="full"]',
+  '.storage-durability-banner[data-headroom="tight"]',
+  '.storage-durability-banner[data-headroom="urgent"]',
+]
+for (const selector of BANNER_TINTS) {
+  check(
+    declaredSelectors.has(selector),
+    `banner tint "${selector}" is still declared -- the .theme-dark pin above protects nothing without it`,
+  )
+}
+
+console.log(`theme surface contract: ${checks} checks passed (${surfacesScanned} light surfaces scanned, ${THEME_BLIND.size} documented exceptions, ${UNCOVERED_LIGHT_SURFACES.size} parked defects, ${bannerThemeRules.length} banner theme rules held clear of the tint properties)`)
