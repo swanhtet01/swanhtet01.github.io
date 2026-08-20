@@ -2640,6 +2640,12 @@ input, select, textarea { border-color: var(--core-field-line); }
 .appointment-till-list small { color: var(--core-quiet); font-size: var(--font-size-sm); }
 .appointment-till-list small[lang="my"] { color: var(--core-ink); font-size: var(--font-size-sm); line-height: 1.7; }
 
+/* Burmese treatment name at the counter. The appointment book has shown treatments in Burmese
+   since the packs were deepened; the till showed the same treatment in English. Myanmar script
+   needs more leading than Latin at the same size or the stacked diacritics collide, so the line
+   height is raised for this line only, and lang="my" lets the font stack pick a Myanmar face. */
+.shop-product-my { color: var(--core-ink); line-height: 1.7; }
+
 /* ============================================================================
    Design phase 3 — bottom-nav work modes, Shop slice. On phones the fixed
    bottom bar carries Shop's four task modes (Today / Sell / Orders / Stock,

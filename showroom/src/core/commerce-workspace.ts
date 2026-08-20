@@ -45,6 +45,19 @@ export const COMMERCE_LOCK = 'supermega-commerce-workspace-v2'
 export type CommerceItem = {
   sku: string
   name: string
+  // Burmese display name, carried alongside `name` rather than widening `name` to {en, my}:
+  // `name` is snapshotted onto every order line and printed on receipts, so changing its type
+  // would invalidate saved workspaces and stored orders.
+  //
+  // OPTIONAL, and it has to stay optional. Catalog items are PERSISTED under COMMERCE_KEY, and
+  // every catalog written before this field existed carries no Burmese name -- as does every
+  // catalog an owner imports from her own CSV, which has no column for one. Requiring it would
+  // turn an ordinary existing workspace into an unreadable one.
+  //
+  // Only rows that sell a bookable service ever receive it, from the pack's own translations via
+  // withShopServiceMyanmarNames. Retail goods have no Myanmar name anywhere in this codebase and
+  // must not be given machine-made ones.
+  nameMy?: string
   variant?: string
   onHand: number
   reorderAt: number
@@ -2517,6 +2530,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     itemSkus.push(sku)
     itemBySku.set(sku, candidate)
     canonicalText(candidate.name, `items[${index}].name`)
+    if (candidate.nameMy !== undefined) canonicalText(candidate.nameMy, `items[${index}].nameMy`)
     if (candidate.variant !== undefined) canonicalText(candidate.variant, `items[${index}].variant`)
     assertSafeInteger(candidate.onHand, `items[${index}].onHand`)
     assertSafeInteger(candidate.reorderAt, `items[${index}].reorderAt`)
@@ -6373,9 +6387,11 @@ export function registerCommerceItem(state: CommerceState, item: CommerceItem, p
   const sku = optionalText(item.sku)
   const name = optionalText(item.name)
   const variant = item.variant === undefined ? undefined : optionalText(item.variant)
+  const nameMy = item.nameMy === undefined ? undefined : optionalText(item.nameMy)
   if (!validProof(proof)
     || !sku || sku !== item.sku || sku.length > 80
     || !name || name !== item.name || name.length > 180
+    || (item.nameMy !== undefined && (nameMy !== item.nameMy || item.nameMy.length > 180))
     || (item.variant !== undefined && (variant !== item.variant || item.variant.length > 180))
     || !Number.isSafeInteger(item.onHand) || item.onHand < 0
     || !Number.isSafeInteger(item.reorderAt) || item.reorderAt < 0

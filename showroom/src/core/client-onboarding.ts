@@ -977,10 +977,17 @@ const shopIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
   // and at reorderAt 0 it never raises a stock alert or a close stock-exception. Prices match the
   // scheduling pack exactly so the counter and the appointment book cannot quote different
   // numbers for the same treatment.
-  spa: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSPA-SVC-CONSULT,Consultation 30 min,999,0,20000\r\nSPA-SVC-MASSAGE,Traditional Myanmar massage 60 min,999,0,45000\r\nSPA-SVC-OIL,Aromatic oil massage 90 min,999,0,65000\r\nSPA-SVC-FOOT,Foot massage 45 min,999,0,28000\r\nSPA-SVC-FACIAL,Facial treatment 45 min,999,0,38000\r\nSPA-SVC-SCRUB,Body scrub 60 min,999,0,42000\r\nSPA-SVC-STEAM,Herbal steam 30 min,999,0,18000\r\nSPA-OIL-100ML,Aromatic massage oil 100ml,36,12,15000\r\nSPA-COMPRESS,Herbal compress ball,24,8,7000\r\n',
+  //
+  // SPA-SVC-DEPOSIT is the restaurant pack's REST-SVC-DEPOSIT pattern rather than a new
+  // mechanism. paymentStatus is binary, so an order cannot be part-paid; a deposit taken as a
+  // counter sale is an ordinary order that the daily close already understands. It is a 10,000
+  // MMK UNIT and quantity carries the amount, which is why the unit is in the name -- the counter
+  // shows the name and nothing else would say so. Mirrors packServiceRows in
+  // products/shop/business-templates.ts, which the pairing guard pins to this file.
+  spa: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSPA-SVC-DEPOSIT,Treatment package deposit 10000 MMK,999,0,10000\r\nSPA-SVC-CONSULT,Consultation 30 min,999,0,20000\r\nSPA-SVC-MASSAGE,Traditional Myanmar massage 60 min,999,0,45000\r\nSPA-SVC-OIL,Aromatic oil massage 90 min,999,0,65000\r\nSPA-SVC-FOOT,Foot massage 45 min,999,0,28000\r\nSPA-SVC-FACIAL,Facial treatment 45 min,999,0,38000\r\nSPA-SVC-SCRUB,Body scrub 60 min,999,0,42000\r\nSPA-SVC-STEAM,Herbal steam 30 min,999,0,18000\r\nSPA-OIL-100ML,Aromatic massage oil 100ml,36,12,15000\r\nSPA-COMPRESS,Herbal compress ball,24,8,7000\r\n',
   // Same reasoning as spa above: a gym sells the session, not the shaker bottle. Prices mirror
   // the scheduling pack so a booked class and a counter sale cannot disagree.
-  gym: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nGYM-SVC-CONSULT,Fitness consultation 30 min,999,0,15000\r\nGYM-SVC-PT,Personal training 60 min,999,0,30000\r\nGYM-SVC-COMPOSITION,Body composition check 20 min,999,0,8000\r\nGYM-SVC-CLASS,Group class 60 min,999,0,12000\r\nGYM-SVC-YOGA,Yoga session 60 min,999,0,15000\r\nGYM-SVC-NUTRITION,Nutrition plan review 30 min,999,0,20000\r\nGYM-WHEY-1KG,Whey protein 1kg,18,6,145000\r\nGYM-SHAKER,Shaker bottle 700ml,40,12,9000\r\n',
+  gym: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nGYM-SVC-DEPOSIT,Training package deposit 10000 MMK,999,0,10000\r\nGYM-SVC-CONSULT,Fitness consultation 30 min,999,0,15000\r\nGYM-SVC-PT,Personal training 60 min,999,0,30000\r\nGYM-SVC-COMPOSITION,Body composition check 20 min,999,0,8000\r\nGYM-SVC-CLASS,Group class 60 min,999,0,12000\r\nGYM-SVC-YOGA,Yoga session 60 min,999,0,15000\r\nGYM-SVC-NUTRITION,Nutrition plan review 30 min,999,0,20000\r\nGYM-WHEY-1KG,Whey protein 1kg,18,6,145000\r\nGYM-SHAKER,Shaker bottle 700ml,40,12,9000\r\n',
   // School is the one pack carrying an extra contract, so its lessons are APPENDED rather than
   // listed first: the integrated demo blueprint requires the shop catalog SKUs to EQUAL the
   // ecommerce storefront SKUs in order, AND the SKU checklist example to stay SCHOOL-ENGLISH

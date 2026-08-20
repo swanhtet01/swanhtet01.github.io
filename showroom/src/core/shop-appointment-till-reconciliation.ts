@@ -1,4 +1,5 @@
 import { myanmarBusinessDate, type CommerceOrder, type CommerceState } from './commerce-workspace.ts'
+import { catalogNameSellsShopService, shopServiceForCatalogName } from './shop-service-catalog-pairing.ts'
 import { validateShopServiceSchedule, type ShopService, type ShopServiceBooking, type ShopServiceSchedule } from './shop-service-scheduling.ts'
 
 /**
@@ -57,29 +58,23 @@ export type ShopAppointmentTillReconciliation = {
 /**
  * Does this counter line sell that bookable treatment?
  *
- * The same rule test_industry_pack_sample_pairing.mjs already enforces between every pack
- * service and its catalog row: the catalog name either IS the service name or is the service
- * name followed by a qualifier -- "Traditional Myanmar massage" against "Traditional Myanmar
- * massage 60 min". Order lines snapshot the catalog name at sale time, so the rule carries over
- * to the till unchanged, and a service renamed in one place without the other stops matching in
- * the build before it stops matching for the owner.
+ * The rule itself is shared -- see shop-service-catalog-pairing.ts -- because the build-time
+ * pairing guard, the Burmese name wiring and this projection must never disagree about what
+ * "sells" means. Order lines snapshot the catalog name at sale time, so the rule that pairs a
+ * catalog row to a service pairs a sold line to it unchanged.
  *
- * PRICE IS DELIBERATELY NOT REQUIRED, and this is the one place this file departs from the
- * pairing test. The pairing test asserts a shipped invariant about seed data; this asks a
- * question about a real day. The harms are asymmetric. A gap this misses leaves the owner
- * exactly where she is today -- no worse. A gap this invents tells her a treatment was never
- * paid for when in fact she discounted it, comped it, or took it against a voucher, and the
- * obvious response to that is to charge the customer a second time. So a matched name at a
- * different price counts as rung up.
+ * PRICE IS DELIBERATELY NOT REQUIRED here, and this is where this file departs from the pairing
+ * test. That test asserts a shipped invariant about seed data; this asks a question about a real
+ * trading day, and the harms are asymmetric. A gap this misses leaves the owner exactly where she
+ * is today -- no worse. A gap this invents tells her a treatment was never paid for when in fact
+ * she discounted it, comped it, or took it against a voucher, and the obvious response to being
+ * told that is to charge the customer a second time.
  *
  * Name matching alone also avoids the failure the pairing guard recorded against itself: a
  * t-shirt satisfied "Personal shopping" purely because both cost 15,000 MMK. Price equality is
  * not evidence that two things are the same thing.
  */
-export function commerceLineSellsShopService(lineName: string, service: Pick<ShopService, 'name'>) {
-  if (typeof lineName !== 'string' || !service?.name) return false
-  return (lineName === service.name || lineName.startsWith(`${service.name} `)) && true
-}
+export const commerceLineSellsShopService = catalogNameSellsShopService
 
 type TillLine = { name: string; quantity: number }
 
@@ -115,12 +110,11 @@ export function projectShopAppointmentTillReconciliation(
   }
 
   // Only treatments actually completed today can be settled today, so only those are candidates
-  // for a line. Longest name wins where one service name prefixes another, so a single line is
-  // never counted twice.
+  // for a line. shopServiceForCatalogName resolves a line to exactly one of them, so a line is
+  // never counted against two treatments whose names share a prefix.
   const candidates = [...byService.keys()]
     .map((serviceId) => serviceById.get(serviceId))
     .filter((service): service is ShopService => Boolean(service))
-    .sort((left, right) => right.name.length - left.name.length)
 
   const chargedByService = new Map<string, number>()
   for (const order of commerce?.orders ?? []) {
@@ -130,7 +124,7 @@ export function projectShopAppointmentTillReconciliation(
     if (typeof order.createdAt !== 'string' || myanmarBusinessDate(order.createdAt) !== businessDate) continue
     for (const line of orderTillLines(order)) {
       if (line.quantity <= 0) continue
-      const service = candidates.find((candidate) => commerceLineSellsShopService(line.name, candidate))
+      const service = shopServiceForCatalogName(line.name, candidates)
       if (!service) continue
       chargedByService.set(service.id, (chargedByService.get(service.id) ?? 0) + line.quantity)
     }
