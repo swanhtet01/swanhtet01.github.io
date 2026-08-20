@@ -523,15 +523,34 @@ tests covering a read role that wrongly holds each of the 21 refused cells.
 **The write path deliberately does NOT refuse `TRUNCATE`,** and the reasoning
 is worth keeping because it looks like an inconsistency. That role is
 superuser-class by construction, and `has_table_privilege` reports every
-privilege true for a superuser regardless of `GRANT` — measured 18/18
-non-`SELECT` held **on PostgreSQL 16**. The PG17 figure is 21/21 by the same
-mechanism, but that is inference from how `has_table_privilege` treats
-superusers, **not** a measurement anyone here has taken; the harness that
-produced the 18/18 could not run on 17. Refusing `TRUNCATE` there would reject
-every superuser admin role and brick all six mutation commands. The intent — the ledger is
-append-only, so the write role has no business truncating — is right; it
-simply cannot be enforced through this probe. Pinned by a test so the next
-lane does not "fix" it.
+privilege true for a superuser regardless of `GRANT` — **measured 21/21
+non-`SELECT` held on a real PostgreSQL 17.10 server.** Refusing `TRUNCATE` or
+`MAINTAIN` there would reject every superuser administrative role and brick all
+six mutation commands. The intent — the ledger is append-only, so the write
+role has no business truncating — is right; it simply cannot be enforced
+through this probe, and the read path owns that bound instead. Pinned by a test
+so the next lane does not "fix" it.
+
+**The harness now runs on the version the code requires.** An earlier revision
+of this section carried the 21/21 as *inference*, because the harness ran on
+PG16 and overrode `server_version_num`. That override is gone: PG17 server
+binaries are reachable through npm (`@embedded-postgres/linux-x64`) even though
+the PGDG apt repo is proxy-blocked, so the probe row is passed through
+untouched and `billing_rail.py:693`'s version assertion is **live during the
+harness rather than silenced by it**. Every earlier finding was re-run on
+17.10 rather than argued to be version-stable: forced-RLS row blindness (0 of 1
+seeded rows), the `TRUNCATE` exploit (all three tables to 0 rows while `DELETE`
+was denied), and `TRIGGER` voiding an insert (rowcount 0) all reproduce. This
+is a scratch test cluster only — it does **not** touch the PG17 rehearsal
+cascade, which still needs the Windows EDB archive.
+
+**The enumeration is now a mechanism, not a checked fact.** The eight
+privileges were read from the server's own catalog (`grant all on table …`
+then `aclexplode(relacl)`), which also confirms why this kept happening: PG16
+reports seven and errors outright on `has_table_privilege(…, 'MAINTAIN')`. The
+harness now asserts on every run that the probed set equals what the live
+server's catalog defines, and a unit test pins the eight. A fifth narrowing
+fails loudly instead of shipping.
 
 **Prerequisite, and it is a real one.** The founder must create that bounded
 read role on the target and place its URL in a service secret. Two conditions
