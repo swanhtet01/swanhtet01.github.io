@@ -28,7 +28,7 @@ import {
   type ShopLoyaltySettings,
 } from './shop-loyalty'
 import { useManagedIdentity } from './workspace-runtime'
-import { loadCommerceWorkspace } from './commerce-workspace'
+import { commerceWorkspaceArchive, commerceWorkspaceArchiveCsv, loadCommerceWorkspace } from './commerce-workspace'
 import { loadProductionWorkspace, productionMaintenanceDueQueue } from './production-workspace'
 import { projectShopOrderProductionStatus } from './shop-production-status'
 import { projectCrossProductOperatingSummary } from './cross-product-report'
@@ -531,6 +531,8 @@ export function WorkspaceControlsPage() {
   const [restoreBusy, setRestoreBusy] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
   const [resetBusy, setResetBusy] = useState(false)
+  const [archiveBusy, setArchiveBusy] = useState(false)
+  const [archiveNotice, setArchiveNotice] = useState('')
   const backupDownload = useMemo(() => ({ href: backupHref(currentBackup), filename: backupFilename(currentBackup) }), [currentBackup])
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : 0
   const statusRows: Array<readonly [string, string]> = [
@@ -593,6 +595,55 @@ export function WorkspaceControlsPage() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The previous workspace could not be restored safely.')
       setRestoreBusy(false)
+    }
+  }
+
+  // Built on demand rather than in a memo. At the workspace ceiling the archive is ~700 KB of
+  // CSV over ~1,250 sales and costs about 80 ms on a desktop -- fine for a button press,
+  // wasteful on every render of a settings page, and this runs on cheap Android tablets.
+  function downloadSalesArchive() {
+    if (archiveBusy) return
+    setArchiveBusy(true)
+    try {
+      const commerce = loadCommerceWorkspace().state
+      const archive = commerceWorkspaceArchive(commerce, new Date().toISOString())
+      if (!archive) {
+        setArchiveNotice('This device could not produce a complete archive, so no file was created. Nothing was changed.')
+        return
+      }
+      if (!archive.orderCount && !archive.closeCount) {
+        setArchiveNotice('There are no sales on this device to archive yet.')
+        return
+      }
+      const filename = `supermega-shop-archive-${archive.generatedAt.slice(0, 10)}-${archive.digest.slice(7, 15)}.csv`
+      // A Blob, not a data: URL. Every other export on this page fits in a memoised data URL,
+      // but this one is ~700 KB at the ceiling and encodeURIComponent would make a ~3.5 MB
+      // string of it -- the shop nearest the ceiling is the one least able to afford that.
+      // The U+FEFF byte-order mark every other CSV in this app carries, so a spreadsheet
+      // opens Burmese product and customer names as UTF-8 instead of mojibake.
+      const url = URL.createObjectURL(new Blob([`\uFEFF${commerceWorkspaceArchiveCsv(archive)}`], { type: 'text/csv;charset=utf-8' }))
+      const anchor = document.createElement('a')
+      anchor.download = filename
+      anchor.href = url
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      // Every number here is read back off the artifact that was just written, so the sentence
+      // cannot drift from the file. The uncovered count is stated even when it is the boring
+      // case, because "nothing is missing" is only worth saying if the same sentence would
+      // have said so when something was.
+      const notArchived = archive.closeCount - archive.archivedCloseCount
+      setArchiveNotice([
+        `${archive.archivedCloseCount} closed ${archive.archivedCloseCount === 1 ? 'day' : 'days'} and ${archive.archivedOrderCount} ${archive.archivedOrderCount === 1 ? 'sale' : 'sales'} saved to ${filename}.`,
+        archive.uncoveredOrderCount
+          ? `${archive.uncoveredOrderCount} ${archive.uncoveredOrderCount === 1 ? 'sale is' : 'sales are'} not on a closed day yet; ${archive.uncoveredOrderCount === 1 ? 'it is' : 'they are'} listed at the end of the file so nothing is left out.`
+          : 'Every sale on this device is on a closed day and is in the file.',
+        notArchived ? `${notArchived} older ${notArchived === 1 ? 'close was' : 'closes were'} taken before this device recorded who closed the day, so ${notArchived === 1 ? 'its' : 'their'} sales are listed one by one instead.` : '',
+        'Keep this file somewhere other than this device. Shop cannot load it back in.',
+      ].filter(Boolean).join(' '))
+    } catch (error) {
+      setArchiveNotice(error instanceof Error ? error.message : 'The sales archive could not be created.')
+    } finally {
+      setArchiveBusy(false)
     }
   }
 
@@ -681,6 +732,19 @@ export function WorkspaceControlsPage() {
             {currentBackup ? <a className="core-button" download={backupDownload.filename} href={backupDownload.href}>Download workspace backup</a> : <button className="core-button" disabled type="button">Backup unavailable</button>}
             <label className="core-button">Load backup file<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadBackupFile(file) }} type="file" /></label>
           </div>
+        </section>
+
+        {/* The sales archive sits BESIDE the workspace backup, not instead of it, and the copy
+            names the difference because the two files answer different questions. The backup
+            is the only one Shop can read back; the archive is the only one a person can read.
+            An owner told to "export a backup" by the storage warning needs to know which file
+            does which, or she will keep the wrong one. */}
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Sales archive</span><h2>Keep a readable copy of your sales.</h2><p>This file lists every trading day you have closed on this device, one row for each sale, as a spreadsheet you or your accountant can open anywhere. It is a record to keep and read — Shop cannot load it back in. To be able to put this device back the way it was, use Download workspace backup above; that is the file Shop can read.</p></div>
+          <div className="trial-actions">
+            <button className="core-button" disabled={archiveBusy} onClick={() => downloadSalesArchive()} type="button">{archiveBusy ? 'Preparing...' : 'Download sales archive'}</button>
+          </div>
+          {archiveNotice ? <p aria-live="polite" className="form-notice" role="status">{archiveNotice}</p> : null}
         </section>
 
         {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} records</small></div><button className="core-button primary" disabled={restoreBusy} onClick={restoreWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}
