@@ -197,3 +197,11 @@ check(csv.split('\n').filter((line) => line.trim()).length >= exported.orders.le
 // the count is not mistaken for coverage of that clause.
 
 console.log(`commerce daily close contract: ${checks} checks passed`)
+
+// The anomaly-flag projection reads nothing but closes, so its executable
+// contract belongs to this gate step. It cannot be its own step -- every step is
+// an npm script in package.json's app:verify chain and package.json is
+// digest-bound (rehearsal cascade) -- so it is imported here rather than left as
+// a file no gate runs. It asserts and prints its own count, and throws on
+// failure, which fails this step.
+await import('./test_shop_close_anomaly.mjs')

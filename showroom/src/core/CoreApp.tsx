@@ -262,6 +262,7 @@ import {
   type ShopIndustryPack,
 } from './shop-service-scheduling'
 import { decideShopNextAction } from './shop-next-action'
+import { projectShopCloseAnomalyFlags, type ShopCloseAnomalyFlag, type ShopCloseAnomalyFlags } from './shop-close-anomaly-flags'
 import { lockedCapabilityNotice } from './capability-tiers'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
@@ -1644,6 +1645,43 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }, [commerce])
   const [receiptAck, setReceiptAck] = useState<CommerceOrderAcknowledgement | null>(null)
   const latestClose = commerce.closes.find((close) => close.operator)
+  // Roadmap §2 item 5 — anomaly flags on the close. A pure projection over
+  // closes already saved (shop-close-anomaly-flags.ts): nothing is stored, no
+  // clock is read, and guided-sample closes are excluded by actionId prefix.
+  const closeAnomaly = useMemo(() => projectShopCloseAnomalyFlags(commerce), [commerce])
+  // The projection stays numeric; the sentences live here so they can use the
+  // shell's own money format. Each one states no more than the numbers behind
+  // it: what happened, in which direction, against which baseline, and the one
+  // thing worth doing about it. The baseline phrase is exact about WHICH
+  // closes were compared — `baselineDays` counts only the closes that recorded
+  // that measure, so it may be fewer than the window, and saying "your last N
+  // closes" when it is fewer would name a set that was never looked at.
+  const closeAnomalyBaselinePhrase = (flag: ShopCloseAnomalyFlag) => flag.baselineDays === flag.windowDays
+    ? `more than on any of your last ${flag.windowDays} closes`
+    : `more than on any of the ${flag.baselineDays} earlier closes that recorded it`
+  const closeAnomalySentence = (flag: ShopCloseAnomalyFlag) => {
+    // The percentage is recomputed from the two figures the projection exposes
+    // rather than from the already-rounded multiple, so an owner who divides
+    // one by the other gets the number on screen.
+    const percentOfUsual = flag.baselineMedian > 0 ? Math.round((flag.todayValue / flag.baselineMedian) * 100) : 0
+    if (flag.measure === 'cash_variance') {
+      const versus = flag.basis === 'multiple_of_median' ? `about ${flag.multipleOfMedian}× your usual difference` : closeAnomalyBaselinePhrase(flag)
+      return `The drawer was off by ${formatMoney(flag.todayValue)} — ${versus}. Worth counting it again against this close.`
+    }
+    if (flag.measure === 'unpaid_orders') {
+      const versus = flag.basis === 'multiple_of_median' ? `about ${flag.multipleOfMedian}× your usual day` : closeAnomalyBaselinePhrase(flag)
+      return `${flag.todayValue} ${flag.todayValue === 1 ? 'order was' : 'orders were'} left unpaid — ${versus}. That is money still to collect.`
+    }
+    if (flag.direction === 'below') return `Takings were ${formatMoney(flag.todayValue)} — about ${percentOfUsual}% of your usual day. Worth checking every sale was rung up.`
+    return `Takings were ${formatMoney(flag.todayValue)} — about ${flag.multipleOfMedian}× your usual day. Worth checking nothing was keyed in twice or with an extra zero.`
+  }
+  // Named only for measures the projection actually compared. A measure that
+  // sat out is never spoken for.
+  const closeAnomalyComparedPhrase = (measures: ShopCloseAnomalyFlags['comparedMeasures']) => {
+    const names = measures.map((measure) => measure === 'cash_variance' ? 'drawer count' : measure === 'unpaid_orders' ? 'unpaid orders' : 'takings')
+    if (names.length === 1) return names[0]
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  }
   const latestCloseDownload = useMemo(() => {
     if (!latestClose) return null
     const artifact = commerceDailyCloseExport(commerce, latestClose.id)
@@ -6691,6 +6729,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </details>
     <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
     <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
+    {/* Roadmap §2 item 5 — what was unusual about the day just closed, read from
+        the closes already saved. Nothing here is a finding about money owed or
+        owing; it points at things worth a look while the till is still open. */}
+    {closeAnomaly.state === 'no_close' ? null : <div className="close-anomaly" data-close-anomaly={closeAnomaly.state}>
+      {/* The heading names the close it read. The projection means "the most
+          recent close", not "today", so on a morning before anything is closed
+          this block is about yesterday and has to say so. */}
+      <strong>{closeAnomaly.businessDate ? `${closeAnomaly.businessDate} against your usual day` : 'Compared with your usual day'}</strong>
+      {closeAnomaly.state === 'building_baseline'
+        ? <p className="panel-copy">Close {closeAnomaly.baselineDaysNeeded} more {closeAnomaly.baselineDaysNeeded === 1 ? 'day' : 'days'} and this will point out what stood out about the day you closed. Until then there is no usual day to compare against.</p>
+        : closeAnomaly.state === 'nothing_unusual'
+          ? <p className="panel-copy">{closeAnomaly.comparedMeasures.length ? `Your ${closeAnomalyComparedPhrase(closeAnomaly.comparedMeasures)} came out close to your usual day.` : 'There is nothing on this close to compare yet.'}</p>
+          : <ul className="close-anomaly-list">{closeAnomaly.flags.map((flag) => <li key={flag.measure}>{closeAnomalySentence(flag)}</li>)}</ul>}
+    </div>}
     {latestClose?.operator ? <details className="compact-disclosure">
       <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
       <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>

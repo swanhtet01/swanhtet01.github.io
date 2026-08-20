@@ -2826,3 +2826,15 @@ input, select, textarea { border-color: var(--core-field-line); }
    long unbroken URL, so this single notice wraps mid-token rather than forcing the fixed
    -width Plant action panel to scroll sideways. Colour and size stay on `.form-notice`. */
 .plant-job-scan-miss { overflow-wrap: anywhere; }
+
+/* Shop close anomaly flags (PRODUCT-SUPREMACY-ROADMAP §2 item 5). The block sits inside the
+   already-panelled "Close the day" section, so it paints no surface of its own: a rule and a
+   left indent mark it as a reading of the close rather than another control. Every colour,
+   size and space is a token, so there is nothing new to mirror in `.theme-dark` — the rule
+   picks up whichever theme's --core-line-strong / --core-warn is in force. Deliberately NOT
+   styled as an alert: these are things worth a look before the till is locked, not failures. */
+.close-anomaly { display: grid; gap: var(--space-1); border-left: 0.125rem solid var(--core-line-strong); padding-left: var(--space-3); }
+.close-anomaly > strong { color: var(--core-muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); letter-spacing: .06em; text-transform: uppercase; }
+.close-anomaly[data-close-anomaly="flagged"] { border-left-color: var(--core-warn); }
+.close-anomaly .panel-copy { margin: 0; }
+.close-anomaly-list { display: grid; gap: var(--space-1); margin: 0; padding-left: var(--space-4); color: var(--core-ink); font-size: var(--font-size-base); line-height: 1.5; }
