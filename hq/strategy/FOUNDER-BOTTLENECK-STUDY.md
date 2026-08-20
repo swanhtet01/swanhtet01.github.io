@@ -421,11 +421,31 @@ needs in two more ways:
 mutation privilege, not merely decline to require them.**
 
 1. Extend the probe to the full matrix: `SELECT`, `INSERT`, `UPDATE`, `DELETE`
-   for `current_user` across all three billing tables (adds the four missing
-   cells).
+   **and `TRUNCATE`** for `current_user` across all three billing tables —
+   fifteen cells.
 2. When `require_write_privilege` is false, **raise unless every one of the
-   nine mutation privileges is absent.** A read connection holding any
-   `INSERT`, `UPDATE`, or `DELETE` on any billing table is refused outright.
+   twelve mutation privileges is absent.** A read connection holding any
+   `INSERT`, `UPDATE`, `DELETE` **or `TRUNCATE`** on any billing table is
+   refused outright.
+
+   **`TRUNCATE` was missing from an earlier revision of this spec, and it is
+   the most dangerous omission of the set** (found in review 2026-08-20,
+   verified in source). It is a *separate* PostgreSQL table privilege, so
+   probing `INSERT`/`UPDATE`/`DELETE` does not cover it — and neither of the
+   two defences this design otherwise leans on applies to it:
+   - **RLS does not restrict `TRUNCATE`.** Policies govern
+     SELECT/INSERT/UPDATE/DELETE, so `force row level security` on the billing
+     tables is no obstacle.
+   - **The immutability triggers do not fire on `TRUNCATE`.**
+     `billing_events_immutable` is `before update or delete … **for each
+     row**` (v12 migration :146-148), and the invoice and entitlement guards
+     are row-level too (:105, :219). `TRUNCATE` fires no row-level trigger.
+     The v12 migration contains no `TRUNCATE` handling at all — zero
+     occurrences.
+
+   So a `BYPASSRLS` role holding only `SELECT` plus an accidental `TRUNCATE`
+   would pass a nine-privilege check while being able to **empty the entire
+   billing ledger in one statement**, silently, past every existing guard.
 3. Keep unconditional, exactly as today: the refusal of the two runtime role
    names, the read-only-transaction assertion, and the three `SELECT` checks.
 4. ~~Only then gate the privileged-role assertion on `require_write_privilege`.~~
@@ -444,10 +464,12 @@ mutation privilege, not merely decline to require them.**
    is strictly worse than a refusal, and it is the exact revenue leakage
    `_overdue_report` exists to surface. The assertion therefore stays
    unconditional, with its own distinct message.
-   **Consequence for A2's bounded read role:** it must be `BYPASSRLS` with no
-   mutation grant — it reads everything and mutates nothing. What bounds the
-   credential is the mutation refusal in step 2, not this assertion. Steps 1-3
-   stand as written and are implemented in PR #506.
+   **Consequence for A2's bounded read role:** it must be `BYPASSRLS` holding
+   `SELECT` only — no `INSERT`, `UPDATE`, `DELETE` **or `TRUNCATE`** on any
+   billing table. What bounds the credential is the mutation refusal in step 2,
+   not this assertion, and that refusal only bounds it once it covers all
+   twelve mutation privileges rather than nine. Steps 1-3 stand as written
+   (step 1-2 as amended above) and are implemented in PR #506.
 
 **This mirrors a pattern the file already contains.** The `runtime_role_denied`
 probe (`:500-512`) already does exactly this shape — `bool_and` over
@@ -464,7 +486,7 @@ credential for an unverified one — a worse position than the status quo, not a
 better one.
 
 **Size:** S–M (was S) — the probe extension, one new rejection branch, and
-tests covering a read role that wrongly holds each of the nine privileges.
+tests covering a read role that wrongly holds each of the twelve privileges.
 
 **Prerequisite, and it is a real one.** The founder must create that bounded
 read role on the target and place its URL in a service secret. Two conditions
