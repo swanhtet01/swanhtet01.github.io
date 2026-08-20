@@ -79,6 +79,79 @@ exact store configuration through the production connection path):
 - Confirm in the DB: one workspace_access_controls row (self_serve_claim_v1),
   one owner membership (15 caps), one immutable company.workspace.created event.
 
+### 2a. Schema version and runtime env must move together
+
+> **PROPOSED AMENDMENT — drafted 2026-08-20, awaiting founder review.** This
+> subsection and the two matching entries in section 4 are a drafted
+> correction, not an instruction the founder has accepted. They add no step,
+> authorize nothing, and change nothing above: sections 0-1 and steps A-D are
+> untouched, and the choice below is explicitly left to the founder. Accept,
+> edit, or delete this block whole — the rest of the runbook reads correctly
+> either way. It is written to stand alone: every mechanism and both forks are
+> stated in full below, so nothing here depends on reading another document.
+> The same finding is analysed at more length in
+> `hq/strategy/CLIENT-READINESS-BRIEF.md` §2, "The schema-version trap" —
+> a companion brief landing separately in PR #488, so that file may not be on
+> trunk yet when you read this.
+
+Step B sets the store to expect v11 because the sequence above applies v11
+alone. Two further migrations now exist in the repo —
+`supabase/migrations/20260817090000_private_trial_backend_v12_billing_rail.sql`
+and `supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql`
+— and applying either of them while step B's value stays `11` leaves a tenant
+on which every managed read and write fails closed. The reason is that BOTH
+runtimes match the live schema version EXACTLY, against a number that comes
+from an environment variable rather than from the database:
+
+- `supermega_runtime/trial_store.py:52` — `TRIAL_SCHEMA_VERSION = _env_schema_version()`
+  (`SUPERMEGA_TRIAL_SCHEMA_VERSION`, default `10`). `_assert_schema` raises
+  `TrialNotReadyError(("schema_ready",))` whenever
+  `int(row["schema_version"]) != TRIAL_SCHEMA_VERSION` (line 3282). This is an
+  exact match, not a minimum: a database AHEAD of the env fails exactly as
+  hard as one behind it.
+- `supermega_runtime/trial_store.py:320` — `if TRIAL_SCHEMA_VERSION >= 12:`
+  extends `_PRIVATE_HARDENING_TRIGGER_CONTRACT` with the billing tables, and
+  `_assert_schema` ALSO rejects a trigger-inventory length mismatch (line
+  3321). So this variable is not merely a number to bump: at 12 and above it
+  changes the trigger inventory the store demands of the database. Env at 12+
+  against a v11 database fails, and a v12+ database against env `11` fails —
+  the two must move together in both directions, forward on a migration and
+  backward on any rollback.
+- `supermega_runtime/billing_rail.py:63` — `BILLING_SCHEMA_VERSION = _env_schema_version()`
+  (`SUPERMEGA_BILLING_SCHEMA_VERSION`, default `12`), enforced at line 543:
+  the ledger rejects any target whose live schema version is not exactly this,
+  independently of the trial store. Its default of `12` therefore does not
+  match a v10 or v11 database. Separately, its schema probe reads privileges on
+  the billing tables directly, and those tables ship in v12 — so the billing
+  rail cannot operate against a v11 database at all, whatever this variable is
+  set to.
+
+The rule, stated once: **the database and both runtime env values must be
+consistent before any managed read or write is attempted.** Never assume
+either variable's default matches the target.
+
+**The two safe forks — choosing between them is a founder decision.** Each is
+stated here in full; nothing is executed by writing it, and the founder picks
+one and runs it.
+
+- **Fork A — reach v13 before tenant #1 exists.** In one window apply v11,
+  v12 and v13 so the database reaches 13; then set BOTH
+  `SUPERMEGA_TRIAL_SCHEMA_VERSION=13` and `SUPERMEGA_BILLING_SCHEMA_VERSION=13`
+  and redeploy; only then run step C and step D. Database first, env second —
+  the same ordering section 4 already insists on for v11. The window in which
+  database and env disagree is unavoidable, and under this fork it costs
+  nothing **because the tenant count is zero.** That is the whole reason Fork A
+  is cheap, and it stops being free the moment step D has produced a real
+  tenant.
+- **Fork B — v11 now, billing later.** Run section 2 verbatim (v11, env `11`),
+  create tenant #1, and complete the "Verify end-to-end" block and the section
+  5 evidence run first; then schedule v12+v13 as an announced maintenance
+  window with the partner warned. Under this fork the tenant is fail-closed
+  from the moment that later migration lands until the redeploy carrying the
+  new env values is live — that is the outage being scheduled, and it is the
+  cost of this fork rather than a surprise. Billing is unavailable until that
+  window completes.
+
 ## 3. Rollback
 
 - Customer-facing: unset `SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW` → 503 again.
@@ -97,6 +170,19 @@ exact store configuration through the production connection path):
   a v10 schema that can't accept it (the exact bug the proof caught).
 - Do not enable writes (D) before you've personally verified a tenant creates
   correctly on the target.
+- *(Proposed 2026-08-20 with section 2a — awaiting founder review.)* Do not
+  apply a migration without setting the matching runtime env values in the same
+  window. Both `SUPERMEGA_TRIAL_SCHEMA_VERSION` and
+  `SUPERMEGA_BILLING_SCHEMA_VERSION` demand an EXACT match with the live schema
+  version, so a database left ahead of the env fail-closes every managed read
+  and write just as surely as one left behind. Applying v12 or v13 as a quiet
+  add-on alongside step A, while step B's value stays `11`, is the specific
+  mistake this warns against.
+- *(Proposed 2026-08-20 with section 2a — awaiting founder review.)* Do not
+  assume `SUPERMEGA_BILLING_SCHEMA_VERSION`'s default of `12` matches the
+  target. It does not match a v10 or v11 database, and it is checked
+  independently of the trial store's variable — set it explicitly to whatever
+  version the database actually reached.
 
 ## 5. After activation — the first-tenant evidence plan
 
