@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -24,6 +25,7 @@ from unittest.mock import patch
 import supermega_runtime.billing_rail as billing_rail_module
 import supermega_runtime.trial_store as trial_store_module
 from supermega_runtime.billing_rail import (
+    BILLING_ENTITLEMENT_READ_POLICY_DIGEST,
     BILLING_ENTITLEMENT_READ_SCHEMA_VERSION,
     BILLING_EVENT_RESULT_CONTRACT,
     BILLING_OVERDUE_REPORT_CONTRACT,
@@ -37,6 +39,7 @@ from supermega_runtime.billing_rail import (
     BillingRailConflict,
     BillingRailError,
     _digest,
+    _policy_expression_fingerprint,
     main,
     validate_founder_evidence,
     validate_invoice_packet,
@@ -145,6 +148,22 @@ FOUNDER_ONLY_BILLING_TABLES = ("billing_invoices", "billing_events")
 BILLING_PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "DELETE")
 # The exact grant set v13 leaves behind: SELECT on billing_entitlements only.
 V13_RUNTIME_GRANTS = frozenset({("billing_entitlements", "SELECT")})
+# pg_policies.qual for v13's billing_entitlements_self_read, copied verbatim
+# from a real PostgreSQL server. This is PostgreSQL's deparsed rendering of the
+# migration's
+#   using (workspace_id = (select current_setting('app.workspace_id', true)))
+# -- note the ::text cast and the AS alias the server adds, which is exactly
+# what the fingerprint normalization exists to absorb.
+V13_READ_POLICY_PREDICATE = (
+    "(workspace_id = ( SELECT current_setting('app.workspace_id'::text, true)"
+    " AS current_setting))"
+)
+# What the same server reports after that policy is dropped and recreated with
+# v13's NAME, its SELECT command, its permissiveness and its role, but
+# `using (true)`. Such a policy is indistinguishable from v13's by name,
+# command, permissiveness and role alone, which is precisely why the guard
+# fingerprints the predicate.
+WIDENED_READ_POLICY_PREDICATE = "true"
 
 
 def runtime_privilege_columns(granted: object) -> dict[str, bool]:
@@ -182,9 +201,16 @@ class FakeBillingDatabase:
         # table. A v13 target is modelled by setting V13_RUNTIME_GRANTS.
         self.runtime_privileges: frozenset[tuple[str, str]] = frozenset()
         # billing_entitlements carries forced RLS and exactly the one permissive
-        # SELECT policy v13 creates. False models a target where that scoping
-        # was disabled or widened after the migration ran.
+        # SELECT policy v13 creates. False models a target where RLS was
+        # disabled, the policy dropped, or a second policy added beside it.
         self.entitlement_read_scoped = True
+        # That policy's PREDICATE, which the shape flag above cannot express: a
+        # policy recreated with v13's name, command, permissiveness and role but
+        # `using (true)` leaves the shape intact and changes only this. The
+        # ledger fingerprints whatever text the server reports here, so the
+        # fixtures carry real deparsed predicates rather than digests. None
+        # models no such policy at all.
+        self.entitlement_read_predicate: str | None = V13_READ_POLICY_PREDICATE
         self.schema_version = 12
 
     def connect(self, _database_url: str):
@@ -258,7 +284,12 @@ class FakeBillingCursor:
                     "schema_version": self.database.schema_version,
                     "backend_role_safe": True,
                     **runtime_privilege_columns(self.database.runtime_privileges),
-                    "runtime_entitlement_read_scoped": self.database.entitlement_read_scoped,
+                    "runtime_entitlement_read_policy_shape": (
+                        self.database.entitlement_read_scoped
+                    ),
+                    "runtime_entitlement_read_predicate": (
+                        self.database.entitlement_read_predicate
+                    ),
                     "invoice_select": True,
                     "invoice_insert": True,
                     "invoice_update": True,
@@ -896,6 +927,71 @@ class BillingLedgerTests(unittest.TestCase):
         self.assertEqual(self.database.invoices, {})
 
 
+class PolicyPredicateFingerprintTests(unittest.TestCase):
+    """The predicate pin is a cross-language constant; bind both ends here.
+
+    `BILLING_ENTITLEMENT_READ_POLICY_DIGEST` and
+    `expectedPolicyFingerprints.billing_entitlements_self_read.qual` in
+    tools/verify_private_trial_migrations.mjs must be the same hex forever: they
+    fingerprint the same predicate under the same normalization. Nothing but a
+    comment linked them, so a future PostgreSQL deparse change would be caught
+    by the migration verifier in CI, that pin would be updated, the gate would
+    go green, and the ledger's copy would silently rot -- surfacing only as a
+    false 'must stay scoped' alarm the first time the founder ran a live billing
+    command. These tests make that divergence a test failure instead.
+    """
+
+    VERIFIER = Path(__file__).resolve().parents[1] / "tools" / "verify_private_trial_migrations.mjs"
+
+    def test_the_pin_is_the_fingerprint_of_v13s_real_deparsed_predicate(self) -> None:
+        # V13_READ_POLICY_PREDICATE is copied verbatim from a real PostgreSQL
+        # server, so this executes the normalization the probe relies on rather
+        # than trusting a hand-computed digest.
+        self.assertEqual(
+            _policy_expression_fingerprint(V13_READ_POLICY_PREDICATE),
+            BILLING_ENTITLEMENT_READ_POLICY_DIGEST,
+        )
+
+    def test_the_normalization_absorbs_only_rendering_differences(self) -> None:
+        # Casts, letter case and whitespace are the server's rendering choices,
+        # so they must not change the fingerprint...
+        for label, rendering in (
+            ("cast suffix dropped", V13_READ_POLICY_PREDICATE.replace("::text", "")),
+            ("uppercased", V13_READ_POLICY_PREDICATE.upper()),
+            ("whitespace expanded", V13_READ_POLICY_PREDICATE.replace(" ", "\n  ")),
+        ):
+            with self.subTest(label=label):
+                self.assertEqual(
+                    _policy_expression_fingerprint(rendering),
+                    BILLING_ENTITLEMENT_READ_POLICY_DIGEST,
+                )
+        # ...while a changed predicate must, or the pin would prove nothing.
+        for label, rendering in (
+            ("widened to true", WIDENED_READ_POLICY_PREDICATE),
+            ("different column", V13_READ_POLICY_PREDICATE.replace("workspace_id =", "status =", 1)),
+            ("different guc", V13_READ_POLICY_PREDICATE.replace("app.workspace_id", "app.other_id")),
+            ("absent", None),
+        ):
+            with self.subTest(label=label):
+                self.assertNotEqual(
+                    _policy_expression_fingerprint(rendering),
+                    BILLING_ENTITLEMENT_READ_POLICY_DIGEST,
+                )
+
+    def test_the_pin_matches_the_migration_verifiers_pin(self) -> None:
+        source = self.VERIFIER.read_text(encoding="utf-8")
+        anchor = source.index("billing_entitlements_self_read: {")
+        block = source[anchor : source.index("}", anchor)]
+        pinned = re.search(r"qual:\s*'([0-9a-f]{64})'", block)
+        self.assertIsNotNone(
+            pinned,
+            "tools/verify_private_trial_migrations.mjs no longer pins a qual "
+            "fingerprint for billing_entitlements_self_read; the ledger's pin "
+            "has lost its counterpart.",
+        )
+        self.assertEqual(pinned.group(1), BILLING_ENTITLEMENT_READ_POLICY_DIGEST)
+
+
 class RuntimePrivilegeContractTests(unittest.TestCase):
     """The deny-by-default guard against the exact grant v13 makes.
 
@@ -928,11 +1024,13 @@ class RuntimePrivilegeContractTests(unittest.TestCase):
         schema_version: int,
         runtime_privileges: object,
         entitlement_read_scoped: bool = True,
+        entitlement_read_predicate: str | None = V13_READ_POLICY_PREDICATE,
     ) -> tuple[FakeBillingDatabase, BillingLedger]:
         database = FakeBillingDatabase()
         database.schema_version = schema_version
         database.runtime_privileges = frozenset(runtime_privileges)
         database.entitlement_read_scoped = entitlement_read_scoped
+        database.entitlement_read_predicate = entitlement_read_predicate
         return database, BillingLedger(DATABASE_URL, connection_factory=database.connect)
 
     def issue(self, ledger: BillingLedger) -> dict[str, object]:
@@ -958,12 +1056,14 @@ class RuntimePrivilegeContractTests(unittest.TestCase):
         schema_version: int,
         runtime_privileges: object,
         entitlement_read_scoped: bool = True,
+        entitlement_read_predicate: str | None = V13_READ_POLICY_PREDICATE,
         message: str | None = None,
     ) -> None:
         database, ledger = self.ledger_for(
             schema_version=schema_version,
             runtime_privileges=runtime_privileges,
             entitlement_read_scoped=entitlement_read_scoped,
+            entitlement_read_predicate=entitlement_read_predicate,
         )
         with patch.object(billing_rail_module, "BILLING_SCHEMA_VERSION", schema_version):
             with self.assertRaises(BillingRailError) as raised:
@@ -999,13 +1099,46 @@ class RuntimePrivilegeContractTests(unittest.TestCase):
             message=self.UNSCOPED_MESSAGE,
         )
 
+    def test_a_widened_predicate_on_the_v13_policy_name_is_rejected(self) -> None:
+        # Codex's finding on #499. Name, command, permissiveness and role are
+        # all trivially reproducible, so a policy recreated as
+        #   create policy billing_entitlements_self_read
+        #     on app_private.billing_entitlements for select
+        #     to supermega_trial_backend using (true);
+        # satisfies every shape condition while exposing every workspace's
+        # entitlement row to the runtime role. Only the predicate fingerprint
+        # separates it from v13's workspace-GUC predicate. The shape flag stays
+        # True here on purpose: this case must be caught by the digest alone.
+        self.assert_rejected(
+            schema_version=self.V13,
+            runtime_privileges=V13_RUNTIME_GRANTS,
+            entitlement_read_scoped=True,
+            entitlement_read_predicate=WIDENED_READ_POLICY_PREDICATE,
+            message=self.UNSCOPED_MESSAGE,
+        )
+
+    def test_a_missing_scoping_policy_reports_no_predicate_and_is_rejected(self) -> None:
+        # No policy of that name means the predicate subquery returns NULL AND
+        # the shape check fails, because that check requires exactly one policy
+        # carrying v13's name. Both are set here so the fixture corresponds to a
+        # state a real database can actually be in.
+        self.assert_rejected(
+            schema_version=self.V13,
+            runtime_privileges=V13_RUNTIME_GRANTS,
+            entitlement_read_scoped=False,
+            entitlement_read_predicate=None,
+            message=self.UNSCOPED_MESSAGE,
+        )
+
     def test_unscoped_entitlements_without_the_grant_stay_accepted(self) -> None:
-        # No grant means no read to scope: RLS shape alone is not this guard's
-        # business, and failing here would ground the billing CLI for nothing.
+        # No grant means no read to scope: neither the RLS shape nor the policy
+        # predicate is this guard's business without one, and failing here would
+        # ground the billing CLI for nothing.
         database, ledger = self.ledger_for(
             schema_version=self.V13,
             runtime_privileges=frozenset(),
             entitlement_read_scoped=False,
+            entitlement_read_predicate=WIDENED_READ_POLICY_PREDICATE,
         )
         with patch.object(billing_rail_module, "BILLING_SCHEMA_VERSION", self.V13):
             self.issue(ledger)

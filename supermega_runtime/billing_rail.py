@@ -76,6 +76,32 @@ BILLING_SCHEMA_VERSION = _env_schema_version()
 # the ledger refuses to operate against: a v13-shaped grant on a v12 database
 # was not put there by a reviewed migration.
 BILLING_ENTITLEMENT_READ_SCHEMA_VERSION = 13
+# The predicate that scoping depends on, pinned by fingerprint. Policy name,
+# command, permissiveness and role are all trivially reproducible: a policy
+# recreated with the SAME name, SAME SELECT command, SAME permissiveness and
+# SAME role but `using (true)` satisfies every one of them while exposing every
+# workspace's entitlement row. Only the predicate itself separates the two, so
+# the probe fingerprints pg_policies.qual and compares it here.
+#
+# This is _policy_expression_fingerprint's output, and that function mirrors the
+# normalization tools/verify_private_trial_migrations.mjs already applies to
+# policy expressions. It is the SAME value that verifier pins at
+# expectedPolicyFingerprints.billing_entitlements_self_read.qual -- one
+# fingerprint for this predicate in the repo, not a second convention, and
+# test_billing_rail.py reads that file and asserts the two stay equal rather
+# than leaving the agreement to this comment. It corresponds to v13's
+#   using (workspace_id = (select current_setting('app.workspace_id', true)))
+# which PostgreSQL reports as
+#   (workspace_id = ( SELECT current_setting('app.workspace_id'::text, true)
+#    AS current_setting))
+# Because that is a deparsed rendering rather than the migration's source text,
+# a future PostgreSQL that deparses the same policy differently would fail this
+# check on an otherwise-correct database. That is the safe direction to fail,
+# and the fix is to re-fingerprint from the target and update both pins together
+# -- never to drop the check.
+BILLING_ENTITLEMENT_READ_POLICY_DIGEST = (
+    "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5"
+)
 BILLING_EVENT_RESULT_CONTRACT = "supermega.managed_billing_event.v1"
 BILLING_OVERDUE_REPORT_CONTRACT = "supermega.managed_billing_overdue_report.v1"
 BILLING_STATE_CONTRACT = "supermega.managed_billing_state.v1"
@@ -428,6 +454,35 @@ def _billing_command_identity(
     return command_id, fingerprint
 
 
+_POLICY_CAST_SUFFIX = re.compile(
+    r"::\s*(?:pg_catalog\.)?"
+    r"(?:text|character\s+varying|varchar|name|uuid|boolean|integer|bigint)\b",
+    re.IGNORECASE,
+)
+
+
+def _policy_expression_fingerprint(value: object) -> str:
+    """Fingerprint a pg_policies expression the way the repo already does.
+
+    Mirrors normalizeExpression + fingerprint in
+    tools/verify_private_trial_migrations.mjs byte-for-byte: lowercase, drop the
+    cast suffixes PostgreSQL adds when it deparses a policy, collapse runs of
+    whitespace, trim, sha256. Both sides therefore pin the SAME hex for the same
+    predicate, and test_billing_rail.py asserts that agreement rather than
+    trusting this comment.
+
+    Returns "" for a missing predicate (no such policy, or a policy with only a
+    WITH CHECK expression) so an absent predicate can never compare equal to a
+    pinned one.
+    """
+
+    if value is None:
+        return ""
+    normalized = _POLICY_CAST_SUFFIX.sub("", str(value).lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def _row_value(row: object, key: str, index: int) -> Any:
     if isinstance(row, Mapping):
         return row.get(key)
@@ -552,12 +607,15 @@ class BillingLedger:
                 'supermega_trial_backend', 'app_private.billing_entitlements', 'SELECT'
               ) as runtime_entitlement_read,
               /* The grant alone is not what makes that read safe -- the RLS
-                 scoping is. Forced RLS plus exactly the one permissive SELECT
-                 policy v13 creates means a session sees only its own
-                 workspace's row. Probed here, on the founder's own ledger
-                 connection at command time, because the migration's $verify$
-                 block and tools/verify_private_trial_migrations.mjs only ran
-                 when the migration was applied. */
+                 scoping is. This column is the SHAPE half of that: forced RLS,
+                 and exactly one policy on the table, carrying v13's name,
+                 SELECT command, permissiveness and role. It is deliberately NOT
+                 the whole answer -- every one of those is reproducible by
+                 anyone who can create a policy, so the predicate column below
+                 carries the rest. Probed on the founder's own ledger connection
+                 at command time, because the migration's $verify$ block and
+                 tools/verify_private_trial_migrations.mjs only run when the
+                 migration is applied. */
               coalesce((
                 select relation.relrowsecurity and relation.relforcerowsecurity
                 from pg_class relation
@@ -576,7 +634,22 @@ class BillingLedger:
                 from pg_policies policy_record
                 where policy_record.schemaname = 'app_private'
                   and policy_record.tablename = 'billing_entitlements'
-              ), false) as runtime_entitlement_read_scoped,
+              ), false) as runtime_entitlement_read_policy_shape,
+              /* The scoping policy's PREDICATE, returned verbatim for
+                 _policy_expression_fingerprint to normalize and hash. Everything
+                 above is reproducible by anyone who can create a policy; only
+                 this separates v13's workspace-GUC predicate from a same-named,
+                 same-command, same-role `using (true)`. Normalizing in Python
+                 rather than SQL keeps one implementation the tests can execute
+                 directly, and keeps regex escapes out of a statement whose
+                 meaning would otherwise depend on standard_conforming_strings. */
+              (
+                select policy_record.qual
+                from pg_policies policy_record
+                where policy_record.schemaname = 'app_private'
+                  and policy_record.tablename = 'billing_entitlements'
+                  and policy_record.policyname = 'billing_entitlements_self_read'
+              ) as runtime_entitlement_read_predicate,
               has_table_privilege(current_user, 'app_private.billing_invoices', 'SELECT') as invoice_select,
               has_table_privilege(current_user, 'app_private.billing_invoices', 'INSERT') as invoice_insert,
               has_table_privilege(current_user, 'app_private.billing_invoices', 'UPDATE') as invoice_update,
@@ -602,17 +675,20 @@ class BillingLedger:
                 _row_value(row, "runtime_entitlement_write_denied", 7)
             ),
             "runtimeEntitlementRead": bool(_row_value(row, "runtime_entitlement_read", 8)),
-            "runtimeEntitlementReadScoped": bool(
-                _row_value(row, "runtime_entitlement_read_scoped", 9)
+            "runtimeEntitlementReadPolicyShape": bool(
+                _row_value(row, "runtime_entitlement_read_policy_shape", 9)
             ),
-            "invoiceSelect": bool(_row_value(row, "invoice_select", 10)),
-            "invoiceInsert": bool(_row_value(row, "invoice_insert", 11)),
-            "invoiceUpdate": bool(_row_value(row, "invoice_update", 12)),
-            "eventSelect": bool(_row_value(row, "event_select", 13)),
-            "eventInsert": bool(_row_value(row, "event_insert", 14)),
-            "entitlementSelect": bool(_row_value(row, "entitlement_select", 15)),
-            "entitlementInsert": bool(_row_value(row, "entitlement_insert", 16)),
-            "entitlementUpdate": bool(_row_value(row, "entitlement_update", 17)),
+            "runtimeEntitlementReadPredicateDigest": _policy_expression_fingerprint(
+                _row_value(row, "runtime_entitlement_read_predicate", 10)
+            ),
+            "invoiceSelect": bool(_row_value(row, "invoice_select", 11)),
+            "invoiceInsert": bool(_row_value(row, "invoice_insert", 12)),
+            "invoiceUpdate": bool(_row_value(row, "invoice_update", 13)),
+            "eventSelect": bool(_row_value(row, "event_select", 14)),
+            "eventInsert": bool(_row_value(row, "event_insert", 15)),
+            "entitlementSelect": bool(_row_value(row, "entitlement_select", 16)),
+            "entitlementInsert": bool(_row_value(row, "entitlement_insert", 17)),
+            "entitlementUpdate": bool(_row_value(row, "entitlement_update", 18)),
         }
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != BILLING_SCHEMA_VERSION:
             raise BillingRailError(
@@ -645,11 +721,19 @@ class BillingLedger:
             )
         # The v13 read is safe only because RLS scopes it to the session's own
         # workspace. Disable/force-off RLS, drop billing_entitlements_self_read,
-        # or add a second permissive SELECT policy beside it, and that same
+        # add a second permissive SELECT policy beside it, or recreate it with
+        # the same name, command and role but a widened predicate, and that same
         # grant becomes a cross-workspace entitlement read. Before this guard
         # was version-aware any grant at all was rejected, so tolerating the
         # grant without re-checking its scoping would be a real relaxation.
-        if snapshot["runtimeEntitlementRead"] and not snapshot["runtimeEntitlementReadScoped"]:
+        # The predicate fingerprint is the load-bearing half: name, command,
+        # permissiveness and role are all trivially reproducible by whoever can
+        # create a policy, so a shape-only check passes `using (true)`.
+        entitlement_read_scoped = snapshot["runtimeEntitlementReadPolicyShape"] and (
+            snapshot["runtimeEntitlementReadPredicateDigest"]
+            == BILLING_ENTITLEMENT_READ_POLICY_DIGEST
+        )
+        if snapshot["runtimeEntitlementRead"] and not entitlement_read_scoped:
             raise BillingRailError(
                 "The runtime member role's billing entitlement read must stay scoped to its own workspace."
             )
@@ -1806,6 +1890,7 @@ if __name__ == "__main__":
 
 
 __all__ = [
+    "BILLING_ENTITLEMENT_READ_POLICY_DIGEST",
     "BILLING_ENTITLEMENT_READ_SCHEMA_VERSION",
     "BILLING_EVENT_RESULT_CONTRACT",
     "BILLING_EVENT_TYPES",
