@@ -21,6 +21,9 @@ import {
   type SetupState,
 } from './product-setup'
 import {
+  MANAGED_SHOP_ONBOARDING_HINT,
+  MANAGED_SHOP_ONBOARDING_INTRO,
+  managedShopOnboardingNotice,
   provisionLocalPlantWorkingSample,
   provisionLocalShopBusinessTemplateSample,
   provisionLocalShopIndustryPack,
@@ -132,6 +135,13 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     : product === 'commerce'
       ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
       : templateFor(product, '')
+  // Shop setup for a signed-in company account. Starter data is browser-local by construction, so
+  // this lane installs nothing and must not say it did -- the whole of the copy and the branch
+  // below hang off this one flag.
+  const managedCommerce = product === 'commerce' && Boolean(managedIdentity)
+  // The trade she actually picked, named the way the picker named it, so the notice can carry her
+  // choice forward instead of dropping it.
+  const managedShopBusinessTypeName = selectedBusinessTemplate?.name.en ?? selectedShopIndustryPack.name
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
@@ -219,7 +229,14 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       // then reached the owner stamped as a completed setup: the appointment book left on the old
       // industry, the catalog never installed, the workspace never written -- interface advanced.
       let carriedOver = false
-      if (product === 'commerce') {
+      // `&& !managedIdentity` mirrors the ecommerce branch below, and the asymmetry between them
+      // WAS the bug: these provisioners write to window.localStorage, a store a managed Shop never
+      // reads, so for a signed-in owner they reported a trade template as installed while the
+      // company workspace stayed at version 0 and rendered 'managed-unprovisioned'. Measured in
+      // hq/research/MANAGED-TEMPLATE-PROVISIONING.md -- disposition 'installed', zero fetch calls.
+      // A managed owner is told the truth and sent to Shop's own "Create the real catalog" step
+      // instead; see managedShopOnboardingNotice in product-onboarding-runtime.ts.
+      if (product === 'commerce' && !managedIdentity) {
         // Returns the pack ACTUALLY in force. An existing appointment keeps its own pack, so the
         // pack asked for is not always the pack installed, and the sample must follow the real one.
         const schedule = provisionLocalShopIndustryPack(selectedShopIndustryPack.id)
@@ -280,6 +297,14 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         setNotice('Your existing Shop data was kept and nothing was overwritten. Open Shop to carry on, or reset this device first to load the starter catalog for this trade.')
         return
       }
+      // Same shape as the 'preserved' case above, and for the same reason: nothing was installed,
+      // so say so here rather than letting a navigation stand in for a claim. The workspace is now
+      // started, which relabels the button to "Open my Shop", so the notice's "Open Shop and add
+      // your first real item" is the button she is already looking at -- routed onward, not stuck.
+      if (managedCommerce) {
+        setNotice(managedShopOnboardingNotice(managedShopBusinessTypeName))
+        return
+      }
       navigate(onboardingJourney.firstTaskPath)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : `The ${onboardingProduct.name} workspace could not be prepared.`)
@@ -306,7 +331,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       />
       <div aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid">
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
-          <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>We will add realistic sample records now; replace them with your data whenever you are ready.</p></div>
+          {/* "We will add realistic sample records now" is the same false promise as the success
+              notice was, one step earlier in the flow: for a company account no sample record is
+              ever added. Signed-out owners keep the original sentence unchanged. */}
+          <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>{managedCommerce ? MANAGED_SHOP_ONBOARDING_INTRO : 'We will add realistic sample records now; replace them with your data whenever you are ready.'}</p></div>
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           {product === 'commerce' ? (
@@ -358,7 +386,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 so a screen reader landing on the disabled control hears "Enter a business name
                 to continue" instead of an unexplained dead end. */}
             <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small id="product-onboarding-submit-hint">{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            {/* A company account gets the managed wording in BOTH states. "Creates local sample
+                records" is untrue before the tap, and "${workspace} is ready" is untrue after it:
+                the workspace is empty on purpose and is waiting for her first real item. */}
+            <small id="product-onboarding-submit-hint">{managedCommerce && workflowReady ? MANAGED_SHOP_ONBOARDING_HINT : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>

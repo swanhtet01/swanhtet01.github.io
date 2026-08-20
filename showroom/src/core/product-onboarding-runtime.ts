@@ -163,6 +163,54 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
  * isGuidedSampleShopSchedule holds for it -- and it books nothing a real customer would be
  * charged for.
  */
+// ==============================================================================================
+// What a SIGNED-IN (managed) owner is told when she picks a trade.
+//
+// Every Shop provisioner in this module writes through loadCommerceWorkspace /
+// mutateCommerceWorkspace, which are window.localStorage. A managed Shop does not read that store
+// at all -- it reads server-authoritative state, written only through
+// saveManagedCommerceCommand -> /api/trial/v1/commands. Measured end to end in
+// hq/research/MANAGED-TEMPLATE-PROVISIONING.md: for a managed account the provisioner reported
+// `installed` with ZERO network calls and one browser-local key written, so the company workspace
+// stayed at version 0 and Shop rendered 'managed-unprovisioned' -- while onboarding told the owner
+// her spa/bakery/pharmacy catalog was ready. A false success, uniform across all ten templates.
+//
+// Provisioning a template INTO a managed workspace is a real feature and is not attempted here:
+// the server's commerce.workspace.initialized contract requires a non-empty catalog and NO
+// operating history, and every template catalog carries an `opening` stock movement per item, so a
+// template state can never satisfy it as written. Until that lands, onboarding stops making the
+// claim and hands the owner to the managed "Create the real catalog" step that already exists.
+//
+// The copy lives here, beside the reason, so it cannot drift back into a promise.
+// ==============================================================================================
+
+/**
+ * Shown after a signed-in owner submits Shop setup. It has three jobs, in this order: keep the
+ * trade she just chose (dropping it silently would be its own small lie), say plainly that nothing
+ * was added, and name the one next step so being routed onward reads as the next move rather than
+ * an error.
+ */
+export function managedShopOnboardingNotice(businessTypeName: string): string {
+  return `${businessTypeName} is saved as your business type. Company accounts do not get sample records, `
+    + 'so nothing was added to this workspace. Open Shop and add your first real item. The prices and stock '
+    + 'you enter there are the ones your team sells from.'
+}
+
+/**
+ * The hint under the submit button, so the honest version is read BEFORE the tap, not only after
+ * it. The browser-local wording it replaces is "Creates local sample records, then opens the first
+ * task."
+ */
+export const MANAGED_SHOP_ONBOARDING_HINT =
+  'Opens Shop so you can add your first real item. Nothing is copied into a company account.'
+
+/**
+ * Replaces the panel's "We will add realistic sample records now" intro, which is the same false
+ * promise one step earlier in the flow.
+ */
+export const MANAGED_SHOP_ONBOARDING_INTRO =
+  'Your company account holds real records only. Name this workspace, then add your own items in Shop.'
+
 export function provisionLocalShopIndustryPack(
   industryPackId: ShopIndustryPackId,
   planningDay = new Date().toISOString().slice(0, 10),
