@@ -1130,7 +1130,10 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || !coreShellSource.includes('const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null')
   || !coreShellSource.includes('const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))')
   || !coreShellSource.includes('const accountEntryRoute = loginRoute || sensitiveAccountRoute')
-  || !coreShellSource.includes('to={companyLoginPath}>Company login</Link>')
+  // Lockstep with DESIGN-PROGRAM batch 2 (Option B): the sidebar door renders through
+  // bi('Company login'), whose table entry is pending_native_review, so the visible
+  // output is still the exact English string this pin has always protected.
+  || !coreShellSource.includes("to={companyLoginPath}>{bi('Company login')}</Link>")
   || !coreShellSource.includes('aria-label="Company login"')
   || coreShellSource.includes('to={companyLoginPath}>Company sign in</Link>')
   || coreShellSource.includes('aria-label="Company sign in"')
@@ -3034,7 +3037,10 @@ if (!coreSource.includes("from './commerce-order-draft'")
   || !rejectedEcommerceNavigationBlock.includes("navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })")
   || !coreSource.includes('Loading orders')
   || !coreSource.includes('Confirmed order left a saved recovery copy')
-  || !coreSource.includes('Recovery unavailable')
+  // Pinned as the whole order-draft expression rather than the bare 'Recovery unavailable'
+  // label: PR #505's stuck-till panel introduced a second occurrence of that label, after
+  // which the short form could no longer fail even if this composer control were deleted.
+  || !coreSource.includes("orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'")
   || !coreSource.includes('expectedInvalidFingerprint: invalidFingerprintAtDiscard')
   || !coreSource.includes('Unfinished order saved on this device')
   || !coreSource.includes('Source-message and Ecommerce links are never recovered.')

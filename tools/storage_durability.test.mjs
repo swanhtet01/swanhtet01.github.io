@@ -142,8 +142,30 @@ test('quota notice flips the flag, notifies once, and keeps a stable snapshot', 
     assert.equal(durability.getStorageDurability(), after)
 
     unsubscribe()
+  } finally {
+    restore()
+  }
+})
+
+// Teardown has to be tested against a state change that would actually notify. Asserting
+// it after the quota flag is already latched proves nothing: publish() short-circuits on
+// an unchanged snapshot, so a leaked listener and a released one look identical. This case
+// takes a fresh module instance, unsubscribes while quotaExceeded is still false, and then
+// makes the one change that does publish -- so a teardown that failed to delete the
+// listener is the difference between 0 notifications and 1.
+test('unsubscribing releases the listener before the state it would report changes', async () => {
+  const restore = replaceGlobal('navigator', fakeNavigator(undefined))
+  try {
+    const durability = await freshModule()
+    let notifications = 0
+    const unsubscribe = durability.subscribeStorageDurability(() => { notifications += 1 })
+
+    assert.equal(durability.getStorageDurability().quotaExceeded, false)
+    unsubscribe()
+
     durability.noteStorageQuotaExceeded()
-    assert.equal(notifications, 1)
+    assert.equal(durability.getStorageDurability().quotaExceeded, true, 'the change must be one that publishes')
+    assert.equal(notifications, 0, 'an unsubscribed listener must not be notified')
   } finally {
     restore()
   }

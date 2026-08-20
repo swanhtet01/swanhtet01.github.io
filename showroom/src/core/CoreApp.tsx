@@ -2761,10 +2761,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         : null}
   </div>
 
-  // Durable-storage warning. Only meaningful for a local workspace: a company account
-  // keeps the record server-side, so browser eviction there costs a cache, not the books.
-  // Quota outranks eviction risk -- "writes are failing now" beats "writes may be cleared
-  // later" -- and neither is shown while the browser is still being asked.
+  // Durable-storage warning. Shown for a local workspace only, which is narrower than the
+  // request itself: persistence is asked for on every Shop open, company account included,
+  // because photos, payment QRs, the order draft and loyalty settings stay device-local
+  // under a managed scope (see storage-durability.ts). What a company account does NOT
+  // risk is the books -- the ledger is server-side and re-syncs -- so this banner, which
+  // says records saved here can be cleared, would overstate the loss and interrupt a till
+  // for something a re-open repairs. Quota outranks eviction risk -- "writes are failing
+  // now" beats "writes may be cleared later" -- and neither is shown while the browser is
+  // still being asked.
   const storageDurabilityNotice = managedIdentity || !(storageDurability.quotaExceeded || storageDurability.state === 'denied')
     ? null
     : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'evictable'} role="alert">
