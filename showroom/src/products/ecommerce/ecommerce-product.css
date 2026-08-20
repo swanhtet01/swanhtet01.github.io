@@ -2017,3 +2017,14 @@
 .storefront-grid:has(article > .storefront-product-photo) article {
   align-content: start;
 }
+
+/* P3.8 batch 1 — the ops-cockpit half of .surface-lead (see core-app.css for the
+   rule and its reasoning). Carries the cockpit class so it outranks
+   `.ecommerce-ops-cockpit p`, which paints the litany in --core-quiet. */
+.ecommerce-ops-cockpit p.surface-lead {
+  margin: 0;
+  color: var(--core-ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+}

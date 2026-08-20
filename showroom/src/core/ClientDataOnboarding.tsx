@@ -930,7 +930,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               </div>
             </div>
             {provisioningPlan ? <div aria-label={`${productName} company setup plan`} className="catalog-import-handoff">
-              <div><strong>{provisioningPlan.next_step}</strong><small>No customer message, payment, website publish, or automation runs from this check.</small></div>
+              <div><strong>{provisioningPlan.next_step}</strong><small className="surface-lead">This is what SuperMega will create in your company account once you approve the import. Read it first — nothing is created until you approve.</small><small>No customer message, payment, website publish, or automation runs from this check.</small></div>
               <div className="catalog-import-handoff-list">
                 {provisioningPlanRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
               </div>

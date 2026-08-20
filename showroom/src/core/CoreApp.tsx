@@ -6104,7 +6104,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked'],
   ] as const
   const shopAccountingReadiness = <section className="shop-order-control" aria-label="Shop accounting readiness">
-    <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and manager review before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small className="surface-lead">Your accountant needs today&apos;s sales, payments, refunds, supplier bills and stock counts to agree with each other. Anything below that is not clear is what to fix before you prepare the accounting file.</small><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and manager review before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
     <div className="shop-order-control-rows">{shopAccountingRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const shopAccountingPacketRows = [
@@ -9265,7 +9265,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostReadiness = <section aria-label="Plant cost readiness" className="plant-control">
-    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check good output, waste, material trace, quality release, maintenance closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small className="surface-lead">Before anyone can work out what a batch really cost, the shift has to be finished properly: output counted, waste recorded, materials traced, quality released and maintenance closed. Anything below still showing blocked is what to close first.</small><small>Check good output, waste, material trace, quality release, maintenance closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostPacket = <section aria-label="Plant cost review file" className="plant-control">
