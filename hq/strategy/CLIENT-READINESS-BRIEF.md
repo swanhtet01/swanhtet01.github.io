@@ -124,16 +124,29 @@ a materially better phone product than existed 48 hours ago (section 3).
    Open Graph tags since 2026-07-24), §2.1's "no dedicated guard suite" on
    replenishment/demand intelligence, and §2.4's "no dedicated guard test yet"
    on activation packets (both guard suites predate the document). All three
-   understated the product. Four shipped modules the catalog omitted
+   understated the product. Five shipped modules the catalog omitted
    outright — camera barcode scanning (#459), merchant payment QR (#465),
-   customer loyalty points (#469/#472/#482), product photos (#459) — were
-   added as rows. Plant shop-floor scanning (#489) is deliberately **not**
-   listed: that PR is still open at the time of this pass, so §2.2 stays
-   silent on it until it merges. Every
+   customer loyalty points (#469/#472/#482), product photos (#459), and
+   Plant shop-floor scanning (#489, merged to `main` as `a7d3977d`) — were
+   added as rows. Every
    remaining gap in that document was re-verified as still true; §2.2's "12
    materials/12 operations per plan" in particular looked wrong against the
    data contract's limit of 100 and is in fact correct at the authoring path,
    and now carries an inline note saying so.
+
+   Because three of the five false claims were wrong *when written* rather
+   than overtaken since, the 2026-08-17 inventory that document was built
+   from contained authoring errors, not merely stale entries. A spot-check of
+   six quantitative claims outside the gap sweep confirmed this: §2.1's
+   "8 Myanmar trades … registry-enforced at exactly 8" was wrong on both
+   halves — there are **10** (`beauty-spa` and `bakery` landed in #421) and
+   the guards assert a `>= 7` floor, not an exact count. Corrected in the
+   same commit. Five other figures held (Plant's 5 industry packs, Shop's 6,
+   the 14-account chart, PBKDF2 600k, the 15-minute checkout quote).
+
+   The pass swept the document for "we do not have X" claims; it did **not**
+   re-derive every quantitative figure. The untouched rows should be treated
+   as unverified, and the catalog now carries a standing note saying so.
 
 ---
 
