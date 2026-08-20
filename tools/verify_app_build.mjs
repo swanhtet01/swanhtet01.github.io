@@ -2929,7 +2929,11 @@ const productOutcomeIndex = productOnboardingPageSource.indexOf('First useful re
 const productWorkspaceIndex = productOnboardingPageSource.indexOf('onboardingJourney.actionLabel', productOutcomeIndex)
 const productBoundaryIndex = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.', productWorkspaceIndex)
 const productRepeatEntryIndex = productOnboardingPageSource.indexOf('if (workspaceStarted) {')
-const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce') {", productRepeatEntryIndex)
+// Pinned WITH its managedIdentity guard, so this contract also fails if the guard is removed. The
+// browser-local Shop provisioners write to window.localStorage, which a managed Shop never reads;
+// running them for a signed-in owner reported a trade template as installed when it was not. See
+// hq/research/MANAGED-TEMPLATE-PROVISIONING.md and tools/test_managed_shop_onboarding_honesty.mjs.
+const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce' && !managedIdentity) {", productRepeatEntryIndex)
 if (settingsAdvancedIndex < 0
   || settingsRestorePointIndex < settingsAdvancedIndex
   || !settingsPageSource.includes('className="setup-complete settings-restore-point"')
@@ -5269,7 +5273,13 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes("firstTaskPath: '/plant/?tab=production'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/website/'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/ecommerce/'")
-  || !productOnboardingPageSource.includes('const onboardingJourney = onboardingJourneys[product]')
+  // The journey the screen advertises. A company account gets the browser-local journey with the
+  // managed overrides applied, because "Complete a sample sale" on "a realistic catalog and stock
+  // are ready" is false for it -- there is no catalog to tap. Both halves are pinned: the local
+  // journey is still the base, and the managed override is still applied on top of it.
+  || !productOnboardingPageSource.includes('const onboardingJourney = managedCommerce')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_SHOP_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes(': onboardingJourneys[product]')
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
   || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup)')
