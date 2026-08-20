@@ -252,13 +252,23 @@ export function writeTrialSignup(storage: TrialSignupStorage | undefined | null,
  * the copy, which is deliberate.
  */
 export type TrialSignupDoor = {
-  id: 'trial' | 'managed'
+  id: 'trial' | 'managed' | 'create-account'
   label: string
   detail: string
-  action: 'open-product' | 'sign-in' | 'request-activation'
+  action: 'open-product' | 'sign-in' | 'request-activation' | 'create-account'
 }
 
-export function trialSignupDoors({ managedReady }: { managedReady: boolean }): readonly TrialSignupDoor[] {
+/**
+ * `signupOpen` (default OFF) is PR-1 of hq/strategy/SELF-SERVE-IDENTITY-DESIGN.md: when the
+ * founder-held signup window is open a THIRD door appears -- create your company account
+ * yourself -- while both existing doors keep their exact state. The founder-conversation door
+ * never disappears: activation requests remain answered by a person whether signup is open or
+ * not. No caller passes `signupOpen` yet, so today's behavior is unchanged by construction; PR-2
+ * wires it from the `/api/health` `self_serve_signup_open` signal AND
+ * `managedTrialAuthConfigured()`, both required, and the signal is fail-closed at the runtime
+ * behind SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW (design section 7).
+ */
+export function trialSignupDoors({ managedReady, signupOpen = false }: { managedReady: boolean; signupOpen?: boolean }): readonly TrialSignupDoor[] {
   return [
     {
       id: 'trial',
@@ -279,6 +289,14 @@ export function trialSignupDoors({ managedReady }: { managedReady: boolean }): r
         detail: 'Shared records, your team, and your data off this device. You have already named your business and hold the claim code -- send your activation request, and a person is on hand whenever you want help.',
         action: 'request-activation',
       },
+    ...(signupOpen
+      ? [{
+        id: 'create-account' as const,
+        label: 'Create your company account',
+        detail: 'Sign up with your work email and a password, verify your address, and activate your company with the claim code you already hold.',
+        action: 'create-account' as const,
+      }]
+      : []),
   ]
 }
 
