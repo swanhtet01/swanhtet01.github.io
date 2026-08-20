@@ -30,6 +30,7 @@ import {
   type ManagedStateRecord,
 } from '../../core/managed-trial'
 import { ProductPhoto } from '../../core/ProductPhoto'
+import { productImageScopeForWorkspace } from '../../core/product-image-store'
 import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace'
 import {
   type EcommerceCartLine,
@@ -456,6 +457,10 @@ export function EcommerceProduct() {
     && savedDraft.selectedSkus.length === selectedSkus.length
     && savedDraft.selectedSkus.every((sku) => selectedSkus.includes(sku))
     && JSON.stringify(savedDraft.merchandising ?? null) === JSON.stringify(merchandising))
+  // Device-local product photos are keyed per workspace (product-image-store.ts
+  // scope note): IndexedDB is per-origin, so the storefront preview must ask for
+  // THIS company's photo or a colliding SKU renders another company's picture.
+  const productImageScope = productImageScopeForWorkspace(managedIdentity?.workspaceId)
   const savedCatalogIsCurrent = managedIdentity
     ? Boolean(savedDraft?.shopCatalogDigest
       && managedCatalogDigest
@@ -2194,7 +2199,7 @@ export function EcommerceProduct() {
                       data-requested={buyingCart.some((line) => line.sku === item.sku) ? 'true' : 'false'}
                       key={item.sku}
                     >
-                      <ProductPhoto className="storefront-product-art storefront-product-photo" fallback={<StorefrontProductArtwork sku={item.sku} />} sku={item.sku} />
+                      <ProductPhoto className="storefront-product-art storefront-product-photo" fallback={<StorefrontProductArtwork sku={item.sku} />} scope={productImageScope} sku={item.sku} />
                       <small>{item.merchandising ? `${item.merchandising.featured ? 'Featured · ' : ''}${item.merchandising.collection}` : item.variant || item.sku}</small>
                       <strong>{displayName}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>

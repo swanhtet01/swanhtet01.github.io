@@ -19,8 +19,8 @@ import { useProductImageUrl } from './use-product-image'
  * fallback (the surface's pre-photo rendering). The photo is decorative — the
  * product name is always adjacent text — so the img stays alt="".
  */
-export function ProductPhoto({ className, fallback, sku }: { className: string; fallback: ReactNode; sku: string }) {
-  const url = useProductImageUrl(sku)
+export function ProductPhoto({ className, fallback, scope, sku }: { className: string; fallback: ReactNode; scope: string; sku: string }) {
+  const url = useProductImageUrl(scope, sku)
   if (!url) return <>{fallback}</>
   return <img alt="" className={className} src={url} />
 }
@@ -32,8 +32,8 @@ export function ProductPhoto({ className, fallback, sku }: { className: string; 
  * unavailable so the stock table stays clean instead of offering a dead
  * control.
  */
-export function ShopProductPhotoControl({ disabled, name, sku }: { disabled: boolean; name: string; sku: string }) {
-  const url = useProductImageUrl(sku)
+export function ShopProductPhotoControl({ disabled, name, scope, sku }: { disabled: boolean; name: string; scope: string; sku: string }) {
+  const url = useProductImageUrl(scope, sku)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [issue, setIssue] = useState('')
@@ -46,7 +46,7 @@ export function ShopProductPhotoControl({ disabled, name, sku }: { disabled: boo
     setBusy(true)
     setIssue('')
     try {
-      await putProductImage(sku, await downscaleProductPhoto(file))
+      await putProductImage(scope, sku, await downscaleProductPhoto(file))
     } catch (error) {
       setIssue(error instanceof Error && error.message ? error.message : 'The photo could not be saved on this device.')
     } finally {
@@ -58,7 +58,7 @@ export function ShopProductPhotoControl({ disabled, name, sku }: { disabled: boo
     setBusy(true)
     setIssue('')
     try {
-      await deleteProductImage(sku)
+      await deleteProductImage(scope, sku)
     } catch {
       setIssue('The photo could not be removed.')
     } finally {

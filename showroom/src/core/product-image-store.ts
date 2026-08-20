@@ -41,30 +41,56 @@
 // A SKU that is renamed or deleted simply strands its photo; a re-created SKU
 // inherits it. Both are harmless — the photo only renders when a matching
 // catalog SKU is on screen.
+//
+// WORKSPACE SCOPE (post-wave audit of PR #459). IndexedDB is per-origin, not
+// per-workspace, and the same browser can serve more than one company: the
+// device-local workspace and any number of managed ones (`managedIdentity`
+// changes with the signed-in company, and `useCommerceWorkspace` then loads
+// that company's own catalog). Keyed by SKU alone, a photo stored against
+// 'RICE-5KG' by one company rendered on every other company's counter tile,
+// stock row, and storefront preview card for its own 'RICE-5KG' — short
+// human-chosen SKUs collide across shops constantly. "Reset this device"
+// deleting the whole database (deleteAllProductImageData below) covers device
+// handover but not two companies alternating on one browser, which is the case
+// this scope closes. Every record is therefore keyed by [scope, sku], where
+// scope is `productImageScopeForWorkspace(workspaceId)`: 'managed:<workspaceId>'
+// for a managed company, 'local' for the device-local workspace (one per
+// browser by construction — see local-workspace-storage.ts). Identical to the
+// payment-QR store's scope (payment-qr-store.ts, Codex P1 on PR #465) and the
+// loyalty settings' (shop-loyalty.ts, PR #469), for the same per-origin reason.
+// Scope is a REQUIRED argument end to end; no call site can silently fall back
+// to a shared key.
 
 const DB_NAME = 'supermega.product-images.v1'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'images'
 const MAX_SKU_LENGTH = 80
+const MAX_SCOPE_LENGTH = 160
 const MAX_EDGE_PX = 1280
 const JPEG_QUALITY = 0.8
 const MAX_SOURCE_BYTES = 64 * 1024 * 1024
 
+/** The storage scope for a workspace: its managed id, or the device-local workspace. */
+export function productImageScopeForWorkspace(workspaceId?: string | null): string {
+  return workspaceId ? `managed:${workspaceId}` : 'local'
+}
+
 export type ProductImageRecord = {
+  scope: string
   sku: string
   imageId: string
   blob: Blob
   updatedAt: string
 }
 
-type ProductImageListener = (sku: string) => void
+type ProductImageListener = (scope: string, sku: string) => void
 
 const listeners = new Set<ProductImageListener>()
 
-function notifyProductImageChange(sku: string) {
+function notifyProductImageChange(scope: string, sku: string) {
   for (const listener of [...listeners]) {
     try {
-      listener(sku)
+      listener(scope, sku)
     } catch {
       // One broken subscriber must not stop the rest from refreshing.
     }
@@ -94,6 +120,13 @@ function requireSku(sku: string): string {
   return sku
 }
 
+function requireScope(scope: string): string {
+  if (typeof scope !== 'string' || !scope || scope !== scope.trim() || scope.length > MAX_SCOPE_LENGTH) {
+    throw new Error('A product photo needs a valid workspace scope.')
+  }
+  return scope
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (!productImagesSupported()) {
@@ -103,12 +136,63 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = () => {
       const database = request.result
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME, { keyPath: 'sku' })
+      // v1 keyed records by SKU alone — the cross-workspace bug this module's
+      // scope note describes. A v1 record carries no workspace, so it cannot be
+      // attributed to the company that took it; showing it under a company that
+      // may not own it is the exact defect being closed, so v1 records are
+      // dropped rather than migrated, the same call payment-qr-store.ts made.
+      // Unlike that store, v1 here did merge to main (PR #459) — but the
+      // showroom reaches production only through the founder-gated coordinated
+      // release, which has not carried it, so the exposure is pre-release
+      // devices. The drop is affordable only for this kind of record: photos
+      // are presentation data, never enter a company backup (see the BACKUP
+      // note above), and every surface falls back to its pre-photo rendering,
+      // so the owner re-adds one in a tap from the stock row. Migrating them
+      // into the 'local' scope instead was considered and rejected: it needs a
+      // cursor copy inside the versionchange transaction whose failure mode
+      // leaves the database wedged at v1 with photos permanently unreadable,
+      // which is a worse outcome than re-taking a picture.
+      if (database.objectStoreNames.contains(STORE_NAME)) {
+        database.deleteObjectStore(STORE_NAME)
       }
+      database.createObjectStore(STORE_NAME, { keyPath: ['scope', 'sku'] })
     }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('Photo storage could not be opened.'))
+    // An IDBOpenDBRequest cannot be cancelled, so a request that has already
+    // settled this promise the 'blocked' way still runs to completion and still
+    // hands back a live connection. `settled` is what keeps that connection from
+    // being orphaned — see onsuccess.
+    let settled = false
+    request.onsuccess = () => {
+      if (settled) {
+        // Late success after a blocked rejection. resolve() here would be a
+        // no-op, so nobody ever receives this IDBDatabase and nobody closes it.
+        // With one open request per rendered product that orphans a connection
+        // per photo, and an open connection is exactly what blocks
+        // deleteAllProductImageData() (the device-handover sweep) and every
+        // future version change until the page unloads. Close it here instead.
+        request.result.close()
+        return
+      }
+      settled = true
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      if (settled) return
+      settled = true
+      reject(request.error ?? new Error('Photo storage could not be opened.'))
+    }
+    // v1 -> v2 is the first version change this database performs in the field,
+    // and an open() that needs an upgrade fires 'blocked' — not 'error' — while
+    // another tab still holds a v1 connection. Without this the promise would
+    // never settle: a second counter tab opened across a deploy could leave the
+    // photo control stuck busy with no ceiling. Rejecting degrades to the
+    // documented photo-less fallback instead, and the next call succeeds as
+    // soon as the other tab closes its (short-lived) connection.
+    request.onblocked = () => {
+      if (settled) return
+      settled = true
+      reject(new Error('Photo storage is busy in another tab. Close the other SuperMega tab and try again.'))
+    }
   })
 }
 
@@ -132,35 +216,39 @@ async function withImageStore<T>(mode: IDBTransactionMode, run: (store: IDBObjec
 function parseProductImageRecord(value: unknown): ProductImageRecord | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Partial<ProductImageRecord>
+  if (typeof record.scope !== 'string' || !record.scope) return null
   if (typeof record.sku !== 'string' || !record.sku) return null
   if (typeof record.imageId !== 'string' || !record.imageId) return null
   if (typeof record.updatedAt !== 'string') return null
   if (!(record.blob instanceof Blob) || record.blob.size < 1) return null
-  return { sku: record.sku, imageId: record.imageId, blob: record.blob, updatedAt: record.updatedAt }
+  return { scope: record.scope, sku: record.sku, imageId: record.imageId, blob: record.blob, updatedAt: record.updatedAt }
 }
 
-/** Stores (or replaces) the photo for a SKU and returns the new image id. */
-export async function putProductImage(sku: string, blob: Blob): Promise<string> {
+/** Stores (or replaces) the photo for a SKU in one workspace scope; returns the new image id. */
+export async function putProductImage(scope: string, sku: string, blob: Blob): Promise<string> {
+  const scopeKey = requireScope(scope)
   const key = requireSku(sku)
   if (!(blob instanceof Blob) || blob.size < 1) throw new Error('The processed photo is empty. Nothing was saved.')
   const imageId = `IMG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
-  const record: ProductImageRecord = { sku: key, imageId, blob, updatedAt: new Date().toISOString() }
+  const record: ProductImageRecord = { scope: scopeKey, sku: key, imageId, blob, updatedAt: new Date().toISOString() }
   await withImageStore('readwrite', (store) => store.put(record))
-  notifyProductImageChange(key)
+  notifyProductImageChange(scopeKey, key)
   return imageId
 }
 
-/** The stored photo for a SKU, or null when there is none (or storage is unavailable). */
-export async function getProductImage(sku: string): Promise<ProductImageRecord | null> {
+/** The stored photo for a SKU in one workspace scope, or null when there is none (or storage is unavailable). */
+export async function getProductImage(scope: string, sku: string): Promise<ProductImageRecord | null> {
+  let scopeKey: string
   let key: string
   try {
+    scopeKey = requireScope(scope)
     key = requireSku(sku)
   } catch {
     return null
   }
   if (!productImagesSupported()) return null
   try {
-    const value = await withImageStore<unknown>('readonly', (store) => store.get(key) as IDBRequest<unknown>)
+    const value = await withImageStore<unknown>('readonly', (store) => store.get([scopeKey, key]) as IDBRequest<unknown>)
     return parseProductImageRecord(value)
   } catch {
     // A blocked or broken photo store must never break the surface that asked;
@@ -169,10 +257,11 @@ export async function getProductImage(sku: string): Promise<ProductImageRecord |
   }
 }
 
-export async function deleteProductImage(sku: string): Promise<void> {
+export async function deleteProductImage(scope: string, sku: string): Promise<void> {
+  const scopeKey = requireScope(scope)
   const key = requireSku(sku)
-  await withImageStore('readwrite', (store) => store.delete(key) as IDBRequest<undefined>)
-  notifyProductImageChange(key)
+  await withImageStore('readwrite', (store) => store.delete([scopeKey, key]) as IDBRequest<undefined>)
+  notifyProductImageChange(scopeKey, key)
 }
 
 async function decodePhoto(source: Blob): Promise<ImageBitmap> {

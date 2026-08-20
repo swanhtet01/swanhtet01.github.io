@@ -197,9 +197,32 @@ async function openDatabase() {
         receipts.createIndex('acknowledgedAt', 'acknowledgedAt', { unique: false })
       }
     }
-    request.onerror = () => reject(request.error ?? new Error('The Shop sync database could not be opened.'))
-    request.onblocked = () => reject(new Error('Another tab blocked the Shop sync database upgrade.'))
-    request.onsuccess = () => resolve(request.result)
+    // An IDBOpenDBRequest cannot be cancelled, so a 'blocked' rejection does not
+    // stop the request: when the blocking tab closes, the upgrade completes and
+    // onsuccess still fires with a live connection whose resolve() is a no-op.
+    // Nobody would receive or close that IDBDatabase, and an open connection is
+    // exactly what blocks the NEXT upgrade — so a single blocked open could wedge
+    // Shop recovery for the rest of the page's life, on the path that protects
+    // staged commerce writes. Close a late connection instead.
+    let settled = false
+    request.onerror = () => {
+      if (settled) return
+      settled = true
+      reject(request.error ?? new Error('The Shop sync database could not be opened.'))
+    }
+    request.onblocked = () => {
+      if (settled) return
+      settled = true
+      reject(new Error('Another tab blocked the Shop sync database upgrade.'))
+    }
+    request.onsuccess = () => {
+      if (settled) {
+        request.result.close()
+        return
+      }
+      settled = true
+      resolve(request.result)
+    }
   })
   database.onversionchange = () => database.close()
   return database
