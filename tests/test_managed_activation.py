@@ -20,14 +20,17 @@ from supermega_runtime.managed_context import (
 from supermega_runtime.managed_activation import (
     ACTIVATION_PLAN_CONTRACT,
     ACTIVATION_RECEIPT_CONTRACT,
+    MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
     SUSPENSION_RECEIPT_CONTRACT,
     TRIAL_SCHEMA_VERSION,
     ManagedActivationConflict,
     ManagedActivationError,
     ManagedWorkspaceProvisioner,
     compile_activation_plan,
+    compile_multi_product_activation_plan,
     main,
     validate_activation_plan,
+    validate_multi_product_activation_plan,
     _validate_admin_target,
 )
 
@@ -227,7 +230,7 @@ def managed_trial_request() -> dict[str, object]:
     }
 
 
-def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+def managed_trial_request_for(product_slug: str = "shop") -> dict[str, object]:
     request = managed_trial_request()
     request["productSlug"] = product_slug
     if product_slug in {"plant", "production"}:
@@ -240,6 +243,11 @@ def activation_plan(product_slug: str = "shop") -> dict[str, object]:
         request["pilotOutcomeReport"] = outcome
         request["approvedAiContext"] = approved_ai_context(outcome)
         request["managedWorkspaceProvisioningPacket"]["dataPackage"]["pilotOutcomeDigest"] = outcome["reportDigest"]  # type: ignore[index]
+    return request
+
+
+def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+    request = managed_trial_request_for(product_slug)
     return compile_activation_plan(
         request,
         workspace_id="mingalar-fresh-mart",
@@ -468,6 +476,31 @@ class FakeCursor:
 
 
 class ManagedActivationPlanTests(unittest.TestCase):
+    def test_multi_product_plan_is_one_tenant_with_union_capabilities(self) -> None:
+        plan = compile_multi_product_activation_plan(
+            [managed_trial_request_for("shop"), managed_trial_request_for("plant")],
+            workspace_id="mingalar-fresh-mart",
+            owner_actor_id=OWNER_ID,
+            approval_id=APPROVAL_ID,
+            approved_by="Swan Htet",
+            approved_at=_fixture_timestamp(5),
+            project_ref=PROJECT_REF,
+            release_commit=RELEASE_COMMIT,
+            admin_ca_sha256=ADMIN_CA_SHA256,
+            now=NOW,
+        )
+        self.assertEqual(plan["contract"], MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT)
+        self.assertEqual(plan["products"], ["shop", "plant"])
+        self.assertIn("commerce.write", plan["ownerCapabilities"])
+        self.assertIn("production.write", plan["ownerCapabilities"])
+        self.assertEqual(len(plan["sourcePlans"]), 2)
+        self.assertEqual(validate_multi_product_activation_plan(plan), plan)
+
+        tampered = deepcopy(plan)
+        tampered["products"].reverse()
+        with self.assertRaises(ManagedActivationError):
+            validate_multi_product_activation_plan(tampered)
+
     def test_plan_is_deterministic_redacted_and_capability_scoped(self) -> None:
         first = activation_plan()
         second = activation_plan()
@@ -600,6 +633,29 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         with self.assertRaisesRegex(ManagedActivationError, "session is no longer active"):
             self.authorize()
         self.assertEqual(self.database.approvals, [])
+
+    def test_multi_product_plan_applies_one_membership_with_union_capabilities(self) -> None:
+        self.plan = compile_multi_product_activation_plan(
+            [managed_trial_request_for("shop"), managed_trial_request_for("plant")],
+            workspace_id="mingalar-fresh-mart",
+            owner_actor_id=OWNER_ID,
+            approval_id=APPROVAL_ID,
+            approved_by="Swan Htet",
+            approved_at=_fixture_timestamp(5),
+            project_ref=PROJECT_REF,
+            release_commit=RELEASE_COMMIT,
+            admin_ca_sha256=ADMIN_CA_SHA256,
+            now=NOW,
+        )
+        self.authorize()
+        activated = self.provisioner.apply(self.plan)
+        self.assertEqual(activated["contract"], ACTIVATION_RECEIPT_CONTRACT)
+        self.assertEqual(len(self.database.memberships), 1)
+        capabilities = self.database.memberships[0]["capabilities"]
+        self.assertIn("commerce.write", capabilities)
+        self.assertIn("production.write", capabilities)
+        event = next(iter(self.database.events.values()))
+        self.assertEqual(event["payload_json"]["products"], ["shop", "plant"])
 
     def test_apply_replay_suspend_and_suspension_replay_are_idempotent(self) -> None:
         preflight = self.provisioner.inspect(self.plan)
