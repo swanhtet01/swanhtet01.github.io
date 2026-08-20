@@ -142,27 +142,6 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
   }
 }
 
-/**
- * Install the industry pack's appointment book, PRESERVING any appointment already taken.
- *
- * provisionEmptyShopServiceSchedule refuses to overwrite a schedule that has bookings, and that
- * refusal is correct -- it is protecting a real customer's appointment. What was wrong is that
- * this function let the exception escape into ProductOnboardingPage's provisioning run, which
- * aborts BEFORE the catalog installs. So the sequence a spa would naturally follow -- take a
- * booking, then finish setting up -- left the shop with no catalog at all.
- *
- * It now returns the schedule that is actually in force -- the new one when installed, the
- * EXISTING one when an appointment made it unsafe to replace -- instead of throwing. The return
- * type is deliberately unchanged so callers that read .industryPackId keep working, and when a
- * schedule is preserved that pack id is the correct answer anyway. The invariant stays where it
- * belongs, in provisionEmptyShopServiceSchedule.
- *
- * What is installed is the pack's guided sample day, not a blank book. A spa whose first screen
- * is an empty diary has been handed a filing cabinet; three bookings partway through their day
- * is the product working. The sample is replaceable by construction --
- * isGuidedSampleShopSchedule holds for it -- and it books nothing a real customer would be
- * charged for.
- */
 // ==============================================================================================
 // What a SIGNED-IN (managed) owner is told when she picks a trade.
 //
@@ -229,6 +208,27 @@ export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
   actionLabel: 'Create Shop and add your first item',
 }
 
+/**
+ * Install the industry pack's appointment book, PRESERVING any appointment already taken.
+ *
+ * provisionEmptyShopServiceSchedule refuses to overwrite a schedule that has bookings, and that
+ * refusal is correct -- it is protecting a real customer's appointment. What was wrong is that
+ * this function let the exception escape into ProductOnboardingPage's provisioning run, which
+ * aborts BEFORE the catalog installs. So the sequence a spa would naturally follow -- take a
+ * booking, then finish setting up -- left the shop with no catalog at all.
+ *
+ * It now returns the schedule that is actually in force -- the new one when installed, the
+ * EXISTING one when an appointment made it unsafe to replace -- instead of throwing. The return
+ * type is deliberately unchanged so callers that read .industryPackId keep working, and when a
+ * schedule is preserved that pack id is the correct answer anyway. The invariant stays where it
+ * belongs, in provisionEmptyShopServiceSchedule.
+ *
+ * What is installed is the pack's guided sample day, not a blank book. A spa whose first screen
+ * is an empty diary has been handed a filing cabinet; three bookings partway through their day
+ * is the product working. The sample is replaceable by construction --
+ * isGuidedSampleShopSchedule holds for it -- and it books nothing a real customer would be
+ * charged for.
+ */
 export function provisionLocalShopIndustryPack(
   industryPackId: ShopIndustryPackId,
   planningDay = new Date().toISOString().slice(0, 10),
