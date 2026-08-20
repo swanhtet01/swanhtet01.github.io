@@ -108,14 +108,32 @@ a materially better phone product than existed 48 hours ago (section 3).
    `database:postgres17:record` → `readiness:managed:write` cascade that
    `CLAUDE.md` records as currently blocked on PG17 access.
 
-5. **Two stale gap claims in `PRODUCT-CATALOG-AND-PRICING.md`** (2026-08-17,
-   overtaken 2026-08-19). §2.1 "Top 3 honest gaps" item 2 says "no barcode
-   scanning" — shipped as `showroom/src/core/BarcodeScanButton.tsx` (roadmap
-   S1, #459). §2.4 item 2 says "no product images" — shipped as
-   `showroom/src/core/product-image-store.ts` (roadmap E1, #459). The
-   receipt-printer/cash-drawer half of the §2.1 claim is still true (roadmap
-   S4 is founder-gated on hardware). Sales copy lifted from that document
-   today would understate the product.
+5. ~~**Two stale gap claims in `PRODUCT-CATALOG-AND-PRICING.md`**~~ —
+   **CLOSED 2026-08-20.** Both are corrected in place, citing the shipping
+   file and PR: §2.1's "no barcode scanning" (shipped as
+   `showroom/src/core/BarcodeScanButton.tsx`, roadmap S1, #459) and §2.4's
+   "no product images" (shipped as `showroom/src/core/product-image-store.ts`,
+   roadmap E1, #459). The receipt-printer/cash-drawer half of the §2.1 claim
+   was re-verified and is still true, so it stays (roadmap S4 is founder-gated
+   on hardware).
+
+   The same pass swept every other "we do not have X" claim in that document
+   against live source and found three more that were false — and, unlike the
+   two above, false *when written*, not overtaken since: §2.3's "no
+   sitemap/robots/Open Graph" (the export has emitted a `robots` directive and
+   Open Graph tags since 2026-07-24), §2.1's "no dedicated guard suite" on
+   replenishment/demand intelligence, and §2.4's "no dedicated guard test yet"
+   on activation packets (both guard suites predate the document). All three
+   understated the product. Four shipped modules the catalog omitted
+   outright — camera barcode scanning (#459), merchant payment QR (#465),
+   customer loyalty points (#469/#472/#482), product photos (#459) — were
+   added as rows. Plant shop-floor scanning (#489) is deliberately **not**
+   listed: that PR is still open at the time of this pass, so §2.2 stays
+   silent on it until it merges. Every
+   remaining gap in that document was re-verified as still true; §2.2's "12
+   materials/12 operations per plan" in particular looked wrong against the
+   data contract's limit of 100 and is in fact correct at the authoring path,
+   and now carries an inline note saying so.
 
 ---
 
