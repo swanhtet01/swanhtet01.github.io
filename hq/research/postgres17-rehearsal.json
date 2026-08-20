@@ -1,10 +1,10 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-19T10:43:25.694Z",
+  "recordedAt": "2026-08-20T10:43:36.579Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "e569b02c379662949bdbe9af473ec0fc007a3303",
+  "implementationCommit": "d4c18da7dc178216c60a3bee6271615c3920c0ff",
   "implementation": {
-    "digest": "sha256:d133fe3bfd18a3fdd54c0e4a63c265bcc4b60a5ad78b866bfbc10bc2f18e1dfb",
+    "digest": "sha256:301702bb8f0990dec29b0403d776920109a0991ab9eaae8ababfa59b1b77381d",
     "paths": [
       "supermega_runtime/managed_context.py",
       "supermega_runtime/managed_activation.py",
@@ -16,6 +16,7 @@
       "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
       "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
       "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+      "supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "tools/activate_supermega_database.ps1",
       "tools/rehearse_supermega_postgres17.py",
@@ -24,8 +25,8 @@
       "tools/verify_managed_runtime_environment_values.mjs"
     ]
   },
-  "implementationDigest": "sha256:d133fe3bfd18a3fdd54c0e4a63c265bcc4b60a5ad78b866bfbc10bc2f18e1dfb",
-  "implementationFileCount": 16,
+  "implementationDigest": "sha256:301702bb8f0990dec29b0403d776920109a0991ab9eaae8ababfa59b1b77381d",
+  "implementationFileCount": 17,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -50,8 +51,8 @@
     "loopbackOnly": true
   },
   "migration": {
-    "count": 11,
-    "schemaVersion": 10,
+    "count": 12,
+    "schemaVersion": 11,
     "productionValidatorReady": true
   },
   "runtime": {
@@ -123,7 +124,7 @@
   "recovery": {
     "backupNonempty": true,
     "format": "pg_dump_custom",
-    "restoredSchemaVersion": 10
+    "restoredSchemaVersion": 11
   },
   "storage": {
     "catalogMode": "local_private_fixture",
