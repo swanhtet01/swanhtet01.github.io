@@ -33,7 +33,7 @@ def _run(*arguments: object) -> subprocess.CompletedProcess[str]:
 
 
 class ClientPortalProvisioningTests(unittest.TestCase):
-    def _spa_preparation(self, directory: Path) -> Path:
+    def _spa_preparation(self, directory: Path, products: str = "shop,website,ecommerce") -> Path:
         workspace = directory / "intake"
         initialized = _run(
             "node",
@@ -43,7 +43,7 @@ class ClientPortalProvisioningTests(unittest.TestCase):
             "--preset",
             "service-business",
             "--products",
-            "shop,website,ecommerce",
+            products,
         )
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
 
@@ -105,6 +105,22 @@ class ClientPortalProvisioningTests(unittest.TestCase):
                 len({product["provisioningPlan"]["planDigest"] for product in bundle["products"]}),
                 3,
             )
+            access = bundle["tenantAccessPlan"]
+            self.assertEqual(access["products"], ["shop", "website", "ecommerce"])
+            self.assertEqual(access["runtimeProducts"], ["commerce", "website", "ecommerce"])
+            self.assertEqual(access["membershipRowsPlanned"], 1)
+            self.assertTrue(access["sharedSurfaceDoesNotGrantProduct"])
+            self.assertIn("commerce.read", access["ownerCapabilities"])
+            self.assertIn("website.read", access["ownerCapabilities"])
+            self.assertIn("ecommerce.read", access["ownerCapabilities"])
+            self.assertEqual(
+                access["surfaceBindings"],
+                [
+                    {"product": "shop", "surface": "commerce"},
+                    {"product": "website", "surface": "website"},
+                    {"product": "ecommerce", "surface": "commerce"},
+                ],
+            )
             self.assertTrue(bundle["portalControls"]["tenantIsolationRequired"])
             self.assertFalse(bundle["portalControls"]["crossTenantReadsAllowed"])
             self.assertFalse(bundle["portalControls"]["crossProductWritesAllowed"])
@@ -140,6 +156,17 @@ class ClientPortalProvisioningTests(unittest.TestCase):
             stale["products"][0]["packageDigest"] = "sha256:" + "0" * 64
             with self.assertRaises(ClientPortalProvisioningError):
                 verify_client_portal_provisioning_bundle(bundle, stale)
+
+    def test_shop_only_access_does_not_grant_ecommerce_product(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-shop-only-portal-") as temporary:
+            preparation_path = self._spa_preparation(Path(temporary), "shop")
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            access = build_client_portal_provisioning_bundle(preparation)["tenantAccessPlan"]
+            self.assertEqual(access["products"], ["shop"])
+            self.assertEqual(access["runtimeProducts"], ["commerce"])
+            self.assertEqual(access["surfaceBindings"], [{"product": "shop", "surface": "commerce"}])
+            self.assertIn("commerce.read", access["ownerCapabilities"])
+            self.assertNotIn("ecommerce.read", access["ownerCapabilities"])
 
     def test_plant_portal_preserves_the_reviewed_industry_pack(self) -> None:
         with tempfile.TemporaryDirectory(prefix="supermega-plant-portal-") as temporary:

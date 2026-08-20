@@ -211,6 +211,22 @@ test('managed product access is derived only from verified tenant surfaces', () 
     approvals: [],
   }
   assert.deepEqual(managedProductsFromBootstrap(bootstrap, identity), ['commerce', 'website', 'ecommerce'])
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['commerce'] } }, identity),
+    ['commerce'],
+  )
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['ecommerce'] } }, identity),
+    ['ecommerce'],
+  )
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['production'] } }, identity),
+    [],
+  )
+  assert.throws(
+    () => managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['ecommerce', 'commerce'] } }, identity),
+    (error) => error instanceof ManagedTrialError && error.code === 'managed_bootstrap_invalid',
+  )
   assert.deepEqual(managedProductsFromBootstrap({ ...bootstrap, states: { company: bootstrap.states.company, setup: bootstrap.states.setup } }, identity), [])
   assert.throws(
     () => managedProductsFromBootstrap({ ...bootstrap, identity: { ...bootstrap.identity, workspace_id: 'another-company' } }, identity),

@@ -21,7 +21,7 @@ from supermega_runtime.client_provisioning import (
 )
 
 
-CONTRACT = "supermega.client_portal_provisioning_bundle.v3"
+CONTRACT = "supermega.client_portal_provisioning_bundle.v4"
 PREPARATION_CONTRACT = "supermega.client_demo_preparation.v3"
 PRODUCT_ORDER = ("commerce", "production", "website", "ecommerce")
 PRODUCT_IDS = {
@@ -185,7 +185,7 @@ def build_client_portal_provisioning_bundle(preparation: Mapping[str, Any]) -> d
 
     payload: dict[str, Any] = {
         "contract": CONTRACT,
-        "version": 3,
+        "version": 4,
         "client": {
             "workspace": workspace,
             "owner": owner,
@@ -200,6 +200,28 @@ def build_client_portal_provisioning_bundle(preparation: Mapping[str, Any]) -> d
             "containsSampleFixtures": controls["containsSampleFixtures"],
         },
         "products": planned_products,
+        "tenantAccessPlan": {
+            "status": "planned_not_applied",
+            "products": [product["productId"] for product in planned_products],
+            "runtimeProducts": [product["product"] for product in planned_products],
+            "surfaceBindings": [
+                {
+                    "product": product["productId"],
+                    "surface": "commerce" if product["product"] == "ecommerce" else product["product"],
+                }
+                for product in planned_products
+            ],
+            "ownerCapabilities": sorted({
+                capability
+                for product in planned_products
+                for role in product["provisioningPlan"]["resources"]["roles"]
+                if role["id"] == "owner"
+                for capability in role["capabilities"]
+            }),
+            "membershipRowsPlanned": 1,
+            "sharedSurfaceDoesNotGrantProduct": True,
+            "tenantWritesPerformed": False,
+        },
         "portalControls": {
             "namedWorkspaceRequired": True,
             "namedOwnerRequired": True,

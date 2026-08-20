@@ -273,7 +273,7 @@ export type ManagedBootstrap = {
     actor_id: string
     actor_kind: 'human' | 'service' | 'agent'
   }
-  readiness: Record<string, unknown>
+  readiness: Record<string, unknown> & { productEntitlements?: ClientSolutionId[] }
   states: Partial<Record<ManagedSurface, ManagedStateRecord>>
   approvals: ManagedApprovalRecord[]
 }
@@ -2422,6 +2422,23 @@ export function managedProductsFromBootstrap(
   expectedIdentity: ManagedIdentity,
 ): ClientSolutionId[] {
   const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
+  const explicit = verified.readiness.productEntitlements
+  if (explicit !== undefined) {
+    const order: ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
+    if (!Array.isArray(explicit)
+      || explicit.some((product) => !order.includes(product))
+      || new Set(explicit).size !== explicit.length
+      || JSON.stringify(explicit) !== JSON.stringify(order.filter((product) => explicit.includes(product)))) {
+      throw new ManagedTrialError('The company account returned invalid product entitlements.', {
+        code: 'managed_bootstrap_invalid',
+      })
+    }
+    return explicit.filter((product) => {
+      if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)
+      if (product === 'production') return Boolean(verified.states.production)
+      return Boolean(verified.states.website)
+    })
+  }
   const products: ClientSolutionId[] = []
   if (verified.states.commerce) products.push('commerce')
   if (verified.states.production) products.push('production')
