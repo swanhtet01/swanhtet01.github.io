@@ -113,6 +113,27 @@ throws(() => validateCreateAccountRequest({ ...base, termsAccepted: false }), 'a
 throws(() => validateCreateAccountRequest({ ...base, termsAccepted: 'yes' }), 'a truthy stand-in is refused at validate -- acceptance is the literal true, never a coerced string')
 throws(() => validateCreateAccountRequest({ ...base, termsAccepted: 1 }), 'a numeric stand-in is refused too')
 
+// Acceptance must be RECORDED, never INHERITED. A bare `input.termsAccepted` read walks the
+// prototype chain, so one polluted `Object.prototype.termsAccepted = true` anywhere in the bundle
+// would turn every unticked box into a consent record for a human who never gave one.
+const unticked = { email: base.email, password: PASSWORD, confirmation: PASSWORD }
+throws(() => validateCreateAccountRequest(unticked), 'an unticked box is refused on a clean prototype')
+Object.defineProperty(Object.prototype, 'termsAccepted', { value: true, configurable: true })
+try {
+  throws(
+    () => validateCreateAccountRequest(unticked),
+    'A POLLUTED Object.prototype.termsAccepted CANNOT FORGE AN ACCEPTANCE -- consent is an own '
+    + 'property or it is not consent',
+  )
+} finally {
+  delete Object.prototype.termsAccepted
+}
+check(Object.prototype.termsAccepted === undefined, 'the guard leaves Object.prototype as it found it')
+throws(
+  () => validateCreateAccountRequest(Object.assign(Object.create({ termsAccepted: true }), unticked)),
+  'terms inherited from a caller-supplied prototype are refused too',
+)
+
 // --- the panel machine: no path to verified that skips sent --------------------------
 check(createAccountPanelTransition('idle', 'confirmation-sent') === 'sent', 'submitting moves idle to sent')
 check(createAccountPanelTransition('sent', 'resend') === 'sent', 'resending stays on the sent screen')
@@ -126,6 +147,43 @@ throws(() => createAccountPanelTransition('verified', 'resend'), 'verified is te
 throws(() => createAccountPanelTransition('verified', 'confirmation-sent'), 'verified is terminal: no re-submit')
 throws(() => createAccountPanelTransition('verified', 'email-verified'), 'verified is terminal: no re-verify')
 throws(() => createAccountPanelTransition('nonsense', 'resend'), 'an unknown state is refused, not absorbed')
+
+// The transition table is consulted with OWN-PROPERTY lookups at both levels. A bare
+// `PANEL_TRANSITIONS[state]?.[event]` reads through Object.prototype, so an inherited builtin --
+// 'constructor', 'toString', anything a polluted prototype carries -- resolves to a truthy value
+// and is therefore an ACCEPTED move. Both slots are checked because each is separately exposed.
+for (const state of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'isPrototypeOf']) {
+  for (const event of ['name', 'call', 'constructor', 'resend']) {
+    throws(
+      () => createAccountPanelTransition(state, event),
+      `AN INHERITED STATE IS NOT A STATE -- "${state}" + "${event}" must be refused, not read off Object.prototype`,
+    )
+  }
+}
+for (const event of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'isPrototypeOf']) {
+  for (const state of ['idle', 'sent', 'verified']) {
+    throws(
+      () => createAccountPanelTransition(state, event),
+      `AN INHERITED EVENT IS NOT AN EVENT -- "${state}" + "${event}" must be refused, not read off Object.prototype`,
+    )
+  }
+}
+
+// The invariant this machine exists to hold must not depend on Object.prototype being clean:
+// with `email-verified` inherited, a bare lookup walks idle straight to verified without a
+// confirmation link ever having been opened.
+Object.defineProperty(Object.prototype, 'email-verified', { value: 'verified', configurable: true })
+try {
+  throws(
+    () => createAccountPanelTransition('idle', 'email-verified'),
+    'A POLLUTED PROTOTYPE CANNOT VERIFY AN EMAIL -- idle still refuses email-verified when the '
+    + 'move is inherited rather than declared',
+  )
+  check(createAccountPanelTransition('sent', 'email-verified') === 'verified', 'and the declared move still works with the prototype polluted')
+} finally {
+  delete Object.prototype['email-verified']
+}
+check(Object.prototype['email-verified'] === undefined, 'the guard leaves Object.prototype as it found it')
 
 // --- copy: enumeration-safe, floor-accurate, and no terms URL yet ---------------------
 check(
