@@ -38,7 +38,7 @@ infra required first.
 
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
-| E1 | Product photos (Shopify/Wix/TikTok Shop are photo-first; our storefront is text-only) | `CommerceStorefrontMerchandising` (`commerce-workspace.ts` ~1059-1065) and `StorefrontPreviewItem` (`storefront-model.ts` ~20-27) have no image field at all | Extended (#483): storefront preview cards flip photo-FIRST via `:has()` when a photo exists (4:3 cover image layout; no-photo cards and non-`:has()` browsers keep the artwork card byte-identically). **SHIPPED 2026-08-19** (#459): `product-image-store.ts` IndexedDB store, downscale-on-ingest; inventory rows + counter tiles + storefront preview. One deliberate deviation from this row's sketch: NO `imageId` on the workspace record — the deployed managed backend enforces exact-field item contracts (`commerce_runtime.py` `_ITEM_FIELDS`), so the SKU→photo binding lives in IndexedDB next to the blob |
+| E1 | Product photos (Shopify/Wix/TikTok Shop are photo-first; our storefront is text-only) | `CommerceStorefrontMerchandising` (`commerce-workspace.ts` ~1059-1065) and `StorefrontPreviewItem` (`storefront-model.ts` ~20-27) have no image field at all | Extended (#483): storefront preview cards flip photo-FIRST via `:has()` when a photo exists (4:3 cover image layout; no-photo cards and non-`:has()` browsers keep the artwork card byte-identically). **SHIPPED 2026-08-19** (#459): `product-image-store.ts` IndexedDB store, downscale-on-ingest; inventory rows + counter tiles + storefront preview. One deliberate deviation from this row's sketch: NO `imageId` on the workspace record — the deployed managed backend enforces exact-field item contracts (`commerce_runtime.py` `_ITEM_FIELDS`), so the SKU→photo binding lives in IndexedDB next to the blob. Photos in the EXPORTED/published site were traced 2026-08-20 and are **founder-gated, not merely unbuilt** — the published artifact has no product to hang a photo on and device-local bytes cannot travel with a file that leaves the device; the full evidence is §3 item 3 |
 | E2 | Channel list is stale for Myanmar 2026 (Facebook VPN-only; Telegram/TikTok commerce growing) | `channel-order-intake.ts:5` hardcodes `['Messenger', 'Viber', 'Phone']`; no Telegram/TikTok option; not verifier-pinned | **SHIPPED 2026-08-19** (#459): Telegram + TikTok in the manual intake const + copy + contract test; the managed AI enum deliberately untouched (extending it requires re-running the golden-set eval) |
 | E3 | Abandoned-cart / follow-up messaging | No expiry/reminder logic in `storefront-request.ts`; recovery requires outbound messaging infra that does not exist | FD — hosted messaging, credential, founder consent. Parked |
 
@@ -141,9 +141,79 @@ status column in §1 for each. The operative forward sequence is now:
    the Control tab's recall-lot trace already has an exact-match resolution
    and a no-match state, so it is the cheapest next scan target if a client
    asks for it.
-3. E1 photo follow-through if wanted: photos in the exported/published site
-   are a separate decision (published markup is built by `website-export.ts`,
-   untouched so far).
+3. ~~E1 photo follow-through~~ — **TRACED 2026-08-20, NOT BUILDABLE IN AN AGENT
+   LANE; founder decision required. Do not re-chase from this line.** This item
+   used to read "photos in the exported/published site are a separate decision
+   (published markup is built by `website-export.ts`, untouched so far)". It is
+   a separate decision, and tracing it produced a harder answer than "separate":
+   the exported site has nowhere to put a photo, and the bytes could not travel
+   with it if it did. Four findings, each verified against source:
+   - **There is no product in the published site to attach a photo to.**
+     `WebsiteArtifact` (`website-model.ts:114-121`) is `schema`, `siteName`,
+     `fingerprint`, `contentDigest`, `source`, `pages` — and a page
+     (`WebsiteArtifactPage`, :105-112) is navigation + hero + `PageSection[]` +
+     seo, where a section (:69-74) is `id`/`eyebrow`/`title`/`body`. All text.
+     `buildWebsiteHtml` renders exactly that: a hero and text cards
+     (`website-export.ts` `renderPage`). No SKU, no price, no catalog row
+     reaches the published file. The `catalog-showcase` template's `/catalog`
+     page (`website-starter.ts:17,154`) is a page of prose, not a product list;
+     `WebsiteCommerceIntake.tsx` is an in-app order-handoff surface and emits no
+     published markup. Ecommerce ships no HTML export at all — its only
+     downloads are the order-import CSV and two JSON review packets
+     (`EcommerceProduct.tsx:557,711,1545`). So "photos in the published site"
+     is not a photo change; the prerequisite is **publishing a catalog**, a new
+     customer-facing surface, which the "finite reviewable site" wedge
+     (`portfolio.json`, and the W1 row in §1) puts squarely in founder scope.
+   - **Adding a catalog to the artifact destroys existing website workspaces.**
+     `isWebsiteArtifact` (`website-model.ts:1725-1743`) is an exact-key contract
+     plus `contentDigest !== 'site-' + canonicalDigest(content)`, and a retained
+     artifact that fails it fails its `LocalPublishRecord`, which fails
+     `restoreWorkspace` — which returns `null`, i.e. the whole persisted website
+     workspace (drafts, evidence, approvals, publish history) is dropped, not
+     just the artifact. That is not a guess: `verify_app_build.mjs` ~11431
+     asserts exactly this shape (`website_tampered_artifact_was_accepted`, a
+     one-word headline edit → `restoreWorkspace(...) === null`). Any new key
+     reproduces that failure on every record already on disk.
+   - **The export is pinned pure, and photos live outside the seal.** Two
+     verifier pins define the contract:
+     `website_static_artifact_export_missing_or_side_effectful`
+     (`verify_app_build.mjs` ~3733) fails the build if `website-export.ts` so
+     much as contains `fetch(`, `localStorage`, `sessionStorage`, or
+     `XMLHttpRequest`; `website_artifact_export_not_deterministic` (~11416)
+     calls `createWebsiteHtmlDownload` twice on one artifact and deep-compares.
+     The published file is a pure, synchronous, deterministic function of a
+     digest-sealed, tamper-checked artifact — that is what makes "the reviewer
+     approved this fingerprint" mean "this is what got published". Reading
+     photos at export time is an async read of device-local IndexedDB that no
+     fingerprint, digest, or approval covers, so one approved artifact would
+     export different bytes on different devices. The pin would have to be
+     widened to allow the thing it was written to forbid.
+   - **Republishing from a second device would silently strip every image.**
+     Photos are IndexedDB, per-origin, keyed `[scope, sku]`
+     (`product-image-store.ts:55-62`), and deliberately excluded from company
+     backup (:25-30, and `company-backup.ts:103` names photos as the
+     not-portable call). A second device signed into the same managed company
+     computes the same scope string and finds an empty database, so every
+     lookup returns `null` and the export emits a text-only file. The owner
+     uploads it and the live site loses its pictures. Photos not travelling is
+     not an edge case here; it is the documented, deliberate design.
+   Size, for whoever takes the decision: a full 3-page starter export is
+   **11,123 bytes** today. One photo at the ingest bound (1280px long edge,
+   JPEG q0.8, `product-image-store.ts:69-70`, ~100-300KB) is 137-411KB as a
+   data URI — **12x to 37x the entire current file for a single picture**, and a
+   ten-item catalog lands at 1.4-4.1MB in one uncacheable HTML file the owner
+   hand-uploads. The published CSP (`default-src 'none'`, no `img-src`) also
+   blocks `data:` images today, so it would have to be widened.
+   What the founder actually has to decide, in order: (a) does the published
+   site carry a product catalog at all — a scope call, not an engineering one;
+   and only if yes, (b) where published image bytes live. Device-local
+   IndexedDB cannot answer (b) for an artifact that leaves the device. Hosted
+   image storage can, and is FD-gated like everything hosted (item 5 below).
+   A cheap honest interim, if the answer to (a) is "not yet": say so on the
+   publish screen, so an owner who has uploaded photos is told the downloaded
+   site file is text-only rather than discovering it after upload. That is
+   customer-facing copy and needs sign-off on the sentence, same rule as
+   `DESIGN-PROGRAM.md` P3.8 batch 1.
 4. AI item 1 (order-intake eval) is server-only and spends no hosted gate, but
    **it cannot run from an agent lane at all** — this line previously said it
    "can run in parallel any time" and that sent a 2026-08-20 attempt at it.
