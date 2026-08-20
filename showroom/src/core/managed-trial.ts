@@ -1,5 +1,5 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
-import type { buildClientImportStagingPackage } from './client-onboarding'
+import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
 import type { PlantEquipmentImportPackage } from './plant-equipment-import.ts'
 import {
   validateProductionState,
@@ -16,6 +16,11 @@ import {
   type ShopServiceSchedule,
 } from './shop-service-scheduling.ts'
 import type { EcommerceOrderQueueReadinessPacket } from '../products/ecommerce/ecommerce-order-review-packet'
+import {
+  currentManagedWorkspace,
+  MANAGED_WORKSPACE_ID_PATTERN as WORKSPACE_ID,
+  MANAGED_WORKSPACE_STORAGE_KEY as WORKSPACE_STORAGE_KEY,
+} from './managed-workspace-selection.ts'
 import {
   managedContextProfileProjection,
   managedContextValidationProjection,
@@ -35,12 +40,9 @@ import {
 } from './operating-baseline.ts'
 
 
-const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
 const BUILD_ENV = import.meta.env ?? {}
 const SUPABASE_URL = String(BUILD_ENV.VITE_SUPABASE_URL ?? '').trim()
 const SUPABASE_PUBLISHABLE_KEY = String(BUILD_ENV.VITE_SUPABASE_PUBLISHABLE_KEY ?? BUILD_ENV.VITE_SUPABASE_ANON_KEY ?? '').trim()
-const DEFAULT_WORKSPACE_ID = String(BUILD_ENV.VITE_SUPERMEGA_TRIAL_WORKSPACE_ID ?? '').trim()
-const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
@@ -2415,6 +2417,21 @@ export function assertManagedBootstrapIdentity(
   return bootstrap as ManagedBootstrap
 }
 
+export function managedProductsFromBootstrap(
+  bootstrap: unknown,
+  expectedIdentity: ManagedIdentity,
+): ClientSolutionId[] {
+  const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
+  const products: ClientSolutionId[] = []
+  if (verified.states.commerce) products.push('commerce')
+  if (verified.states.production) products.push('production')
+  if (verified.states.website) products.push('website')
+  // Ecommerce is the customer-facing storefront over the tenant's Shop catalog,
+  // orders, stock, and fulfilment state. It never becomes a separate authority.
+  if (verified.states.commerce) products.push('ecommerce')
+  return products
+}
+
 export function requireManagedSurfaceState(
   bootstrap: ManagedBootstrap,
   surface: ManagedSurface,
@@ -2493,15 +2510,7 @@ function normalizeWorkspaceId(value: string) {
   return workspaceId
 }
 
-export function currentManagedWorkspace() {
-  try {
-    const stored = window.localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? ''
-    if (WORKSPACE_ID.test(stored)) return stored
-  } catch {
-    // The configured workspace remains available when storage is disabled.
-  }
-  return WORKSPACE_ID.test(DEFAULT_WORKSPACE_ID) ? DEFAULT_WORKSPACE_ID : ''
-}
+export { currentManagedWorkspace }
 
 function rememberWorkspace(value: string) {
   const workspaceId = normalizeWorkspaceId(value)

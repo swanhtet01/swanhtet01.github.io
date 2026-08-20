@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
@@ -6,6 +6,7 @@ import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
+import { currentManagedWorkspace } from './managed-workspace-selection'
 import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
@@ -216,6 +217,78 @@ function managedLoginPath(product: string | null) {
   return slug ? `/login?product=${slug}` : '/login'
 }
 
+type ManagedPortalAccess =
+  | { status: 'local'; products: readonly ClientSolutionId[]; workspaceId: '' }
+  | { status: 'checking'; products: readonly ClientSolutionId[]; workspaceId: string }
+  | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; workspaceId: string }
+  | { status: 'ready'; products: readonly ClientSolutionId[]; workspaceId: string }
+  | { status: 'error'; products: readonly ClientSolutionId[]; workspaceId: string; message: string }
+
+const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
+const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
+
+function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
+  const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
+  const [resolved, setResolved] = useState<{ key: string; access: ManagedPortalAccess }>({ key: 'local', access: localPortalAccess })
+
+  useEffect(() => {
+    let active = true
+    if (!enabled || !selectedWorkspace) {
+      setResolved({ key: accessKey, access: localPortalAccess })
+      return () => { active = false }
+    }
+    setResolved({ key: accessKey, access: { status: 'checking', products: [], workspaceId: '' } })
+    void import('./managed-trial')
+      .then(async ({ currentManagedIdentity, loadManagedBootstrap, managedProductsFromBootstrap }) => {
+        const identity = await currentManagedIdentity()
+        if (!active) return
+        if (!identity || identity.workspaceId !== selectedWorkspace) {
+          setResolved({ key: accessKey, access: { status: 'reauthenticate', products: [], workspaceId: selectedWorkspace } })
+          return
+        }
+        const bootstrap = await loadManagedBootstrap(identity)
+        if (!active) return
+        setResolved({
+          key: accessKey,
+          access: {
+            status: 'ready',
+            products: managedProductsFromBootstrap(bootstrap, identity),
+            workspaceId: selectedWorkspace,
+          },
+        })
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setResolved({
+          key: accessKey,
+          access: {
+            status: 'error',
+            products: [],
+            workspaceId: '',
+            message: error instanceof Error ? error.message : 'Company product access could not be verified.',
+          },
+        })
+      })
+    return () => { active = false }
+  }, [accessKey, enabled, selectedWorkspace])
+
+  if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
+  return resolved.access
+}
+
+function PortalAccessPanel({ title, copy, action }: { title: string; copy: string; action?: ReactNode }) {
+  return (
+    <section className="workspace-screen managed-login-screen" aria-live="polite">
+      <div className="managed-login-panel">
+        <span className="core-eyebrow">Company portal</span>
+        <h1>{title}</h1>
+        <p>{copy}</p>
+        {action ? <div className="heading-actions">{action}</div> : null}
+      </div>
+    </section>
+  )
+}
+
 function useRuntimeHealth() {
   const [runtime, setRuntime] = useState<RuntimeHealth>(checkingRuntime)
 
@@ -358,6 +431,9 @@ export function CoreLayout() {
   const customerSettingsRoute = location.pathname.startsWith('/settings/')
   const internalBuilderRoute = location.pathname.startsWith('/internal/client-builder')
   const settingsProduct = customerSettingsRoute ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
+  const requestedProduct = routeProduct ?? settingsProduct
+  const selectedManagedWorkspace = typeof window !== 'undefined' ? currentManagedWorkspace() : ''
+  const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
@@ -401,6 +477,10 @@ export function CoreLayout() {
             ? 'Plant'
             : 'Products'
   const navigationClass = (_to: string, isActive: boolean) => isActive ? 'active' : ''
+  const managedProductAllowed = !requestedProduct
+    || portalAccess.status === 'local'
+    || (portalAccess.status === 'ready' && portalAccess.products.includes(requestedProduct))
+  const managedFallbackProduct = portalAccess.status === 'ready' ? portalAccess.products[0] : null
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -475,14 +555,28 @@ export function CoreLayout() {
           : mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">
-            <RouteErrorBoundary resetKey={location.pathname}><Outlet context={runtime} /></RouteErrorBoundary>
+            <ManagedPortalAccessContext.Provider value={portalAccess}>
+              <RouteErrorBoundary resetKey={location.pathname}>
+                {requestedProduct && portalAccess.status === 'checking'
+                  ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
+                  : requestedProduct && portalAccess.status === 'reauthenticate'
+                    ? <Navigate replace to={companyLoginPath} />
+                    : requestedProduct && portalAccess.status === 'error'
+                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Product access needs attention" />
+                      : requestedProduct && !managedProductAllowed
+                        ? managedFallbackProduct
+                          ? <Navigate replace to={productWorkspacePath(managedFallbackProduct)} />
+                          : <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
+                        : <Outlet context={runtime} />}
+              </RouteErrorBoundary>
+            </ManagedPortalAccessContext.Provider>
           </div>
           {/* The navigator is its own lazy chunk, so a stale deploy can fail it independently
               of the route. Outside a boundary that failure escapes to the root and unmounts
               the entire shell — the exact blank page the boundary exists to prevent, reached
               by a different door. It is secondary furniture, so its own boundary is enough:
               the route content beside it keeps working. */}
-          {routeProduct ? <RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary> : null}
+          {routeProduct && managedProductAllowed ? <RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary> : null}
         </main>
       </div>
     </div>
@@ -512,12 +606,29 @@ const customerProducts = [
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
   const location = useLocation()
+  const portalAccess = useContext(ManagedPortalAccessContext)
   const params = new URLSearchParams(location.search)
   const route = productDemoPath(params.get('demo'))
   const choosingProduct = params.get('choose') === '1'
   const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
     ? readLastProduct(window.localStorage)
     : null
+  if (portalAccess.status === 'checking') {
+    return <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
+  }
+  if (portalAccess.status === 'reauthenticate') return <Navigate replace to={managedLoginPath(lastProduct)} />
+  if (portalAccess.status === 'error') {
+    return <PortalAccessPanel action={<Link className="button" to={managedLoginPath(lastProduct)}>Sign in again</Link>} copy={portalAccess.message} title="Product access needs attention" />
+  }
+  if (portalAccess.status === 'ready') {
+    const requestedRouteProduct = route ? productFromPathname(route) : null
+    const assignedRoute = requestedRouteProduct && portalAccess.products.includes(requestedRouteProduct) ? route : null
+    const rememberedProduct = lastProduct && portalAccess.products.includes(lastProduct) ? lastProduct : null
+    const entryProduct = rememberedProduct ?? portalAccess.products[0]
+    if (assignedRoute) return <Navigate replace to={assignedRoute} />
+    if (choosingProduct || !entryProduct) return <ProductHomePage />
+    return <Navigate replace to={productWorkspacePath(entryProduct)} />
+  }
   return route
     ? <Navigate replace to={route} />
     : choosingProduct
@@ -526,7 +637,10 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 }
 
 export function ProductHomePage() {
+  const portalAccess = useContext(ManagedPortalAccessContext)
+  const managedPortal = portalAccess.status === 'ready'
   const productSetups = useMemo(() => {
+    if (managedPortal) return null
     if (typeof window === 'undefined') return null
     return {
       commerce: readProductSetup(window.localStorage, 'commerce'),
@@ -534,7 +648,7 @@ export function ProductHomePage() {
       website: readProductSetup(window.localStorage, 'website'),
       ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
     }
-  }, [])
+  }, [managedPortal])
   const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
   const nextSetupStep = (() => {
     if (!productSetups) return null
@@ -542,8 +656,13 @@ export function ProductHomePage() {
   })()
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
-      {!anyStarted ? (
+      {managedPortal
+        ? <PageHeading copy="Only products assigned to this company are shown." eyebrow="Company portal" title="Company products" />
+        : <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />}
+      {managedPortal && portalAccess.products.length === 0
+        ? <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
+        : null}
+      {!managedPortal && !anyStarted ? (
         <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — set it up once, and it connects to all other products through one catalog and order flow.</p>
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
@@ -551,6 +670,7 @@ export function ProductHomePage() {
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
+          if (managedPortal && !portalAccess.products.includes(setupKey)) return null
           const setup = productSetups?.[setupKey]
           const workspaceName = setup?.startedAt ? setup.workspace : null
           return <Link aria-label={`Open ${name} workspace`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
@@ -565,8 +685,8 @@ export function ProductHomePage() {
             </Link>
         })}
       </nav>
-      <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense>
-      <p className="product-home-note">Your product workspaces stay separate. Opening a sample does not change another product.</p>
+      {!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
+      <p className="product-home-note">{managedPortal ? 'Your company products share one account while preserving product-specific roles and data access.' : 'Your product workspaces stay separate. Opening a sample does not change another product.'}</p>
     </div>
   )
 }

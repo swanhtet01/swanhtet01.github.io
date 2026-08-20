@@ -1264,6 +1264,18 @@ if (!coreShellSource.includes("const LAST_PRODUCT_KEY = 'supermega.last-product.
   || !coreShellSource.includes('? <ProductHomePage />')
   || !coreShellSource.includes('<Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />')
   || !coreShellSource.includes('if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)')) fail('remembered_product_entry_missing')
+if (!managedTrialSource.includes('export function managedProductsFromBootstrap(')
+  || !managedTrialSource.includes("if (verified.states.commerce) products.push('commerce')")
+  || !managedTrialSource.includes("if (verified.states.production) products.push('production')")
+  || !managedTrialSource.includes("if (verified.states.website) products.push('website')")
+  || !managedTrialSource.includes("if (verified.states.commerce) products.push('ecommerce')")
+  || !coreShellSource.includes("const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)")
+  || !coreShellSource.includes("void import('./managed-trial')")
+  || !coreShellSource.includes('currentManagedWorkspace()')
+  || !coreShellSource.includes('portalAccess.products.includes(requestedProduct)')
+  || !coreShellSource.includes('if (managedPortal && !portalAccess.products.includes(setupKey)) return null')
+  || !coreShellSource.includes('!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null')
+  || !coreShellSource.includes('title="No products assigned"')) fail('managed_product_portal_isolation_missing')
 if (!operationalReportSource.includes('The source failed validation; no sample values were substituted.')
   || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
   || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
@@ -19416,7 +19428,10 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // chip, and the settings panel). Raised to 3_050_000: covers the measured
 // number with ~18_824 bytes of headroom, the same order of headroom the
 // previous two ceilings gave.
-if (bytes > 3_050_000) fail(`artifact_budget:${bytes}`)
+// Tenant-aware portal routing adds a small lazy entitlement boundary while the
+// initial-route budget remains independently enforced above. Keep total output
+// growth bounded to a narrow 10 KB allowance rather than weakening that gate.
+if (bytes > 3_060_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

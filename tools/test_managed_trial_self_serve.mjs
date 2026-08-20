@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   ManagedTrialError,
   createSelfServeWorkspace,
+  managedProductsFromBootstrap,
   normalizeSelfServeClaimCode,
   requestSelfServeWorkspace,
 } from '../showroom/src/core/managed-trial.ts'
@@ -194,4 +195,25 @@ test('createSelfServeWorkspace fails closed when managed auth is not configured'
   } finally {
     restore()
   }
+})
+
+test('managed product access is derived only from verified tenant surfaces', () => {
+  const identity = { workspaceId: WORKSPACE_ID, userId: session.user.id, email: session.user.email }
+  const bootstrap = {
+    identity: { workspace_id: WORKSPACE_ID, actor_id: session.user.id, actor_kind: 'human' },
+    readiness: {},
+    states: {
+      company: { surface: 'company', version: 0, state: {}, updated_by: '', updated_at: '' },
+      commerce: { surface: 'commerce', version: 0, state: {}, updated_by: '', updated_at: '' },
+      website: { surface: 'website', version: 0, state: {}, updated_by: '', updated_at: '' },
+      setup: { surface: 'setup', version: 0, state: {}, updated_by: '', updated_at: '' },
+    },
+    approvals: [],
+  }
+  assert.deepEqual(managedProductsFromBootstrap(bootstrap, identity), ['commerce', 'website', 'ecommerce'])
+  assert.deepEqual(managedProductsFromBootstrap({ ...bootstrap, states: { company: bootstrap.states.company, setup: bootstrap.states.setup } }, identity), [])
+  assert.throws(
+    () => managedProductsFromBootstrap({ ...bootstrap, identity: { ...bootstrap.identity, workspace_id: 'another-company' } }, identity),
+    (error) => error instanceof ManagedTrialError && error.code === 'managed_identity_changed',
+  )
 })
