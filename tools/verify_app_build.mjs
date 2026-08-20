@@ -138,6 +138,9 @@ const managedTrialProofSource = await readFile(resolve(root, 'showroom', 'src', 
 const operationsPageRouteSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'OperationsPageRoute.tsx'), 'utf8')
 const localWorkspaceBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-workspace-backup.ts'), 'utf8')
 const localWorkspaceStorageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-workspace-storage.ts'), 'utf8')
+const productImageStoreSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-image-store.ts'), 'utf8')
+const productPhotoSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductPhoto.tsx'), 'utf8')
+const useProductImageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'use-product-image.ts'), 'utf8')
 const productSetupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts'), 'utf8')
 const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'workspace-runtime.ts'), 'utf8')
 const operationalReportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts'), 'utf8')
@@ -6347,6 +6350,39 @@ if (!coreSource.includes("const PLANT_JOB_VIEW_KEY = 'supermega.plant.job-view.v
   || !coreCssSource.includes('.plant-job-board {')
   || !coreCssSource.includes('.plant-job-board-lane {')
   || !coreCssSource.includes('.plant-job-card {')) fail('plant_job_board_view_missing')
+// Device-local product photos are WORKSPACE-SCOPED (post-wave audit of PR #459).
+// IndexedDB is per-origin, not per-workspace, and one browser can serve the
+// device-local workspace plus any number of managed companies. Keyed by SKU
+// alone — the shipped v1 shape — a photo one shop stored against a short,
+// human-chosen SKU rendered on every other company's counter tile, stock row,
+// and storefront preview card for its own identically-named SKU. The same
+// per-origin trap the payment-QR store closed (PR #465) and the loyalty settings
+// closed (PR #469). These pins hold the composite key, the required-scope guard,
+// and every call site passing a scope, so the leak cannot be reintroduced by a
+// later edit that drops an argument.
+if (!productImageStoreSource.includes('export function productImageScopeForWorkspace(')
+  || !productImageStoreSource.includes("return workspaceId ? `managed:${workspaceId}` : 'local'")
+  || !productImageStoreSource.includes("createObjectStore(STORE_NAME, { keyPath: ['scope', 'sku'] })")
+  || !productImageStoreSource.includes('const DB_VERSION = 2')
+  || !productImageStoreSource.includes('function requireScope(scope: string): string')
+  || !productImageStoreSource.includes('export async function putProductImage(scope: string, sku: string, blob: Blob)')
+  || !productImageStoreSource.includes('export async function getProductImage(scope: string, sku: string)')
+  || !productImageStoreSource.includes('export async function deleteProductImage(scope: string, sku: string)')
+  || !productImageStoreSource.includes('store.get([scopeKey, key])')
+  || !productImageStoreSource.includes('store.delete([scopeKey, key])')
+  || !useProductImageSource.includes('export function useProductImageUrl(scope: string, sku: string)')
+  || !useProductImageSource.includes('getProductImage(scope, sku)')
+  || !useProductImageSource.includes('if (changedScope === scope && changedSku === sku) load()')
+  || !useProductImageSource.includes('}, [scope, sku])')
+  || !productPhotoSource.includes('export function ProductPhoto({ className, fallback, scope, sku }')
+  || !productPhotoSource.includes('export function ShopProductPhotoControl({ disabled, name, scope, sku }')
+  || !productPhotoSource.includes('await putProductImage(scope, sku, await downscaleProductPhoto(file))')
+  || !productPhotoSource.includes('await deleteProductImage(scope, sku)')
+  || !coreSource.includes('const productImageScope = productImageScopeForWorkspace(managedIdentity?.workspaceId)')
+  || !coreSource.includes('productImageScope={productImageScope}')
+  || !coreSource.includes('scope={productImageScope} sku={item.sku}')
+  || !ecommerceSource.includes('const productImageScope = productImageScopeForWorkspace(managedIdentity?.workspaceId)')
+  || !ecommerceSource.includes('scope={productImageScope} sku={item.sku}')) fail('product_image_workspace_scope_missing')
 if (!productionPageContract.includes('const outputJobSelectRef = useRef<HTMLSelectElement>(null)')
   || !productionPageContract.includes('const [outputOpen, setOutputOpen] = useState(false)')
   || !productionPageContract.includes('const [materialGuideOpen, setMaterialGuideOpen] = useState(false)')

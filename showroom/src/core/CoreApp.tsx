@@ -45,6 +45,7 @@ import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
+import { productImageScopeForWorkspace } from './product-image-store'
 import { SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyRedemptionAllowed, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
@@ -1060,7 +1061,7 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, sampleCatalogActive }: {
+function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, productImageScope, sampleCatalogActive }: {
   disabled: boolean
   industryPack: ShopIndustryPack | null
   items: CommerceItem[]
@@ -1069,6 +1070,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoin
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
   paymentQrScope: string
+  productImageScope: string
   sampleCatalogActive: boolean
 }) {
   const [restoredDraft] = useState(readShopCounterDraft)
@@ -1183,7 +1185,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoin
             const quantity = cart[item.sku] ?? 0
             const artKind = Math.max(0, items.indexOf(item)) % 5
             return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
-              <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} sku={item.sku} />
+              <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
               <span className="shop-product-copy"><strong>{item.name}</strong>{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
@@ -1383,6 +1385,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   // carry which company this browser is operating as, or a later workspace could
   // show an earlier merchant's bank QR at its counter.
   const paymentQrScope = paymentQrScopeForWorkspace(managedIdentity?.workspaceId)
+  // Same per-origin trap for device-local product photos (product-image-store.ts
+  // scope note): IndexedDB is shared by every company that uses this browser, so
+  // an unscoped SKU key showed one shop's photo on another shop's counter tile
+  // and stock row wherever the two catalogs share a SKU string.
+  const productImageScope = productImageScopeForWorkspace(managedIdentity?.workspaceId)
   const ecommerceBuyingScope = managedIdentity ? `ecommerce:${managedIdentity.workspaceId}` : 'ecommerce:local'
   const commerceRef = useRef(commerce)
   useEffect(() => {
@@ -6171,7 +6178,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
       : null
     return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
-      <span role="rowheader"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={item.name} sku={item.sku} /><span className="stock-row-copy"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
+      <span role="rowheader"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={item.name} scope={productImageScope} sku={item.sku} /><span className="stock-row-copy"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
       <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
       <span role="cell">{item.reorderAt}</span>
       <span role="cell">{formatMoney(item.price)}</span>
@@ -6190,7 +6197,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
     {actionGate}
   </div>
 
