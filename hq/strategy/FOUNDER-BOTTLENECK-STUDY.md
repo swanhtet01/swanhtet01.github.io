@@ -420,26 +420,45 @@ needs in two more ways:
 **Revised smallest change — the read branch must fail closed on every
 mutation privilege, not merely decline to require them.**
 
-1. Extend the probe to **every table privilege PostgreSQL defines** —
-   `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`
-   — for `current_user` across all three billing tables: **21 cells**, with the
-   select list generated from the same tuple the checks read.
-2. When `require_write_privilege` is false, **raise unless every one of the 18
+1. Extend the probe to **every table privilege PostgreSQL 17 defines** —
+   `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`,
+   `MAINTAIN` — for `current_user` across all three billing tables: **24
+   cells**, with the select list generated from the same tuple the checks read.
+2. When `require_write_privilege` is false, **raise unless every one of the 21
    non-`SELECT` cells is absent.**
 
-   **Enumerate the whole privilege set, not a curated subset.** This spec
-   narrowed twice — first missing `DELETE`, then `TRUNCATE` — so the fix is to
-   the class, not the instance. Two corrections from the implementation
-   (PR #506), both measured on a live server and both against what an earlier
-   revision of this document asserted:
+   **Enumerate the whole privilege set for the TARGET VERSION, not a curated
+   subset and not the version in front of you.** This spec narrowed *four*
+   times — missing `DELETE`, then `TRUNCATE`, then `TRIGGER`, then `MAINTAIN` —
+   and each revision read complete when written. The fix is to the class:
+   generate the query from one tuple, and derive that tuple from the target's
+   own catalog.
+
+   **`MAINTAIN` is the instructive one.** It is a PostgreSQL **17** table
+   privilege (maintenance operations, and it can take table locks — so a role
+   holding it can block billing activity while changing no row). The
+   implementation's live harness ran on **PostgreSQL 16**, whose catalog has
+   seven table privileges, and enumerated "all of them" from there. Worse,
+   `_assert_schema` **already refuses any server that is not PostgreSQL 17**
+   (`billing_rail.py:693`, `postgresMajor != 17`) — and the harness worked by
+   overriding `server_version_num`, the one column that would have flagged the
+   mismatch. The lesson is not "add `MAINTAIN`": it is that a harness which
+   silences a version assertion cannot validate anything that depends on
+   version. Because the module only ever runs on PG17, `MAINTAIN` needs no
+   conditional branch.
+
+   Three further corrections from the implementation (PR #506), all measured on
+   a live server and all against what an earlier revision of this document
+   asserted:
    - **`TRIGGER` belongs in the refused set.** A `SELECT`+`TRIGGER` role
      installed a `before insert` trigger returning `NULL`; the founder's next
      insert reported `INSERT 0 0`. The ledger silently stops recording while
      writes appear to succeed — no row changed by the role itself, and worse
      than if one had been. `REFERENCES` is weaker (it cannot read or change a
      row; it yields an invoice-id existence oracle) and is refused anyway.
-   - **Twelve was the wrong count.** Twelve is right only for the directly
-     row-changing class. The refused set is **18**.
+   - **Twelve was the wrong count**, and so was 18. Twelve covers only the
+     directly row-changing class; 18 was the PG16 enumeration. The refused set
+     is **21**.
 
    **`TRUNCATE` was missing from an earlier revision of this spec, and it is
    the most dangerous omission of the set** (found in review 2026-08-20,
@@ -480,7 +499,7 @@ mutation privilege, not merely decline to require them.**
    **Consequence for A2's bounded read role:** it must be `BYPASSRLS` holding
    `SELECT` **only** — none of the other six table privileges on any billing
    table. What bounds the credential is the refusal in step 2, not this
-   assertion, and it bounds it only because that refusal now covers all 18
+   assertion, and it bounds it only because that refusal now covers all 21
    non-`SELECT` cells rather than a curated subset. Steps 1-3 stand as written
    (1-2 as amended above) and are implemented in PR #506.
 
@@ -499,14 +518,17 @@ credential for an unverified one — a worse position than the status quo, not a
 better one.
 
 **Size:** S–M (was S) — the probe extension, one new rejection branch, and
-tests covering a read role that wrongly holds each of the 18 refused cells.
+tests covering a read role that wrongly holds each of the 21 refused cells.
 
 **The write path deliberately does NOT refuse `TRUNCATE`,** and the reasoning
 is worth keeping because it looks like an inconsistency. That role is
 superuser-class by construction, and `has_table_privilege` reports every
-privilege true for a superuser regardless of `GRANT` (measured: 18/18
-non-`SELECT` held). Refusing `TRUNCATE` there would reject every superuser
-admin role and brick all six mutation commands. The intent — the ledger is
+privilege true for a superuser regardless of `GRANT` — measured 18/18
+non-`SELECT` held **on PostgreSQL 16**. The PG17 figure is 21/21 by the same
+mechanism, but that is inference from how `has_table_privilege` treats
+superusers, **not** a measurement anyone here has taken; the harness that
+produced the 18/18 could not run on 17. Refusing `TRUNCATE` there would reject
+every superuser admin role and brick all six mutation commands. The intent — the ledger is
 append-only, so the write role has no business truncating — is right; it
 simply cannot be enforced through this probe. Pinned by a test so the next
 lane does not "fix" it.
