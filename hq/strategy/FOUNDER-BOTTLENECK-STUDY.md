@@ -420,15 +420,88 @@ needs in two more ways:
 **Revised smallest change — the read branch must fail closed on every
 mutation privilege, not merely decline to require them.**
 
-1. Extend the probe to the full matrix: `SELECT`, `INSERT`, `UPDATE`, `DELETE`
-   for `current_user` across all three billing tables (adds the four missing
-   cells).
-2. When `require_write_privilege` is false, **raise unless every one of the
-   nine mutation privileges is absent.** A read connection holding any
-   `INSERT`, `UPDATE`, or `DELETE` on any billing table is refused outright.
+1. Extend the probe to **every table privilege PostgreSQL 17 defines** —
+   `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`,
+   `MAINTAIN` — for `current_user` across all three billing tables: **24
+   cells**, with the select list generated from the same tuple the checks read.
+2. When `require_write_privilege` is false, **raise unless every one of the 21
+   non-`SELECT` cells is absent.**
+
+   **Enumerate the whole privilege set for the TARGET VERSION, not a curated
+   subset and not the version in front of you.** This spec narrowed *four*
+   times — missing `DELETE`, then `TRUNCATE`, then `TRIGGER`, then `MAINTAIN` —
+   and each revision read complete when written. The fix is to the class:
+   generate the query from one tuple, and derive that tuple from the target's
+   own catalog.
+
+   **`MAINTAIN` is the instructive one.** It is a PostgreSQL **17** table
+   privilege (maintenance operations, and it can take table locks — so a role
+   holding it can block billing activity while changing no row). The
+   implementation's live harness ran on **PostgreSQL 16**, whose catalog has
+   seven table privileges, and enumerated "all of them" from there. Worse,
+   `_assert_schema` **already refuses any server that is not PostgreSQL 17**
+   (`billing_rail.py:693`, `postgresMajor != 17`) — and the harness worked by
+   overriding `server_version_num`, the one column that would have flagged the
+   mismatch. The lesson is not "add `MAINTAIN`": it is that a harness which
+   silences a version assertion cannot validate anything that depends on
+   version. Because the module only ever runs on PG17, `MAINTAIN` needs no
+   conditional branch.
+
+   Three further corrections from the implementation (PR #506), all measured on
+   a live server and all against what an earlier revision of this document
+   asserted:
+   - **`TRIGGER` belongs in the refused set.** A `SELECT`+`TRIGGER` role
+     installed a `before insert` trigger returning `NULL`; the founder's next
+     insert reported `INSERT 0 0`. The ledger silently stops recording while
+     writes appear to succeed — no row changed by the role itself, and worse
+     than if one had been. `REFERENCES` is weaker (it cannot read or change a
+     row; it yields an invoice-id existence oracle) and is refused anyway.
+   - **Twelve was the wrong count**, and so was 18. Twelve covers only the
+     directly row-changing class; 18 was the PG16 enumeration. The refused set
+     is **21**.
+
+   **`TRUNCATE` was missing from an earlier revision of this spec, and it is
+   the most dangerous omission of the set** (found in review 2026-08-20,
+   verified in source). It is a *separate* PostgreSQL table privilege, so
+   probing `INSERT`/`UPDATE`/`DELETE` does not cover it — and neither of the
+   two defences this design otherwise leans on applies to it:
+   - **RLS does not restrict `TRUNCATE`.** Policies govern
+     SELECT/INSERT/UPDATE/DELETE, so `force row level security` on the billing
+     tables is no obstacle.
+   - **The immutability triggers do not fire on `TRUNCATE`.**
+     `billing_events_immutable` is `before update or delete … **for each
+     row**` (v12 migration :146-148), and the invoice and entitlement guards
+     are row-level too (:105, :219). `TRUNCATE` fires no row-level trigger.
+     The v12 migration contains no `TRUNCATE` handling at all — zero
+     occurrences.
+
+   So a `BYPASSRLS` role holding only `SELECT` plus an accidental `TRUNCATE`
+   would pass a nine-privilege check while being able to **empty the entire
+   billing ledger in one statement**, silently, past every existing guard.
 3. Keep unconditional, exactly as today: the refusal of the two runtime role
    names, the read-only-transaction assertion, and the three `SELECT` checks.
-4. Only then gate the privileged-role assertion on `require_write_privilege`.
+4. ~~Only then gate the privileged-role assertion on `require_write_privilege`.~~
+   **WITHDRAWN 2026-08-20 — do NOT implement this step. It is unsafe, and it
+   was measured, not argued.** The v12 migration puts `force row level
+   security` on all three billing tables with no policies
+   (`20260817090000_private_trial_backend_v12_billing_rail.sql:221-226`, pinned
+   independently by `tests/test_database_activation_contract.py:337-341`), and
+   forced RLS is **not** bypassed by the table owner — only by
+   `rolsuper`/`rolbypassrls`, which is precisely what that assertion probes. On
+   a live PostgreSQL server, a `nosuperuser nobypassrls` role holding `SELECT`
+   on all three tables read **0 of 1** seeded rows. Gated, such a role would
+   connect cleanly and `get_billing_state` would report a paid-up workspace as
+   having no invoices, `entitlement.status: "none"`, `premiumUnlocked: false`
+   and an **empty overdue report** — a silent under-report of money owed. That
+   is strictly worse than a refusal, and it is the exact revenue leakage
+   `_overdue_report` exists to surface. The assertion therefore stays
+   unconditional, with its own distinct message.
+   **Consequence for A2's bounded read role:** it must be `BYPASSRLS` holding
+   `SELECT` **only** — none of the other six table privileges on any billing
+   table. What bounds the credential is the refusal in step 2, not this
+   assertion, and it bounds it only because that refusal now covers all 21
+   non-`SELECT` cells rather than a curated subset. Steps 1-3 stand as written
+   (1-2 as amended above) and are implemented in PR #506.
 
 **This mirrors a pattern the file already contains.** The `runtime_role_denied`
 probe (`:500-512`) already does exactly this shape — `bool_and` over
@@ -445,7 +518,39 @@ credential for an unverified one — a worse position than the status quo, not a
 better one.
 
 **Size:** S–M (was S) — the probe extension, one new rejection branch, and
-tests covering a read role that wrongly holds each of the nine privileges.
+tests covering a read role that wrongly holds each of the 21 refused cells.
+
+**The write path deliberately does NOT refuse `TRUNCATE`,** and the reasoning
+is worth keeping because it looks like an inconsistency. That role is
+superuser-class by construction, and `has_table_privilege` reports every
+privilege true for a superuser regardless of `GRANT` — **measured 21/21
+non-`SELECT` held on a real PostgreSQL 17.10 server.** Refusing `TRUNCATE` or
+`MAINTAIN` there would reject every superuser administrative role and brick all
+six mutation commands. The intent — the ledger is append-only, so the write
+role has no business truncating — is right; it simply cannot be enforced
+through this probe, and the read path owns that bound instead. Pinned by a test
+so the next lane does not "fix" it.
+
+**The harness now runs on the version the code requires.** An earlier revision
+of this section carried the 21/21 as *inference*, because the harness ran on
+PG16 and overrode `server_version_num`. That override is gone: PG17 server
+binaries are reachable through npm (`@embedded-postgres/linux-x64`) even though
+the PGDG apt repo is proxy-blocked, so the probe row is passed through
+untouched and `billing_rail.py:693`'s version assertion is **live during the
+harness rather than silenced by it**. Every earlier finding was re-run on
+17.10 rather than argued to be version-stable: forced-RLS row blindness (0 of 1
+seeded rows), the `TRUNCATE` exploit (all three tables to 0 rows while `DELETE`
+was denied), and `TRIGGER` voiding an insert (rowcount 0) all reproduce. This
+is a scratch test cluster only — it does **not** touch the PG17 rehearsal
+cascade, which still needs the Windows EDB archive.
+
+**The enumeration is now a mechanism, not a checked fact.** The eight
+privileges were read from the server's own catalog (`grant all on table …`
+then `aclexplode(relacl)`), which also confirms why this kept happening: PG16
+reports seven and errors outright on `has_table_privilege(…, 'MAINTAIN')`. The
+harness now asserts on every run that the probed set equals what the live
+server's catalog defines, and a unit test pins the eight. A fifth narrowing
+fails loudly instead of shipping.
 
 **Prerequisite, and it is a real one.** The founder must create that bounded
 read role on the target and place its URL in a service secret. Two conditions

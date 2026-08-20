@@ -118,13 +118,24 @@ actor string — actor strings are display copy and will be rewritten.
    NOT re-chase these, they are closed in `DESIGN-PROGRAM.md` with evidence:
    P3.0 (CSS ratchet), P3.6a/b/c (px→rem, lane COMPLETE), and P3.7 (bottom-nav
    work modes, which this line used to name as the next item) have all shipped.
-   Remaining phase 3: the website lane (P3.1-P3.4 pin cataloguing and gen-one
-   deletion), P3.5 ecommerce literal retirement, P3.8 selling-surface IA
-   (batch 1 = plain-language lead lines above the compliance litanies, added
-   BEFORE the pinned strings and never edits to them; batches 2-3 = the
-   Operations regrouping, which needs a founder probe first), and P3.9 as a
-   standing attrition rule rather than a PR. Phase-3 exit criteria are listed
-   at the end of that doc's execution plan.
+   The website lane (P3.1-P3.4) is CLOSED, and so is P3.5 — P3.5b/c/d closed
+   BY EVIDENCE, not by completion: #467's interval math proved no color-mix of
+   existing tokens reproduces the cockpit pastels, and the `#fff` conversions
+   would flip THEME_BLIND cards in dark. The lane is shut with an honest zero
+   and the ecommerce ratchet ceiling stands at 111. Do not reopen it looking
+   for the "missing" conversions; they were measured and do not exist.
+   **Phase 3 is therefore nearly exhausted.** What is actually left: P3.8
+   batch 1 (plain-language lead lines above the compliance litanies, added
+   BEFORE the pinned strings and never edits to them) is BUILT and sitting in
+   a draft PR awaiting founder sign-off on the sentences, which that doc
+   requires because they are customer-facing; P3.8 batches 2-3 (the Operations
+   regrouping) need a founder probe first; and P3.9 is a standing attrition
+   rule, never a standalone PR. Note that the phase-3 exit criteria as written
+   are now partly unreachable — they ask for ecommerce live-declaration hex to
+   reach preview-frame exemptions only, which P3.5's honest zero rules out. Do
+   not chase that criterion; re-grade against the tribunal rubric instead.
+   With the design program parked on founder input, take new work from
+   `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §3 rather than from this queue.
 2. ~~Verified correctness backlog~~ — all four items closed 2026-08-18 on
    `claude/supermega-dev-ceo-aije17`; do not re-chase them:
    - **SSRF IPv6 gap** — real, fixed (`cdb7c1d6`). NAT64 `64:ff9b::/96` and the
