@@ -2,7 +2,12 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
-import { managedAccountPath, managedAccountRequestUrl } from './account-routes'
+import {
+  alternateManagedWorkspaceId,
+  managedAccountPath,
+  managedAccountRequestUrl,
+  managedPortalEntryPath,
+} from './account-routes'
 import {
   completeManagedWorkspaceSignIn,
   createSelfServeWorkspace,
@@ -11,6 +16,7 @@ import {
   loadManagedBootstrap,
   managedTrialAuthConfigured,
   signInAndDiscoverManagedWorkspaces,
+  signOutManagedTrial,
   type ManagedIdentity,
   type ManagedWorkspaceSignIn,
 } from './managed-trial'
@@ -21,6 +27,7 @@ export function ManagedLoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const productIntent = new URLSearchParams(location.search).get('product')
+  const portalEntryPath = managedPortalEntryPath(productIntent)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [workspaceId, setWorkspaceId] = useState('')
@@ -68,7 +75,7 @@ export function ManagedLoginPage() {
     const identity = await completeManagedWorkspaceSignIn(signIn, selectedWorkspaceId)
     await loadManagedBootstrap(identity)
     setExistingIdentity(identity)
-    navigate('/settings/#controls')
+    navigate(portalEntryPath)
   }
 
   async function submit(event: FormEvent) {
@@ -134,12 +141,62 @@ export function ManagedLoginPage() {
     }
   }
 
+  async function chooseAnotherCompany() {
+    if (!existingIdentity) return
+    setBusy(true)
+    setNoticeTone('quiet')
+    setNotice('Finding your other companies...')
+    try {
+      const signIn = await discoverManagedWorkspacesForCurrentSession()
+      const alternateWorkspaceId = alternateManagedWorkspaceId(signIn.workspaces, existingIdentity.workspaceId)
+      if (!alternateWorkspaceId) {
+        setNotice('This account has only one active company. You can open it or sign out.')
+        return
+      }
+      setDirectory(signIn)
+      setWorkspaceId(alternateWorkspaceId)
+      setExistingIdentity(null)
+      setNotice(`Choose another company assigned to ${signIn.email}.`)
+    } catch (error) {
+      setNoticeTone('error')
+      setExistingIdentity(null)
+      setNotice(error instanceof Error ? error.message : 'Your company list could not be loaded.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function signOut() {
+    setBusy(true)
+    setNoticeTone('quiet')
+    try {
+      await signOutManagedTrial()
+      setExistingIdentity(null)
+      setDirectory(null)
+      setWorkspaceId('')
+      setEmail('')
+      setPassword('')
+      setActivating(false)
+      setNotice('Signed out on this device.')
+    } catch (error) {
+      setNoticeTone('error')
+      setNotice(error instanceof Error ? error.message : 'Sign out could not be completed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="workspace-screen managed-login-screen">
       <PageHeading eyebrow="Company account" title="Open your company." copy="Sign in once. SuperMega finds the companies assigned to you." />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
-        <Link className="core-button primary" to="/settings/#controls">Open company</Link>
+        <div className="managed-login-actions">
+          <Link className="core-button primary" to={portalEntryPath}>Open company</Link>
+          <button className="core-button" disabled={busy} onClick={() => void chooseAnotherCompany()} type="button">{busy ? 'Checking...' : 'Switch company'}</button>
+          <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
+        </div>
+        {notice ? <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p> : null}
       </section> : managedReady && activating ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
         <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Use the claim code from your free trial. The company is created for this signed-in account and only this account owns it.</p></div>
         <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>

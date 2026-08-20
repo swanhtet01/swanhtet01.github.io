@@ -6,9 +6,10 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runnerPath = resolve(root, 'tools', 'run_local_app.mjs')
-const [packageText, runnerSource, readme] = await Promise.all([
+const [packageText, runnerSource, verificationRunnerSource, readme] = await Promise.all([
   readFile(resolve(root, 'package.json'), 'utf8'),
   readFile(runnerPath, 'utf8'),
+  readFile(resolve(root, 'tools', 'run_app_verify.mjs'), 'utf8'),
   readFile(resolve(root, 'README.md'), 'utf8'),
 ])
 const packageJson = JSON.parse(packageText)
@@ -19,7 +20,10 @@ requireContract('dev command uses the canonical runner',
   packageJson.scripts?.dev === 'node tools/run_local_app.mjs')
 requireContract('full-stack verification is part of app verification',
   packageJson.scripts?.['app:dev:verify'] === 'node tools/verify_local_app_dev.mjs'
-  && packageJson.scripts?.['app:verify']?.includes('npm run app:dev:verify'))
+  && packageJson.scripts?.['app:verify'] === 'node tools/run_app_verify.mjs --serial'
+  && packageJson.scripts?.['app:verify:steps']?.includes('npm run app:dev:verify')
+  && verificationRunnerSource.includes("pkg.scripts?.['app:verify:steps']")
+  && verificationRunnerSource.includes('const failure = await runSerial(steps)'))
 requireContract('runner starts the canonical runtime',
   runnerSource.includes("'supermega_runtime.runtime:app'")
   && runnerSource.includes("body?.service === 'supermega-service'"))

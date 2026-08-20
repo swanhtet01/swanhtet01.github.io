@@ -1,5 +1,17 @@
 import { shopIndustryPack, type ShopIndustryPackId } from './shop-service-scheduling.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
+import {
+  isShopServiceSku,
+  shopBusinessTemplate,
+  shopBusinessTemplateCatalogCsv,
+  type ShopBusinessTemplate,
+  type ShopBusinessTemplateId,
+} from '../products/shop/business-templates.ts'
+import {
+  plantBusinessTemplateForShopTemplateId,
+  type PlantBusinessTemplate,
+} from '../products/plant/business-templates.ts'
+import { websiteTradeBrief } from '../products/website/website-trade-brief.ts'
 
 export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
@@ -28,7 +40,7 @@ export type ClientSolutionId = 'commerce' | 'production' | 'website' | 'ecommerc
 export type ClientImportMapping = Record<string, string>
 export type ClientImportRowStatus = 'ready' | 'invalid' | 'duplicate'
 export type ClientImportSuggestionBasis = 'exact' | 'alias' | 'ambiguous' | 'unmapped'
-export type ClientDemoPresetId = 'social-seller' | 'retail-network' | 'food-service' | 'manufacturing' | 'service-business'
+export type ClientDemoPresetId = 'social-seller' | 'retail-network' | 'food-service' | 'manufacturing' | 'bakery' | 'fashion' | 'service-business'
 
 export type ClientDemoSelection = {
   product: ClientSolutionId
@@ -47,6 +59,7 @@ export type ClientDemoPreset = {
   description: string
   shopIndustryPackId: ShopIndustryPackId
   plantIndustryPackId: PlantIndustryPackId
+  shopBusinessTemplateId?: ShopBusinessTemplateId
   selections: readonly ClientDemoSelection[]
 }
 
@@ -686,11 +699,40 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     ],
   },
   {
+    id: 'bakery',
+    name: 'Bakery & patisserie',
+    description: 'Counter sales, production jobs, a bakery website, and Shop-backed online ordering.',
+    shopIndustryPackId: 'cafe',
+    plantIndustryPackId: 'food-beverage',
+    shopBusinessTemplateId: 'bakery',
+    selections: [
+      { product: 'commerce', templateId: 'restaurant-ordering' },
+      { product: 'production', templateId: 'production-control' },
+      { product: 'website', templateId: 'lead-generation' },
+      { product: 'ecommerce', templateId: 'pickup-preorder' },
+    ],
+  },
+  {
+    id: 'fashion',
+    name: 'Fashion & clothing',
+    description: 'Size-level stock, cut-and-sew production, a collection website, and Shop-backed ordering.',
+    shopIndustryPackId: 'retail',
+    plantIndustryPackId: 'apparel',
+    shopBusinessTemplateId: 'fashion',
+    selections: [
+      { product: 'commerce', templateId: 'retail-wholesale' },
+      { product: 'production', templateId: 'production-control' },
+      { product: 'website', templateId: 'catalog-showcase' },
+      { product: 'ecommerce', templateId: 'social-storefront' },
+    ],
+  },
+  {
     id: 'service-business',
-    name: 'Service business',
-    description: 'Service sales, lead generation, and accountable follow-up.',
+    name: 'Beauty & spa',
+    description: 'Appointments, treatments, retail products, service sales, and accountable follow-up.',
     shopIndustryPackId: 'spa',
     plantIndustryPackId: 'general-manufacturing',
+    shopBusinessTemplateId: 'beauty-spa',
     selections: [
       { product: 'commerce', templateId: 'social-commerce' },
       { product: 'website', templateId: 'lead-generation' },
@@ -1006,7 +1048,7 @@ const websiteIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
   retail: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Shop trusted everyday essentials,Show current products and one clear enquiry path.,https://example.com/contact\r\nproducts,Products,Find the right product,Group products with useful buying details.,https://example.com/contact\r\n',
   cafe: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Fresh local favourites ready for pickup,Show today’s menu location and opening hours.,https://example.com/contact\r\nmenu,Menu,Choose food and drinks,Explain pickup timing and how to request an order.,https://example.com/contact\r\n',
   restaurant: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,A clear place to eat well,Show signature meals location and reservation details.,https://example.com/contact\r\nmenu,Menu,Explore the approved menu,Explain table and pickup options before enquiry.,https://example.com/contact\r\n',
-  spa: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Make time for trusted care,Show treatments proof and one appointment path.,https://example.com/contact\r\nservices,Services,Choose the right treatment,Explain duration price and preparation clearly.,https://example.com/contact\r\n',
+  spa: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Massage and beauty treatments by appointment,Choose a treatment then contact us to request a time that works for you.,https://example.com/contact\r\nservices,Treatments,Treatments with clear times and prices,Traditional massage oil massage facials body scrub foot massage and herbal steam are available by appointment.,https://example.com/contact\r\n',
   gym: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Train with a clear plan,Show coaching facilities and one trial path.,https://example.com/contact\r\nclasses,Classes,Find the right session,Explain schedules levels and what to bring.,https://example.com/contact\r\n',
   school: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Learn with a clear next step,Show courses teachers proof and one enquiry path.,https://example.com/contact\r\ncourses,Courses,Choose the right class,Explain level schedule fees and enrollment clearly.,https://example.com/contact\r\n',
 }
@@ -1167,7 +1209,47 @@ const operatingUnitKindByPreset: Readonly<Record<ClientDemoPresetId, ClientOpera
   'retail-network': 'retail',
   'food-service': 'food-service',
   manufacturing: 'plant',
+  bakery: 'food-service',
+  fashion: 'plant',
   'service-business': 'service',
+}
+
+function clientCsvField(value: string) {
+  return `"${value.replaceAll('"', '""')}"`
+}
+
+function businessTemplateWebsiteCsv(template: ShopBusinessTemplate, businessName: string) {
+  const brief = websiteTradeBrief({ tradeId: template.id, businessName })
+  if (!brief) throw new Error(`The ${template.name.en} template needs a reviewed Website brief.`)
+  const lines = [
+    ['home', 'Home', `${template.name.en} for ${brief.audience}`, brief.offer, 'https://example.com/contact'],
+    ['proof', 'Why us', 'How we keep our promise', brief.proof, 'https://example.com/contact'],
+  ].map((row) => row.map(clientCsvField).join(','))
+  return `page_slug,page_title,headline,body,contact_url\r\n${lines.join('\r\n')}\r\n`
+}
+
+function businessTemplateStorefrontCsv(template: ShopBusinessTemplate) {
+  const merchandise = template.catalog.filter((item) => !isShopServiceSku(item.sku)).slice(0, 6)
+  if (merchandise.length < 2) throw new Error(`The ${template.name.en} template needs at least two storefront products.`)
+  const lines = merchandise.map((item, index) => [
+    item.sku,
+    index < 2 ? 'true' : 'false',
+    clientCsvField(index < 2 ? 'Featured today' : 'More to browse'),
+    clientCsvField(item.name),
+    clientCsvField('Confirm current availability before accepting the order request.'),
+  ].join(','))
+  return `sku,featured,collection,display_name,merchandising_note\r\n${lines.join('\r\n')}\r\n`
+}
+
+function plantBusinessTemplateCsv(template: PlantBusinessTemplate, planningDate = currentYangonDate()) {
+  const lines = template.jobs.map((job) => [
+    job.jobCode,
+    clientCsvField(job.product),
+    String(job.target),
+    planningDateAfter(planningDate, job.dueInDays),
+    clientCsvField(job.line),
+  ].join(','))
+  return `job_code,product_name,target_quantity,due_date,production_line\r\n${lines.join('\r\n')}\r\n`
 }
 
 const clientChannelByProduct: Readonly<Record<ClientSolutionId, {
@@ -1278,6 +1360,15 @@ export function buildClientDemoBlueprint(input: {
   const preset = clientDemoPreset(input.presetId)
   const industryPack = shopIndustryPack(input.shopIndustryPackId ?? preset.shopIndustryPackId)
   const plantPack = plantIndustryPack(input.plantIndustryPackId ?? preset.plantIndustryPackId)
+  const businessTemplate = preset.shopBusinessTemplateId
+    ? shopBusinessTemplate(preset.shopBusinessTemplateId)
+    : null
+  const plantBusinessTemplate = businessTemplate
+    ? plantBusinessTemplateForShopTemplateId(businessTemplate.id)
+    : null
+  const presetBusinessCatalog = businessTemplate?.industryPackId === industryPack.id
+    ? shopBusinessTemplateCatalogCsv(businessTemplate.id)
+    : null
   if (input.selections.length < 1 || input.selections.length > clientDemoProductOrder.length) {
     throw new Error('Choose between one and four products for this client demo.')
   }
@@ -1300,10 +1391,18 @@ export function buildClientDemoBlueprint(input: {
       setupPath: details.setupPath,
       importObject: object.id,
       importLabel: object.label,
-      sampleCsv: clientImportTemplate(product, templateId, {
-        shopIndustryPackId: industryPack.id,
-        plantIndustryPackId: plantPack.id,
-      }),
+      sampleCsv: product === 'commerce' && presetBusinessCatalog
+        ? presetBusinessCatalog
+        : product === 'production' && plantBusinessTemplate && plantBusinessTemplate.industryPackId === plantPack.id
+          ? plantBusinessTemplateCsv(plantBusinessTemplate)
+          : product === 'website' && businessTemplate && businessTemplate.industryPackId === industryPack.id
+            ? businessTemplateWebsiteCsv(businessTemplate, workspace)
+          : product === 'ecommerce' && businessTemplate && businessTemplate.industryPackId === industryPack.id
+            ? businessTemplateStorefrontCsv(businessTemplate)
+        : clientImportTemplate(product, templateId, {
+            shopIndustryPackId: industryPack.id,
+            plantIndustryPackId: plantPack.id,
+          }),
       checklist: clientImportChecklist(product, templateId, {
         shopIndustryPackId: industryPack.id,
         plantIndustryPackId: plantPack.id,

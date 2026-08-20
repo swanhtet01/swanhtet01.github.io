@@ -49,6 +49,8 @@ const OPERATING_UNIT_KIND = Object.freeze({
   'retail-network': 'retail',
   'food-service': 'food-service',
   manufacturing: 'plant',
+  bakery: 'food-service',
+  fashion: 'plant',
   'service-business': 'service',
 })
 const CHANNEL_BY_PRODUCT = Object.freeze({

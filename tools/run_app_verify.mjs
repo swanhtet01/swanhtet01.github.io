@@ -5,11 +5,11 @@ import { cpus } from 'node:os'
 
 const root = resolve(import.meta.dirname, '..')
 const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
-const chain = pkg.scripts?.['app:verify']
+const chain = pkg.scripts?.['app:verify:steps']
 if (!chain) throw new Error('app_verify_chain_missing')
 
 // Windows cmd.exe rejects command lines over 8191 chars, so the app:verify
-// chain (~23KB) can never run as one npm script there. This runner executes
+// chain can never run as one npm script there. This runner executes
 // the same chain step-by-step from the canonical package.json string.
 //
 // Default behaviour is byte-identical to the historical serial runner: no flags

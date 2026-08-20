@@ -8818,9 +8818,31 @@ async function verifyClientOnboardingRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-onboarding-verify=${Date.now()}`)
     const capabilityModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-capability-plan.ts')).href}?client-capability-verify=${Date.now()}`)
+    const extensionModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-extension-manifest.ts')).href}?client-extension-verify=${Date.now()}`)
     const websiteLeadModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-lead-verify=${Date.now()}`)
     const plantPacks = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts')).href}?plant-packs-verify=${Date.now()}`)
     assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
+    const spaPreset = model.clientDemoPresets.find((preset) => preset.id === 'service-business')
+    const spaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Private spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
+    const spaExtension = await extensionModel.buildClientExtensionManifest(spaBlueprint, {
+      id: 'ext-spa-membership',
+      label: 'Spa membership packages',
+      outcome: 'Track reviewed packages and remaining sessions under Shop authority.',
+      baseProduct: 'commerce',
+      domain: 'customer',
+      mode: 'reviewed-write',
+      records: ['membership_plan', 'membership_balance', 'membership_redemption'],
+      roles: ['Spa manager', 'Front desk operator'],
+      dependsOn: ['shop-order-to-cash', 'shop-customer-credit', 'platform-approval'],
+      acceptanceCriteria: ['A named operator can draft without charging.', 'A reviewed Shop payment creates one idempotent balance.'],
+    }, '2026-08-21T00:00:00.000Z')
+    const spaExtensionVerification = await extensionModel.verifyClientExtensionManifest(spaExtension, spaBlueprint)
+    assert(spaExtension.schema === extensionModel.CLIENT_EXTENSION_MANIFEST_SCHEMA && spaExtension.controls.activationStatus === 'not-implemented', 'client_extension_activation_boundary_missing')
+    assert(spaExtension.authority.crossProductWritesAllowed === false && spaExtension.authority.requestedActions.join(',') === 'read,draft,propose-write', 'client_extension_authority_too_broad')
+    assert(spaExtensionVerification.digest === spaExtension.digest && spaExtensionVerification.blueprintDigest === spaExtension.blueprintDigest, 'client_extension_blueprint_binding_missing')
+    const otherSpaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Other spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
+    await rejects(() => extensionModel.verifyClientExtensionManifest(spaExtension, otherSpaBlueprint), 'client_extension_cross_tenant_blueprint_accepted')
+    await rejects(() => extensionModel.verifyClientExtensionManifest({ ...spaExtension, outcome: 'Changed after review.' }, spaBlueprint), 'client_extension_tamper_accepted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
     assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
     const objectIds = new Set()
@@ -8910,7 +8932,9 @@ async function verifyClientOnboardingRuntime() {
     }, '2026-07-29T00:15:00.000Z'), 'website_closed_lead_reopened')
     assert(websiteLeadModel.restoreWebsiteLeadLedger({ ...closedLeadLedger, unexpected: true }) === null, 'website_lead_unknown_field_accepted')
 
-    assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
+    const clientDemoPresetIds = model.clientDemoPresets.map((preset) => preset.id)
+    assert(clientDemoPresetIds.join(',') === 'social-seller,retail-network,food-service,manufacturing,bakery,fashion,service-business'
+      && new Set(clientDemoPresetIds).size === clientDemoPresetIds.length, 'client_demo_presets_missing_or_duplicated')
     assert(capabilityModel.clientCapabilityDependencyLabel('platform-identity') === 'Identity and role boundaries'
       && capabilityModel.clientCapabilityDependencyLabel('shop-order-to-cash') === 'Order to cash'
       && capabilityModel.clientCapabilityDependencyLabel('future-control') === 'future control', 'client_capability_dependency_labels_wrong')
@@ -8974,6 +8998,32 @@ async function verifyClientOnboardingRuntime() {
     const manufacturingBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Factory', owner: 'General manager', presetId: 'manufacturing', selections: manufacturingPreset.selections })
     assert(manufacturingBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce', 'client_demo_manufacturing_product_order_drifted')
     assert(manufacturingBlueprint.integrations.length === 3 && manufacturingBlueprint.integrations.some((integration) => integration.from === 'ecommerce' && integration.to === 'commerce'), 'client_demo_integrations_missing')
+    const bakeryPreset = model.clientDemoPresets.find((preset) => preset.id === 'bakery')
+    const bakeryBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Bakery', owner: 'Bakery manager', presetId: 'bakery', selections: bakeryPreset.selections })
+    const bakeryShopProduct = bakeryBlueprint.products.find((product) => product.product === 'commerce')
+    const bakeryPlantProduct = bakeryBlueprint.products.find((product) => product.product === 'production')
+    const bakeryEcommerceProduct = bakeryBlueprint.products.find((product) => product.product === 'ecommerce')
+    const bakeryShopSkus = new Set(bakeryShopProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+    const bakeryEcommerceSkus = bakeryEcommerceProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+    assert(bakeryBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce'
+      && bakeryShopProduct.sampleCsv.includes('BREAD-WHITE,"White sandwich loaf"')
+      && bakeryPlantProduct.sampleCsv.includes('JOB-BAKE-001,"White sandwich loaf"')
+      && bakeryEcommerceSkus.length >= 2
+      && bakeryEcommerceSkus.every((sku) => bakeryShopSkus.has(sku) && !sku.includes('-SVC-')),
+    'client_demo_bakery_cross_product_template_drifted')
+    const fashionPreset = model.clientDemoPresets.find((preset) => preset.id === 'fashion')
+    const fashionBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Fashion', owner: 'Fashion manager', presetId: 'fashion', selections: fashionPreset.selections })
+    const fashionShopProduct = fashionBlueprint.products.find((product) => product.product === 'commerce')
+    const fashionPlantProduct = fashionBlueprint.products.find((product) => product.product === 'production')
+    const fashionWebsiteProduct = fashionBlueprint.products.find((product) => product.product === 'website')
+    const fashionEcommerceProduct = fashionBlueprint.products.find((product) => product.product === 'ecommerce')
+    const fashionShopSkus = new Set(fashionShopProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+    const fashionEcommerceSkus = fashionEcommerceProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+    assert(fashionPlantProduct.sampleCsv.includes('JOB-FASHION-001,"Cotton T-shirt medium white"')
+      && fashionWebsiteProduct.sampleCsv.includes('Fashion & clothing for shoppers looking for clothing and accessories in their own size')
+      && fashionEcommerceSkus.length >= 2
+      && fashionEcommerceSkus.every((sku) => fashionShopSkus.has(sku)),
+    'client_demo_fashion_cross_product_template_drifted')
     const customPlantPreview = await model.createClientImportPreview(model.clientImportTemplate('production', 'production-control'), 'production', undefined, 'custom-plant.csv', 'production-control')
     const customPlantPackage = model.buildClientImportStagingPackage(customPlantPreview, { workflowTemplateId: 'production-control', workspace: 'Integrated Factory', owner: 'General manager', plantIndustryPackId: 'batch-process' })
     assert(customPlantPackage.plantIndustryPackId === 'batch-process', 'client_demo_custom_plant_pack_not_bound')

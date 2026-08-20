@@ -221,7 +221,14 @@ type ManagedPortalAccess =
   | { status: 'local'; products: readonly ClientSolutionId[]; workspaceId: '' }
   | { status: 'checking'; products: readonly ClientSolutionId[]; workspaceId: string }
   | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; workspaceId: string }
-  | { status: 'ready'; products: readonly ClientSolutionId[]; workspaceId: string }
+  | {
+      status: 'ready'
+      products: readonly ClientSolutionId[]
+      workspaceId: string
+      companyName: string
+      companyRole: 'owner' | 'operator' | 'viewer'
+      accountEmail: string
+    }
   | { status: 'error'; products: readonly ClientSolutionId[]; workspaceId: string; message: string }
 
 const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
@@ -235,21 +242,31 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
     if (!enabled || !selectedWorkspace) return undefined
     let active = true
     void import('./managed-trial')
-      .then(async ({ currentManagedIdentity, loadManagedBootstrap, managedProductsFromBootstrap }) => {
+      .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
         const identity = await currentManagedIdentity()
         if (!active) return
         if (!identity || identity.workspaceId !== selectedWorkspace) {
           setResolved({ key: accessKey, access: { status: 'reauthenticate', products: [], workspaceId: selectedWorkspace } })
           return
         }
-        const bootstrap = await loadManagedBootstrap(identity)
+        const [bootstrap, directory] = await Promise.all([
+          loadManagedBootstrap(identity),
+          discoverManagedWorkspacesForCurrentSession(),
+        ])
         if (!active) return
+        const company = directory.workspaces.find((workspace) => workspace.workspaceId === selectedWorkspace)
+        if (!company || directory.userId !== identity.userId) {
+          throw new Error('This company is no longer assigned to the signed-in account. Sign in again.')
+        }
         setResolved({
           key: accessKey,
           access: {
             status: 'ready',
             products: managedProductsFromBootstrap(bootstrap, identity),
             workspaceId: selectedWorkspace,
+            companyName: company.label,
+            companyRole: company.access,
+            accountEmail: directory.email,
           },
         })
       })
@@ -656,6 +673,17 @@ export function ProductHomePage() {
       {managedPortal
         ? <PageHeading copy="Only products assigned to this company are shown." eyebrow="Company portal" title="Company products" />
         : <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />}
+      {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
+        <div>
+          <span>Active company</span>
+          <strong>{portalAccess.companyName}</strong>
+          <small>{portalAccess.accountEmail}</small>
+        </div>
+        <div className="company-portal-role">
+          <span>{portalAccess.companyRole}</span>
+          <Link to="/login">Switch company</Link>
+        </div>
+      </section> : null}
       {managedPortal && portalAccess.products.length === 0
         ? <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
         : null}
