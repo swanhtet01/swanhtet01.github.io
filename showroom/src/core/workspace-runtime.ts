@@ -559,6 +559,29 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
   }, [localSnapshot, managedIdentity, managedSnapshot])
 
+  // Shop first-open is the moment durable storage starts to matter, and it matters for a
+  // company account exactly as much as for a signed-out one. UNCONDITIONAL ON PURPOSE:
+  // signing in moves the workspace ledger server-side, but several Shop stores stay
+  // device-local under a `managed:<workspaceId>` scope with no server copy at all --
+  // product photos and payment-QR blobs (product-image-store.ts / payment-qr-store.ts,
+  // both explicitly outside company backups), the unfinished order draft
+  // (commerce-order-draft.ts) and loyalty settings (shop-loyalty.ts). Browser eviction
+  // takes those permanently whoever is signed in, so every Shop gets to ask.
+  //
+  // Deliberately its own effect rather than a line inside the managed/local branch below.
+  // Reached from that branch it fired for company accounts anyway -- managedIdentity is
+  // null until /api/health answers and useManagedIdentity is enabled, so the local arm
+  // always ran first and the module memo made that first call the only one of the session
+  // -- which left the code doing the right thing for a reason that read as a bug.
+  //
+  // Fired here rather than in main.tsx so the marketing site never asks, and deliberately
+  // not awaited -- the answer only drives a warning banner, so it must not delay recovery,
+  // the first write, or first paint. Memoised inside the module, so the several surfaces
+  // that mount this hook still produce exactly one request per page session.
+  useEffect(() => {
+    void requestStorageDurability()
+  }, [])
+
   useEffect(() => {
     if (managedIdentity) {
       let active = true
@@ -571,13 +594,6 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       }
     }
     let active = true
-    // Shop first-open on a local (signed-out) workspace is the moment durable storage
-    // starts to matter: from here on, this browser holds the only copy of the shop's
-    // records. Fired here rather than in main.tsx so the marketing site never asks, and
-    // deliberately not awaited -- the answer only drives a warning banner, so it must
-    // not delay recovery, the first write, or first paint. Memoised inside the module,
-    // so the several surfaces that mount this hook still produce exactly one request.
-    void requestStorageDurability()
     recoverLocalCommerceSyncOutbox()
       .then((status) => {
         if (!active || identityRef.current) return
