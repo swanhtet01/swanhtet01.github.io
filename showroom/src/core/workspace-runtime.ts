@@ -1119,21 +1119,59 @@ export function useSetupWorkspace() {
   return [setup, updateSetup] as const
 }
 
+// The two halves of "is this definitely a signed-out shop", pulled out as pure functions
+// so the question can be ENUMERATED in a suite rather than asserted by eye. Both are used
+// by the code below and by CoreApp; neither is test-only scaffolding.
+//
+// The distinction they exist for is the af705d42 bug: runtime.status starts at 'checking',
+// which leaves useManagedIdentity disabled, which makes managedIdentity null -- so on first
+// mount a signed-IN operator is indistinguishable from a local shop to any check of the
+// shape `if (!managedIdentity)`. Anything that fires on being signed OUT has to wait for
+// both answers.
+
+// Whether the identity probe has answered for the CURRENT `enabled`. When the hook is
+// disabled there is nothing to wait for, so it is trivially settled -- the caller is
+// responsible for also checking that health itself has answered.
+export function managedIdentitySettled(enabled: boolean, probed: boolean): boolean {
+  return enabled ? probed : true
+}
+
+// The full gate. All three must hold: health answered at all, the identity probe settled
+// behind it, and no managed identity came back.
+export function localShopConfirmed(runtimeStatus: string, settled: boolean, managedIdentity: unknown): boolean {
+  return runtimeStatus !== 'checking' && settled && !managedIdentity
+}
+
+// Third tuple element is `settled`: whether the identity question has actually been
+// ANSWERED, as opposed to merely not answered yet. A null identity on its own is
+// ambiguous -- it means "signed out" only once `settled` is true, and "nobody has asked"
+// before that -- and every caller that branches on being signed OUT needs the difference.
+// Callers that only branch on being signed IN can keep ignoring it.
 export function useManagedIdentity(enabled: boolean) {
   const [identity, setIdentity] = useState<ManagedIdentity | null>(null)
+  const [probed, setProbed] = useState(false)
 
   useEffect(() => {
     if (!enabled) return undefined
     let active = true
     currentManagedIdentity()
       .then((current) => {
-        if (active) setIdentity(current)
+        if (active) { setIdentity(current); setProbed(true) }
       })
       .catch(() => {
-        if (active) setIdentity(null)
+        if (active) { setIdentity(null); setProbed(true) }
       })
     return () => { active = false }
   }, [enabled])
 
-  return [enabled ? identity : null, setIdentity] as const
+  // Derived during render rather than stored by the effect, deliberately. If the effect
+  // set it, the render that first flips `enabled` false->true would still carry the
+  // previous `settled: true`, and useEffect runs AFTER paint -- so a signed-in session
+  // would paint one frame looking signed out. Deriving it from `enabled` makes it false on
+  // the very same render that enabled it, which closes that frame.
+  //
+  // `enabled` here is `runtime.status === 'enterprise'`, which settles once and does not
+  // oscillate; if it ever did, a second true would report settled from the first probe.
+  const settled = managedIdentitySettled(enabled, probed)
+  return [enabled ? identity : null, setIdentity, settled] as const
 }

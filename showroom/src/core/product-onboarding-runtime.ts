@@ -17,6 +17,7 @@ import {
   type CommerceItem,
 } from './commerce-workspace.ts'
 import { plantImportDueAt } from './managed-trial.ts'
+import { withShopServiceMyanmarNames } from './shop-service-scheduling.ts'
 import {
   appendGuidedSampleProductionActivity,
   GUIDED_SAMPLE_PRODUCTION_ACTOR,
@@ -207,13 +208,17 @@ export async function provisionLocalShopWorkingSample(industryPackId: ShopIndust
   if (!preview.readyForStaging || preview.rows.some((row) => row.status !== 'ready')) {
     throw new Error(`The ${pack.name} working sample did not pass its local data checks.`)
   }
-  const items: CommerceItem[] = preview.rows.map((row) => ({
+  // The CSV has no Burmese column and must not grow one -- an owner's own import would then be
+  // expected to supply Myanmar copy. The pack in scope a few lines above already carries the
+  // translations the appointment book displays, so they are carried onto the treatment rows here
+  // instead of being dropped, which is what left the counter in English.
+  const items: CommerceItem[] = withShopServiceMyanmarNames(preview.rows.map((row) => ({
     sku: row.values.sku,
     name: row.values.name,
     onHand: Number(row.values.onHand),
     reorderAt: Number(row.values.reorderAt),
     price: Number(row.values.price),
-  }))
+  })), pack.id)
   const commerceWorkspace = loadCommerceWorkspace()
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
@@ -244,13 +249,14 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
   if (!preview.readyForStaging || preview.rows.some((row) => row.status !== 'ready')) {
     throw new Error(`The ${template.name.en} business template did not pass its local data checks.`)
   }
-  const items: CommerceItem[] = preview.rows.map((row) => ({
+  // Same reasoning as the pack route above; a trade template installs its pack's service rows.
+  const items: CommerceItem[] = withShopServiceMyanmarNames(preview.rows.map((row) => ({
     sku: row.values.sku,
     name: row.values.name,
     onHand: Number(row.values.onHand),
     reorderAt: Number(row.values.reorderAt),
     price: Number(row.values.price),
-  }))
+  })), template.industryPackId)
   const commerceWorkspace = loadCommerceWorkspace()
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   const provisionedAt = new Date().toISOString()

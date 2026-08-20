@@ -60,9 +60,16 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false, initiallyOpen = false }: { actor?: string; disabled?: boolean; initiallyOpen?: boolean }) {
+export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: { actor?: string; disabled?: boolean; initiallyOpen?: boolean; onScheduleChange?: (schedule: ShopServiceSchedule) => void }) {
   const [initial] = useState(initialSchedule)
-  const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
+  const [schedule, setScheduleState] = useState<ShopServiceSchedule | null>(initial.schedule)
+  // Every path that changes the book goes through here, so an observer -- today, the close
+  // screen's "completed but not rung up" list -- cannot miss a completion. Notifying is
+  // strictly read-only: observers receive the book, they do not get to change it.
+  function setSchedule(next: ShopServiceSchedule) {
+    setScheduleState(next)
+    onScheduleChange?.(next)
+  }
   const [notice, setNotice] = useState(initial.error)
   const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)
   const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })

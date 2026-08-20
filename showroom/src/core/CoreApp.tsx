@@ -32,6 +32,7 @@ import {
   normalizeActions,
   productionActionProof,
   useCommerceWorkspace,
+  localShopConfirmed,
   useManagedIdentity,
   useProductionWorkspace,
   useSetupWorkspace,
@@ -41,7 +42,7 @@ import {
   type ActionDomain,
   type PendingAccountableAction,
 } from './workspace-runtime'
-import { getStorageDurability, subscribeStorageDurability } from './storage-durability'
+import { getStorageDurability, measureCommerceHeadroom, subscribeStorageDurability } from './storage-durability'
 import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
@@ -259,8 +260,11 @@ import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   readShopServiceSchedule,
   shopIndustryPack,
+  shopScheduleVocabulary,
   type ShopIndustryPack,
+  type ShopServiceSchedule as ShopServiceScheduleState,
 } from './shop-service-scheduling'
+import { projectShopAppointmentTillReconciliation } from './shop-appointment-till-reconciliation'
 import { decideShopNextAction } from './shop-next-action'
 import { projectShopCloseAnomalyFlags, type ShopCloseAnomalyFlag, type ShopCloseAnomalyFlags } from './shop-close-anomaly-flags'
 import { lockedCapabilityNotice } from './capability-tiers'
@@ -1037,7 +1041,16 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [managedIdentity, , managedIdentitySettled] = useManagedIdentity(runtime.status === 'enterprise')
+  // "Signed out" is NOT the same as "not asked yet", and every surface that fires on being
+  // signed OUT needs the difference. runtime.status starts at 'checking', which keeps
+  // useManagedIdentity disabled, so on first mount a signed-IN operator has
+  // managedIdentity === null exactly like a local shop does -- a naive `if (!managedIdentity)`
+  // therefore runs the LOCAL arm for a company account until /api/health answers and the
+  // identity probe resolves behind it. localShopConfirmed requires all three: health
+  // answered at all, the probe settled behind it, and no identity returned. Its lifecycle
+  // is enumerated frame by frame in tools/storage_durability.test.mjs.
+  const confirmedLocalShop = localShopConfirmed(runtime.status, managedIdentitySettled, managedIdentity)
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
   const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
   const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
@@ -1082,7 +1095,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} confirmedLocalShop={confirmedLocalShop} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1101,6 +1114,20 @@ function readLocalShopIndustryPack() {
   try {
     return shopIndustryPack(readShopServiceSchedule(stored).industryPackId)
   } catch {
+    return null
+  }
+}
+
+// Read-only. Commerce never writes this key and must not start: the appointment book owns it,
+// under its own lock. This exists so the close screen can ASK the book a question, which is a
+// different thing from the close screen being able to change it.
+function readLocalShopServiceSchedule(): ShopServiceScheduleState | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return readShopServiceSchedule(window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY))
+  } catch {
+    // An unreadable book is already reported, loudly, by the appointment panel itself. The
+    // close screen staying quiet is better than two alarms for one fault.
     return null
   }
 }
@@ -1240,7 +1267,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
             const artKind = Math.max(0, items.indexOf(item)) % 5
             return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><strong>{item.name}</strong>{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
+              <span className="shop-product-copy"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
           })}
@@ -1253,7 +1280,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
       <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
         <header><div><span className="core-eyebrow">Current sale</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : 'Ready for the first item'}</h2></div><div className="shop-cart-actions">{unitCount ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
         <div className="shop-cart-lines">
-          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong><small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>Your sale is empty</strong><small>Tap any product to begin.</small></div>}
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>Your sale is empty</strong><small>Tap any product to begin.</small></div>}
         </div>
         {unitCount ? <><div className="shop-sale-details">
           <label>Customer <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
@@ -1406,7 +1433,7 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, shopCounterCustomer, shopCounterSearch, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, confirmedLocalShop, managedIdentity, requestedRequestId, requestedSource, shopCounterCustomer, shopCounterSearch, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
@@ -1414,6 +1441,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ecommerceOrderRescheduleNavigationIntent: EcommerceOrderRescheduleIntent | null
   ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
   ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
+  confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
   requestedSource: string | null
@@ -1425,7 +1453,24 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
+  const [shopSchedule, setShopSchedule] = useState<ShopServiceScheduleState | null>(readLocalShopServiceSchedule)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
+  // Workspace headroom. LOCAL SHOPS ONLY: a company account keeps the ledger server-side
+  // and neither local ceiling applies to it (workspace-runtime.ts branches on
+  // !managedIdentity long before any of this), so a signed-in operator must never be told
+  // their till is filling up. Gated on confirmedLocalShop rather than on `!managedIdentity`
+  // alone -- see where confirmedLocalShop is derived: a null identity means "not asked yet"
+  // until health and the identity probe have both answered, so the bare check runs the
+  // LOCAL arm for a signed-in session on first mount.
+  //
+  // Keyed on the workspace object identity, which changes only when the workspace is
+  // actually mutated -- so a re-render that changed nothing costs one reference comparison.
+  // measureCommerceHeadroom caches on that same identity and only serializes the workspace
+  // when the shop is near a wall; its doc comment carries the cost profile.
+  const commerceHeadroom = useMemo(
+    () => (confirmedLocalShop ? measureCommerceHeadroom(commerce) : null),
+    [commerce, confirmedLocalShop],
+  )
   const storageDurability = useSyncExternalStore(subscribeStorageDurability, getStorageDurability)
   // The installed sample id is either an industry pack id or a business template id;
   // comparing only the pack id reported a successful template install as "preserved".
@@ -1685,6 +1730,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
+  // "Which treatments did I finish today and never ring up?" Derived, never stored, and it
+  // posts nothing -- see shop-appointment-till-reconciliation.ts for why that boundary holds.
+  const appointmentTillReconciliation = useMemo(() => {
+    if (!shopSchedule) return null
+    try {
+      return projectShopAppointmentTillReconciliation(shopSchedule, commerce, new Date(purchaseOrderClock).toISOString())
+    } catch {
+      return null
+    }
+  }, [commerce, purchaseOrderClock, shopSchedule])
+  const scheduleVocabulary = shopScheduleVocabulary(shopSchedule?.industryPackId ?? '')
   const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
@@ -2873,9 +2929,45 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {commerceStuckRecovery.discardError ? <p className="form-notice" data-tone="error">{commerceStuckRecovery.discardError}</p> : null}
     </details>
 
+  // Headroom warning -- the till filling up, said in sales rather than bytes.
+  //
+  // SILENT BY DEFAULT. 'clear' renders nothing whatsoever: a shop at 12% has nothing to do
+  // about it, and a meter that talks when there is nothing to do is a meter that gets
+  // ignored at 95%. Escalation is in TONE as well as colour, because 'tight' can persist
+  // for roughly ten trading days on a plain shop -- it is a quiet notice with no role, and
+  // only 'urgent' takes role="alert" and the danger pill.
+  //
+  // The advice deliberately stops at "take a backup". A follow-up batch that reclaims room
+  // by folding settled orders is DESIGNED but NOT APPROVED -- it rewrites a shop's own
+  // business records and sits behind a founder gate -- so nothing here may promise it. The
+  // copy says only what is true today: a backup is the safe step, and Shop cannot yet free
+  // up room from the inside.
+  const headroomSales = commerceHeadroom?.salesRemaining ?? 0
+  const storageHeadroomNotice = !commerceHeadroom || commerceHeadroom.level === 'clear'
+    ? null
+    : <div className="production-mode-banner storage-durability-banner" data-headroom={commerceHeadroom.level} role={commerceHeadroom.level === 'urgent' ? 'alert' : undefined}>
+      <span className={`status-pill ${commerceHeadroom.level === 'urgent' ? 'danger' : 'pending'}`}>{commerceHeadroom.limit === 'inventory-commands'
+        ? (commerceHeadroom.level === 'urgent' ? 'Stock log almost full' : 'Stock log filling up')
+        : (commerceHeadroom.level === 'urgent' ? 'Storage almost full' : 'Storage filling up')}</span>
+      <p>{headroomSales === 0
+        ? 'This device has no room left for new sales.'
+        : `${commerceHeadroom.level === 'urgent' ? 'Only about' : 'About'} ${headroomSales.toLocaleString()} more ${headroomSales === 1 ? 'sale fits' : 'sales fit'} on this device before Shop stops accepting new sales.`}
+        {commerceHeadroom.limit === 'inventory-commands' ? " This shop's limit is its stock movement log, which cannot be cleared once it is written." : ''}
+        {commerceHeadroom.level === 'urgent'
+          ? ' Export a backup from Settings now. When this device is full Shop stops taking new sales, and the records already saved stay where they are.'
+          : ' Export a backup from Settings so these records are safe off the device.'}
+        {' There is no way to free up room inside Shop yet, so a backup is the safe step today.'}
+        <small className="storage-headroom-detail">{commerceHeadroom.limit === 'inventory-commands'
+          ? `${commerceHeadroom.commands.toLocaleString()} of ${commerceHeadroom.commandCeiling.toLocaleString()} stock log entries used · 2 per sale`
+          : `${(commerceHeadroom.bytes / 1048576).toFixed(2)} MB of ${(commerceHeadroom.byteCeiling / 1048576).toFixed(2)} MB used · about ${Math.round(commerceHeadroom.bytesPerSale).toLocaleString()} bytes per sale${commerceHeadroom.bytesPerSaleMeasured ? ' on this device' : ''}`}</small>
+      </p>
+      <Link to="/settings/#controls">Open Settings</Link>
+    </div>
+
   const commerceBoundary = <>
     {commerceWriteBanner}
     {storageDurabilityNotice}
+    {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
   </>
   const orderNotice = notice || commerceStorageError
@@ -6459,7 +6551,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={shopScheduleControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={shopScheduleControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onScheduleChange={setShopSchedule} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
@@ -6759,6 +6851,34 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       the /shop/?tab=orders#shop-close-controls deep links working. */}
   <section aria-labelledby="shop-close-heading" className="core-panel shop-close-day" id="shop-close-controls">
     <div className="section-head"><h2 id="shop-close-heading">Close the day</h2><small>{closableOrders.length ? `${closableOrders.length} ready` : latestClose ? 'Today is closed' : 'Nothing to close yet'}</small></div>
+    {/* The appointment book does not post to the ledger, so a treatment completed in the book
+        and never rung up at the counter is simply absent from this close and from every report
+        after it. This is where she finds that out -- at the moment she is closing, not by going
+        looking. It is a prompt, never a blocker: the close below stays available whatever this
+        says, because a complimentary treatment, a voucher redemption or a staff treatment are
+        all ordinary reasons for a completed appointment to have no sale, and the product has no
+        business deciding which. */}
+    {appointmentTillReconciliation?.gaps.length ? <section aria-labelledby="shop-appointment-till-heading" className="core-panel shop-appointment-till" data-appointment-till-gaps={appointmentTillReconciliation.unpostedBookings}>
+      <div className="section-head">
+        <h3 id="shop-appointment-till-heading">Completed, not yet at the counter</h3>
+        <small>{appointmentTillReconciliation.unpostedBookings} of {appointmentTillReconciliation.completedBookings} · {formatMoney(appointmentTillReconciliation.unpostedValueMmk)}</small>
+      </div>
+      <p className="form-notice">These {scheduleVocabulary.plural.toLowerCase()} were completed today and no matching sale was rung up. Ring one up at the counter if it was paid for, or leave it if it was complimentary, prepaid, or settled another way. Nothing here changes an order by itself.</p>
+      <ul className="appointment-till-list">
+        {appointmentTillReconciliation.gaps.map((gap) => <li key={gap.serviceId}>
+          <div>
+            <strong>{gap.serviceName}</strong>
+            {gap.serviceNameMy ? <small className="shop-product-my" lang="my">{gap.serviceNameMy}</small> : null}
+            <small>{gap.unpostedCount} of {gap.completedCount} completed · {gap.chargedQuantity} rung up · {formatMoney(gap.unitPriceMmk)} each</small>
+          </div>
+          <div>
+            <span className="status-pill pending">{formatMoney(gap.unpostedValueMmk)}</span>
+            <small>{gap.bookings.filter((booking) => gap.unpostedBookingIds.includes(booking.id)).map((booking) => `${booking.customerName} ${formatTime(booking.startsAt)}`).join(' · ')}</small>
+          </div>
+        </li>)}
+      </ul>
+      <Link className="core-button" to="/shop/?tab=counter">Open the counter</Link>
+    </section> : null}
     <details className="compact-disclosure" data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
       <summary><span>Settlement count</span><small>{closePreview ? `${closeExpectedByPayment.size} payment method${closeExpectedByPayment.size === 1 ? '' : 's'} · ${closeSettlement?.status === 'matched' ? 'matched' : closeSettlement?.status === 'variance_review' ? 'variance needs review' : 'complete the count'}` : 'No open close'}</small></summary>
       <section aria-label="Daily settlement count" className="core-form compact-form">
