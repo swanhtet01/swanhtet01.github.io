@@ -21,8 +21,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import supermega_runtime.billing_rail as billing_rail_module
 import supermega_runtime.trial_store as trial_store_module
 from supermega_runtime.billing_rail import (
+    BILLING_ENTITLEMENT_READ_SCHEMA_VERSION,
     BILLING_EVENT_RESULT_CONTRACT,
     BILLING_OVERDUE_REPORT_CONTRACT,
     BILLING_STATE_CONTRACT,
@@ -137,6 +139,36 @@ def founder_evidence(action_id: str, reference: str, reason: str = "Founder veri
     }
 
 
+# The two tables that stay founder-only forever, and every privilege the
+# deny-by-default guard reasons about.
+FOUNDER_ONLY_BILLING_TABLES = ("billing_invoices", "billing_events")
+BILLING_PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "DELETE")
+# The exact grant set v13 leaves behind: SELECT on billing_entitlements only.
+V13_RUNTIME_GRANTS = frozenset({("billing_entitlements", "SELECT")})
+
+
+def runtime_privilege_columns(granted: object) -> dict[str, bool]:
+    """Derive the three runtime-role probe columns exactly as the SQL in
+    BillingLedger._assert_schema derives them, from the set of (table,
+    privilege) pairs supermega_trial_backend actually holds. Modelling the
+    grants rather than the aggregates keeps the fixtures honest: a test names
+    the privilege v13 grants, not a hand-set boolean."""
+
+    held = {(str(table), str(privilege)) for table, privilege in granted}
+    return {
+        "runtime_ledger_denied": all(
+            (table, privilege) not in held
+            for table in FOUNDER_ONLY_BILLING_TABLES
+            for privilege in BILLING_PRIVILEGES
+        ),
+        "runtime_entitlement_write_denied": all(
+            ("billing_entitlements", privilege) not in held
+            for privilege in ("INSERT", "UPDATE", "DELETE")
+        ),
+        "runtime_entitlement_read": ("billing_entitlements", "SELECT") in held,
+    }
+
+
 class FakeBillingDatabase:
     def __init__(self) -> None:
         self.invoices: dict[tuple[str, str], dict[str, object]] = {}
@@ -146,7 +178,13 @@ class FakeBillingDatabase:
         self.clock = NOW
         self.current_user = "postgres"
         self.provisioning_role_privileged = True
-        self.runtime_role_denied = True
+        # v12 default: the runtime member role holds nothing on any billing
+        # table. A v13 target is modelled by setting V13_RUNTIME_GRANTS.
+        self.runtime_privileges: frozenset[tuple[str, str]] = frozenset()
+        # billing_entitlements carries forced RLS and exactly the one permissive
+        # SELECT policy v13 creates. False models a target where that scoping
+        # was disabled or widened after the migration ran.
+        self.entitlement_read_scoped = True
         self.schema_version = 12
 
     def connect(self, _database_url: str):
@@ -219,7 +257,8 @@ class FakeBillingCursor:
                     "provisioning_role_privileged": self.database.provisioning_role_privileged,
                     "schema_version": self.database.schema_version,
                     "backend_role_safe": True,
-                    "runtime_role_denied": self.database.runtime_role_denied,
+                    **runtime_privilege_columns(self.database.runtime_privileges),
+                    "runtime_entitlement_read_scoped": self.database.entitlement_read_scoped,
                     "invoice_select": True,
                     "invoice_insert": True,
                     "invoice_update": True,
@@ -825,16 +864,21 @@ class BillingLedgerTests(unittest.TestCase):
             )
 
     def test_runtime_or_nonprivileged_connection_cannot_record(self) -> None:
-        for label, current_user, privileged, denied in (
-            ("runtime role", "supermega_trial_backend", True, True),
-            ("non-privileged role", "operator", False, True),
-            ("member role reached billing", "postgres", True, False),
+        for label, current_user, privileged, runtime_privileges in (
+            ("runtime role", "supermega_trial_backend", True, frozenset()),
+            ("non-privileged role", "operator", False, frozenset()),
+            (
+                "member role reached billing",
+                "postgres",
+                True,
+                frozenset({("billing_invoices", "SELECT")}),
+            ),
         ):
             with self.subTest(label=label):
                 database = FakeBillingDatabase()
                 database.current_user = current_user
                 database.provisioning_role_privileged = privileged
-                database.runtime_role_denied = denied
+                database.runtime_privileges = runtime_privileges
                 ledger = BillingLedger(DATABASE_URL, connection_factory=database.connect)
                 with self.assertRaises(BillingRailError):
                     ledger.issue_invoice(
@@ -850,6 +894,156 @@ class BillingLedgerTests(unittest.TestCase):
         with self.assertRaises(BillingRailError):
             self.issue()
         self.assertEqual(self.database.invoices, {})
+
+
+class RuntimePrivilegeContractTests(unittest.TestCase):
+    """The deny-by-default guard against the exact grant v13 makes.
+
+    v12 shipped billing dark: zero policies, zero grants for
+    supermega_trial_backend on all three billing tables. v13
+    (20260818090000_private_trial_backend_v13_billing_entitlement_read.sql) is
+    the one separate founder decision that opens a single privilege -- SELECT on
+    app_private.billing_entitlements, RLS-scoped to the session's own workspace
+    -- so the product surface can read the paid flag. The ledger's guard must
+    tolerate exactly that one privilege at exactly that schema version and go on
+    refusing everything else: a v13-shaped grant on a v12 database was not put
+    there by a reviewed migration, entitlement writes stay founder-only forever,
+    and billing_invoices/billing_events stay completely dark forever.
+    """
+
+    DENY_MESSAGE = (
+        "The billing tables must remain deny-by-default for the runtime member role."
+    )
+    UNSCOPED_MESSAGE = (
+        "The runtime member role's billing entitlement read must stay scoped to its own workspace."
+    )
+    # Read off the source of truth so the cases track the constant, not a literal.
+    V13 = BILLING_ENTITLEMENT_READ_SCHEMA_VERSION
+    PRE_V13 = BILLING_ENTITLEMENT_READ_SCHEMA_VERSION - 1
+    SCHEMA_VERSIONS = (PRE_V13, V13)
+
+    def ledger_for(
+        self,
+        *,
+        schema_version: int,
+        runtime_privileges: object,
+        entitlement_read_scoped: bool = True,
+    ) -> tuple[FakeBillingDatabase, BillingLedger]:
+        database = FakeBillingDatabase()
+        database.schema_version = schema_version
+        database.runtime_privileges = frozenset(runtime_privileges)
+        database.entitlement_read_scoped = entitlement_read_scoped
+        return database, BillingLedger(DATABASE_URL, connection_factory=database.connect)
+
+    def issue(self, ledger: BillingLedger) -> dict[str, object]:
+        return ledger.issue_invoice(
+            sample_packet(),
+            workspace_id=WORKSPACE_ID,
+            evidence=founder_evidence("issue-0001", "viber:handover:2026-08-17"),
+        )
+
+    def assert_accepted(self, *, schema_version: int, runtime_privileges: object) -> None:
+        database, ledger = self.ledger_for(
+            schema_version=schema_version, runtime_privileges=runtime_privileges
+        )
+        with patch.object(billing_rail_module, "BILLING_SCHEMA_VERSION", schema_version):
+            recorded = self.issue(ledger)
+        self.assertFalse(recorded["replayed"])
+        self.assertEqual(len(database.invoices), 1)
+        self.assertEqual(len(database.events), 1)
+
+    def assert_rejected(
+        self,
+        *,
+        schema_version: int,
+        runtime_privileges: object,
+        entitlement_read_scoped: bool = True,
+        message: str | None = None,
+    ) -> None:
+        database, ledger = self.ledger_for(
+            schema_version=schema_version,
+            runtime_privileges=runtime_privileges,
+            entitlement_read_scoped=entitlement_read_scoped,
+        )
+        with patch.object(billing_rail_module, "BILLING_SCHEMA_VERSION", schema_version):
+            with self.assertRaises(BillingRailError) as raised:
+                self.issue(ledger)
+        self.assertEqual(str(raised.exception), message or self.DENY_MESSAGE)
+        self.assertEqual(database.invoices, {})
+        self.assertEqual(database.events, {})
+
+    def test_v13_entitlement_read_grant_is_accepted_at_schema_13(self) -> None:
+        # The regression this fix closes: on a real v13 database EVERY founder
+        # billing command raised DENY_MESSAGE, because the guard's predicate
+        # folded billing_entitlements SELECT in with the privileges v13 never
+        # grants. v13 is un-applyable in practice until this passes.
+        self.assert_accepted(
+            schema_version=self.V13, runtime_privileges=V13_RUNTIME_GRANTS
+        )
+
+    def test_v13_entitlement_read_grant_is_rejected_below_schema_13(self) -> None:
+        self.assert_rejected(
+            schema_version=self.PRE_V13, runtime_privileges=V13_RUNTIME_GRANTS
+        )
+
+    def test_an_unscoped_entitlement_read_is_rejected_at_schema_13(self) -> None:
+        # The grant is what v13 makes, but forced RLS plus exactly the one
+        # billing_entitlements_self_read policy is what keeps it to the
+        # session's own workspace. Without that scoping the same grant is a
+        # cross-workspace entitlement read, and tolerating it would be a real
+        # relaxation of what the guard rejected before it became version-aware.
+        self.assert_rejected(
+            schema_version=self.V13,
+            runtime_privileges=V13_RUNTIME_GRANTS,
+            entitlement_read_scoped=False,
+            message=self.UNSCOPED_MESSAGE,
+        )
+
+    def test_unscoped_entitlements_without_the_grant_stay_accepted(self) -> None:
+        # No grant means no read to scope: RLS shape alone is not this guard's
+        # business, and failing here would ground the billing CLI for nothing.
+        database, ledger = self.ledger_for(
+            schema_version=self.V13,
+            runtime_privileges=frozenset(),
+            entitlement_read_scoped=False,
+        )
+        with patch.object(billing_rail_module, "BILLING_SCHEMA_VERSION", self.V13):
+            self.issue(ledger)
+        self.assertEqual(len(database.invoices), 1)
+
+    def test_a_fully_dark_runtime_role_is_accepted_at_every_version(self) -> None:
+        # v13 PERMITS the read, it is not required: a target holding less than
+        # v13 allows is not the anomaly this guard exists to catch, and no
+        # ledger write depends on the runtime role's grant.
+        for schema_version in self.SCHEMA_VERSIONS:
+            with self.subTest(schema_version=schema_version):
+                self.assert_accepted(
+                    schema_version=schema_version, runtime_privileges=frozenset()
+                )
+
+    def test_entitlement_write_grants_are_rejected_at_every_version(self) -> None:
+        for schema_version in self.SCHEMA_VERSIONS:
+            for privilege in ("INSERT", "UPDATE", "DELETE"):
+                with self.subTest(schema_version=schema_version, privilege=privilege):
+                    # Alongside the read v13 does grant, so the rejection can
+                    # only come from the write privilege itself.
+                    self.assert_rejected(
+                        schema_version=schema_version,
+                        runtime_privileges=V13_RUNTIME_GRANTS
+                        | {("billing_entitlements", privilege)},
+                    )
+
+    def test_any_invoice_or_event_grant_is_rejected_at_every_version(self) -> None:
+        for schema_version in self.SCHEMA_VERSIONS:
+            for table in FOUNDER_ONLY_BILLING_TABLES:
+                for privilege in BILLING_PRIVILEGES:
+                    with self.subTest(
+                        schema_version=schema_version, table=table, privilege=privilege
+                    ):
+                        self.assert_rejected(
+                            schema_version=schema_version,
+                            runtime_privileges=V13_RUNTIME_GRANTS | {(table, privilege)},
+                        )
 
 
 class RefundDigestScopingTests(unittest.TestCase):
