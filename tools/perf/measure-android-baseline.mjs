@@ -6,7 +6,7 @@
 // Chromium over raw CDP (Node's built-in WebSocket), applies CPU throttling
 // x6 and Slow-3G-ish network throttling with a Galaxy-class mobile viewport,
 // and reports per-route navigation metrics (median of N runs):
-//   FCP, DOMContentLoaded, load, JS transfer bytes, JS executed bytes
+//   FCP, DOMContentLoaded, load, JS transfer bytes (total and pre-FCP), JS executed bytes
 //   (Profiler precise coverage), main-thread long-task totals, and
 //   ScriptDuration/TaskDuration from Performance.getMetrics.
 //
@@ -373,10 +373,23 @@ async function measureRoute(cdp, origin, route) {
         const nav = performance.getEntriesByType('navigation')[0];
         const fcp = performance.getEntriesByName('first-contentful-paint')[0];
         const lt = (window.__perfBaseline || { longTasks: [] }).longTasks;
+        // Script bytes that were already on the wire when the first pixel landed.
+        // jsTransferBytes (from CDP, below) counts everything up to settle, so on its
+        // own it cannot tell "moved off the critical path" from "never loaded" -- this
+        // separates them. Resource timing shares FCP's navigation-start clock, so the
+        // comparison is exact; transferSize includes response headers, so this reads a
+        // few hundred bytes per request above the CDP encodedDataLength total.
+        // No FCP means there is no "before FCP" to report. Returning null drops the
+        // run from median() the same way a null fcp does, rather than silently
+        // reporting the whole post-settle total as if it were a pre-paint figure.
+        const jsBeforeFcp = fcp === undefined ? null : performance.getEntriesByType('resource')
+          .filter((e) => /\\.m?js$/.test(new URL(e.name, location.href).pathname) && e.responseEnd <= fcp.startTime)
+          .reduce((a, e) => a + (e.transferSize || 0), 0);
         return {
           fcp: fcp ? fcp.startTime : null,
           domContentLoaded: nav ? nav.domContentLoadedEventEnd : null,
           load: nav ? nav.loadEventEnd : null,
+          jsTransferBeforeFcpBytes: jsBeforeFcp,
           longTaskCount: lt.length,
           longTaskTotalMs: lt.reduce((a, t) => a + t.dur, 0),
           longestTaskMs: lt.reduce((a, t) => Math.max(a, t.dur), 0),
@@ -421,6 +434,7 @@ const MEDIAN_FIELDS = [
   'domContentLoaded',
   'load',
   'jsTransferBytes',
+  'jsTransferBeforeFcpBytes',
   'jsSourceBytes',
   'jsExecutedBytes',
   'longTaskCount',

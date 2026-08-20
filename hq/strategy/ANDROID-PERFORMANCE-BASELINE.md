@@ -2,7 +2,27 @@
 
 Date: 2026-08-19 (revised same day: the original "chooser" row actually
 measured the default-entry redirect — see the route-semantics note in Method)
-Status: measurement only. No optimization was performed in this pass; the
+
+> **2026-08-20 corrections — read this before acting on anything below.** Three
+> claims in this document turned out to be wrong, and all three were load-bearing
+> for the ranked recommendations:
+>
+> 1. The model chunks on the chooser were blamed on `workspace-runtime.ts`'s
+>    static imports. The cause is `WorkspaceStatusPanel`.
+> 2. First paint was blamed on a serial dynamic-import waterfall. There is no
+>    waterfall on the first-paint path: pre-FCP JS is the 91.3 KB gz entry set on
+>    every route, identically.
+> 3. The chooser's 261 KB was framed as mostly unexecuted freight. ~150 KB of it
+>    is shared with the product routes and is already downloaded when the visitor
+>    taps through; withholding it costs the destination ~931 ms.
+>
+> Each is corrected in place below and marked. The evidence, an optimization pass
+> that was **measured and withdrawn**, and a second one **measured and rejected**,
+> are in
+> **[2026-08-20: corrections, two rejected optimizations, and what actually moves FCP](#2026-08-20-corrections-two-rejected-optimizations-and-what-actually-moves-fcp)**
+> at the end.
+
+Status (2026-08-19): measurement only. No optimization was performed in this pass; the
 roadmap's F2 verdict ("no measured low-end-device profile exists — measure
 first", `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §1 F2) is what this
 document closes. Every number below is a measured median from the run
@@ -99,18 +119,30 @@ Named chunks map to sources via `showroom/vite.config.ts` `manualChunks`
 | `website-model-*.js` | 11.2 | 39 | `src/products/website/website-model.ts` |
 | `index-BrCosHje.js` | 56.0 | 214 | `@supabase/supabase-js` — dynamically imported at `managed-trial.ts:2477`; did NOT load on any measured route (good) |
 
-The eager edge that defeats route splitting: every measured surface —
-including the chooser — renders through `workspace-runtime.ts`, which
-statically imports `commerce-workspace.ts`, `production-workspace.ts`, and
-`managed-trial.ts` (`src/core/workspace-runtime.ts` lines 12/35/56).
-Route-level `lazy()` boundaries exist in `App.tsx` (lines 9–20), but the
-model layer rides along everywhere: `commerce-model` (60.1 KB gz),
-`operating-models` (50.3 KB gz), `operating-baseline` (26.2 KB gz), and
-`shop-ledger-accounts` (13.3 KB gz) all loaded on all seven measured rows.
-On the chooser — a menu of four product tiles — those model chunks plus
-`website-model` total ~161 KB gz (62% of its 261 KB transfer) and execute
-10–18% of their bytes; on `/website/` and `/ecommerce/`, `commerce-model`
-executes only 14% and `operating-models` 8%.
+The eager edge that defeats route splitting: the model layer rides along
+everywhere. `commerce-model` (60.1 KB gz), `operating-models` (50.3 KB gz),
+`operating-baseline` (26.2 KB gz), and `shop-ledger-accounts` (13.3 KB gz) load
+on all seven measured rows. On the chooser — a menu of four product tiles —
+those model chunks plus `website-model` total ~161 KB gz (62% of its 261 KB
+transfer) and execute 10–18% of their bytes; on `/website/` and `/ecommerce/`,
+`commerce-model` executes only 14% and `operating-models` 8%.
+
+> **Corrected 2026-08-20 — WHY they load on the chooser.** This paragraph
+> originally attributed the chooser's model chunks to `workspace-runtime.ts`
+> statically importing `commerce-workspace.ts` / `production-workspace.ts` /
+> `managed-trial.ts` (lines 12/35/56). That attribution is wrong on the chooser,
+> and it was self-refuting: `workspace-runtime.ts` never imports
+> `website-model`, yet `website-model` was measured loading on the chooser. The
+> chooser's real cause is `WorkspaceStatusPanel.tsx` — 48 lines that statically
+> import `loadCommerceWorkspace`, `loadProductionWorkspace`,
+> `buildOperationalReport` AND `loadWebsiteWorkspace`, to render at most six
+> links (`MAX_SHOWN = 6`). `workspace-runtime.ts` is reached through
+> `ProductSystemNavigator`, which `CoreShell.tsx` renders only when
+> `routeProduct` is non-null — and `routeProduct` is null on `/?choose=1`. The
+> per-script transfer log confirms it end to end: no `workspace-runtime-*.js`
+> request appears on the chooser at all, while every chunk that does appear is
+> either the entry set or reachable from `WorkspaceStatusPanel`. Route-level
+> `lazy()` boundaries in `App.tsx` (lines 9–20) are not what leaks here.
 
 ## The three worst measured findings
 
@@ -120,21 +152,44 @@ executes only 14% and `operating-models` 8%.
    but only 213–370 KB executed (roughly 75–80% unexecuted at settle on
    every row). Implicated chunks: `commerce-model-*.js` (60.1 KB gz, ≤22%
    executed anywhere, 14% on the chooser and Website/Ecommerce) and
-   `operating-models-*.js` (50.3 KB gz, 8–12% executed), both dragged onto
-   every surface by `workspace-runtime.ts`'s static imports;
+   `operating-models-*.js` (50.3 KB gz, 8–12% executed);
    `shop-ledger-accounts-*.js` (13.3 KB gz) executes 7–12% everywhere. On a
    400 kbit/s link the unexecuted freight alone is multiple seconds of
    transfer.
 
+   > **Corrected 2026-08-20, twice.** (a) The clause "both dragged onto every
+   > surface by `workspace-runtime.ts`'s static imports" was removed: on the
+   > chooser the carrier is `WorkspaceStatusPanel`, not `workspace-runtime`; on
+   > the product routes both are live and which dominates has not been
+   > separated. (b) More importantly, **"unexecuted freight" is the wrong frame
+   > for the chooser row.** Of its 261 KB gz, ~150 KB is shared with the product
+   > routes and is already downloaded when the visitor taps through — measured,
+   > withholding it costs the destination route ~931 ms. Only 20.1 KB is
+   > genuinely chooser-only. See
+   > [the withdrawn slice 1](#slice-1-implemented-measured-withdrawn-defer-the-choosers-attention-panel)
+   > and the section after it. The freight framing still holds on the product
+   > routes, where the model layer really is loaded and mostly not executed.
+
 2. **First paint waits ~4 s and arrives after `load` on every route — and
    bytes are not the binding constraint.** Median FCP is 3,940–4,168 ms on
    all seven rows while the HTML itself (4 KB) is on-screen-ready in <1 s of
-   network time. The chooser proves the mechanism: 261 KB gz vs the
-   counter's 415 KB gz, identical ~4.05 s FCP — the cost is the serial
-   chain of entry chunk (`index-Dl7tVyPC.js`, 74.1 KB gz) then
-   dynamic-import waterfall (each hop paying 400 ms RTT) then parse/execute
-   under ×6 CPU, with `core-app-*.js` (100.0 KB gz, the largest chunk, 9%
-   executed on the counter) on that path for `/`, `/shop/*`, and `/plant/`.
+   network time. The chooser proves bytes are not the constraint: 261 KB gz vs
+   the counter's 415 KB gz, identical ~4.05 s FCP.
+
+   > **Corrected 2026-08-20 — the mechanism named here was wrong.** This
+   > finding originally blamed "the serial chain of entry chunk then
+   > dynamic-import waterfall (each hop paying 400 ms RTT)", with
+   > `core-app-*.js` on the first-paint path for `/`, `/shop/*` and `/plant/`.
+   > A direct measurement of *script bytes already transferred when FCP fires*
+   > (`jsTransferBeforeFcpBytes`, added to the harness 2026-08-20) returns
+   > **91.3 KB gz on all seven routes, identically** — exactly the four
+   > HTML-discoverable files: the entry chunk, `router`, the react chunk and
+   > `preload-helper`. No dynamically imported chunk — not `core-app`, not
+   > `commerce-model`, not the route chunks — is on the first-paint path on any
+   > route. React renders the shell, suspends the lazy subtrees on a null
+   > fallback, and paints; everything else lands afterwards. So FCP is set by
+   > one HTML round-trip plus 91 KB gz at 400 kbit/s plus parse/execute under
+   > ×6 CPU, and nothing else. There is no waterfall to flatten.
 
 3. **Shop work routes carry the heaviest main-thread boot — on the screens
    a Galaxy user lives in.** `/shop/?tab=orders` has the worst long-task
@@ -148,24 +203,56 @@ executes only 14% and `operating-models` 8%.
 
 ## What to optimize first (ranked, each item cites its number)
 
-1. **Cut the `workspace-runtime.ts` eager-model edge.** Making
-   `commerce-workspace` / `production-workspace` imports lazy or per-product
-   removes 110.4 KB gz (`commerce-model` 60.1 + `operating-models` 50.3)
-   from surfaces that execute ≤22% of it — ~27% of the counter's 415 KB gz
-   JS transfer and 42% of the chooser's 261 KB gz, worth ~2.2 s of raw
-   transfer at 400 kbit/s before parse savings. Highest-leverage single
-   change, and it is a dependency-graph change, not a rewrite.
+1. **Cut the eager-model edge.** Making `commerce-workspace` /
+   `production-workspace` imports lazy or per-product removes 110.4 KB gz
+   (`commerce-model` 60.1 + `operating-models` 50.3) from surfaces that execute
+   ≤22% of it — ~27% of the counter's 415 KB gz JS transfer and 42% of the
+   chooser's 261 KB gz, worth ~2.2 s of raw transfer at 400 kbit/s before parse
+   savings. It is a dependency-graph change, not a rewrite.
+
+   > **Corrected 2026-08-20.** This item was headed "Cut the
+   > `workspace-runtime.ts` eager-model edge". On the chooser that is the wrong
+   > file: the carrier is `WorkspaceStatusPanel`. That half was attempted on
+   > 2026-08-20 and **withdrawn after measurement** — deferring it made the
+   > chooser's tap-through ~931 ms slower, because ~150 KB of what it loads is
+   > shared with the product route the visitor is heading to (see the section at
+   > the end). Two things also have to be said plainly about the remaining
+   > product-route half, because this item as written oversells it: (a) it will not move FCP, since none of these chunks
+   > is on the pre-FCP path (finding 2 correction); (b) it is blocked as
+   > scoped — `useCommerceWorkspace` calls `loadCommerceWorkspace()`
+   > synchronously inside a `useState` initializer
+   > (`workspace-runtime.ts:509–512`) and sample seeding runs on that same
+   > synchronous path, so the import cannot simply be made lazy. It needs its
+   > own planning pass.
 2. **Split `core-app-*.js` (100.0 KB gz / 393 KB src).** Only 9% executes on
    the counter and `/plant/`, 17% on the orders tab — the monolithic
    `CoreApp.tsx` carries every tab's UI to paint one tab, and it sits on the
    first-paint path of `/`, `/shop/*`, and `/plant/` (finding 2).
-3. **Give `index.html` a real first paint and flatten the import
-   waterfall.** FCP trails `load` on all seven rows (e.g. `/`: FCP 3,940 ms
-   vs load 3,690 ms), and the chooser's same-FCP-at-37%-less-JS datum shows
-   serial RTT hops + parse, not bytes, set the floor. A static app-shell
-   skeleton in the 4 KB HTML moves first visual feedback to well under 1 s
-   on this profile with no JS changes; `<link rel="modulepreload">` for the
-   route's known chunk chain removes 400 ms per eliminated hop.
+3. **Give `index.html` a real first paint.** FCP trails `load` on all seven
+   rows (e.g. `/`: FCP 3,940 ms vs load 3,690 ms). A static app-shell skeleton
+   in the 4 KB HTML moves first visual feedback to well under 1 s on this
+   profile with no JS changes. With the waterfall theory dead, this and
+   shrinking the 91 KB gz entry set are the only identified levers on FCP, and
+   this is the highest-value unclaimed item in this document.
+
+   > **Corrected 2026-08-20 — the modulepreload half of this item was wrong,
+   > and was measured wrong.** The original text advised
+   > `<link rel="modulepreload">` for "the route's known chunk chain" to remove
+   > "400 ms per eliminated hop". There is no hop to eliminate (finding 2
+   > correction), and a static SPA serves one `index.html` to every route, so
+   > any preload it names is paid by every route. Measured, 3 runs, by adding
+   > `core-app` (102.8 KB gz — the first dynamic hop for `/`, `/shop/*` and
+   > `/plant/`) to the entry preload list: **FCP got 1.5 s worse on every route,
+   > including the ones it was meant to help** — measured against the identical
+   > build with the preload line removed (3,804 / 3,840 / 3,884 ms in that
+   > pairing): `/` → 5,372 ms, `/shop/?tab=counter` → 5,356 ms, `/?choose=1`
+   > → 5,396 ms, a +1.5 s regression roughly 15× the control band, and
+   > the chooser additionally carried +100.7 KB gz (261.0 → 361.7) it never
+   > executes. Cause: the preload shares the 400 kbit/s pipe with the entry set,
+   > which is the one thing that does gate first paint, so 102.8 KB gz at
+   > 50 KB/s pushes the entry chunk ~2 s later. Do not add speculative
+   > `modulepreload` to `index.html` on this profile. A preload only pays when
+   > the pipe has headroom the critical path is not using; here it has none.
 4. **Break up boot long tasks on the Shop routes.** 2,031 ms (orders) and
    1,767 ms (counter) of ≥50 ms tasks, longest 745–758 ms, block input
    during boot. Worth doing after 1–2, since smaller chunks shrink these
@@ -206,3 +293,199 @@ loads on any measured route), or `client-capability-plan` /
 | `/plant/` | 4056 / 3711 / 1358 | 4064 / 3726 / 1280 | 4032 / 3696 / 1531 |
 | `/website/` | 4104 / 3763 / 1102 | 4036 / 3702 / 1031 | 4088 / 3716 / 1246 |
 | `/ecommerce/` | 4168 / 3749 / 1415 | 4184 / 3756 / 1394 | 4108 / 3746 / 1364 |
+
+---
+
+## 2026-08-20: corrections, two rejected optimizations, and what actually moves FCP
+
+Date: 2026-08-20. Status: one optimization shipped, one rejected on evidence,
+two attributions in the 2026-08-19 document corrected. Same harness, same
+throttling profile, same method as above. Every number is a median of 3 cold
+loads; `dist/` contained no `sw.js` in every run on this page, matching the
+2026-08-19 method note.
+
+### What changed in the harness
+
+One metric was **added** (nothing existing was altered, so the rows above stay
+comparable): `jsTransferBeforeFcpBytes` — script bytes already transferred when
+first contentful paint fires, read from resource timing, which shares FCP's
+navigation-start clock. It exists because `jsTransferBytes` counts to settle and
+therefore cannot tell "moved off the critical path" from "never loaded". It
+turned out to be the most informative number in this whole document.
+
+### Re-measured before (unchanged code, 2026-08-20)
+
+The 2026-08-19 table was re-measured on this day's `main` (`4a5d406b`) so the
+after-numbers compare against the same code, machine and load, not against
+yesterday's. Four feature PRs landed in between, and machine noise is real, so
+these differ slightly from the table at the top — that gap **is** the noise
+floor, and it is the yardstick for reading the deltas below.
+
+| Route | FCP (ms) | load (ms) | JS transfer (KB gz) | **pre-FCP JS (KB gz)** | Long-task total (ms) | Longest task (ms) |
+|---|---|---|---|---|---|---|
+| `/` | 3,880 | 3,682 | 415.6 | **91.3** | 918 | 440 |
+| `/?choose=1` | 3,992 | 3,684 | 260.9 | **91.3** | 676 | 246 |
+| `/shop/?tab=counter` | 3,912 | 3,667 | 415.6 | **91.3** | 1,000 | 451 |
+| `/shop/?tab=orders` | 3,840 | 3,646 | 425.0 | **91.3** | 1,127 | 447 |
+| `/plant/` | 3,908 | 3,649 | 411.5 | **91.3** | 835 | 322 |
+| `/website/` | 3,944 | 3,667 | 330.2 | **91.3** | 803 | 294 |
+| `/ecommerce/` | 3,936 | 3,661 | 346.1 | **91.3** | 811 | 197 |
+
+**91.3 KB gz on every route, to the tenth of a kilobyte.** That is the entry
+chunk + `router` + the react chunk + `preload-helper` — the four files the HTML
+names directly. Nothing dynamically imported reaches the screen before the first
+pixel does, on any route. This single column invalidates finding 2's stated
+mechanism and recommendation 3's preload advice, and it sets the ceiling on what
+any lazy-loading work can win: **in this app, deferring a chunk that was already
+post-FCP cannot improve FCP.** Scope that claim carefully — it holds here only
+because every dynamic import is issued after the entry set has finished
+downloading *and* executing, so those requests never contend with it for the
+pipe. A request that overlaps the entry set on a 400 kbit/s link absolutely can
+push FCP out; the rejected slice 2 below is precisely that counterexample.
+
+### The chooser's 261 KB, attributed correctly
+
+Per-script transfer on `/?choose=1`, from the run log:
+
+| Chunk | KB gz | On the chooser because |
+|---|---|---|
+| `index-*.js` (entry) | 74.1 | HTML `<script>` |
+| `router-*.js` | 13.0 | entry static import, modulepreloaded |
+| react chunk + `preload-helper` | 3.9 | entry static imports, modulepreloaded |
+| `commerce-model-*.js` | 60.1 | `WorkspaceStatusPanel` → `loadCommerceWorkspace` |
+| `operating-models-*.js` | 50.3 | `WorkspaceStatusPanel` → `loadProductionWorkspace` |
+| `operating-baseline-*.js` | 26.2 | transitively, same subtree |
+| `shop-ledger-accounts-*.js` | 13.3 | transitively, same subtree |
+| `website-model-*.js` | 11.2 | `WorkspaceStatusPanel` → `loadWebsiteWorkspace` |
+| `WorkspaceStatusPanel-*.js` | 6.8 | the panel itself |
+| `website-leads-*.js` | 1.9 | transitively, same subtree |
+
+91.0 KB gz of entry set, 169.9 KB gz (65%) of `WorkspaceStatusPanel` subtree,
+and **no `workspace-runtime-*.js` request at all**. `workspace-runtime` is a
+real chunk in this build and it is simply not requested here, which is the
+cleanest possible disproof of the original attribution.
+
+### Slice 1 (implemented, measured, WITHDRAWN): defer the chooser's attention panel
+
+The plan was to stop `WorkspaceStatusPanel` from mounting during the chooser's
+first render, so its ~170 KB gz subtree would not sit on the critical path. It
+was built, reviewed, measured three ways, and then **withdrawn — the measurements
+disproved its premise.** No app code from this slice ships. The reasoning is
+recorded here because the disproof is a reusable fact about this codebase, not
+because the change was interesting.
+
+**Step 1 — cold-load numbers: no effect, as the pre-FCP column predicted.**
+Deferring the mount left FCP and settle-transfer unchanged. Chooser deltas
+(−88 ms FCP, −64 ms long-task) sat inside the control band established by the six
+routes the change cannot touch (FCP −88 to +44 ms, long-task −108 to +116 ms).
+Not a result — the panel was never on the pre-FCP path, so taking it off first
+render could not move first paint.
+
+**Step 2 — the deferral was not deferring.** A PR review (Codex, PR #494) caught
+that `requestIdleCallback(show, { timeout: 1200 })` treats 1,200 ms as a *maximum*
+wait, not a minimum delay. Measured on the throttled profile, this is exactly what
+happens: the main thread goes idle the instant the tiles paint — nothing else is
+runnable, everything is waiting on a 400 kbit/s pipe — so the callback fired a
+median of **56 ms after FCP** (36–59 ms across three runs) and the graph then held
+the pipe from 3,888 ms to 7,965 ms. Rebuilding it as a genuine minimum (grace
+`setTimeout` first, then `requestIdleCallback` with its own 400 ms ceiling) moved
+the graph's first request to **FCP+1,212 ms**, confirming both the diagnosis and
+the fix.
+
+**Step 3 — the interaction measurement, which killed the slice.** The claimed
+benefit was that an early tapper would stop paying for a panel they never read.
+Measured directly: load the chooser, tap the Shop tile 1,000 ms after FCP, and
+time how long the Shop route takes to become usable. Three runs per variant,
+same throttling.
+
+| Variant | panel requests started before the tap | Shop usable after tap | `core-app` downloaded after tap |
+|---|---|---|---|
+| **No deferral** (what `main` already does) | 7 | **6,964 ms** | **6,404 ms** |
+| Deferred, as first shipped (fires at FCP+56 ms) | 7 | 7,145 ms | 6,530 ms |
+| Deferred, genuine minimum (fires at FCP+1,212 ms) | 0 | **7,895 ms** | 7,317 ms |
+
+**Deferring made the early tap monotonically worse — by 931 ms once the deferral
+actually worked.** The reason is a dependency fact nobody had checked: of the
+170.3 KB gz the chooser pulls for the panel, only **20.1 KB is panel-exclusive**
+(`WorkspaceStatusPanel` 6.8 + `website-model` 11.3 + `website-leads` 2.0). The
+other ~150 KB — `commerce-model`, `operating-models`, `operating-baseline`,
+`shop-ledger-accounts` — is **shared with the product routes**, which load it
+through `workspace-runtime.ts` the moment the visitor picks Shop or Plant. So on
+the chooser those bytes are not waste being spent on a panel; they are a
+head start on wherever the visitor is about to go. Withholding them delays the
+destination.
+
+The gap is well outside noise: run-to-run spread within each variant is ~±180 ms
+against a 931 ms separation, and the ordering is identical in all nine runs.
+
+**Withdrawn.** The slice does not improve FCP, does not reduce transfer, and
+costs 181–931 ms on the tap that most chooser visitors actually perform. It also
+added a module-scope mutable flag and a pop-in. `main` is already the better
+behaviour. What survives from the attempt is the harness metric, this section,
+and the correction to finding 1 below.
+
+### Consequence: "unexecuted freight" is the wrong frame for the chooser
+
+Finding 1 above counts 75–80% of each route's JS as unexecuted at settle and
+calls it freight. For the chooser specifically that reading is now measured to be
+wrong. Its 261 KB gz breaks down as 91.0 KB entry set + 20.1 KB panel-exclusive +
+~150 KB shared with whichever product the visitor opens next. Since the chooser
+exists to send people to a product, that ~150 KB is prefetch, and the early-tap
+table above shows removing it costs the destination roughly a second. "Executed
+on this route" is simply the wrong success metric for a menu screen; "already
+downloaded when the next screen needs it" is the right one.
+
+This does not rehabilitate the 20.1 KB that is genuinely chooser-only, nor the
+model layer's cost on the product routes themselves, where it really is loaded
+and mostly not executed. It does mean **the chooser is the wrong place to hunt
+for savings**, and any future attempt to trim it must measure the tap-through
+path, not the chooser in isolation.
+
+### Slice 2 (implemented, measured, REJECTED): `modulepreload` in `index.html`
+
+Measured and rejected — see the correction under recommendation 3 for the
+numbers and the mechanism. Summary: +1.5 s FCP on every route measured,
+including the two it was intended to help. Not shipped.
+
+### What this leaves for the next pass
+
+1. **A static app-shell skeleton in `index.html`** (recommendation 3, corrected).
+   With the waterfall theory dead, this is the only identified lever that can
+   move first *visual* feedback, and it needs no JS change.
+2. **Shrink the 91.3 KB gz entry set.** It is the entire pre-FCP critical path
+   on all seven routes, so it is the only other thing FCP responds to. Nobody
+   has looked at what is in it beyond "react, react-dom, App, CoreShell".
+3. **The product-route model-split** (recommendation 1, corrected) — worth real
+   transfer and parse on `/shop/*` and `/plant/`, will not move FCP, and is
+   blocked as scoped on the synchronous `useState` initializer in
+   `workspace-runtime.ts:509–512`. Needs its own planning pass.
+4. **Do not re-attempt chooser trimming without measuring tap-through.** Two
+   optimizations were built and measured off this baseline in one day and both
+   were reverted; the common cause was optimizing a number (chooser transfer,
+   preload hops) instead of a journey. Any future F2 change should be measured
+   on the path a visitor actually walks — cold load *and* the tap that follows —
+   using `probe`-style instrumentation like the early-tap harness described
+   above, not on a single route in isolation.
+
+### Limitations specific to this pass
+
+- `jsTransferBeforeFcpBytes` uses resource timing's `transferSize`, which
+  includes response headers; it reads a few hundred bytes per request above the
+  CDP `encodedDataLength` totals in the `JS transfer` columns. The two are not
+  interchangeable to the byte.
+- Same-day re-measure or not, three runs on this harness cannot resolve a change
+  smaller than the control band measured in this pass: **−88 to +44 ms FCP** and
+  **−108 to +116 ms long-task total**, taken from the six routes the change
+  cannot touch. Hold future F2 deltas to those bands, not to the tighter
+  within-run ±3% quoted for the 2026-08-19 run. Everything claimed as a result
+  above clears that bar or is explicitly called out as not clearing it.
+- The early-tap numbers use a synthetic tap at a fixed 1,000 ms after FCP,
+  fired from inside the page. Real visitors tap at a spread of delays, and a
+  visitor who takes longer than the panel needs to load sees none of this cost.
+  The 1,000 ms figure was chosen as a plausible fast tap on a screen with four
+  options; the ordering between the three variants held across every run, but
+  the size of the gap is specific to that tap time.
+- Nothing here measures CLS, tap latency, or scrolling. `jsTransferBytes`
+  counts to settle, so it cannot by itself distinguish "moved off the critical
+  path" from "never loaded" — that is what `jsTransferBeforeFcpBytes` was added
+  for, and the early-tap probe covers the interaction axis neither of them sees.
