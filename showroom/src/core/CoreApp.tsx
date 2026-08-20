@@ -259,8 +259,11 @@ import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   readShopServiceSchedule,
   shopIndustryPack,
+  shopScheduleVocabulary,
   type ShopIndustryPack,
+  type ShopServiceSchedule as ShopServiceScheduleState,
 } from './shop-service-scheduling'
+import { projectShopAppointmentTillReconciliation } from './shop-appointment-till-reconciliation'
 import { decideShopNextAction } from './shop-next-action'
 import { projectShopCloseAnomalyFlags, type ShopCloseAnomalyFlag, type ShopCloseAnomalyFlags } from './shop-close-anomaly-flags'
 import { lockedCapabilityNotice } from './capability-tiers'
@@ -1103,6 +1106,20 @@ function readLocalShopIndustryPack() {
   }
 }
 
+// Read-only. Commerce never writes this key and must not start: the appointment book owns it,
+// under its own lock. This exists so the close screen can ASK the book a question, which is a
+// different thing from the close screen being able to change it.
+function readLocalShopServiceSchedule(): ShopServiceScheduleState | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return readShopServiceSchedule(window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY))
+  } catch {
+    // An unreadable book is already reported, loudly, by the appointment panel itself. The
+    // close screen staying quiet is better than two alarms for one fault.
+    return null
+  }
+}
+
 function ShopProductArtwork({ kind }: { kind: number }) {
   if (kind === 1) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
   if (kind === 2) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
@@ -1236,7 +1253,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoin
             const artKind = Math.max(0, items.indexOf(item)) % 5
             return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><strong>{item.name}</strong>{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
+              <span className="shop-product-copy"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
           })}
@@ -1249,7 +1266,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoin
       <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
         <header><div><span className="core-eyebrow">Current sale</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : 'Ready for the first item'}</h2></div><div className="shop-cart-actions">{unitCount ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
         <div className="shop-cart-lines">
-          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong><small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>Your sale is empty</strong><small>Tap any product to begin.</small></div>}
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>Your sale is empty</strong><small>Tap any product to begin.</small></div>}
         </div>
         {unitCount ? <><div className="shop-sale-details">
           <label>Customer <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
@@ -1419,6 +1436,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
+  const [shopSchedule, setShopSchedule] = useState<ShopServiceScheduleState | null>(readLocalShopServiceSchedule)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
   const storageDurability = useSyncExternalStore(subscribeStorageDurability, getStorageDurability)
   // The installed sample id is either an industry pack id or a business template id;
@@ -1679,6 +1697,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
+  // "Which treatments did I finish today and never ring up?" Derived, never stored, and it
+  // posts nothing -- see shop-appointment-till-reconciliation.ts for why that boundary holds.
+  const appointmentTillReconciliation = useMemo(() => {
+    if (!shopSchedule) return null
+    try {
+      return projectShopAppointmentTillReconciliation(shopSchedule, commerce, new Date(purchaseOrderClock).toISOString())
+    } catch {
+      return null
+    }
+  }, [commerce, purchaseOrderClock, shopSchedule])
+  const scheduleVocabulary = shopScheduleVocabulary(shopSchedule?.industryPackId ?? '')
   const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
@@ -6453,7 +6482,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={shopScheduleControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={shopScheduleControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onScheduleChange={setShopSchedule} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
@@ -6753,6 +6782,34 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       the /shop/?tab=orders#shop-close-controls deep links working. */}
   <section aria-labelledby="shop-close-heading" className="core-panel shop-close-day" id="shop-close-controls">
     <div className="section-head"><h2 id="shop-close-heading">Close the day</h2><small>{closableOrders.length ? `${closableOrders.length} ready` : latestClose ? 'Today is closed' : 'Nothing to close yet'}</small></div>
+    {/* The appointment book does not post to the ledger, so a treatment completed in the book
+        and never rung up at the counter is simply absent from this close and from every report
+        after it. This is where she finds that out -- at the moment she is closing, not by going
+        looking. It is a prompt, never a blocker: the close below stays available whatever this
+        says, because a complimentary treatment, a voucher redemption or a staff treatment are
+        all ordinary reasons for a completed appointment to have no sale, and the product has no
+        business deciding which. */}
+    {appointmentTillReconciliation?.gaps.length ? <section aria-labelledby="shop-appointment-till-heading" className="core-panel shop-appointment-till" data-appointment-till-gaps={appointmentTillReconciliation.unpostedBookings}>
+      <div className="section-head">
+        <h3 id="shop-appointment-till-heading">Completed, not yet at the counter</h3>
+        <small>{appointmentTillReconciliation.unpostedBookings} of {appointmentTillReconciliation.completedBookings} · {formatMoney(appointmentTillReconciliation.unpostedValueMmk)}</small>
+      </div>
+      <p className="form-notice">These {scheduleVocabulary.plural.toLowerCase()} were completed today and no matching sale was rung up. Ring one up at the counter if it was paid for, or leave it if it was complimentary, prepaid, or settled another way. Nothing here changes an order by itself.</p>
+      <ul className="appointment-till-list">
+        {appointmentTillReconciliation.gaps.map((gap) => <li key={gap.serviceId}>
+          <div>
+            <strong>{gap.serviceName}</strong>
+            {gap.serviceNameMy ? <small className="shop-product-my" lang="my">{gap.serviceNameMy}</small> : null}
+            <small>{gap.unpostedCount} of {gap.completedCount} completed · {gap.chargedQuantity} rung up · {formatMoney(gap.unitPriceMmk)} each</small>
+          </div>
+          <div>
+            <span className="status-pill pending">{formatMoney(gap.unpostedValueMmk)}</span>
+            <small>{gap.bookings.filter((booking) => gap.unpostedBookingIds.includes(booking.id)).map((booking) => `${booking.customerName} ${formatTime(booking.startsAt)}`).join(' · ')}</small>
+          </div>
+        </li>)}
+      </ul>
+      <Link className="core-button" to="/shop/?tab=counter">Open the counter</Link>
+    </section> : null}
     <details className="compact-disclosure" data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
       <summary><span>Settlement count</span><small>{closePreview ? `${closeExpectedByPayment.size} payment method${closeExpectedByPayment.size === 1 ? '' : 's'} · ${closeSettlement?.status === 'matched' ? 'matched' : closeSettlement?.status === 'variance_review' ? 'variance needs review' : 'complete the count'}` : 'No open close'}</small></summary>
       <section aria-label="Daily settlement count" className="core-form compact-form">
