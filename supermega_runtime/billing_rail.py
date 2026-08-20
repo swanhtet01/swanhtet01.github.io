@@ -61,6 +61,47 @@ def _env_schema_version(default: int = 12) -> int:
 # The exact live schema version the ledger fail-closes on: _assert_schema
 # rejects any database whose app_private schema is not EXACTLY this.
 BILLING_SCHEMA_VERSION = _env_schema_version()
+# The schema version at which ONE runtime-role privilege stops being an anomaly,
+# following the trial_store.py `if TRIAL_SCHEMA_VERSION >= 12:` pattern for
+# version-conditional contracts. v12 shipped billing fully dark -- zero
+# policies, zero grants for supermega_trial_backend on all three billing tables
+# (20260817090000_private_trial_backend_v12_billing_rail.sql header, "RLS
+# posture (design 4.4): deny by default, NO policies"). v13
+# (20260818090000_private_trial_backend_v13_billing_entitlement_read.sql) is the
+# separate founder decision it named: it grants that role SELECT -- and only
+# SELECT -- on app_private.billing_entitlements, RLS-scoped by
+# billing_entitlements_self_read to the session's own workspace GUC, so
+# PostgresTrialStore._premium_unlocked can resolve the paid flag instead of
+# fail-closing to false. Below this version that same grant is still an anomaly
+# the ledger refuses to operate against: a v13-shaped grant on a v12 database
+# was not put there by a reviewed migration.
+BILLING_ENTITLEMENT_READ_SCHEMA_VERSION = 13
+# The predicate that scoping depends on, pinned by fingerprint. Policy name,
+# command, permissiveness and role are all trivially reproducible: a policy
+# recreated with the SAME name, SAME SELECT command, SAME permissiveness and
+# SAME role but `using (true)` satisfies every one of them while exposing every
+# workspace's entitlement row. Only the predicate itself separates the two, so
+# the probe fingerprints pg_policies.qual and compares it here.
+#
+# This is _policy_expression_fingerprint's output, and that function mirrors the
+# normalization tools/verify_private_trial_migrations.mjs already applies to
+# policy expressions. It is the SAME value that verifier pins at
+# expectedPolicyFingerprints.billing_entitlements_self_read.qual -- one
+# fingerprint for this predicate in the repo, not a second convention, and
+# test_billing_rail.py reads that file and asserts the two stay equal rather
+# than leaving the agreement to this comment. It corresponds to v13's
+#   using (workspace_id = (select current_setting('app.workspace_id', true)))
+# which PostgreSQL reports as
+#   (workspace_id = ( SELECT current_setting('app.workspace_id'::text, true)
+#    AS current_setting))
+# Because that is a deparsed rendering rather than the migration's source text,
+# a future PostgreSQL that deparses the same policy differently would fail this
+# check on an otherwise-correct database. That is the safe direction to fail,
+# and the fix is to re-fingerprint from the target and update both pins together
+# -- never to drop the check.
+BILLING_ENTITLEMENT_READ_POLICY_DIGEST = (
+    "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5"
+)
 BILLING_EVENT_RESULT_CONTRACT = "supermega.managed_billing_event.v1"
 BILLING_OVERDUE_REPORT_CONTRACT = "supermega.managed_billing_overdue_report.v1"
 BILLING_STATE_CONTRACT = "supermega.managed_billing_state.v1"
@@ -413,6 +454,35 @@ def _billing_command_identity(
     return command_id, fingerprint
 
 
+_POLICY_CAST_SUFFIX = re.compile(
+    r"::\s*(?:pg_catalog\.)?"
+    r"(?:text|character\s+varying|varchar|name|uuid|boolean|integer|bigint)\b",
+    re.IGNORECASE,
+)
+
+
+def _policy_expression_fingerprint(value: object) -> str:
+    """Fingerprint a pg_policies expression the way the repo already does.
+
+    Mirrors normalizeExpression + fingerprint in
+    tools/verify_private_trial_migrations.mjs byte-for-byte: lowercase, drop the
+    cast suffixes PostgreSQL adds when it deparses a policy, collapse runs of
+    whitespace, trim, sha256. Both sides therefore pin the SAME hex for the same
+    predicate, and test_billing_rail.py asserts that agreement rather than
+    trusting this comment.
+
+    Returns "" for a missing predicate (no such policy, or a policy with only a
+    WITH CHECK expression) so an absent predicate can never compare equal to a
+    pinned one.
+    """
+
+    if value is None:
+        return ""
+    normalized = _POLICY_CAST_SUFFIX.sub("", str(value).lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def _row_value(row: object, key: str, index: int) -> Any:
     if isinstance(row, Mapping):
         return row.get(key)
@@ -438,8 +508,10 @@ class BillingLedger:
     method validates founder evidence, takes the tenant's billing advisory
     lock inside one serializable transaction, replays exactly on byte-equal
     commands, and fails closed on anything else. The runtime member role can
-    never reach these tables (v12 RLS is deny-by-default with no policies);
-    the ledger itself refuses to operate through it.
+    never WRITE any billing table and can never read an invoice or an event at
+    any schema version; from v13 it may SELECT its own workspace's
+    billing_entitlements row and nothing else. The ledger itself refuses to
+    operate through it.
     """
 
     def __init__(self, database_url: str, *, connection_factory: Callable[..., Any] | None = None):
@@ -497,6 +569,11 @@ class BillingLedger:
                 from pg_roles
                 where rolname = 'supermega_trial_backend'
               ), false) as backend_role_safe,
+              /* billing_invoices and billing_events are founder-only forever:
+                 no policy, no privilege, at any schema version (v12 header;
+                 tools/verify_private_trial_migrations.mjs asserts the same
+                 against a live database). Block comments, not line comments:
+                 fixtures flatten this statement onto one line. */
               coalesce((
                 select bool_and(
                   not has_table_privilege(
@@ -505,11 +582,74 @@ class BillingLedger:
                     billing_privilege.privilege_name
                   )
                 )
-                from unnest(array['billing_invoices', 'billing_events', 'billing_entitlements'])
+                from unnest(array['billing_invoices', 'billing_events'])
                   billing_table(table_name),
                   unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
                   billing_privilege(privilege_name)
-              ), false) as runtime_role_denied,
+              ), false) as runtime_ledger_denied,
+              /* Entitlement WRITES stay founder-only forever too: v13 adds no
+                 INSERT/UPDATE/DELETE policy and no such grant. The runtime can
+                 observe entitlement, never change it. */
+              coalesce((
+                select bool_and(
+                  not has_table_privilege(
+                    'supermega_trial_backend',
+                    'app_private.billing_entitlements',
+                    billing_privilege.privilege_name
+                  )
+                )
+                from unnest(array['INSERT', 'UPDATE', 'DELETE'])
+                  billing_privilege(privilege_name)
+              ), false) as runtime_entitlement_write_denied,
+              /* The single privilege v13 deliberately opens, probed on its own
+                 so the version-conditional check below can reason about it. */
+              has_table_privilege(
+                'supermega_trial_backend', 'app_private.billing_entitlements', 'SELECT'
+              ) as runtime_entitlement_read,
+              /* The grant alone is not what makes that read safe -- the RLS
+                 scoping is. This column is the SHAPE half of that: forced RLS,
+                 and exactly one policy on the table, carrying v13's name,
+                 SELECT command, permissiveness and role. It is deliberately NOT
+                 the whole answer -- every one of those is reproducible by
+                 anyone who can create a policy, so the predicate column below
+                 carries the rest. Probed on the founder's own ledger connection
+                 at command time, because the migration's $verify$ block and
+                 tools/verify_private_trial_migrations.mjs only run when the
+                 migration is applied. */
+              coalesce((
+                select relation.relrowsecurity and relation.relforcerowsecurity
+                from pg_class relation
+                join pg_namespace schema_record
+                  on schema_record.oid = relation.relnamespace
+                where schema_record.nspname = 'app_private'
+                  and relation.relname = 'billing_entitlements'
+              ), false)
+              and coalesce((
+                select count(*) = 1 and bool_and(
+                  policy_record.policyname = 'billing_entitlements_self_read'
+                  and policy_record.cmd = 'SELECT'
+                  and policy_record.permissive = 'PERMISSIVE'
+                  and array_to_string(policy_record.roles, ',') = 'supermega_trial_backend'
+                )
+                from pg_policies policy_record
+                where policy_record.schemaname = 'app_private'
+                  and policy_record.tablename = 'billing_entitlements'
+              ), false) as runtime_entitlement_read_policy_shape,
+              /* The scoping policy's PREDICATE, returned verbatim for
+                 _policy_expression_fingerprint to normalize and hash. Everything
+                 above is reproducible by anyone who can create a policy; only
+                 this separates v13's workspace-GUC predicate from a same-named,
+                 same-command, same-role `using (true)`. Normalizing in Python
+                 rather than SQL keeps one implementation the tests can execute
+                 directly, and keeps regex escapes out of a statement whose
+                 meaning would otherwise depend on standard_conforming_strings. */
+              (
+                select policy_record.qual
+                from pg_policies policy_record
+                where policy_record.schemaname = 'app_private'
+                  and policy_record.tablename = 'billing_entitlements'
+                  and policy_record.policyname = 'billing_entitlements_self_read'
+              ) as runtime_entitlement_read_predicate,
               has_table_privilege(current_user, 'app_private.billing_invoices', 'SELECT') as invoice_select,
               has_table_privilege(current_user, 'app_private.billing_invoices', 'INSERT') as invoice_insert,
               has_table_privilege(current_user, 'app_private.billing_invoices', 'UPDATE') as invoice_update,
@@ -530,15 +670,25 @@ class BillingLedger:
             "provisioningRolePrivileged": bool(_row_value(row, "provisioning_role_privileged", 3)),
             "schemaVersion": int(_row_value(row, "schema_version", 4) or 0),
             "backendRoleSafe": bool(_row_value(row, "backend_role_safe", 5)),
-            "runtimeRoleDenied": bool(_row_value(row, "runtime_role_denied", 6)),
-            "invoiceSelect": bool(_row_value(row, "invoice_select", 7)),
-            "invoiceInsert": bool(_row_value(row, "invoice_insert", 8)),
-            "invoiceUpdate": bool(_row_value(row, "invoice_update", 9)),
-            "eventSelect": bool(_row_value(row, "event_select", 10)),
-            "eventInsert": bool(_row_value(row, "event_insert", 11)),
-            "entitlementSelect": bool(_row_value(row, "entitlement_select", 12)),
-            "entitlementInsert": bool(_row_value(row, "entitlement_insert", 13)),
-            "entitlementUpdate": bool(_row_value(row, "entitlement_update", 14)),
+            "runtimeLedgerDenied": bool(_row_value(row, "runtime_ledger_denied", 6)),
+            "runtimeEntitlementWriteDenied": bool(
+                _row_value(row, "runtime_entitlement_write_denied", 7)
+            ),
+            "runtimeEntitlementRead": bool(_row_value(row, "runtime_entitlement_read", 8)),
+            "runtimeEntitlementReadPolicyShape": bool(
+                _row_value(row, "runtime_entitlement_read_policy_shape", 9)
+            ),
+            "runtimeEntitlementReadPredicateDigest": _policy_expression_fingerprint(
+                _row_value(row, "runtime_entitlement_read_predicate", 10)
+            ),
+            "invoiceSelect": bool(_row_value(row, "invoice_select", 11)),
+            "invoiceInsert": bool(_row_value(row, "invoice_insert", 12)),
+            "invoiceUpdate": bool(_row_value(row, "invoice_update", 13)),
+            "eventSelect": bool(_row_value(row, "event_select", 14)),
+            "eventInsert": bool(_row_value(row, "event_insert", 15)),
+            "entitlementSelect": bool(_row_value(row, "entitlement_select", 16)),
+            "entitlementInsert": bool(_row_value(row, "entitlement_insert", 17)),
+            "entitlementUpdate": bool(_row_value(row, "entitlement_update", 18)),
         }
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != BILLING_SCHEMA_VERSION:
             raise BillingRailError(
@@ -546,9 +696,46 @@ class BillingLedger:
             )
         if not snapshot["backendRoleSafe"]:
             raise BillingRailError("The billing ledger backend role is unsafe.")
-        if not snapshot["runtimeRoleDenied"]:
+        # Deny-by-default for the runtime member role, minus EXACTLY the one
+        # read v13 grants. Invoices and events stay dark at every version, and
+        # entitlement writes stay dark at every version -- those two clauses are
+        # the property this guard has always protected and they are unchanged.
+        # Only entitlement SELECT is version-conditional: permitted from v13 on
+        # (where a reviewed migration put it there), still an anomaly below it.
+        # Permitted, not required -- a v13 target whose grant is absent holds
+        # LESS access than v13 allows, which is not the anomaly this guards
+        # against, and the ledger's own writes never depend on that grant.
+        # snapshot["schemaVersion"] is the live database's own counter, already
+        # asserted equal to BILLING_SCHEMA_VERSION above.
+        runtime_role_denied = (
+            snapshot["runtimeLedgerDenied"]
+            and snapshot["runtimeEntitlementWriteDenied"]
+            and (
+                not snapshot["runtimeEntitlementRead"]
+                or snapshot["schemaVersion"] >= BILLING_ENTITLEMENT_READ_SCHEMA_VERSION
+            )
+        )
+        if not runtime_role_denied:
             raise BillingRailError(
                 "The billing tables must remain deny-by-default for the runtime member role."
+            )
+        # The v13 read is safe only because RLS scopes it to the session's own
+        # workspace. Disable/force-off RLS, drop billing_entitlements_self_read,
+        # add a second permissive SELECT policy beside it, or recreate it with
+        # the same name, command and role but a widened predicate, and that same
+        # grant becomes a cross-workspace entitlement read. Before this guard
+        # was version-aware any grant at all was rejected, so tolerating the
+        # grant without re-checking its scoping would be a real relaxation.
+        # The predicate fingerprint is the load-bearing half: name, command,
+        # permissiveness and role are all trivially reproducible by whoever can
+        # create a policy, so a shape-only check passes `using (true)`.
+        entitlement_read_scoped = snapshot["runtimeEntitlementReadPolicyShape"] and (
+            snapshot["runtimeEntitlementReadPredicateDigest"]
+            == BILLING_ENTITLEMENT_READ_POLICY_DIGEST
+        )
+        if snapshot["runtimeEntitlementRead"] and not entitlement_read_scoped:
+            raise BillingRailError(
+                "The runtime member role's billing entitlement read must stay scoped to its own workspace."
             )
         if (
             not snapshot["provisioningRolePrivileged"]
@@ -1703,6 +1890,8 @@ if __name__ == "__main__":
 
 
 __all__ = [
+    "BILLING_ENTITLEMENT_READ_POLICY_DIGEST",
+    "BILLING_ENTITLEMENT_READ_SCHEMA_VERSION",
     "BILLING_EVENT_RESULT_CONTRACT",
     "BILLING_EVENT_TYPES",
     "BILLING_OVERDUE_REPORT_CONTRACT",
