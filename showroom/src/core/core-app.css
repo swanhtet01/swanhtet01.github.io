@@ -851,15 +851,19 @@ textarea { min-height: 72px; resize: vertical; }
    crutch is gone and all four banner tints are plain 0-2-0 siblings that read the same way.
    The colours are the rgba pair already used above, so no new literal enters either ratchet,
    and no px does either.
-   CONTRAST, measured in the browser on the composited tint rather than estimated. Dark:
-   --core-muted 8.79:1, --core-quiet 5.48:1, --core-green 13.49:1, the amber pill 13.07:1
-   (urgent; the tight tint is the same to within 0.02). Light: --core-muted 5.01:1,
-   --core-green 4.71:1, the amber pill 4.32:1, --core-quiet 4.38:1.
-   Those last two are BELOW the 4.5:1 AA floor, and they are pre-existing -- the light tints
-   have rendered since they shipped. A previous note here claimed --core-quiet was 4.80:1 in
-   light/urgent; that figure does not reproduce, so do not trust it. Raising them is a colour
-   decision (the tint, the token, or both) and is filed rather than taken here. Nothing in
-   the dark column is affected: every ratio there is 5.48:1 or better. */
+   CONTRAST, read out of the browser on the composited tint with the real markup, not
+   estimated from token values. Which pill renders depends on the variant: the urgent banner
+   uses .status-pill.danger, every other tinted banner uses .status-pill.pending.
+     dark   --core-muted 8.79, --core-quiet 5.48, --core-green 13.49, pending pill 13.07,
+            danger pill 8.17. (The amber tint matches these to within 0.02.)
+     light  --core-muted 5.01, --core-green 4.71, danger pill 5.35 -- but --core-quiet is
+            4.47 on amber / 4.38 on red, and the pending pill 4.42 on amber / 4.32 on red.
+   Those last two are BELOW the 4.5:1 AA floor at the size they render. They are pre-existing
+   -- the light tints have looked like this since they shipped -- and are filed rather than
+   changed here, because raising them means altering a token or a tint, which is a colour
+   decision. A previous note here claimed --core-quiet was 4.80:1 in light/urgent; it
+   measures 4.38:1, so do not carry that figure forward. Nothing in the dark column is
+   below 5.48:1. */
 .storage-durability-banner[data-headroom="tight"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
 .storage-durability-banner[data-headroom="urgent"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
 /* The raw number, kept quiet: an owner who wants it can read it, one who does not is not
