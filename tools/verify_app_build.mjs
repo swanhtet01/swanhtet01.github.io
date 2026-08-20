@@ -19650,7 +19650,8 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // root script, not `npm --prefix showroom run build` -- the latter skips
 // app:release:write, so sw.js never gets its placeholder and the precache seal
 // fails (caught at :537, but it wastes a measurement). No app code was shrunk
-// to fit.if (bytes > 3_070_000) fail(`artifact_budget:${bytes}`)
+// to fit.
+if (bytes > 3_070_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
