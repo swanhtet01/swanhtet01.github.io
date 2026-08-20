@@ -45,6 +45,7 @@ MIGRATIONS = (
     "20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "20260803063822_private_trial_backend_v9_metadata_rls.sql",
     "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+    "20260816120000_private_trial_backend_v11_self_serve_grants.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -3609,7 +3610,7 @@ def _run_rehearsal(
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 10,
+                    "schema_version": 11,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -3642,7 +3643,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 10,
+                    "restored_schema_version": 11,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,

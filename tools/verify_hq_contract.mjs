@@ -87,6 +87,7 @@ const databaseImplementationPaths = [
   'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
   'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
   'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  'supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql',
   'supabase/rehearsal/20260804_public_browser_quarantine.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
@@ -1025,8 +1026,8 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 11
-  && databaseRehearsal.migration?.schemaVersion === 10
+  && databaseRehearsal.migration?.count === 12
+  && databaseRehearsal.migration?.schemaVersion === 11
   && databaseRehearsal.migration?.productionValidatorReady === true
   && Object.keys(databaseRehearsal.checks || {}).length === 56
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
