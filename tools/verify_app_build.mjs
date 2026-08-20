@@ -6398,6 +6398,22 @@ const plantScanHandlerBody = (name) => {
   return end < 0 ? '' : productionPageContract.slice(start, end + 5)
 }
 const plantShopFloorScanHandlers = [plantScanHandlerBody('selectScannedJob'), plantScanHandlerBody('applyScannedMaterialRef')]
+// SHOP-FLOOR SAFETY (Codex review on PR #489). A missed job scan leaves the PREVIOUS job
+// selected -- scanning a label is exactly the moment an operator believes the panel now
+// knows which job they mean, so both output actions must be dead until the scan is
+// resolved. Guarded on the buttons AND inside both handlers, because a disabled control is
+// an affordance and the output form can also be reached by implicit submission. Sliced by
+// each function's own boundaries so neither guard can be dropped by a later reorder.
+const plantOutputActionBody = (signature) => {
+  const start = productionPageContract.indexOf(`function ${signature} {`)
+  if (start < 0) return ''
+  const end = productionPageContract.indexOf('\n  }\n', start)
+  return end < 0 ? '' : productionPageContract.slice(start, end + 5)
+}
+const plantOutputActionBodies = [
+  plantOutputActionBody('recordOutput(event: FormEvent)'),
+  plantOutputActionBody('closeSelectedJobShort(trigger: HTMLButtonElement)'),
+]
 if (!productionPageContract.includes("const [jobScanMiss, setJobScanMiss] = useState('')")
   || !productionPageContract.includes('function selectScannedJob(value: string)')
   || !productionPageContract.includes('function applyScannedMaterialRef(value: string)')
@@ -6419,8 +6435,16 @@ if (!productionPageContract.includes("const [jobScanMiss, setJobScanMiss] = useS
   || !productionJobsContract.includes('onDetected={applyScannedMaterialRef}')
   || !productionJobsContract.includes('label="Scan the job card to choose this job"')
   || !productionJobsContract.includes('label="Scan the material label into the material field"')
-  // An unmatched code stays on screen next to the field instead of vanishing.
+  // An unresolved miss blocks BOTH output actions. The selection is kept (blanking `jobId`
+  // would fall through to `activeJobs[0]` -- another job nobody scanned) but made dead.
+  || !productionPageContract.includes('const jobScanUnresolved = Boolean(jobScanMiss)')
+  || plantOutputActionBodies.some((body) => !body)
+  || plantOutputActionBodies.some((body) => !body.includes('if (jobScanUnresolved) return setNotice('))
+  || !productionJobsContract.includes('disabled={jobScanUnresolved || !productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity)')
+  || !productionJobsContract.includes('disabled={jobScanUnresolved || !productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1')
+  // An unmatched code stays on screen next to the field instead of vanishing, and says so.
   || !productionJobsContract.includes('{jobScanMiss ? <p className="form-notice plant-job-scan-miss" role="alert">Scanned {jobScanMiss}')
+  || !productionJobsContract.includes('both review actions are blocked')
   // A stale miss must not survive into the materials view and re-announce on return.
   || !productionJobsContract.includes("onToggle={(event) => { setJobScanMiss(''); setMaterialGuideOpen(event.currentTarget.open) }}")
   || !coreCssSource.includes('.sku-scan-row select {')

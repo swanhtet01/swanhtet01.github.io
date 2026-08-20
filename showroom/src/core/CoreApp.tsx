@@ -7559,6 +7559,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
+  // An unresolved job scan BLOCKS both output actions. Scanning a label is the moment an
+  // operator believes the panel now knows which job they mean; a miss leaves the PREVIOUS
+  // job selected, so without this an operator who scans, glances at the warning and taps on
+  // would queue production against a job they did not scan. Clearing the selection instead
+  // would be worse, not better: `selectedJobId` falls back to `activeJobs[0]` when `jobId`
+  // is not in the list, so blanking it silently selects the FIRST active job -- also a job
+  // nobody scanned, and with no warning left on screen. So the selection stays visible for
+  // context and becomes un-actionable until the operator resolves the scan.
+  const jobScanUnresolved = Boolean(jobScanMiss)
   const selectedMaterialJob = activeJobs.find((job) => job.id === materialDraft.jobId)
   const materialJobIsStale = Boolean(materialDraft.jobId && !selectedMaterialJob)
   const parsedMaterialQuantity = parseProductionMaterialQuantity(materialDraft.quantity)
@@ -8269,6 +8278,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function recordOutput(event: FormEvent) {
     event.preventDefault()
+    // Guarded here as well as on the button: a disabled control is an affordance, not a
+    // safety boundary, and this form can also be reached by implicit submission.
+    if (jobScanUnresolved) return setNotice(`No active job carries the scanned code ${jobScanMiss}. Choose the job or scan again before recording output.`)
     const recordedShiftRef = shiftRef.trim()
     if (!recordedShiftRef || recordedShiftRef.length > 80) return setNotice('Enter a shift reference of 1 to 80 characters.')
     if (!Number.isSafeInteger(quantity) || quantity < 1) return setNotice('Enter a whole-unit quantity of at least 1.')
@@ -8400,6 +8412,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
 
   function closeSelectedJobShort(trigger: HTMLButtonElement) {
+    if (jobScanUnresolved) return setNotice(`No active job carries the scanned code ${jobScanMiss}. Choose the job or scan again before closing a job short.`)
     const recordedShiftRef = shiftRef.trim()
     if (!recordedShiftRef || recordedShiftRef.length > 80) return setNotice('Enter a shift reference of 1 to 80 characters before closing a job short.')
     if (!selectedJob) return setNotice('Choose an active job before reviewing a short close.')
@@ -9399,14 +9412,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
         {!materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
           <label>Job<span className="sku-scan-row"><select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobScanMiss(''); setJobId(event.target.value) }}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select><BarcodeScanButton disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} label="Scan the job card to choose this job" onDetected={selectScannedJob} /></span></label>
-          {jobScanMiss ? <p className="form-notice plant-job-scan-miss" role="alert">Scanned {jobScanMiss} · no active job carries this code. Choose the job in the list, or scan the job card again.</p> : null}
+          {jobScanMiss ? <p className="form-notice plant-job-scan-miss" role="alert">Scanned {jobScanMiss} · no active job carries this code. {selectedJob ? `${selectedJob.id} is still selected and both review actions are blocked` : 'Both review actions are blocked'} until you choose the job in the list or scan the job card again.</p> : null}
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
           <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
           <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter the shift name or date to continue.'}</p>
           <div className="form-actions">
-            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > selectedRemaining || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
-            <button aria-describedby="plant-short-close-boundary" className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} onClick={(event) => closeSelectedJobShort(event.currentTarget)} type="button">Review short close</button>
+            <button className="core-button primary" disabled={jobScanUnresolved || !productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > selectedRemaining || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
+            <button aria-describedby="plant-short-close-boundary" className="core-button" disabled={jobScanUnresolved || !productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} onClick={(event) => closeSelectedJobShort(event.currentTarget)} type="button">Review short close</button>
           </div>
           <p className="panel-copy" id="plant-short-close-boundary">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only. Short close ends the selected job without changing its target, output, hold, inventory, costing, or accounting.</p>
         </form> : null}
