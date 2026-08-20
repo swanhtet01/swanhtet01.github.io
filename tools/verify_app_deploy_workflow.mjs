@@ -267,7 +267,14 @@ requireContract('app content policy refuses framing, injection and unexpected eg
     "frame-ancestors 'none'",
     "form-action 'self'",
     // The built shell emits no inline script, so this exception is never needed
-    // and its absence is the property worth pinning.
+    // and its absence is the property worth pinning. That claim went unchecked and
+    // was FALSE for as long as it stood: the shell carried three inline scripts,
+    // including the service-worker registration, and every one of them was refused
+    // by this very directive -- silently, because a refused inline script logs and
+    // does nothing. The app therefore had no service worker and no offline mode at
+    // all. The shell now loads those three as files; the check that the built shell
+    // really contains no inline script lives in tools/verify_app_build.mjs
+    // (app_shell_inline_script_blocked_by_content_policy) and is asserted below too.
     "script-src 'self'",
     "connect-src 'self' https://*.supabase.co",
   ].every((directive) => appPolicy.includes(directive))
@@ -281,6 +288,8 @@ requireContract('app shell carries the same policy for hosts that cannot set hea
   && appShellPolicy.includes("connect-src 'self' https://*.supabase.co")
   && !/script-src[^;]*unsafe-(inline|eval)/.test(appShellPolicy)
   && !appShellPolicy.includes('frame-ancestors'))
+requireContract('app shell carries no inline script the policy would refuse',
+  ![...appShell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].some((match) => match[1].trim().length))
 requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))

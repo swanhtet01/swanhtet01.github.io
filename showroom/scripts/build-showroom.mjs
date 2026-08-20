@@ -25,3 +25,4 @@ function runNodeScript(label, scriptPath, args = []) {
 runNodeScript('TypeScript build', path.join(showroomRoot, 'node_modules', 'typescript', 'bin', 'tsc'), ['-b'])
 runNodeScript('Vite build', path.join(showroomRoot, 'node_modules', 'vite', 'bin', 'vite.js'), ['build', '--configLoader', 'runner'])
 runNodeScript('Static route export', path.join(showroomRoot, 'scripts', 'prepare-static-routes.mjs'))
+runNodeScript('Offline precache seal', path.join(showroomRoot, 'scripts', 'seal-offline-precache.mjs'))
