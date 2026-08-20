@@ -6384,6 +6384,71 @@ if (!productImageStoreSource.includes('export function productImageScopeForWorks
   || !coreSource.includes('scope={productImageScope} sku={item.sku}')
   || !ecommerceSource.includes('const productImageScope = productImageScopeForWorkspace(managedIdentity?.workspaceId)')
   || !ecommerceSource.includes('scope={productImageScope} sku={item.sku}')) fail('product_image_workspace_scope_missing')
+// Plant shop-floor scanning (roadmap P2). Two printed codes reach the line: the job card
+// and the material label. Both feed the SAME state the keyboard/dropdown path feeds, and
+// neither may grow into a write path -- scanning is input assistance, never evidence. Each
+// handler body below is sliced by its OWN boundaries (declaration to its 2-space closing
+// brace) rather than by the span between two anchors, so reordering the functions cannot
+// quietly drop one out of the write-verb guard, and an unrelated function landing between
+// them cannot trip it. Prefix pins where copy growth is expected.
+const plantScanHandlerBody = (name) => {
+  const start = productionPageContract.indexOf(`function ${name}(value: string) {`)
+  if (start < 0) return ''
+  const end = productionPageContract.indexOf('\n  }\n', start)
+  return end < 0 ? '' : productionPageContract.slice(start, end + 5)
+}
+const plantShopFloorScanHandlers = [plantScanHandlerBody('selectScannedJob'), plantScanHandlerBody('applyScannedMaterialRef')]
+// SHOP-FLOOR SAFETY (Codex review on PR #489). A missed job scan leaves the PREVIOUS job
+// selected -- scanning a label is exactly the moment an operator believes the panel now
+// knows which job they mean, so both output actions must be dead until the scan is
+// resolved. Guarded on the buttons AND inside both handlers, because a disabled control is
+// an affordance and the output form can also be reached by implicit submission. Sliced by
+// each function's own boundaries so neither guard can be dropped by a later reorder.
+const plantOutputActionBody = (signature) => {
+  const start = productionPageContract.indexOf(`function ${signature} {`)
+  if (start < 0) return ''
+  const end = productionPageContract.indexOf('\n  }\n', start)
+  return end < 0 ? '' : productionPageContract.slice(start, end + 5)
+}
+const plantOutputActionBodies = [
+  plantOutputActionBody('recordOutput(event: FormEvent)'),
+  plantOutputActionBody('closeSelectedJobShort(trigger: HTMLButtonElement)'),
+]
+if (!productionPageContract.includes("const [jobScanMiss, setJobScanMiss] = useState('')")
+  || !productionPageContract.includes('function selectScannedJob(value: string)')
+  || !productionPageContract.includes('function applyScannedMaterialRef(value: string)')
+  // Exact, case-insensitive match against the SAME activeJobs list the dropdown renders:
+  // a scan can never reach a job the operator could not have selected by hand.
+  || !productionPageContract.includes('const match = activeJobs.find((job) => job.id.toLocaleLowerCase() === normalized)')
+  || !productionPageContract.includes('if (!match) return setJobScanMiss(scanned.slice(0, 120))')
+  // The typed path is capped by maxLength={120}; the camera path carries the same cap so
+  // a long QR payload cannot enter a value the keyboard could not produce.
+  || !productionPageContract.includes('materialRef: value.slice(0, 120)')
+  || plantShopFloorScanHandlers.some((body) => !body)
+  || plantShopFloorScanHandlers.some((body) => body.includes('mutateProduction') || body.includes('setPendingAction') || body.includes('setActions'))
+  // The camera dialog opens inside the Plant action panel, so the panel's Escape/Tab
+  // handler must yield to it. Without this the panel closes under an open modal and the
+  // MediaStream is never released -- BarcodeScanButton's cleanup only runs when it closes.
+  || !productionPageContract.includes("const nestedDialog = eventTarget?.closest('dialog[open]') ?? null")
+  || !productionPageContract.includes('if (nestedDialog && outputPanelRef.current?.contains(nestedDialog)) return')
+  || !productionJobsContract.includes('onDetected={selectScannedJob}')
+  || !productionJobsContract.includes('onDetected={applyScannedMaterialRef}')
+  || !productionJobsContract.includes('label="Scan the job card to choose this job"')
+  || !productionJobsContract.includes('label="Scan the material label into the material field"')
+  // An unresolved miss blocks BOTH output actions. The selection is kept (blanking `jobId`
+  // would fall through to `activeJobs[0]` -- another job nobody scanned) but made dead.
+  || !productionPageContract.includes('const jobScanUnresolved = Boolean(jobScanMiss)')
+  || plantOutputActionBodies.some((body) => !body)
+  || plantOutputActionBodies.some((body) => !body.includes('if (jobScanUnresolved) return setNotice('))
+  || !productionJobsContract.includes('disabled={jobScanUnresolved || !productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity)')
+  || !productionJobsContract.includes('disabled={jobScanUnresolved || !productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1')
+  // An unmatched code stays on screen next to the field instead of vanishing, and says so.
+  || !productionJobsContract.includes('{jobScanMiss ? <p className="form-notice plant-job-scan-miss" role="alert">Scanned {jobScanMiss}')
+  || !productionJobsContract.includes('both review actions are blocked')
+  // A stale miss must not survive into the materials view and re-announce on return.
+  || !productionJobsContract.includes("onToggle={(event) => { setJobScanMiss(''); setMaterialGuideOpen(event.currentTarget.open) }}")
+  || !coreCssSource.includes('.sku-scan-row select {')
+  || !coreCssSource.includes('.plant-job-scan-miss { overflow-wrap: anywhere; }')) fail('plant_shopfloor_scan_missing')
 if (!productionPageContract.includes('const outputJobSelectRef = useRef<HTMLSelectElement>(null)')
   || !productionPageContract.includes('const [outputOpen, setOutputOpen] = useState(false)')
   || !productionPageContract.includes('const [materialGuideOpen, setMaterialGuideOpen] = useState(false)')
