@@ -223,6 +223,11 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       scope: orderIntakeEvidenceScopeForWorkspace(identity?.workspaceId),
     })
     onUse(reviewedDraft)
+    clearIntakeForm()
+    onAcceptedFocus()
+  }
+
+  function clearIntakeForm() {
     setSourceLabel('')
     setMessage('')
     setCustomer('')
@@ -235,7 +240,24 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
     setReviewedDraft(null)
     setAiProposedDraft(null)
     setAiGeneration(null)
-    onAcceptedFocus()
+  }
+
+  /**
+   * The operator judging that this message is not an order. It creates nothing -- no order, no
+   * stock move, no message -- and that is the whole point: a correct refusal is a RESULT, and
+   * until now the only outcome this surface could record was acceptance, so a model that rightly
+   * extracted nothing from a prompt injection looked identical to a draft nobody ever reviewed.
+   */
+  function declineReviewedDraft() {
+    captureOrderIntakeCorrection(window.localStorage, {
+      generation: aiGeneration,
+      proposed: aiProposedDraft,
+      accepted: null,
+      acceptedAt: new Date(),
+      actor: identity?.userId ?? '',
+      scope: orderIntakeEvidenceScopeForWorkspace(identity?.workspaceId),
+    })
+    clearIntakeForm()
   }
 
   return <section className="channel-intake-panel">
@@ -302,7 +324,10 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       {channelOrderDraftIsReady(reviewedDraft) ? <>
         <p>{reviewedDraft.sourceRecordId} / {reviewedDraft.provenance.filter((entry) => entry.kind === 'quote').length} exact source mappings</p>
         <button className="core-button primary compact" disabled={controlsDisabled} onClick={useReviewedDraft} type="button">Use reviewed draft</button>
-      </> : <ul>{reviewedDraft.blockers.slice(0, 4).map((blocker) => <li key={blocker}>{channelDraftBlockerLabel(blocker)}</li>)}</ul>}
+      </> : <>
+        <ul>{reviewedDraft.blockers.slice(0, 4).map((blocker) => <li key={blocker}>{channelDraftBlockerLabel(blocker)}</li>)}</ul>
+        {aiProposedDraft ? <button className="core-button compact" disabled={controlsDisabled} onClick={declineReviewedDraft} type="button">Not an order</button> : null}
+      </>}
       <small>The message is used only to prepare this draft and is not written into the order record.</small>
     </div> : null}
   </section>

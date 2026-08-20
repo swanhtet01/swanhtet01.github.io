@@ -48,10 +48,22 @@ import {
  *   `fieldsExtracted` names what the model filled in, so "the model MISSED payment" (payment
  *   absent from fieldsExtracted) is now distinguishable from "the model got payment WRONG"
  *   (payment present in both arrays), which one array could never express.
- * - `totalExtractedFields` counts all six; `fieldsExtracted` names only the five the review
- *   surface exposes. The gap between them is deliberate and readable: it is the part of section
- *   9's denominator this surface cannot put in front of an operator, and an evaluator who cannot
- *   see that gap would read a falsely low correction_effort. Today the gap is `fulfilment`.
+ * - The denominator is the SCORABLE populated set, not the literal one, and the difference is
+ *   recorded rather than reasoned about. Section 9 says "every field the model populated", which
+ *   read literally includes `fulfilment` -- but ChannelOrderDraft has no fulfilment field and the
+ *   review surface has no fulfilment control, so an INCORRECT fulfilment could only ever land in
+ *   the denominator and never in the numerator. An operator who corrected every field they could
+ *   reach would score at most 5/6 instead of 1. That understates correction effort on every
+ *   fixture the model fills completely, and it understates it toward PASSING the <= 0.20 gate.
+ *   A metric that fails wrongly gets investigated; one that passes wrongly ships. So a populated
+ *   field this surface cannot score is counted in `unscorableExtractedFields` and left out of the
+ *   ratio entirely, and a non-zero value there marks the record as a PARTIAL observation.
+ *   Exposing `fulfilment` in the review surface would make it scorable and shrink that gap to
+ *   zero; CoreApp.tsx's useChannelDraft currently does `setFulfilment('')` because the draft
+ *   cannot carry one, so the value the model already extracts is thrown away and the operator
+ *   re-enters it. That is a real product improvement and a real surface change, and it needs its
+ *   own pass rather than riding along with the metric plumbing.
+ * - A zero denominator is an outcome, not a gap. See OrderIntakeOutcome and `correctionEffort`.
  */
 
 export const ORDER_INTAKE_EVIDENCE_SCHEMA = 'supermega.order-intake-evidence.v2' as const
@@ -132,7 +144,7 @@ const captureFieldByManagedField: Record<ManagedOrderField, ChannelOrderCaptureF
   fulfilment: null,
 }
 
-/** What the model populated: section 9's denominator, plus the capture-scope part of it by name. */
+/** What the model populated, split by whether this surface can actually score it. */
 export type OrderIntakeExtractedFields = {
   /**
    * Populated fields that land inside the capture scope. Still only a CANDIDATE set for
@@ -141,9 +153,21 @@ export type OrderIntakeExtractedFields = {
    * front of the operator to correct.
    */
   populated: ChannelOrderCaptureField[]
-  /** Section 9's denominator: every managed field the model populated, capture scope or not. */
+  /** Every managed field the model populated, capture scope or not. */
   total: number
 }
+
+/**
+ * What the operator did with the reviewed draft.
+ *
+ * `declined` is not a failure and not an absence -- it is the correct outcome for a message that
+ * is not an order, and section 9's corpus contains two of them (en-prompt-injection-no-order-17
+ * and en-retracted-order-19, both `scope: not_an_order` with all six fields null in
+ * tests/fixtures/order_intake_v1.json). A model that correctly extracts nothing from a prompt
+ * injection has SUCCEEDED, and a record shape that could only express acceptance made that
+ * success indistinguishable from an unreviewed draft or a failed write.
+ */
+export type OrderIntakeOutcome = 'accepted' | 'declined'
 
 export type OrderIntakeGeneration = {
   messageDigest: string
@@ -169,10 +193,31 @@ export type OrderIntakeEvidenceRecord = {
   capturedAt: string
   acceptedAt: string
   actor: string
+  outcome: OrderIntakeOutcome
   fieldsExtracted: ChannelOrderCaptureField[]
   fieldsCorrected: ChannelOrderCaptureField[]
   correctionCount: number
+  /**
+   * Section 9's denominator, SCORABLE ONLY: always equal to fieldsExtracted.length. A populated
+   * field this surface cannot put in front of an operator is counted in
+   * unscorableExtractedFields instead of here -- see the module comment for why that is the
+   * unbiased choice rather than the literal one.
+   */
   totalExtractedFields: number
+  /**
+   * Populated managed fields this surface cannot score: no control to change them, or a value the
+   * client could not translate. Never silently folded into the denominator. An evaluator reading
+   * a non-zero value here knows the record is a PARTIAL section 9 observation.
+   */
+  unscorableExtractedFields: number
+  /**
+   * correctionCount / totalExtractedFields, or null when the denominator is zero. The policy is
+   * carried in the record rather than left to the reader: a fixture the model extracted nothing
+   * from contributes NO correction effort and is counted, not averaged. Storing it as 0 would
+   * dilute the average downward and make the <= 0.20 gate easier to pass, which is the one
+   * direction a metric must never be wrong in.
+   */
+  correctionEffort: number | null
   rawMessageIncluded: false
 }
 
@@ -290,22 +335,27 @@ export function diffChannelOrderCorrections(
 export function buildOrderIntakeEvidenceRecord(input: {
   generation: OrderIntakeGeneration | null
   proposed: ChannelOrderDraft | null
-  accepted: ChannelOrderDraft
+  /**
+   * The draft the operator accepted, or null when they DECLINED -- correctly deciding the message
+   * was not an order. A declined review is scored against the proposal alone, so the fingerprint
+   * check below falls back to the proposal's own fingerprint rather than being skipped: the guard
+   * that stops a stale proposal being scored against a different message stays load-bearing on
+   * both paths.
+   */
+  accepted: ChannelOrderDraft | null
   acceptedAt: Date
   actor: string
 }): OrderIntakeEvidenceRecord | null {
-  const { generation, proposed, accepted } = input
+  const { generation, proposed } = input
   if (!generation || !proposed) return null
+  const outcome: OrderIntakeOutcome = input.accepted ? 'accepted' : 'declined'
+  const accepted = input.accepted ?? proposed
   if (!proposed.messageFingerprint || proposed.messageFingerprint !== accepted.messageFingerprint) return null
   if (!(input.acceptedAt instanceof Date) || !Number.isFinite(input.acceptedAt.getTime())) return null
   // Section 9 measures what a NAMED operator changed. An anonymous correction is not a section 9
   // observation, so it is not recorded at all rather than recorded and later mistaken for one.
   const actor = boundedText(input.actor, ACTOR_MAX)
   if (!actor) return null
-  // A denominator of zero has no correction_effort -- the division is NaN, and a record carrying
-  // it would either poison an average or read as a flawless extraction of a message the model in
-  // fact failed on completely. The model proposed nothing here, so there is nothing to score.
-  if (generation.extractedFields.total < 1) return null
   // Narrowed from "the model populated it" to "the operator could see it".
   // buildManagedChannelOrderDraft maps the server enums through managedChannels / managedPayments
   // and turns anything it cannot translate into null -- and the two enums do diverge today:
@@ -316,7 +366,13 @@ export function buildOrderIntakeEvidenceRecord(input: {
   // correction_effort against the <= 0.20 threshold for a defect that is not the model's.
   const fieldsExtracted = generation.extractedFields.populated
     .filter((field) => Boolean(fieldValue(proposed, field)))
-  const corrections = diffChannelOrderCorrections(proposed, accepted, fieldsExtracted)
+  // A declined review changed nothing by definition -- the operator's judgement was that no order
+  // should exist, not that a field was wrong -- so the diff is skipped rather than run against the
+  // proposal comparing to itself.
+  const corrections = outcome === 'declined'
+    ? []
+    : diffChannelOrderCorrections(proposed, accepted, fieldsExtracted)
+  const totalExtractedFields = fieldsExtracted.length
   return {
     schema: ORDER_INTAKE_EVIDENCE_SCHEMA,
     version: 2,
@@ -327,10 +383,13 @@ export function buildOrderIntakeEvidenceRecord(input: {
     capturedAt: generation.generatedAt,
     acceptedAt: input.acceptedAt.toISOString(),
     actor,
+    outcome,
     fieldsExtracted,
     fieldsCorrected: corrections.map((change) => change.field),
     correctionCount: corrections.length,
-    totalExtractedFields: generation.extractedFields.total,
+    totalExtractedFields,
+    unscorableExtractedFields: generation.extractedFields.total - totalExtractedFields,
+    correctionEffort: totalExtractedFields > 0 ? corrections.length / totalExtractedFields : null,
     rawMessageIncluded: false,
   }
 }
@@ -349,6 +408,9 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
   const claimedFields = value.fieldsCorrected
   const claimedExtracted = value.fieldsExtracted
   const totalExtractedFields = value.totalExtractedFields
+  const unscorableExtractedFields = value.unscorableExtractedFields
+  const correctionEffort = value.correctionEffort
+  const outcome = value.outcome === 'accepted' || value.outcome === 'declined' ? value.outcome : null
   if (value.schema !== ORDER_INTAKE_EVIDENCE_SCHEMA
     || value.version !== 2
     || value.intakeDraftSchema !== ORDER_INTAKE_DRAFT_SCHEMA
@@ -360,9 +422,12 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
     || !validTimestamp(value.capturedAt)
     || !validTimestamp(value.acceptedAt)
     || value.rawMessageIncluded !== false
+    || !outcome
     || !Array.isArray(claimedFields)
     || !Array.isArray(claimedExtracted)
-    || typeof totalExtractedFields !== 'number') return null
+    || typeof totalExtractedFields !== 'number'
+    || typeof unscorableExtractedFields !== 'number'
+    || (correctionEffort !== null && typeof correctionEffort !== 'number')) return null
   const fieldsExtracted = channelOrderCaptureFields.filter((field) => claimedExtracted.includes(field))
   const fieldsCorrected = channelOrderCaptureFields.filter((field) => claimedFields.includes(field))
   // Both directions: the names must all be known fields, and the count must not be assertable
@@ -375,10 +440,21 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
   // larger than the total, describes an impossible correction_effort -- refuse it on read rather
   // than let an evaluation average it in.
   if (!fieldsCorrected.every((field) => fieldsExtracted.includes(field))) return null
-  if (!Number.isSafeInteger(totalExtractedFields)
-    || totalExtractedFields < 1
-    || totalExtractedFields < fieldsExtracted.length
-    || totalExtractedFields > managedOrderFields.length) return null
+  // The scorable denominator is not assertable independently of the names it counts, exactly like
+  // correctionCount above.
+  if (totalExtractedFields !== fieldsExtracted.length) return null
+  if (!Number.isSafeInteger(unscorableExtractedFields)
+    || unscorableExtractedFields < 0
+    || totalExtractedFields + unscorableExtractedFields > managedOrderFields.length) return null
+  // A declined review is the operator judging that no order should exist. It cannot carry
+  // corrections, and a stored record claiming otherwise is describing something that never
+  // happened.
+  if (outcome === 'declined' && fieldsCorrected.length > 0) return null
+  // correctionEffort is stored so the metric policy travels WITH the record rather than being
+  // reconstructed by whoever reads it -- but a stored ratio that disagrees with the counts it is
+  // derived from is exactly the fabricated number this module exists to refuse.
+  const expectedEffort = totalExtractedFields > 0 ? fieldsCorrected.length / totalExtractedFields : null
+  if (correctionEffort !== expectedEffort) return null
   return {
     schema: ORDER_INTAKE_EVIDENCE_SCHEMA,
     version: 2,
@@ -389,10 +465,13 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
     capturedAt: String(value.capturedAt),
     acceptedAt: String(value.acceptedAt),
     actor,
+    outcome,
     fieldsExtracted,
     fieldsCorrected,
     correctionCount: fieldsCorrected.length,
     totalExtractedFields,
+    unscorableExtractedFields,
+    correctionEffort: expectedEffort,
     rawMessageIncluded: false,
   }
 }
@@ -451,7 +530,8 @@ export function captureOrderIntakeCorrection(
   input: {
     generation: OrderIntakeGeneration | null
     proposed: ChannelOrderDraft | null
-    accepted: ChannelOrderDraft
+    /** null when the operator declined -- see buildOrderIntakeEvidenceRecord. */
+    accepted: ChannelOrderDraft | null
     acceptedAt: Date
     actor: string
     scope: string

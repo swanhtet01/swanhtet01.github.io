@@ -20,10 +20,18 @@
 //      total_extracted_fields is every field the MODEL populated and fields_corrected is what a
 //      NAMED operator changed. Three things follow and each is asserted below, because getting
 //      any of them wrong misclassifies the threshold rather than failing loudly:
-//        - the denominator is the SIX managed fields, read off the managed response, not the four
-//          quote-mapped ones and not inferred from the browser draft;
+//        - the denominator is read off the managed RESPONSE, not the four quote-mapped fields and
+//          not inferred from the browser draft;
+//        - it is the SCORABLE populated set, and anything populated that this surface cannot put
+//          in front of an operator is counted separately instead of padding the denominator;
 //        - the numerator lives inside the denominator, so the ratio cannot exceed 1;
+//        - a zero denominator is an outcome carrying a null ratio, never a dropped record and
+//          never a zero;
 //        - no operator name, no record.
+//
+//      Every one of those exists because the error it prevents biases the metric toward PASSING
+//      the <= 0.20 gate. A metric that fails wrongly gets investigated; one that passes wrongly
+//      ships.
 //
 // The cap is asserted on WRITE, not merely on read: a device left running for a year must hold
 // 200 records, not a growing blob that happens to be trimmed when it is read back.
@@ -263,6 +271,11 @@ check(written.totalExtractedFields === 4,
 check(written.fieldsExtracted.join(',') === 'customer,sku,quantity,payment',
   `and the record names which four, got "${written.fieldsExtracted.join(',')}"`)
 check(written.actor === ACTOR, 'the named operator who reviewed the draft is recorded')
+check(written.outcome === 'accepted', 'and what they did with the draft')
+check(written.unscorableExtractedFields === 0,
+  'this fixture has no unscorable fields, so the record is a COMPLETE section 9 observation')
+check(written.correctionEffort === 1 / 4,
+  `the record carries the metric itself, got ${written.correctionEffort}`)
 check(written.modelVersion === 'gpt-5-mini' && written.promptVersion === 'supermega.order_intake.extract.v1',
   'the record is bound to the model and prompt that produced the proposal')
 check(written.messageDigest === generation.messageDigest, 'and to the digest of the message the model saw')
@@ -485,9 +498,30 @@ const wideRecord = captureOrderIntakeCorrection(wideStorage, {
   generation: wideGeneration, proposed: wideProposed, accepted: channelCorrected, acceptedAt: ACCEPTED_AT, actor: ACTOR, scope: SCOPE,
 })
 check(wideRecord.fieldsCorrected.join(',') === 'channel', 'and it is recorded by name')
-check(wideRecord.totalExtractedFields === 6, 'against a denominator of six')
-check(wideRecord.correctionCount / wideRecord.totalExtractedFields < 0.2,
-  'so this fixture computes a correction_effort of 1/6, which the old denominator would have reported as 1/4')
+check(wideRecord.totalExtractedFields === 5,
+  `the denominator is the SCORABLE populated set, got ${wideRecord.totalExtractedFields}`)
+check(wideRecord.unscorableExtractedFields === 1,
+  'with the one populated field this surface cannot score -- fulfilment -- counted separately')
+check(wideRecord.correctionEffort === 1 / 5, 'so correction_effort is 1/5, and the record carries it')
+// P1(a). fulfilment could only ever land in the denominator: ChannelOrderDraft has no field for it
+// and the review surface no control, so an INCORRECT fulfilment is unfixable. Leaving it in the
+// denominator meant an operator who corrected every field they could reach scored at most 5/6
+// rather than 1 -- an understatement, and an understatement toward PASSING the <= 0.20 gate.
+const allCorrected = acceptWide({ channel: 'Messenger', customer: 'Daw Khin Aye', sku: 'SM-1003', quantity: 9, payment: 'WavePay', attributions: {
+  customer: { kind: 'operator_supplied' },
+  sku: { kind: 'quote', quote: 'SM-1001' },
+  quantity: { kind: 'operator_supplied' },
+  payment: { kind: 'operator_supplied' },
+} })
+const allCorrectedRecord = buildOrderIntakeEvidenceRecord({
+  generation: wideGeneration, proposed: wideProposed, accepted: allCorrected, acceptedAt: ACCEPTED_AT, actor: ACTOR, scope: SCOPE,
+})
+check(allCorrectedRecord.correctionCount === 5 && allCorrectedRecord.totalExtractedFields === 5,
+  `every reachable field corrected scores 5/5, got ${allCorrectedRecord.correctionCount}/${allCorrectedRecord.totalExtractedFields}`)
+check(allCorrectedRecord.correctionEffort === 1,
+  `correcting everything the operator CAN correct is a correction_effort of 1, not 5/6 = ${(5 / 6).toFixed(3)}`)
+check(allCorrectedRecord.unscorableExtractedFields === 1,
+  'and the record still states that one populated field was outside the measurement')
 check(!wideStorage.raw().includes('Messenger') && !wideStorage.raw().includes('Viber'),
   'and the channel VALUES stay out of storage, exactly like every other corrected value')
 
@@ -531,14 +565,24 @@ check(!unmappableRecord.fieldsExtracted.includes('channel'),
   'a value that never reached the operator is not scored as reviewed')
 check(unmappableRecord.fieldsCorrected.length === 0,
   `so picking one from the dropdown is not a correction, got "${unmappableRecord.fieldsCorrected.join(',')}"`)
-check(unmappableRecord.totalExtractedFields === 6,
-  'while the denominator still counts all six the model populated')
+check(unmappableRecord.totalExtractedFields === 4,
+  `the scorable denominator drops it, got ${unmappableRecord.totalExtractedFields}`)
+check(unmappableRecord.unscorableExtractedFields === 2,
+  'and both the unmappable channel and the unreachable fulfilment are counted as unscorable')
+check(unmappableRecord.totalExtractedFields + unmappableRecord.unscorableExtractedFields === 6,
+  'the two together still account for every field the model populated -- nothing is dropped silently')
 
-// --- a proposal that populated NOTHING has no correction_effort ------------------------------
-// correction_effort = fields_corrected / total_extracted_fields is NaN at a denominator of zero.
-// Stored, one such record turns an evaluation average into NaN, or -- if the evaluator sums
-// numerators and denominators instead -- reads as a flawless extraction of a message the model in
-// fact failed on completely. There is no observation here, so there is no record.
+// --- a proposal that populated NOTHING is an OUTCOME, not an absence --------------------------
+// P1(b). The golden set in tests/fixtures/order_intake_v1.json contains two all-null
+// `not_an_order` fixtures -- en-prompt-injection-no-order-17 and en-retracted-order-19 -- and
+// section 9 averages correction effort across all 20. A model that correctly extracts nothing from
+// a prompt injection has SUCCEEDED. Dropping the record made that success indistinguishable from a
+// draft nobody reviewed or a storage failure, and the 20-fixture population unreconstructable.
+//
+// The metric policy is carried IN the record rather than left to the reader: correctionEffort is
+// null, which says "this observation contributes no ratio". Storing 0 instead would dilute the
+// average downward and make the <= 0.20 gate easier to pass -- the one direction a metric must
+// never be wrong in.
 const emptyResponse = await buildWideResponse({
   scope: 'not_an_order',
   status: 'needs_clarification',
@@ -561,24 +605,82 @@ const emptyProposed = await buildManagedChannelOrderDraft({
   response: emptyResponse,
   sourceLabel: SOURCE_LABEL,
 })
-const fullyManual = acceptWide()
-check(channelOrderDraftIsReady(fullyManual), 'the operator typed the whole order in by hand')
+check(!channelOrderDraftIsReady(emptyProposed), 'the proposal is not acceptable, as it should not be')
+check(emptyProposed.blockers.includes('ai_not_an_order'), 'and it says why')
+
+const declineStorage = makeStorage()
+const declined = captureOrderIntakeCorrection(declineStorage, {
+  generation: emptyGeneration, proposed: emptyProposed, accepted: null, acceptedAt: ACCEPTED_AT, actor: ACTOR, scope: SCOPE,
+})
+check(declined !== null, 'the operator correctly refusing the message IS recorded')
+check(declined.outcome === 'declined', 'as a declined review, not as an acceptance')
+check(declined.correctionEffort === null,
+  `with no correction_effort defined, got ${declined.correctionEffort}`)
+check(declined.correctionEffort !== 0,
+  'explicitly NOT zero -- a zero would dilute the average toward passing the <= 0.20 gate')
+check(declined.totalExtractedFields === 0 && declined.correctionCount === 0,
+  'nothing extracted and nothing corrected')
+check(declined.actor === ACTOR, 'and it is still a NAMED operator judgement, which is what makes it evidence')
+check(readOrderIntakeEvidence(declineStorage, SCOPE).length === 1,
+  'the declined record survives the round trip rather than being dropped on read')
+check(readOrderIntakeEvidence(declineStorage, SCOPE)[0].correctionEffort === null,
+  'and its null correction_effort survives too, so the evaluator sees the policy, not an absence')
+
+// The fingerprint guard is NOT weakened on the decline path: it still runs, against the proposal.
 check(buildOrderIntakeEvidenceRecord({
-  generation: emptyGeneration, proposed: emptyProposed, accepted: fullyManual, acceptedAt: ACCEPTED_AT, actor: ACTOR, scope: SCOPE,
-}) === null, 'and a zero denominator produces no record rather than a NaN correction_effort')
-const zeroStorage = makeStorage()
-check(captureOrderIntakeCorrection(zeroStorage, {
-  generation: emptyGeneration, proposed: emptyProposed, accepted: fullyManual, acceptedAt: ACCEPTED_AT, actor: ACTOR, scope: SCOPE,
-}) === null && zeroStorage.raw() === '', 'the capture entry point writes nothing for it either')
-const zeroDenominator = makeStorage({
+  generation: emptyGeneration, proposed: { ...emptyProposed, messageFingerprint: null }, accepted: null, acceptedAt: ACCEPTED_AT, actor: ACTOR, scope: SCOPE,
+}) === null, 'a decline with no message fingerprint produces no record')
+check(buildOrderIntakeEvidenceRecord({
+  generation: emptyGeneration, proposed: emptyProposed, accepted: null, acceptedAt: ACCEPTED_AT, actor: '', scope: SCOPE,
+}) === null, 'and an unnamed decline is not an observation either')
+
+// A decline cannot smuggle in corrections, on write or on read.
+const forgedDecline = makeStorage({
   [SCOPED_KEY]: JSON.stringify({
     contract: ORDER_INTAKE_EVIDENCE_STATE_CONTRACT,
     version: 2,
-    records: [{ ...written, fieldsExtracted: [], fieldsCorrected: [], correctionCount: 0, totalExtractedFields: 0 }],
+    records: [{ ...written, outcome: 'declined' }],
   }),
 })
-check(readOrderIntakeEvidence(zeroDenominator, SCOPE).length === 0,
-  'and one hand-written into storage is refused on read')
+check(readOrderIntakeEvidence(forgedDecline, SCOPE).length === 0,
+  'a stored record that claims corrections on a declined review is refused')
+
+// A model that populated ONLY an unscorable field still yields a defined outcome with a null ratio,
+// rather than a division by zero.
+const fulfilmentOnly = await buildWideResponse({
+  customer_reference: null,
+  channel: null,
+  sku: null,
+  quantity: null,
+  payment: null,
+  fulfilment: 'delivery',
+  missing_fields: ['customer_reference', 'channel', 'sku', 'quantity', 'payment'],
+  provenance: [{ field: 'fulfilment', source_spans: [wideSpan('deliver to Yangon')] }],
+})
+const fulfilmentOnlyGeneration = readManagedIntakeGeneration(fulfilmentOnly)
+check(fulfilmentOnlyGeneration.extractedFields.total === 1, 'one populated field')
+const fulfilmentOnlyProposed = await buildManagedChannelOrderDraft({
+  catalogSkus: CATALOG, fallbackChannel: 'Viber', message: WIDE_MESSAGE, response: fulfilmentOnly, sourceLabel: SOURCE_LABEL,
+})
+const fulfilmentOnlyRecord = buildOrderIntakeEvidenceRecord({
+  generation: fulfilmentOnlyGeneration, proposed: fulfilmentOnlyProposed, accepted: acceptWide(), acceptedAt: ACCEPTED_AT, actor: ACTOR, scope: SCOPE,
+})
+check(fulfilmentOnlyRecord.totalExtractedFields === 0 && fulfilmentOnlyRecord.unscorableExtractedFields === 1,
+  'nothing scorable, one unscorable')
+check(fulfilmentOnlyRecord.correctionEffort === null,
+  'so no ratio is defined -- and NaN never reaches storage')
+check(!Number.isNaN(fulfilmentOnlyRecord.correctionEffort), 'stated directly: the stored metric is never NaN')
+
+// A stored ratio that disagrees with the counts it derives from is a fabricated number.
+const forgedEffort = makeStorage({
+  [SCOPED_KEY]: JSON.stringify({
+    contract: ORDER_INTAKE_EVIDENCE_STATE_CONTRACT,
+    version: 2,
+    records: [{ ...written, correctionEffort: 0 }],
+  }),
+})
+check(readOrderIntakeEvidence(forgedEffort, SCOPE).length === 0,
+  'a record whose correction_effort disagrees with its own counts is refused on read')
 
 // --- NO raw message text is ever stored --------------------------------------
 // The serialised record is searched for every meaningful fragment of the message, not just the
@@ -867,5 +969,11 @@ check(channelOrderFields.join(',') === 'customer,sku,quantity,payment',
 //  10. reverting the storage key to a single device-wide one -> "a scoped key is registered in
 //      local-workspace-storage.ts, so a device reset reaches it" (the registration check fires
 //      first; "two workspaces write to two separate keys on the same device" catches it too)
+//  11. padding the denominator with unscorable fields again (P1a)
+//      -> "the denominator is the SCORABLE populated set, got 6" (the 5/5 case catches it too)
+//  12. dropping the declined record instead of carrying it (P1b)
+//      -> "the operator correctly refusing the message IS recorded"
+//  13. storing 0 instead of null for an undefined ratio
+//      -> "with no correction_effort defined, got 0"
 
 console.log(`order intake correction capture contract: ${checks} checks passed`)
