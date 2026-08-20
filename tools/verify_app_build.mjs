@@ -5773,6 +5773,157 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   || !coreSource.includes('loyalty={receiptLoyalty}')
   || !receiptDialogSource.includes('Points balance')
   || !workspaceControlsPageSource.includes('Points are redeemed as a discount recorded on the order — 1 point = 1 MMK')) fail('shop_loyalty_redemption_contract_missing')
+// G2 receipt print geometry. A counter receipt goes on a continuous thermal ROLL, so the
+// printed document carries a roll layout by default and a sheet layout only when the print
+// service reports sheet-sized media. Prefix pins on the branch conditions and on `@page {
+// margin:`, not on the values inside them, so tuning an inset or a font size does not trip
+// this -- the roll inset in particular is the number the file marks UNVERIFIED and expects
+// the founder device test to revise.
+//
+// The negative is the one that earns its keep. `size: <length> auto` READS like the way to
+// say "80mm wide, length decided by the roll", and it is what a competitive-scan note
+// recommended -- but the `size` grammar takes `auto` alone, one length (a SQUARE page), or
+// two lengths, never a length beside `auto` in either order. A browser discards the whole
+// declaration and falls back to sheet geometry, so a receipt built on it looks finished,
+// passes every gate, and fixes nothing on real paper. Measured in Chromium: `size: 80mm
+// auto` renders a 215.9x279.4mm page, identical to declaring no size at all.
+//
+// Two things the pattern has to get right. It anchors `size` on a non-identifier boundary,
+// or it would also fire on `background-size: 40mm auto` -- the idiomatic way to scale a
+// logo, exactly what a shop-logo receipt feature would add, failing the gate under a key
+// that names the wrong problem. And it accepts any unit and BOTH orders, because
+// `size: auto 80mm` and `size: 20rem auto` are equally invalid and equally silent.
+//
+// Scoped to the RECEIPT_PRINT_STYLES template rather than the whole file, because the
+// comment above it necessarily SPELLS the invalid declaration out in order to warn about
+// it -- the same carve-out check_css_contracts.mjs makes for hex in comments, and for the
+// same reason: turning the warning into the violation would punish the note. The slice
+// bounds are checked rather than passed straight to String.slice, which treats a -1 end as
+// length - 1 and would silently widen the scan to the rest of the file on a rename.
+const receiptStylesStart = receiptDialogSource.indexOf('const RECEIPT_PRINT_STYLES = `')
+const receiptStylesEnd = receiptDialogSource.indexOf('function openPrintWindow(')
+const receiptPrintStyles = receiptStylesStart >= 0 && receiptStylesEnd > receiptStylesStart
+  ? receiptDialogSource.slice(receiptStylesStart, receiptStylesEnd)
+  : ''
+const receiptRollBranchStart = receiptPrintStyles.indexOf('@media print {')
+const receiptRollBranchEnd = receiptPrintStyles.indexOf('@media print and (max-width:')
+const receiptRollBranch = receiptRollBranchStart >= 0 && receiptRollBranchEnd > receiptRollBranchStart
+  ? receiptPrintStyles.slice(receiptRollBranchStart, receiptRollBranchEnd)
+  : ''
+if (!receiptDialogSource.includes('<style>${RECEIPT_PRINT_STYLES}')
+  || !receiptPrintStyles
+  || !receiptRollBranch
+  || !receiptRollBranch.includes('@page { margin:')
+  || !receiptPrintStyles.includes('@media print and (max-width: 65mm) {')
+  || !receiptPrintStyles.includes('@media print and (min-width: 90mm) {')
+  || !/@media print and \(min-width: 90mm\) \{[^}]*@page \{ margin:/.test(receiptPrintStyles)
+  || /(?<![-\w])size\s*:\s*(?:[\d.]+[a-z%]+\s+auto|auto\s+[\d.]+[a-z%]+)/i.test(receiptPrintStyles)) fail('receipt_roll_print_geometry_missing')
+// Roadmap §2 item 5 -- anomaly flags on the close (shop-close-anomaly-flags.ts).
+// A shop owner closing the till is told what was unusual about the day without
+// having to know what to look for. The value of that depends entirely on it
+// never saying something false, so the pins here are the four ways it could:
+//   1. IT IS A PROJECTION, NOT A FEATURE WITH STATE. The module's only import is
+//      a TYPE import -- erased at build, so the module can reach nothing: no
+//      write path, no storage, no network. It also reads NO CLOCK, so "today"
+//      means "the most recent close" and replaying the same state always gives
+//      the same answer. A stored anomaly would be a claim outliving the data
+//      that justified it, which is why nothing here is stored.
+//   2. THIN DATA FAILS QUIET. Under a full trading week of prior closes the
+//      surface says it is still learning and raises nothing -- a shop with three
+//      closes is never handed an invented "usual day".
+//   3. A MEASURE IS ONLY READ WHERE IT WAS RECORDED. A legacy close carries no
+//      payment-exception list and a close saved without a drawer count carries
+//      no variance; reading either as a zero would drag the median down and
+//      manufacture a spike out of an ordinary day, so both read null and the
+//      close simply sits out of that measure's baseline.
+//   4. GUIDED SAMPLES RAISE NOTHING (CLAUDE.md proof-counter rule) -- identified
+//      by the ACT-DEMO- actionId prefix on the order's own stock movement OR by
+//      the working sample's SETUP-SAMPLE- order-id prefix, never by an actor
+//      string, and excluded from the baseline as well as from the subject
+//      position. Two markers because re-seeding a working sample DELETES its
+//      movements and orders while leaving `closes` untouched, which would leave
+//      an old all-sample close reading as real trading. The test is "touches ANY
+//      sample order", not "is made entirely of them": commerceCloseExpectation
+//      sweeps every completed, reconciled, unclosed order into the day whatever
+//      its origin, and createSeedCommerce ships ORD-1039 already reconciled, so
+//      a seeded workspace's FIRST close is normally mixed and its `total` is a
+//      sum across both. Such a close is dropped whole rather than netted out --
+//      the close records no per-order amounts, so subtracting would re-derive
+//      them from data a working-sample re-seed deletes and order corrections
+//      move. An empty or absent order list is NOT a sample: missing evidence
+//      must not become a verdict about records that do not exist.
+//   5. AN ALL-CLEAR SPEAKS ONLY FOR WHAT WAS COMPARED. `comparedMeasures` names
+//      the measures that had both a value on this close and a full baseline, and
+//      the "nothing stood out" sentence is built from that list -- a shop that
+//      never counts its drawer must not be told its drawer looked normal.
+// The arithmetic itself (thresholds, zero medians, window bounds, purity) is
+// pinned EXECUTABLY in tools/test_shop_close_anomaly.mjs. That file cannot be
+// its own chain step (package.json is digest-bound), so commerce:close:verify
+// imports it -- the gate step that already owns the daily close. Both halves are
+// pinned below: a string pin cannot see broken arithmetic, and an unrun test
+// cannot see a deleted string.
+const shopCloseAnomalySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-close-anomaly-flags.ts'), 'utf8')
+const commerceCloseTestSource = await readFile(resolve(root, 'tools', 'test_commerce_daily_close.mjs'), 'utf8')
+const shopCloseAnomalyImports = shopCloseAnomalySource.split('\n').filter((line) => line.startsWith('import ')).join('\n')
+if (shopCloseAnomalyImports !== "import type { CommerceClose, CommerceState } from './commerce-workspace.ts'"
+  || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'localStorage', 'sessionStorage', 'new Date', 'Date.now', 'Date.parse', 'mutateCommerce', 'saveCommerceClose', 'validateCommerceState'].some((marker) => shopCloseAnomalySource.includes(marker))
+  || !shopCloseAnomalySource.includes('export const SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS = 7')
+  || !shopCloseAnomalySource.includes('export const SHOP_CLOSE_ANOMALY_BASELINE_WINDOW = 14')
+  || !shopCloseAnomalySource.includes('export const SHOP_CLOSE_ANOMALY_MULTIPLE = 4')
+  // Thin data: both gates, the whole-surface one and the per-measure one.
+  || !shopCloseAnomalySource.includes('if (baseline.length < SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS) {')
+  || !shopCloseAnomalySource.includes("      state: 'building_baseline',")
+  || !shopCloseAnomalySource.includes('      baselineDaysNeeded: SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS - baseline.length,\n      comparedMeasures: [],\n      flags: [],')
+  || !shopCloseAnomalySource.includes('if (observations.length < SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS) return null')
+  // A close that did not record a measure reads null and is left out of that
+  // measure's observations -- never counted as a zero.
+  || !shopCloseAnomalySource.includes('read: (close) => close.settlement ? Math.abs(close.settlement.totalVarianceMmk) : null')
+  || !shopCloseAnomalySource.includes('read: (close) => close.paymentExceptionOrderIds ? close.paymentExceptionOrderIds.length : null')
+  || !shopCloseAnomalySource.includes('if (value !== null) observations.push(value)')
+  // A zero median has no ratio: the claim becomes "higher than every day in the
+  // window", and no multiple is stated. Takings opts out of that rule entirely.
+  || !shopCloseAnomalySource.includes('if (!spec.spikeOnZeroMedian) return null')
+  || !shopCloseAnomalySource.includes("basis: 'above_every_baseline_day', multipleOfMedian: null")
+  // Guided samples, by actionId prefix and never by actor string.
+  || !shopCloseAnomalySource.includes("const SAMPLE_ACTION_ID_PREFIX = 'ACT-DEMO-'")
+  || !shopCloseAnomalySource.includes("const SAMPLE_ORDER_ID_PREFIX = 'SETUP-SAMPLE-'")
+  || !shopCloseAnomalySource.includes('movement.actionId.startsWith(SAMPLE_ACTION_ID_PREFIX)')
+  || !shopCloseAnomalySource.includes('return sampleOrderIds.has(orderId) || orderId.startsWith(SAMPLE_ORDER_ID_PREFIX)')
+  || !shopCloseAnomalySource.includes('if (!orderIds || orderIds.length === 0) return false')
+  || !shopCloseAnomalySource.includes('return orderIds.some((orderId) => shopCloseOrderIsGuidedSample(orderId, sampleOrderIds))')
+  || shopCloseAnomalySource.includes('orderIds.every(')
+  || !shopCloseAnomalySource.includes('.filter((close) => !shopCloseTouchesGuidedSample(close, sampleOrderIds))')
+  // The median the threshold and the ratio use is EXACT. Rounding it moves the
+  // threshold: over [0,0,0,0,1,1,1,1] a day with 2 unpaid orders is exactly 4x.
+  || !shopCloseAnomalySource.includes('baselineMedian: shopCloseAnomalyMedian(observations),')
+  || shopCloseAnomalySource.includes('Math.round(shopCloseAnomalyMedian(')
+  // An all-clear names only what was compared, and a zero-order close never
+  // raises a downward takings flag (the accountable-snapshot flow).
+  || !shopCloseAnomalySource.includes('comparedMeasures.push(spec.measure)')
+  || !shopCloseAnomalySource.includes('if (spec.watchLow && subject.orders > 0 && todayValue * SHOP_CLOSE_ANOMALY_MULTIPLE <= baselineMedian)')
+  // The executable half runs inside the chain step that owns the daily close.
+  || !commerceCloseTestSource.includes("await import('./test_shop_close_anomaly.mjs')")
+  // The Shop close surface reads it, and says which of the four states it is in
+  // rather than rendering an empty box when there is nothing to report.
+  || !coreSource.includes('const closeAnomaly = useMemo(() => projectShopCloseAnomalyFlags(commerce), [commerce])')
+  || !coreSource.includes('data-close-anomaly={closeAnomaly.state}')
+  || !coreSource.includes("closeAnomaly.state === 'no_close' ? null")
+  || !coreSource.includes('Until then there is no usual day to compare against.')
+  // The all-clear claims only that no threshold was crossed -- everything
+  // between a quarter and four times the usual day lands in it.
+  || !coreSource.includes('`Nothing in your ${closeAnomalyComparedPhrase(closeAnomaly.comparedMeasures)} was far enough from your usual day to be worth raising.`')
+  // The block names the close it read -- the projection means "the most recent
+  // close", not "today", and a morning reader must not be shown yesterday's
+  // drawer as though it were still countable.
+  || !coreSource.includes('{closeAnomaly.businessDate ? `${closeAnomaly.businessDate} against your usual day`')
+  // The baseline phrase names the set that was actually compared, and the
+  // percentage is recomputed from the exposed figures, not from the rounded
+  // multiple.
+  || !coreSource.includes('const closeAnomalyBaselinePhrase = (flag: ShopCloseAnomalyFlag) => flag.baselineDays === flag.windowDays')
+  || !coreSource.includes('more than on any of the ${flag.baselineDays} earlier closes that recorded it')
+  || !coreSource.includes('const percentOfUsual = flag.baselineMedian > 0 ? Math.round((flag.todayValue / flag.baselineMedian) * 100) : 0')
+  || !coreCssSource.includes('.close-anomaly { display: grid;')
+  || !coreCssSource.includes('.close-anomaly-list { display: grid;')) fail('shop_close_anomaly_contract_missing')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('supplierSourcingDraft')
@@ -19474,21 +19625,26 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // chip, and the settings panel). Raised to 3_050_000: covers the measured
 // number with ~18_824 bytes of headroom, the same order of headroom the
 // previous two ceilings gave.
-// RAISE 2026-08-20 (G3, offline precache reaches the till): fresh dist/ measures
-// 3_051_233 -- 1_233 bytes over -- after +3_358 bytes of real product value. Nothing
-// here is app code getting fatter; it is four small artifacts that make the
-// "works offline" claim true instead of decorative:
-//   * three shell scripts (theme-restore.js, sw-register.js, vercel-insights.js,
-//     ~600 B together) that USED to be inline <script> blocks and were therefore
-//     refused outright by `script-src 'self'` -- which is why the service worker
-//     had never registered and nothing worked offline at all;
-//   * the sealed precache list in sw.js (~2.4 KB), 32 entries derived from Vite's
-//     own manifest by showroom/scripts/seal-offline-precache.mjs, which is what
-//     finally puts /shop/ and /plant/ in the offline cache.
-// Vite's manifest is deleted after the seal, so it contributes nothing. Raised to
-// 3_070_000: covers the measured number with ~18_767 bytes of headroom, the same
-// order of headroom the previous three ceilings gave.
-if (bytes > 3_070_000) fail(`artifact_budget:${bytes}`)
+// RAISE 2026-08-20 -- two landings, one ceiling. Both were measured alone; the
+// number below is re-measured on a fresh dist/ with BOTH present, because the
+// first of them said in this very comment not to carry a solo figure over.
+//   * Roadmap section 2 item 5, anomaly flags on the close (#515): the
+//     shop-close-anomaly-flags projection plus the close-surface block reading it.
+//   * G3, offline precache reaches the till (#519): +3_358 bytes of four small
+//     artifacts that make the "works offline" claim true instead of decorative --
+//     three shell scripts (theme-restore.js, sw-register.js, vercel-insights.js,
+//     ~600 B) that USED to be inline <script> blocks and were therefore refused
+//     outright by `script-src 'self'`, which is why the service worker had never
+//     registered and nothing worked offline at all; plus the sealed 32-entry
+//     precache list in sw.js (~2.4 KB), derived from Vite's own manifest by
+//     showroom/scripts/seal-offline-precache.mjs. Vite's manifest is deleted
+//     after the seal, so it contributes nothing.
+// Re-measured together on a fresh dist/ via the ROOT `npm run app:build`:
+// 3_056_576, leaving ~13_424 bytes of headroom under 3_070_000. Build via the
+// root script, not `npm --prefix showroom run build` -- the latter skips
+// app:release:write, so sw.js never gets its placeholder and the precache seal
+// fails (caught at :537, but it wastes a measurement). No app code was shrunk
+// to fit.if (bytes > 3_070_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
