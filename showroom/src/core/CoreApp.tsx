@@ -2923,8 +2923,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           : ' Export a backup from Settings so these records are safe off the device.'}
         {' There is no way to free up room inside Shop yet, so a backup is the safe step today.'}
         <small className="storage-headroom-detail">{commerceHeadroom.limit === 'inventory-commands'
-          ? `${commerceHeadroom.commands.toLocaleString()} of ${commerceHeadroom.commandCeiling.toLocaleString()} stock log entries used - 2 per sale`
-          : `${(commerceHeadroom.bytes / 1048576).toFixed(2)} MB of ${(commerceHeadroom.byteCeiling / 1048576).toFixed(2)} MB used - about ${Math.round(commerceHeadroom.bytesPerSale).toLocaleString()} bytes per sale${commerceHeadroom.bytesPerSaleMeasured ? ' on this device' : ''}`}</small>
+          ? `${commerceHeadroom.commands.toLocaleString()} of ${commerceHeadroom.commandCeiling.toLocaleString()} stock log entries used · 2 per sale`
+          : `${(commerceHeadroom.bytes / 1048576).toFixed(2)} MB of ${(commerceHeadroom.byteCeiling / 1048576).toFixed(2)} MB used · about ${Math.round(commerceHeadroom.bytesPerSale).toLocaleString()} bytes per sale${commerceHeadroom.bytesPerSaleMeasured ? ' on this device' : ''}`}</small>
       </p>
       <Link to="/settings/#controls">Open Settings</Link>
     </div>
