@@ -7592,9 +7592,17 @@ async function verifyShopDemandIntelligenceRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-demand-intelligence.ts')).href}?shop-demand-intelligence-verify=${Date.now()}`)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-demand-commerce-verify=${Date.now()}`)
-    const state = commerce.createSeedCommerce()
+    // Seed and query must share ONE clock. createSeedCommerce()'s default is the frozen
+    // deterministicSeedNow (commerce-workspace.ts), and its completed order lands 5h before
+    // that instant -- so pairing it with a wall-clock asOf made this assertion a time bomb:
+    // the order aged out of the 28-day lookback exactly 28 days after the frozen date and
+    // turned main's gate red on 2026-08-20. Seeding from the same instant we query with keeps
+    // the 5h gap fixed forever, and keeps the assertion measuring what it means to measure
+    // (a real completed sale inside the window) instead of measuring the calendar.
+    const seedNow = Date.now()
+    const state = commerce.createSeedCommerce(seedNow)
     const before = JSON.stringify(state)
-    const asOf = Date.now() + 60_000
+    const asOf = seedNow + 60_000
     const projection = model.projectShopDemandIntelligence(state, asOf)
     const completedSale = projection.rows.find((row) => row.sku === 'SM-1004')
     assert(projection.contract === 'supermega.shop.demand-intelligence.v1'
