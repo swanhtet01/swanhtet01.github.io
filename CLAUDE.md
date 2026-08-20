@@ -104,10 +104,17 @@ actor string — actor strings are display copy and will be rewritten.
    sale" line below is what this file used to say before phase 2 closed).
    Phase 3 is next: structural, each item "needs its own planning pass"
    before implementation — do not blind-implement a phase 3 item from its
-   one-line queue description alone. Highest-leverage unblocked item: bottom-
-   nav work modes (item 1 shipped, so its prerequisite is clear; touches the
-   pinned `mobile-nav` markup at `tools/verify_app_build.mjs` ~1093 and
-   requires a full keyboard regression pass as acceptance criteria).
+   one-line queue description alone. Phase 3 progress as of 2026-08-20 — do
+   NOT re-chase these, they are closed in `DESIGN-PROGRAM.md` with evidence:
+   P3.0 (CSS ratchet), P3.6a/b/c (px→rem, lane COMPLETE), and P3.7 (bottom-nav
+   work modes, which this line used to name as the next item) have all shipped.
+   Remaining phase 3: the website lane (P3.1-P3.4 pin cataloguing and gen-one
+   deletion), P3.5 ecommerce literal retirement, P3.8 selling-surface IA
+   (batch 1 = plain-language lead lines above the compliance litanies, added
+   BEFORE the pinned strings and never edits to them; batches 2-3 = the
+   Operations regrouping, which needs a founder probe first), and P3.9 as a
+   standing attrition rule rather than a PR. Phase-3 exit criteria are listed
+   at the end of that doc's execution plan.
 2. ~~Verified correctness backlog~~ — all four items closed 2026-08-18 on
    `claude/supermega-dev-ceo-aije17`; do not re-chase them:
    - **SSRF IPv6 gap** — real, fixed (`cdb7c1d6`). NAT64 `64:ff9b::/96` and the
