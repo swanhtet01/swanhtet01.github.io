@@ -518,14 +518,19 @@ const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> 
     ['REST-SVC-EVENT', 'Private event consultation 45 min', 'pcs', 15_000, 25_000, 999, 0],
   ],
   spa: [
-    // A deposit unit, copied from the restaurant pack's REST-SVC-DEPOSIT rather than invented.
-    // paymentStatus is binary, so part-payment cannot be expressed on an order; it CAN be
-    // expressed as an ordinary counter sale, which is an ordinary order with ordinary evidence
-    // that the daily close already understands. Priced as a 10,000 MMK unit so quantity carries
-    // the amount: the shipped bridal package is 325,500 MMK, and ten of these is the 100,000 a
-    // spa would actually ask for up front. The name says the unit because the counter shows the
-    // name and nothing else would tell her.
-    ['SPA-SVC-DEPOSIT', 'Treatment package deposit 10000 MMK', 'pcs', 6_000, 10_000, 999, 0],
+    // A deposit unit, copied from the restaurant pack's REST-SVC-DEPOSIT rather than invented --
+    // including its NAME SHAPE. paymentStatus is binary, so part-payment cannot be expressed on
+    // an order; it CAN be expressed as an ordinary counter sale, which is an ordinary order with
+    // ordinary evidence that the daily close already understands. Priced as a 10,000 MMK unit so
+    // quantity carries the amount: the shipped bridal package is 325,500 MMK, and ten of these is
+    // the 100,000 a spa would actually ask for up front.
+    //
+    // The amount is deliberately NOT in the name. The price column is the only source of truth
+    // for the price, and a name carrying its own copy of it becomes a lie the moment a shop
+    // raises its deposit -- printing "deposit 10000 MMK" on a 15,000 MMK receipt, with nothing
+    // enforcing the two stay in step. Name-and-price drift is exactly the class of fault
+    // test_industry_pack_sample_pairing.mjs exists to catch, after it bit a real spa pilot.
+    ['SPA-SVC-DEPOSIT', 'Treatment package deposit', 'pcs', 6_000, 10_000, 999, 0],
     ['SPA-SVC-CONSULT', 'Consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
     ['SPA-SVC-MASSAGE', 'Traditional Myanmar massage 60 min', 'pcs', 27_000, 45_000, 999, 0],
     ['SPA-SVC-OIL', 'Aromatic oil massage 90 min', 'pcs', 39_000, 65_000, 999, 0],
@@ -537,7 +542,7 @@ const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> 
   gym: [
     // Same gap, same fix: a gym sells course blocks and memberships up front, and had no row to
     // take that money against either.
-    ['GYM-SVC-DEPOSIT', 'Training package deposit 10000 MMK', 'pcs', 6_000, 10_000, 999, 0],
+    ['GYM-SVC-DEPOSIT', 'Training package deposit', 'pcs', 6_000, 10_000, 999, 0],
     ['GYM-SVC-CONSULT', 'Fitness consultation 30 min', 'pcs', 9_000, 15_000, 999, 0],
     ['GYM-SVC-PT', 'Personal training 60 min', 'pcs', 18_000, 30_000, 999, 0],
     ['GYM-SVC-COMPOSITION', 'Body composition check 20 min', 'pcs', 4_800, 8_000, 999, 0],
