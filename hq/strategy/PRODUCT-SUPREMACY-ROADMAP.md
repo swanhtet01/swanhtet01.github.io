@@ -140,3 +140,36 @@ status column in §1 for each. The operative forward sequence is now:
    server-only and spends no hosted gate.
 5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
    decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
+6. Scaling-ceiling work, from `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md`
+   (2026-08-20, revised twice after Codex review on #500): of the nine
+   founder-only steps on the client path, seven are permanent hard limits and
+   **four** of those (steps 1, 5, 6, 7) are paid ONCE for the whole company.
+   Step 2 recurs per outreach batch; **step 10 recurs per client per billing
+   cycle (two CLI commands); step 11 does NOT recur** —
+   `grant_entitlement` refuses an already-granted entitlement
+   (`billing_rail.py:1091`), so it is onboarding-or-post-revocation work.
+   **The recurring cadence is not settled**: D5 (entitlement lapse policy) is
+   an open founder ask, and a re-establish-each-cycle policy would add
+   `revoke-entitlement` + `grant-entitlement` per cycle, roughly doubling it.
+   So the per-client ceiling is not "eight founder steps"; near-term it is the
+   five on-site days of the design-partner pilot. Top item is **A2: make the
+   billing READ path fail closed on every mutation privilege, then decouple it
+   from the write credential** (S–M, verified defect — `_assert_schema` only
+   REQUIRES the mutation flags when `require_write_privilege` is true and never
+   REJECTS them when false, `DELETE` is never probed for `current_user`, and
+   `billing_events` UPDATE is not probed either; so merely skipping the
+   privileged-role assertion would leave the "service cannot mutate billing"
+   invariant resting on hand-provisioning. Mirror the existing
+   `runtime_role_denied` `bool_and` idiom onto the connecting role. Prereq is a
+   founder-provisioned bounded read role). **A1 (pilot measurement) was
+   re-costed from M to L and dropped to second**: it is NOT a pure projection —
+   only 1 of the 5 measurements is derivable from `CommerceState` (exception
+   rate, and only the domain-recorded subset), 2 need device-local
+   instrumentation, and 2 are irreducibly human. Do NOT implement A1 as a
+   projection: `CommerceOrder` has no per-transition timestamps, `CommerceClose`
+   has no start time, and `corrections[]` is a financial ledger, not an
+   operator-error counter — deriving those would mislabel acceptance evidence.
+   Adding order fields is backend-gated (`commerce_runtime.py` exact-field
+   contracts + founder-only release dispatch), so use the device-local
+   `shop-loyalty.ts` PR1 pattern. Each needs its own planning pass; do not
+   blind-implement from this line.
