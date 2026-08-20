@@ -173,9 +173,23 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
  * trade she just chose (dropping it silently would be its own small lie), say plainly that nothing
  * was added, and name the one next step so being routed onward reads as the next move rather than
  * an error.
+ *
+ * It deliberately makes NO claim that her trade was SAVED, because for a company account it is
+ * not. Both writes that would have kept it are browser-local and both are now guarded:
+ * provisionLocalShopIndustryPack (the pack id) and provisionLocalShopBusinessTemplateSample (the
+ * commerce stamp readLocalShopBusinessTemplateId reads back). What survives is only the derived
+ * workflow template on the setup record, and that does not distinguish her trade -- measured, six
+ * of the ten trades persist identically as 'retail-wholesale'. On her next visit
+ * readLocalShopIndustryPackId returns the 'retail' default and readLocalShopBusinessTemplateId
+ * returns null, so the picker shows "Standard sample", not her trade.
+ *
+ * An earlier draft opened with "<trade> is saved as your business type". That is the kind of
+ * technically-not-false sentence this whole module exists to remove: it invites her to believe a
+ * spa catalog is on file and waiting. Contrast managedPlantOnboardingNotice, which DOES say
+ * "saved" -- because Plant's pack id genuinely round-trips.
  */
 export function managedShopOnboardingNotice(businessTypeName: string): string {
-  return `${businessTypeName} is saved as your business type. Company accounts do not get sample records, `
+  return `You chose ${businessTypeName}, but company accounts do not get sample records, `
     + 'so nothing was added to this workspace. Open Shop and add your first real item. The prices and stock '
     + 'you enter there are the ones your team sells from.'
 }
@@ -223,7 +237,10 @@ export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
  * "is saved as your plant type" is literally true here, and deliberately so:
  * savePlantIndustryPackId is kept OUTSIDE the managed guard in ProductOnboardingPage, because the
  * picker's choice is a device preference that readPlantIndustryPackId reads back on her next
- * visit -- not workspace data a managed account would need the server to hold.
+ * visit -- not workspace data a managed account would need the server to hold. Verified as an
+ * EXACT round-trip for all five packs: what she picks is what readPlantIndustryPackId returns
+ * and what the picker shows her again. Shop cannot say the same, which is why its notice
+ * claims nothing about saving -- see managedShopOnboardingNotice above.
  */
 export function managedPlantOnboardingNotice(plantTypeName: string): string {
   return `${plantTypeName} is saved as your plant type. Company accounts do not get sample records, `

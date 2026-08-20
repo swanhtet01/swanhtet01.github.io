@@ -7990,6 +7990,16 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
     assert(/first real item/i.test(shopNotice), 'managed_shop_notice_names_no_next_step')
     assert(/nothing was added|no sample records|do not get sample records/i.test(shopNotice), 'managed_shop_notice_omits_the_absence')
     assert(/Open Shop/i.test(shopNotice), 'managed_shop_notice_omits_destination')
+    // ...and makes NO claim that her trade was saved, because for a company account it is not.
+    // Both browser-local writes that would have kept it are now guarded, and what does survive --
+    // the derived workflow template on the setup record -- cannot distinguish her trade: six of
+    // the ten trades persist identically as 'retail-wholesale', and the picker shows "Standard
+    // sample" on her next visit. A sentence like "<trade> is saved as your business type" is
+    // exactly the technically-not-false claim this contract exists to keep out.
+    assert(
+      !/\bsaved as your\b|\bis saved\b|\bwe(?:'ve| have) saved\b|\bkept on file\b/i.test(shopNotice),
+      'managed_shop_notice_claims_the_trade_was_saved',
+    )
     assert(/first real item/i.test(model.MANAGED_SHOP_ONBOARDING_HINT), 'managed_shop_hint_hides_what_the_tap_does')
     // Built from the argument, not a fixed string that happens to mention a spa.
     assert(
@@ -8007,6 +8017,12 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
     assert(/first real job/i.test(plantNotice), 'managed_plant_notice_names_no_next_step')
     assert(/nothing was added|no jobs|do not get sample records/i.test(plantNotice), 'managed_plant_notice_omits_the_absence')
     assert(/Open Plant/i.test(plantNotice), 'managed_plant_notice_omits_destination')
+    // The mirror image of the Shop assertion above, and the asymmetry is deliberate: Plant DOES
+    // say "saved" because savePlantIndustryPackId runs for a managed account and
+    // readPlantIndustryPackId returns the same pack id back into the picker -- an exact round-trip
+    // for all five packs. If that save is ever moved inside the guard, this claim stops being true
+    // and this line is what should fail.
+    assert(/\bis saved as your plant type\b/i.test(plantNotice), 'managed_plant_notice_drops_its_true_persistence_claim')
     assert(!/\bitem\b/i.test(plantNotice), 'managed_plant_notice_promises_a_shop_item')
     assert(/first real job/i.test(model.MANAGED_PLANT_ONBOARDING_HINT), 'managed_plant_hint_hides_what_the_tap_does')
     assert(/machine/i.test(model.MANAGED_PLANT_ONBOARDING_JOURNEY.detail), 'managed_plant_journey_detail_omits_the_machine')
