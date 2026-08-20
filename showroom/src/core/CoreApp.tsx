@@ -32,6 +32,7 @@ import {
   normalizeActions,
   productionActionProof,
   useCommerceWorkspace,
+  localShopConfirmed,
   useManagedIdentity,
   useProductionWorkspace,
   useSetupWorkspace,
@@ -41,7 +42,7 @@ import {
   type ActionDomain,
   type PendingAccountableAction,
 } from './workspace-runtime'
-import { getStorageDurability, subscribeStorageDurability } from './storage-durability'
+import { getStorageDurability, measureCommerceHeadroom, subscribeStorageDurability } from './storage-durability'
 import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
@@ -1040,7 +1041,16 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [managedIdentity, , managedIdentitySettled] = useManagedIdentity(runtime.status === 'enterprise')
+  // "Signed out" is NOT the same as "not asked yet", and every surface that fires on being
+  // signed OUT needs the difference. runtime.status starts at 'checking', which keeps
+  // useManagedIdentity disabled, so on first mount a signed-IN operator has
+  // managedIdentity === null exactly like a local shop does -- a naive `if (!managedIdentity)`
+  // therefore runs the LOCAL arm for a company account until /api/health answers and the
+  // identity probe resolves behind it. localShopConfirmed requires all three: health
+  // answered at all, the probe settled behind it, and no identity returned. Its lifecycle
+  // is enumerated frame by frame in tools/storage_durability.test.mjs.
+  const confirmedLocalShop = localShopConfirmed(runtime.status, managedIdentitySettled, managedIdentity)
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
   const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
   const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
@@ -1083,7 +1093,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} confirmedLocalShop={confirmedLocalShop} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1419,7 +1429,7 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, confirmedLocalShop, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
@@ -1427,6 +1437,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ecommerceOrderRescheduleNavigationIntent: EcommerceOrderRescheduleIntent | null
   ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
   ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
+  confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
   requestedSource: string | null
@@ -1438,6 +1449,22 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [shopSchedule, setShopSchedule] = useState<ShopServiceScheduleState | null>(readLocalShopServiceSchedule)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
+  // Workspace headroom. LOCAL SHOPS ONLY: a company account keeps the ledger server-side
+  // and neither local ceiling applies to it (workspace-runtime.ts branches on
+  // !managedIdentity long before any of this), so a signed-in operator must never be told
+  // their till is filling up. Gated on confirmedLocalShop rather than on `!managedIdentity`
+  // alone -- see where confirmedLocalShop is derived: a null identity means "not asked yet"
+  // until health and the identity probe have both answered, so the bare check runs the
+  // LOCAL arm for a signed-in session on first mount.
+  //
+  // Keyed on the workspace object identity, which changes only when the workspace is
+  // actually mutated -- so a re-render that changed nothing costs one reference comparison.
+  // measureCommerceHeadroom caches on that same identity and only serializes the workspace
+  // when the shop is near a wall; its doc comment carries the cost profile.
+  const commerceHeadroom = useMemo(
+    () => (confirmedLocalShop ? measureCommerceHeadroom(commerce) : null),
+    [commerce, confirmedLocalShop],
+  )
   const storageDurability = useSyncExternalStore(subscribeStorageDurability, getStorageDurability)
   // The installed sample id is either an industry pack id or a business template id;
   // comparing only the pack id reported a successful template install as "preserved".
@@ -2896,9 +2923,45 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {commerceStuckRecovery.discardError ? <p className="form-notice" data-tone="error">{commerceStuckRecovery.discardError}</p> : null}
     </details>
 
+  // Headroom warning -- the till filling up, said in sales rather than bytes.
+  //
+  // SILENT BY DEFAULT. 'clear' renders nothing whatsoever: a shop at 12% has nothing to do
+  // about it, and a meter that talks when there is nothing to do is a meter that gets
+  // ignored at 95%. Escalation is in TONE as well as colour, because 'tight' can persist
+  // for roughly ten trading days on a plain shop -- it is a quiet notice with no role, and
+  // only 'urgent' takes role="alert" and the danger pill.
+  //
+  // The advice deliberately stops at "take a backup". A follow-up batch that reclaims room
+  // by folding settled orders is DESIGNED but NOT APPROVED -- it rewrites a shop's own
+  // business records and sits behind a founder gate -- so nothing here may promise it. The
+  // copy says only what is true today: a backup is the safe step, and Shop cannot yet free
+  // up room from the inside.
+  const headroomSales = commerceHeadroom?.salesRemaining ?? 0
+  const storageHeadroomNotice = !commerceHeadroom || commerceHeadroom.level === 'clear'
+    ? null
+    : <div className="production-mode-banner storage-durability-banner" data-headroom={commerceHeadroom.level} role={commerceHeadroom.level === 'urgent' ? 'alert' : undefined}>
+      <span className={`status-pill ${commerceHeadroom.level === 'urgent' ? 'danger' : 'pending'}`}>{commerceHeadroom.limit === 'inventory-commands'
+        ? (commerceHeadroom.level === 'urgent' ? 'Stock log almost full' : 'Stock log filling up')
+        : (commerceHeadroom.level === 'urgent' ? 'Storage almost full' : 'Storage filling up')}</span>
+      <p>{headroomSales === 0
+        ? 'This device has no room left for new sales.'
+        : `${commerceHeadroom.level === 'urgent' ? 'Only about' : 'About'} ${headroomSales.toLocaleString()} more ${headroomSales === 1 ? 'sale fits' : 'sales fit'} on this device before Shop stops accepting new sales.`}
+        {commerceHeadroom.limit === 'inventory-commands' ? " This shop's limit is its stock movement log, which cannot be cleared once it is written." : ''}
+        {commerceHeadroom.level === 'urgent'
+          ? ' Export a backup from Settings now. When this device is full Shop stops taking new sales, and the records already saved stay where they are.'
+          : ' Export a backup from Settings so these records are safe off the device.'}
+        {' There is no way to free up room inside Shop yet, so a backup is the safe step today.'}
+        <small className="storage-headroom-detail">{commerceHeadroom.limit === 'inventory-commands'
+          ? `${commerceHeadroom.commands.toLocaleString()} of ${commerceHeadroom.commandCeiling.toLocaleString()} stock log entries used · 2 per sale`
+          : `${(commerceHeadroom.bytes / 1048576).toFixed(2)} MB of ${(commerceHeadroom.byteCeiling / 1048576).toFixed(2)} MB used · about ${Math.round(commerceHeadroom.bytesPerSale).toLocaleString()} bytes per sale${commerceHeadroom.bytesPerSaleMeasured ? ' on this device' : ''}`}</small>
+      </p>
+      <Link to="/settings/#controls">Open Settings</Link>
+    </div>
+
   const commerceBoundary = <>
     {commerceWriteBanner}
     {storageDurabilityNotice}
+    {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
   </>
   const orderNotice = notice || commerceStorageError

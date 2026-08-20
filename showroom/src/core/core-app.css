@@ -844,6 +844,22 @@ textarea { min-height: 72px; resize: vertical; }
 /* A durability warning that ellipsises is a warning the owner cannot act on, so this
    one wraps at every width instead of inheriting the single-line banner treatment. */
 .storage-durability-banner p { overflow: visible; text-overflow: clip; white-space: normal; }
+/* Headroom tints. These are 0-3-0 (two classes + an attribute) rather than the 0-2-0 the
+   evictable/full pair above use, and the extra class is load-bearing, not decoration:
+   `.theme-dark .core-panel, .theme-dark .production-mode-banner, ...` further down this
+   file is ALSO 0-2-0 and sits LATER, so it out-cascades an equal-specificity tint -- which
+   is why the two rules above render as a plain untinted panel in dark mode today. At 0-3-0
+   these win in both themes whatever the file order. The colours are the rgba pair already
+   used above, so no new literal enters either ratchet, and no px does either.
+   Contrast measured on both tinted backgrounds in both themes: the quietest text that
+   lands on them is --core-quiet at 4.80:1 (light, urgent); --core-muted is 5.49:1 or
+   better and --core-ink 14.66:1 or better. */
+.production-mode-banner.storage-durability-banner[data-headroom="tight"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
+.production-mode-banner.storage-durability-banner[data-headroom="urgent"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
+/* The raw number, kept quiet: an owner who wants it can read it, one who does not is not
+   made to. Block, so it drops under the sentence instead of becoming a fourth grid child
+   of the banner and breaking the three-column template. */
+.storage-headroom-detail { display: block; margin-top: 0.125rem; color: var(--core-quiet); font-size: var(--font-size-xs); }
 .commerce-stuck-recovery { border-radius: var(--core-radius); padding: 0 0.6875rem 0.25rem; background: rgba(148,98,0,.06); }
 /* Top margin only. The bottom belongs to the disclosure house rule
    (.evidence-disclosure .panel-copy, same 0-2-0 specificity but later in the file), the
