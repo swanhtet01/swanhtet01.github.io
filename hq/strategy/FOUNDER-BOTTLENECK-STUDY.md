@@ -420,13 +420,26 @@ needs in two more ways:
 **Revised smallest change — the read branch must fail closed on every
 mutation privilege, not merely decline to require them.**
 
-1. Extend the probe to the full matrix: `SELECT`, `INSERT`, `UPDATE`, `DELETE`
-   **and `TRUNCATE`** for `current_user` across all three billing tables —
-   fifteen cells.
-2. When `require_write_privilege` is false, **raise unless every one of the
-   twelve mutation privileges is absent.** A read connection holding any
-   `INSERT`, `UPDATE`, `DELETE` **or `TRUNCATE`** on any billing table is
-   refused outright.
+1. Extend the probe to **every table privilege PostgreSQL defines** —
+   `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`
+   — for `current_user` across all three billing tables: **21 cells**, with the
+   select list generated from the same tuple the checks read.
+2. When `require_write_privilege` is false, **raise unless every one of the 18
+   non-`SELECT` cells is absent.**
+
+   **Enumerate the whole privilege set, not a curated subset.** This spec
+   narrowed twice — first missing `DELETE`, then `TRUNCATE` — so the fix is to
+   the class, not the instance. Two corrections from the implementation
+   (PR #506), both measured on a live server and both against what an earlier
+   revision of this document asserted:
+   - **`TRIGGER` belongs in the refused set.** A `SELECT`+`TRIGGER` role
+     installed a `before insert` trigger returning `NULL`; the founder's next
+     insert reported `INSERT 0 0`. The ledger silently stops recording while
+     writes appear to succeed — no row changed by the role itself, and worse
+     than if one had been. `REFERENCES` is weaker (it cannot read or change a
+     row; it yields an invoice-id existence oracle) and is refused anyway.
+   - **Twelve was the wrong count.** Twelve is right only for the directly
+     row-changing class. The refused set is **18**.
 
    **`TRUNCATE` was missing from an earlier revision of this spec, and it is
    the most dangerous omission of the set** (found in review 2026-08-20,
@@ -465,11 +478,11 @@ mutation privilege, not merely decline to require them.**
    `_overdue_report` exists to surface. The assertion therefore stays
    unconditional, with its own distinct message.
    **Consequence for A2's bounded read role:** it must be `BYPASSRLS` holding
-   `SELECT` only — no `INSERT`, `UPDATE`, `DELETE` **or `TRUNCATE`** on any
-   billing table. What bounds the credential is the mutation refusal in step 2,
-   not this assertion, and that refusal only bounds it once it covers all
-   twelve mutation privileges rather than nine. Steps 1-3 stand as written
-   (step 1-2 as amended above) and are implemented in PR #506.
+   `SELECT` **only** — none of the other six table privileges on any billing
+   table. What bounds the credential is the refusal in step 2, not this
+   assertion, and it bounds it only because that refusal now covers all 18
+   non-`SELECT` cells rather than a curated subset. Steps 1-3 stand as written
+   (1-2 as amended above) and are implemented in PR #506.
 
 **This mirrors a pattern the file already contains.** The `runtime_role_denied`
 probe (`:500-512`) already does exactly this shape — `bool_and` over
@@ -486,7 +499,17 @@ credential for an unverified one — a worse position than the status quo, not a
 better one.
 
 **Size:** S–M (was S) — the probe extension, one new rejection branch, and
-tests covering a read role that wrongly holds each of the twelve privileges.
+tests covering a read role that wrongly holds each of the 18 refused cells.
+
+**The write path deliberately does NOT refuse `TRUNCATE`,** and the reasoning
+is worth keeping because it looks like an inconsistency. That role is
+superuser-class by construction, and `has_table_privilege` reports every
+privilege true for a superuser regardless of `GRANT` (measured: 18/18
+non-`SELECT` held). Refusing `TRUNCATE` there would reject every superuser
+admin role and brick all six mutation commands. The intent — the ledger is
+append-only, so the write role has no business truncating — is right; it
+simply cannot be enforced through this probe. Pinned by a test so the next
+lane does not "fix" it.
 
 **Prerequisite, and it is a real one.** The founder must create that bounded
 read role on the target and place its URL in a service secret. Two conditions
