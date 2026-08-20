@@ -14,7 +14,10 @@
 // of their dynamic imports, and a named list below drops the surfaces that cannot work offline
 // anyway. That polarity is deliberate: forgetting to update an exclusion list costs bytes, while
 // forgetting to update an inclusion list silently breaks offline -- which is precisely the bug
-// being fixed here. A new lazy screen is therefore offline-capable by default.
+// being fixed here. A new lazy screen hung off either root is therefore offline-capable by
+// default. The walk is ONE level deep, though, so a lazy() added INSIDE one of those screens is
+// not covered by that default -- the check near the bottom of this file fails the build on
+// exactly that case rather than letting it become another silent hole.
 //
 // What that yields: the app shell and its chrome (including the product switcher and workspace
 // status panel, which render on every screen), the `core-app` chunk -- /shop/ and /plant/, the till
@@ -35,6 +38,7 @@
 // the bug this script was written to end.
 
 import { readFile, writeFile, rm, stat } from 'node:fs/promises'
+import { writeSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -52,9 +56,11 @@ const swPath = resolve(distDir, 'sw.js')
 const OFFLINE_ENTRY_KEYS = ['index.html']
 const OFFLINE_CHUNK_NAMES = ['core-app']
 
-// Surfaces that are NOT worth the install-time bytes because they cannot be used with the internet
-// down. Entries are manifest module keys or chunk names; every one must still resolve, so a stale
-// name fails the build rather than silently excluding nothing. See the header for the reasoning.
+// Surfaces that are NOT worth the install-time bytes: either they need a network to do anything,
+// or they are one-time setup a shop does once, on connectivity, and never again during a shift.
+// None of them stop working offline -- they cache on first visit like anything else -- they are
+// just not paid for up front. Entries are manifest module keys or chunk names; every one must
+// still resolve, so a stale name fails the build rather than silently excluding nothing.
 const ONLINE_ONLY = [
   'src/core/SettingsPage.tsx',
   'src/core/ProductOnboardingPage.tsx',
@@ -62,6 +68,9 @@ const ONLINE_ONLY = [
   'src/core/ManagedLoginPage.tsx',
   'src/core/ManagedAccountPage.tsx',
   'src/core/SignupPage.tsx',
+  // The "data tools" panel behind the product switcher: a client's catalog/CSV import, run once
+  // while setting a shop up. Flagged by the two-levels-deep check below rather than by hand.
+  'src/core/ClientDataOnboarding.tsx',
   // Shop pulls this in only to review an order that arrived through the online storefront.
   'ecommerce-buying-lifecycle',
 ]
@@ -70,7 +79,10 @@ const ONLINE_ONLY = [
 const ONLINE_ONLY_PREFIX = 'src/products/'
 
 function fail(reason) {
-  console.error(`offline precache seal failed: ${reason}`)
+  // Written synchronously. build-showroom.mjs runs this with stdio 'inherit', so in CI stderr is a
+  // pipe, where console.error is asynchronous and process.exit can truncate it -- turning a fatal
+  // seal error into a bare non-zero exit with no reason, which is the opposite of the point.
+  writeSync(2, `offline precache seal failed: ${reason}\n`)
   process.exit(1)
 }
 
@@ -78,9 +90,21 @@ const manifestSource = await readFile(manifestPath, 'utf8').catch(() => null)
 if (manifestSource === null) fail(`missing Vite manifest at ${manifestPath} -- build.manifest must stay enabled in vite.config.ts`)
 const manifest = JSON.parse(manifestSource)
 
+// Chunk names are NOT unique in this manifest -- `index` alone maps to three keys (the entry
+// document, a shared chunk, and supabase-js). Collecting every key per name and refusing to
+// resolve an ambiguous one keeps a future collision from silently binding a declared route or
+// exclusion to the wrong module, which a last-wins map would have done without any error.
 const keysByChunkName = new Map()
 for (const [key, entry] of Object.entries(manifest)) {
-  if (entry.name) keysByChunkName.set(entry.name, key)
+  if (!entry.name) continue
+  if (!keysByChunkName.has(entry.name)) keysByChunkName.set(entry.name, [])
+  keysByChunkName.get(entry.name).push(key)
+}
+function resolveChunkName(name, role) {
+  const keys = keysByChunkName.get(name)
+  if (!keys) return null
+  if (keys.length > 1) fail(`${role} "${name}" is ambiguous -- ${keys.length} manifest entries share that chunk name (${keys.join(', ')}); name it by manifest key instead`)
+  return keys[0]
 }
 
 const entryKeys = []
@@ -90,14 +114,14 @@ for (const key of OFFLINE_ENTRY_KEYS) {
 }
 const chunkRootKeys = []
 for (const name of OFFLINE_CHUNK_NAMES) {
-  const key = keysByChunkName.get(name)
+  const key = resolveChunkName(name, 'declared offline chunk')
   if (!key) fail(`declared offline chunk "${name}" is not in the Vite manifest -- if it was renamed in vite.config.ts, rename it here in the same commit`)
   chunkRootKeys.push(key)
 }
 
 const excludedKeys = new Set()
 for (const name of ONLINE_ONLY) {
-  const key = manifest[name] ? name : keysByChunkName.get(name)
+  const key = manifest[name] ? name : resolveChunkName(name, 'online-only exclusion')
   if (!key) fail(`online-only exclusion "${name}" matches nothing in the Vite manifest -- remove it or correct it`)
   excludedKeys.add(key)
 }
@@ -123,10 +147,13 @@ function collectStatic(key) {
 // the online-only surfaces. One level is enough because it reaches every screen the shell and the
 // operations route render directly; going deeper would follow those screens' own lazy branches
 // into the rest of the app.
+const followedDynamicKeys = new Set()
 for (const key of [...entryKeys, ...chunkRootKeys]) {
   collectStatic(key)
   for (const dynamicImport of manifest[key].dynamicImports ?? []) {
-    if (!isOnlineOnly(dynamicImport)) collectStatic(dynamicImport)
+    if (isOnlineOnly(dynamicImport)) continue
+    collectStatic(dynamicImport)
+    followedDynamicKeys.add(dynamicImport)
   }
 }
 
@@ -154,16 +181,21 @@ if (!precache.some((url) => /^\/assets\/core-app-[^/]+\.js$/.test(url))) {
   fail('the Shop/Plant operations route chunk (core-app) is not in the precache list')
 }
 
-// The cache name carries this digest, so it must move whenever anything the worker precaches
-// moves. The asset list covers the hashed files; index.html is folded in because it is the one
-// precached file whose content can change while every asset hash stays the same, and the worker
-// never refreshes '/' outside install.
-const build = createHash('sha256')
-  .update(precache.join('\n'))
-  .update('\0')
-  .update(indexSource)
-  .digest('hex')
-  .slice(0, 16)
+// The one-level bound, made loud. Following dynamic imports one level reaches every screen the
+// shell and the operations route render directly, but a lazy() added inside one of THOSE screens
+// produces a chunk nothing here would notice -- and its first offline open would land in the route
+// error boundary, which is the regression this file exists to end. Rather than quietly following
+// it (which walks into the rest of the app) or quietly dropping it, refuse to seal until someone
+// decides which it is.
+for (const key of followedDynamicKeys) {
+  for (const deeper of manifest[key].dynamicImports ?? []) {
+    if (isOnlineOnly(deeper)) continue
+    const deeperFile = manifest[deeper]?.file
+    if (deeperFile && !files.has(deeperFile)) {
+      fail(`"${deeper}" is lazily imported by the precached screen "${key}", which puts it two levels deep and outside the precache. Decide: add it to OFFLINE_CHUNK_NAMES if it must work offline, or to ONLINE_ONLY if it must not.`)
+    }
+  }
+}
 
 const BUILD_PLACEHOLDER = 'unsealed__SUPERMEGA_PRECACHE_BUILD__'
 const FILES_PLACEHOLDER = '[] /* __SUPERMEGA_PRECACHE_FILES__ */'
@@ -171,6 +203,38 @@ let swSource = await readFile(swPath, 'utf8').catch(() => null)
 if (swSource === null) fail(`missing ${swPath} -- run tools/write_app_release_metadata.mjs before the build`)
 if (!swSource.includes(FILES_PLACEHOLDER)) fail(`sw.js has no ${FILES_PLACEHOLDER} placeholder`)
 if (!swSource.includes(BUILD_PLACEHOLDER)) fail(`sw.js has no ${BUILD_PLACEHOLDER} placeholder`)
+
+// The worker's SHELL list, read back out of the worker itself so there is one source of truth.
+// These paths carry no content hash in their names -- /theme-restore.js, /sw-register.js, the
+// icons, the webmanifest -- so nothing about them appears in the asset list above.
+const shellBlock = /const SHELL = (\[[\s\S]*?\])/.exec(swSource)?.[1]
+let shell = []
+try { shell = JSON.parse(shellBlock ?? '') } catch { /* handled next */ }
+if (!Array.isArray(shell) || !shell.length) fail('could not read the SHELL list out of sw.js')
+// '/' is the built document, read above; everything else is a real file in dist/.
+const shellFiles = shell.filter((url) => url !== '/').map((url) => url.slice(1))
+for (const file of shellFiles) {
+  const onDisk = await stat(resolve(distDir, file)).catch(() => null)
+  if (!onDisk?.isFile()) fail(`SHELL names /${file}, which is not a file in dist/ -- install would reject it`)
+}
+
+// The cache name carries this digest, so it must move whenever ANYTHING the worker precaches
+// changes -- otherwise the worker's bytes stay identical, the browser never re-installs it, and
+// the precache freezes. That is the bug this digest exists to close, and until 2026-08-20 it was
+// still open for every unhashed file: the asset list covers only the hashed chunks, so editing
+// /theme-restore.js produced a byte-identical sw.js (measured). Hashing the built document and
+// each shell file's CONTENTS closes it for the whole precached set, /sw-register.js included --
+// which matters, because a fix to the registration script is otherwise the one thing that
+// cannot ship.
+const digest = createHash('sha256').update(precache.join('\n')).update('\0').update(indexSource)
+for (const file of shellFiles) {
+  digest.update('\0')
+  digest.update(file)
+  digest.update('\0')
+  digest.update(await readFile(resolve(distDir, file)))
+}
+const build = digest.digest('hex').slice(0, 16)
+
 swSource = swSource
   .replace(BUILD_PLACEHOLDER, build)
   .replace(FILES_PLACEHOLDER, JSON.stringify(precache, null, 2))

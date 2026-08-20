@@ -514,7 +514,11 @@ const inlineShellScripts = [indexSource, rootPageSource]
   .filter((match) => match[1].trim().length)
 if (inlineShellScripts.length) fail(`app_shell_inline_script_blocked_by_content_policy:${inlineShellScripts.length}`)
 for (const shellScript of ['/theme-restore.js', '/sw-register.js', '/vercel-insights.js']) {
-  if (!indexSource.includes(`<script src="${shellScript}"></script>`)) fail(`missing_shell_script_tag:${shellScript}`)
+  // Both the source template and the BUILT shell. The shipped document is the one that decides
+  // whether a worker ever registers, and checking only the template is the same unchecked-claim
+  // shape this change is fixing elsewhere.
+  if (!indexSource.includes(`<script src="${shellScript}"></script>`)
+    || !rootPageSource.includes(`<script src="${shellScript}"></script>`)) fail(`missing_shell_script_tag:${shellScript}`)
   if (!await exists(resolve(dist, shellScript.replace(/^\//, '')))) fail(`missing_shell_script_file:${shellScript}`)
 }
 const swRegisterPath = resolve(dist, 'sw-register.js')
@@ -559,10 +563,64 @@ else {
       || !swSource.includes("' + BUILD")) fail('service_worker_cache_name_not_release_scoped')
     // Offline navigations to /shop/ and /plant/ have nothing cached under those URLs -- the host
     // rewrites them to /index.html -- so without the shell fallback they hit the browser's own
-    // network-error page and the app never runs.
-    if (!swSource.includes("request.mode === 'navigate'") || !swSource.includes("caches.match('/')")) {
+    // network-error page and the app never runs. The lookup is scoped to THIS release's cache
+    // because a retained predecessor also holds a '/' document and an unscoped cross-cache match
+    // resolves in creation order, which would boot the previous release's shell offline.
+    if (!swSource.includes("request.mode === 'navigate'")
+      || !swSource.includes("cache.match('/')")) {
       fail('service_worker_navigation_fallback_missing')
     }
+    // A dead link rejects fetch() at once, but a degraded or captive one hangs for the browser's
+    // own timeout and the till stays blank through all of it even though everything it needs is
+    // already on the device.
+    if (!swSource.includes('const NAVIGATION_NETWORK_TIMEOUT_MS = 3000')
+      || !swSource.includes("Promise.race([settled, expired])")) fail('service_worker_navigation_has_no_network_timeout')
+    // Cross-origin responses must never enter this cache: the app talks to Supabase from the page,
+    // cache matching ignores the Authorization header, and a stored reply would be replayed offline.
+    if (!swSource.includes('if (url.origin !== self.location.origin) return')) {
+      fail('service_worker_caches_cross_origin_responses')
+    }
+    // addAll() accepts the host's 200 SPA-document answer for a path it no longer has, which would
+    // fill the cache with HTML under .js URLs and serve it forever from the cache-first branch.
+    if (swSource.includes('cache.addAll(')
+      || !swSource.includes("throw new Error('precache_document_returned_for_' + url)")) {
+      fail('service_worker_precache_accepts_document_for_asset')
+    }
+    // A failed install must not leave an empty cache behind: it would be retained as the
+    // predecessor at the next release and evict the cache an open tab is still served from. But it
+    // must only delete a cache THIS install created -- the digest does not cover the worker's own
+    // source, so a worker-only release reopens the live cache under an unchanged name, and wiping
+    // that on one flaky fetch would strand a device that was working offline a moment earlier.
+    if (!swSource.includes('const preexisting = (await caches.keys()).includes(CACHE)')
+      || !swSource.includes('if (!preexisting) await caches.delete(CACHE)')) {
+      fail('service_worker_failed_install_deletes_a_live_cache')
+    }
+    // An unsealed worker must do nothing at all. `vite dev` serves the unsealed file, whose cache
+    // name contains the placeholder and therefore never changes -- its shell files would freeze
+    // for the life of the origin, /sw-register.js among them.
+    if (!swSource.includes("const SEALED = !BUILD.startsWith('unsealed')")
+      || !swSource.includes('await self.registration.unregister()')
+      || !swSource.includes('if (!SEALED) return')) fail('service_worker_unsealed_build_is_not_inert')
+    // Every file the webmanifest declares must be precached, or an offline install has no icon.
+    for (const shellIcon of ['/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png']) {
+      if (!swSource.includes(`"${shellIcon}"`)) fail(`service_worker_shell_omits_icon:${shellIcon}`)
+    }
+    // A till stays open all day, and a tab held across a deploy still asks for the PREVIOUS
+    // release's chunk hashes. Deleting every other cache on activate stranded exactly that tab
+    // (measured 2026-08-20, including with the device offline, where the old cache was the only
+    // possible source). One predecessor is retained; deletion is scoped to our own prefix so a
+    // brand-version change still collects the older names and nothing foreign is touched.
+    if (!swSource.includes("key.startsWith(CACHE_PREFIX)")
+      || !swSource.includes("const previous = await previousCacheName()")
+      || !swSource.includes("key !== CACHE && key !== previous")
+      // The predecessor must be the newest NON-EMPTY cache; an empty leftover from a worker
+      // killed mid-install would otherwise be retained and evict the one an open tab needs.
+      || !swSource.includes("if ((await (await caches.open(ours[index])).keys()).length) return ours[index]")) {
+      fail('service_worker_deletes_cache_open_tabs_still_use')
+    }
+    // A deploy makes a replaced asset answer 200 with the SPA fallback document rather than 404,
+    // and storing that under a .js URL poisons it for the life of the cache, offline included.
+    if (!swSource.includes("includes('text/html')")) fail('service_worker_caches_html_under_asset_urls')
   }
 }
 // The build must not ship the Vite manifest it used to derive the precache list.
@@ -19645,12 +19703,21 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 //     precache list in sw.js (~2.4 KB), derived from Vite's own manifest by
 //     showroom/scripts/seal-offline-precache.mjs. Vite's manifest is deleted
 //     after the seal, so it contributes nothing.
-// Re-measured together on a fresh dist/ via the ROOT `npm run app:build`:
-// 3_056_576, leaving ~13_424 bytes of headroom under 3_070_000. Build via the
-// root script, not `npm --prefix showroom run build` -- the latter skips
-// app:release:write, so sw.js never gets its placeholder and the precache seal
-// fails (caught at :537, but it wastes a measurement). No app code was shrunk
-// to fit.
+// Re-measured together on a fresh dist/ via the ROOT `npm run app:build`, after
+// the service-worker lifecycle fixes #519 took on review (retain the previous
+// release's cache so a till held open across a deploy keeps its chunks; fold the
+// unhashed shell files' CONTENTS into the build digest so editing one of them
+// actually ships; guarded precache, origin guard, navigation timeout):
+// 3_062_171, leaving ~7_829 bytes of headroom under 3_070_000. Those fixes are
+// worker source only -- no new files and no app code -- and they cost less than
+// they look: the rationale for them lives in the generator rather than inside the
+// worker template, which took the shipped sw.js from 12_186 to 7_285 bytes. The
+// worker is downloaded on install AND on every update check, so prose in it is
+// prose on a metered connection, which is the same argument the precache
+// exclusion list is built on. Build via the root script, not `npm --prefix showroom run build` --
+// the latter skips app:release:write, so sw.js never gets its placeholder and the
+// precache seal fails (caught at :537, but it wastes a measurement). No app code
+// was shrunk to fit.
 if (bytes > 3_070_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
