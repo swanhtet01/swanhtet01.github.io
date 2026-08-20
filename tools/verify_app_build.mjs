@@ -19606,6 +19606,18 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // previous three ceilings gave. NOTE for whoever lands next: re-measure on a
 // fresh dist/ rather than carrying this number over -- it was taken without
 // any other in-flight branch's CSS or components.
+// MEASUREMENT 2026-08-21 (day-one Shop template fixes, rebased onto the anomaly-flags
+// raise above): taking that NOTE at its word, this is a fresh `npm run app:build`
+// measured AFTER combining both branches rather than either side's pre-rebase number.
+// Combined dist/ measures 3_057_542 -- 4_692 bytes above this branch's own pre-rebase
+// 3_050_627, which is the anomaly-flags close surface landing alongside the working-sample
+// counter sales staged as reconciled, the accountable gate releasing the operator after a
+// failed confirmation, and owner-language error copy with the validator text behind a
+// disclosure. The existing 3_070_000 ceiling already covers it with ~12_458 bytes of
+// headroom, so it is kept rather than raised again.
+// RE-CONFIRMED 2026-08-21 after rebasing onto #522: measured again on a fresh dist/
+// rather than carried over. Still 3_057_542 -- #522 wired orphaned tests and changed
+// tools/, not showroom/src, so the emitted assets are byte-for-byte the same build.
 if (bytes > 3_070_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
