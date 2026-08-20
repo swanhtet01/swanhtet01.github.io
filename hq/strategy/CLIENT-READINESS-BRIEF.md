@@ -262,12 +262,29 @@ server write.
 *workflow*, not of the *first load*: a fresh or cache-cleared device must
 download the app over HTTPS before any of it exists, and offline operation
 starts only once that load registers and populates the service worker
-(`showroom/index.html:59` registers `/sw.js`, which
-`tools/write_app_release_metadata.mjs:230` generates at release time). A
-founder who arrives at a shop with no connectivity and a fresh phone reaches
-none of the surfaces below. After that first successful load the honest claim
-holds in full: no account, no server, and no network needed to sell, count
-stock, or close the day.
+(`showroom/index.html` loads `/sw-register.js`, which registers `/sw.js`;
+`tools/write_app_release_metadata.mjs` generates both at release time and
+`showroom/scripts/seal-offline-precache.mjs` seals the precache list into the
+worker after the build). A founder who arrives at a shop with no connectivity
+and a fresh phone reaches none of the surfaces below. After that first
+successful load the honest claim holds in full: no account, no server, and no
+network needed to sell, count stock, or close the day.
+
+**Correction, 2026-08-20.** The paragraph above was accurate about *when*
+offline starts and wrong about *whether* it started at all. Until this date the
+registration was an inline `<script>`, and both content policies serving this
+app carry `script-src 'self'` with no hash and no nonce — so the browser
+refused it, no service worker was ever installed, and nothing worked offline on
+any device. Underneath that sat the gap the competitive re-scan logged as G3:
+the precache only ever covered the entry graph, and `/shop/` and `/plant/` are
+a lazy chunk, so the till was not in it either. Both are fixed and both are now
+checked in the gate (`app_shell_inline_script_blocked_by_content_policy` and
+`service_worker_precache_omits_operations_route` in `tools/verify_app_build.mjs`).
+Measured after the fix, with the local server killed: `/shop/` and `/plant/`
+open, a sale line builds on the counter, and the four Shop work modes navigate
+with no failed requests. **F1 still stands** — none of this has been run on real
+Myanmar hardware over a real dropped connection, and the phone test is what
+turns a measured claim into a demonstrated one.
 
 `docs/demo-playbooks/shop.md` §2 is still the correct
 setup path, **but its §3 script is pre-#459 and demos roughly three of the nine

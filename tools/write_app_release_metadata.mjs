@@ -165,20 +165,69 @@ const rasterIcons = [
   ['apple-touch-icon.png', 180, {}],
 ].map(([name, size, opts]) => [name, encodePng(renderIcon(size, opts), size)])
 
+// The app shell must emit NO inline <script>. Both content policies that serve this app
+// (the vercel.json response header and index.html's own meta tag) carry `script-src 'self'`
+// with no hash and no nonce, so an inline script is REFUSED by the browser -- it does not
+// warn, it simply never runs. That is not theoretical: the service-worker registration used
+// to be inline, so `navigator.serviceWorker.register('/sw.js')` never executed, no service
+// worker was ever installed, and nothing at all worked offline. Measured 2026-08-20 against
+// a built dist/ in Chromium: three "Refused to execute inline script" console errors, zero
+// registrations, zero caches. `tools/verify_app_deploy_workflow.mjs` already pinned the
+// intended property ("the built shell emits no inline script") -- it just had nothing
+// checking it. These three files restore that property; the checks now enforce it.
+//
+// Keep the theme key in sync with THEME_KEY in showroom/src/core/CoreShell.tsx. This runs
+// as a render-blocking classic script in <head>, so it still lands before first paint and
+// a returning dark-theme user does not get a light flash.
+const themeRestoreScript = `try {
+  if (window.localStorage.getItem('supermega-interface-theme') === 'dark') {
+    document.documentElement.dataset.supermegaTheme = 'dark'
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#05080d')
+  }
+} catch (e) {}
+`
+const serviceWorkerRegisterScript = `if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
+`
+// Vercel Web Analytics: cookieless aggregate pageviews, no PII. Loaded dynamically because
+// /_vercel/insights/ exists only on the deployment edge, never in dist/, and only on the
+// production host so local/dev stays beacon-free.
+const insightsScript = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) { const insights = document.createElement('script'); insights.defer = true; insights.src = '/_vercel/insights/script.js'; document.head.append(insights) }
+`
+
+// SHELL is what the worker can name before the build exists: the document plus the icon and
+// manifest files this generator writes itself. Everything hashed -- the entry chunks and the
+// Shop/Plant operations route -- is sealed in post-build by
+// showroom/scripts/seal-offline-precache.mjs, which reads Vite's own manifest and rewrites
+// the two placeholders below. It fails the build if either placeholder is missing, so this
+// worker can never ship with an empty precache list.
+//
+// BUILD is likewise injected post-build: a digest of the sealed precache list AND of the built
+// document. It matters because the browser only re-installs a worker whose BYTES changed. The
+// old cache name was `supermega-app-${brand.version}` and the worker source was otherwise
+// release-independent, so a release that changed every asset hash left this file byte-identical,
+// no install event fired, precacheAll() never re-ran, and the previous release's precache
+// silently went stale. Deriving the cache name from the build output means each release that
+// changes anything this worker serves produces a different worker, installs it, and the activate
+// handler below retires exactly the superseded cache. The document is folded into the digest for
+// the same reason: it is the one precached file that can change without any asset hash changing.
+//
+// The two placeholders are written so the UNSEALED worker is still valid JavaScript -- `vite dev`
+// serves public-app/ directly, and a worker that throws on evaluation cannot be replaced by a
+// later good one, which would strand a developer's machine on a stale registration. Unsealed it
+// simply precaches SHELL and nothing else; tools/verify_app_build.mjs fails the artifact if either
+// marker survives into dist/.
 const cacheKey = `supermega-app-${manifest.brand.version}`
-const serviceWorker = `const CACHE = '${cacheKey}'
+const serviceWorker = `const BUILD = 'unsealed__SUPERMEGA_PRECACHE_BUILD__'
+const CACHE = '${cacheKey}-' + BUILD
+const SHELL = ['/', '/favicon.svg', '/site.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/theme-restore.js', '/sw-register.js', '/vercel-insights.js']
+const PRECACHE = [] /* __SUPERMEGA_PRECACHE_FILES__ */
 
 async function precacheAll() {
   const cache = await caches.open(CACHE)
-  await cache.addAll(['/', '/favicon.svg', '/site.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'])
-  const indexResp = await caches.match('/')
-  if (!indexResp) return
-  const html = await indexResp.text()
-  const assets = [
-    ...[...html.matchAll(/src="(\\/assets\\/[^"]+)"/g)].map((m) => m[1]),
-    ...[...html.matchAll(/href="(\\/assets\\/[^"]+)"/g)].map((m) => m[1]),
-  ]
-  if (assets.length) await cache.addAll(assets)
+  // One addAll: if any member fails the install fails, the worker does not activate, and
+  // the previously installed worker keeps serving its complete cache. A half-filled cache
+  // that claims to work offline is worse than an old one that does.
+  await cache.addAll([...SHELL, ...PRECACHE])
 }
 
 self.addEventListener('install', (event) => {
@@ -194,6 +243,15 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+// Only successful responses are worth keeping, and a failed write must never surface as an
+// unhandled rejection inside the worker. Caching a 5xx body, a 429, or a host's interstitial
+// would hand that page back on every later offline request for the same URL.
+function cacheIfOk(request, resp) {
+  if (!resp.ok) return
+  const clone = resp.clone()
+  caches.open(CACHE).then((cache) => cache.put(request, clone)).catch(() => {})
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event
   if (request.method !== 'GET') return
@@ -202,21 +260,37 @@ self.addEventListener('fetch', (event) => {
   if (pathname.startsWith('/assets/')) {
     event.respondWith(
       caches.match(request).then((cached) => cached ?? fetch(request).then((resp) => {
-        const clone = resp.clone()
-        caches.open(CACHE).then((cache) => cache.put(request, clone))
+        cacheIfOk(request, resp)
         return resp
       }))
+    )
+    return
+  }
+  // Navigations are the offline entry point. Every product path (/shop/, /plant/, ...) is
+  // rewritten to /index.html by the host, so nothing is ever cached under those URLs; without
+  // this shell fallback an offline open of /shop/ returned the browser's own network-error
+  // page and the app never got a chance to run. Falling back to the cached document lets the
+  // router take the path from the address bar as it always does.
+  //
+  // Nothing is written back here on success. The '/' entry belongs to precacheAll(), which
+  // fills it from the release that owns this cache; letting a navigation overwrite it would
+  // mean a mid-deploy request could store the NEXT release's document -- referencing entry
+  // chunks this cache does not hold -- against a worker whose own install may then fail and
+  // never activate. That trades a stale-but-working shell for a blank one.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .catch(async () => (await caches.match(request)) ?? (await caches.match('/')) ?? Response.error())
     )
     return
   }
   event.respondWith(
     fetch(request)
       .then((resp) => {
-        const clone = resp.clone()
-        caches.open(CACHE).then((cache) => cache.put(request, clone))
+        cacheIfOk(request, resp)
         return resp
       })
-      .catch(() => caches.match(request))
+      .catch(async () => (await caches.match(request)) ?? Response.error())
   )
 })
 `
@@ -228,6 +302,9 @@ await Promise.all([
   writeFile(resolve(publicDir, 'favicon.svg'), favicon, 'utf8'),
   writeFile(resolve(publicDir, 'site.webmanifest'), `${JSON.stringify(webmanifest, null, 2)}\n`, 'utf8'),
   writeFile(resolve(publicDir, 'sw.js'), serviceWorker, 'utf8'),
+  writeFile(resolve(publicDir, 'theme-restore.js'), themeRestoreScript, 'utf8'),
+  writeFile(resolve(publicDir, 'sw-register.js'), serviceWorkerRegisterScript, 'utf8'),
+  writeFile(resolve(publicDir, 'vercel-insights.js'), insightsScript, 'utf8'),
   ...rasterIcons.map(([name, bytes]) => writeFile(resolve(publicDir, name), bytes)),
 ])
 console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release', commit: release.commit }))
