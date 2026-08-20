@@ -14,6 +14,17 @@
 //      known strings -- it walks the ENTIRE serialised record and fails on any substring of the
 //      raw message, so a future field that quietly carries text fails here rather than shipping.
 //
+//   3. The record is ARITHMETICALLY USABLE as section 9 of
+//      hq/research/order-intake-agent-evaluation-2026-08.md defines the correction-effort metric:
+//      correction_effort = fields_corrected / total_extracted_fields, threshold <= 0.20, where
+//      total_extracted_fields is every field the MODEL populated and fields_corrected is what a
+//      NAMED operator changed. Three things follow and each is asserted below, because getting
+//      any of them wrong misclassifies the threshold rather than failing loudly:
+//        - the denominator is the SIX managed fields, read off the managed response, not the four
+//          quote-mapped ones and not inferred from the browser draft;
+//        - the numerator lives inside the denominator, so the ratio cannot exceed 1;
+//        - no operator name, no record.
+//
 // The cap is asserted on WRITE, not merely on read: a device left running for a year must hold
 // 200 records, not a growing blob that happens to be trimmed when it is read back.
 import assert from 'node:assert/strict'
@@ -27,12 +38,13 @@ const bundle = await build({
   stdin: {
     contents: `export {
       buildChannelOrderDraft, buildManagedChannelOrderDraft, channelOrderDraftIsReady,
+      channelOrderFields,
     } from './channel-order-intake.ts'
     export {
       ORDER_INTAKE_EVIDENCE_SCHEMA, ORDER_INTAKE_EVIDENCE_STORAGE_KEY,
-      ORDER_INTAKE_EVIDENCE_MAX_RECORDS,
+      ORDER_INTAKE_EVIDENCE_MAX_RECORDS, channelOrderCaptureFields,
       appendOrderIntakeEvidence, buildOrderIntakeEvidenceRecord, captureOrderIntakeCorrection,
-      countExtractedChannelOrderFields, diffChannelOrderCorrections,
+      diffChannelOrderCorrections,
       readManagedIntakeGeneration, readOrderIntakeEvidence,
     } from './order-intake-correction-capture.ts'
     export { isLocalWorkspaceKey } from './local-workspace-storage.ts'`,
@@ -49,10 +61,11 @@ const bundle = await build({
 
 const {
   buildChannelOrderDraft, buildManagedChannelOrderDraft, channelOrderDraftIsReady,
+  channelOrderFields,
   ORDER_INTAKE_EVIDENCE_SCHEMA, ORDER_INTAKE_EVIDENCE_STORAGE_KEY,
-  ORDER_INTAKE_EVIDENCE_MAX_RECORDS,
+  ORDER_INTAKE_EVIDENCE_MAX_RECORDS, channelOrderCaptureFields,
   appendOrderIntakeEvidence, buildOrderIntakeEvidenceRecord, captureOrderIntakeCorrection,
-  countExtractedChannelOrderFields, diffChannelOrderCorrections,
+  diffChannelOrderCorrections,
   readManagedIntakeGeneration, readOrderIntakeEvidence,
   isLocalWorkspaceKey,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
@@ -75,6 +88,9 @@ const SOURCE_LABEL = 'Viber thread 4471'
 const CATALOG = ['SM-1001', 'SM-1003']
 const ACCEPTED_AT = new Date('2026-08-18T04:30:00.000Z')
 const GENERATED_AT = '2026-08-18T04:29:12.000Z'
+// The named operator section 9 requires. A managed userId, deliberately not an email or a person's
+// name -- the leak sweep below would fail on either, which is the point.
+const ACTOR = '4f5b2a10-8c3d-4e71-9a52-6b0d1c8e37af'
 
 const span = (quote) => {
   const start = MESSAGE.indexOf(quote)
@@ -186,6 +202,23 @@ for (const [label, mutate] of [
 }
 check(readManagedIntakeGeneration(null) === null, 'a null response yields no generation')
 check(readManagedIntakeGeneration({ draft: {} }) === null, 'a response with an empty draft yields no generation')
+// The denominator is only defined against the managed contract's full field list. A response that
+// omits one of them cannot answer "how many fields did the model populate", and a denominator
+// guessed from a short response is a wrong number rather than a missing one.
+for (const field of ['customer_reference', 'channel', 'sku', 'quantity', 'payment', 'fulfilment']) {
+  const short = structuredClone(response)
+  delete short.draft[field]
+  check(readManagedIntakeGeneration(short) === null,
+    `a response missing the ${field} key yields no generation -- the denominator is undefined without it`)
+  const undefinedField = structuredClone(response)
+  undefinedField.draft[field] = undefined
+  check(readManagedIntakeGeneration(undefinedField) === null,
+    `and an explicitly undefined ${field} is refused too, not read as null`)
+}
+check(generation.extractedFields.total === 4,
+  'the base fixture populated four of the six managed fields')
+check(generation.extractedFields.reviewable.join(',') === 'customer,sku,quantity,payment',
+  'and its null channel is absent from the reviewable set')
 
 // --- a corrected field IS recorded -------------------------------------------
 // AI read the quantity as 2; the shop owner knows this customer and fixes it to 5.
@@ -204,14 +237,18 @@ check(changes[0].from === '2' && changes[0].to === '5', 'the diff carries the be
 
 const storage = makeStorage()
 const written = captureOrderIntakeCorrection(storage, {
-  generation, proposed, accepted: corrected, acceptedAt: ACCEPTED_AT,
+  generation, proposed, accepted: corrected, acceptedAt: ACCEPTED_AT, actor: ACTOR,
 })
 check(written !== null, 'accepting a corrected draft writes an evidence record')
 check(written.schema === ORDER_INTAKE_EVIDENCE_SCHEMA, 'the record declares the versioned evidence schema')
 check(written.schema === 'supermega.order-intake-evidence.v1', 'and that schema is the one the research contract designed')
 check(written.correctionCount === 1, 'the correction count is 1')
 check(written.fieldsCorrected.join(',') === 'quantity', 'the corrected FIELD NAME is recorded')
-check(written.totalExtractedFields === 4, 'all four provenance fields were extracted by AI')
+check(written.totalExtractedFields === 4,
+  'four of the six managed fields were populated -- channel and fulfilment came back null')
+check(written.fieldsExtracted.join(',') === 'customer,sku,quantity,payment',
+  `and the record names which four, got "${written.fieldsExtracted.join(',')}"`)
+check(written.actor === ACTOR, 'the named operator who reviewed the draft is recorded')
 check(written.modelVersion === 'gpt-5-mini' && written.promptVersion === 'supermega.order_intake.extract.v1',
   'the record is bound to the model and prompt that produced the proposal')
 check(written.messageDigest === generation.messageDigest, 'and to the digest of the message the model saw')
@@ -245,7 +282,7 @@ const untouched = acceptWith({})
 check(channelOrderDraftIsReady(untouched), 'the untouched draft is acceptable')
 const cleanStorage = makeStorage()
 const cleanRecord = captureOrderIntakeCorrection(cleanStorage, {
-  generation, proposed, accepted: untouched, acceptedAt: ACCEPTED_AT,
+  generation, proposed, accepted: untouched, acceptedAt: ACCEPTED_AT, actor: ACTOR,
 })
 check(cleanRecord !== null, 'an accepted-as-proposed draft is still recorded -- a correct extraction is a label too')
 check(cleanRecord.correctionCount === 0, 'with a correction count of zero')
@@ -253,7 +290,7 @@ check(cleanRecord.fieldsCorrected.length === 0, 'and no corrected fields')
 check(diffChannelOrderCorrections(proposed, untouched).length === 0, 'the diff itself reports no change')
 
 // A partial extraction is counted honestly rather than assumed to be four.
-const { draft: partial } = await proposeWithAi({
+const { draft: partial, generation: partialGeneration } = await proposeWithAi({
   payment: null,
   missing_fields: ['payment'],
   blockers: ['incomplete_required_fields'],
@@ -263,8 +300,10 @@ const { draft: partial } = await proposeWithAi({
     { field: 'quantity', source_spans: [span('2 of')] },
   ],
 })
-check(countExtractedChannelOrderFields(partial) === 3,
-  `a proposal missing the payment counts three extracted fields, got ${countExtractedChannelOrderFields(partial)}`)
+check(partialGeneration.extractedFields.total === 3,
+  `a proposal missing the payment counts three extracted fields, got ${partialGeneration.extractedFields.total}`)
+check(partialGeneration.extractedFields.reviewable.join(',') === 'customer,sku,quantity',
+  'and names them, so "the model missed payment" is readable from the record')
 
 // --- the case the flywheel exists for: AI got it WRONG and a person fixed it -
 // Everything above starts from a proposal that was already acceptable. The valuable record is
@@ -283,14 +322,160 @@ const repaired = acceptWith({ attributions: {
 check(channelOrderDraftIsReady(repaired), 'the operator-repaired draft is acceptable')
 const repairStorage = makeStorage()
 const repairRecord = captureOrderIntakeCorrection(repairStorage, {
-  generation, proposed: partial, accepted: repaired, acceptedAt: ACCEPTED_AT,
+  generation: partialGeneration, proposed: partial, accepted: repaired, acceptedAt: ACCEPTED_AT, actor: ACTOR,
 })
 check(repairRecord !== null, 'a blocked AI proposal repaired by hand IS recorded')
-check(repairRecord.fieldsCorrected.join(',') === 'payment',
-  `the field AI failed on is the one recorded, got "${repairRecord.fieldsCorrected.join(',')}"`)
+// WHICH array names the payment changed here, and that is a deliberate move rather than a lost
+// signal. Scoring "the model returned null and a person filled it in" as a CORRECTION of the model
+// put section 9's numerator outside its denominator -- one correction over three extracted fields
+// here, but a message where the model populated one field and the operator filled three would have
+// produced a correction_effort of 3.0, against a metric whose own definition tops out at 1. So
+// fieldsCorrected now covers only fields the model actually populated, and the miss is recorded by
+// ABSENCE from fieldsExtracted, which is strictly more information: a payment the model got wrong
+// appears in both arrays, a payment it never attempted appears in neither.
+check(repairRecord.fieldsCorrected.length === 0,
+  `filling a field the model left null is not a correction OF the model, got "${repairRecord.fieldsCorrected.join(',')}"`)
+check(repairRecord.fieldsExtracted.join(',') === 'customer,sku,quantity',
+  `the payment AI failed on is recorded by its absence, got "${repairRecord.fieldsExtracted.join(',')}"`)
+check(!repairRecord.fieldsExtracted.includes('payment'), 'stated directly: AI never populated the payment')
 check(repairRecord.totalExtractedFields === 3,
-  'and the record admits AI only extracted three of the four fields')
+  'and the record admits AI populated only three of the six managed fields')
 check(!repairStorage.raw().includes('KBZPay'), 'still no value text reaches storage on this path')
+
+// --- section 9's denominator is the SIX managed fields, not the four quote-mapped ones -------
+// The old count walked channelOrderFields, which is exactly ['customer','sku','quantity','payment'].
+// The model also populates `channel` and `fulfilment` -- both are OrderIntakeField members in
+// supermega_runtime/order_intake.py and both are required to carry source evidence by
+// buildManagedChannelOrderDraft -- so a fixture where the model filled all six was scored 4, and a
+// correction_effort computed from it came out inflated by up to 1.5x against a <= 0.20 threshold.
+//
+// The denominator is now read off the managed RESPONSE, which is the only source that can answer
+// the question correctly, and the two fields prove why the draft cannot:
+//   - `fulfilment` has no field on ChannelOrderDraft at all, so no draft-walking count could ever
+//     see it;
+//   - `draft.channel` is populated even when the model returned null, because
+//     buildManagedChannelOrderDraft substitutes the operator's own "Received through" selection.
+//     Counting that as a model extraction would inflate the denominator in the other direction.
+// Both directions matter: either one silently misclassifies the <= 0.20 threshold.
+const WIDE_MESSAGE = 'Viber order from Ma Thida: 2 of SM-1001, deliver to Yangon, paying KBZPay.'
+const wideSpan = (quote) => {
+  const start = WIDE_MESSAGE.indexOf(quote)
+  assert.ok(start >= 0, `fixture error: "${quote}" is not in the wide test message`)
+  assert.ok(WIDE_MESSAGE.indexOf(quote, start + 1) < 0, `fixture error: "${quote}" is ambiguous in the wide test message`)
+  return { quote, start, end: start + quote.length }
+}
+const WIDE_PROVENANCE = [
+  { field: 'customer_reference', source_spans: [wideSpan('Ma Thida')] },
+  { field: 'channel', source_spans: [wideSpan('Viber')] },
+  { field: 'sku', source_spans: [wideSpan('SM-1001')] },
+  { field: 'quantity', source_spans: [wideSpan('2 of')] },
+  { field: 'payment', source_spans: [wideSpan('KBZPay')] },
+  { field: 'fulfilment', source_spans: [wideSpan('deliver to Yangon')] },
+]
+const buildWideResponse = async (draftOverrides = {}) => ({
+  source_label_digest: await sha256Reference(SOURCE_LABEL),
+  draft: {
+    schema_version: 'supermega.order_intake.draft.v1',
+    request_id: 'OID-0123456789abcdef0123456789abcdef',
+    generated_at: GENERATED_AT,
+    message_digest: await sha256Reference(WIDE_MESSAGE),
+    generation: {
+      provider: 'openai',
+      response_id: 'resp_0123456789',
+      model: 'gpt-5-mini',
+      prompt_version: 'supermega.order_intake.extract.v1',
+    },
+    status: 'ready_for_review',
+    scope: 'single_item_order',
+    missing_fields: [],
+    uncertain_fields: [],
+    blockers: [],
+    customer_reference: 'Ma Thida',
+    channel: 'viber',
+    sku: 'SM-1001',
+    quantity: 2,
+    payment: 'kbzpay',
+    fulfilment: 'delivery',
+    provenance: WIDE_PROVENANCE,
+    ...draftOverrides,
+  },
+})
+const acceptWide = (overrides = {}) => buildChannelOrderDraft({
+  sourceLabel: SOURCE_LABEL,
+  message: WIDE_MESSAGE,
+  channel: 'Viber',
+  customer: 'Ma Thida',
+  sku: 'SM-1001',
+  quantity: 2,
+  payment: 'KBZPay',
+  catalogSkus: CATALOG,
+  attributions: {
+    customer: { kind: 'quote', quote: 'Ma Thida' },
+    sku: { kind: 'quote', quote: 'SM-1001' },
+    quantity: { kind: 'quote', quote: '2 of' },
+    payment: { kind: 'quote', quote: 'KBZPay' },
+  },
+  ...overrides,
+})
+
+const wideResponse = await buildWideResponse()
+const wideGeneration = readManagedIntakeGeneration(wideResponse)
+check(wideGeneration !== null, 'a fully populated managed response still yields generation metadata')
+check(wideGeneration.extractedFields.total === 6,
+  `all six managed fields count toward the denominator, got ${wideGeneration.extractedFields.total}`)
+check(wideGeneration.extractedFields.reviewable.join(',') === 'customer,channel,sku,quantity,payment',
+  `five of the six are reviewable; fulfilment has no control to correct it, got "${wideGeneration.extractedFields.reviewable.join(',')}"`)
+check(wideGeneration.extractedFields.total > wideGeneration.extractedFields.reviewable.length,
+  'and the gap between them is visible, so an evaluator cannot read a falsely low correction_effort')
+
+// The null case: the same two fields are SKIPPED rather than counted, and `channel` is skipped even
+// though the draft ends up carrying one.
+const nullWideResponse = await buildWideResponse({
+  channel: null,
+  fulfilment: null,
+  missing_fields: ['channel', 'fulfilment'],
+  provenance: WIDE_PROVENANCE.filter((entry) => entry.field !== 'channel' && entry.field !== 'fulfilment'),
+})
+const nullWideGeneration = readManagedIntakeGeneration(nullWideResponse)
+check(nullWideGeneration.extractedFields.total === 4,
+  `a null channel and a null fulfilment are not counted, got ${nullWideGeneration.extractedFields.total}`)
+check(!nullWideGeneration.extractedFields.reviewable.includes('channel'),
+  'and channel is absent from the reviewable set')
+const fallbackDraft = await buildManagedChannelOrderDraft({
+  catalogSkus: CATALOG,
+  fallbackChannel: 'Messenger',
+  message: WIDE_MESSAGE,
+  response: nullWideResponse,
+  sourceLabel: SOURCE_LABEL,
+})
+check(fallbackDraft.channel === 'Messenger',
+  'the draft DOES carry a channel -- the operator form supplied it, the model did not')
+check(!nullWideGeneration.extractedFields.reviewable.includes('channel'),
+  'so counting the draft rather than the response would have credited the model with the operator\'s own choice')
+
+// A channel correction is now recorded. The old four-field diff could not see it at all.
+const wideProposed = await buildManagedChannelOrderDraft({
+  catalogSkus: CATALOG,
+  fallbackChannel: 'Viber',
+  message: WIDE_MESSAGE,
+  response: wideResponse,
+  sourceLabel: SOURCE_LABEL,
+})
+check(wideProposed.channel === 'Viber', 'the model resolved the channel from the message')
+const channelCorrected = acceptWide({ channel: 'Messenger' })
+const channelChanges = diffChannelOrderCorrections(wideProposed, channelCorrected)
+check(channelChanges.length === 1 && channelChanges[0].field === 'channel',
+  `switching the channel is a correction, got ${JSON.stringify(channelChanges.map((change) => change.field))}`)
+const wideStorage = makeStorage()
+const wideRecord = captureOrderIntakeCorrection(wideStorage, {
+  generation: wideGeneration, proposed: wideProposed, accepted: channelCorrected, acceptedAt: ACCEPTED_AT, actor: ACTOR,
+})
+check(wideRecord.fieldsCorrected.join(',') === 'channel', 'and it is recorded by name')
+check(wideRecord.totalExtractedFields === 6, 'against a denominator of six')
+check(wideRecord.correctionCount / wideRecord.totalExtractedFields < 0.2,
+  'so this fixture computes a correction_effort of 1/6, which the old denominator would have reported as 1/4')
+check(!wideStorage.raw().includes('Messenger') && !wideStorage.raw().includes('Viber'),
+  'and the channel VALUES stay out of storage, exactly like every other corrected value')
 
 // --- NO raw message text is ever stored --------------------------------------
 // The serialised record is searched for every meaningful fragment of the message, not just the
@@ -314,7 +499,7 @@ check(leakChanges.some((change) => change.field === 'customer' && change.from ==
 
 const leakStorage = makeStorage()
 captureOrderIntakeCorrection(leakStorage, {
-  generation, proposed, accepted: leakAccepted, acceptedAt: ACCEPTED_AT,
+  generation, proposed, accepted: leakAccepted, acceptedAt: ACCEPTED_AT, actor: ACTOR,
 })
 const serialized = leakStorage.raw()
 check(serialized.length > 0, 'something was actually written -- otherwise the leak check is vacuous')
@@ -348,6 +533,10 @@ const leakRecord = JSON.parse(serialized).records[0]
 check(leakRecord.fieldsCorrected.join(',') === 'customer,quantity',
   `both corrected field names ARE recorded, got "${leakRecord.fieldsCorrected.join(',')}"`)
 check(leakRecord.correctionCount === 2, 'with a correction count of 2')
+// The operator identity is the one NEW thing the record carries, so it gets its own leak check:
+// it must be the opaque managed userId and must not have smuggled a person's name in beside it.
+check(leakRecord.actor === ACTOR, 'the named operator is stored as the opaque managed userId')
+check(!/@/.test(serialized), 'no email address reaches storage alongside the operator identity')
 
 // --- the pair must describe the SAME message ---------------------------------
 // A stale proposal scored against a different message is a fabricated training label, which is
@@ -369,21 +558,52 @@ const otherMessage = buildChannelOrderDraft({
   },
 })
 check(
-  buildOrderIntakeEvidenceRecord({ generation, proposed, accepted: otherMessage, acceptedAt: ACCEPTED_AT }) === null,
+  buildOrderIntakeEvidenceRecord({ generation, proposed, accepted: otherMessage, acceptedAt: ACCEPTED_AT, actor: ACTOR }) === null,
   'a proposal and an acceptance for DIFFERENT messages produce no record',
 )
 check(
-  buildOrderIntakeEvidenceRecord({ generation, proposed: null, accepted: corrected, acceptedAt: ACCEPTED_AT }) === null,
+  buildOrderIntakeEvidenceRecord({ generation, proposed: null, accepted: corrected, acceptedAt: ACCEPTED_AT, actor: ACTOR }) === null,
   'a manual draft with no AI proposal produces no record',
 )
 check(
-  buildOrderIntakeEvidenceRecord({ generation: null, proposed, accepted: corrected, acceptedAt: ACCEPTED_AT }) === null,
+  buildOrderIntakeEvidenceRecord({ generation: null, proposed, accepted: corrected, acceptedAt: ACCEPTED_AT, actor: ACTOR }) === null,
   'a proposal with no generation metadata produces no record',
 )
 check(
-  buildOrderIntakeEvidenceRecord({ generation, proposed, accepted: corrected, acceptedAt: new Date('nope') }) === null,
+  buildOrderIntakeEvidenceRecord({ generation, proposed, accepted: corrected, acceptedAt: new Date('nope'), actor: ACTOR }) === null,
   'an invalid acceptance time produces no record',
 )
+
+// --- section 9 measures a NAMED operator -------------------------------------
+// "fields_corrected is the number of ... fields a named operator changed during the review of the
+// draft." An anonymous edit is not that observation, and a record that looked like one would be
+// averaged into the correction-effort metric as if a person had signed for it.
+for (const [label, actor] of [
+  ['an empty operator', ''],
+  ['a whitespace-only operator', '   '],
+  ['a missing operator', undefined],
+  ['a non-string operator', 12345],
+  ['an operator name longer than the 80-character bound', 'x'.repeat(81)],
+]) {
+  check(
+    buildOrderIntakeEvidenceRecord({ generation, proposed, accepted: corrected, acceptedAt: ACCEPTED_AT, actor }) === null,
+    `${label} produces no record -- an unsigned correction is not a section 9 observation`,
+  )
+}
+const unsignedStorage = makeStorage()
+check(captureOrderIntakeCorrection(unsignedStorage, {
+  generation, proposed, accepted: corrected, acceptedAt: ACCEPTED_AT, actor: '',
+}) === null, 'and the capture entry point writes nothing for it')
+check(unsignedStorage.raw() === '', 'storage is untouched, not written with a nameless record')
+const strippedActor = makeStorage({
+  [ORDER_INTAKE_EVIDENCE_STORAGE_KEY]: JSON.stringify({
+    contract: 'supermega.local_order_intake_evidence_state.v1',
+    version: 1,
+    records: [{ ...written, actor: '' }],
+  }),
+})
+check(readOrderIntakeEvidence(strippedActor).length === 0,
+  'a stored record whose operator name was stripped is refused on read too')
 
 // --- the history cap holds ----------------------------------------------------
 check(ORDER_INTAKE_EVIDENCE_MAX_RECORDS === 200, 'the documented cap is 200 records')
@@ -395,6 +615,7 @@ for (let index = 0; index < overflow; index += 1) {
     proposed,
     accepted: corrected,
     acceptedAt: new Date(ACCEPTED_AT.getTime() + index * 60_000),
+    actor: ACTOR,
   })
 }
 const capped = readOrderIntakeEvidence(cappedStorage)
@@ -432,6 +653,35 @@ const inconsistent = makeStorage({
 })
 check(readOrderIntakeEvidence(inconsistent).length === 0,
   'a record claiming more corrections than it names is rejected')
+// Section 9's ratio is only meaningful while its numerator sits inside its denominator. Both ways
+// out of range are refused rather than averaged into a correction-effort figure.
+const outOfScope = makeStorage({
+  [ORDER_INTAKE_EVIDENCE_STORAGE_KEY]: JSON.stringify({
+    contract: 'supermega.local_order_intake_evidence_state.v1',
+    version: 1,
+    records: [{ ...written, fieldsCorrected: ['channel'], correctionCount: 1 }],
+  }),
+})
+check(readOrderIntakeEvidence(outOfScope).length === 0,
+  'a record claiming a correction to a field the model never populated is rejected')
+const oversizedDenominator = makeStorage({
+  [ORDER_INTAKE_EVIDENCE_STORAGE_KEY]: JSON.stringify({
+    contract: 'supermega.local_order_intake_evidence_state.v1',
+    version: 1,
+    records: [{ ...written, totalExtractedFields: 7 }],
+  }),
+})
+check(readOrderIntakeEvidence(oversizedDenominator).length === 0,
+  'and a denominator larger than the managed contract has fields is rejected')
+const shrunkDenominator = makeStorage({
+  [ORDER_INTAKE_EVIDENCE_STORAGE_KEY]: JSON.stringify({
+    contract: 'supermega.local_order_intake_evidence_state.v1',
+    version: 1,
+    records: [{ ...written, totalExtractedFields: 2 }],
+  }),
+})
+check(readOrderIntakeEvidence(shrunkDenominator).length === 0,
+  'as is a denominator smaller than the fields the same record says were extracted')
 const smuggled = makeStorage({
   [ORDER_INTAKE_EVIDENCE_STORAGE_KEY]: JSON.stringify({
     contract: 'supermega.local_order_intake_evidence_state.v1',
@@ -452,6 +702,15 @@ check(ORDER_INTAKE_EVIDENCE_STORAGE_KEY === 'supermega.shop.order-intake-evidenc
 check(isLocalWorkspaceKey(ORDER_INTAKE_EVIDENCE_STORAGE_KEY),
   'and is registered in local-workspace-storage.ts, so a device reset reaches it')
 
+// --- the capture scope is its own list, deliberately ------------------------
+// Widening channelOrderFields to serve section 9 would have demanded an exact message quote for a
+// channel the operator picks from a dropdown and broken channelOrderDraftIsReady's one-provenance-
+// entry-per-field rule for every existing draft. The capture scope is a separate constant instead.
+check(channelOrderCaptureFields.join(',') === 'customer,channel,sku,quantity,payment',
+  `the capture scope is the five reviewable fields, got "${channelOrderCaptureFields.join(',')}"`)
+check(channelOrderFields.join(',') === 'customer,sku,quantity,payment',
+  'and channelOrderFields is untouched, so quote attribution and draft readiness are unchanged')
+
 // --- layered guard, recorded so the count is not over-read -------------------
 // Adding the raw before/after diff to the object buildOrderIntakeEvidenceRecord returns leaves
 // every check here passing, because normalizeRecord rebuilds each record from a fixed field
@@ -466,5 +725,11 @@ check(isLocalWorkspaceKey(ORDER_INTAKE_EVIDENCE_STORAGE_KEY),
 //   3. dropping .slice() on the WRITE path only        -> "the SERIALISED history is capped too, got 201"
 //   4. dropping the messageFingerprint equality check  -> "a proposal and an acceptance for
 //      DIFFERENT messages produce no record"
+//   5. reverting the denominator to channelOrderFields -> "all six managed fields count toward
+//      the denominator, got 4"
+//   6. crediting the model with a channel the operator's form supplied, which is what any
+//      denominator read off the proposed DRAFT rather than the managed response would do
+//      -> "the base fixture populated four of the six managed fields"
+//   7. dropping the required actor                     -> "an empty operator produces no record"
 
 console.log(`order intake correction capture contract: ${checks} checks passed`)

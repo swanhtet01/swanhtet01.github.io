@@ -210,11 +210,15 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
     if (!reviewedDraft || !channelOrderDraftIsReady(reviewedDraft)) return
     // Acceptance is the only moment both halves of the pair exist and are final. Digest-only:
     // captureOrderIntakeCorrection writes field NAMES and counts, never the message or the values.
+    // The actor is the managed userId, the same identity managed audit events record -- section 9
+    // of the intake evaluation scores what a NAMED operator changed, and an AI proposal only
+    // exists here when an identity does, so an empty actor simply writes no record.
     captureOrderIntakeCorrection(window.localStorage, {
       generation: aiGeneration,
       proposed: aiProposedDraft,
       accepted: reviewedDraft,
       acceptedAt: new Date(),
+      actor: identity?.userId ?? '',
     })
     onUse(reviewedDraft)
     setSourceLabel('')

@@ -1,7 +1,7 @@
 import {
-  channelOrderFields,
+  managedOrderFields,
   type ChannelOrderDraft,
-  type ChannelOrderField,
+  type ManagedOrderField,
 } from './channel-order-intake.ts'
 
 /**
@@ -23,10 +23,35 @@ import {
  * Shape follows `supermega.order-intake-evidence.v1`, designed in
  * hq/research/order-intake-agent-evaluation-2026-08.md section 4. Field names are camelCase, the
  * same split channel-order-intake.ts already makes between the snake_case managed response and
- * the browser-side ChannelOrderDraft. Two deviations, both deliberate: `accepted_by` is absent
- * because naming the operator is not needed to learn from a correction and an unneeded identity
- * is an unneeded privacy surface; `intakeDraftSchema` is pinned to the value the server actually
- * sends rather than restated by the caller.
+ * the browser-side ChannelOrderDraft. One deviation, deliberate: `intakeDraftSchema` is pinned to
+ * the value the server actually sends rather than restated by the caller.
+ *
+ * WHAT SECTION 9 NEEDS ON TOP OF SECTION 4, and how each part is served here:
+ *
+ *   correction_effort = fields_corrected / total_extracted_fields   (threshold <= 0.20)
+ *
+ * - `total_extracted_fields` is "every field the model populated with a non-null value". That is
+ *   the SIX managed fields (managedOrderFields), not the four a human maps to exact quotes. It is
+ *   read off the managed RESPONSE rather than inferred from the browser draft, because the draft
+ *   cannot answer the question: buildManagedChannelOrderDraft substitutes the operator's own form
+ *   selection for a channel the model returned as null, so a populated `draft.channel` is not
+ *   evidence that the model populated anything, and `fulfilment` never reaches the draft at all.
+ * - `fields_corrected` is what a NAMED operator changed, so `actor` is required and a record with
+ *   no named operator is not written. The identity recorded is the managed `userId` -- the same
+ *   value managed audit events already use as `actor` -- never an email or a person's name, so
+ *   naming the operator costs nothing against the no-PII promise below.
+ * - The two counts must be comparable. `fieldsCorrected` is therefore a subset of
+ *   `fieldsExtracted`: a field the model never populated cannot be a correction OF the model, and
+ *   scoring one as such put correction_effort above 1, which section 9's own definition ("a
+ *   correction effort of 1 means the operator changed every populated field") excludes. The
+ *   signal that used to live in that miscount is not lost -- it moved somewhere more precise.
+ *   `fieldsExtracted` names what the model filled in, so "the model MISSED payment" (payment
+ *   absent from fieldsExtracted) is now distinguishable from "the model got payment WRONG"
+ *   (payment present in both arrays), which one array could never express.
+ * - `totalExtractedFields` counts all six; `fieldsExtracted` names only the five the review
+ *   surface exposes. The gap between them is deliberate and readable: it is the part of section
+ *   9's denominator this surface cannot put in front of an operator, and an evaluator who cannot
+ *   see that gap would read a falsely low correction_effort. Today the gap is `fulfilment`.
  */
 
 export const ORDER_INTAKE_EVIDENCE_SCHEMA = 'supermega.order-intake-evidence.v1' as const
@@ -44,16 +69,59 @@ export const ORDER_INTAKE_EVIDENCE_MAX_RECORDS = 200
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/
 const MODEL_NAME_MAX = 120
 const PROMPT_VERSION_MAX = 120
+/** Matches the actor bound on managed proof records elsewhere in the workspace. */
+const ACTOR_MAX = 80
+
+/**
+ * The capture scope: the managed fields whose value both reaches the browser draft AND is put in
+ * front of the operator by ChannelOrderIntake, so they can be counted as extracted and diffed as
+ * corrected. Listed in managedOrderFields order so the two sets line up.
+ *
+ * This is NOT channelOrderFields, and widening channelOrderFields to serve section 9 would have
+ * been wrong: that list drives per-field quote attribution, the `<field>_attribution_required`
+ * blockers, and channelOrderDraftIsReady's requirement that provenance carry exactly one entry
+ * per field. Adding `channel` to it would demand an exact message quote for a value the operator
+ * picks from a dropdown, and every existing ready draft would stop being ready.
+ *
+ * `fulfilment` is absent for the opposite reason: the model populates it and section 9 counts it,
+ * but ChannelOrderDraft has no fulfilment field and the review surface has no fulfilment control,
+ * so no operator can correct it. It is counted in totalExtractedFields and named here as missing
+ * rather than quietly folded in as if it had been reviewed.
+ */
+export const channelOrderCaptureFields = ['customer', 'channel', 'sku', 'quantity', 'payment'] as const
+
+export type ChannelOrderCaptureField = (typeof channelOrderCaptureFields)[number]
+
+/**
+ * Managed field name -> the capture-scope field it lands on, or null when the review surface has
+ * no control for it. Exhaustive over managedOrderFields on purpose: a field added to the server
+ * contract fails to compile here until someone decides which side of the line it falls on.
+ */
+const captureFieldByManagedField: Record<ManagedOrderField, ChannelOrderCaptureField | null> = {
+  customer_reference: 'customer',
+  channel: 'channel',
+  sku: 'sku',
+  quantity: 'quantity',
+  payment: 'payment',
+  fulfilment: null,
+}
+
+/** What the model populated: section 9's denominator, plus the reviewable part of it by name. */
+export type OrderIntakeExtractedFields = {
+  reviewable: ChannelOrderCaptureField[]
+  total: number
+}
 
 export type OrderIntakeGeneration = {
   messageDigest: string
   model: string
   promptVersion: string
   generatedAt: string
+  extractedFields: OrderIntakeExtractedFields
 }
 
 export type OrderIntakeFieldChange = {
-  field: ChannelOrderField
+  field: ChannelOrderCaptureField
   from: string
   to: string
 }
@@ -67,7 +135,9 @@ export type OrderIntakeEvidenceRecord = {
   promptVersion: string
   capturedAt: string
   acceptedAt: string
-  fieldsCorrected: ChannelOrderField[]
+  actor: string
+  fieldsExtracted: ChannelOrderCaptureField[]
+  fieldsCorrected: ChannelOrderCaptureField[]
   correctionCount: number
   totalExtractedFields: number
   rawMessageIncluded: false
@@ -102,11 +172,31 @@ function validTimestamp(value: unknown) {
  * than compared numerically so that "2" proposed and 2 accepted is not read as a correction --
  * the accepted draft has already been through buildChannelOrderDraft, which coerces it.
  */
-function fieldValue(draft: ChannelOrderDraft, field: ChannelOrderField) {
+function fieldValue(draft: ChannelOrderDraft, field: ChannelOrderCaptureField) {
   if (field === 'customer') return draft.customer
+  if (field === 'channel') return draft.channel ?? ''
   if (field === 'sku') return draft.sku
   if (field === 'quantity') return Number.isSafeInteger(draft.quantity) ? String(draft.quantity) : ''
   return draft.payment ?? ''
+}
+
+/**
+ * Which fields the MODEL populated, read straight off the managed draft. Fail-closed in both
+ * directions: a managed field name that is absent or `undefined` means this response does not
+ * match the contract the count is defined against, and a denominator computed from a response
+ * that might be missing a field is a wrong number rather than a missing one.
+ */
+function readExtractedFields(managed: Record<string, unknown>): OrderIntakeExtractedFields | null {
+  const reviewable: ChannelOrderCaptureField[] = []
+  let total = 0
+  for (const field of managedOrderFields) {
+    if (!(field in managed) || managed[field] === undefined) return null
+    if (managed[field] === null) continue
+    total += 1
+    const captureField = captureFieldByManagedField[field]
+    if (captureField) reviewable.push(captureField)
+  }
+  return { reviewable, total }
 }
 
 /**
@@ -124,34 +214,38 @@ export function readManagedIntakeGeneration(response: unknown): OrderIntakeGener
   const promptVersion = boundedText(draft.generation.prompt_version, PROMPT_VERSION_MAX)
   if (!SHA256_DIGEST.test(messageDigest) || !model || !promptVersion) return null
   if (!validTimestamp(draft.generated_at)) return null
+  const extractedFields = readExtractedFields(draft)
+  if (!extractedFields) return null
   return {
     messageDigest,
     model,
     promptVersion,
     generatedAt: new Date(String(draft.generated_at)).toISOString(),
+    extractedFields,
   }
 }
 
 /**
  * The field-level diff. Returns before/after values for the caller's benefit; the persisted
  * record keeps only the field names (see the module comment).
+ *
+ * `scope` defaults to every reviewable field, which is what a caller showing the operator "here is
+ * what you changed" wants. buildOrderIntakeEvidenceRecord narrows it to the fields the model
+ * actually populated, because only those can be a correction OF the model.
  */
 export function diffChannelOrderCorrections(
   proposed: ChannelOrderDraft,
   accepted: ChannelOrderDraft,
+  scope: readonly ChannelOrderCaptureField[] = channelOrderCaptureFields,
 ): OrderIntakeFieldChange[] {
   const changes: OrderIntakeFieldChange[] = []
-  for (const field of channelOrderFields) {
+  for (const field of channelOrderCaptureFields) {
+    if (!scope.includes(field)) continue
     const from = fieldValue(proposed, field)
     const to = fieldValue(accepted, field)
     if (from !== to) changes.push({ field, from, to })
   }
   return changes
-}
-
-/** How many of the four provenance fields the AI actually filled in. */
-export function countExtractedChannelOrderFields(proposed: ChannelOrderDraft) {
-  return channelOrderFields.filter((field) => Boolean(fieldValue(proposed, field))).length
 }
 
 /**
@@ -165,12 +259,18 @@ export function buildOrderIntakeEvidenceRecord(input: {
   proposed: ChannelOrderDraft | null
   accepted: ChannelOrderDraft
   acceptedAt: Date
+  actor: string
 }): OrderIntakeEvidenceRecord | null {
   const { generation, proposed, accepted } = input
   if (!generation || !proposed) return null
   if (!proposed.messageFingerprint || proposed.messageFingerprint !== accepted.messageFingerprint) return null
   if (!(input.acceptedAt instanceof Date) || !Number.isFinite(input.acceptedAt.getTime())) return null
-  const corrections = diffChannelOrderCorrections(proposed, accepted)
+  // Section 9 measures what a NAMED operator changed. An anonymous correction is not a section 9
+  // observation, so it is not recorded at all rather than recorded and later mistaken for one.
+  const actor = boundedText(input.actor, ACTOR_MAX)
+  if (!actor) return null
+  const fieldsExtracted = generation.extractedFields.reviewable
+  const corrections = diffChannelOrderCorrections(proposed, accepted, fieldsExtracted)
   return {
     schema: ORDER_INTAKE_EVIDENCE_SCHEMA,
     version: 1,
@@ -180,9 +280,11 @@ export function buildOrderIntakeEvidenceRecord(input: {
     promptVersion: generation.promptVersion,
     capturedAt: generation.generatedAt,
     acceptedAt: input.acceptedAt.toISOString(),
+    actor,
+    fieldsExtracted: [...fieldsExtracted],
     fieldsCorrected: corrections.map((change) => change.field),
     correctionCount: corrections.length,
-    totalExtractedFields: countExtractedChannelOrderFields(proposed),
+    totalExtractedFields: generation.extractedFields.total,
     rawMessageIncluded: false,
   }
 }
@@ -197,7 +299,9 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
   if (!record(value)) return null
   const model = boundedText(value.modelVersion, MODEL_NAME_MAX)
   const promptVersion = boundedText(value.promptVersion, PROMPT_VERSION_MAX)
+  const actor = boundedText(value.actor, ACTOR_MAX)
   const claimedFields = value.fieldsCorrected
+  const claimedExtracted = value.fieldsExtracted
   const totalExtractedFields = value.totalExtractedFields
   if (value.schema !== ORDER_INTAKE_EVIDENCE_SCHEMA
     || value.version !== 1
@@ -206,19 +310,28 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
     || !SHA256_DIGEST.test(value.messageDigest)
     || !model
     || !promptVersion
+    || !actor
     || !validTimestamp(value.capturedAt)
     || !validTimestamp(value.acceptedAt)
     || value.rawMessageIncluded !== false
     || !Array.isArray(claimedFields)
+    || !Array.isArray(claimedExtracted)
     || typeof totalExtractedFields !== 'number') return null
-  const fieldsCorrected = channelOrderFields.filter((field) => claimedFields.includes(field))
+  const fieldsExtracted = channelOrderCaptureFields.filter((field) => claimedExtracted.includes(field))
+  const fieldsCorrected = channelOrderCaptureFields.filter((field) => claimedFields.includes(field))
   // Both directions: the names must all be known fields, and the count must not be assertable
   // independently of them -- correctionCount is the number downstream analysis would trust.
+  if (fieldsExtracted.length !== claimedExtracted.length) return null
   if (fieldsCorrected.length !== claimedFields.length) return null
   if (value.correctionCount !== fieldsCorrected.length) return null
+  // Section 9's ratio only means anything while its numerator is inside its denominator. A stored
+  // record that claims a correction to a field the model never populated, or a reviewable set
+  // larger than the total, describes an impossible correction_effort -- refuse it on read rather
+  // than let an evaluation average it in.
+  if (!fieldsCorrected.every((field) => fieldsExtracted.includes(field))) return null
   if (!Number.isSafeInteger(totalExtractedFields)
-    || totalExtractedFields < 0
-    || totalExtractedFields > channelOrderFields.length) return null
+    || totalExtractedFields < fieldsExtracted.length
+    || totalExtractedFields > managedOrderFields.length) return null
   return {
     schema: ORDER_INTAKE_EVIDENCE_SCHEMA,
     version: 1,
@@ -228,6 +341,8 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
     promptVersion,
     capturedAt: String(value.capturedAt),
     acceptedAt: String(value.acceptedAt),
+    actor,
+    fieldsExtracted,
     fieldsCorrected,
     correctionCount: fieldsCorrected.length,
     totalExtractedFields,
@@ -289,6 +404,7 @@ export function captureOrderIntakeCorrection(
     proposed: ChannelOrderDraft | null
     accepted: ChannelOrderDraft
     acceptedAt: Date
+    actor: string
   },
 ): OrderIntakeEvidenceRecord | null {
   const entry = buildOrderIntakeEvidenceRecord(input)
