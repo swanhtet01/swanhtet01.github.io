@@ -21,6 +21,7 @@ from supermega_runtime.managed_activation import (
     ACTIVATION_PLAN_CONTRACT,
     ACTIVATION_RECEIPT_CONTRACT,
     SUSPENSION_RECEIPT_CONTRACT,
+    TRIAL_SCHEMA_VERSION,
     ManagedActivationConflict,
     ManagedActivationError,
     ManagedWorkspaceProvisioner,
@@ -331,7 +332,7 @@ class FakeCursor:
                     if len(self.database.statements) > 1
                     else False,
                     "provisioning_role_privileged": self.database.provisioning_role_privileged,
-                    "schema_version": 10,
+                    "schema_version": TRIAL_SCHEMA_VERSION,
                     "backend_role_safe": True,
                     "access_select": True,
                     "access_insert": True,
@@ -472,7 +473,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
         second = activation_plan()
         self.assertEqual(first, second)
         self.assertEqual(first["contract"], ACTIVATION_PLAN_CONTRACT)
-        self.assertEqual(first["target"]["schemaVersion"], 10)
+        self.assertEqual(first["target"]["schemaVersion"], TRIAL_SCHEMA_VERSION)
         self.assertEqual(first["target"]["adminCaSha256"], ADMIN_CA_SHA256)
         self.assertIn("commerce.write", first["ownerCapabilities"])
         self.assertNotIn("production.write", first["ownerCapabilities"])
