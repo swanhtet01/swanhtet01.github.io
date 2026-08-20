@@ -5739,9 +5739,16 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
 //      string, and excluded from the baseline as well as from the subject
 //      position. Two markers because re-seeding a working sample DELETES its
 //      movements and orders while leaving `closes` untouched, which would leave
-//      an old all-sample close reading as real trading. An empty order list is
-//      NOT a sample: `every` on an empty array must not become a verdict about
-//      records that do not exist.
+//      an old all-sample close reading as real trading. The test is "touches ANY
+//      sample order", not "is made entirely of them": commerceCloseExpectation
+//      sweeps every completed, reconciled, unclosed order into the day whatever
+//      its origin, and createSeedCommerce ships ORD-1039 already reconciled, so
+//      a seeded workspace's FIRST close is normally mixed and its `total` is a
+//      sum across both. Such a close is dropped whole rather than netted out --
+//      the close records no per-order amounts, so subtracting would re-derive
+//      them from data a working-sample re-seed deletes and order corrections
+//      move. An empty or absent order list is NOT a sample: missing evidence
+//      must not become a verdict about records that do not exist.
 //   5. AN ALL-CLEAR SPEAKS ONLY FOR WHAT WAS COMPARED. `comparedMeasures` names
 //      the measures that had both a value on this close and a full baseline, and
 //      the "nothing stood out" sentence is built from that list -- a shop that
@@ -5780,7 +5787,13 @@ if (shopCloseAnomalyImports !== "import type { CommerceClose, CommerceState } fr
   || !shopCloseAnomalySource.includes('movement.actionId.startsWith(SAMPLE_ACTION_ID_PREFIX)')
   || !shopCloseAnomalySource.includes('return sampleOrderIds.has(orderId) || orderId.startsWith(SAMPLE_ORDER_ID_PREFIX)')
   || !shopCloseAnomalySource.includes('if (!orderIds || orderIds.length === 0) return false')
-  || !shopCloseAnomalySource.includes('.filter((close) => !shopCloseIsGuidedSample(close, sampleOrderIds))')
+  || !shopCloseAnomalySource.includes('return orderIds.some((orderId) => shopCloseOrderIsGuidedSample(orderId, sampleOrderIds))')
+  || shopCloseAnomalySource.includes('orderIds.every(')
+  || !shopCloseAnomalySource.includes('.filter((close) => !shopCloseTouchesGuidedSample(close, sampleOrderIds))')
+  // The median the threshold and the ratio use is EXACT. Rounding it moves the
+  // threshold: over [0,0,0,0,1,1,1,1] a day with 2 unpaid orders is exactly 4x.
+  || !shopCloseAnomalySource.includes('baselineMedian: shopCloseAnomalyMedian(observations),')
+  || shopCloseAnomalySource.includes('Math.round(shopCloseAnomalyMedian(')
   // An all-clear names only what was compared, and a zero-order close never
   // raises a downward takings flag (the accountable-snapshot flow).
   || !shopCloseAnomalySource.includes('comparedMeasures.push(spec.measure)')
@@ -5793,7 +5806,9 @@ if (shopCloseAnomalyImports !== "import type { CommerceClose, CommerceState } fr
   || !coreSource.includes('data-close-anomaly={closeAnomaly.state}')
   || !coreSource.includes("closeAnomaly.state === 'no_close' ? null")
   || !coreSource.includes('Until then there is no usual day to compare against.')
-  || !coreSource.includes('closeAnomalyComparedPhrase(closeAnomaly.comparedMeasures)')
+  // The all-clear claims only that no threshold was crossed -- everything
+  // between a quarter and four times the usual day lands in it.
+  || !coreSource.includes('`Nothing in your ${closeAnomalyComparedPhrase(closeAnomaly.comparedMeasures)} was far enough from your usual day to be worth raising.`')
   // The block names the close it read -- the projection means "the most recent
   // close", not "today", and a morning reader must not be shown yesterday's
   // drawer as though it were still countable.
@@ -19508,10 +19523,10 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // number with ~18_824 bytes of headroom, the same order of headroom the
 // previous two ceilings gave.
 // RAISE 2026-08-20 (roadmap §2 item 5, anomaly flags on the close): fresh
-// `npm run app:build` measures 3_052_831 -- 2_831 bytes over -- after one real
+// `npm run app:build` measures 3_052_850 -- 2_850 bytes over -- after one real
 // product feature (the shop-close-anomaly-flags projection plus the
 // close-surface block that reads it). Raised to 3_070_000: covers the measured
-// number with ~17_169 bytes of headroom, the same order of headroom the
+// number with ~17_150 bytes of headroom, the same order of headroom the
 // previous three ceilings gave. NOTE for whoever lands next: re-measure on a
 // fresh dist/ rather than carrying this number over -- it was taken without
 // any other in-flight branch's CSS or components.

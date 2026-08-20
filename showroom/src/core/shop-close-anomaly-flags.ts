@@ -50,9 +50,12 @@ import type { CommerceClose, CommerceState } from './commerce-workspace.ts'
 // string, or by the working sample's own `SETUP-SAMPLE-` order-id prefix —
 // two independent structural markers, because re-seeding a working sample
 // deletes its movements and orders while leaving `closes` untouched. A close
-// whose every order is sample-seeded is dropped from both the subject position
-// and the baseline, so a demo workspace cannot produce a flag that reads like
-// a real finding. Note this is belt-and-braces: closes are the
+// that touches ANY sample order — not merely one made entirely of them — is
+// dropped from both the subject position and the baseline, because the day's
+// figures are summed across every order it swept in and cannot be
+// unpicked faithfully from the close record (see
+// `shopCloseTouchesGuidedSample` for why subtraction was rejected). So a
+// demo workspace cannot produce a flag that reads like a real finding. Note this is belt-and-braces: closes are the
 // one record type guided seeding never creates, because the close write path
 // admits only a full-UUID `ACT-…` actionId (commerce-workspace.ts's
 // `closeActionIdPattern`), which no `ACT-DEMO-` value can match.
@@ -98,7 +101,11 @@ export type ShopCloseAnomalyFlag = {
   basis: ShopCloseAnomalyBasis
   /** The measured value on the close being read. */
   todayValue: number
-  /** Median of the same measure across the baseline closes, rounded to a whole unit. */
+  /**
+   * Median of the same measure across the baseline closes, EXACT — the number
+   * both the threshold and the ratio are computed from. Count measures can
+   * carry a half value; rounding it would move the threshold.
+   */
   baselineMedian: number
   /** Highest value of the same measure across the baseline closes. */
   baselineHigh: number
@@ -214,14 +221,37 @@ function shopCloseOrderIsGuidedSample(orderId: string, sampleOrderIds: ReadonlyS
 }
 
 /**
- * A close is guided sample activity when every order it closed was sample
- * seeded. A close that recorded no orders is NOT a sample — an empty list must
- * not pass an `every` check into a verdict about records that do not exist.
+ * Whether a close touched guided sample activity AT ALL — one sampled order out
+ * of ten is enough. `commerceCloseExpectation` sweeps every completed,
+ * reconciled, not-yet-closed order into the day regardless of origin, so a close
+ * can hold real sales and sample sales together and its `total` is their sum.
+ * This is not an exotic case: `createSeedCommerce` ships ORD-1039 already
+ * completed and reconciled, so the FIRST close a seeded workspace saves is
+ * normally a mixed one.
+ *
+ * WHY THE WHOLE CLOSE IS DROPPED RATHER THAN THE SAMPLE PART SUBTRACTED. The
+ * close records `orderIds` and one summed `total`; it does not record what each
+ * order contributed. Subtracting would mean re-deriving each sample order's
+ * adjusted total from `commerce.orders` today — and that is exactly the data a
+ * working-sample re-seed DELETES, and that later order corrections move. The
+ * result would be a reconstruction presented as the record. A flag is a claim
+ * about the owner's money, so the right failure mode for a close this
+ * projection cannot describe faithfully is to say nothing about it.
+ *
+ * The cost is bounded and self-healing: an order can never be closed twice, so
+ * each sample order can contaminate at most one close, and the thin-data gate
+ * already counts only usable closes — a workspace that has been exploring
+ * samples is told it needs more closes, which closing more real days fixes.
+ *
+ * A close that recorded no orders is NOT a sample, and neither is a legacy close
+ * with no `orderIds` to check — an absent list is missing evidence, not evidence
+ * of absence, and the close surface separately tells the owner that a legacy
+ * close history needs migration.
  */
-function shopCloseIsGuidedSample(close: CommerceClose, sampleOrderIds: ReadonlySet<string>) {
+function shopCloseTouchesGuidedSample(close: CommerceClose, sampleOrderIds: ReadonlySet<string>) {
   const orderIds = close.orderIds
   if (!orderIds || orderIds.length === 0) return false
-  return orderIds.every((orderId) => shopCloseOrderIsGuidedSample(orderId, sampleOrderIds))
+  return orderIds.some((orderId) => shopCloseOrderIsGuidedSample(orderId, sampleOrderIds))
 }
 
 /**
@@ -246,9 +276,14 @@ function shopCloseAnomalyComparison(
 
   return {
     todayValue,
-    // The exposed median is the one the ratio is computed from, so a reader
-    // can check the arithmetic in the sentence against the numbers beside it.
-    baselineMedian: Math.round(shopCloseAnomalyMedian(observations)),
+    // EXACT, never rounded. Rounding here moves the threshold itself: over
+    // [0,0,0,0,1,1,1,1] the median is 0.5, so a day with 2 unpaid orders is
+    // exactly 4× and must flag — rounded to 1 it would take 4 orders before
+    // anything was said. It is also the median the ratio is computed from, so a
+    // reader can check the arithmetic in the sentence against the numbers
+    // beside it. Count measures can therefore carry a half value; formatting is
+    // the surface's job, not the projection's.
+    baselineMedian: shopCloseAnomalyMedian(observations),
     baselineHigh: Math.max(...observations),
     baselineDays: observations.length,
   }
@@ -293,7 +328,7 @@ export function projectShopCloseAnomalyFlags(commerce: CommerceState): ShopClose
   // assumed: reading the wrong close as "today" would put a normal day in the
   // subject position and a baseline in the wrong window.
   const closes = commerce.closes
-    .filter((close) => !shopCloseIsGuidedSample(close, sampleOrderIds))
+    .filter((close) => !shopCloseTouchesGuidedSample(close, sampleOrderIds))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))
 
   const subject = closes[0]

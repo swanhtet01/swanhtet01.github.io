@@ -277,8 +277,46 @@ const mixed = projectShopCloseAnomalyFlags(state(
 check(mixed.state === 'building_baseline', 'sample closes are excluded from the baseline as well as the subject')
 check(mixed.baselineDays === 0, 'a workspace of samples leaves a real close with no baseline at all')
 
+// A close that mixes ONE sample order into real trading is dropped whole. Its
+// `total` is a sum across both, and the close records no per-order amounts, so
+// there is nothing faithful to subtract. This is the common case, not an exotic
+// one: createSeedCommerce ships ORD-1039 completed and reconciled, so the first
+// close of a seeded workspace normally sweeps it in.
+const mixedSubject = projectShopCloseAnomalyFlags(state(
+  [close(0, { orderIds: ['ORD-3000', 'SETUP-SAMPLE-BAKERY-SALE-X'].sort(), total: 500000 }), ...week({ total: 100000 })],
+  [],
+))
+check(mixedSubject.closeId !== close(0).id, 'a close holding one sample order is not read as today')
+check(mixedSubject.flags.length === 0, 'and its inflated total raises no flag')
+
+const mixedBaseline = projectShopCloseAnomalyFlags(state([
+  close(0, { total: 100000 }),
+  ...Array.from({ length: 8 }, (_, n) => close(n + 1, n < 4
+    ? { orderIds: ['ORD-4000', `SETUP-SAMPLE-BAKERY-SALE-${n}`].sort(), total: 900000 }
+    : { total: 100000 })),
+]))
+check(mixedBaseline.baselineDays === 4, 'mixed closes are excluded from the baseline as well')
+check(mixedBaseline.state === 'building_baseline', 'and the baseline is honestly reported as short rather than padded')
+
+// The seed's own order reaches this through the OTHER marker: ORD-1039 ships
+// completed and reconciled with an ACT-DEMO- reserve movement, which is exactly
+// how a real shop's first close ends up mixed.
+const seededFirstClose = projectShopCloseAnomalyFlags(state(
+  [close(0, { orderIds: ['ORD-1039', 'ORD-3000'].sort(), total: 500000 }), ...week({ total: 100000 })],
+  [{ id: 'MOV-ACT-DEMO-1039', actionId: 'ACT-DEMO-1039', orderId: 'ORD-1039', sku: 'SM-1004', quantityDelta: -1 }],
+))
+check(seededFirstClose.flags.length === 0, 'the seeded order sweeping into a real first close raises nothing')
+
+// The same close, with the sample order removed, is ordinary trading again --
+// so the exclusion is about the sample marker, not about the shape of the close.
+const realOnly = projectShopCloseAnomalyFlags(state(
+  [close(0, { orderIds: ['ORD-3000'], total: 500000 }), ...week({ total: 100000 })],
+  [],
+))
+check(flagFor(realOnly, 'takings') !== null, 'the same figures without a sample order do flag')
+
 // A close that recorded no orders is not a sample: an empty list must not pass
-// an `every` check into a verdict about records that do not exist.
+// a membership check into a verdict about records that do not exist.
 const zeroOrderClose = projectShopCloseAnomalyFlags(state([close(0, { orderIds: [], total: 0 })]))
 check(zeroOrderClose.state === 'building_baseline', 'a zero-order close is still a close')
 
@@ -356,5 +394,26 @@ check(flagFor(quietButTrading, 'takings') !== null, 'a day that did trade, barel
 // orphaned sample closes would start reading as real trading.
 const orphanedSamples = projectShopCloseAnomalyFlags(state(sampleCloses, []))
 check(orphanedSamples.state === 'no_close', 'sample closes stay excluded after their movements are deleted')
+
+// ---------------------------------------------------------------------------
+// 10. The threshold uses the exact median, never a rounded one.
+// ---------------------------------------------------------------------------
+// Eight closes at [0,0,0,0,1,1,1,1] have a median of 0.5, so two unpaid orders
+// today is exactly 4x and must flag. Rounding the median to 1 would silently
+// raise the bar to four orders.
+const halfMedian = projectShopCloseAnomalyFlags(state([
+  close(0, { unpaidOrders: 2 }),
+  ...Array.from({ length: 8 }, (_, n) => close(n + 1, { unpaidOrders: n < 4 ? 0 : 1 })),
+]))
+const halfMedianFlag = flagFor(halfMedian, 'unpaid_orders')
+check(halfMedianFlag !== null, 'two unpaid orders against a median of 0.5 is exactly 4x and flags')
+check(halfMedianFlag.baselineMedian === 0.5, 'the exact median is exposed, not a rounded one')
+check(halfMedianFlag.multipleOfMedian === 4, 'and the ratio is computed from it')
+
+const halfMedianQuiet = projectShopCloseAnomalyFlags(state([
+  close(0, { unpaidOrders: 1 }),
+  ...Array.from({ length: 8 }, (_, n) => close(n + 1, { unpaidOrders: n < 4 ? 0 : 1 })),
+]))
+check(flagFor(halfMedianQuiet, 'unpaid_orders') === null, 'one unpaid order against the same median is 2x and stays quiet')
 
 console.log(`shop close anomaly flags contract ok (${checks} checks)`)

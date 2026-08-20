@@ -1680,7 +1680,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const closeAnomalyComparedPhrase = (measures: ShopCloseAnomalyFlags['comparedMeasures']) => {
     const names = measures.map((measure) => measure === 'cash_variance' ? 'drawer count' : measure === 'unpaid_orders' ? 'unpaid orders' : 'takings')
     if (names.length === 1) return names[0]
-    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+    return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`
   }
   const latestCloseDownload = useMemo(() => {
     if (!latestClose) return null
@@ -6739,8 +6739,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <strong>{closeAnomaly.businessDate ? `${closeAnomaly.businessDate} against your usual day` : 'Compared with your usual day'}</strong>
       {closeAnomaly.state === 'building_baseline'
         ? <p className="panel-copy">Close {closeAnomaly.baselineDaysNeeded} more {closeAnomaly.baselineDaysNeeded === 1 ? 'day' : 'days'} and this will point out what stood out about the day you closed. Until then there is no usual day to compare against.</p>
+        // An empty flag list proves only that no threshold was crossed.
+        // Everything between a quarter and four times the usual day lands here,
+        // so "close to your usual day" would be untrue at 3.9× — the discipline
+        // comparedMeasures applies to coverage, applied to magnitude.
         : closeAnomaly.state === 'nothing_unusual'
-          ? <p className="panel-copy">{closeAnomaly.comparedMeasures.length ? `Your ${closeAnomalyComparedPhrase(closeAnomaly.comparedMeasures)} came out close to your usual day.` : 'There is nothing on this close to compare yet.'}</p>
+          ? <p className="panel-copy">{closeAnomaly.comparedMeasures.length ? `Nothing in your ${closeAnomalyComparedPhrase(closeAnomaly.comparedMeasures)} was far enough from your usual day to be worth raising.` : 'There is nothing on this close to compare yet.'}</p>
           : <ul className="close-anomaly-list">{closeAnomaly.flags.map((flag) => <li key={flag.measure}>{closeAnomalySentence(flag)}</li>)}</ul>}
     </div>}
     {latestClose?.operator ? <details className="compact-disclosure">
