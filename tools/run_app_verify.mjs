@@ -15,12 +15,17 @@ if (!chain) throw new Error('app_verify_chain_missing')
 // Default behaviour is byte-identical to the historical serial runner: no flags
 // => run every step in canonical order, stop at the first failure. Opt into
 // parallelism with --jobs N (capped at the core count). Parallel mode never
-// uses an unbounded pool and runs the five heavy, subprocess-spawning steps
-// (typecheck, build, dev-verify, deploy-workflow, security-contract) as a
-// serial prelude first, so the port-bound app:dev:verify (hard 45s timeout) is
-// never starved and the most common breakages fast-fail before the wide
-// fan-out. First-failure reporting is deterministic in BOTH modes: the minimum
-// failing canonical stepIndex wins, identical to serial semantics.
+// uses an unbounded pool. It runs a serial prelude first -- the dist-producing
+// app:build and the port-bound app:dev:verify (hard 45s timeout) -- so the
+// artifact is complete before anything reads it and the dev boot is never
+// starved; see the prelude block below for why each is there. First-failure
+// reporting is deterministic in BOTH modes: the minimum failing canonical
+// stepIndex wins, identical to serial semantics.
+//
+// This header previously listed five steps as the prelude (typecheck, build,
+// dev-verify, deploy-workflow, security-contract) while the code preludes only
+// app:dev:verify. Two of the three claims were wrong and stayed wrong for a
+// while, so: the code below is the contract, and this comment tracks it.
 //
 // Subset flags for local iteration (do not affect canonical indices):
 //   --only <substring>   keep only steps whose label/command contains it (repeatable)
@@ -69,16 +74,46 @@ if (only.length) {
   if (!steps.length) throw new Error(`app_verify_only_no_match:${only.join(',')}`)
 }
 
-// The adversarial safety audit found exactly ONE step that can FALSE-FAIL under
-// concurrency: app:dev:verify boots FastAPI+Vite on an ephemeral port with a
-// hard 45s timeout, so CPU/IO starvation from a saturated pool could push its
-// boot past the deadline. It alone runs uncontended, as a serial prelude, before
-// the fan-out. The other subprocess-heavy steps (typecheck, build,
-// deploy-workflow, security-contract) do NOT mutate shared state and have no
-// hard timeout, so they pool safely (peak concurrency is capped at `jobs`), and
-// ascending assignment still surfaces an early typecheck/build failure quickly.
-const PRELUDE_MATCHERS = ['app:dev:verify', 'verify_local_app_dev']
+// Two steps must run before the fan-out, for unrelated reasons.
+//
+// app:dev:verify boots FastAPI+Vite on an ephemeral port with a hard 45s
+// timeout, so CPU/IO starvation from a saturated pool could push its boot past
+// the deadline.
+//
+// app:build PRODUCES showroom/dist/, which verify_app_build CONSUMES. An
+// earlier revision of this comment claimed the heavy steps "do NOT mutate
+// shared state and have no hard timeout, so they pool safely". That was wrong
+// about the build: `npm run app:build` runs app:release:write and then Vite,
+// which EMPTIES dist/ before repopulating it. With both steps in the pool at
+// --jobs 8 they start together, and verify_app_build reads the directory
+// mid-write. Three independent lanes hit this on 2026-08-20 and each reported
+// the same shape: missing_app_webmanifest / missing_apple_touch_icon /
+// missing_service_worker / missing_release_metadata, on a tree where those
+// files demonstrably existed in dist/ afterwards.
+//
+// The false-RED above is the benign direction. The silent one is worse: when a
+// previous complete dist/ is already on disk and verify_app_build finishes
+// reading it before Vite empties it, the gate validates the OLD artifact and
+// reports green while this build's output was never inspected at all. That is
+// the same stale-dist false-green CLAUDE.md warns about after a suppressed
+// build, arrived at by a different route -- and unlike that one, it leaves no
+// trace in the output to notice afterwards.
+//
+// Ordering the producer ahead of the pool removes both directions. The cost is
+// that the build no longer overlaps the other heavy steps; correctness over a
+// few seconds of wall clock, and the fan-out still covers the remaining ~637.
+const PRELUDE_MATCHERS = ['app:build', 'app:dev:verify', 'verify_local_app_dev']
 const isPrelude = (s) => PRELUDE_MATCHERS.some((m) => s.label.includes(m) || s.command.includes(m))
+
+// Regression guard for the race above. If a future chain adds another consumer
+// of dist/ -- or the build is dropped from the prelude -- this fails loudly at
+// scheduling time instead of racing silently and reporting a colour nobody can
+// trust. Deliberately scoped to the case where the chain being run contains
+// BOTH sides: `--only verify_app_build` filters the producer out on purpose, to
+// re-check an existing dist/, and that is not a race.
+const DIST_PRODUCER_MATCHERS = ['app:build']
+const DIST_CONSUMER_MATCHERS = ['verify_app_build']
+const matchesAny = (s, matchers) => matchers.some((m) => s.label.includes(m) || s.command.includes(m))
 
 function runStep(step) {
   return new Promise((done) => {
@@ -121,9 +156,19 @@ if (jobs <= 1) {
   if (failure) finishFailure(failure)
   finishSuccess()
 } else {
-  // The port-bound step first, uncontended, in canonical order.
+  // The dist producer and the port-bound step first, uncontended, in canonical
+  // order. Every pool worker starts only after this returns.
   const prelude = steps.filter(isPrelude)
   const light = steps.filter((s) => !isPrelude(s))
+
+  if (
+    light.some((s) => matchesAny(s, DIST_CONSUMER_MATCHERS)) &&
+    steps.some((s) => matchesAny(s, DIST_PRODUCER_MATCHERS)) &&
+    !prelude.some((s) => matchesAny(s, DIST_PRODUCER_MATCHERS))
+  ) {
+    throw new Error('app_verify_dist_producer_not_ordered_before_pool')
+  }
+
   const preludeFailure = await runSerial(prelude)
   if (preludeFailure) finishFailure(preludeFailure)
 
