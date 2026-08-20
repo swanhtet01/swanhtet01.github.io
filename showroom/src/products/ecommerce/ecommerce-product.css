@@ -2028,3 +2028,22 @@
   font-weight: var(--font-weight-medium);
   line-height: 1.45;
 }
+
+/* The cockpits are deliberately THEME_BLIND (tools/test_theme_surface_contract.mjs)
+   -- they keep their light tint in dark mode -- so shared token text landing on
+   them inherits the dark palette and disappears. Measured in a real browser
+   before this rule existed: var(--core-ink) on the cockpit tint is 15.3:1 in
+   light and 1.01:1 in dark, i.e. the lead line was invisible on the dark theme.
+   The contract test does not catch it, because these cards are listed exceptions
+   and are skipped.
+   This file's established remedy is "on a theme-blind card the text must be
+   theme-blind too" (see the .theme-dark .ecommerce-ops-cockpit .core-eyebrow
+   note above), and it spells that with a dark literal. A literal is not
+   available here: the hex ratchet in tools/check_css_contracts.mjs sits at 111
+   for this file and is never raised. --core-bg is the one token that resolves
+   DARK inside .theme-dark (#05080d), which is exactly the ink a card that stays
+   light needs, and this rule is scoped to .theme-dark so the token's light
+   value is never consulted. */
+.theme-dark .ecommerce-ops-cockpit p.surface-lead {
+  color: var(--core-bg);
+}
