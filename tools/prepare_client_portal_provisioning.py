@@ -20,7 +20,7 @@ from supermega_runtime.client_provisioning import (
 )
 
 
-CONTRACT = "supermega.client_portal_provisioning_bundle.v1"
+CONTRACT = "supermega.client_portal_provisioning_bundle.v2"
 PREPARATION_CONTRACT = "supermega.client_demo_preparation.v3"
 PRODUCT_ORDER = ("commerce", "production", "website", "ecommerce")
 PRODUCT_IDS = {
@@ -153,11 +153,18 @@ def build_client_portal_provisioning_bundle(preparation: Mapping[str, Any]) -> d
             workspace=workspace,
             owner=owner,
         )
+        setup_path = str(product["setupPath"])
+        if runtime_product == "commerce":
+            industry_pack_id = str(client["shopIndustryPackId"])
+            if industry_pack_id not in {"retail", "cafe", "restaurant", "spa", "gym", "school"}:
+                raise ClientPortalProvisioningError("The Shop industry pack is unsupported.")
+            setup_path = f"/settings/?product=shop&pack={industry_pack_id}"
         planned_products.append({
             "product": runtime_product,
             "productId": product_id,
             "label": product["label"],
             "templateId": template_id,
+            "setupPath": setup_path,
             "source": {
                 "preparationBundleDigest": preparation["bundleDigest"],
                 "packageDigest": product["packageDigest"],
@@ -170,7 +177,7 @@ def build_client_portal_provisioning_bundle(preparation: Mapping[str, Any]) -> d
 
     payload: dict[str, Any] = {
         "contract": CONTRACT,
-        "version": 1,
+        "version": 2,
         "client": {
             "workspace": workspace,
             "owner": owner,

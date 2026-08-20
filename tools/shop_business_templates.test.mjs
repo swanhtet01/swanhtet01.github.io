@@ -184,6 +184,11 @@ test('deep links select templates and unknown values fall back safely', () => {
   assert.equal(model.shopBusinessTemplateFromQuery(''), null)
   assert.equal(model.shopBusinessTemplateFromQuery(null), null)
   assert.equal(model.shopBusinessTemplateSetupPath('pharmacy'), '/settings/?product=shop&template=pharmacy')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('spa'), 'trade:beauty-spa')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('restaurant'), 'trade:restaurant')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('gym'), 'pack:gym')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('retail'), 'pack:retail')
+  assert.equal(model.shopIndustryPackSetupPath('spa'), '/settings/?product=shop&pack=spa')
   assert.throws(() => model.shopBusinessTemplate('unknown'))
 })
 

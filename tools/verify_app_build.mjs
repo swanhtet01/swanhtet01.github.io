@@ -7861,7 +7861,9 @@ async function verifyShopBusinessTemplateRuntime() {
     || ['Date.now', 'Math.random', 'new Date()', 'crypto.randomUUID', 'performance.now', 'fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'localStorage'].some((marker) => shopBusinessTemplatesSource.includes(marker))
     || !productOnboardingRuntimeSource.includes('export async function provisionLocalShopBusinessTemplateSample')
     || !productOnboardingPageSource.includes('provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)')
-    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
+    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(query.get('template'))")
+    || !productOnboardingPageSource.includes("shopBusinessChoiceFromIndustryPack(pack.id)")
+    || !shopBusinessTemplatesSource.includes('export function shopIndustryPackSetupPath(')
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
     || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
@@ -7928,7 +7930,10 @@ async function verifyShopBusinessTemplateRuntime() {
       && model.shopBusinessTemplateFromQuery(' PHARMACY ') === 'pharmacy'
       && model.shopBusinessTemplateFromQuery('unknown-type') === null
       && model.shopBusinessTemplateFromQuery(null) === null, 'shop_business_template_query_selection_wrong')
-    assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy', 'shop_business_template_setup_path_wrong')
+    assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy'
+      && model.shopIndustryPackSetupPath('spa') === '/settings/?product=shop&pack=spa'
+      && model.shopBusinessChoiceFromIndustryPack('spa') === 'trade:beauty-spa'
+      && model.shopBusinessChoiceFromIndustryPack('gym') === 'pack:gym', 'shop_business_template_setup_path_wrong')
     assertThrows(() => model.shopBusinessTemplate('unknown'), 'shop_business_unknown_template_accepted')
   } catch (error) {
     fail(`shop_business_template_runtime:${error instanceof Error ? error.message : 'unknown'}`)

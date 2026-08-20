@@ -599,6 +599,15 @@ export function shopBusinessTemplateSetupPath(id: ShopBusinessTemplateId) {
   return `/settings/?product=shop&template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
 }
 
+export function shopBusinessChoiceFromIndustryPack(id: ShopIndustryPackId) {
+  const matchingTemplates = shopBusinessTemplates.filter((template) => template.industryPackId === id)
+  return matchingTemplates.length === 1 ? `trade:${matchingTemplates[0].id}` : `pack:${id}`
+}
+
+export function shopIndustryPackSetupPath(id: ShopIndustryPackId) {
+  return `/settings/?product=shop&pack=${encodeURIComponent(id)}`
+}
+
 // Item names are the one free-text field here, and they were interpolated raw. No shipped
 // name contains a comma today, so nothing was broken -- but "Front brake pad set, ceramic"
 // is an ordinary thing to call a product, and it would have split into two columns and

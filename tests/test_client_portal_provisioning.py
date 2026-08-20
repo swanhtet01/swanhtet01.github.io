@@ -97,6 +97,10 @@ class ClientPortalProvisioningTests(unittest.TestCase):
                 [product["product"] for product in bundle["products"]],
                 ["commerce", "website", "ecommerce"],
             )
+            setup_paths = {product["product"]: product["setupPath"] for product in bundle["products"]}
+            self.assertEqual(setup_paths["commerce"], "/settings/?product=shop&pack=spa")
+            self.assertEqual(setup_paths["website"], "/settings/?product=website")
+            self.assertEqual(setup_paths["ecommerce"], "/settings/?product=ecommerce")
             self.assertEqual(
                 len({product["provisioningPlan"]["planDigest"] for product in bundle["products"]}),
                 3,

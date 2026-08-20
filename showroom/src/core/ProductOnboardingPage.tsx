@@ -29,6 +29,7 @@ import {
 } from './product-onboarding-runtime'
 import {
   shopBusinessTemplate,
+  shopBusinessChoiceFromIndustryPack,
   shopBusinessTemplateFromQuery,
   shopBusinessTemplates,
 } from '../products/shop/business-templates'
@@ -102,8 +103,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   // the empty string keeps the standard sample on whatever pack this device already carries.
   const [businessChoiceId, setBusinessChoiceId] = useState(() => {
     if (product !== 'commerce') return ''
-    const requestedTrade = shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))
-    return requestedTrade ? `trade:${requestedTrade}` : ''
+    const query = new URLSearchParams(location.search)
+    const requestedTrade = shopBusinessTemplateFromQuery(query.get('template'))
+    if (requestedTrade) return `trade:${requestedTrade}`
+    const requestedPack = query.get('pack')?.trim().toLowerCase()
+    const pack = shopIndustryPacks.find((candidate) => candidate.id === requestedPack)
+    return pack ? shopBusinessChoiceFromIndustryPack(pack.id) : ''
   })
   const businessTemplateId = businessChoiceId.startsWith('trade:')
     ? shopBusinessTemplateFromQuery(businessChoiceId.slice('trade:'.length))
@@ -116,6 +121,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       .filter((choice) => choice.kind === 'pack')
       .map((choice) => choice.industryPackId),
   ), [])
+  const visiblePackIds = useMemo(() => {
+    const ids = new Set(servicePackIds)
+    if (businessChoiceId.startsWith('pack:')) ids.add(businessChoiceId.slice('pack:'.length) as ShopIndustryPackId)
+    return ids
+  }, [businessChoiceId, servicePackIds])
   // Open by default for Shop. It used to open only when a ?template= deep link supplied the
   // answer, so an owner arriving at /settings/?product=shop -- which is how everyone actually
   // arrives -- saw a collapsed summary and completed setup on the default retail catalog. That
@@ -328,7 +338,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                     {shopBusinessTemplates.map((template) => <option key={template.id} value={`trade:${template.id}`}>{template.name.en} · {template.name.my}</option>)}
                   </optgroup>
                   <optgroup label="Service businesses">
-                    {shopIndustryPacks.filter((pack) => servicePackIds.has(pack.id)).map((pack) => <option key={pack.id} value={`pack:${pack.id}`}>{pack.name} · {pack.nameMy}</option>)}
+                    {shopIndustryPacks.filter((pack) => visiblePackIds.has(pack.id)).map((pack) => <option key={pack.id} value={`pack:${pack.id}`}>{pack.name} · {pack.nameMy}</option>)}
                   </optgroup>
                 </select>
                 <small>{selectedBusinessTemplate
