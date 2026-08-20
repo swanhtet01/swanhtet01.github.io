@@ -88,14 +88,20 @@ exact store configuration through the production connection path):
 > untouched, and the choice below is explicitly left to the founder. Accept,
 > edit, or delete this block whole — the rest of the runbook reads correctly
 > either way. It is written to stand alone: every mechanism is stated in full
-> below, so nothing here depends on reading another document. The same finding
-> is analysed at more length in `hq/strategy/CLIENT-READINESS-BRIEF.md` §2,
-> "The schema-version trap" — a companion brief landing separately in PR #488,
-> so that file may not be on trunk yet when you read this. Where this
-> subsection and that brief differ, **this one is the corrected version**: the
-> brief recommends a one-window "apply v11+v12+v13" fork, and review of this
-> amendment established that reaching v13 blocks every founder billing command
-> (see "v13 is BLOCKED today" below). That fork is withdrawn here.
+> below, so nothing here depends on reading another document. The same trap is
+> analysed at more length in `hq/strategy/CLIENT-READINESS-BRIEF.md` §2, "The
+> schema-version trap" (on trunk since #488). The two agree; what this
+> subsection adds is the env-scope split — that the two variables are read in
+> two different processes — which that brief does not cover.
+>
+> **Revision note (2026-08-20).** An earlier revision of this subsection said
+> v13 was BLOCKED, because `billing_rail.py`'s `runtime_role_denied` guard
+> folded `billing_entitlements` SELECT in with the privileges v13 never grants,
+> so a v13 database rejected every founder billing command. **#499 fixed that**
+> (`1fe92b96`): the read is now permitted behind a version gate. That blocker is
+> gone and the text asserting it has been removed. It has NOT been replaced with
+> a recommendation to take v13 — see "What reaching v13 costs now", which is a
+> shorter list than before but not an empty one.
 
 Step B sets the store to expect v11 because the sequence above applies v11
 alone. Two further migrations now exist in the repo —
@@ -121,13 +127,13 @@ from an environment variable rather than from the database:
   the two must move together in both directions, forward on a migration and
   backward on any rollback.
 - `supermega_runtime/billing_rail.py:63` — `BILLING_SCHEMA_VERSION = _env_schema_version()`
-  (`SUPERMEGA_BILLING_SCHEMA_VERSION`, default `12`), enforced at line 543:
-  the ledger rejects any target whose live schema version is not exactly this,
-  independently of the trial store. Its default of `12` therefore does not
-  match a v10 or v11 database. Separately, its schema probe reads privileges on
-  the billing tables directly, and those tables ship in v12 — so the billing
-  rail cannot operate against a v11 database at all, whatever this variable is
-  set to.
+  (`SUPERMEGA_BILLING_SCHEMA_VERSION`, default `12`), enforced in
+  `_assert_schema` (line 693): the ledger rejects any target whose live schema
+  version is not exactly this, independently of the trial store. Its default of
+  `12` therefore does not match a v10 or v11 database. Separately, its schema
+  probe reads privileges on the billing tables directly, and those tables ship
+  in v12 — so the billing rail cannot operate against a v11 database at all,
+  whatever this variable is set to.
 
 The rule, stated once: **the database and both runtime env values must be
 consistent before any managed read or write is attempted.** Never assume
@@ -138,7 +144,7 @@ Vercel is not enough.** `SUPERMEGA_TRIAL_SCHEMA_VERSION` is read by the app
 runtime, so step B's "set it in Vercel and redeploy" is right for that one.
 `SUPERMEGA_BILLING_SCHEMA_VERSION` is not: `supermega_runtime/billing_rail.py`
 is a founder-run CLI entrypoint (`python -m supermega_runtime.billing_rail`,
-`main()` at line 1604, `if __name__ == "__main__":` at line 1701), and nothing
+`main()` at line 1791, `if __name__ == "__main__":` at line 1888), and nothing
 in the app runtime imports it — a repo-wide search finds no importer outside
 its own test file. It reads the variable at **module import, in whichever
 process runs the CLI command** (line 63). So setting it in Vercel and
@@ -147,68 +153,84 @@ redeploying does nothing for billing: the CLI keeps its own default of `12`.
 billing command runs**, matching the version the database actually reached,
 and re-export it in every new shell. This applies under every fork below.
 
-**v13 is BLOCKED today — a code contract contradicts it.** Do not apply v13 to
-production until this is resolved:
+This finding is untouched by #499 and matters more at v13 than it did before,
+not less — see the next section for why.
 
-- `supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql`
-  ends with `grant select on app_private.billing_entitlements to supermega_trial_backend;`,
-  deliberately — its header scopes the runtime to "observe entitlement, never
-  change it", and the migration's own verify block *raises* if that grant is
-  missing.
-- `supermega_runtime/billing_rail.py:500-512` computes `runtime_role_denied` as
-  `bool_and(not has_table_privilege(...))` across **all three** billing tables
-  × all four privileges — `billing_entitlements` included (line 508) — and
-  lines 549-552 raise `BillingRailError("The billing tables must remain
-  deny-by-default for the runtime member role.")` when that predicate is false.
+**What reaching v13 costs now.** v13 grants the runtime role SELECT — and only
+SELECT — on `app_private.billing_entitlements`, so that the in-product premium
+flag (`PostgresTrialStore._premium_unlocked`) can resolve instead of
+fail-closing to `false`. `billing_rail.py` accepts that grant from schema
+version 13 upward (`BILLING_ENTITLEMENT_READ_SCHEMA_VERSION = 13`, line 78;
+the gate is the last clause of `runtime_role_denied`, line 710). Invoice and
+event privileges, and entitlement *writes*, stay denied at every version — that
+half of the guard is unchanged. What remains is not the flat contradiction the
+earlier revision described, but it is not nothing — three costs:
 
-The exact grant v13 requires is the grant this assertion forbids; both cannot
-hold at once. On a v13 database the predicate is false permanently, so **every
-founder billing command fails — issue-invoice, confirm-payment,
-grant-entitlement alike — regardless of `SUPERMEGA_BILLING_SCHEMA_VERSION`.**
-Reconciling `billing_rail.py`'s contract with v13's intent is tracked as
-separate code work; it is deliberately not attempted in this amendment, and
-this runbook must not route production to v13 until that fix has landed and
-been proven on a disposable branch.
+- **The env-scope split becomes load-bearing.** The gate compares
+  `snapshot["schemaVersion"]`, which `_assert_schema` has *already* required to
+  equal `BILLING_SCHEMA_VERSION` — the env value — a few lines earlier. So on a
+  v13 database with `SUPERMEGA_BILLING_SCHEMA_VERSION` unset, the CLI fails at
+  the exact-version assert on its default of `12` and never reaches the gate at
+  all. The failure surfaces as the schema-version error, not as anything naming
+  entitlements. Exporting `SUPERMEGA_BILLING_SCHEMA_VERSION=13` in the founder
+  shell is what makes v13 work; forgetting it looks exactly like v13 being
+  broken.
+- **A new fail-closed surface: the policy-predicate fingerprint.** Permitting
+  the grant is safe only because RLS scopes it to the session's own workspace,
+  so #499 also pinned the predicate by hash
+  (`BILLING_ENTITLEMENT_READ_POLICY_DIGEST`, line 102) — a name/command/role
+  check alone would pass a `using (true)` policy. That hash is taken over
+  PostgreSQL's *deparsed* rendering of the policy, not the migration's source
+  text. The file says so itself: a future PostgreSQL that deparses the same
+  correct policy differently "would fail this check on an otherwise-correct
+  database." That is the safe direction to fail, but it is a way v13 can be
+  applied correctly and still take billing down, and it is only observable
+  against a real database.
+- **Neither v12 nor v13 has been proven on a disposable branch.** #499 is a
+  code fix with unit coverage; it is not a migration proof. v13's own header
+  says it is "Reviewed and local-rehearsed only … NOT proven on a hosted branch
+  and NOT applied anywhere. Do not apply to production without a
+  disposable-branch proof first." That is unchanged. **v13 being unblocked in
+  code is not v13 being proven.** The fingerprint cost above is precisely the
+  kind of thing a disposable-branch proof exists to catch.
 
-By contrast v12 does **not** hit this: it ships billing dark with zero policies
-and zero grants for the runtime role (its header states this as the RLS
-posture), which is precisely the state `runtime_role_denied` was written to
-assert. A v11→v12 database with both variables set to `12` is internally
-coherent. Note that v12 leaves `_premium_unlocked` fail-closed to `false` by
-design — that is the deviation v13 exists to close — and neither v12 nor v13
-has been proven on a hosted branch, so either still needs a disposable-branch
-proof before production per house discipline.
+v12 has never had this issue: it ships billing dark with zero policies and zero
+grants for the runtime role, which is the state the guard's unchanged half
+asserts. A v11→v12 database with both variables set to `12` is internally
+coherent, and leaves `_premium_unlocked` fail-closed to `false` by design —
+that is the deviation v13 exists to close. Note also that v13's own guard block
+*requires* the database to already be at exactly 12, so v13 is never applied
+instead of v12, only after it.
 
-**The documented path — v11 now, billing deferred.** Run section 2 verbatim
-(v11, `SUPERMEGA_TRIAL_SCHEMA_VERSION=11`), create tenant #1, and complete the
-"Verify end-to-end" block and the section 5 evidence run first. Defer v12 and
-v13 entirely. Billing is unavailable during this period — the billing tables
-ship in v12, so the rail cannot run against a v11 database at all — which
-means the section 5 evidence run is reachable but issuing an invoice is not.
-When billing is genuinely needed, take it as an **announced maintenance
-window** with the partner warned, not as an add-on to an activation window:
-the tenant is fail-closed from the moment the migration lands until the
-redeploy carrying the new env values is live, and that outage must be
-scheduled rather than discovered.
+**The three forks, and what each costs. Which one to take is a founder
+decision; this subsection does not recommend one.** Under every fork, database
+first and env second, and `SUPERMEGA_BILLING_SCHEMA_VERSION` is exported in the
+founder's CLI shell rather than set in Vercel.
 
-**A one-window "apply v11+v12+v13 and set both env values to 13" fork was
-proposed and is WITHDRAWN.** It looked free because the tenant count is zero,
-but reaching v13 lands production in the blocked state above, where every
-founder billing command fails — so it walks production into a state where the
-thing billing exists to do cannot be done. Do not take it until
-`billing_rail.py`'s `runtime_role_denied` contract is reconciled with v13.
-If and when that fix lands and is proven on a disposable branch, the
-zero-tenant argument becomes valid again and the one-window approach is worth
-revisiting on its merits — the ordering it specified (database first, env
-second, both variables, C and D last) was never the problem.
+- **v11 only — what section 2 already documents.** Run section 2 verbatim
+  (`SUPERMEGA_TRIAL_SCHEMA_VERSION=11`), create tenant #1, complete the "Verify
+  end-to-end" block and the section 5 evidence run. Cost: no billing at all —
+  the billing tables ship in v12, so the rail cannot run against a v11 database
+  whatever the env says. The section 5 evidence run is reachable; issuing an
+  invoice is not. Requires no new migration proof.
+- **v11 → v12 — billing operable, premium flag still dark.** Both variables at
+  `12`. Cost: a v12 disposable-branch proof first, and `_premium_unlocked`
+  stays `false` in-product, so nothing the customer sees changes when they pay;
+  the founder can still issue, confirm and record. Reaching v12 later, after
+  tenant #1 exists, is a maintenance window (see below).
+- **v11 → v12 → v13 — billing operable and the premium flag live.** Both
+  variables at `13`. Cost: proofs for v12 *and* v13, plus the fingerprint
+  exposure above, plus the env-scope trap that makes a forgotten export look
+  like a v13 failure. The zero-tenant argument for doing this in one window
+  before tenant #1 exists is intact — the window where database and env
+  disagree costs nothing when no tenant exists — but that argument is about
+  *scheduling*, and does not substitute for the proofs.
 
-**If billing is needed before that fix:** v11→v12 is the furthest coherent
-point today, with `SUPERMEGA_TRIAL_SCHEMA_VERSION=12` in the app runtime and
-`SUPERMEGA_BILLING_SCHEMA_VERSION=12` exported in the founder CLI shell. This
-still requires a disposable-branch proof of v12 first, and it leaves the
-in-product premium flag fail-closed to `false` until v13 is unblocked. Whether
-that trade is worth a maintenance window is a founder decision; nothing here
-is executed by writing it.
+**Any of these taken after tenant #1 exists is an announced maintenance
+window**, with the partner warned, not an add-on to an activation window: the
+tenant is fail-closed from the moment the migration lands until the redeploy
+carrying the new env values is live, and that outage must be scheduled rather
+than discovered. This is unchanged by #499 and applies to v12 and v13 alike.
 
 ## 3. Rollback
 
@@ -245,10 +267,13 @@ is executed by writing it.
   that reads the variable in its own process, so it must be exported in the
   shell where each billing command runs.
 - *(Proposed 2026-08-20 with section 2a — awaiting founder review.)* Do not
-  apply v13 to production at all right now. Its entitlement SELECT grant is
-  the exact privilege `billing_rail.py`'s `runtime_role_denied` assertion
-  forbids, so a v13 database blocks every founder billing command. Wait for
-  that contract to be reconciled and proven on a disposable branch.
+  apply v12 or v13 to production on the strength of a code review alone.
+  Neither has been proven on a disposable branch, and v13's own header forbids
+  applying it to production without that proof. `billing_rail.py` pins v13's
+  RLS policy predicate by a hash of PostgreSQL's deparsed rendering of it, so a
+  correctly-applied v13 can still fail billing closed on a target whose server
+  deparses it differently — a disposable-branch proof is how that is found
+  before production, not after.
 
 ## 5. After activation — the first-tenant evidence plan
 
