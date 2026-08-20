@@ -91,6 +91,14 @@ actor string — actor strings are display copy and will be rewritten.
   archive present can complete it; a Linux agent sandbox cannot. Check
   `node tools/run_postgres17_rehearsal.mjs --preflight` before assuming either.
 - Never edit files while a background verifier runs (some stash/restore).
+- **Point `code-review` at the commit, not the checkout, when you work in a
+  worktree.** Observed 2026-08-20: invoked from the repository root it resolved
+  the root's own uncommitted diff rather than the worktree's branch, reported
+  cleanly, and missed six real findings — one of which (an A6 page falling into
+  the roll branch with zero horizontal margin, clipping every line inside the
+  printer's unprintable border) would have shipped. A mis-targeted review is
+  indistinguishable from a clean one, so name the target explicitly and sanity-
+  check that the findings mention files you actually changed.
 
 ## Design system rules (2026-08 tribunal — binding)
 

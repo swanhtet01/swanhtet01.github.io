@@ -5715,6 +5715,51 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   || !coreSource.includes('loyalty={receiptLoyalty}')
   || !receiptDialogSource.includes('Points balance')
   || !workspaceControlsPageSource.includes('Points are redeemed as a discount recorded on the order — 1 point = 1 MMK')) fail('shop_loyalty_redemption_contract_missing')
+// G2 receipt print geometry. A counter receipt goes on a continuous thermal ROLL, so the
+// printed document carries a roll layout by default and a sheet layout only when the print
+// service reports sheet-sized media. Prefix pins on the branch conditions and on `@page {
+// margin:`, not on the values inside them, so tuning an inset or a font size does not trip
+// this -- the roll inset in particular is the number the file marks UNVERIFIED and expects
+// the founder device test to revise.
+//
+// The negative is the one that earns its keep. `size: <length> auto` READS like the way to
+// say "80mm wide, length decided by the roll", and it is what a competitive-scan note
+// recommended -- but the `size` grammar takes `auto` alone, one length (a SQUARE page), or
+// two lengths, never a length beside `auto` in either order. A browser discards the whole
+// declaration and falls back to sheet geometry, so a receipt built on it looks finished,
+// passes every gate, and fixes nothing on real paper. Measured in Chromium: `size: 80mm
+// auto` renders a 215.9x279.4mm page, identical to declaring no size at all.
+//
+// Two things the pattern has to get right. It anchors `size` on a non-identifier boundary,
+// or it would also fire on `background-size: 40mm auto` -- the idiomatic way to scale a
+// logo, exactly what a shop-logo receipt feature would add, failing the gate under a key
+// that names the wrong problem. And it accepts any unit and BOTH orders, because
+// `size: auto 80mm` and `size: 20rem auto` are equally invalid and equally silent.
+//
+// Scoped to the RECEIPT_PRINT_STYLES template rather than the whole file, because the
+// comment above it necessarily SPELLS the invalid declaration out in order to warn about
+// it -- the same carve-out check_css_contracts.mjs makes for hex in comments, and for the
+// same reason: turning the warning into the violation would punish the note. The slice
+// bounds are checked rather than passed straight to String.slice, which treats a -1 end as
+// length - 1 and would silently widen the scan to the rest of the file on a rename.
+const receiptStylesStart = receiptDialogSource.indexOf('const RECEIPT_PRINT_STYLES = `')
+const receiptStylesEnd = receiptDialogSource.indexOf('function openPrintWindow(')
+const receiptPrintStyles = receiptStylesStart >= 0 && receiptStylesEnd > receiptStylesStart
+  ? receiptDialogSource.slice(receiptStylesStart, receiptStylesEnd)
+  : ''
+const receiptRollBranchStart = receiptPrintStyles.indexOf('@media print {')
+const receiptRollBranchEnd = receiptPrintStyles.indexOf('@media print and (max-width:')
+const receiptRollBranch = receiptRollBranchStart >= 0 && receiptRollBranchEnd > receiptRollBranchStart
+  ? receiptPrintStyles.slice(receiptRollBranchStart, receiptRollBranchEnd)
+  : ''
+if (!receiptDialogSource.includes('<style>${RECEIPT_PRINT_STYLES}')
+  || !receiptPrintStyles
+  || !receiptRollBranch
+  || !receiptRollBranch.includes('@page { margin:')
+  || !receiptPrintStyles.includes('@media print and (max-width: 65mm) {')
+  || !receiptPrintStyles.includes('@media print and (min-width: 90mm) {')
+  || !/@media print and \(min-width: 90mm\) \{[^}]*@page \{ margin:/.test(receiptPrintStyles)
+  || /(?<![-\w])size\s*:\s*(?:[\d.]+[a-z%]+\s+auto|auto\s+[\d.]+[a-z%]+)/i.test(receiptPrintStyles)) fail('receipt_roll_print_geometry_missing')
 // Roadmap §2 item 5 -- anomaly flags on the close (shop-close-anomaly-flags.ts).
 // A shop owner closing the till is told what was unusual about the day without
 // having to know what to look for. The value of that depends entirely on it
