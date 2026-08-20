@@ -53,21 +53,36 @@ async function browserQuarantineInventory(repositoryRoot) {
     readFile(resolve(repositoryRoot, securityAuditPath), 'utf8'),
   ])
   const audit = JSON.parse(auditRaw)
-  // The audit records the live schema anywhere on the approved v7 -> v10 path (v10 + quarantine
-  // are applied to production as of 2026-08-12); the packet stays valid as an idempotent rehearsal.
-  if (!Number.isInteger(audit?.managedBackend?.liveSchemaVersion)
+  // The source audit may trail the full isolated rehearsal chain, but it must
+  // describe a reviewed managed schema no newer than this packet's v13 target.
+  // The rehearsal remains responsible for applying and validating later
+  // migrations; the audit remains the exact current public-object inventory.
+  if (audit?.contract !== 'supermega.supabase-security-advisor-audit.v2'
+    || !Number.isInteger(audit?.managedBackend?.liveSchemaVersion)
     || audit.managedBackend.liveSchemaVersion < 7
-    || audit.managedBackend.liveSchemaVersion > 10) fail('supabase_rehearsal_quarantine_audit_schema_invalid')
+    || audit.managedBackend.liveSchemaVersion > expectedSchemaVersion
+    || audit.managedBackend.localTargetVersion !== audit.managedBackend.liveSchemaVersion
+    || audit.managedBackend.versionDrift !== 0) fail('supabase_rehearsal_quarantine_audit_schema_invalid')
   if (audit?.catalog?.businessRowsRead !== 0) fail('supabase_rehearsal_quarantine_audit_boundary_invalid')
   if (!Array.isArray(audit?.catalog?.tables) || audit.catalog.tables.length !== 27) {
     fail('supabase_rehearsal_quarantine_audit_inventory_invalid')
   }
   if (audit.catalog.queryContract !== 'supermega.supabase-security-metadata-query.v2'
     || audit.catalog.sequenceCount !== 2
+    || !Array.isArray(audit.catalog.sequences)
+    || audit.catalog.sequences.length !== 2
     || audit.catalog.nonTableRelationCount !== 0
     || audit.catalog.publicRoutineCount !== 0
     || audit.catalog.browserCallableRoutineCount !== 0
+    || audit.managedBackend.browserRolesDenied !== true
+    || audit.conclusion?.directBrowserTableAccessDefaultDenied !== true
     || audit.conclusion?.indirectExposureAudited !== true
+    || audit.conclusion?.browserGrantHardeningRequired !== false
+    || audit.catalog.applicationOwnerDefaultBrowserTablePrivilegesPresent !== false
+    || audit.catalog.applicationOwnerDefaultBrowserSequencePrivilegesPresent !== false
+    || audit.catalog.applicationOwnerDefaultBrowserFunctionExecutePresent !== false
+    || audit.catalog.tables.some((table) => !table || table.anonPrivileges?.length || table.authenticatedPrivileges?.length)
+    || audit.catalog.sequences.some((sequence) => !sequence || sequence.anonPrivileges?.length || sequence.authenticatedPrivileges?.length)
     || !/^sha256:[0-9a-f]{64}$/.test(audit.evidenceDigest || '')) {
     fail('supabase_rehearsal_quarantine_audit_exposure_invalid')
   }
@@ -265,8 +280,8 @@ export async function buildSupabaseRehearsalPacket({
       'provider-backup-inventory-before-migration',
       'independent-restore-to-isolated-target',
       'hostname-verified-postgresql-17-preflight',
-      'ordered-migration-application-through-v10',
-      'read-only-v10-runtime-validator',
+      'ordered-migration-application-through-v13',
+      'read-only-v13-runtime-validator',
       'supabase-security-advisor-without-applicable-errors',
       'private-storage-isolation-proof',
       'named-user-auth-and-cross-tenant-denial',
