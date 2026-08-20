@@ -508,13 +508,129 @@ if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
   || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
+// The app is served under `script-src 'self'` with no hash and no nonce, from both the
+// vercel.json response header and index.html's own meta tag. An inline <script> under that
+// policy is REFUSED -- it does not warn, it simply never runs. The service-worker registration
+// used to be inline, so it never executed, no worker was ever installed, and the product's
+// headline "works offline" claim was false end to end: measured 2026-08-20 in Chromium against
+// a built dist/, three refused inline scripts, zero registrations, zero caches. The shell now
+// loads three files instead, and this check is what keeps it that way.
+const inlineShellScripts = [indexSource, rootPageSource]
+  .flatMap((source) => [...source.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)])
+  .filter((match) => match[1].trim().length)
+if (inlineShellScripts.length) fail(`app_shell_inline_script_blocked_by_content_policy:${inlineShellScripts.length}`)
+for (const shellScript of ['/theme-restore.js', '/sw-register.js', '/vercel-insights.js']) {
+  // Both the source template and the BUILT shell. The shipped document is the one that decides
+  // whether a worker ever registers, and checking only the template is the same unchecked-claim
+  // shape this change is fixing elsewhere.
+  if (!indexSource.includes(`<script src="${shellScript}"></script>`)
+    || !rootPageSource.includes(`<script src="${shellScript}"></script>`)) fail(`missing_shell_script_tag:${shellScript}`)
+  if (!await exists(resolve(dist, shellScript.replace(/^\//, '')))) fail(`missing_shell_script_file:${shellScript}`)
+}
+const swRegisterPath = resolve(dist, 'sw-register.js')
+if (!(await readFile(swRegisterPath, 'utf8').catch(() => '')).includes("serviceWorker.register('/sw.js')")) {
+  fail('service_worker_not_registered')
+}
 const swPath = resolve(dist, 'sw.js')
 if (!await exists(swPath)) fail('missing_service_worker')
 else {
   const swSource = await readFile(swPath, 'utf8')
   if (!swSource.includes('supermega-app-') || !swSource.includes('/assets/')) fail('service_worker_contract_invalid')
-  if (!indexSource.includes("serviceWorker.register('/sw.js')")) fail('service_worker_not_registered')
+  // G3: the offline precache used to be whatever the worker could scrape out of index.html,
+  // which is the entry graph and nothing else -- the till (/shop/) and the shop floor (/plant/)
+  // are a lazy chunk, so neither was ever precached and a first-run offline open of the counter
+  // failed. showroom/scripts/seal-offline-precache.mjs now derives the list from Vite's manifest
+  // and seals it in post-build; these checks are what make a regression loud instead of silent.
+  // The unsealed worker is deliberately valid JavaScript so `vite dev` can serve it, which means
+  // an unsealed worker would not crash -- it would quietly precache nothing. The markers are what
+  // make that state visible, so their survival into dist/ is the failure.
+  if (swSource.includes('__SUPERMEGA_PRECACHE_FILES__') || swSource.includes('__SUPERMEGA_PRECACHE_BUILD__')) {
+    fail('service_worker_precache_not_sealed')
+  }
+  const precacheBlock = /const PRECACHE = (\[[\s\S]*?\n\])/.exec(swSource)?.[1]
+  let precache = []
+  try { precache = JSON.parse(precacheBlock ?? '') } catch { /* handled below */ }
+  if (!Array.isArray(precache) || !precache.length) fail('service_worker_precache_list_missing')
+  else {
+    // The operations route artifact, by the same chunk name this file already pins below.
+    if (!precache.some((url) => /^\/assets\/core-app-[^/]+\.js$/.test(url))) fail('service_worker_precache_omits_operations_route')
+    // Everything the built document loads, so the shell the worker falls back to can boot.
+    for (const asset of rootPageSource.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)) {
+      if (!precache.includes(asset[1])) fail(`service_worker_precache_omits_shell_asset:${asset[1]}`)
+    }
+    for (const url of precache) {
+      if (!await exists(resolve(dist, url.replace(/^\//, '')))) fail(`service_worker_precache_names_missing_file:${url}`)
+    }
+    // Each release must produce a DIFFERENT worker, or the browser never re-installs it and the
+    // precache silently keeps the previous release's asset hashes. The cache name carries the
+    // sealed build digest for exactly that reason.
+    if (!/const BUILD = '[0-9a-f]{16}'/.test(swSource)
+      || !swSource.includes("const CACHE = 'supermega-app-")
+      || !swSource.includes("' + BUILD")) fail('service_worker_cache_name_not_release_scoped')
+    // Offline navigations to /shop/ and /plant/ have nothing cached under those URLs -- the host
+    // rewrites them to /index.html -- so without the shell fallback they hit the browser's own
+    // network-error page and the app never runs. The lookup is scoped to THIS release's cache
+    // because a retained predecessor also holds a '/' document and an unscoped cross-cache match
+    // resolves in creation order, which would boot the previous release's shell offline.
+    if (!swSource.includes("request.mode === 'navigate'")
+      || !swSource.includes("cache.match('/')")) {
+      fail('service_worker_navigation_fallback_missing')
+    }
+    // A dead link rejects fetch() at once, but a degraded or captive one hangs for the browser's
+    // own timeout and the till stays blank through all of it even though everything it needs is
+    // already on the device.
+    if (!swSource.includes('const NAVIGATION_NETWORK_TIMEOUT_MS = 3000')
+      || !swSource.includes("Promise.race([settled, expired])")) fail('service_worker_navigation_has_no_network_timeout')
+    // Cross-origin responses must never enter this cache: the app talks to Supabase from the page,
+    // cache matching ignores the Authorization header, and a stored reply would be replayed offline.
+    if (!swSource.includes('if (url.origin !== self.location.origin) return')) {
+      fail('service_worker_caches_cross_origin_responses')
+    }
+    // addAll() accepts the host's 200 SPA-document answer for a path it no longer has, which would
+    // fill the cache with HTML under .js URLs and serve it forever from the cache-first branch.
+    if (swSource.includes('cache.addAll(')
+      || !swSource.includes("throw new Error('precache_document_returned_for_' + url)")) {
+      fail('service_worker_precache_accepts_document_for_asset')
+    }
+    // A failed install must not leave an empty cache behind: it would be retained as the
+    // predecessor at the next release and evict the cache an open tab is still served from. But it
+    // must only delete a cache THIS install created -- the digest does not cover the worker's own
+    // source, so a worker-only release reopens the live cache under an unchanged name, and wiping
+    // that on one flaky fetch would strand a device that was working offline a moment earlier.
+    if (!swSource.includes('const preexisting = (await caches.keys()).includes(CACHE)')
+      || !swSource.includes('if (!preexisting) await caches.delete(CACHE)')) {
+      fail('service_worker_failed_install_deletes_a_live_cache')
+    }
+    // An unsealed worker must do nothing at all. `vite dev` serves the unsealed file, whose cache
+    // name contains the placeholder and therefore never changes -- its shell files would freeze
+    // for the life of the origin, /sw-register.js among them.
+    if (!swSource.includes("const SEALED = !BUILD.startsWith('unsealed')")
+      || !swSource.includes('await self.registration.unregister()')
+      || !swSource.includes('if (!SEALED) return')) fail('service_worker_unsealed_build_is_not_inert')
+    // Every file the webmanifest declares must be precached, or an offline install has no icon.
+    for (const shellIcon of ['/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png']) {
+      if (!swSource.includes(`"${shellIcon}"`)) fail(`service_worker_shell_omits_icon:${shellIcon}`)
+    }
+    // A till stays open all day, and a tab held across a deploy still asks for the PREVIOUS
+    // release's chunk hashes. Deleting every other cache on activate stranded exactly that tab
+    // (measured 2026-08-20, including with the device offline, where the old cache was the only
+    // possible source). One predecessor is retained; deletion is scoped to our own prefix so a
+    // brand-version change still collects the older names and nothing foreign is touched.
+    if (!swSource.includes("key.startsWith(CACHE_PREFIX)")
+      || !swSource.includes("const previous = await previousCacheName()")
+      || !swSource.includes("key !== CACHE && key !== previous")
+      // The predecessor must be the newest NON-EMPTY cache; an empty leftover from a worker
+      // killed mid-install would otherwise be retained and evict the one an open tab needs.
+      || !swSource.includes("if ((await (await caches.open(ours[index])).keys()).length) return ours[index]")) {
+      fail('service_worker_deletes_cache_open_tabs_still_use')
+    }
+    // A deploy makes a replaced asset answer 200 with the SPA fallback document rather than 404,
+    // and storing that under a .js URL poisons it for the life of the cache, offline included.
+    if (!swSource.includes("includes('text/html')")) fail('service_worker_caches_html_under_asset_urls')
+  }
 }
+// The build must not ship the Vite manifest it used to derive the precache list.
+if (await exists(resolve(dist, '.vite', 'manifest.json'))) fail('vite_manifest_shipped_in_artifact')
 
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
@@ -19674,7 +19790,51 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // fix with the Spa client journey: fresh dist/ is 3_080_236 bytes. The existing
 // ceiling remains unchanged; the separate initial-route and chunk limits below
 // continue to prevent hiding bundle growth inside this total.
-if (bytes > 3_082_000) fail(`artifact_budget:${bytes}`)
+// RAISE 2026-08-20 (roadmap §2 item 5, anomaly flags on the close): fresh
+// `npm run app:build` measures 3_052_850 -- 2_850 bytes over -- after one real
+// product feature (the shop-close-anomaly-flags projection plus the
+// close-surface block that reads it). Raised to 3_070_000: covers the measured
+// number with ~17_150 bytes of headroom, the same order of headroom the
+// previous three ceilings gave. NOTE for whoever lands next: re-measure on a
+// fresh dist/ rather than carrying this number over -- it was taken without
+// any other in-flight branch's CSS or components.
+// MEASUREMENT 2026-08-21 (day-one Shop template fixes, rebased onto the anomaly-flags
+// raise above): taking that NOTE at its word, this is a fresh `npm run app:build`
+// measured AFTER combining both branches rather than either side's pre-rebase number.
+// Combined dist/ measures 3_057_542 -- 4_692 bytes above this branch's own pre-rebase
+// 3_050_627, which is the anomaly-flags close surface landing alongside the working-sample
+// counter sales staged as reconciled, the accountable gate releasing the operator after a
+// failed confirmation, and owner-language error copy with the validator text behind a
+// disclosure. The existing 3_070_000 ceiling already covers it with ~12_458 bytes of
+// headroom, so it is kept rather than raised again.
+// RE-CONFIRMED 2026-08-21 after rebasing onto #522: measured again on a fresh dist/
+// rather than carried over. Still 3_057_542 -- #522 wired orphaned tests and changed
+// tools/, not showroom/src, so the emitted assets are byte-for-byte the same build.
+// MEASUREMENT 2026-08-21 (G3, the app had no service worker at all -- #519): the
+// shipped additions are three shell scripts (theme-restore.js, sw-register.js,
+// vercel-insights.js, ~600 B) that USED to be inline <script> blocks and were
+// therefore refused outright by `script-src 'self'` -- which is why the worker had
+// never registered and nothing worked offline -- plus the sealed precache list in
+// sw.js derived from Vite's own manifest by showroom/scripts/seal-offline-precache.mjs.
+// The lifecycle fixes taken on review (retain the previous release's cache so a till
+// held open across a deploy keeps its chunks; fold the unhashed shell files' CONTENTS
+// into the build digest so editing one actually ships; guarded precache, origin guard,
+// navigation timeout) are worker source only -- no new files, no app code. They cost
+// less than they look because their rationale lives in the generator rather than inside
+// the worker template: the shipped sw.js went 12_186 -> 7_285 bytes. The worker is
+// downloaded on install AND on every update check, so prose in it is prose on a metered
+// connection -- the same argument the precache exclusion list is built on.
+// Build via the ROOT `npm run app:build`, never `npm --prefix showroom run build`: the
+// latter skips app:release:write, so sw.js never gets its placeholder and the precache
+// seal fails (caught at :537, but it wastes a measurement).
+// Re-measured on a fresh dist/ with #520/#521/#522 and this branch all present:
+// 3_064_424 bytes, ~5_576 under the 3_070_000 ceiling, which is kept rather
+// than raised. No app code was shrunk to fit.
+// MERGE 2026-08-21: the Spa portal branch measured 3_080_236 before absorbing
+// G3's offline shell and sealed service worker. The fresh combined artifact is
+// 3_087_367 bytes. Raise the ceiling to 3_100_000, leaving 12_633 bytes while
+// preserving the independent initial-route and per-chunk gates below.
+if (bytes > 3_100_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

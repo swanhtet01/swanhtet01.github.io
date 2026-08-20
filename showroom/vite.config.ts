@@ -82,6 +82,12 @@ export default defineConfig({
   preview: { proxy: apiProxy },
   build: {
     target: 'es2022',
+    // Emitted so scripts/seal-offline-precache.mjs can derive the service worker's
+    // precache list from the real chunk graph instead of a hand-kept route list --
+    // a hand-kept list is what left the till out of the offline cache in the first
+    // place. The sealer deletes dist/.vite/ once it has read the manifest, so the
+    // manifest never ships and never counts against the artifact byte budget.
+    manifest: true,
     rollupOptions: {
       output: {
         onlyExplicitManualChunks: true,
