@@ -268,7 +268,11 @@ async function record() {
   const implementationCommit = gitOutput(['rev-parse', 'HEAD'])
   const tempEvidence = resolve(tmpdir(), `supermega-postgres17-${randomUUID()}.json`)
   try {
-    const result = spawnSync(process.execPath, [rehearsalRunner, '--evidence-file', tempEvidence], { cwd: root, encoding: 'utf8', timeout: 120_000, windowsHide: true })
+    // The loopback PostgreSQL cluster, TLS checks, dump, and restore can exceed
+    // two minutes on the ROG Ally under normal foreground load. Keep the run
+    // bounded, but allow enough time to avoid converting machine contention
+    // into a false database failure.
+    const result = spawnSync(process.execPath, [rehearsalRunner, '--evidence-file', tempEvidence], { cwd: root, encoding: 'utf8', timeout: 300_000, windowsHide: true })
     if (result.status !== 0) fail('database_rehearsal_execution_failed')
     const raw = JSON.parse(await readFile(tempEvidence, 'utf8'))
     const proof = buildSanitizedProof(raw, {
