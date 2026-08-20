@@ -140,3 +140,16 @@ status column in §1 for each. The operative forward sequence is now:
    server-only and spends no hosted gate.
 5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
    decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
+6. Scaling-ceiling work, from `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md`
+   (2026-08-20): of the nine founder-only steps on the client path, seven are
+   permanent hard limits and five of those are paid ONCE for the whole company
+   — so the per-client ceiling is not "eight founder steps", it is the five
+   on-site days of the design-partner pilot. Highest-leverage unblocked item is
+   **A1: auto-measured pilot baseline and five-day evidence** (M, no
+   prerequisite) — the five measurements
+   `tools/create_shop_pilot_handoff.mjs` demands are founder-typed today,
+   nothing in `showroom/` computes them, and
+   `shop-fulfillment-lead-time-summary.ts` already shows the projection shape.
+   Both `SELF-SERVE-ONBOARDING-SPEC.md` §3.6 and
+   `PRODUCTION-ACTIVATION-RUNBOOK.md` §5 already promise this is automatic.
+   Needs its own planning pass; do not blind-implement from this line.
