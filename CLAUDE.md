@@ -80,6 +80,16 @@ actor string — actor strings are display copy and will be rewritten.
   signature growth.
 - `package.json` and 16 runtime files are digest-bound: editing them requires
   the rehearsal cascade (`database:postgres17:record` → `readiness:managed:write`).
+  What actually blocks that cascade (verified 2026-08-20, worth knowing before
+  you conclude it is unfixable): `tools/record_postgres17_rehearsal.mjs`
+  hardcodes `externallyHosted: false` and fails outright on anything else, so
+  it demands a **local loopback PG17 from the EDB Windows x86-64 binaries**
+  (`~/.cache/supermega-postgresql/postgresql-17.10-2-windows-x64-binaries.zip`,
+  pinned at :12). It is a Windows-toolchain gap, NOT a Supabase-access gap —
+  hosted evidence cannot feed this ledger by construction, and no amount of
+  preview-branch work substitutes. A founder on the Windows machine with that
+  archive present can complete it; a Linux agent sandbox cannot. Check
+  `node tools/run_postgres17_rehearsal.mjs --preflight` before assuming either.
 - Never edit files while a background verifier runs (some stash/restore).
 
 ## Design system rules (2026-08 tribunal — binding)
@@ -104,10 +114,17 @@ actor string — actor strings are display copy and will be rewritten.
    sale" line below is what this file used to say before phase 2 closed).
    Phase 3 is next: structural, each item "needs its own planning pass"
    before implementation — do not blind-implement a phase 3 item from its
-   one-line queue description alone. Highest-leverage unblocked item: bottom-
-   nav work modes (item 1 shipped, so its prerequisite is clear; touches the
-   pinned `mobile-nav` markup at `tools/verify_app_build.mjs` ~1093 and
-   requires a full keyboard regression pass as acceptance criteria).
+   one-line queue description alone. Phase 3 progress as of 2026-08-20 — do
+   NOT re-chase these, they are closed in `DESIGN-PROGRAM.md` with evidence:
+   P3.0 (CSS ratchet), P3.6a/b/c (px→rem, lane COMPLETE), and P3.7 (bottom-nav
+   work modes, which this line used to name as the next item) have all shipped.
+   Remaining phase 3: the website lane (P3.1-P3.4 pin cataloguing and gen-one
+   deletion), P3.5 ecommerce literal retirement, P3.8 selling-surface IA
+   (batch 1 = plain-language lead lines above the compliance litanies, added
+   BEFORE the pinned strings and never edits to them; batches 2-3 = the
+   Operations regrouping, which needs a founder probe first), and P3.9 as a
+   standing attrition rule rather than a PR. Phase-3 exit criteria are listed
+   at the end of that doc's execution plan.
 2. ~~Verified correctness backlog~~ — all four items closed 2026-08-18 on
    `claude/supermega-dev-ceo-aije17`; do not re-chase them:
    - **SSRF IPv6 gap** — real, fixed (`cdb7c1d6`). NAT64 `64:ff9b::/96` and the

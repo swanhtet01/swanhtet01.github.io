@@ -2796,6 +2796,17 @@ input, select, textarea { border-color: var(--core-field-line); }
   .plant-job-card-actions .text-link { width: 100%; }
 }
 
+/* Plant shop-floor scanning (roadmap P2). The job card and the material label are the two
+   printed codes an operator carries to the line, so the Job control and the Material used
+   field each gain the same scan affordance the Shop counter already uses. Both rows reuse
+   `.sku-scan-row` rather than declaring a near-duplicate Plant class; only the select
+   variant is new, because that row's control is a <select> and not an <input>. No colour,
+   surface, or size is introduced here, so there is nothing to mirror in `.theme-dark`. */
+.sku-scan-row select { flex: 1; min-width: 0; }
+/* The unmatched-scan notice echoes whatever the camera decoded. A QR payload can be one
+   long unbroken URL, so this single notice wraps mid-token rather than forcing the fixed
+   -width Plant action panel to scroll sideways. Colour and size stay on `.form-notice`. */
+.plant-job-scan-miss { overflow-wrap: anywhere; }
 /* P3.8 batch 1 — plain-language lead line above a compliance litany. The litany
    stays verbatim underneath; .surface-lead is the sentence a shop owner reads
    first, so it carries ink rather than the muted caption colour its host panel

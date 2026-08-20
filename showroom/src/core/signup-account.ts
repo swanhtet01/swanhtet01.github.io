@@ -80,10 +80,19 @@ export function validateCreateAccountRequest(input: CreateAccountInput): CreateA
 
   // Literal or nothing, mirroring createTrialSignupRecord: a caller that "accepts" with 'yes' or
   // 1 wrote code this module does not trust with an acceptance record.
-  if (input.termsAccepted !== undefined && typeof input.termsAccepted !== 'boolean') {
+  //
+  // Acceptance must be RECORDED, never INHERITED. A bare `input.termsAccepted` read walks the
+  // prototype chain, so a single polluted `Object.prototype.termsAccepted = true` anywhere in the
+  // bundle would make every request that left the box unticked validate as accepted -- a consent
+  // record for a human who never gave one. Own property or nothing, the idiom account-routes.ts
+  // already uses for its own closed-set lookup.
+  const termsAccepted = Object.prototype.hasOwnProperty.call(input, 'termsAccepted')
+    ? input.termsAccepted
+    : undefined
+  if (termsAccepted !== undefined && typeof termsAccepted !== 'boolean') {
     throw new Error('Terms acceptance must be recorded as exactly true, or not at all.')
   }
-  if (input.termsAccepted !== true) throw new Error('Accept the terms to create your company account.')
+  if (termsAccepted !== true) throw new Error('Accept the terms to create your company account.')
 
   return { email, password, termsAccepted: true }
 }
@@ -111,7 +120,17 @@ export function createAccountPanelTransition(
   state: CreateAccountPanelState,
   event: CreateAccountPanelEvent,
 ): CreateAccountPanelState {
-  const next = PANEL_TRANSITIONS[state]?.[event]
+  // Own properties only, at BOTH levels. A bare `PANEL_TRANSITIONS[state]?.[event]` reads through
+  // Object.prototype: `state` of 'constructor' or `event` of 'toString' resolves to an inherited
+  // builtin, and a truthy result is an ACCEPTED move. The same read makes the machine's one
+  // load-bearing invariant -- no path to `verified` that skips `sent` -- contingent on nobody
+  // having polluted Object.prototype, because `Object.prototype['email-verified'] = 'verified'`
+  // would let `idle` jump straight to `verified` without a confirmation link ever being opened.
+  // This machine must hold that line on its own, so every lookup is an own-property lookup.
+  const moves = Object.prototype.hasOwnProperty.call(PANEL_TRANSITIONS, state)
+    ? PANEL_TRANSITIONS[state]
+    : undefined
+  const next = moves && Object.prototype.hasOwnProperty.call(moves, event) ? moves[event] : undefined
   // An illegal move is a coding error in the caller, not a state to absorb: refuse loudly rather
   // than silently staying put, exactly as validation refuses rather than reinterprets.
   if (!next) throw new Error(`The create-account panel cannot apply "${event}" while "${state}".`)

@@ -47,7 +47,7 @@ infra required first.
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
 | P1 | Visual job-scheduling board (Katana's signature drag-and-drop timeline) | Jobs surface is list/filter only (`CoreApp.tsx` ~7364-7373); `priority`/`dueAt` exist in the data (`production-workspace.ts` ~1008-1010) but no timeline/board UI | **SHIPPED 2026-08-19** (#484): list ⇄ board toggle (list default, per-device preference), Overdue/Today/This week/Later/No-due lanes with exclusive midnight bounds (Codex-verified), display-only — no drag-and-drop rescheduling (that is a domain write, a future slice). |
-| P2 | Shop-floor barcode/QR for material issue & job dispatch (Katana Shop Floor Control) | No scanning anywhere in Plant; `'QREL'` hits are ID prefixes, not scanning | NOW after S1 ships — reuse S1's camera component |
+| P2 | Shop-floor barcode/QR for material issue & job dispatch (Katana Shop Floor Control) | No scanning anywhere in Plant; `'QREL'` hits are ID prefixes, not scanning | **SHIPPED 2026-08-20**: S1's `BarcodeScanButton` imported (not forked) into the two Plant fields an operator fills from a printed code at the line — job dispatch (the output panel's Job control; exact case-insensitive match against the same `activeJobs` list the dropdown renders, unmatched code stays on screen next to a no-match notice) and material issue (Materials used → `materialRef`, free text, scan applies the field's own `maxLength` cap). Input assistance only: no new domain record, event kind, or write path, and `plant_shopfloor_scan_missing` pins the two handlers against the Plant write verbs. Scanning the optional lot field and the Control-tab recall trace were deliberately left out — one scan target per form. Open (same as S1): on-device camera smoke test, founder, any Android phone |
 
 ### Website
 
@@ -128,7 +128,11 @@ status column in §1 for each. The operative forward sequence is now:
    `loadCommerceWorkspace()` call in a `useState` initializer
    (`workspace-runtime.ts:509-512`). Each needs its own planning pass, and each
    must be measured on the tap-through journey, not one route in isolation.
-2. P2 Plant shop-floor scanning (reuses `BarcodeScanButton`, small-medium).
+2. ~~P2 Plant shop-floor scanning~~ — SHIPPED 2026-08-20, see the Plant table
+   in §1. Remaining Plant scan surface, unclaimed and deliberately deferred:
+   the Control tab's recall-lot trace already has an exact-match resolution
+   and a no-match state, so it is the cheapest next scan target if a client
+   asks for it.
 3. E1 photo follow-through if wanted: photos in the exported/published site
    are a separate decision (published markup is built by `website-export.ts`,
    untouched so far).
@@ -136,3 +140,36 @@ status column in §1 for each. The operative forward sequence is now:
    server-only and spends no hosted gate.
 5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
    decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
+6. Scaling-ceiling work, from `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md`
+   (2026-08-20, revised twice after Codex review on #500): of the nine
+   founder-only steps on the client path, seven are permanent hard limits and
+   **four** of those (steps 1, 5, 6, 7) are paid ONCE for the whole company.
+   Step 2 recurs per outreach batch; **step 10 recurs per client per billing
+   cycle (two CLI commands); step 11 does NOT recur** —
+   `grant_entitlement` refuses an already-granted entitlement
+   (`billing_rail.py:1091`), so it is onboarding-or-post-revocation work.
+   **The recurring cadence is not settled**: D5 (entitlement lapse policy) is
+   an open founder ask, and a re-establish-each-cycle policy would add
+   `revoke-entitlement` + `grant-entitlement` per cycle, roughly doubling it.
+   So the per-client ceiling is not "eight founder steps"; near-term it is the
+   five on-site days of the design-partner pilot. Top item is **A2: make the
+   billing READ path fail closed on every mutation privilege, then decouple it
+   from the write credential** (S–M, verified defect — `_assert_schema` only
+   REQUIRES the mutation flags when `require_write_privilege` is true and never
+   REJECTS them when false, `DELETE` is never probed for `current_user`, and
+   `billing_events` UPDATE is not probed either; so merely skipping the
+   privileged-role assertion would leave the "service cannot mutate billing"
+   invariant resting on hand-provisioning. Mirror the existing
+   `runtime_role_denied` `bool_and` idiom onto the connecting role. Prereq is a
+   founder-provisioned bounded read role). **A1 (pilot measurement) was
+   re-costed from M to L and dropped to second**: it is NOT a pure projection —
+   only 1 of the 5 measurements is derivable from `CommerceState` (exception
+   rate, and only the domain-recorded subset), 2 need device-local
+   instrumentation, and 2 are irreducibly human. Do NOT implement A1 as a
+   projection: `CommerceOrder` has no per-transition timestamps, `CommerceClose`
+   has no start time, and `corrections[]` is a financial ledger, not an
+   operator-error counter — deriving those would mislabel acceptance evidence.
+   Adding order fields is backend-gated (`commerce_runtime.py` exact-field
+   contracts + founder-only release dispatch), so use the device-local
+   `shop-loyalty.ts` PR1 pattern. Each needs its own planning pass; do not
+   blind-implement from this line.
