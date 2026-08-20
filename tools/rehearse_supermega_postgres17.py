@@ -3338,7 +3338,7 @@ def _verify_restored_data(
             """
         ).fetchone()
     if row != (
-        10,
+        11,
         11,
         7,
         20,
@@ -3392,6 +3392,12 @@ def _run_rehearsal(
     if preflight.get("ok") is not True:
         _emit(preflight, evidence_file)
         return 2
+
+    # The runtime schema contract is process-scoped for this disposable v11
+    # rehearsal. The launcher is a short-lived child process, so this cannot
+    # alter the caller or any hosted environment.
+    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "11"
+    os.environ["SUPERMEGA_OTEL_DISABLED"] = "1"
 
     admin_password = _password()
     runtime_password = _password()
