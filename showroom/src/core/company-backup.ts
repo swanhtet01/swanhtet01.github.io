@@ -50,13 +50,6 @@ const portableExactKeys = new Set([
   // The in-progress basket. 'supermega.shop.order_draft.v1.' is already a portable PREFIX, so
   // leaving the counter draft behind was an inconsistency rather than a decision.
   'supermega.shop.counter_draft.v1',
-  // Order-intake correction evidence. Portable, unlike the local analytics counters below, because
-  // it is an accumulating record of how the AI performs on THIS shop's own messages rather than a
-  // marker about this device — the same reasoning that makes the behaviour trail portable. It is
-  // also the asset: a shop that replaces a device would otherwise silently lose every correction it
-  // has ever taught the system. Carrying it is safe because the record is digest-only, so the
-  // backup file gains no message text it did not already lack.
-  'supermega.shop.order-intake-evidence.v1',
 ])
 
 /**
@@ -91,6 +84,11 @@ export const deliberatelyNotPortableKeys: readonly string[] = [
   // device displays jobs, not a business record: a restored backup must not flip another
   // device's chosen view. Same reasoning as the local metrics key above.
   'supermega.plant.job-view.v1',
+  // Order-intake correction evidence, superseded by the per-workspace
+  // 'supermega.shop.order-intake-evidence.v2.' family below. Nothing reads it any more, so
+  // restoring it would resurrect a blob no code path can use, on the same reasoning as the other
+  // superseded keys at the top of this list. Still resettable, so a device reset erases it.
+  'supermega.shop.order-intake-evidence.v1',
 ]
 
 const portablePrefixes = [
@@ -106,6 +104,13 @@ const portablePrefixes = [
   // dropped it would zero every customer's points while keeping the orders that earned
   // them, which is exactly the silent-deletion shape this list exists to prevent.
   'supermega.shop.loyalty.v1.',
+  // Order-intake correction evidence (order-intake-correction-capture.ts), one record set per
+  // workspace scope. PORTABLE, unlike the device-local analytics counters: it is an accumulating
+  // record of how the AI performs on THIS shop's own messages rather than a marker about this
+  // device, and it is the asset — a shop that replaces a device would otherwise silently lose
+  // every correction it has ever taught the system. Carrying it is safe because the record is
+  // digest-only, so the backup file gains no message text it did not already lack.
+  'supermega.shop.order-intake-evidence.v2.',
 ]
 
 /** Same contract as deliberatelyNotPortableKeys, for the prefixed families. */

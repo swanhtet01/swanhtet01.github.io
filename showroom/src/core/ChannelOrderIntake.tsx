@@ -18,6 +18,7 @@ import type { CommerceItem } from './commerce-workspace'
 import { prepareManagedOrderIntakeDraft, type ManagedIdentity } from './managed-trial'
 import {
   captureOrderIntakeCorrection,
+  orderIntakeEvidenceScopeForWorkspace,
   readManagedIntakeGeneration,
   type OrderIntakeGeneration,
 } from './order-intake-correction-capture'
@@ -219,6 +220,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       accepted: reviewedDraft,
       acceptedAt: new Date(),
       actor: identity?.userId ?? '',
+      scope: orderIntakeEvidenceScopeForWorkspace(identity?.workspaceId),
     })
     onUse(reviewedDraft)
     setSourceLabel('')

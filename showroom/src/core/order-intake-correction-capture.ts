@@ -20,7 +20,7 @@ import {
  * checkable while the weaker promise holds too: no raw message text, no quotes, no corrected
  * values, digests and field names only. Consent-gated raw retention is separate, later work.
  *
- * Shape follows `supermega.order-intake-evidence.v1`, designed in
+ * Shape follows `supermega.order-intake-evidence.v2`, designed in
  * hq/research/order-intake-agent-evaluation-2026-08.md section 4. Field names are camelCase, the
  * same split channel-order-intake.ts already makes between the snake_case managed response and
  * the browser-side ChannelOrderDraft. One deviation, deliberate: `intakeDraftSchema` is pinned to
@@ -54,10 +54,36 @@ import {
  *   see that gap would read a falsely low correction_effort. Today the gap is `fulfilment`.
  */
 
-export const ORDER_INTAKE_EVIDENCE_SCHEMA = 'supermega.order-intake-evidence.v1' as const
+export const ORDER_INTAKE_EVIDENCE_SCHEMA = 'supermega.order-intake-evidence.v2' as const
 export const ORDER_INTAKE_DRAFT_SCHEMA = 'supermega.order_intake.draft.v1' as const
-export const ORDER_INTAKE_EVIDENCE_STATE_CONTRACT = 'supermega.local_order_intake_evidence_state.v1' as const
-export const ORDER_INTAKE_EVIDENCE_STORAGE_KEY = 'supermega.shop.order-intake-evidence.v1' as const
+export const ORDER_INTAKE_EVIDENCE_STATE_CONTRACT = 'supermega.local_order_intake_evidence_state.v2' as const
+
+/**
+ * The key FAMILY, one record set per workspace scope -- see orderIntakeEvidenceStorageKey. It was
+ * a single device-wide key while the record held no identity at all. It cannot stay one now that
+ * every record names the operator who reviewed the draft: two companies signed into the same
+ * browser profile would otherwise share one blob, and each would be holding the other's operator
+ * IDs. Same reasoning, and the same 'managed:<id>' / 'local' shape, as shopLoyaltyStorageKey.
+ *
+ * v1 is deliberately NOT migrated. A v1 record predates the operator identity, so it cannot carry
+ * one, and section 9 measures what a NAMED operator changed -- inventing a name to carry the old
+ * rows forward would fabricate exactly the thing the metric requires be real. The v1 key stays
+ * registered in local-workspace-storage.ts and company-backup.ts so "Reset this device" still
+ * reaches any blob a pilot device is holding; it is simply never read or written again.
+ */
+export const ORDER_INTAKE_EVIDENCE_STORAGE_KEY = 'supermega.shop.order-intake-evidence.v2' as const
+export const ORDER_INTAKE_EVIDENCE_LEGACY_STORAGE_KEY = 'supermega.shop.order-intake-evidence.v1' as const
+
+/** 'managed:<id>' for a managed workspace, 'local' for the device-local one. */
+export function orderIntakeEvidenceScopeForWorkspace(workspaceId?: string | null): string {
+  return workspaceId ? `managed:${workspaceId}` : 'local'
+}
+
+export function orderIntakeEvidenceStorageKey(scope: string): string {
+  const trimmed = typeof scope === 'string' ? scope.trim() : ''
+  if (!trimmed || trimmed.length > 160) throw new Error('Order intake evidence needs a valid workspace scope.')
+  return `${ORDER_INTAKE_EVIDENCE_STORAGE_KEY}.${encodeURIComponent(trimmed)}`
+}
 
 /**
  * A shop device is not a data warehouse. Two hundred accepted drafts is a deep enough window to
@@ -106,9 +132,16 @@ const captureFieldByManagedField: Record<ManagedOrderField, ChannelOrderCaptureF
   fulfilment: null,
 }
 
-/** What the model populated: section 9's denominator, plus the reviewable part of it by name. */
+/** What the model populated: section 9's denominator, plus the capture-scope part of it by name. */
 export type OrderIntakeExtractedFields = {
-  reviewable: ChannelOrderCaptureField[]
+  /**
+   * Populated fields that land inside the capture scope. Still only a CANDIDATE set for
+   * fieldsExtracted -- buildOrderIntakeEvidenceRecord narrows it further to the ones whose value
+   * actually reached the draft, because a value the client could not translate was never put in
+   * front of the operator to correct.
+   */
+  populated: ChannelOrderCaptureField[]
+  /** Section 9's denominator: every managed field the model populated, capture scope or not. */
   total: number
 }
 
@@ -128,7 +161,7 @@ export type OrderIntakeFieldChange = {
 
 export type OrderIntakeEvidenceRecord = {
   schema: typeof ORDER_INTAKE_EVIDENCE_SCHEMA
-  version: 1
+  version: 2
   messageDigest: string
   intakeDraftSchema: typeof ORDER_INTAKE_DRAFT_SCHEMA
   modelVersion: string
@@ -145,7 +178,7 @@ export type OrderIntakeEvidenceRecord = {
 
 type StoredOrderIntakeEvidence = {
   contract: typeof ORDER_INTAKE_EVIDENCE_STATE_CONTRACT
-  version: 1
+  version: 2
   records: OrderIntakeEvidenceRecord[]
 }
 
@@ -187,16 +220,16 @@ function fieldValue(draft: ChannelOrderDraft, field: ChannelOrderCaptureField) {
  * that might be missing a field is a wrong number rather than a missing one.
  */
 function readExtractedFields(managed: Record<string, unknown>): OrderIntakeExtractedFields | null {
-  const reviewable: ChannelOrderCaptureField[] = []
+  const populated: ChannelOrderCaptureField[] = []
   let total = 0
   for (const field of managedOrderFields) {
     if (!(field in managed) || managed[field] === undefined) return null
     if (managed[field] === null) continue
     total += 1
     const captureField = captureFieldByManagedField[field]
-    if (captureField) reviewable.push(captureField)
+    if (captureField) populated.push(captureField)
   }
-  return { reviewable, total }
+  return { populated, total }
 }
 
 /**
@@ -269,11 +302,24 @@ export function buildOrderIntakeEvidenceRecord(input: {
   // observation, so it is not recorded at all rather than recorded and later mistaken for one.
   const actor = boundedText(input.actor, ACTOR_MAX)
   if (!actor) return null
-  const fieldsExtracted = generation.extractedFields.reviewable
+  // A denominator of zero has no correction_effort -- the division is NaN, and a record carrying
+  // it would either poison an average or read as a flawless extraction of a message the model in
+  // fact failed on completely. The model proposed nothing here, so there is nothing to score.
+  if (generation.extractedFields.total < 1) return null
+  // Narrowed from "the model populated it" to "the operator could see it".
+  // buildManagedChannelOrderDraft maps the server enums through managedChannels / managedPayments
+  // and turns anything it cannot translate into null -- and the two enums do diverge today:
+  // OrderIntakeChannel includes `website` and `walk_in`, which managedChannels has no entry for.
+  // Such a value is populated by the model, so it counts in the denominator, but it never reaches
+  // the operator as a value, so the dropdown choice they are then forced to make is compensation
+  // for a client mapping gap, not a correction of the model. Scoring it as one would inflate
+  // correction_effort against the <= 0.20 threshold for a defect that is not the model's.
+  const fieldsExtracted = generation.extractedFields.populated
+    .filter((field) => Boolean(fieldValue(proposed, field)))
   const corrections = diffChannelOrderCorrections(proposed, accepted, fieldsExtracted)
   return {
     schema: ORDER_INTAKE_EVIDENCE_SCHEMA,
-    version: 1,
+    version: 2,
     messageDigest: generation.messageDigest,
     intakeDraftSchema: ORDER_INTAKE_DRAFT_SCHEMA,
     modelVersion: generation.model,
@@ -281,7 +327,7 @@ export function buildOrderIntakeEvidenceRecord(input: {
     capturedAt: generation.generatedAt,
     acceptedAt: input.acceptedAt.toISOString(),
     actor,
-    fieldsExtracted: [...fieldsExtracted],
+    fieldsExtracted,
     fieldsCorrected: corrections.map((change) => change.field),
     correctionCount: corrections.length,
     totalExtractedFields: generation.extractedFields.total,
@@ -304,7 +350,7 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
   const claimedExtracted = value.fieldsExtracted
   const totalExtractedFields = value.totalExtractedFields
   if (value.schema !== ORDER_INTAKE_EVIDENCE_SCHEMA
-    || value.version !== 1
+    || value.version !== 2
     || value.intakeDraftSchema !== ORDER_INTAKE_DRAFT_SCHEMA
     || typeof value.messageDigest !== 'string'
     || !SHA256_DIGEST.test(value.messageDigest)
@@ -330,11 +376,12 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
   // than let an evaluation average it in.
   if (!fieldsCorrected.every((field) => fieldsExtracted.includes(field))) return null
   if (!Number.isSafeInteger(totalExtractedFields)
+    || totalExtractedFields < 1
     || totalExtractedFields < fieldsExtracted.length
     || totalExtractedFields > managedOrderFields.length) return null
   return {
     schema: ORDER_INTAKE_EVIDENCE_SCHEMA,
-    version: 1,
+    version: 2,
     messageDigest: value.messageDigest,
     intakeDraftSchema: ORDER_INTAKE_DRAFT_SCHEMA,
     modelVersion: model,
@@ -352,14 +399,15 @@ function normalizeRecord(value: unknown): OrderIntakeEvidenceRecord | null {
 
 export function readOrderIntakeEvidence(
   storage: Pick<OrderIntakeEvidenceStorage, 'getItem'>,
+  scope: string,
 ): OrderIntakeEvidenceRecord[] {
   try {
-    const raw = storage.getItem(ORDER_INTAKE_EVIDENCE_STORAGE_KEY)
+    const raw = storage.getItem(orderIntakeEvidenceStorageKey(scope))
     if (!raw) return []
     const value: unknown = JSON.parse(raw)
     if (!record(value)
       || value.contract !== ORDER_INTAKE_EVIDENCE_STATE_CONTRACT
-      || value.version !== 1
+      || value.version !== 2
       || !Array.isArray(value.records)) return []
     return value.records
       .map(normalizeRecord)
@@ -378,17 +426,18 @@ export function readOrderIntakeEvidence(
 export function appendOrderIntakeEvidence(
   storage: OrderIntakeEvidenceStorage,
   entry: OrderIntakeEvidenceRecord | null,
+  scope: string,
 ): OrderIntakeEvidenceRecord[] {
-  const history = readOrderIntakeEvidence(storage)
+  const history = readOrderIntakeEvidence(storage, scope)
   const normalized = normalizeRecord(entry)
   if (!normalized) return history
   const records = [...history, normalized].slice(-ORDER_INTAKE_EVIDENCE_MAX_RECORDS)
   const state: StoredOrderIntakeEvidence = {
     contract: ORDER_INTAKE_EVIDENCE_STATE_CONTRACT,
-    version: 1,
+    version: 2,
     records,
   }
-  storage.setItem(ORDER_INTAKE_EVIDENCE_STORAGE_KEY, JSON.stringify(state))
+  storage.setItem(orderIntakeEvidenceStorageKey(scope), JSON.stringify(state))
   return records
 }
 
@@ -405,12 +454,13 @@ export function captureOrderIntakeCorrection(
     accepted: ChannelOrderDraft
     acceptedAt: Date
     actor: string
+    scope: string
   },
 ): OrderIntakeEvidenceRecord | null {
   const entry = buildOrderIntakeEvidenceRecord(input)
   if (!entry) return null
   try {
-    appendOrderIntakeEvidence(storage, entry)
+    appendOrderIntakeEvidence(storage, entry, input.scope)
   } catch {
     return null
   }
