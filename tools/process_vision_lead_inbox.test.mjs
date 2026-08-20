@@ -119,7 +119,7 @@ test('Windows entry point initializes a local sales workspace and runs the inbox
     const inbox = join(root, 'inbox')
     await mkdir(inbox)
     await writeFile(join(inbox, 'lead.json'), JSON.stringify(event()))
-    const result = spawnSync('cmd.exe', ['/d', '/c', 'vision-sales.cmd'], {
+    const result = spawnSync('cmd.exe', ['/d', '/c', '.\\vision-sales.cmd'], {
       cwd: process.cwd(),
       encoding: 'utf8',
       env: { ...process.env, SUPERMEGA_VISION_SALES_ROOT: root },
