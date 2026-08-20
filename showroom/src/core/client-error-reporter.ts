@@ -27,6 +27,7 @@
 // build commit from /__release.json. No stack frames, no free text, no identifiers.
 
 import { surfaceFromHash } from '../analytics/metrics-collector'
+import { noteStorageQuotaExceeded } from './storage-durability'
 
 declare global {
   interface Window {
@@ -156,6 +157,10 @@ export function report(candidate: unknown, fallbackMessage: string): void {
   try {
     if (reportsSent >= MAX_REPORTS_PER_SESSION) return
     const errorClass = classifyError(candidate, fallbackMessage)
+    // A render crash caught by RouteErrorBoundary reaches the beacon only through this
+    // direct call, so the owner-facing quota notice is raised here too -- not only from
+    // the window listeners in startStorageQuotaWatch below.
+    if (errorClass === 'quota_exceeded') noteStorageQuotaExceeded()
     const messageText = candidate instanceof Error ? candidate.message : fallbackMessage
     const hash = hashErrorMessage(messageText)
     const key = `${errorClass}:${hash}`
@@ -180,6 +185,32 @@ export function report(candidate: unknown, fallbackMessage: string): void {
 // from the console or a future diagnostics surface, gone when the tab closes.
 export function getReportedErrors(): readonly ClientErrorEvent[] {
   return sessionReports
+}
+
+// Owner-facing quota lane, deliberately NOT behind isBeaconHost and NOT behind the
+// MAX_REPORTS_PER_SESSION budget.
+//
+// startClientErrorReporter() exists to feed the analytics beacon, so it is correctly
+// gated to production hostnames and rate limited -- telemetry is optional. Telling a
+// shop owner that the device is full is not optional, and it must not be lost because
+// five unrelated errors already spent the session's report budget, or because the shop
+// is being run from a preview host. This lane classifies only, sends nothing, and stores
+// nothing; it just flips the in-memory durability flag the Shop banner reads.
+export function startStorageQuotaWatch(): void {
+  const notice = (candidate: unknown, fallbackMessage: string) => {
+    try {
+      if (classifyError(candidate, fallbackMessage) === 'quota_exceeded') noteStorageQuotaExceeded()
+    } catch {
+      // Never add a second failure to the page it is observing.
+    }
+  }
+  window.addEventListener('error', (event) => {
+    notice(event.error, typeof event.message === 'string' ? event.message : '')
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason: unknown = event.reason
+    notice(reason, typeof reason === 'string' ? reason : '')
+  })
 }
 
 export function startClientErrorReporter(): void {
