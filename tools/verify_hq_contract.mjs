@@ -1117,8 +1117,8 @@ requireContract('managed pilot readiness is derived and fail closed',
   && supabaseSecurityAudit.targetClassification === 'protected-production'
   && Number.isInteger(supabaseSecurityAudit.managedBackend?.liveSchemaVersion)
   && supabaseSecurityAudit.managedBackend.liveSchemaVersion >= 7
-  && supabaseSecurityAudit.managedBackend.liveSchemaVersion <= 10
-  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 10
+  && supabaseSecurityAudit.managedBackend.liveSchemaVersion <= 11
+  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 11
   && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
   && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === (supabaseSecurityAudit.managedBackend.liveSchemaVersion >= 9)
   && supabaseSecurityAudit.conclusion?.productionMutationAuthorized === false

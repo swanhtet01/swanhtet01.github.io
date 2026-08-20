@@ -94,7 +94,7 @@ function securityGateReady(audit) {
 }
 
 function hostedGateReady(audit) {
-  return audit.liveSchemaVersion === 10 && audit.versionDrift === 0
+  return audit.liveSchemaVersion === 11 && audit.versionDrift === 0
 }
 
 function securityGateEvidence(audit) {
@@ -222,8 +222,8 @@ export function buildManagedPilotReadiness(input = {}) {
     || (securityAudit.advisor.status === 'blocked' ? securityAudit.advisor.findingCount < 1 : securityAudit.advisor.findingCount !== 0)
     || !Number.isInteger(securityAudit.managedBackend?.liveSchemaVersion)
     || securityAudit.managedBackend.liveSchemaVersion < 7
-    || securityAudit.managedBackend.liveSchemaVersion > 10
-    || securityAudit.managedBackend?.localTargetVersion !== 10
+    || securityAudit.managedBackend.liveSchemaVersion > 11
+    || securityAudit.managedBackend?.localTargetVersion !== 11
     || securityAudit.managedBackend?.versionDrift !== securityAudit.managedBackend.localTargetVersion - securityAudit.managedBackend.liveSchemaVersion
     || securityAudit.managedBackend?.browserRolesDenied !== true
     || typeof securityAudit.managedBackend?.metadataRlsEnabled !== 'boolean'
@@ -447,8 +447,8 @@ export function validateManagedPilotReadiness(value) {
     || (audit.advisorStatus === 'blocked' ? audit.findingCount < 1 : audit.findingCount !== 0)
     || !Number.isInteger(audit.liveSchemaVersion)
     || audit.liveSchemaVersion < 7
-    || audit.liveSchemaVersion > 10
-    || audit.localTargetVersion !== 10
+    || audit.liveSchemaVersion > 11
+    || audit.localTargetVersion !== 11
     || audit.versionDrift !== audit.localTargetVersion - audit.liveSchemaVersion
     || audit.browserRolesDenied !== true
     || typeof audit.metadataRlsEnabled !== 'boolean'

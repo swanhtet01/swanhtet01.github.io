@@ -30,10 +30,15 @@ const PENDING_MIGRATIONS = [
     path: 'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
     digest: 'sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde',
   },
+  {
+    version: 11,
+    path: 'supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql',
+    digest: 'sha256:133105acb69e7c305876d86e0c6a55b53164efabd166a962b5fb90dfac0ab2de',
+  },
 ]
 // v2: the audit records STATE, so the required next action depends on it.
-const NEXT_ACTION_BLOCKED = 'Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal.'
-const NEXT_ACTION_CLEAR = 'Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal.'
+const NEXT_ACTION_BLOCKED = 'Apply the digest-bound v8 through v11 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and owner-scoped default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal.'
+const NEXT_ACTION_CLEAR = 'Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs.'
 
 function fail(code) {
   throw new Error(code)
@@ -101,9 +106,15 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
     || catalog.sequenceCount !== catalog.sequences?.length
     || catalog.sequenceCount !== PUBLIC_SEQUENCES.length
     || catalog.defaultPrivilegeOwners?.join(',') !== 'postgres,supabase_admin'
-    || catalog.defaultBrowserTablePrivilegesPresent !== !hardened
-    || catalog.defaultBrowserSequencePrivilegesPresent !== !hardened
-    || catalog.defaultBrowserFunctionExecutePresent !== !hardened) fail('supabase_security_audit_catalog_invalid')
+    || catalog.defaultBrowserTablePrivilegesPresent !== true
+    || catalog.defaultBrowserSequencePrivilegesPresent !== true
+    || catalog.defaultBrowserFunctionExecutePresent !== true
+    || catalog.applicationOwnerDefaultBrowserTablePrivilegesPresent !== !hardened
+    || catalog.applicationOwnerDefaultBrowserSequencePrivilegesPresent !== !hardened
+    || catalog.applicationOwnerDefaultBrowserFunctionExecutePresent !== !hardened
+    || catalog.providerOwnerDefaultBrowserTablePrivilegesPresent !== true
+    || catalog.providerOwnerDefaultBrowserSequencePrivilegesPresent !== true
+    || catalog.providerOwnerDefaultBrowserFunctionExecutePresent !== true) fail('supabase_security_audit_catalog_invalid')
   const catalogNames = []
   for (const table of catalog.tables) {
     if (!isRecord(table)
@@ -130,23 +141,24 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
     }
   }
 
-  // v2: schema version may sit anywhere on the approved v7 -> v10 path; every dependent count
+  // v2: schema version may sit anywhere on the approved v7 -> v11 path; every dependent count
   // must be arithmetically consistent with it (v9 adds metadata RLS + one policy, v10 adds the
-  // session-revocation definer), and pendingMigrations must be exactly the not-yet-applied tail.
+  // session-revocation definer, and v11 adds two self-serve policies), while pendingMigrations
+  // must be exactly the not-yet-applied tail.
   const managed = value.managedBackend
   if (!isRecord(managed)
     || managed.queryContract !== MANAGED_QUERY_CONTRACT
     || managed.schema !== 'app_private'
     || !Number.isInteger(managed.liveSchemaVersion)
     || managed.liveSchemaVersion < 7
-    || managed.liveSchemaVersion > 10
-    || managed.localTargetVersion !== 10
+    || managed.liveSchemaVersion > 11
+    || managed.localTargetVersion !== 11
     || managed.versionDrift !== managed.localTargetVersion - managed.liveSchemaVersion
     || managed.tableCount !== 6
     || typeof managed.metadataRlsEnabled !== 'boolean'
     || managed.metadataRlsEnabled !== managed.liveSchemaVersion >= 9
     || managed.rlsTableCount !== (managed.metadataRlsEnabled ? 6 : 5)
-    || managed.policyCount !== (managed.metadataRlsEnabled ? 15 : 14)
+    || managed.policyCount !== (managed.liveSchemaVersion >= 11 ? 17 : (managed.metadataRlsEnabled ? 15 : 14))
     || managed.performancePolicyFindingCount !== (managed.liveSchemaVersion >= 8 ? 0 : 10)
     || managed.browserRolesDenied !== true
     || managed.serverBypassRoleDenied !== true
@@ -219,19 +231,25 @@ function fixture(state = 'blocked') {
       sequenceCount: 2,
       sequences: PUBLIC_SEQUENCES.map((name) => ({ name, schema: 'public', anonPrivileges: sequencePrivileges, authenticatedPrivileges: sequencePrivileges })),
       defaultPrivilegeOwners: ['postgres', 'supabase_admin'],
-      defaultBrowserTablePrivilegesPresent: !hardened,
-      defaultBrowserSequencePrivilegesPresent: !hardened,
-      defaultBrowserFunctionExecutePresent: !hardened,
+      defaultBrowserTablePrivilegesPresent: true,
+      defaultBrowserSequencePrivilegesPresent: true,
+      defaultBrowserFunctionExecutePresent: true,
+      applicationOwnerDefaultBrowserTablePrivilegesPresent: !hardened,
+      applicationOwnerDefaultBrowserSequencePrivilegesPresent: !hardened,
+      applicationOwnerDefaultBrowserFunctionExecutePresent: !hardened,
+      providerOwnerDefaultBrowserTablePrivilegesPresent: true,
+      providerOwnerDefaultBrowserSequencePrivilegesPresent: true,
+      providerOwnerDefaultBrowserFunctionExecutePresent: true,
     },
     managedBackend: {
       queryContract: MANAGED_QUERY_CONTRACT,
       schema: 'app_private',
-      liveSchemaVersion: hardened ? 10 : 7,
-      localTargetVersion: 10,
-      versionDrift: hardened ? 0 : 3,
+      liveSchemaVersion: hardened ? 11 : 7,
+      localTargetVersion: 11,
+      versionDrift: hardened ? 0 : 4,
       tableCount: 6,
       rlsTableCount: hardened ? 6 : 5,
-      policyCount: hardened ? 15 : 14,
+      policyCount: hardened ? 17 : 14,
       performancePolicyFindingCount: hardened ? 0 : 10,
       metadataRlsEnabled: hardened,
       browserRolesDenied: true,
