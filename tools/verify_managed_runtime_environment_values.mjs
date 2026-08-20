@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const packageState = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const projectRef = String(packageState?.supermega?.productionSupabaseProjectRef || '').trim()
-const runtimeRole = 'supermega_trial_runtime'
+const runtimeRole = 'supermega_trial_login'
 const managedSchemaVersion = '11'
 
 const evaluate = (environment, expectedMode) => {
