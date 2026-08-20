@@ -49,6 +49,13 @@ its own section below:
    the shop's ability to close a trading day. Nothing warns anybody. Section 6.3
    describes it in full, because it is the single most important thing in this
    document.
+4. There is a **second ceiling** that nobody had been counting, and for one class
+   of shop it caps what compaction can achieve. A shop using location inventory
+   appends two entries per sale to a hash-chained command log that is hard-capped
+   at 2,000 entries and **cannot be pruned by any amount of compaction**. Measured
+   in section 7.5: the byte ceiling still binds first, so this design is sound,
+   but compaction moves such a shop only from 731 sales to 999 rather than
+   removing the wall. That gap needs its own design.
 
 Everything below is cited to `file:line` in the worktree at commit `5d6217c2`.
 Line numbers in `commerce-workspace.ts` were checked directly and are current.
@@ -454,10 +461,11 @@ break them — but it will leave them pointing at orders that no longer exist.
   `ProductionJob.shopDemandSource.snapshot.sourceOrderIds`, validated for
   uniqueness and sort order at `production-workspace.ts:847-850`. **[read]**
 
-### 7.5 A second, harder ceiling nobody has been counting
+### 7.5 A second, harder ceiling — measured
 
-This did not come from the earlier findings and is flagged here because it may
-matter more than the byte ceiling for some shops.
+This did not come from the earlier findings. It was flagged during this batch as
+possibly mattering more than the byte ceiling, and then measured. The result
+changes what compaction is worth for one class of shop.
 
 `commerce-workspace.ts:2422` rejects any workspace whose location-inventory
 command log exceeds 2,000 entries:
@@ -470,17 +478,49 @@ Every order reservation and fulfilment appends commands to that log, and the
 command identifiers are **digests of the order ID itself**
 (`shop-inventory-foundation.ts:1604`, `:1609`, `:1619`), chained through
 `previousDigest`/`headDigest`. A hash chain cannot be rewritten or pruned
-without invalidating everything after it.
+without invalidating everything after it, so **compaction cannot reclaim a
+single byte of this log.**
 
-So a shop that has enabled location inventory has a second ceiling, expressed in
-orders rather than bytes, that **compaction cannot relieve at all**. How many
-sales that represents depends on how many commands each sale appends, which was
-**not measured in this batch** — the seed workspace has no inventory foundation,
-so no run here exercised it. Establishing that number should be the first task
-of any implementation batch, because if it is two commands per sale the wall
-arrives at roughly 1,000 sales, ahead of the byte ceiling, and this entire design
-addresses the wrong constraint for those shops. **Unverified. Measure before
-building.**
+**Measured [executed].** A workspace was stood up with a real location-inventory
+foundation — an opening import built through `buildShopInventoryImportPackage`
+and applied with `applyShopInventoryImport`, attached to the seed state and
+validated — then driven through the same sale lifecycle used in section 3.
+
+| Measure | Value |
+| --- | --- |
+| Command-log entries per completed sale | **exactly 2.000** (`order_reserve`, `order_fulfil`) |
+| Command-log bytes per entry | 654.5 |
+| Bytes per sale, inventory-enabled shop | **2,850.8** (against 1,502 without) |
+| Sales until the 2,000-command wall | **999** |
+| Sales until the 2 MiB byte wall | **731** |
+
+The cap is genuinely enforced: a padded 2,001-command log is rejected by
+`validateCommerceState` with *"Commerce location inventory envelope is
+invalid."*
+
+**Which ceiling binds, and what compaction is actually worth here.** Today the
+byte ceiling binds first, at 731 sales. So compaction *is* addressing the real
+constraint and this design is not built on a wrong premise. But the picture
+*after* compaction is the part that matters:
+
+- A shop **without** location inventory: compaction removes essentially all of
+  the per-sale cost, moving the wall from 1,390 sales to far beyond it.
+- A shop **with** location inventory: compaction removes the order and movement
+  bytes but leaves the command log, whose 1,309 bytes per sale (2 × 654.5) it
+  cannot touch. The byte wall moves out past 1,500 sales — and the **999-sale
+  command wall becomes binding instead.**
+
+So compaction takes an inventory-enabled shop from **731 sales to 999** — a
+useful 37% gain, not the order-of-magnitude gain it delivers elsewhere. And at
+999 sales that shop hits a wall this design has **no remedy for at all**,
+because the log is a hash chain.
+
+**That needs its own answer, and it is out of scope here.** Whatever it turns
+out to be — checkpointing the chain, raising the cap, or moving
+location-inventory shops to hosted storage — it is a separate design and a
+separate decision. It should not delay compaction, which helps both classes of
+shop. But it must not be forgotten: for inventory-enabled shops, compaction buys
+roughly 270 more sales and then the problem returns in a harder form.
 
 ---
 
@@ -664,17 +704,16 @@ it gives a real undo on day one without waiting for an archive importer.
 
 ## 12. Implementation plan
 
-Batches 1 and 2 are non-destructive and may start now. Batch 0 is measurement
-and should also start now, because its result could invalidate the premise for
-some shops. **Batches 3 onward must not start until the founder approves this
-document.**
+Batches 1 and 2 are non-destructive and may start now. **Batches 3 onward must
+not start until the founder approves this document.**
 
-**Batch 0 — measure the location-inventory command ceiling.** Determine how many
-commands a sale appends to `inventoryFoundation.commands`, and therefore how
-many sales reach the 2,000-command cap at `commerce-workspace.ts:2422`. Docs
-only. If that wall arrives before 1,390 sales, this design is addressing the
-wrong constraint for location-inventory shops and needs revisiting before
-anything is built.
+**Batch 0 — measure the location-inventory command ceiling. DONE in this batch.**
+Two command-log entries per completed sale; the 2,000-command wall at 999 sales;
+the byte wall at 731 for an inventory-enabled shop. The byte ceiling binds first
+today, so this design addresses the right constraint — but compaction moves an
+inventory-enabled shop only from 731 sales to 999, after which the unpruneable
+command log stops it for good. Full result and its consequences in section 7.5.
+**The command-log wall needs a separate design; it should not block this one.**
 
 **Batch 1 — the headroom meter.** Compute the workspace's serialized size against
 `COMMERCE_SYNC_MAX_STATE_BYTES` and show it, with a warning well before the
@@ -715,17 +754,14 @@ tool must be wired into `app:verify` or it will never run in CI.
 
 Listed as unverified rather than estimated, per the rules of this batch.
 
-- **Commands appended per sale to the location-inventory log, and therefore the
-  real 2,000-command ceiling.** The seed workspace has no inventory foundation,
-  so no measurement here exercised that path. Section 7.5. This is the largest
-  open question in the document.
 - **Whether the fold validates for a workspace that *does* have a location
-  inventory foundation.** The fold shapes tested in section 6.3 were on a
-  workspace without one. `validateCommerceState` does not appear to cross-check
-  inventory reservations against `state.orders` — it checks the projection
-  against the catalog and against supplier policies only
-  (`commerce-workspace.ts:4492-4518`) — which suggests the fold would validate.
-  That is an inference from reading, not a measurement.
+  inventory foundation.** Such a workspace was built and validated for the
+  section 7.5 measurement, but the fold itself was only exercised on a workspace
+  without one. `validateCommerceState` does not cross-check inventory
+  reservations against `state.orders` — it checks the projection against the
+  catalog and against supplier policies only
+  (`commerce-workspace.ts:4492-4518`) — so the fold should validate. That is an
+  inference from reading plus a partial measurement, not a direct test.
 - **The byte size of the proposed `foldedOrders` summary record.** Estimated
   under 200 bytes against a 1,115-byte order, but the shape does not exist yet
   and was not built or measured.
