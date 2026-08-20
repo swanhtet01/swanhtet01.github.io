@@ -1069,25 +1069,26 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.overall?.hostedActivationReady === false
   && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
   && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
-  && managedPilotReadiness.overall?.nextAction?.decisionId === 'bounded-managed-pilot-rehearsal'
-  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_preview_branch_target,approve_self_serve_activation_window'
-  && managedPilotReadiness.overall?.nextAction?.targetEnvironment === 'preview_branch'
+  && managedPilotReadiness.overall?.nextAction?.decisionId === 'managed-production-activation'
+  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_runtime_role_provisioning,approve_first_named_owner_identity,approve_exact_production_release,approve_managed_activation_window'
+  && managedPilotReadiness.overall?.nextAction?.targetEnvironment === 'production'
   && managedPilotReadiness.overall?.nextAction?.operatorProductId === 'shop'
-  && managedPilotReadiness.overall?.nextAction?.maximumLifetimeHours === 24
+  && managedPilotReadiness.overall?.nextAction?.maximumLifetimeHours === null
   && managedPilotReadiness.products?.map((product) => product.productId).join(',') === 'shop,plant,website,ecommerce'
   && managedPilotReadiness.products?.every((product) => product.managedPilotStatus === 'blocked' && product.automationStatus === 'owner-gated')
   && managedPilotReadiness.founderDecision?.status === 'required'
   && managedPilotReadiness.founderDecision?.authority === 'proposal_only'
   && managedPilotReadiness.founderDecision?.createsAuthority === false
   && managedPilotReadiness.founderDecision?.approvalReceipt === null
-  && managedPilotReadiness.founderDecision?.target?.environment === 'preview_branch'
-  && managedPilotReadiness.founderDecision?.target?.production === false
+  && managedPilotReadiness.founderDecision?.target?.environment === 'production'
+  && managedPilotReadiness.founderDecision?.target?.production === true
   && managedPilotReadiness.founderDecision?.target?.startsWithProductionData === false
-  && managedPilotReadiness.founderDecision?.target?.maximumLifetimeHours === 24
-  && managedPilotReadiness.founderDecision?.target?.deleteAfterEvidence === true
+  && managedPilotReadiness.founderDecision?.target?.maximumLifetimeHours === null
+  && managedPilotReadiness.founderDecision?.target?.deleteAfterEvidence === false
   && managedPilotReadiness.founderDecision?.operator?.productId === 'shop'
-  && managedPilotReadiness.founderDecision?.proposedActions?.includes('delete_preview_branch_after_evidence')
-  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('production_database_change')
+  && managedPilotReadiness.founderDecision?.proposedActions?.includes('provision_dedicated_runtime_login')
+  && managedPilotReadiness.founderDecision?.proposedActions?.includes('deploy_exact_reviewed_release')
+  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('additional_tenant_activation')
   && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('hosted_scheduler_activation')
   && managedPilotReadiness.controls?.externalWritesPerformed === false
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
@@ -1101,7 +1102,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.selfServePilot?.proofComplete === true
   && managedPilotReadiness.selfServePilot?.contract === 'supermega.self-serve-pilot-proof.v1'
   && managedPilotReadiness.selfServePilot?.schemaVersionProven === 11
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'self_serve_pilot')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'self_serve_pilot')?.status === 'ready-hosted'
   && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
   && managedPilotReadiness.securityAudit?.findingCount === supabaseSecurityAudit.advisor?.findingCount
