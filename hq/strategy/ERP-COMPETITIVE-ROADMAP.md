@@ -258,7 +258,14 @@ our capability against live `main` source.
 
 Rule applied, unchanged from the top of this document and inherited by
 `PRODUCT-SUPREMACY-ROADMAP.md`: every claim cites a repo file or an external
-source, or names the gap outright. Nothing below was carried over from the
+source, or names the gap outright. **Repo-side claims cite inline; source-side
+claims cite §6.7, with access dates and a confidence grade per claim.** The
+first revision of this section asserted that competitor capability had been
+checked against live sources but printed none of them — caught in review on this
+PR, and a real defect: the unsourced claims were exactly the time-sensitive ones
+that set the G1/G2 priority order, so nobody could reproduce the scan or tell
+when it had gone stale. §6.7 also flags, rather than drops, the claims that rest
+on weak evidence. Nothing below was carried over from the
 earlier passes without re-tracing. That rule earns its keep — the 2026-08-20
 gap-correction pass on `PRODUCT-CATALOG-AND-PRICING.md` found six false gap
 claims, three of which were wrong when written rather than merely stale.
@@ -293,7 +300,7 @@ Who actually competes for a Myanmar shop owner's install:
 |---|---|---|
 | **Loyverse** | The real one. Free core POS app with offline selling and points-based loyalty, an active Myanmar service presence in Yangon, Burmese app interface, and Burmese added to its receipt-printing languages | Free core; employee management, advanced inventory, and extended sales history are paid per-store add-ons |
 | **Myanmar-local POS apps** (Yangon POS, MharMal POS, Mini POS, Smart POS, Global Eco Suite) | Burmese-first Android apps with MMK, barcode, low-stock alerts, and thermal-printer support. Shallow back office, no manufacturing, no ledger | Local licence/subscription, local support |
-| **Odoo** | Community is genuinely free but needs a server, and its POS lacks the retail layer: **no loyalty/gift cards (Enterprise-only), no robust offline POS, no official IoT support for printers, scanners, or cash drawers**. Odoo 19 Enterprise added full offline POS operation, redesigned loyalty, self-order kiosks, and barcodes with embedded price/weight/loyalty | Community free + your own hosting and integrator; Enterprise per-user + partner |
+| **Odoo** | Community is genuinely free, open-source, and self-hostable, and **it does cover the whole four-product span** (Sales, Inventory, POS, Manufacturing, Website, eCommerce, Purchase, invoicing) — see §6.3 item 3, which got this wrong once. What Community lacks is the retail and depth layer: **no loyalty/gift cards, no robust offline POS, no official IoT support for printers/scanners/cash drawers, no Barcode or Shopfloor app, manufacturing limited to basic MOs (Work Centers/PLM/Maintenance are Enterprise), and Invoicing rather than full balance-sheet/P&L reporting**. Odoo 19 Enterprise added full offline POS operation, redesigned loyalty, self-order kiosks, and barcodes with embedded price/weight/loyalty | Community free + your own server, sysadmin, and usually an integrator; Enterprise per-user + partner |
 | **Shopify / Wix** | Technically reachable from Myanmar, with sanctions-compliance friction and no local acquiring — Shopify guidance for Myanmar sellers points at KBZPay/Wave and COD, not card gateways | Subscription in foreign currency |
 | **Katana** | Plant's only real comparator. Shop Floor app, batch tracking, and **drag-and-drop visual production scheduling** | Paid SaaS per user, no free tier |
 
@@ -348,8 +355,26 @@ competitor equivalent turned up in the scan.
    demand, material handoff, and reconciliation (`core/shop-production-demand.ts`,
    `production-material-handoff.ts`, `shop-production-reconciliation.ts`);
    Ecommerce request → Shop order intent; Website intake → Shop. Loyverse and
-   Square have no manufacturing. Katana has no POS. Odoo has the span but only
-   hosted, paid, and integrator-assisted.
+   Square have no manufacturing at all. Katana has no POS. **Against Odoo,
+   however, span is NOT a differentiator and must not be sold as one** — this
+   item said "Odoo has the span but only hosted, paid, and integrator-assisted"
+   in the first revision of this section, and that was wrong, caught in review
+   on this PR. Odoo **Community** is free, open-source, and self-hostable, and
+   it includes Sales, Inventory, POS, Manufacturing, Website, eCommerce,
+   Purchase, and invoicing-level accounting — the same span, at no licence cost.
+   What Community does *not* include, and this is the correctly scoped claim:
+   POS offline operation, loyalty and gift cards, official IoT support for
+   printers/scanners/cash drawers, the Barcode and Shopfloor apps, manufacturing
+   beyond basic manufacturing orders (Work Centers, PLM, Maintenance are
+   Enterprise), and full financial reporting — Community gives Invoicing, not
+   balance sheet and P&L. So the honest statement against Odoo is: Community
+   matches the span and beats us on nothing we care about only if the owner can
+   run a server; Enterprise matches us on retail features at subscription cost.
+   Our differentiation against either is items 1, 2, 4, 6, and 7 of this list —
+   accountability and ownership — plus needing no server, no sysadmin, and no
+   account. Note what this correction is: exactly the overclaim §6.2 exists to
+   prevent, made in the same document that diagnoses it. It is recorded rather
+   than quietly fixed for that reason.
 4. **Free-forever as a build-checked invariant.** `FREE_FOREVER` in
    `showroom/src/core/capability-tiers.ts:43` fails the build if a local
    capability is moved behind a tier. Odoo Community is free but needs a server;
@@ -440,9 +465,35 @@ printer via an installed print service, and what makes the output unusable is
 that it is A4-shaped: centimetre margins and two-rem body padding on a 58mm or
 80mm roll.
 
-Size. **S** for the fix: a print-media rule sized for the roll
-(`@page { size: 58mm auto; margin: 2mm }` or an owner-selected roll width),
-tighter type, and no horizontal padding. **S4's Web Bluetooth ESC/POS build
+Size. **S** for the fix — but read the next paragraph before writing the rule,
+because the obvious form of it does not work.
+
+**Do not write `@page { size: 58mm auto }`.** This document said that in its
+first revision and it is **invalid CSS**, caught in review on this PR. The
+`size` grammar is `<length>{1,2} | auto | [ <page-size> || [ portrait |
+landscape ] ]` — `auto` stands alone, and a length paired with `auto` is not a
+valid production. The parser drops the whole declaration and the sheet geometry
+is unchanged, so an engineer copying it would ship something that looks done,
+passes every gate, changes nothing on a real printer, and closes the ticket.
+That is worse than leaving the gap open. Two valid shapes exist:
+
+- **Recommended: declare no `size` at all.** Set the page margin to near-zero,
+  remove the body's horizontal padding, and constrain content width in
+  millimetres. On the Android system-print path the media geometry comes from
+  the printer the print service selects, so the roll defines the page and the
+  document should not fight it. This is also the only form that behaves
+  sensibly when the owner prints to an ordinary sheet printer instead.
+- If a fixed page is genuinely wanted, the valid form is **two lengths**
+  (`size: <width> <height>`). It pins the receipt to a fixed height, so it
+  either paginates a long receipt or wastes roll on a short one. Worse default;
+  use only if the recommended form is measured to fail.
+
+**The 58mm and 80mm figures in the paragraph above are unverified.** Nothing in
+this scan establishes which roll widths Myanmar shops actually run — they are
+the common sizes generally, not a sourced finding about this market — and no
+SuperMega receipt has ever been printed on a thermal printer at all. Treat roll
+width as an owner setting or as something to measure on the founder device
+test, not as a constant to hardcode. **S4's Web Bluetooth ESC/POS build
 stays FD and stays deprioritised** — it is a large build for the last mile of a
 problem a CSS rule may close most of.
 
@@ -570,6 +621,142 @@ G3 are cheap enough to ride along in the same cycle. After those three, further
 feature work has sharply diminishing returns against the actual bottleneck, and
 the next honest thing to do is put the product in front of one real Myanmar shop
 — which is founder work, and which §5 items 3, 4, and 9 already describe.
+
+
+### 6.7 Sources
+
+All accessed **2026-08-20** via web search from an agent sandbox. No competitor
+software was installed, purchased, or tested; every capability claim below is a
+**documentary** claim about what a vendor or market source says, not an
+observation of the software running. Prices are deliberately omitted (§6 preamble).
+
+Confidence grades: **[A]** primary — the vendor's own documentation, help
+centre, or release notes. **[B]** secondary — trade press, review aggregators,
+or partner/integrator blogs; directionally reliable, individual details may be
+wrong. **[C]** weak — app-store listings (vendor self-description, untested),
+social pages, or general knowledge with no source located. A **[C]** claim is
+kept only where it is flagged in the body text too.
+
+**Square market availability** (§6.1 — underpins removing Square from the
+competitor set)
+- [A] https://squareup.com/help/us/en/article/4956-international-availability
+- [A] https://developer.squareup.com/docs/international-development
+- [B] https://squareup.com/us/en/press/square-brings-offline-payments — offline
+  payments on all devices in all countries (§6.2)
+
+**TikTok Shop market availability** (§6.1 — underpins "no Myanmar seller
+centre, so nothing to integrate with")
+- [B] https://dpl.company/countries-with-access-to-tiktok-shop-seller-center/
+- [B] https://quicksync.pro/blog/tiktok-shop-countries-where-can-you-sell-and-what-you-need-to-know/
+- [B] https://en.wikipedia.org/wiki/TikTok_Shop
+- Note: the market list is consistent across three secondary sources but was
+  **not** confirmed against TikTok's own seller centre, which is the primary
+  source and was not reachable from this sandbox. Grade [B], not [A]. This is
+  the weakest link under a §6.1 conclusion, and it is a negative claim
+  ("Myanmar is absent from the list"), which is the harder kind to verify.
+
+**Loyverse capability and Myanmar presence** (§6.1, §6.2, and G1's ranking)
+- [A] https://help.loyverse.com/help/how-change-language — interface languages
+- [A] https://loyverse.town/blogs/entry/113-new-languages-for-receipt-printing/
+  — Burmese among receipt-printing languages
+- [C] https://apps.apple.com/mu/app/loyverse-pos-point-of-sale/id1070865387 —
+  store listing naming Burmese support
+- [B] https://www.getapp.com/retail-consumer-services-software/a/loyverse-pos/
+  and https://www.posusa.com/loyverse-pos-review/ — free core apps, offline
+  mode, points loyalty, paid per-store add-ons
+- [C] https://www.facebook.com/loyverse.mm/ — **soft.** The "active Yangon
+  service presence" claim rests on Facebook pages operated by a local
+  reseller/service provider, not on any Loyverse corporate statement. It is
+  plausible and consistent with the Burmese localisation, but it is not firm.
+  G1's ranking does **not** depend on it: the Burmese-interface claim carries
+  G1 on its own, at [A].
+
+**Odoo edition split and Odoo 19 POS** (§6.1, §6.2, §6.3 item 3)
+- [A] https://www.odoo.com/odoo-19-release-notes
+- [A] https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale.html
+- [B] https://oec.sh/odoo-pricing/community and
+  https://theledgerlabs.com/odoo-community-edition-guide/ — Community app set
+- [B] https://www.farishtatech.com/odoo-community-edition-pos-point-of-sale-features-required-modules/
+  and https://www.odoo.com/forum/help-1/difference-between-enterprise-and-community-for-the-pos-module-220572
+  — Community POS limits: no loyalty/gift cards, no robust offline, no official
+  IoT
+- [B] https://ecosire.com/blog/odoo-19-pos-self-order-loyalty-tip-splitting —
+  Odoo 19 offline POS, loyalty redesign, barcode-embedded price/weight/loyalty
+- Note: the edition-by-edition module split is drawn mostly from partner and
+  integrator blogs rather than an official Odoo feature matrix. Grade [B]. The
+  specific claims that matter — Community lacks loyalty and robust offline POS,
+  Enterprise added full offline in 19 — are consistent across independent
+  secondary sources, but a reader planning to *depend* on the split should check
+  Odoo's own pricing page.
+
+**Android ESC/POS print-service behaviour** (G2 — this is what reframes S4)
+- [C] https://loopedlabs.com/esc-pos-bluetooth-print-service/ and
+  https://play.google.com/store/apps/details?id=com.loopedlabs.escposprintservice
+  — a third-party Android print service that renders any printable app's output
+  to an ESC/POS Bluetooth printer
+- [C] https://whizz-tech.com/support/printers/escpos-web-printing-without-drivers-test-page/
+  — browser-to-ESC/POS without drivers
+- **Soft, and flagged in G2 itself.** These are third-party app vendors
+  describing their own products. Nobody has printed a SuperMega receipt this
+  way. G2's *fix* (roll-appropriate print CSS) is worth doing regardless,
+  because A4 geometry is wrong for a receipt on any path; G2's *reframing* of
+  S4 — "the Android print path may already reach the printer, so the Web
+  Bluetooth build is the expensive last mile" — is the part that rests on [C]
+  and should be settled by the founder device test before S4 is formally
+  deprioritised.
+
+**Myanmar-local POS apps** (§6.1, and the "thermal printing is table stakes"
+claim)
+- [C] https://play.google.com/store/apps/details?id=com.pyaephyonyo.pos (Mini
+  POS — Burmese interface, barcode, thermal printer support)
+- [C] https://play.google.com/store/apps/details?id=com.mharmal.possystem
+  (MharMal — localised interface and printing, EN + Burmese)
+- [C] https://play.google.com/store/apps/details?id=com.yangonpos.mm (Yangon
+  POS — MMK and Myanmar language)
+- [C] https://globalecosuite.com/
+- **All [C]: these are vendor self-descriptions in store listings, not tested.**
+  The §1 POS row states the softened form — every listing that mentions printing
+  names thermal/receipt printing — rather than "every local app ships it".
+
+**Myanmar payments (MMQR)** (§6.5 item 3)
+- [A] https://www.wavemoney.com.mm/media-center/mmqr-with-wave/ and
+  https://www.wavemoney.com.mm/partner/myanmar-pay-merchant/
+- [A] https://ayapay.com/myanmarpay_mmqr/
+- [B] https://en.wikipedia.org/wiki/MyanmarPay
+
+**Myanmar channel reality — Facebook/VPN, Telegram, TikTok** (§6.1, §6.5 item 1)
+- [B] https://marketingmyanmar.com/social-media-marketing-in-myanmar-2026-platforms-trends-what-works/
+  — TikTok Shop, Telegram group selling with chatbot automation, Messenger
+  livestream selling; this is the source behind the non-goal named in §6.5
+- [B] https://www.accessnow.org/myanmar-vpn-ban/
+- [B] https://restofworld.org/2024/myanmar-internet-blackouts-app-vpn-bans-starlink/
+
+**Myanmar connectivity and power** (G3's justification)
+- [B] https://pulse.internetsociety.org/en/shutdowns/events-in-myanmar/
+- [B] https://telecomlead.com/broadband/best-isps-in-myanmar-2026-mpt-myanmar-net-atom-power-or-5bb-which-broadband-provider-is-best-for-internet-customers-126031
+  — battery-backed CPE sold specifically for outage resilience
+- [B] https://asiafoundation.org/wp-content/uploads/2023/12/Myanmar-Adapting-to-Electricity-Shortages-Learning-from-Yangon-Households-and-Small-Businesses.pdf
+  — dated 2023; the electricity-shortage pattern is long-running, but treat the
+  specifics as historical
+
+**Shopify in Myanmar** (§6.1)
+- [A] https://help.shopify.com/en/manual/payments/third-party-providers/payment-gateway-availability
+- [B] https://easyappsecom.com/guides/selling-on-shopify-myanmar — sanctions
+  friction, no local acquiring, KBZPay/Wave/COD in practice
+
+**Katana** (§6.2, Plant comparison)
+- [A] https://katanamrp.com/features/manufacturing/shop-floor-control/ —
+  drag-and-drop production scheduling and the Shop Floor app
+
+**Unsourced and marked as such in the body:** the 58mm/80mm roll widths in G2
+(general knowledge, no Myanmar-specific source located); the CSS `size` grammar
+in G2 is a specification fact, not a market claim, and needs no source beyond
+CSS Paged Media.
+
+**Staleness.** The volatile entries are Square and TikTok Shop market lists,
+the Odoo edition split, and anything about Myanmar platform access — all four
+can change without notice. Re-run this scan before any customer-facing claim is
+built on §6, and treat it as stale after roughly one quarter.
 
 ---
 
