@@ -160,12 +160,29 @@ measured:
    informs the decision but cannot by itself fail the gate.
 2. **The §9 human metric**, `fields_corrected / total_extracted_fields`,
    threshold `<= 0.20` averaged over the 20 fixtures, requiring a named human
-   reviewer to accept or correct each draft. Its client-side capture layer
-   already exists — `showroom/src/core/order-intake-correction-capture.ts`
+   reviewer to accept or correct each draft. A client-side capture layer
+   exists — `showroom/src/core/order-intake-correction-capture.ts`
    (`countExtractedChannelOrderFields`, `diffChannelOrderCorrections`,
    `captureOrderIntakeCorrection`, writing field names and counts only, never
-   raw message text or corrected values). It has never been exercised, because
-   it needs a real managed intake response to diff against.
+   raw message text or corrected values) — but calling it "the §9 capture
+   layer" would overstate it, and this document is the wrong place to be
+   loose. It is **partial telemetry with a narrower denominator**, in two
+   specific ways:
+   - `channelOrderFields` is exactly four names — `customer`, `sku`,
+     `quantity`, `payment` (`channel-order-intake.ts:7`) — so
+     `countExtractedChannelOrderFields` cannot see two fields the model does
+     populate on the same draft: `channel` and `fulfilment`. §9 defines
+     `total_extracted_fields` as every field the model filled with a non-null
+     value, so scoring from this capture computes a **different denominator**
+     and can misclassify the `<= 0.20` threshold in either direction.
+   - The evidence record deliberately carries no named reviewer, while §9
+     requires `fields_corrected` to be what "a named operator changed."
+   So it is a real and useful signal, and it is not the §9 metric. Producing
+   §9 needs either the capture path extended to the full populated-field set
+   with reviewer identity, or an evaluation-side computation that does not
+   route through this layer. Either way it is still downstream of a live run —
+   it has never been exercised, because it needs a real managed intake
+   response to diff against.
 
 Both are downstream of a live run. There is no honest way to produce either
 number without one, and a fabricated figure here would poison the exact gate
