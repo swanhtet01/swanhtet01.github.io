@@ -6545,6 +6545,7 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
     const saleNumber = n + 1
     const orderId = saleOrderIds[n]
     const reserveActionId = `${activityPrefix}SALE-${saleNumber}-RESERVE`
+    const settleActionId = `${activityPrefix}SALE-${saleNumber}-SETTLE`
     const completeActionId = `${activityPrefix}SALE-${saleNumber}-COMPLETE`
     if (!validTimestamp(sale?.recordedAt) || !Array.isArray(sale?.lines) || !sale.lines.length) return null
     const salePayment = optionalText(sale.payment)
@@ -6566,6 +6567,15 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
       if (reservedSoFar === null || reservedSoFar > item.onHand) return null
       reservedQuantityBySku.set(item.sku, reservedSoFar)
     }
+    // A counter sale is money taken and then goods handed over: the customer pays at the till and
+    // walks out with the purchase. Stage it in that order -- payment reconciled first, completion
+    // after -- exactly as the demo seed's ORD-1039 does.
+    //
+    // Staging it 'completed' with payment left 'pending' put a permanent primary "Reconcile
+    // payment" button on the owner's first screen that could never succeed: validateCommerceState
+    // requires completion.capturedAt >= paymentReconciledAt, and a real till only ever stamps a
+    // proof from the present clock, which is always later than this backdated completion.
+    const paidAt = new Date(Date.parse(sale.recordedAt) + 5 * 60 * 1000).toISOString()
     const completedAt = new Date(Date.parse(sale.recordedAt) + 15 * 60 * 1000).toISOString()
     const reserveProof: CommerceActionProof = { actionId: reserveActionId, capturedAt: sale.recordedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample sale ${saleNumber}.`, evidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-RESERVE` }
     newOrders.push({
@@ -6578,7 +6588,12 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
       ...(orderLines.length === 1 ? { itemSku: orderLines[0].sku } : {}),
       quantity: orderQuantity,
       payment: salePayment,
-      paymentStatus: 'pending',
+      paymentStatus: 'reconciled',
+      paymentReconciledAt: paidAt,
+      paymentReconciliationActionId: settleActionId,
+      paymentReconciledBy: WORKING_SAMPLE_SETUP_ACTOR,
+      paymentReconciliationReason: `Counter payment taken for the ${sampleName} working sample.`,
+      paymentEvidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-SETTLE`,
       refundStatus: 'none',
       fulfilment: 'pickup',
       fulfilmentReference: `Counter ${orderId}`,
@@ -8360,6 +8375,13 @@ export function reconcileCommercePayment(state: CommerceState, orderId: string, 
       && order.paymentEvidenceReference === proof.evidenceReference ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId)) return null
+  // The record keeps payment at or before handover (validateCommerceState enforces
+  // completion.capturedAt >= paymentReconciledAt), so a proof stamped after this order was
+  // completed cannot be written without breaking the chronology. Refuse it here instead of
+  // letting validateCommerceState throw out of a transition: returning null is what every other
+  // refusal in this module does, and it is what the callers are written to handle.
+  if (order.completion
+    && (timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(order.completion.capturedAt) as bigint)) return null
   return validateCommerceState({
     ...state,
     orders: state.orders.map((candidate) => candidate.id === orderId ? {

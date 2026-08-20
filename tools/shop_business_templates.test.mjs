@@ -182,3 +182,173 @@ test('deep links select templates and unknown values fall back safely', () => {
   assert.equal(model.shopBusinessTemplateSetupPath('pharmacy'), '/settings/?product=shop&template=pharmacy')
   assert.throws(() => model.shopBusinessTemplate('unknown'))
 })
+
+// ---------------------------------------------------------------------------
+// Day-one invariant: what a template installs must be ACTIONABLE, not just present.
+//
+// The tests above prove the sample activity installs. These prove the owner can actually
+// clear it. A new owner's first screen is the order queue their chosen template installed;
+// every order there that the app offers a payment action on must accept that action when
+// pressed, using a proof stamped from the clock in front of them -- the only kind a real
+// till produces. A sample order that renders a primary "Reconcile payment" button and then
+// refuses is worse than no sample at all: commerceOrderNeedsAction keeps it in the queue
+// forever, and cancelCommerceOrder will not release a completed order either.
+//
+// Asserted against all ten templates at once, so a template added later cannot reintroduce
+// the defect by copying the wrong order shape.
+// ---------------------------------------------------------------------------
+
+const commerceModel = await import(pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href)
+
+const SAMPLE_ORDER_PREFIX = 'SETUP-SAMPLE-'
+// A provisioning instant well clear of the authored template timestamps, so the rebase does
+// real work rather than accidentally reproducing the authored values.
+const SAMPLE_PROVISIONED_AT = '2027-03-04T11:00:00.000Z'
+
+function installTemplateActivity(template, provisionedAt = SAMPLE_PROVISIONED_AT) {
+  const withCatalog = commerceModel.installCommerceWorkingSampleCatalog(commerceModel.createSeedCommerce(), {
+    sampleId: template.id,
+    sampleName: template.name.en,
+    items: model.shopBusinessTemplateCommerceItems(template.id),
+    capturedAt: provisionedAt,
+  })
+  assert.ok(withCatalog, `${template.id} catalog must install`)
+  const activity = model.rebaseWorkingSampleActivity(template, provisionedAt)
+  const withActivity = commerceModel.installCommerceWorkingSampleActivity(withCatalog, {
+    sampleId: template.id,
+    sampleName: template.name.en,
+    counterSales: activity.counterSales,
+    pendingOrder: activity.pendingOrder,
+  })
+  assert.ok(withActivity !== null, `${template.id} activity must install`)
+  return withActivity
+}
+
+// The proof a real till produces: stamped now, not backdated to suit the stored record.
+function presentClockProof(order, capturedAt) {
+  return {
+    actionId: `ACT-TILL-${order.id}`,
+    capturedAt,
+    actor: 'Counter operator',
+    reason: 'Counted the cash drawer against this sale.',
+    evidenceReference: `TILL-${order.id}`,
+  }
+}
+
+test('every order a template installs is reconcilable with a present-clock proof', () => {
+  // The owner opens the workspace after provisioning, not at the same instant.
+  const atTheTill = new Date(Date.parse(SAMPLE_PROVISIONED_AT) + 40 * 60 * 1000).toISOString()
+  for (const template of model.shopBusinessTemplates) {
+    const state = installTemplateActivity(template)
+    const sampleOrders = state.orders.filter((order) => order.id.startsWith(SAMPLE_ORDER_PREFIX))
+    assert.ok(sampleOrders.length, `${template.id} installed no sample orders`)
+    for (const order of sampleOrders) {
+      if (order.paymentStatus !== 'pending' || order.status === 'cancelled') continue
+      const proof = presentClockProof(order, atTheTill)
+      let result
+      assert.doesNotThrow(
+        () => { result = commerceModel.reconcileCommercePayment(state, order.id, proof) },
+        `${template.id} ${order.id}: reconciling with a present-clock proof threw`,
+      )
+      assert.ok(result !== null, `${template.id} ${order.id}: reconciling with a present-clock proof refused`)
+      assert.equal(result.orders.find((candidate) => candidate.id === order.id).paymentStatus, 'reconciled', `${template.id} ${order.id}`)
+    }
+  }
+})
+
+test('no sample order is left needing an action the app cannot complete', () => {
+  const atTheTill = new Date(Date.parse(SAMPLE_PROVISIONED_AT) + 40 * 60 * 1000).toISOString()
+  for (const template of model.shopBusinessTemplates) {
+    const state = installTemplateActivity(template)
+    for (const order of state.orders.filter((candidate) => candidate.id.startsWith(SAMPLE_ORDER_PREFIX))) {
+      if (!commerceModel.commerceOrderNeedsAction(order)) continue
+      // Whatever the queue asks the owner to do, at least one accountable transition must
+      // accept it. A queued order that neither reconciles nor cancels is unclearable by any button.
+      const reconciles = (() => {
+        try { return commerceModel.reconcileCommercePayment(state, order.id, presentClockProof(order, atTheTill)) !== null }
+        catch { return false }
+      })()
+      const cancels = (() => {
+        try {
+          return commerceModel.cancelCommerceOrder(state, order.id, {
+            ...presentClockProof(order, atTheTill),
+            actionId: `ACT-CANCEL-${order.id}`,
+            reason: 'Customer did not collect.',
+          }) !== null
+        } catch { return false }
+      })()
+      const advances = order.status !== 'completed' && order.status !== 'cancelled'
+      assert.ok(
+        reconciles || cancels || advances,
+        `${template.id} ${order.id} (${order.status}/${order.paymentStatus}) is stuck: it cannot be reconciled, cancelled, or advanced`,
+      )
+    }
+  }
+})
+
+test('completed sample sales carry settled takings, so the first daily close is not empty', () => {
+  for (const template of model.shopBusinessTemplates) {
+    const state = installTemplateActivity(template)
+    const completed = state.orders.filter((order) => order.id.startsWith(SAMPLE_ORDER_PREFIX) && order.status === 'completed')
+    assert.equal(completed.length, template.counterSales.length, `${template.id} completed sale count`)
+    for (const order of completed) {
+      assert.equal(order.paymentStatus, 'reconciled', `${template.id} ${order.id}: a handed-over counter sale must be recorded as paid`)
+      assert.ok(order.paymentReconciledAt, `${template.id} ${order.id} needs a reconciliation instant`)
+      assert.ok(
+        Date.parse(order.paymentReconciledAt) <= Date.parse(order.completion.capturedAt),
+        `${template.id} ${order.id}: payment must be taken at or before the handover`,
+      )
+      assert.ok(
+        Date.parse(order.createdAt) <= Date.parse(order.paymentReconciledAt),
+        `${template.id} ${order.id}: payment cannot precede the sale`,
+      )
+    }
+  }
+})
+
+// Exercised against the shape workspaces provisioned before this fix still carry: an order
+// completed with payment left pending, whose completion instant is already in the past.
+// reconcileCommercePayment used to hand that straight to validateCommerceState, which threw
+// out of the transition and surfaced a raw validator string in the owner's confirm dialog.
+test('reconciling a completed order with a later proof refuses safely instead of throwing', () => {
+  const template = model.shopBusinessTemplate('beauty-spa')
+  const state = installTemplateActivity(template)
+  const legacy = JSON.parse(JSON.stringify(state))
+  const target = legacy.orders.find((order) => order.id.endsWith('-SALE-1'))
+  target.paymentStatus = 'pending'
+  for (const field of [
+    'paymentReconciledAt',
+    'paymentReconciliationActionId',
+    'paymentReconciledBy',
+    'paymentReconciliationReason',
+    'paymentEvidenceReference',
+  ]) delete target[field]
+  const stuck = commerceModel.validateCommerceState(legacy)
+
+  const afterCompletion = new Date(Date.parse(target.completion.capturedAt) + 60 * 1000).toISOString()
+  let result
+  assert.doesNotThrow(
+    () => { result = commerceModel.reconcileCommercePayment(stuck, target.id, presentClockProof(target, afterCompletion)) },
+    'a proof stamped after completion must be refused, not thrown on',
+  )
+  assert.equal(result, null, 'a proof stamped after completion must refuse')
+
+  // The guard is a chronology guard, not a blanket ban: a proof at or before the completion
+  // instant is still a valid reconciliation and must be accepted.
+  const accepted = commerceModel.reconcileCommercePayment(stuck, target.id, presentClockProof(target, target.completion.capturedAt))
+  assert.ok(accepted !== null, 'a proof at the completion instant must still reconcile')
+  assert.equal(accepted.orders.find((order) => order.id === target.id).paymentStatus, 'reconciled')
+})
+
+test('an order still open for payment reconciles with a present-clock proof', () => {
+  // Guarding on completion must not touch the ordinary pay-later path, where there is no
+  // completion proof yet and the till stamps now.
+  const state = installTemplateActivity(model.shopBusinessTemplate('beauty-spa'))
+  const pending = state.orders.find((order) => order.id.endsWith('-ORDER'))
+  assert.equal(pending.paymentStatus, 'pending')
+  assert.equal(pending.completion, undefined)
+  const later = new Date(Date.parse(SAMPLE_PROVISIONED_AT) + 3 * 60 * 60 * 1000).toISOString()
+  const result = commerceModel.reconcileCommercePayment(state, pending.id, presentClockProof(pending, later))
+  assert.ok(result !== null, 'an uncompleted order must accept a present-clock payment proof')
+  assert.equal(result.orders.find((order) => order.id === pending.id).paymentStatus, 'reconciled')
+})

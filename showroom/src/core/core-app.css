@@ -389,6 +389,10 @@ textarea { min-height: 72px; resize: vertical; }
 .action-confirm-form { grid-template-columns: 1fr; align-items: end; gap: 12px; }
 .action-confirm-form .form-actions { min-width: max-content; align-items: center; }
 .action-confirm-form > .form-notice { grid-column: 1/-1; }
+.form-notice[data-action-gate="error"] p { margin: 0 0 0.375rem; }
+.form-notice[data-action-gate="error"] p:last-of-type { margin-bottom: 0.5rem; }
+.action-error-detail > summary { min-height: 2.75rem; display: flex; align-items: center; color: var(--core-quiet); font-size: 0.75rem; cursor: pointer; }
+.action-error-detail > code { display: block; overflow-wrap: anywhere; color: var(--core-muted); font-family: var(--core-mono); font-size: 0.75rem; line-height: 1.5; }
 .action-history { flex: 0 0 auto; min-height: 0; padding: 0; }
 .action-history summary { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px; color: var(--core-muted); font-size: 0.5625rem; cursor: pointer; list-style: none; }
 .action-history summary::-webkit-details-marker { display: none; }

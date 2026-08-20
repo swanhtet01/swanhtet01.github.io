@@ -4633,6 +4633,31 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
 if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !workspaceRuntimeSource.includes('result.version !== current.version + 1') || !workspaceRuntimeSource.includes('validateCommerceState(result.state)') || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'") || !workspaceRuntimeSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !workspaceRuntimeSource.includes('const latest = loadCommerceWorkspace()') || !workspaceRuntimeSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
 if ((workspaceRuntimeSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
 if (!workspaceRuntimeSource.includes('confirmation?: AccountableAction') || !workspaceRuntimeSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !workspaceRuntimeSource.includes('result.idempotent_replay') || !workspaceRuntimeSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
+// A frozen command proof blocks Cancel and Escape while the outcome is unknown. Once a submit has
+// come back with an error the outcome IS known -- nothing applied -- and the only remaining
+// control was "Retry same confirmation", which reuses the frozen timestamp and fails identically.
+// That left reloading the app as the operator's sole escape from the dialog.
+if (!coreSource.includes('const confirmationLocked = Boolean(action.confirmation) && !error')
+  || !coreSource.includes('disabled={busy || confirmationLocked} onClick={onCancel}')
+  || !coreSource.includes('if (!busy && !confirmationLocked) onCancel()')
+  || coreSource.includes('disabled={busy || Boolean(action.confirmation)} onClick={onCancel}')) fail('failed_confirmation_traps_operator_in_dialog')
+// Validator strings name array indexes and internal fields. Shop owners read this dialog at a
+// counter; the technical text stays available under a disclosure, never as the whole message.
+if (!coreSource.includes('function ownerFacingActionError(detail: string)')
+  || !coreSource.includes('{ownerFacingActionError(error)}')
+  || !coreSource.includes('className="action-error-detail"')
+  || !coreSource.includes('<summary>Technical detail</summary>')
+  || !coreCssSource.includes('.action-error-detail > summary { min-height: 2.75rem;')) fail('raw_validator_error_shown_to_shop_owner')
+// A completed order keeps payment at or before handover, so it can never accept a proof stamped
+// now. Offering "Reconcile payment" as its primary action promises what the transition refuses.
+if (!coreSource.includes("const reconcileIsPrimary = !settleSaleIsPrimary && needsPayment && order.status === 'ready'")
+  || !commerceSource.includes('(timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(order.completion.capturedAt) as bigint)) return null')) fail('completed_order_offers_a_payment_action_that_always_refuses')
+// The sample counter sales a trade template installs are money already taken. Staged 'pending'
+// they became permanently unclearable -- completed orders cannot be cancelled either -- and their
+// takings never reached a daily close.
+if (!commerceSource.includes('const paidAt = new Date(Date.parse(sale.recordedAt) + 5 * 60 * 1000).toISOString()')
+  || !commerceSource.includes('paymentReconciledAt: paidAt,')
+  || !commerceSource.includes('paymentReconciliationActionId: settleActionId,')) fail('working_sample_counter_sales_not_recorded_as_paid')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!commerceSource.includes('registerCommerceItem')
   || !commerceSource.includes('export function importCommerceCatalog')
@@ -19689,35 +19714,46 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // chip, and the settings panel). Raised to 3_050_000: covers the measured
 // number with ~18_824 bytes of headroom, the same order of headroom the
 // previous two ceilings gave.
-// RAISE 2026-08-20 -- two landings, one ceiling. Both were measured alone; the
-// number below is re-measured on a fresh dist/ with BOTH present, because the
-// first of them said in this very comment not to carry a solo figure over.
-//   * Roadmap section 2 item 5, anomaly flags on the close (#515): the
-//     shop-close-anomaly-flags projection plus the close-surface block reading it.
-//   * G3, offline precache reaches the till (#519): +3_358 bytes of four small
-//     artifacts that make the "works offline" claim true instead of decorative --
-//     three shell scripts (theme-restore.js, sw-register.js, vercel-insights.js,
-//     ~600 B) that USED to be inline <script> blocks and were therefore refused
-//     outright by `script-src 'self'`, which is why the service worker had never
-//     registered and nothing worked offline at all; plus the sealed 32-entry
-//     precache list in sw.js (~2.4 KB), derived from Vite's own manifest by
-//     showroom/scripts/seal-offline-precache.mjs. Vite's manifest is deleted
-//     after the seal, so it contributes nothing.
-// Re-measured together on a fresh dist/ via the ROOT `npm run app:build`, after
-// the service-worker lifecycle fixes #519 took on review (retain the previous
-// release's cache so a till held open across a deploy keeps its chunks; fold the
-// unhashed shell files' CONTENTS into the build digest so editing one of them
-// actually ships; guarded precache, origin guard, navigation timeout):
-// 3_062_171, leaving ~7_829 bytes of headroom under 3_070_000. Those fixes are
-// worker source only -- no new files and no app code -- and they cost less than
-// they look: the rationale for them lives in the generator rather than inside the
-// worker template, which took the shipped sw.js from 12_186 to 7_285 bytes. The
-// worker is downloaded on install AND on every update check, so prose in it is
-// prose on a metered connection, which is the same argument the precache
-// exclusion list is built on. Build via the root script, not `npm --prefix showroom run build` --
-// the latter skips app:release:write, so sw.js never gets its placeholder and the
-// precache seal fails (caught at :537, but it wastes a measurement). No app code
-// was shrunk to fit.
+// RAISE 2026-08-20 (roadmap §2 item 5, anomaly flags on the close): fresh
+// `npm run app:build` measures 3_052_850 -- 2_850 bytes over -- after one real
+// product feature (the shop-close-anomaly-flags projection plus the
+// close-surface block that reads it). Raised to 3_070_000: covers the measured
+// number with ~17_150 bytes of headroom, the same order of headroom the
+// previous three ceilings gave. NOTE for whoever lands next: re-measure on a
+// fresh dist/ rather than carrying this number over -- it was taken without
+// any other in-flight branch's CSS or components.
+// MEASUREMENT 2026-08-21 (day-one Shop template fixes, rebased onto the anomaly-flags
+// raise above): taking that NOTE at its word, this is a fresh `npm run app:build`
+// measured AFTER combining both branches rather than either side's pre-rebase number.
+// Combined dist/ measures 3_057_542 -- 4_692 bytes above this branch's own pre-rebase
+// 3_050_627, which is the anomaly-flags close surface landing alongside the working-sample
+// counter sales staged as reconciled, the accountable gate releasing the operator after a
+// failed confirmation, and owner-language error copy with the validator text behind a
+// disclosure. The existing 3_070_000 ceiling already covers it with ~12_458 bytes of
+// headroom, so it is kept rather than raised again.
+// RE-CONFIRMED 2026-08-21 after rebasing onto #522: measured again on a fresh dist/
+// rather than carried over. Still 3_057_542 -- #522 wired orphaned tests and changed
+// tools/, not showroom/src, so the emitted assets are byte-for-byte the same build.
+// MEASUREMENT 2026-08-21 (G3, the app had no service worker at all -- #519): the
+// shipped additions are three shell scripts (theme-restore.js, sw-register.js,
+// vercel-insights.js, ~600 B) that USED to be inline <script> blocks and were
+// therefore refused outright by `script-src 'self'` -- which is why the worker had
+// never registered and nothing worked offline -- plus the sealed precache list in
+// sw.js derived from Vite's own manifest by showroom/scripts/seal-offline-precache.mjs.
+// The lifecycle fixes taken on review (retain the previous release's cache so a till
+// held open across a deploy keeps its chunks; fold the unhashed shell files' CONTENTS
+// into the build digest so editing one actually ships; guarded precache, origin guard,
+// navigation timeout) are worker source only -- no new files, no app code. They cost
+// less than they look because their rationale lives in the generator rather than inside
+// the worker template: the shipped sw.js went 12_186 -> 7_285 bytes. The worker is
+// downloaded on install AND on every update check, so prose in it is prose on a metered
+// connection -- the same argument the precache exclusion list is built on.
+// Build via the ROOT `npm run app:build`, never `npm --prefix showroom run build`: the
+// latter skips app:release:write, so sw.js never gets its placeholder and the precache
+// seal fails (caught at :537, but it wastes a measurement).
+// Re-measured on a fresh dist/ with #520/#521/#522 and this branch all present:
+// 3_064_424 bytes, ~5_576 under the 3_070_000 ceiling, which is kept rather
+// than raised. No app code was shrunk to fit.
 if (bytes > 3_070_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
