@@ -30,8 +30,10 @@ exact-field contracts in `supermega_runtime/commerce_runtime.py`.
 against the working checkout.** During review of PR #500 two citations here
 (`shop-fulfillment-lead-time-summary.ts` and `docs/pilot-kit/`) were reported
 as non-existent on main. Both exist on `origin/main` — added by `4819163f`
-(#454). The checkout at the repository root is pinned at `c9e0d436`, **1190
-commits behind `origin/main`**, which is what a grep there finds. Anyone
+(#454). The checkout at the repository root was pinned at `c9e0d436`, **1190
+commits behind `origin/main` when measured on 2026-08-20** (that gap will
+drift; re-measure rather than quoting it), which is what a grep there finds.
+Anyone
 re-checking this study should `git fetch` and grep `origin/main` (for example
 `git ls-tree -r origin/main --name-only`) rather than the working tree.
 
@@ -90,9 +92,10 @@ founder actions. It is not. **Five of those nine — steps 1, 5, 6, 7, 8 — are
 one-time activation costs** that are paid once and then amortize to zero
 across every subsequent client. Of the remaining four: step 2 recurs per
 outreach *batch* (its identity-and-cadence setup portion is one-time, its
-per-message review is not), step 4 recurs per *design partner*, and steps 10
-and 11 recur per client per cycle. Step 9, which the brief left untagged, is
-a sixth one-time cost.
+per-message review is not), step 4 recurs per *design partner*, **step 10
+recurs per client per billing cycle, and step 11 recurs only at onboarding or
+after a revocation — not per cycle** (see "Why step 11 does not recur" below).
+Step 9, which the brief left untagged, is a sixth one-time cost.
 
 This is the single most important finding in this study, and section 2 is
 built on it. "Number of founder-only steps" is a metric that cannot
@@ -114,15 +117,58 @@ scaling ceiling produces a wrong answer in both directions at once.
 | 7 | Production activation steps A→D | Yes | **One-time** | Under a working session |
 | 8 | Create and verify tenant #1 | Yes, once | **One-time** (steady state: zero — see correction 2) | Under an hour, once |
 | 9 | Hosted acceptance evidence run | De facto yes | **One-time** (closes the Shop gate once) | ~5 days |
-| 10 | Issue invoice → receive transfer → `confirm-payment` | Yes | **Per client, per billing cycle** | Minutes per invoice |
-| 11 | `grant-entitlement` | Yes | **Per client, per entitlement** | Minutes |
+| 10 | Issue invoice → receive transfer → `confirm-payment` | Yes | **Per client, per billing cycle** — two CLI commands | Minutes per invoice |
+| 11 | `grant-entitlement` | Yes | **Per client, once** — at onboarding or after a revocation, **not** per cycle | Minutes |
 
 **One-time subtotal:** steps 1, 5, 6, 7, 8, 9 — roughly one working week of
 founder attention, dominated by step 9's five days, paid once for the whole
 company.
 
-**Per-client steady-state subtotal:** steps 10 and 11 — two billing CLI
-invocations, minutes each — plus an amortized slice of step 2's batch review.
+**Per-client steady-state subtotal:** **step 10 only** — `issue-invoice` then
+`confirm-payment`, two CLI commands per billing cycle — plus an amortized
+slice of step 2's batch review. **Step 11 is onboarding work, not recurring
+work.**
+
+### Why step 11 does not recur — corrected after review
+
+The second revision of this study said steps 10 **and** 11 recur per cycle.
+Codex challenged it on PR #500 and **Codex was right**; the code refuses that
+reading. `BillingLedger.grant_entitlement` raises
+`BillingRailConflict("Premium entitlement is already granted.")` whenever the
+stored entitlement status is already `granted` (`billing_rail.py:1091-1092`),
+and `revoke_entitlement` refuses anything that is not currently granted
+(`:1192-1193`). So for a client whose entitlement stays active between cycles,
+step 11 *cannot* run a second time.
+
+That leaves two possible processes, and **the code cannot tell us which one
+the founder intends, because D5 is still an open founder ask:**
+
+- **Reading A — entitlement persists (what recommended D5 implies).** Step 11
+  runs once at onboarding. Each later cycle is step 10's two commands only.
+  `BILLING-RAIL-DESIGN.md` D5 recommends "NO automatic expiry in v1: you
+  review monthly and revoke manually", which describes exactly this: a
+  standing grant plus a human monthly review.
+- **Reading B — entitlement is re-established each cycle.** Then every cycle
+  needs `revoke-entitlement` *and* `grant-entitlement` on top of step 10 — a
+  **third and fourth** founder command per client per cycle, roughly doubling
+  the steady-state load. The rail supports this; nothing selects it.
+
+**This study takes Reading A as the working assumption because it is what D5
+recommends, and flags plainly that it is not settled.** D5 sits in
+`BILLING-RAIL-DESIGN.md`'s "Founder decision asks (**nothing below proceeds
+without these**)" table, and all six of D1–D6 remain open. Until D5 is
+answered, **the steady-state per-client founder cadence is genuinely
+undefined**, and any capacity plan built on it inherits that. An unanswered
+founder decision is the honest finding here; asserting a settled number would
+not be.
+
+**A consequence worth recording, since it strengthens A2.** Under Reading A
+the entitlement row stays bound to the *first* paid invoice's digest and is
+never revisited, so `premiumUnlocked` answers "was this workspace ever
+granted", **not** "is this client current on payments". Whether a paying
+client has stopped paying is therefore visible only in the invoice and
+payment-event history — which is exactly what `_overdue_report` projects, and
+exactly the query A2 makes runnable outside the founder's shell.
 
 **Per-design-partner subtotal:** step 4, ~5 days, paid only for the small set
 of early named partners the pilot kit exists for. `docs/pilot-kit/README.md`
@@ -136,15 +182,21 @@ The premise "every client costs founder hours, so revenue cannot outrun the
 founder's calendar" is **true in the near term and materially wrong in the
 steady state**, and the two need separating:
 
-- **Near term (first ~5–10 clients):** the ceiling is real and tight. It is
-  step 4, at roughly five founder-days per design partner. One founder,
-  working nothing else, tops out somewhere near twenty partners a year. This
-  is the binding constraint today and it deserves the whole of section 4.
-- **Steady state (after the pilot gate closes):** the ceiling is steps 10 and
-  11 at minutes per client per cycle. Both are permanent `CLAUDE.md` hard
-  limits and neither may be automated — but a ceiling measured in *minutes*
-  per client per cycle sits in the hundreds of clients before it consumes a
-  part-time founder billing shift, not in the tens. When it does bind, the
+- **Near term (the first handful of design partners):** the ceiling is real
+  and tight. It is step 4, at roughly five founder-days per design partner —
+  the pilot kit's own five-day plan, not an invented figure. One founder
+  working nothing else tops out in the low tens of partners a year. This is
+  the binding constraint today and it deserves the whole of section 4.
+- **Steady state (after the pilot gate closes):** the ceiling is **step 10**
+  — two CLI commands per client per billing cycle — plus a monthly entitlement
+  review per D5. It is a permanent `CLAUDE.md` hard limit and may not be
+  automated. Where it binds depends on one number this repo has never
+  measured, so the arithmetic is given rather than the conclusion: at *m*
+  minutes per client per cycle and *h* founder-hours a month available for
+  billing, the ceiling is `60h / m` clients. At m = 20 that is 150 clients per
+  50-hour month; at m = 5 it is 600. **The honest statement is that it binds
+  somewhere in the hundreds under any plausible *m*, and that *m* is a guess
+  until a real billing cycle is run.** When it does bind, the
   correct answer is a second trusted human running the billing shift, not
   automation, because the boundary is *who is accountable for moving money*,
   not *how many keystrokes it takes*.
@@ -342,13 +394,58 @@ events. So the founder must personally run every "who owes me money" query,
 because the only credential that answers it is the one that can also move
 money.
 
-**Smallest change.** Gate the privileged-role assertion on
-`require_write_privilege`, keeping unconditional (a) the refusal of the two
-runtime role names, (b) the read-only-transaction assertion, and (c) the three
-`SELECT` privilege checks. A dedicated bounded read role with SELECT on the
-three billing tables and nothing else could then produce the overdue report.
+**A correction to this study's second revision — the first A2 spec did not
+enforce its own invariant.** That revision proposed merely *gating* the
+privileged-role assertion on `require_write_privilege`. Codex challenged it on
+PR #500 and **Codex was right.** Skipping an assertion is not the same as
+adding one: `_assert_schema` only ever *requires* the mutation flags when
+`require_write_privilege` is true (`billing_rail.py:562-572`) and **never
+rejects them when it is false**. A read role accidentally provisioned with
+`INSERT` or `UPDATE` would therefore sail through the read branch. Since A2's
+whole purpose is putting that credential in a service context, the claimed
+invariant "the service cannot mutate billing" would have rested entirely on
+someone provisioning the role correctly by hand, with nothing in code to catch
+a slip. That is precisely the failure that shows up when a role is created
+slightly wrong under time pressure.
 
-**Size:** S — one conditional plus its tests.
+**Checking it went further than the review did.** Reading the probe SQL
+(`:513-520`), the `current_user` privilege set is narrower than the check
+needs in two more ways:
+
+- **`DELETE` is never probed on any of the three tables** — so it could not be
+  rejected even if the code wanted to.
+- **`UPDATE` on `billing_events` is never probed either** — only `SELECT` and
+  `INSERT` are, so an events-table UPDATE grant is invisible to every branch.
+
+**Revised smallest change — the read branch must fail closed on every
+mutation privilege, not merely decline to require them.**
+
+1. Extend the probe to the full matrix: `SELECT`, `INSERT`, `UPDATE`, `DELETE`
+   for `current_user` across all three billing tables (adds the four missing
+   cells).
+2. When `require_write_privilege` is false, **raise unless every one of the
+   nine mutation privileges is absent.** A read connection holding any
+   `INSERT`, `UPDATE`, or `DELETE` on any billing table is refused outright.
+3. Keep unconditional, exactly as today: the refusal of the two runtime role
+   names, the read-only-transaction assertion, and the three `SELECT` checks.
+4. Only then gate the privileged-role assertion on `require_write_privilege`.
+
+**This mirrors a pattern the file already contains.** The `runtime_role_denied`
+probe (`:500-512`) already does exactly this shape — `bool_and` over
+`SELECT/INSERT/UPDATE/DELETE` across all three tables — for the
+`supermega_trial_backend` role. The fix applies the existing idiom to the
+*connecting* role in the read branch, rather than inventing a new one.
+
+**The invariant is then enforced by the probe, not by provisioning
+discipline.** That distinction is load-bearing and is the reason A2 outranks
+A1: a mis-provisioned read role fails closed at connection time with a clear
+error, instead of silently becoming a mutation-capable credential sitting in a
+service context. Without step 2 above, A2 would be trading a founder-shell
+credential for an unverified one — a worse position than the status quo, not a
+better one.
+
+**Size:** S–M (was S) — the probe extension, one new rejection branch, and
+tests covering a read role that wrongly holds each of the nine privileges.
 
 **Prerequisite, and it is a real one.** The founder must create that bounded
 read role on the target and place its URL in a service secret. Two conditions
@@ -421,9 +518,19 @@ brief's `[founder-only]` tag on step 8 should be read as "for tenant #1".
 
 ## 5. Ranking
 
-Ordered by founder-minutes saved per client, with payback stated separately.
-Every minute figure is an **estimate**, not a measurement; nothing in this
-repo has ever timed a real client engagement, because no client exists.
+Ordered by founder-minutes saved per client. Every minute figure is an
+**estimate**, not a measurement; nothing in this repo has ever timed a real
+client engagement, because no client exists.
+
+**A "clients until payback" column has been removed from this table.** The
+previous revision carried one (~10, 2–4, ~20). Payback requires build cost ÷
+saving per client, and this study never estimated build cost in hours — so
+those numbers were division by an absent operand and could not be checked
+against anything. Sizes (S/M/L) and per-client savings are given instead;
+whoever plans the work can supply the build estimate and do the division with
+their own number. Flagging this on my own initiative rather than waiting for a
+fourth review round: two of the three rounds so far have caught exactly this
+shape of unsupported figure.
 
 **This ranking changed after review.** The first revision put A1 first on the
 strength of a "pure projection, size M, no prerequisite" claim that did not
@@ -431,17 +538,21 @@ survive checking (section 4, A1). Re-costed as instrumentation plus a
 provenance contract, and delivering three of five measurements rather than
 five, A1 drops to second and **A2 becomes the top recommendation.**
 
-| Rank | Item | Size | Prereq | Est. founder-minutes saved | Clients until payback |
-|---|---|---|---|---|---|
-| 1 | **A2 — decouple the billing read path from the write credential** | S | Founder creates a bounded read role; write URL stays out of every service context | ~10–20 per client per cycle, plus prevented revenue leakage | ~10 |
-| 2 | **A1 — instrument the pilot measurements (3 of 5) + provenance contract** | L | None on the device-local route | ~150–300/partner directly; does **not** unlock full delegation | 2–4 partners |
-| 3 | **A3 — invoice config generator feeding the existing preparer** | M | D1 pricing decision; price file outside the repo | ~10–15 per client per cycle | ~20 |
+| Rank | Item | Size | Prereq | Est. founder-minutes saved |
+|---|---|---|---|---|
+| 1 | **A2 — read path fails closed on every mutation privilege, then decouples from the write credential** | S–M | Founder creates a bounded read role; write URL stays out of every service context | ~10–20 per client per cycle, plus prevented revenue leakage |
+| 2 | **A1 — instrument the pilot measurements (3 of 5) + provenance contract** | L | None on the device-local route | ~150–300/partner directly; does **not** unlock full delegation |
+| 3 | **A3 — invoice config generator feeding the existing preparer** | M | D1 pricing decision; price file outside the repo | ~10–15 per client per cycle |
 
-**A2 is now first** because it is the only item that is small, certain, and
-verified defect-shaped: a one-conditional change against code quoted in
-section 4, with no product-design question inside it and no dependence on a
-founder decision beyond provisioning the read role. It saves less per client
-than A1's original (withdrawn) estimate, but it saves it reliably and forever.
+**A2 is still first, but for a narrower reason than the last revision gave.**
+That revision called it "a one-conditional change" — which was true of the
+spec as then written, and that spec did not enforce its own invariant (section
+4, A2). The corrected version is a probe extension plus a fail-closed
+rejection branch: still small, still a verified defect against quoted code,
+still free of product-design questions. What earns it the top spot is that
+**its invariant ends up enforced in code rather than by provisioning
+discipline** — which is exactly what the first spec got wrong, and exactly
+what makes it safe to put a billing credential in a service context at all.
 
 **A1 stays second on strategic grounds, stated with its limits.** It is still
 the only item touching the step that actually binds today, and it is still
@@ -476,10 +587,20 @@ table in section 2; Codex caught it on PR #500 and it is corrected here. Step
 2's *setup* is one-time but its per-message review is not, so it cannot be
 counted as paid-once.)
 
-The steady-state per-client founder-only load is therefore two billing CLI
-invocations plus a share of batch outreach review. That is a genuine ceiling
-and it is permanent — but it binds in the hundreds of clients, and the correct
+The steady-state per-client founder-only load is therefore **step 10's two
+commands per billing cycle** — `issue-invoice` and `confirm-payment` — plus a
+monthly entitlement review and a share of batch outreach review. Step 11 is
+onboarding work, not recurring work: `grant_entitlement` refuses an
+already-granted entitlement, so it cannot run again unless the founder first
+revokes. That is a genuine ceiling and it is permanent. It binds somewhere in
+the hundreds of clients on the arithmetic in section 2 — and the correct
 response when it binds is a second trusted human, not automation.
+
+**With one caveat that no amount of code reading resolves:** the recurring
+cadence is only settled once D5 (entitlement lapse policy) is answered. Under
+the *recommended* D5 the figure above holds. Under a re-establish-each-cycle
+policy it roughly doubles. D5 is still open, so treat this number as
+conditional rather than measured.
 
 The step that binds *now*, at client one through ten, is step 4: five founder-
 days per design partner, on a shop floor, with a stopwatch. It is not a hard

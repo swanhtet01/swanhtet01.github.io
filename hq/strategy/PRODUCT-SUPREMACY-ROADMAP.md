@@ -141,17 +141,26 @@ status column in §1 for each. The operative forward sequence is now:
 5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
    decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
 6. Scaling-ceiling work, from `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md`
-   (2026-08-20, revised after Codex review on #500): of the nine founder-only
-   steps on the client path, seven are permanent hard limits and **four** of
-   those (steps 1, 5, 6, 7) are paid ONCE for the whole company — steps 10 and
-   11 recur per client per cycle and step 2 per outreach batch. So the
-   per-client ceiling is not "eight founder steps"; near-term it is the five
-   on-site days of the design-partner pilot, and in steady state it is two
-   billing CLI invocations. Top item is **A2: decouple the billing READ path
-   from the write credential** (S, verified defect —
-   `billing_rail.py`'s privileged-role assertion sits outside the
-   `require_write_privilege` conditional, so the read-only overdue projection
-   needs the same superuser-class role that inserts billing events; prereq is a
+   (2026-08-20, revised twice after Codex review on #500): of the nine
+   founder-only steps on the client path, seven are permanent hard limits and
+   **four** of those (steps 1, 5, 6, 7) are paid ONCE for the whole company.
+   Step 2 recurs per outreach batch; **step 10 recurs per client per billing
+   cycle (two CLI commands); step 11 does NOT recur** —
+   `grant_entitlement` refuses an already-granted entitlement
+   (`billing_rail.py:1091`), so it is onboarding-or-post-revocation work.
+   **The recurring cadence is not settled**: D5 (entitlement lapse policy) is
+   an open founder ask, and a re-establish-each-cycle policy would add
+   `revoke-entitlement` + `grant-entitlement` per cycle, roughly doubling it.
+   So the per-client ceiling is not "eight founder steps"; near-term it is the
+   five on-site days of the design-partner pilot. Top item is **A2: make the
+   billing READ path fail closed on every mutation privilege, then decouple it
+   from the write credential** (S–M, verified defect — `_assert_schema` only
+   REQUIRES the mutation flags when `require_write_privilege` is true and never
+   REJECTS them when false, `DELETE` is never probed for `current_user`, and
+   `billing_events` UPDATE is not probed either; so merely skipping the
+   privileged-role assertion would leave the "service cannot mutate billing"
+   invariant resting on hand-provisioning. Mirror the existing
+   `runtime_role_denied` `bool_and` idiom onto the connecting role. Prereq is a
    founder-provisioned bounded read role). **A1 (pilot measurement) was
    re-costed from M to L and dropped to second**: it is NOT a pure projection —
    only 1 of the 5 measurements is derivable from `CommerceState` (exception
