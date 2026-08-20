@@ -2826,3 +2826,23 @@ input, select, textarea { border-color: var(--core-field-line); }
    long unbroken URL, so this single notice wraps mid-token rather than forcing the fixed
    -width Plant action panel to scroll sideways. Colour and size stay on `.form-notice`. */
 .plant-job-scan-miss { overflow-wrap: anywhere; }
+/* P3.8 batch 1 — plain-language lead line above a compliance litany. The litany
+   stays verbatim underneath; .surface-lead is the sentence a shop owner reads
+   first, so it carries ink rather than the muted caption colour its host panel
+   gives every other small/p. Tokens only: no new hex, no new px, and nothing
+   added to :root, so the .theme-dark mirror is unchanged. Each host class is
+   named explicitly because the panel rules (.plant-control small,
+   .shop-order-control small, .catalog-import-handoff small) are one class plus
+   one element and would otherwise outrank a bare .surface-lead regardless of
+   source order. */
+.surface-lead,
+.plant-control small.surface-lead,
+.shop-order-control small.surface-lead,
+.catalog-import-handoff small.surface-lead,
+.website-intake > p.surface-lead {
+  margin: 0;
+  color: var(--core-ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+}
