@@ -8375,6 +8375,13 @@ export function reconcileCommercePayment(state: CommerceState, orderId: string, 
       && order.paymentEvidenceReference === proof.evidenceReference ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId)) return null
+  // The record keeps payment at or before handover (validateCommerceState enforces
+  // completion.capturedAt >= paymentReconciledAt), so a proof stamped after this order was
+  // completed cannot be written without breaking the chronology. Refuse it here instead of
+  // letting validateCommerceState throw out of a transition: returning null is what every other
+  // refusal in this module does, and it is what the callers are written to handle.
+  if (order.completion
+    && (timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(order.completion.capturedAt) as bigint)) return null
   return validateCommerceState({
     ...state,
     orders: state.orders.map((candidate) => candidate.id === orderId ? {

@@ -148,3 +148,51 @@ test('no template dates its sample activity into the future', () => {
     )
   }
 })
+
+// Fix 3, exercised against the shape workspaces provisioned before this fix still carry: an order
+// completed with payment left pending, whose completion instant is already in the past.
+// reconcileCommercePayment used to hand that straight to validateCommerceState, which threw out of
+// the transition and surfaced a raw validator string in the owner's confirmation dialog.
+test('reconciling a completed order with a later proof refuses safely instead of throwing', () => {
+  const template = templates.shopBusinessTemplate('beauty-spa')
+  const state = installTemplate(template)
+  const legacy = JSON.parse(JSON.stringify(state))
+  const target = legacy.orders.find((order) => order.id.endsWith('-SALE-1'))
+  target.paymentStatus = 'pending'
+  for (const field of [
+    'paymentReconciledAt',
+    'paymentReconciliationActionId',
+    'paymentReconciledBy',
+    'paymentReconciliationReason',
+    'paymentEvidenceReference',
+  ]) delete target[field]
+  const stuck = commerce.validateCommerceState(legacy)
+
+  const afterCompletion = new Date(Date.parse(target.completion.capturedAt) + 60 * 1000).toISOString()
+  let result
+  assert.doesNotThrow(
+    () => { result = commerce.reconcileCommercePayment(stuck, target.id, presentClockProof(target, afterCompletion)) },
+    'a proof stamped after completion must be refused, not thrown on',
+  )
+  assert.equal(result, null, 'a proof stamped after completion must refuse')
+
+  // The guard is a chronology guard, not a blanket ban: a proof at or before the completion
+  // instant is still a valid reconciliation and must be accepted.
+  const atCompletion = target.completion.capturedAt
+  const accepted = commerce.reconcileCommercePayment(stuck, target.id, presentClockProof(target, atCompletion))
+  assert.ok(accepted !== null, 'a proof at the completion instant must still reconcile')
+  assert.equal(accepted.orders.find((order) => order.id === target.id).paymentStatus, 'reconciled')
+})
+
+test('an order still open for payment reconciles with a present-clock proof', () => {
+  // Guarding on completion must not touch the ordinary pay-later path, where there is no
+  // completion proof yet and the till stamps now.
+  const state = installTemplate(templates.shopBusinessTemplate('beauty-spa'))
+  const pending = state.orders.find((order) => order.id.endsWith('-ORDER'))
+  assert.equal(pending.paymentStatus, 'pending')
+  assert.equal(pending.completion, undefined)
+  const later = new Date(Date.parse(PROVISIONED_AT) + 3 * 60 * 60 * 1000).toISOString()
+  const result = commerce.reconcileCommercePayment(state, pending.id, presentClockProof(pending, later))
+  assert.ok(result !== null, 'an uncompleted order must accept a present-clock payment proof')
+  assert.equal(result.orders.find((order) => order.id === pending.id).paymentStatus, 'reconciled')
+})
