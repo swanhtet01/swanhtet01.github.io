@@ -60,7 +60,7 @@ infra required first.
 | # | Item | State | Status |
 |---|---|---|---|
 | F1 | Bottom-nav work modes — Shop's Today/Sell/Orders/Stock as the mobile bottom bar instead of the 2-link stub | Scoped + in build this cycle (design phase 3 item; plan on file) | **SHIPPED 2026-08-19** (#459): 4 task tabs + Products door (verifier-pinned — only ≤840px path to `/?choose=1`) via shared `commerce-tabs.ts`. Open: on-device keyboard/touch pass |
-| F2 | Low-end Android ("Galaxy") performance pass | Weight normalization + system-font stacks shipped in design phase 2; no measured low-end-device profile exists. Needs a real-device or throttled-CPU Lighthouse baseline before optimizing further — measure first | **MEASURED 2026-08-19** (#481, `hq/strategy/ANDROID-PERFORMANCE-BASELINE.md` + `tools/perf/measure-android-baseline.mjs`): FCP uniform ~3.9-4.2s across ALL routes under ×6 CPU + 400ms RTT — the serial entry→dynamic-import waterfall (not bytes) sets the floor; eager model layer (~110KB gz, 10-22% executed) rides every route via workspace-runtime static imports; counter/orders worst main-thread (~1.8-2.0s long tasks). NEXT: targeted fixes citing these numbers — waterfall flattening (modulepreload), model-layer import split |
+| F2 | Low-end Android ("Galaxy") performance pass | Weight normalization + system-font stacks shipped in design phase 2; no measured low-end-device profile exists. Needs a real-device or throttled-CPU Lighthouse baseline before optimizing further — measure first | **MEASURED 2026-08-19** (#481), **two findings corrected + first slice shipped 2026-08-20** (`hq/strategy/ANDROID-PERFORMANCE-BASELINE.md` + `tools/perf/measure-android-baseline.mjs`): FCP uniform ~3.9-4.2s across ALL routes under ×6 CPU + 400ms RTT. Measured pre-FCP JS is **91.3KB gz on every route** — the HTML-named entry set only, so there is NO dynamic-import waterfall on the first-paint path and modulepreload makes it worse (measured +1.5s FCP on every route, rejected). The chooser's eager model layer came from `WorkspaceStatusPanel`, not `workspace-runtime` — that panel now mounts after first paint. Counter/orders still worst main-thread (~1.0-1.2s long tasks). NEXT: static app-shell skeleton in `index.html` (only remaining FCP lever), then shrink the 91.3KB entry set |
 | F3 | Design phase 3 remainder (`DESIGN-PROGRAM.md`): selling-surface IA, ecommerce literal retirement, px→rem, stylelint CI | Queued, each needs its own planning pass | NOW, sequenced |
 
 ---
@@ -113,10 +113,18 @@ S2 #465, S3 PR1+PR2 #469/#472/#482, P1 #484, F2 measured #481) — see the
 status column in §1 for each. The operative forward sequence is now:
 
 1. F2 follow-through, citing the measured baseline
-   (`ANDROID-PERFORMANCE-BASELINE.md`): flatten the entry→dynamic-import
-   waterfall (modulepreload) and split the eager model layer out of
-   `workspace-runtime.ts`'s static imports. Needs its own planning pass —
-   those imports are load-bearing for every product surface.
+   (`ANDROID-PERFORMANCE-BASELINE.md`). **Do not chase waterfall flattening or
+   modulepreload** — the 2026-08-20 pass measured both dead: pre-FCP JS is the
+   91.3KB gz entry set on every route (no waterfall to flatten), and adding a
+   `modulepreload` to `index.html` cost +1.5s FCP on every route measured. The
+   live items are: (a) a static app-shell skeleton in `index.html`, the only
+   identified lever left on first visual feedback; (b) shrinking the 91.3KB gz
+   entry set, the only other thing FCP responds to; (c) splitting the eager
+   model layer out of `workspace-runtime.ts`'s static imports — worth real
+   transfer and parse on `/shop/*` and `/plant/`, but it will NOT move FCP, and
+   it is blocked as scoped on the synchronous `loadCommerceWorkspace()` call in
+   a `useState` initializer (`workspace-runtime.ts:509-512`). Each needs its
+   own planning pass.
 2. P2 Plant shop-floor scanning (reuses `BarcodeScanButton`, small-medium).
 3. E1 photo follow-through if wanted: photos in the exported/published site
    are a separate decision (published markup is built by `website-export.ts`,

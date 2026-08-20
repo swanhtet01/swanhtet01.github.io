@@ -2795,3 +2795,16 @@ input, select, textarea { border-color: var(--core-field-line); }
   .plant-job-card-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .plant-job-card-actions .text-link { width: 100%; }
 }
+
+/* Deferred arrival of the chooser's attention panel (CoreShell ProductHomePage mounts
+   it after first paint, not with it). The four product tiles above it do not move,
+   but `.product-home-note` below it is pushed down -- that is a real layout shift,
+   accepted deliberately: the panel is null whenever nothing needs attention, so
+   reserving its height would leave a permanent hole on the common case to avoid a
+   shift below the last thing anyone reads. The short fade keeps the arrival from
+   reading as a flicker (the transform does not reflow; the DOM insertion is the
+   shift). Appended at EOF -- the original `.wsp-panel` rule above is verifier-pinned
+   and stays byte-identical. */
+@keyframes wsp-panel-arrive { from { opacity: 0; transform: translateY(var(--space-1)); } to { opacity: 1; transform: none; } }
+.wsp-panel { animation: wsp-panel-arrive 180ms ease-out both; }
+@media (prefers-reduced-motion: reduce) { .wsp-panel { animation: none; } }
