@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 from typing import Any, Mapping, Sequence
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -20,7 +21,7 @@ from supermega_runtime.client_provisioning import (
 )
 
 
-CONTRACT = "supermega.client_portal_provisioning_bundle.v2"
+CONTRACT = "supermega.client_portal_provisioning_bundle.v3"
 PREPARATION_CONTRACT = "supermega.client_demo_preparation.v3"
 PRODUCT_ORDER = ("commerce", "production", "website", "ecommerce")
 PRODUCT_IDS = {
@@ -159,6 +160,13 @@ def build_client_portal_provisioning_bundle(preparation: Mapping[str, Any]) -> d
             if industry_pack_id not in {"retail", "cafe", "restaurant", "spa", "gym", "school"}:
                 raise ClientPortalProvisioningError("The Shop industry pack is unsupported.")
             setup_path = f"/settings/?product=shop&pack={industry_pack_id}"
+        elif runtime_product == "production":
+            industry_pack_id = str(client["plantIndustryPackId"])
+            if industry_pack_id not in {"general-manufacturing", "batch-process", "food-beverage", "apparel", "assembly"}:
+                raise ClientPortalProvisioningError("The Plant industry pack is unsupported.")
+            setup_path = f"/settings/?product=plant&pack={industry_pack_id}"
+        elif runtime_product in {"website", "ecommerce"}:
+            setup_path = f"/settings/?product={runtime_product}&template={quote(template_id, safe='')}"
         planned_products.append({
             "product": runtime_product,
             "productId": product_id,
@@ -177,7 +185,7 @@ def build_client_portal_provisioning_bundle(preparation: Mapping[str, Any]) -> d
 
     payload: dict[str, Any] = {
         "contract": CONTRACT,
-        "version": 2,
+        "version": 3,
         "client": {
             "workspace": workspace,
             "owner": owner,

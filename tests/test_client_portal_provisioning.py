@@ -99,8 +99,8 @@ class ClientPortalProvisioningTests(unittest.TestCase):
             )
             setup_paths = {product["product"]: product["setupPath"] for product in bundle["products"]}
             self.assertEqual(setup_paths["commerce"], "/settings/?product=shop&pack=spa")
-            self.assertEqual(setup_paths["website"], "/settings/?product=website")
-            self.assertEqual(setup_paths["ecommerce"], "/settings/?product=ecommerce")
+            self.assertEqual(setup_paths["website"], "/settings/?product=website&template=lead-generation")
+            self.assertEqual(setup_paths["ecommerce"], "/settings/?product=ecommerce&template=social-storefront")
             self.assertEqual(
                 len({product["provisioningPlan"]["planDigest"] for product in bundle["products"]}),
                 3,
@@ -140,6 +140,31 @@ class ClientPortalProvisioningTests(unittest.TestCase):
             stale["products"][0]["packageDigest"] = "sha256:" + "0" * 64
             with self.assertRaises(ClientPortalProvisioningError):
                 verify_client_portal_provisioning_bundle(bundle, stale)
+
+    def test_plant_portal_preserves_the_reviewed_industry_pack(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-plant-portal-") as temporary:
+            directory = Path(temporary)
+            workspace = directory / "intake"
+            initialized = _run(
+                "node", PREPARE_TOOL, "--init", workspace,
+                "--preset", "manufacturing", "--products", "plant",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            profile_path = workspace / "client.json"
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            profile["workspace"] = "Manufacturing Client Portal"
+            profile["owner"] = "Named Plant Owner"
+            profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            preparation_path = directory / "private-review.json"
+            prepared = _run("node", PREPARE_TOOL, "--data-dir", workspace, "--out", preparation_path)
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            bundle = build_client_portal_provisioning_bundle(preparation)
+            pack_id = preparation["client"]["plantIndustryPackId"]
+            self.assertEqual(
+                bundle["products"][0]["setupPath"],
+                f"/settings/?product=plant&pack={pack_id}",
+            )
 
 
 if __name__ == "__main__":

@@ -95,7 +95,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
-  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => {
+    const requested = new URLSearchParams(location.search).get('pack')?.trim().toLowerCase()
+    return plantIndustryPacks.find((pack) => pack.id === requested)?.id
+      ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage)
+  })
   const [plantTypeOpen, setPlantTypeOpen] = useState(() => product === 'production')
   const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
   // One grouped picker, ported from the signup page so both doors ask the product's first
@@ -135,13 +139,16 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
+  const requestedWorkflowTemplate = product === 'commerce'
+    ? templateFor(product, '')
+    : templateFor(product, new URLSearchParams(location.search).get('template') ?? '')
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
     : product === 'commerce'
       ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
-      : templateFor(product, '')
+      : requestedWorkflowTemplate
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
@@ -150,7 +157,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     if (setup.product === product) return undefined
     const template = product === 'commerce'
       ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
-      : templateFor(product, '')
+      : requestedWorkflowTemplate
     const selectionTimer = window.setTimeout(() => {
       rememberProductSetup(window.localStorage, setup)
       const saved = readProductSetup(window.localStorage, product)
@@ -160,7 +167,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
     }, 0)
     return () => window.clearTimeout(selectionTimer)
-  }, [onboardingProduct.name, product, selectedShopIndustryPack.workflowTemplateId, setSetup, setup])
+  }, [onboardingProduct.name, product, requestedWorkflowTemplate, selectedShopIndustryPack.workflowTemplateId, setSetup, setup])
 
   useEffect(() => {
     if (setup.product !== product) return
