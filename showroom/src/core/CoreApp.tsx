@@ -7424,6 +7424,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [plantJobView, setPlantJobView] = useStoredState<PlantJobView>(PLANT_JOB_VIEW_KEY, 'list', normalizePlantJobView)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [jobId, setJobId] = useState('')
+  const [jobScanMiss, setJobScanMiss] = useState('')
   const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold && !job.closure)?.id ?? '')
   const [handoffShiftRef, setHandoffShiftRef] = useState(latestRecordedShiftRef)
   const [shiftHandoff, setShiftHandoff] = useState<ProductionShiftHandoff | null>(null)
@@ -8234,6 +8235,38 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setPendingAction(null)
   }
 
+  // Shop-floor scanning is input assistance only: neither function below writes a Plant
+  // record, opens an accountable action, or invents a domain value. They fill exactly the
+  // field an operator would otherwise fill by hand at the line, from the printed code on
+  // the job card and on the material label.
+  //
+  // The Job control is a select, so there is no typed variant a scan could drift from --
+  // a scan sets the same jobId the dropdown sets and nothing else. Matching is an exact,
+  // case-insensitive job-id comparison against the SAME activeJobs list the dropdown
+  // renders, so a code can never select a job the operator could not have picked. An
+  // unmatched code is never swallowed: it stays on screen so the operator can read what
+  // the camera actually decoded instead of wondering why nothing happened.
+  function selectScannedJob(value: string) {
+    const scanned = value.trim()
+    const normalized = scanned.toLocaleLowerCase()
+    const match = activeJobs.find((job) => job.id.toLocaleLowerCase() === normalized)
+    // The echoed miss is capped exactly like the material field: a QR code carrying a long
+    // URL must not push an unbreakable string through the panel. The notice also wraps
+    // anywhere, so what is shown is readable rather than a horizontal scrollbar.
+    if (!match) return setJobScanMiss(scanned.slice(0, 120))
+    setJobScanMiss('')
+    setJobId(match.id)
+  }
+
+  // The material reference is free text with no master list to resolve against, so the
+  // scan simply becomes the field value -- identical to typing it. The one thing applied
+  // on top is the field's own maxLength: the keyboard path cannot produce more than 120
+  // characters, so a long QR payload must not enter through the camera either. The value
+  // stays visible in the field and passes through the same accountable review gate.
+  function applyScannedMaterialRef(value: string) {
+    setMaterialDraft((current) => ({ ...current, materialRef: value.slice(0, 120) }))
+  }
+
   function recordOutput(event: FormEvent) {
     event.preventDefault()
     const recordedShiftRef = shiftRef.trim()
@@ -8278,6 +8311,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function openJobOutput(job: ProductionJob, trigger: HTMLButtonElement | null = null) {
     outputTriggerRef.current = trigger
+    setJobScanMiss('')
     setJobId(job.id)
     if (!managedIdentity && !shiftRef.trim()) {
       const suggestedShiftRef = shiftReferencePlaceholder()
@@ -8326,10 +8360,22 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function closeJobOutput() {
     setOutputOpen(false)
     setMaterialGuideOpen(false)
+    setJobScanMiss('')
     requestAnimationFrame(() => outputTriggerRef.current?.focus())
   }
 
   function handleOutputDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    // The camera scan dialog renders INSIDE this panel and opens with showModal(), so its
+    // key events bubble here. They belong to that dialog, not to the panel: swallowing
+    // Escape would preventDefault() the native close request and leave a modal open with
+    // the camera still streaming, while `closeJobOutput()` hides the panel around it
+    // (`visibility: hidden` is inherited, so the dialog and its backdrop go invisible too
+    // and the effect cleanup that stops the MediaStream never runs). Tab is the same story
+    // in reverse: while a modal is open the panel's own focus trap must not compete with
+    // it. Anything raised from inside an open <dialog> in this panel is that dialog's.
+    const eventTarget = event.target instanceof Element ? event.target : null
+    const nestedDialog = eventTarget?.closest('dialog[open]') ?? null
+    if (nestedDialog && outputPanelRef.current?.contains(nestedDialog)) return
     if (event.key === 'Escape') {
       event.preventDefault()
       closeJobOutput()
@@ -9352,7 +9398,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <section aria-labelledby="plant-output-title" aria-modal={outputOpen} className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={handleOutputDialogKeyDown} ref={outputPanelRef} role="dialog">
         <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
         {!materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
-          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
+          <label>Job<span className="sku-scan-row"><select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobScanMiss(''); setJobId(event.target.value) }}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select><BarcodeScanButton disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} label="Scan the job card to choose this job" onDetected={selectScannedJob} /></span></label>
+          {jobScanMiss ? <p className="form-notice plant-job-scan-miss" role="alert">Scanned {jobScanMiss} · no active job carries this code. Choose the job in the list, or scan the job card again.</p> : null}
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
           <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
@@ -9363,7 +9410,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           </div>
           <p className="panel-copy" id="plant-short-close-boundary">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only. Short close ends the selected job without changing its target, output, hold, inventory, costing, or accounting.</p>
         </form> : null}
-        <details className="compact-disclosure production-history" onToggle={(event) => setMaterialGuideOpen(event.currentTarget.open)} open={materialGuideOpen} ref={materialDisclosureRef}>
+        <details className="compact-disclosure production-history" onToggle={(event) => { setJobScanMiss(''); setMaterialGuideOpen(event.currentTarget.open) }} open={materialGuideOpen} ref={materialDisclosureRef}>
           <summary>Materials used <span>{materialEntries.length}</span></summary>
           <form autoComplete="off" className="core-form compact-form" onSubmit={recordMaterialUse}>
             <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} onChange={(event) => setMaterialDraft((current) => ({ ...current, jobId: event.target.value }))} value={materialDraft.jobId}>
@@ -9372,7 +9419,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               {activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>)}
             </select></label>
             {materialJobIsStale ? <p className="form-notice" role="alert">The selected job {materialDraft.jobId} is no longer active. Your draft is preserved; choose another job before review.</p> : null}
-            <label>Material used<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialRef: event.target.value }))} placeholder="e.g. Resin A or RM-001" ref={materialRefInputRef} required value={materialDraft.materialRef} /></label>
+            <label>Material used<span className="sku-scan-row"><input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialRef: event.target.value }))} placeholder="e.g. Resin A or RM-001" ref={materialRefInputRef} required value={materialDraft.materialRef} /><BarcodeScanButton disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} label="Scan the material label into the material field" onDetected={applyScannedMaterialRef} /></span></label>
             <label>Lot or batch (optional)<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialLot: event.target.value }))} placeholder="LOT-24" value={materialDraft.materialLot} /></label>
             <div className="form-row">
               <label>Quantity<input aria-describedby={materialQuantityError ? 'plant-material-quantity-error' : undefined} aria-invalid={materialQuantityError ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} min="0.001" onChange={(event) => setMaterialDraft((current) => ({ ...current, quantity: event.target.value }))} required step="0.001" type="number" value={materialDraft.quantity} /></label>

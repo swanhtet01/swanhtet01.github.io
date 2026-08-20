@@ -47,7 +47,7 @@ infra required first.
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
 | P1 | Visual job-scheduling board (Katana's signature drag-and-drop timeline) | Jobs surface is list/filter only (`CoreApp.tsx` ~7364-7373); `priority`/`dueAt` exist in the data (`production-workspace.ts` ~1008-1010) but no timeline/board UI | **SHIPPED 2026-08-19** (#484): list ⇄ board toggle (list default, per-device preference), Overdue/Today/This week/Later/No-due lanes with exclusive midnight bounds (Codex-verified), display-only — no drag-and-drop rescheduling (that is a domain write, a future slice). |
-| P2 | Shop-floor barcode/QR for material issue & job dispatch (Katana Shop Floor Control) | No scanning anywhere in Plant; `'QREL'` hits are ID prefixes, not scanning | NOW after S1 ships — reuse S1's camera component |
+| P2 | Shop-floor barcode/QR for material issue & job dispatch (Katana Shop Floor Control) | No scanning anywhere in Plant; `'QREL'` hits are ID prefixes, not scanning | **SHIPPED 2026-08-20**: S1's `BarcodeScanButton` imported (not forked) into the two Plant fields an operator fills from a printed code at the line — job dispatch (the output panel's Job control; exact case-insensitive match against the same `activeJobs` list the dropdown renders, unmatched code stays on screen next to a no-match notice) and material issue (Materials used → `materialRef`, free text, scan applies the field's own `maxLength` cap). Input assistance only: no new domain record, event kind, or write path, and `plant_shopfloor_scan_missing` pins the two handlers against the Plant write verbs. Scanning the optional lot field and the Control-tab recall trace were deliberately left out — one scan target per form. Open (same as S1): on-device camera smoke test, founder, any Android phone |
 
 ### Website
 
@@ -128,7 +128,11 @@ status column in §1 for each. The operative forward sequence is now:
    `loadCommerceWorkspace()` call in a `useState` initializer
    (`workspace-runtime.ts:509-512`). Each needs its own planning pass, and each
    must be measured on the tap-through journey, not one route in isolation.
-2. P2 Plant shop-floor scanning (reuses `BarcodeScanButton`, small-medium).
+2. ~~P2 Plant shop-floor scanning~~ — SHIPPED 2026-08-20, see the Plant table
+   in §1. Remaining Plant scan surface, unclaimed and deliberately deferred:
+   the Control tab's recall-lot trace already has an exact-match resolution
+   and a no-match state, so it is the cheapest next scan target if a client
+   asks for it.
 3. E1 photo follow-through if wanted: photos in the exported/published site
    are a separate decision (published markup is built by `website-export.ts`,
    untouched so far).
