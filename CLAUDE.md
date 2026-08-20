@@ -80,6 +80,16 @@ actor string — actor strings are display copy and will be rewritten.
   signature growth.
 - `package.json` and 16 runtime files are digest-bound: editing them requires
   the rehearsal cascade (`database:postgres17:record` → `readiness:managed:write`).
+  What actually blocks that cascade (verified 2026-08-20, worth knowing before
+  you conclude it is unfixable): `tools/record_postgres17_rehearsal.mjs`
+  hardcodes `externallyHosted: false` and fails outright on anything else, so
+  it demands a **local loopback PG17 from the EDB Windows x86-64 binaries**
+  (`~/.cache/supermega-postgresql/postgresql-17.10-2-windows-x64-binaries.zip`,
+  pinned at :12). It is a Windows-toolchain gap, NOT a Supabase-access gap —
+  hosted evidence cannot feed this ledger by construction, and no amount of
+  preview-branch work substitutes. A founder on the Windows machine with that
+  archive present can complete it; a Linux agent sandbox cannot. Check
+  `node tools/run_postgres17_rehearsal.mjs --preflight` before assuming either.
 - Never edit files while a background verifier runs (some stash/restore).
 
 ## Design system rules (2026-08 tribunal — binding)
