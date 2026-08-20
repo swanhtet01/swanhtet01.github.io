@@ -72,7 +72,7 @@ export const IDENTITY_DATA_REQUIREMENTS = [
   },
   {
     id: 'upstream-database-activation-tests', authority: 'upstream', file: 'tests/test_database_activation_contract.py', tokens: [
-      'def test_historical_migrations_are_unchanged_and_v8_v9_v10_are_additive',
+      'def test_historical_migrations_are_unchanged_and_v8_through_v11_are_additive',
       'def test_production_activation_binds_tls_checkout_and_live_release_provenance',
       'def test_browser_auth_and_write_enablement_are_complete_and_ordered',
     ],
@@ -310,11 +310,11 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'upstream-security-and-activation-gates', authority: 'upstream', file: 'tools/verify_app_security_contract.mjs', tokens: [
-      'managed schema contract advances through additive v2 through v10 migrations',
+      'managed schema contract advances through additive v2 through v11 migrations',
       'managed recovery is non-enumerating and password setup remains named-user only',
       'managed activation requires durable named-owner authorization and encrypted admin transport',
       'managed AI context is owner-consented, summary-only, tenant-bound, and revision-bound',
-      'managed database secret handoff is staged, value-verified, and compensated',
+      'managed database secret handoff is staged, release-bound, value-verified, and compensated',
     ],
   },
   {

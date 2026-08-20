@@ -132,7 +132,7 @@ requireContract('ordered integration batches preserve production safeguards and 
   && releaseIntegrationBatch.includes('function submitAmendmentRequest')
   && releaseIntegrationBatch.includes('function submitCorrectionRequest')
   && releaseIntegrationBatch.includes('commerce.storefront_request.received')
-  && releaseIntegrationBatch.includes('managed schema contract advances through additive v2 through v10 migrations')
+  && releaseIntegrationBatch.includes('managed schema contract advances through additive v2 through v11 migrations')
   && releaseIntegrationBatch.includes('release:integration:batch:prepare')
   && releaseIntegrationBatch.includes('production Supabase target requires separately committed activation authority')
   && releaseIntegrationBatch.includes("resolutionRule: 'preserve_all_upstream_and_candidate_requirements_in_one_tree'")

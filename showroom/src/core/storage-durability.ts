@@ -1,10 +1,21 @@
-// Durable-storage lane for the free tier.
+// Durable-storage lane for whatever this browser is the only copy of.
 //
 // A local (signed-out) Shop keeps every record in this browser: the workspace itself in
 // localStorage (COMMERCE_KEY) and the crash-recovery outbox in IndexedDB. Both live in
 // "best-effort" storage by default, which the browser is allowed to evict without asking
 // and without warning when the device runs low on space. For a shop whose only copy of
 // today's takings is on one tablet, that is silent data loss.
+//
+// A signed-in company account is NOT exempt, which is why the request is unconditional
+// (workspace-runtime.ts, useCommerceWorkspace). Signing in moves the workspace ledger
+// server-side, but product photos and payment-QR blobs (product-image-store.ts /
+// payment-qr-store.ts -- both deliberately excluded from company backups), the unfinished
+// order draft (commerce-order-draft.ts) and loyalty settings (shop-loyalty.ts) all stay on
+// the device under a `managed:<workspaceId>` scope with no server copy behind them.
+// Eviction destroys those for a managed workspace just as permanently as for a local one.
+// The warning BANNER is still local-only (CoreApp.tsx) -- that is a separate judgement
+// about which failure is worth interrupting a till for, not a claim that a company
+// account keeps nothing here.
 //
 // navigator.storage.persist() asks the browser to move this origin to "persistent"
 // storage, which is exempt from that automatic eviction. It is a request, not a

@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
+import { bi } from './i18n-actions'
 import {
   alternateManagedWorkspaceId,
   managedAccountPath,
@@ -192,7 +193,7 @@ export function ManagedLoginPage() {
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
-          <Link className="core-button primary" to={portalEntryPath}>Open company</Link>
+          <Link className="core-button primary" to={portalEntryPath}>{bi('Open company')}</Link>
           <button className="core-button" disabled={busy} onClick={() => void chooseAnotherCompany()} type="button">{busy ? 'Checking...' : 'Switch company'}</button>
           <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
         </div>
@@ -203,7 +204,7 @@ export function ManagedLoginPage() {
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
         <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Ask a person to finish setup instead</a>
-        <button className="account-inline-link account-link-button" onClick={() => { setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">Back to sign in</button>
+        <button className="account-inline-link account-link-button" onClick={() => { setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">{bi('Back to sign in')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : managedReady ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
         <div><span className="core-eyebrow">Company account</span><h2>{directory ? 'Choose your company.' : 'Use your work account.'}</h2><p>{directory ? 'Only active companies assigned to this account are shown.' : 'No workspace code or technical setup is required.'}</p></div>
@@ -217,7 +218,7 @@ export function ManagedLoginPage() {
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent)}>Forgot password?</Link>
           <Link className="account-inline-link" to="/signup">No account yet? Free trial</Link>
         </>}
-        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? 'Open company' : 'Find my company'}</button>
+        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? bi('Open company') : bi('Find my company')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
         <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>

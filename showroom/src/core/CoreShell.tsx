@@ -3,6 +3,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
+import { bi } from './i18n-actions'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
@@ -551,7 +552,7 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link signup-shell-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company login</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link signup-shell-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link className="account-shell-link mobile-signup-topbar-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
