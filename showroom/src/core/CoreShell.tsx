@@ -503,45 +503,6 @@ const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
   ['website', 'Website', 'give your business a public face'],
 ]
 
-// The chooser is four product tiles; the attention panel underneath them is
-// secondary furniture. Its own chunk is small, but it reaches commerce-workspace,
-// production-workspace and website-model to build its list, and those pull ~170 KB
-// gz -- 65% of everything the chooser downloads (measured:
-// hq/strategy/ANDROID-PERFORMANCE-BASELINE.md) -- to show at most six links. Mount
-// it only after the browser has drawn the tiles and gone idle, so a visitor who taps
-// a product straight away spends the whole pipe on that product instead of on a
-// panel they never read. requestIdleCallback and a plain timer race each other and
-// the first to fire wins, so a tab that never reports idle -- or a browser with no
-// requestIdleCallback at all -- still gets the panel rather than losing it.
-//
-// The wait is paid once per document, not once per visit. Once the panel has
-// mounted, its chunks are in the module registry and a later return to the
-// chooser -- via the mobile Products door, say -- costs nothing to render it
-// immediately, so making that visit wait again would be a delay that buys
-// nothing.
-const STATUS_PANEL_MOUNT_DELAY_MS = 1200
-let statusPanelChunksLoaded = false
-
-function useMountAfterPaint() {
-  const [mounted, setMounted] = useState(statusPanelChunksLoaded)
-  useEffect(() => {
-    if (statusPanelChunksLoaded) return
-    const show = () => {
-      statusPanelChunksLoaded = true
-      setMounted(true)
-    }
-    const timer = window.setTimeout(show, STATUS_PANEL_MOUNT_DELAY_MS)
-    const idleHandle = typeof window.requestIdleCallback === 'function'
-      ? window.requestIdleCallback(show, { timeout: STATUS_PANEL_MOUNT_DELAY_MS })
-      : null
-    return () => {
-      window.clearTimeout(timer)
-      if (idleHandle !== null) window.cancelIdleCallback(idleHandle)
-    }
-  }, [])
-  return mounted
-}
-
 const customerProducts = [
   ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
   ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
@@ -565,7 +526,6 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 }
 
 export function ProductHomePage() {
-  const statusPanelMounted = useMountAfterPaint()
   const productSetups = useMemo(() => {
     if (typeof window === 'undefined') return null
     return {
@@ -605,7 +565,7 @@ export function ProductHomePage() {
             </Link>
         })}
       </nav>
-      {statusPanelMounted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
+      <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense>
       <p className="product-home-note">Your product workspaces stay separate. Opening a sample does not change another product.</p>
     </div>
   )

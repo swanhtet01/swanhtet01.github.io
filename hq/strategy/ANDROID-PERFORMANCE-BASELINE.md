@@ -3,18 +3,26 @@
 Date: 2026-08-19 (revised same day: the original "chooser" row actually
 measured the default-entry redirect — see the route-semantics note in Method)
 
-> **2026-08-20 correction — read this before acting on anything below.** The
-> chunk-attribution paragraph in this document originally blamed
-> `workspace-runtime.ts`'s static imports for the model chunks loading on the
-> chooser. That was wrong; the cause is `WorkspaceStatusPanel`. Two of the
-> ranked recommendations rested on that misattribution and on a second wrong
-> claim — that the dynamic-import waterfall sets first paint. Both are corrected
-> in place below (each correction is marked) and the evidence, plus an
-> optimization pass and its measured before/after, is in
-> **[2026-08-20: correction, slice 1, and what actually moves FCP](#2026-08-20-correction-slice-1-and-what-actually-moves-fcp)**
+> **2026-08-20 corrections — read this before acting on anything below.** Three
+> claims in this document turned out to be wrong, and all three were load-bearing
+> for the ranked recommendations:
+>
+> 1. The model chunks on the chooser were blamed on `workspace-runtime.ts`'s
+>    static imports. The cause is `WorkspaceStatusPanel`.
+> 2. First paint was blamed on a serial dynamic-import waterfall. There is no
+>    waterfall on the first-paint path: pre-FCP JS is the 91.3 KB gz entry set on
+>    every route, identically.
+> 3. The chooser's 261 KB was framed as mostly unexecuted freight. ~150 KB of it
+>    is shared with the product routes and is already downloaded when the visitor
+>    taps through; withholding it costs the destination ~931 ms.
+>
+> Each is corrected in place below and marked. The evidence, an optimization pass
+> that was **measured and withdrawn**, and a second one **measured and rejected**,
+> are in
+> **[2026-08-20: corrections, two rejected optimizations, and what actually moves FCP](#2026-08-20-corrections-two-rejected-optimizations-and-what-actually-moves-fcp)**
 > at the end.
 
-Status: measurement only. No optimization was performed in this pass; the
+Status (2026-08-19): measurement only. No optimization was performed in this pass; the
 roadmap's F2 verdict ("no measured low-end-device profile exists — measure
 first", `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §1 F2) is what this
 document closes. Every number below is a measured median from the run
@@ -147,11 +155,20 @@ transfer) and execute 10–18% of their bytes; on `/website/` and `/ecommerce/`,
    `operating-models-*.js` (50.3 KB gz, 8–12% executed);
    `shop-ledger-accounts-*.js` (13.3 KB gz) executes 7–12% everywhere. On a
    400 kbit/s link the unexecuted freight alone is multiple seconds of
-   transfer. (*Corrected 2026-08-20: the clause "both dragged onto every
-   surface by `workspace-runtime.ts`'s static imports" was removed. On the
-   chooser the carrier is `WorkspaceStatusPanel`, not `workspace-runtime`; on
-   the product routes both are live, and which one dominates has not been
-   separated.*)
+   transfer.
+
+   > **Corrected 2026-08-20, twice.** (a) The clause "both dragged onto every
+   > surface by `workspace-runtime.ts`'s static imports" was removed: on the
+   > chooser the carrier is `WorkspaceStatusPanel`, not `workspace-runtime`; on
+   > the product routes both are live and which dominates has not been
+   > separated. (b) More importantly, **"unexecuted freight" is the wrong frame
+   > for the chooser row.** Of its 261 KB gz, ~150 KB is shared with the product
+   > routes and is already downloaded when the visitor taps through — measured,
+   > withholding it costs the destination route ~931 ms. Only 20.1 KB is
+   > genuinely chooser-only. See
+   > [the withdrawn slice 1](#slice-1-implemented-measured-withdrawn-defer-the-choosers-attention-panel)
+   > and the section after it. The freight framing still holds on the product
+   > routes, where the model layer really is loaded and mostly not executed.
 
 2. **First paint waits ~4 s and arrives after `load` on every route — and
    bytes are not the binding constraint.** Median FCP is 3,940–4,168 ms on
@@ -195,10 +212,12 @@ transfer) and execute 10–18% of their bytes; on `/website/` and `/ecommerce/`,
 
    > **Corrected 2026-08-20.** This item was headed "Cut the
    > `workspace-runtime.ts` eager-model edge". On the chooser that is the wrong
-   > file: the carrier is `WorkspaceStatusPanel`, and the 2026-08-20 pass took
-   > that half (see the section at the end). Two things also have to be said
-   > plainly about the remaining product-route half, because this item as
-   > written oversells it: (a) it will not move FCP, since none of these chunks
+   > file: the carrier is `WorkspaceStatusPanel`. That half was attempted on
+   > 2026-08-20 and **withdrawn after measurement** — deferring it made the
+   > chooser's tap-through ~931 ms slower, because ~150 KB of what it loads is
+   > shared with the product route the visitor is heading to (see the section at
+   > the end). Two things also have to be said plainly about the remaining
+   > product-route half, because this item as written oversells it: (a) it will not move FCP, since none of these chunks
    > is on the pre-FCP path (finding 2 correction); (b) it is blocked as
    > scoped — `useCommerceWorkspace` calls `loadCommerceWorkspace()`
    > synchronously inside a `useState` initializer
@@ -277,7 +296,7 @@ loads on any measured route), or `client-capability-plan` /
 
 ---
 
-## 2026-08-20: correction, slice 1, and what actually moves FCP
+## 2026-08-20: corrections, two rejected optimizations, and what actually moves FCP
 
 Date: 2026-08-20. Status: one optimization shipped, one rejected on evidence,
 two attributions in the 2026-08-19 document corrected. Same harness, same
@@ -346,59 +365,83 @@ and **no `workspace-runtime-*.js` request at all**. `workspace-runtime` is a
 real chunk in this build and it is simply not requested here, which is the
 cleanest possible disproof of the original attribution.
 
-### Slice 1 (shipped): mount the chooser's attention panel after first paint
+### Slice 1 (implemented, measured, WITHDRAWN): defer the chooser's attention panel
 
-`WorkspaceStatusPanel` was already `lazy()`, but it was rendered unconditionally
-inside `ProductHomePage`, so its subtree started downloading during the chooser's
-first render. It now mounts on `requestIdleCallback`, raced against a 1,200 ms
-`setTimeout` so a tab that never reports idle — or a browser without
-`requestIdleCallback` — still gets the panel rather than losing it. The wait is
-paid once per document: once the panel has mounted, its chunks are in the module
-registry, so a later client-side return to the chooser (the mobile Products door
-from `/shop/`) renders it immediately — verified at 34 ms after the tiles, versus
-391–500 ms on a cold load. The panel itself, its markup and its CSS are untouched.
+The plan was to stop `WorkspaceStatusPanel` from mounting during the chooser's
+first render, so its ~170 KB gz subtree would not sit on the critical path. It
+was built, reviewed, measured three ways, and then **withdrawn — the measurements
+disproved its premise.** No app code from this slice ships. The reasoning is
+recorded here because the disproof is a reusable fact about this codebase, not
+because the change was interesting.
 
-| Route | FCP before → after (ms) | Δ FCP | JS transfer before → after (KB gz) | pre-FCP JS (KB gz) | Long-task total before → after (ms) | Δ LT | Longest task (ms) |
-|---|---|---|---|---|---|---|---|
-| **`/?choose=1`** | 3,992 → **3,904** | **−88** | 260.9 → **261.0** | 91.3 → 91.4 | 676 → **612** | **−64** | 246 → 216 |
-| `/` *(control)* | 3,880 → 3,792 | −88 | 415.6 → 415.7 | 91.3 → 91.4 | 918 → 917 | −1 | 440 → 459 |
-| `/shop/?tab=counter` *(control)* | 3,912 → 3,852 | −60 | 415.6 → 415.7 | 91.3 → 91.4 | 1,000 → 1,015 | +15 | 451 → 456 |
-| `/shop/?tab=orders` *(control)* | 3,840 → 3,884 | +44 | 425.0 → 425.1 | 91.3 → 91.4 | 1,127 → 1,243 | +116 | 447 → 465 |
-| `/plant/` *(control)* | 3,908 → 3,872 | −36 | 411.5 → 411.7 | 91.3 → 91.4 | 835 → 808 | −27 | 322 → 347 |
-| `/website/` *(control)* | 3,944 → 3,876 | −68 | 330.2 → 330.3 | 91.3 → 91.4 | 803 → 722 | −81 | 294 → 201 |
-| `/ecommerce/` *(control)* | 3,936 → 3,864 | −72 | 346.1 → 346.3 | 91.3 → 91.4 | 811 → 703 | −108 | 197 → 193 |
+**Step 1 — cold-load numbers: no effect, as the pre-FCP column predicted.**
+Deferring the mount left FCP and settle-transfer unchanged. Chooser deltas
+(−88 ms FCP, −64 ms long-task) sat inside the control band established by the six
+routes the change cannot touch (FCP −88 to +44 ms, long-task −108 to +116 ms).
+Not a result — the panel was never on the pre-FCP path, so taking it off first
+render could not move first paint.
 
-The panel renders only on the chooser, so the other six rows are a built-in
-control, and their spread is this harness's real resolution limit: FCP
-**−88 to +44 ms**, long-task total **−108 to +116 ms**. The chooser's own deltas
-(−88 ms FCP, −64 ms long-task) sit inside both bands — **on this harness slice 1
-is not distinguishable from noise**, exactly as the pre-FCP column predicts.
-Note the control band is wider than the "±3% of median" spread quoted for the
-2026-08-19 run: that figure described within-run repeatability, not the
-build-to-build band, and the control rows are the honest number to hold new work
-to.
+**Step 2 — the deferral was not deferring.** A PR review (Codex, PR #494) caught
+that `requestIdleCallback(show, { timeout: 1200 })` treats 1,200 ms as a *maximum*
+wait, not a minimum delay. Measured on the throttled profile, this is exactly what
+happens: the main thread goes idle the instant the tiles paint — nothing else is
+runnable, everything is waiting on a 400 kbit/s pipe — so the callback fired a
+median of **56 ms after FCP** (36–59 ms across three runs) and the graph then held
+the pipe from 3,888 ms to 7,965 ms. Rebuilding it as a genuine minimum (grace
+`setTimeout` first, then `requestIdleCallback` with its own 400 ms ceiling) moved
+the graph's first request to **FCP+1,212 ms**, confirming both the diagnosis and
+the fix.
 
-**Honest read, against the targets this slice was given:**
+**Step 3 — the interaction measurement, which killed the slice.** The claimed
+benefit was that an early tapper would stop paying for a panel they never read.
+Measured directly: load the chooser, tap the Shop tile 1,000 ms after FCP, and
+time how long the Shop route takes to become usable. Three runs per variant,
+same throttling.
 
-| Target | Result | |
-|---|---|---|
-| chooser JS transfer < 150 KB gz | **261.0 KB gz — missed** | The harness counts transfer to settle. Deferral moves the download; it does not delete it. Only not loading the subtree at all could hit this. |
-| chooser FCP < 3,650 ms | **3,904 ms — missed** | Predicted by the pre-FCP column: the panel was never on the pre-FCP path, so taking it out of first render cannot move FCP. The −88 ms delta sits exactly on the control band's edge — not a result. |
-| chooser long-task total < 819 ms | **612 ms — nominally met, but not a result** | The same-day before was already 676 ms, so the real delta is −64 ms, inside the control band of −108 to +116 ms. The 819 ms this target was set from was a noisier day's number. This slice cannot be credited with a main-thread win on this evidence. |
+| Variant | panel requests started before the tap | Shop usable after tap | `core-app` downloaded after tap |
+|---|---|---|---|
+| **No deferral** (what `main` already does) | 7 | **6,964 ms** | **6,404 ms** |
+| Deferred, as first shipped (fires at FCP+56 ms) | 7 | 7,145 ms | 6,530 ms |
+| Deferred, genuine minimum (fires at FCP+1,212 ms) | 0 | **7,895 ms** | 7,317 ms |
 
-Ordering was verified directly on an unthrottled run (`.wsp-panel` first seen at
-391–500 ms vs. four product tiles at 73–121 ms and FCP at 116–196 ms, across
-mobile/desktop × light/dark), and the panel arrived in all four combinations with
-its theme tokens resolved.
+**Deferring made the early tap monotonically worse — by 931 ms once the deferral
+actually worked.** The reason is a dependency fact nobody had checked: of the
+170.3 KB gz the chooser pulls for the panel, only **20.1 KB is panel-exclusive**
+(`WorkspaceStatusPanel` 6.8 + `website-model` 11.3 + `website-leads` 2.0). The
+other ~150 KB — `commerce-model`, `operating-models`, `operating-baseline`,
+`shop-ledger-accounts` — is **shared with the product routes**, which load it
+through `workspace-runtime.ts` the moment the visitor picks Shop or Plant. So on
+the chooser those bytes are not waste being spent on a panel; they are a
+head start on wherever the visitor is about to go. Withholding them delays the
+destination.
 
-So on this harness slice 1 measures as **no result** — nothing it changed clears
-the control band. Its value is on the axis the harness does not measure at all: a
-visitor who taps a product tile within ~1.2 s now never downloads 169.9 KB gz of
-model chunks for a panel they never read — on a metered 400 kbit/s link that is
-~3.4 s of pipe handed back to the product they asked for. That is a claim about
-real usage, not a measured number, and it is labelled as such.
+The gap is well outside noise: run-to-run spread within each variant is ~±180 ms
+against a 931 ms separation, and the ordering is identical in all nine runs.
 
-### Slice 2 (rejected on evidence): `modulepreload` in `index.html`
+**Withdrawn.** The slice does not improve FCP, does not reduce transfer, and
+costs 181–931 ms on the tap that most chooser visitors actually perform. It also
+added a module-scope mutable flag and a pop-in. `main` is already the better
+behaviour. What survives from the attempt is the harness metric, this section,
+and the correction to finding 1 below.
+
+### Consequence: "unexecuted freight" is the wrong frame for the chooser
+
+Finding 1 above counts 75–80% of each route's JS as unexecuted at settle and
+calls it freight. For the chooser specifically that reading is now measured to be
+wrong. Its 261 KB gz breaks down as 91.0 KB entry set + 20.1 KB panel-exclusive +
+~150 KB shared with whichever product the visitor opens next. Since the chooser
+exists to send people to a product, that ~150 KB is prefetch, and the early-tap
+table above shows removing it costs the destination roughly a second. "Executed
+on this route" is simply the wrong success metric for a menu screen; "already
+downloaded when the next screen needs it" is the right one.
+
+This does not rehabilitate the 20.1 KB that is genuinely chooser-only, nor the
+model layer's cost on the product routes themselves, where it really is loaded
+and mostly not executed. It does mean **the chooser is the wrong place to hunt
+for savings**, and any future attempt to trim it must measure the tap-through
+path, not the chooser in isolation.
+
+### Slice 2 (implemented, measured, REJECTED): `modulepreload` in `index.html`
 
 Measured and rejected — see the correction under recommendation 3 for the
 numbers and the mechanism. Summary: +1.5 s FCP on every route measured,
@@ -416,6 +459,13 @@ including the two it was intended to help. Not shipped.
    transfer and parse on `/shop/*` and `/plant/`, will not move FCP, and is
    blocked as scoped on the synchronous `useState` initializer in
    `workspace-runtime.ts:509–512`. Needs its own planning pass.
+4. **Do not re-attempt chooser trimming without measuring tap-through.** Two
+   optimizations were built and measured off this baseline in one day and both
+   were reverted; the common cause was optimizing a number (chooser transfer,
+   preload hops) instead of a journey. Any future F2 change should be measured
+   on the path a visitor actually walks — cold load *and* the tap that follows —
+   using `probe`-style instrumentation like the early-tap harness described
+   above, not on a single route in isolation.
 
 ### Limitations specific to this pass
 
@@ -429,8 +479,13 @@ including the two it was intended to help. Not shipped.
   cannot touch. Hold future F2 deltas to those bands, not to the tighter
   within-run ±3% quoted for the 2026-08-19 run. Everything claimed as a result
   above clears that bar or is explicitly called out as not clearing it.
-- The layout shift when the panel arrives (`.product-home-note` is pushed down)
-  was accepted, not measured — this harness reports no CLS. The panel renders
-  `null` whenever nothing needs attention, so reserving its height would trade a
-  shift below the last line of the page for a permanent hole on the common case.
-  If a CLS budget is ever adopted, revisit that trade rather than assuming it.
+- The early-tap numbers use a synthetic tap at a fixed 1,000 ms after FCP,
+  fired from inside the page. Real visitors tap at a spread of delays, and a
+  visitor who takes longer than the panel needs to load sees none of this cost.
+  The 1,000 ms figure was chosen as a plausible fast tap on a screen with four
+  options; the ordering between the three variants held across every run, but
+  the size of the gap is specific to that tap time.
+- Nothing here measures CLS, tap latency, or scrolling. `jsTransferBytes`
+  counts to settle, so it cannot by itself distinguish "moved off the critical
+  path" from "never loaded" — that is what `jsTransferBeforeFcpBytes` was added
+  for, and the early-tap probe covers the interaction axis neither of them sees.
