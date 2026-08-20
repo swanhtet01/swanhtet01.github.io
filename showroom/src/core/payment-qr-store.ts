@@ -153,8 +153,37 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       database.createObjectStore(STORE_NAME, { keyPath: ['scope', 'method'] })
     }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('QR storage could not be opened.'))
+    // Same settle discipline as product-image-store.ts's openDatabase, kept
+    // identical on purpose: these two stores are siblings by construction, and
+    // the workspace-scope defect this file's scope note describes recurred in
+    // the photo store precisely because the two drifted apart. An open() that
+    // needs a version change fires 'blocked' — not 'error' — while another tab
+    // holds an older connection; without a handler the promise never settles
+    // and withQrStore awaits forever, and with one that rejects, the request
+    // still completes later and hands back a connection nobody closes (an open
+    // connection is what blocks deleteAllPaymentQrData and the next upgrade).
+    // Not reachable today — v2 is the first shipped version, so no device
+    // performs a version change — but the store is a money-path display
+    // surface and the next DB_VERSION bump would make it live.
+    let settled = false
+    request.onsuccess = () => {
+      if (settled) {
+        request.result.close()
+        return
+      }
+      settled = true
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      if (settled) return
+      settled = true
+      reject(request.error ?? new Error('QR storage could not be opened.'))
+    }
+    request.onblocked = () => {
+      if (settled) return
+      settled = true
+      reject(new Error('QR storage is busy in another tab. Close the other SuperMega tab and try again.'))
+    }
   })
 }
 

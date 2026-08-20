@@ -157,8 +157,30 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       database.createObjectStore(STORE_NAME, { keyPath: ['scope', 'sku'] })
     }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('Photo storage could not be opened.'))
+    // An IDBOpenDBRequest cannot be cancelled, so a request that has already
+    // settled this promise the 'blocked' way still runs to completion and still
+    // hands back a live connection. `settled` is what keeps that connection from
+    // being orphaned — see onsuccess.
+    let settled = false
+    request.onsuccess = () => {
+      if (settled) {
+        // Late success after a blocked rejection. resolve() here would be a
+        // no-op, so nobody ever receives this IDBDatabase and nobody closes it.
+        // With one open request per rendered product that orphans a connection
+        // per photo, and an open connection is exactly what blocks
+        // deleteAllProductImageData() (the device-handover sweep) and every
+        // future version change until the page unloads. Close it here instead.
+        request.result.close()
+        return
+      }
+      settled = true
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      if (settled) return
+      settled = true
+      reject(request.error ?? new Error('Photo storage could not be opened.'))
+    }
     // v1 -> v2 is the first version change this database performs in the field,
     // and an open() that needs an upgrade fires 'blocked' — not 'error' — while
     // another tab still holds a v1 connection. Without this the promise would
@@ -166,7 +188,11 @@ function openDatabase(): Promise<IDBDatabase> {
     // photo control stuck busy with no ceiling. Rejecting degrades to the
     // documented photo-less fallback instead, and the next call succeeds as
     // soon as the other tab closes its (short-lived) connection.
-    request.onblocked = () => reject(new Error('Photo storage is busy in another tab. Close the other SuperMega tab and try again.'))
+    request.onblocked = () => {
+      if (settled) return
+      settled = true
+      reject(new Error('Photo storage is busy in another tab. Close the other SuperMega tab and try again.'))
+    }
   })
 }
 

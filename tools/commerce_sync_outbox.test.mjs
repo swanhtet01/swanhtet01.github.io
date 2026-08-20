@@ -57,8 +57,9 @@ function replaceGlobal(name, value) {
   }
 }
 
-function createFakeIndexedDbFactory() {
+function createFakeIndexedDbFactory({ blockFirstOpen = false } = {}) {
   const databases = new Map()
+  let blockedOnce = false
 
   function createTransaction(record, names, mode) {
     const storeNames = [].concat(names)
@@ -131,6 +132,14 @@ function createFakeIndexedDbFactory() {
     return transaction
   }
 
+  // `blockFirstOpen` reproduces the one sequence a real IndexedDB performs and a
+  // naive fake never does: an upgrading open() that another tab is holding fires
+  // 'blocked' FIRST and then, once that tab closes, still runs to completion and
+  // fires 'success'. An IDBOpenDBRequest cannot be cancelled, so both handlers
+  // really do run on the same request. closedConnections records every close()
+  // so a test can assert the late connection was not orphaned.
+  const closedConnections = []
+
   function createConnection(record) {
     return {
       onversionchange: null,
@@ -141,19 +150,25 @@ function createFakeIndexedDbFactory() {
         return { createIndex: () => ({}) }
       },
       transaction: (names, transactionMode) => createTransaction(record, names, transactionMode),
-      close: () => {},
+      close: () => { closedConnections.push(record) },
     }
   }
 
   return {
+    closedConnections,
     open(name, version) {
       const request = { result: null, error: null, onupgradeneeded: null, onsuccess: null, onerror: null, onblocked: null }
+      const blocked = blockFirstOpen && !blockedOnce
+      if (blocked) blockedOnce = true
       queueMicrotask(() => {
-        const upgrade = !databases.has(name)
-        if (upgrade) databases.set(name, { version, stores: new Map(), keyPaths: new Map() })
-        request.result = createConnection(databases.get(name))
-        if (upgrade) request.onupgradeneeded?.()
-        request.onsuccess?.()
+        if (blocked) request.onblocked?.()
+        queueMicrotask(() => {
+          const upgrade = !databases.has(name)
+          if (upgrade) databases.set(name, { version, stores: new Map(), keyPaths: new Map() })
+          request.result = createConnection(databases.get(name))
+          if (upgrade) request.onupgradeneeded?.()
+          request.onsuccess?.()
+        })
       })
       return request
     },
@@ -366,3 +381,33 @@ test('pending outbox is bounded so unrecovered changes cannot grow without revie
   )
   assert.equal((await readLocalCommerceSyncIntents()).length, COMMERCE_SYNC_MAX_PENDING)
 }))
+
+// A 'blocked' open must not orphan the connection the request still produces.
+//
+// An IDBOpenDBRequest cannot be cancelled. When another tab holds an older
+// connection, an upgrading open() fires 'blocked' — and then, once that tab
+// closes, the SAME request still completes and fires 'success' with a live
+// IDBDatabase. openSyncDatabase rejects on 'blocked', so its resolve() in
+// onsuccess is a no-op: without an explicit close, nobody ever receives that
+// connection and nobody closes it. An open connection is exactly what blocks
+// the NEXT version change, so one blocked open could wedge Shop recovery — the
+// path that protects staged commerce writes — for the rest of the page's life.
+// Regression pin for the leak Codex flagged on PR #490 (found in
+// product-image-store.ts, present here on main by the same shape).
+test('a blocked database open closes the connection it still receives', async () => {
+  const factory = createFakeIndexedDbFactory({ blockFirstOpen: true })
+  const restore = replaceGlobal('indexedDB', factory)
+  try {
+    await assert.rejects(() => readLocalCommerceSyncIntents(), /blocked the Shop sync database upgrade/)
+    // Let the request run to completion the way a real one does after the
+    // blocking tab closes: onsuccess fires on the already-rejected request.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(
+      factory.closedConnections.length,
+      1,
+      'the late connection must be closed, or it blocks every future upgrade until page unload',
+    )
+  } finally {
+    restore()
+  }
+})

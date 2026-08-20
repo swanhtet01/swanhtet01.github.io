@@ -48,6 +48,7 @@ let pilotOutcomeRuntimeChecks = 0
 let companyBackupRuntimeChecks = 0
 let shopProductionDemandRuntimeChecks = 0
 let shopDemandIntelligenceRuntimeChecks = 0
+let deviceImageStoreRuntimeChecks = 0
 let shopReplenishmentRuntimeChecks = 0
 let shopProcurementDecisionRuntimeChecks = 0
 let behaviorTrailRuntimeChecks = 0
@@ -7613,6 +7614,79 @@ async function verifyShopProductionDemandRuntime() {
     assert(await model.shopProductionDemandIsCurrent(signal, commerce, [unrelatedJob]), 'shop_production_demand_unrelated_job_invalidated_signal')
   } catch (error) {
     fail(`shop_production_demand_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+// The two device-local IndexedDB stores must not orphan a connection when an
+// upgrading open() is blocked by another tab. An IDBOpenDBRequest cannot be
+// cancelled: after 'blocked' rejects the open promise, the SAME request still
+// completes and fires 'success' with a live IDBDatabase whose resolve() is now a
+// no-op. Nobody receives it, so nobody closes it — and an open connection is
+// exactly what blocks deleteAll*Data (the device-handover sweep) and every
+// future version change until the page unloads. With one open request per
+// rendered product that leaks a connection per photo. Codex P2 on PR #490; the
+// same shape is pinned for the Shop sync outbox in tools/commerce_sync_outbox.test.mjs.
+async function verifyDeviceImageStoreBlockedOpenRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    deviceImageStoreRuntimeChecks += 1
+  }
+  // Minimal IndexedDB stand-in that performs the real blocked-then-success
+  // sequence and counts close() calls.
+  function fakeFactory() {
+    const closed = []
+    return {
+      closed,
+      open() {
+        const request = { result: null, error: null, onupgradeneeded: null, onsuccess: null, onerror: null, onblocked: null }
+        queueMicrotask(() => {
+          request.onblocked?.()
+          queueMicrotask(() => {
+            request.result = {
+              objectStoreNames: { contains: () => false },
+              createObjectStore: () => ({}),
+              deleteObjectStore: () => {},
+              transaction: () => { throw new Error('the blocked open must never reach a transaction') },
+              close: () => closed.push(true),
+            }
+            request.onupgradeneeded?.()
+            request.onsuccess?.()
+          })
+        })
+        return request
+      },
+    }
+  }
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB')
+  try {
+    for (const [label, modulePath, read] of [
+      ['product photos', 'product-image-store.ts', (module) => module.getProductImage('local', 'SM-1001')],
+      ['payment QR', 'payment-qr-store.ts', (module) => module.getPaymentQr('local', 'KBZPay')],
+    ]) {
+      const factory = fakeFactory()
+      Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: factory })
+      const module = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', modulePath)).href}?device-image-store-verify=${Date.now()}-${label}`)
+      // A blocked open degrades to the documented fallback rather than hanging.
+      // Raced against a timeout so that a store whose open promise never settles
+      // fails loudly instead of hanging the whole gate. (This fake always
+      // delivers the deferred 'success', so it measures the LEAK, not the
+      // real-world hang where the blocking tab never closes and no onblocked
+      // handler exists — that one is unobservable without a wall clock.)
+      const HANG = Symbol('hang')
+      const outcome = await Promise.race([
+        read(module),
+        new Promise((settle) => setTimeout(() => settle(HANG), 2000)),
+      ])
+      assert(outcome !== HANG, `device_image_store_blocked_open_never_settles:${modulePath}`)
+      assert(outcome === null, `device_image_store_blocked_open_not_fallback:${modulePath}`)
+      // Then let the request complete the way a real one does once the blocking
+      // tab closes. The late connection must be closed, not orphaned.
+      await new Promise((settle) => setTimeout(settle, 0))
+      assert(factory.closed.length === 1, `device_image_store_blocked_open_leaks_connection:${modulePath}`)
+    }
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'indexedDB', previous)
+    else delete globalThis.indexedDB
   }
 }
 
@@ -19204,6 +19278,9 @@ await verifyShopServiceScheduleRuntime()
 await verifyShopBusinessTemplateRuntime()
 await verifyShopProductionDemandRuntime()
 await verifyShopDemandIntelligenceRuntime()
+try { await verifyDeviceImageStoreBlockedOpenRuntime() } catch (error) {
+  fail(`device_image_store_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+}
 await verifyPlantOrderRuntime()
 await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
@@ -19790,4 +19867,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
