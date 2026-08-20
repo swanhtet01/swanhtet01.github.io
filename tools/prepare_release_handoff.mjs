@@ -203,7 +203,7 @@ export function buildReleaseHandoff(input) {
       forceUpdateAllowed: false,
     },
     verification: {
-      command: 'npm run app:verify',
+      command: 'npm run app:verify:local -- --serial',
       passed: true,
       verifiedCommit: candidateCommit,
       workflowAuthority,
@@ -292,9 +292,10 @@ function remoteHead(ref) {
 }
 
 function appVerifyCommand() {
-  if (process.platform !== 'win32') return { file: 'npm', args: ['run', 'app:verify'] }
-  const command = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe')
-  return { file: command, args: ['/d', '/s', '/c', 'npm.cmd run app:verify'] }
+  return {
+    file: process.execPath,
+    args: [resolve(root, 'tools', 'run_app_verify.mjs'), '--serial'],
+  }
 }
 
 async function boundedJson(url) {
