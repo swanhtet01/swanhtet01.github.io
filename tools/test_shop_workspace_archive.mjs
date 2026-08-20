@@ -188,12 +188,17 @@ function coverageOf(subject, artifact) {
 // pass every assertion above and fail this one.
 {
   const base = dayStart(DAYS)
-  let openState = receiveCommerceStock(state, item.sku, 4, proof(`RESTOCK-${DAYS}`, base))
+  // Deliberately more than fifty. A gap list is the part of this file whose size a future
+  // change is most tempted to cap "to keep the download small", and a fixture with a handful
+  // of gaps would not notice -- confirmed by mutation: a `gaps.length = Math.min(gaps.length,
+  // 50)` survived a two-sale fixture. Every one of these is a plain reservation rather than a
+  // full lifecycle, because an un-closed order is uncovered whatever state it is in.
+  const OPEN_SALES = 61
+  let openState = receiveCommerceStock(state, item.sku, OPEN_SALES + 4, proof(`RESTOCK-${DAYS}`, base))
   assert.ok(openState, 'the fourth-day restock lands')
-  const OPEN_SALES = 2
   for (let index = 0; index < OPEN_SALES; index += 1) {
     const at = base + (index + 1) * 60_000
-    const id = `ORD-ARCHIVE-OPEN-${index}`
+    const id = `ORD-ARCHIVE-OPEN-${String(index).padStart(3, '0')}`
     const next = reserveCommerceOrder(openState, {
       id,
       createdAt: iso(at),
@@ -225,8 +230,13 @@ function coverageOf(subject, artifact) {
   check(openArchive.archivedOrderCount === archive.archivedOrderCount, 'and an un-closed sale does not change what was already archived')
   const { current, archivedIds, gapOrderIds } = coverageOf(openState, openArchive)
   check(archivedIds.size + gapOrderIds.size === current.orders.length, 'and the completeness invariant still holds with un-closed sales present')
-  const openGap = openArchive.gaps.find((gap) => gap.id === 'ORD-ARCHIVE-OPEN-0')
-  check(Boolean(openGap) && openGap.detail.includes('Not on a closed day yet'), 'an un-closed sale is named with why it is not in the file, not merely omitted')
+  const openGap = openArchive.gaps.find((gap) => gap.id === 'ORD-ARCHIVE-OPEN-000')
+  check(Boolean(openGap) && openGap.detail.includes('Not on a closed day in this file'), 'an un-closed sale is named with why it is not in the file, not merely omitted')
+  // Pins the order count to the DIFFERENCE between two workspaces, not to a value. Asserting
+  // only that it equals orders.length passes for any constant that happens to match this
+  // fixture -- confirmed by mutation, which is why this is here.
+  check(openArchive.orderCount === archive.orderCount + OPEN_SALES, 'the reported order count tracks the workspace rather than being a constant that fits this fixture')
+  check(openArchive.closeCount === archive.closeCount, 'while the close count is unchanged by sales that were never closed')
 }
 
 // --- a close the exporter refuses is NAMED, not filtered away ---------------------------

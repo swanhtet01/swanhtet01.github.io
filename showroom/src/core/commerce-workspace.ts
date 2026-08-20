@@ -10090,12 +10090,7 @@ export function commerceWorkspaceArchive(state: CommerceState, generatedAt: stri
 
   const closes: CommerceDailyCloseExport[] = []
   const gaps: CommerceWorkspaceArchiveGap[] = []
-  // Order id -> the close that claims it, so an uncovered order can say WHICH close failed
-  // rather than only that it is missing. Built from close.orderIds, which every close
-  // carries; a close whose export was refused still tells us what it was covering.
-  const claimedBy = new Map<string, CommerceClose>()
   for (const close of current.closes) {
-    for (const orderId of close.orderIds ?? []) claimedBy.set(orderId, close)
     const exported = commerceDailyCloseExportFrom(current, close.id)
     if (exported) {
       closes.push(exported)
@@ -10108,16 +10103,19 @@ export function commerceWorkspaceArchive(state: CommerceState, generatedAt: stri
     })
   }
 
+  // Unconditional by design: an order is in this file or it has a row saying it is not, and
+  // there is no third branch that could quietly swallow one. An earlier revision looked up
+  // which close had claimed the order so the row could name it, and that lookup was both
+  // unreachable in practice — a close carries all eight snapshot fields or none, so a close
+  // that cannot be exported has no orderIds to claim with — and a place where a stray
+  // `continue` would drop a record with nothing to catch it.
   const archivedOrderIds = new Set(closes.flatMap((close) => close.orders.map((order) => order.orderId)))
   for (const order of current.orders) {
     if (archivedOrderIds.has(order.id)) continue
-    const claim = claimedBy.get(order.id)
     gaps.push({
       kind: 'order_not_on_an_archived_close',
       id: order.id,
-      detail: claim
-        ? `On the ${claim.businessDate ?? 'undated'} close, which could not be archived.`
-        : `Not on a closed day yet — ${order.status}, payment ${order.paymentStatus}.`,
+      detail: `Not on a closed day in this file — ${order.status}, payment ${order.paymentStatus}.`,
     })
   }
 
