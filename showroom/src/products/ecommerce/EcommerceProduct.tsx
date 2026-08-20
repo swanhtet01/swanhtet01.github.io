@@ -1808,7 +1808,9 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Import customer orders</span>
           <h2>{orderImportStage}</h2>
-          <p className="surface-lead">Customer orders arrive from Viber, LINE, WeChat, email, your web form and spreadsheets. Paste or upload them here and you get one list to check before Shop takes the order.</p>
+          <p className="surface-lead">{importNeeded
+            ? 'Customer orders arrive from Viber, LINE, WeChat, email, your web form and spreadsheets. Load your products first: every order is checked against your Shop catalog, so without one each row comes back blocked.'
+            : 'Customer orders arrive from Viber, LINE, WeChat, email, your web form and spreadsheets. Paste or upload them here and you get one list to check before Shop takes the order.'}</p>
           <p>Check CSV, Viber, LINE, WeChat, email, and form orders against the saved Shop catalog so Shop gets one clean order list. Nothing is sent, charged, delivered, refunded, or saved to Shop until a manager reviews it.</p>
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
@@ -1888,7 +1890,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Store launch checklist</span>
           <h2>{managedStoreActivationStage}</h2>
-          <p className="surface-lead">This is what still has to be ready before your online store can open. Work through anything below that is not ready, then download the go-live file for review — opening the store is not done from this screen.</p>
+          <p className="surface-lead">These are the checks your online store has to pass before it can open. Work through anything below that is not ready yet, then download the go-live file for review — opening the store is not done from this screen.</p>
           <p>Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or go-live action runs from this file.</p>
           <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
         </div>
@@ -1960,7 +1962,9 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Quote recovery</span>
           <h2>{quoteRecoveryStage}</h2>
-          <p className="surface-lead">Some customers asked for a price and then went quiet, and some of those prices are now too old to honour. This screen shows which ones and opens them in Shop so you can decide what to offer.</p>
+          <p className="surface-lead">{pendingManagedRequests.length
+            ? 'Some customers asked for a price and then went quiet, and some of those prices are now too old to honour. This screen shows which ones and opens them in Shop so you can decide what to offer.'
+            : 'No customer request is waiting on a price right now. When one goes quiet, or its price gets too old to honour, it appears here.'}</p>
           <p>Prepare stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source. No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareQuoteRecovery} type="button">Prepare quote recovery</button>
         </div>

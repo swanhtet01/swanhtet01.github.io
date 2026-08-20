@@ -190,7 +190,9 @@ export function WebsiteCommerceIntake({
           <div><Link className="text-link" to="/website/">Open Website</Link></div>
         </header>
 
-        <p className="surface-lead">Orders placed on your website land here. Check the item, quantity, payment and collection, then send each one on for order confirmation.</p>
+        <p className="surface-lead">{pendingManaged
+          ? 'Orders placed on your website land here. Check the item, quantity, payment and collection, then send each one on for order confirmation.'
+          : 'Orders placed on your website land here. Nothing is waiting for review right now.'}</p>
 
         {pendingManaged ? (
           <form className="website-intake-completion" onSubmit={reviewManagedIntake}>
@@ -222,7 +224,9 @@ export function WebsiteCommerceIntake({
         <div><Link className="text-link" to="/website/">Open Website</Link></div>
       </header>
 
-      <p className="surface-lead">This is where a website request becomes a real Shop order: accept the request, add how it will be paid and collected, then confirm it into your order queue. You are working on this device only, so nothing reaches the customer.</p>
+      <p className="surface-lead">{context
+        ? 'This is where a website request becomes a real Shop order: accept the request, add how it will be paid and collected, then confirm it into your order queue. You are working on this device only, so nothing reaches the customer.'
+        : 'This is where a website request becomes a real Shop order. Nothing is waiting right now. You are working on this device only, so nothing reaches the customer.'}</p>
 
       {context && !item ? <p className="form-notice warning-text">SKU {context.handoff.intake.sku} does not match exactly one Shop stock item. Intake is blocked.</p> : null}
 
