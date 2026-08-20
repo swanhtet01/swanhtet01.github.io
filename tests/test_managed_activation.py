@@ -20,14 +20,17 @@ from supermega_runtime.managed_context import (
 from supermega_runtime.managed_activation import (
     ACTIVATION_PLAN_CONTRACT,
     ACTIVATION_RECEIPT_CONTRACT,
+    MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
     SUSPENSION_RECEIPT_CONTRACT,
     TRIAL_SCHEMA_VERSION,
     ManagedActivationConflict,
     ManagedActivationError,
     ManagedWorkspaceProvisioner,
     compile_activation_plan,
+    compile_multi_product_activation_plan,
     main,
     validate_activation_plan,
+    validate_multi_product_activation_plan,
     _validate_admin_target,
 )
 
@@ -49,7 +52,12 @@ ADMIN_CA_SHA256 = "sha256:" + "1" * 64
 def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
     workspace = "Mingalar Fresh Mart"
     owner = "Swan Htet"
-    template = "production-control" if product == "production" else "retail-wholesale"
+    template = {
+        "commerce": "retail-wholesale",
+        "production": "production-control",
+        "website": "lead-generation",
+        "ecommerce": "social-storefront",
+    }[product]
     started_at = _fixture_timestamp(30)
     reviewed_at = _fixture_timestamp(25)
     checkpoint_digest = "sha256:" + "2" * 64
@@ -118,9 +126,12 @@ def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
 
 
 def approved_ai_context(outcome: dict[str, object]) -> dict[str, object]:
-    product = "plant" if outcome["product"] == "production" else "shop"
-    template = "production-control" if product == "plant" else "retail-wholesale"
-    behavior_product = "production" if product == "plant" else "commerce"
+    product, template, behavior_product = {
+        "commerce": ("shop", "retail-wholesale", "commerce"),
+        "production": ("plant", "production-control", "production"),
+        "website": ("website", "lead-generation", "website"),
+        "ecommerce": ("ecommerce", "social-storefront", "ecommerce"),
+    }[str(outcome["product"])]
     body: dict[str, object] = {
         "contract": "supermega.ai_context_export.v1",
         "version": 1,
@@ -227,19 +238,30 @@ def managed_trial_request() -> dict[str, object]:
     }
 
 
-def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+def managed_trial_request_for(product_slug: str = "shop") -> dict[str, object]:
     request = managed_trial_request()
     request["productSlug"] = product_slug
-    if product_slug in {"plant", "production"}:
-        request["product"] = "Plant"
-        request["templateId"] = "production-control"
-        request["templateName"] = "Production control"
-        request["managedWorkspaceProvisioningPacket"]["product"] = "Plant"  # type: ignore[index]
-        request["managedWorkspaceProvisioningPacket"]["template"] = "Production control"  # type: ignore[index]
-        outcome = pilot_outcome_report("production")
+    product_label, template_id, template_name, report_product = {
+        "shop": ("Shop", "retail-wholesale", "Retail and wholesale", "commerce"),
+        "plant": ("Plant", "production-control", "Production control", "production"),
+        "website": ("Website", "lead-generation", "Lead generation", "website"),
+        "ecommerce": ("Ecommerce", "social-storefront", "Social storefront", "ecommerce"),
+    }[product_slug]
+    if product_slug != "shop":
+        request["product"] = product_label
+        request["templateId"] = template_id
+        request["templateName"] = template_name
+        request["managedWorkspaceProvisioningPacket"]["product"] = product_label  # type: ignore[index]
+        request["managedWorkspaceProvisioningPacket"]["template"] = template_name  # type: ignore[index]
+        outcome = pilot_outcome_report(report_product)
         request["pilotOutcomeReport"] = outcome
         request["approvedAiContext"] = approved_ai_context(outcome)
         request["managedWorkspaceProvisioningPacket"]["dataPackage"]["pilotOutcomeDigest"] = outcome["reportDigest"]  # type: ignore[index]
+    return request
+
+
+def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+    request = managed_trial_request_for(product_slug)
     return compile_activation_plan(
         request,
         workspace_id="mingalar-fresh-mart",
@@ -468,6 +490,31 @@ class FakeCursor:
 
 
 class ManagedActivationPlanTests(unittest.TestCase):
+    def test_multi_product_plan_is_one_tenant_with_union_capabilities(self) -> None:
+        plan = compile_multi_product_activation_plan(
+            [managed_trial_request_for("shop"), managed_trial_request_for("plant")],
+            workspace_id="mingalar-fresh-mart",
+            owner_actor_id=OWNER_ID,
+            approval_id=APPROVAL_ID,
+            approved_by="Swan Htet",
+            approved_at=_fixture_timestamp(5),
+            project_ref=PROJECT_REF,
+            release_commit=RELEASE_COMMIT,
+            admin_ca_sha256=ADMIN_CA_SHA256,
+            now=NOW,
+        )
+        self.assertEqual(plan["contract"], MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT)
+        self.assertEqual(plan["products"], ["shop", "plant"])
+        self.assertIn("commerce.write", plan["ownerCapabilities"])
+        self.assertIn("production.write", plan["ownerCapabilities"])
+        self.assertEqual(len(plan["sourcePlans"]), 2)
+        self.assertEqual(validate_multi_product_activation_plan(plan), plan)
+
+        tampered = deepcopy(plan)
+        tampered["products"].reverse()
+        with self.assertRaises(ManagedActivationError):
+            validate_multi_product_activation_plan(tampered)
+
     def test_plan_is_deterministic_redacted_and_capability_scoped(self) -> None:
         first = activation_plan()
         second = activation_plan()
@@ -600,6 +647,29 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         with self.assertRaisesRegex(ManagedActivationError, "session is no longer active"):
             self.authorize()
         self.assertEqual(self.database.approvals, [])
+
+    def test_multi_product_plan_applies_one_membership_with_union_capabilities(self) -> None:
+        self.plan = compile_multi_product_activation_plan(
+            [managed_trial_request_for("shop"), managed_trial_request_for("plant")],
+            workspace_id="mingalar-fresh-mart",
+            owner_actor_id=OWNER_ID,
+            approval_id=APPROVAL_ID,
+            approved_by="Swan Htet",
+            approved_at=_fixture_timestamp(5),
+            project_ref=PROJECT_REF,
+            release_commit=RELEASE_COMMIT,
+            admin_ca_sha256=ADMIN_CA_SHA256,
+            now=NOW,
+        )
+        self.authorize()
+        activated = self.provisioner.apply(self.plan)
+        self.assertEqual(activated["contract"], ACTIVATION_RECEIPT_CONTRACT)
+        self.assertEqual(len(self.database.memberships), 1)
+        capabilities = self.database.memberships[0]["capabilities"]
+        self.assertIn("commerce.write", capabilities)
+        self.assertIn("production.write", capabilities)
+        event = next(iter(self.database.events.values()))
+        self.assertEqual(event["payload_json"]["products"], ["shop", "plant"])
 
     def test_apply_replay_suspend_and_suspension_replay_are_idempotent(self) -> None:
         preflight = self.provisioner.inspect(self.plan)
@@ -907,6 +977,48 @@ class ManagedActivationCliTests(unittest.TestCase):
             plan = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(plan["contract"], ACTIVATION_PLAN_CONTRACT)
             self.assertFalse(plan["secretValuesExposed"])
+
+    def test_prepare_command_accepts_four_reviewed_products_for_one_tenant(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            request_paths = []
+            for product in ("shop", "plant", "website", "ecommerce"):
+                path = root / f"{product}.json"
+                path.write_text(
+                    json.dumps(managed_trial_request_for(product)),
+                    encoding="utf-8",
+                )
+                request_paths.append(path)
+            output_path = root / "tenant-plan.json"
+            certificate_path = root / "supabase-ca.crt"
+            certificate_path.write_text(
+                "-----BEGIN CERTIFICATE-----\nTEST-CA\n-----END CERTIFICATE-----\n",
+                encoding="ascii",
+            )
+            arguments = ["prepare"]
+            for request_path in request_paths:
+                arguments.extend(("--request-file", str(request_path)))
+            arguments.extend(
+                (
+                    "--workspace-id", "mingalar-fresh-mart",
+                    "--owner-actor-id", OWNER_ID,
+                    "--approval-id", APPROVAL_ID,
+                    "--approved-by", "Swan Htet",
+                    "--approved-at", datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                    "--project-ref", PROJECT_REF,
+                    "--release-commit", RELEASE_COMMIT,
+                    "--admin-ca-file", str(certificate_path),
+                    "--output", str(output_path),
+                )
+            )
+            self.assertEqual(main(arguments), 0)
+            plan = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["contract"], MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT)
+            self.assertEqual(plan["products"], ["shop", "plant", "website", "ecommerce"])
+            self.assertEqual(len(plan["sourcePlans"]), 4)
+            self.assertIn("commerce.write", plan["ownerCapabilities"])
+            self.assertIn("production.write", plan["ownerCapabilities"])
+            self.assertIn("website.write", plan["ownerCapabilities"])
 
 
 if __name__ == "__main__":

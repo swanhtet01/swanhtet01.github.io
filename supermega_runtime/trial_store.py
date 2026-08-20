@@ -51,6 +51,13 @@ def _env_schema_version(default: int = 10) -> int:
 # v11 branch) only AFTER the matching migration has been applied to that target.
 TRIAL_SCHEMA_VERSION = _env_schema_version()
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
+ACTIVATION_PRODUCT_ORDER = ("shop", "plant", "website", "ecommerce")
+ACTIVATION_PRODUCT_ENTITLEMENTS = {
+    "shop": "commerce",
+    "plant": "production",
+    "website": "website",
+    "ecommerce": "ecommerce",
+}
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
 # authoritative client->server (or client->Supavisor-pooler) guarantee -- a
@@ -188,6 +195,34 @@ _SELF_SERVE_RELEASE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 JsonObject = dict[str, Any]
 StateReducer = Callable[[str, str, Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any]]
 StatePrecondition = Callable[[Mapping[str, Any], Mapping[str, Mapping[str, Any]]], None]
+
+
+def activation_product_entitlements(payload_value: object) -> tuple[str, ...]:
+    """Return only the canonical products proven by an activation event."""
+
+    payload = payload_value
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            return ()
+    if not isinstance(payload, Mapping):
+        return ()
+    products_value = payload.get("products")
+    if products_value is None:
+        products_value = [payload.get("product")]
+    if not isinstance(products_value, list) or not products_value:
+        return ()
+    if any(not isinstance(product, str) for product in products_value):
+        return ()
+    products = tuple(products_value)
+    canonical = tuple(product for product in ACTIVATION_PRODUCT_ORDER if product in products)
+    if products != canonical or len(set(products)) != len(products):
+        return ()
+    try:
+        return tuple(ACTIVATION_PRODUCT_ENTITLEMENTS[product] for product in products)
+    except KeyError:
+        return ()
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
     ("workspace_access_controls", "workspace_access_control_guard"): {
@@ -559,6 +594,10 @@ class TrialReadiness:
     # server-side billing_entitlements projection, never stored on the device,
     # and fail-closed to False everywhere the entitlement cannot be proven.
     premium_unlocked: bool = False
+    # Present only when an immutable managed activation event proves the
+    # products assigned to this tenant. None preserves compatibility for
+    # non-managed stores; an empty tuple is an explicit fail-closed grant.
+    product_entitlements: tuple[str, ...] | None = None
 
     @property
     def read_ready(self) -> bool:
@@ -590,7 +629,7 @@ class TrialReadiness:
         return tuple(name for name, ready in checks if not ready)
 
     def to_dict(self) -> JsonObject:
-        return {
+        payload: JsonObject = {
             "status": "ready" if self.write_ready else "blocked",
             "backend": self.backend,
             "read_ready": self.read_ready,
@@ -607,6 +646,9 @@ class TrialReadiness:
             "blockers": list(self.blockers),
             "premiumUnlocked": self.premium_unlocked,
         }
+        if self.product_entitlements is not None:
+            payload["productEntitlements"] = list(self.product_entitlements)
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -3961,6 +4003,31 @@ class PostgresTrialStore:
                     yield cursor, capabilities
 
     @staticmethod
+    def _product_entitlements(cursor: Any, workspace_id: str) -> tuple[str, ...]:
+        """Read the immutable activation event; malformed or absent proof grants nothing."""
+
+        cursor.execute(
+            """
+            select payload_json
+            from app_private.workspace_events
+            where workspace_id = %s
+              and surface = 'company'
+              and event_type = 'company.workspace.activated'
+            order by created_at desc
+            limit 1
+            """,
+            (workspace_id,),
+        )
+        row = cursor.fetchone()
+        if isinstance(row, Mapping):
+            payload = row.get("payload_json")
+        elif isinstance(row, Sequence) and not isinstance(row, (str, bytes)) and row:
+            payload = row[0]
+        else:
+            payload = None
+        return activation_product_entitlements(payload)
+
+    @staticmethod
     def _premium_unlocked(cursor: Any, workspace_id: str) -> bool:
         """Billing rail v12 (BILLING-RAIL-DESIGN.md 4.3): derive premiumUnlocked
         from the billing_entitlements projection, one query, fail closed.
@@ -4006,6 +4073,7 @@ class PostgresTrialStore:
         membership_ready = False
         audit_ready = False
         premium_unlocked = False
+        product_entitlements: tuple[str, ...] | None = None
         capabilities: frozenset[str] = frozenset()
         if not self.database_url:
             return TrialReadiness(
@@ -4035,6 +4103,9 @@ class PostgresTrialStore:
                             self._set_context(cursor, normalized)
                             capabilities = self._load_membership(cursor, normalized)
                             membership_ready = True
+                            product_entitlements = self._product_entitlements(
+                                cursor, normalized.workspace_id
+                            )
                             if TRIAL_SCHEMA_VERSION >= 12:
                                 premium_unlocked = self._premium_unlocked(
                                     cursor, normalized.workspace_id
@@ -4067,6 +4138,7 @@ class PostgresTrialStore:
             write_enabled=self.write_enabled,
             capabilities=capabilities,
             premium_unlocked=premium_unlocked,
+            product_entitlements=product_entitlements,
         )
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
