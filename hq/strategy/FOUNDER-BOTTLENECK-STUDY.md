@@ -22,7 +22,18 @@ Sources re-read for this study: `hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`,
 `tools/verify_self_serve_pilot.py`,
 `showroom/src/core/shop-fulfillment-lead-time-summary.ts`,
 `.github/workflows/supermega-public-release.yml`,
-`hq/readiness/managed-pilot-readiness.json`.
+`hq/readiness/managed-pilot-readiness.json`. Revision 2 additionally read the
+type definitions in `showroom/src/core/commerce-workspace.ts` and the
+exact-field contracts in `supermega_runtime/commerce_runtime.py`.
+
+**All file citations in this document resolve against `origin/main`, not
+against the working checkout.** During review of PR #500 two citations here
+(`shop-fulfillment-lead-time-summary.ts` and `docs/pilot-kit/`) were reported
+as non-existent on main. Both exist on `origin/main` — added by `4819163f`
+(#454). The checkout at the repository root is pinned at `c9e0d436`, **1190
+commits behind `origin/main`**, which is what a grep there finds. Anyone
+re-checking this study should `git fetch` and grep `origin/main` (for example
+`git ls-tree -r origin/main --name-only`) rather than the working tree.
 
 ---
 
@@ -75,10 +86,13 @@ sound engineering practice, not a per-client tax.
 ### Correction 3 — counting founder-only *steps* is the wrong metric
 
 Nine of eleven rows being founder-only sounds like a per-client tax of nine
-founder actions. It is not. Six of those nine are **one-time activation
-costs** that are paid once and then amortize to zero across every subsequent
-client. Only three recur, and one of those recurs per outreach *batch* rather
-than per client.
+founder actions. It is not. **Five of those nine — steps 1, 5, 6, 7, 8 — are
+one-time activation costs** that are paid once and then amortize to zero
+across every subsequent client. Of the remaining four: step 2 recurs per
+outreach *batch* (its identity-and-cadence setup portion is one-time, its
+per-message review is not), step 4 recurs per *design partner*, and steps 10
+and 11 recur per client per cycle. Step 9, which the brief left untagged, is
+a sixth one-time cost.
 
 This is the single most important finding in this study, and section 2 is
 built on it. "Number of founder-only steps" is a metric that cannot
@@ -239,34 +253,75 @@ baseline: first order-to-close (shop) or equivalent funnel event, **recorded
 by the system, not by a human**." `PRODUCTION-ACTIVATION-RUNBOOK.md` §5:
 "Baseline auto-measured."
 
-**Why it is small.** The inputs already exist in `CommerceState` and one of
-the five measurements is already computed, as a pure projection, by shipped
-code: `showroom/src/core/shop-fulfillment-lead-time-summary.ts`'s
-`projectShopFulfillmentLeadTimeSummary` walks completed orders, differences
-`order.completion.capturedAt` against `order.createdAt`, and returns a median.
-Daily-close records carry their own `createdAt`; the credit-correction
-mechanism that loyalty redemption already rides gives corrections a countable
-shape; and idempotent replay on `actionId` is the `reload_and_retry_result`
-property, structurally.
+**A correction to this study's first revision — A1 is NOT a pure projection.**
+The first revision of this document claimed all five measurements could be
+computed as a pure projection over `CommerceState`, citing
+`showroom/src/core/shop-fulfillment-lead-time-summary.ts`. Codex challenged
+that on PR #500 and **Codex was right**; the claim is withdrawn and replaced
+below. The failure mode it would have caused is the serious one: four of the
+five measurements would have been *mislabelled* rather than measured, which is
+the same class of error as a guided sample earning a proof counter. A study
+whose top recommendation would fabricate acceptance evidence is worse than one
+reporting a smaller win, so the smaller win is what is recorded here.
 
-**Smallest change.** One new pure projection module beside the existing
-summary (same shape, same file neighbourhood, no new dependency) computing the
-five measurements from `CommerceState`, plus an export that emits the
-generator's existing input shape. Read-only, device-local, no server, no
-schema, no digest-bound file, no gate spend.
+**Measurement-by-measurement verdict, checked against the type definitions.**
 
-**Size:** M. **Prerequisite:** none. Not blocked by PG17, not blocked by the
-v13 billing-rail contract conflict, not blocked by production activation.
+| Measurement | Derivable? | Evidence |
+|---|---|---|
+| `median_minutes_per_order` | **No** | The pilot means *operator handling minutes per run*. `CommerceOrder` (`commerce-workspace.ts:385-428`) carries `createdAt`, `paymentReconciledAt`, `refundSettledAt` and `completion` — and no per-transition timestamps at all; `advancementActionIds` records *that* steps happened, never *when*. The shipped `projectShopFulfillmentLeadTimeSummary` computes something genuinely different: order create→complete **lead time**, floored to whole **hours** (`Math.floor(… / (1000 * 3600))`). Wrong quantity, wrong unit. |
+| `close_minutes_per_day` | **No** | `CommerceClose` (`:636-651`) has exactly one timestamp, `createdAt` — the instant the close was saved. There is no close-start time, so the close's *duration* does not exist in state. |
+| `operator_corrections` | **No** | `CommerceOrderCorrection` (`:310-325`) is a **financial** credit/debit ledger entry with monetary reason codes (`pricing_error`, `service_recovery`, `fee_adjustment`, `other`) and a balance. Whether an edit was the operator fixing their own slip or a legitimate business change is a human judgement the record does not carry. Counting these and calling them operator corrections would be a mislabel. |
+| `reload_and_retry_result` | **No** | A day-4 rehearsal act: the operator deliberately reloads mid-day and retries a step. Idempotent replay on `actionId` is a system *property* provable by test — a different claim from "this operator did this on this device and the record survived". |
+| `weekly_exception_rate` | **Partly** | The domain-recorded subset genuinely exists: `CommerceClose.paymentExceptionOrderIds` and `.stockExceptionSkus`, plus `order.returns[]` and `order.supportCases[]`, over `close.orders` as denominator. What it cannot see is a process exception the operator observed that never became a domain record. Derivable **if labelled** "domain-recorded exception rate", never as the pilot's observed rate. |
 
-**What it saves, honestly.** It does *not* remove the on-site days — a
-stranger walking into a shop and earning trust is not a measurement problem.
-It removes the measurement labour inside those days, removes transcription
-error from the evidence, and — the actual prize — makes the evidence
-**machine-produced rather than founder-attested**. That is the precondition
-for ever handing step 4 or step 9 to a hired field operator, because a
-non-founder's stopwatch readings are not evidence anyone can rely on, while a
-projection over the tenant's own records is. This is the item that converts
-step 4 from bucket H-with-no-exit into bucket H-that-can-be-delegated.
+**So the honest scope is one partial projection plus new instrumentation.**
+
+**Why the instrumentation cannot simply add order timestamps.** The obvious
+fix — timestamp each order transition — is blocked, and not by tooling.
+`supermega_runtime/commerce_runtime.py` enforces exact-field contracts:
+`_ORDER_REQUIRED_FIELDS` / `_ORDER_OPTIONAL_FIELDS` (`:321-370`) are frozensets
+checked by `_exact_fields`, and `_STATE_FIELDS` (`:280`) does the same at the
+top level. A new order key is rejected on every managed sync until the
+deployed backend accepts it, and the backend only moves by the **founder-only
+release dispatch**. This is exactly the constraint that forced loyalty PR3 to
+be deferred (roadmap S3).
+
+**The viable shape, and it has a shipped precedent.** Record operator timings
+in a **device-local store that never enters `CommerceState`** — the pattern
+`showroom/src/core/shop-loyalty.ts` PR1 already uses ("an opt-in settings
+record on this device, plus a pure projection") and `product-image-store.ts`
+uses for photos, both chosen for this same contract reason. That buys
+`median_minutes_per_order` and `close_minutes_per_day` as genuine measurements
+with no backend gate, provided the product defines what starts and ends a
+task — a real product-design question, not a mechanical derivation.
+
+**The deliverable must include a provenance contract.** Each of the five
+measurements has to carry how it was obtained — machine-derived, or
+human-attested — so a handoff can never present an attested number as a
+measured one. Without that field this item is a liability rather than an
+improvement, and the generator should refuse a packet that omits it.
+
+**Revised scope:** one partial projection (exception rate, relabelled) +
+device-local task instrumentation for two measurements + a provenance-tagged
+result contract + the two permanently-human measurements left explicitly
+human.
+
+**Size:** **L** (was stated as M). **Prerequisite:** none for the device-local
+route — still not blocked by PG17, the v13 conflict, or production activation.
+Any route that extends `CommerceState` instead is founder-gated on a release
+dispatch and should not be taken for this.
+
+**What it saves, honestly, after the correction.** Two of five measurements
+stop being stopwatch work; a third becomes machine-derived under a narrower
+name; **two remain irreducibly human**. So this does *not* make the pilot
+self-measuring, and the first revision's "~2,400 minutes unlocked" was built
+on that false premise and is withdrawn. What survives is real but smaller: it
+removes some measurement labour, removes transcription error, and makes the
+*machine-derived* portion trustworthy when someone other than the founder runs
+the pilot. That still improves delegation — a hired operator's three
+machine-derived numbers plus two explicitly-attested ones is a far better
+artifact than five hand-typed ones — but it does not by itself convert step 4
+into a delegable task.
 
 ### A2 — The billing *read* path is welded to the billing *write* credential
 
@@ -370,23 +425,33 @@ Ordered by founder-minutes saved per client, with payback stated separately.
 Every minute figure is an **estimate**, not a measurement; nothing in this
 repo has ever timed a real client engagement, because no client exists.
 
+**This ranking changed after review.** The first revision put A1 first on the
+strength of a "pure projection, size M, no prerequisite" claim that did not
+survive checking (section 4, A1). Re-costed as instrumentation plus a
+provenance contract, and delivering three of five measurements rather than
+five, A1 drops to second and **A2 becomes the top recommendation.**
+
 | Rank | Item | Size | Prereq | Est. founder-minutes saved | Clients until payback |
 |---|---|---|---|---|---|
-| 1 | **A1 — auto-measured pilot baseline and evidence** | M | None | ~300–600/partner directly; **~2,400/partner** once it enables delegating step 4 to a non-founder | 1 |
-| 2 | **A2 — decouple the billing read path from the write credential** | S | Founder creates a bounded read role; write URL stays out of every service context | ~10–20 per client per cycle, plus prevented leakage | ~10 |
+| 1 | **A2 — decouple the billing read path from the write credential** | S | Founder creates a bounded read role; write URL stays out of every service context | ~10–20 per client per cycle, plus prevented revenue leakage | ~10 |
+| 2 | **A1 — instrument the pilot measurements (3 of 5) + provenance contract** | L | None on the device-local route | ~150–300/partner directly; does **not** unlock full delegation | 2–4 partners |
 | 3 | **A3 — invoice config generator feeding the existing preparer** | M | D1 pricing decision; price file outside the repo | ~10–15 per client per cycle | ~20 |
 
-A1 is first by a wide margin and it is first for a reason that is not its
-direct time saving: it is the only item on the list that changes the *shape*
-of the ceiling rather than shaving minutes off it. A2 and A3 make a founder's
-billing shift shorter. A1 is what makes it possible for the five-day pilot to
-be run by somebody who is not the founder — and until that is true, the
-company grows at five founder-days per design partner no matter what else
-ships.
+**A2 is now first** because it is the only item that is small, certain, and
+verified defect-shaped: a one-conditional change against code quoted in
+section 4, with no product-design question inside it and no dependence on a
+founder decision beyond provisioning the read role. It saves less per client
+than A1's original (withdrawn) estimate, but it saves it reliably and forever.
 
-Note that A1 has **no prerequisite at all**. It is not blocked by PG17, not by
-the v13 billing-rail contract conflict, not by production activation, and not
-by any founder decision. It can start today.
+**A1 stays second on strategic grounds, stated with its limits.** It is still
+the only item touching the step that actually binds today, and it is still
+unblocked. But it now buys three of five measurements, one of them only under
+a narrower name, and it leaves two permanently human — so it improves the
+*quality* of pilot evidence and shaves some measurement labour without making
+the pilot self-measuring. Anyone planning capacity off this document should
+**not** assume A1 turns five founder-days into zero. It does not.
+
+A3 is unchanged and remains gated on D1.
 
 ---
 
@@ -403,19 +468,34 @@ stranger, and cannot have an agent arm a production database. Those four
 boundaries are the product.
 
 But seven permanent founder-only steps do **not** produce a per-client tax of
-seven founder actions, because five of them are paid once for the entire
-company. The steady-state per-client founder-only load is two billing CLI
-invocations. That is a genuine ceiling and it is permanent — but it binds in
-the hundreds of clients, and the correct response when it binds is a second
-trusted human, not automation.
+seven founder actions, because **four of them — steps 1, 5, 6 and 7 — are
+paid once for the entire company.** The other three recur: step 2 per approved
+outreach batch, and steps 10 and 11 per client per cycle. (An earlier revision
+of this section said "five", which contradicted this study's own recurrence
+table in section 2; Codex caught it on PR #500 and it is corrected here. Step
+2's *setup* is one-time but its per-message review is not, so it cannot be
+counted as paid-once.)
+
+The steady-state per-client founder-only load is therefore two billing CLI
+invocations plus a share of batch outreach review. That is a genuine ceiling
+and it is permanent — but it binds in the hundreds of clients, and the correct
+response when it binds is a second trusted human, not automation.
 
 The step that binds *now*, at client one through ten, is step 4: five founder-
 days per design partner, on a shop floor, with a stopwatch. It is not a hard
-limit. It is not a security boundary. Roughly half of it is a measurement
-problem the product is already most of the way to solving, and the other half
-is a trust and training problem that needs a human but does not need *this*
-human. It is the only item on the client path where engineering effort
-converts directly into founder calendar, and it is unblocked today.
+limit and not a security boundary — it is a trust and training problem that
+needs a human but does not need *this* human.
+
+**But it is less automatable than this study first claimed.** The first
+revision described step 4 as "roughly half a measurement problem the product
+is already most of the way to solving". Checking the type definitions
+(section 4, A1) shows that is not so: of the five measurements the pilot
+requires, one is derivable from state, two need instrumentation that does not
+exist, and two are irreducibly human observations. Engineering effort still
+converts into founder calendar here, but at a worse exchange rate than stated,
+and no amount of it removes the five days. **Step 4 is delegable, not
+automatable, and delegating it is a hiring decision rather than an engineering
+one.** That is the honest shape of the near-term ceiling.
 
 **One thing this study will not claim:** that any of this makes revenue
 possible sooner. Every path to a first paying client still runs through the

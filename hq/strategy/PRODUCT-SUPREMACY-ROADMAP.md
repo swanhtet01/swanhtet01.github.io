@@ -141,15 +141,26 @@ status column in §1 for each. The operative forward sequence is now:
 5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
    decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
 6. Scaling-ceiling work, from `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md`
-   (2026-08-20): of the nine founder-only steps on the client path, seven are
-   permanent hard limits and five of those are paid ONCE for the whole company
-   — so the per-client ceiling is not "eight founder steps", it is the five
-   on-site days of the design-partner pilot. Highest-leverage unblocked item is
-   **A1: auto-measured pilot baseline and five-day evidence** (M, no
-   prerequisite) — the five measurements
-   `tools/create_shop_pilot_handoff.mjs` demands are founder-typed today,
-   nothing in `showroom/` computes them, and
-   `shop-fulfillment-lead-time-summary.ts` already shows the projection shape.
-   Both `SELF-SERVE-ONBOARDING-SPEC.md` §3.6 and
-   `PRODUCTION-ACTIVATION-RUNBOOK.md` §5 already promise this is automatic.
-   Needs its own planning pass; do not blind-implement from this line.
+   (2026-08-20, revised after Codex review on #500): of the nine founder-only
+   steps on the client path, seven are permanent hard limits and **four** of
+   those (steps 1, 5, 6, 7) are paid ONCE for the whole company — steps 10 and
+   11 recur per client per cycle and step 2 per outreach batch. So the
+   per-client ceiling is not "eight founder steps"; near-term it is the five
+   on-site days of the design-partner pilot, and in steady state it is two
+   billing CLI invocations. Top item is **A2: decouple the billing READ path
+   from the write credential** (S, verified defect —
+   `billing_rail.py`'s privileged-role assertion sits outside the
+   `require_write_privilege` conditional, so the read-only overdue projection
+   needs the same superuser-class role that inserts billing events; prereq is a
+   founder-provisioned bounded read role). **A1 (pilot measurement) was
+   re-costed from M to L and dropped to second**: it is NOT a pure projection —
+   only 1 of the 5 measurements is derivable from `CommerceState` (exception
+   rate, and only the domain-recorded subset), 2 need device-local
+   instrumentation, and 2 are irreducibly human. Do NOT implement A1 as a
+   projection: `CommerceOrder` has no per-transition timestamps, `CommerceClose`
+   has no start time, and `corrections[]` is a financial ledger, not an
+   operator-error counter — deriving those would mislabel acceptance evidence.
+   Adding order fields is backend-gated (`commerce_runtime.py` exact-field
+   contracts + founder-only release dispatch), so use the device-local
+   `shop-loyalty.ts` PR1 pattern. Each needs its own planning pass; do not
+   blind-implement from this line.
