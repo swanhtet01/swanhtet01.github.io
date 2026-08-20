@@ -2,6 +2,7 @@ import { type FormEvent, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
+import { bi } from './i18n-actions'
 import { shopBusinessTemplates } from '../products/shop/business-templates'
 import { shopIndustryPacks } from './shop-service-scheduling'
 import { managedTrialAuthConfigured } from './managed-trial'
@@ -161,7 +162,7 @@ export function SignupPage() {
         {managedDoor?.action === 'sign-in'
           ? <Link className="core-button primary" to="/login?product=shop">Sign in to your company</Link>
           : <a className="core-button primary" href={trialSignupContactUrl(record)}>Request activation</a>}
-        <button className="core-button" onClick={() => downloadClaim(record)} type="button">Save my claim file</button>
+        <button className="core-button" onClick={() => downloadClaim(record)} type="button">{bi('Save my claim file')}</button>
       </div>
     </section>
   )
@@ -179,7 +180,7 @@ export function SignupPage() {
               : <p>Your Shop workspace is ready with a full starter catalog.</p>}
           </div>
           <div className="managed-login-actions">
-            <Link className="core-button primary" to="/shop/">Open my Shop</Link>
+            <Link className="core-button primary" to="/shop/">{bi('Open my Shop')}</Link>
             <Link className="core-button" to="/settings/#controls">{carriedOver ? 'Reset this device' : 'Company controls'}</Link>
           </div>
         </section>
@@ -238,7 +239,7 @@ export function SignupPage() {
           <p>{managedDoor?.detail}</p>
         </div>
         <div className="managed-login-actions">
-          <Link className="core-button" to="/login?product=shop">Company sign in</Link>
+          <Link className="core-button" to="/login?product=shop">{bi('Company sign in')}</Link>
         </div>
       </section>
     </div>

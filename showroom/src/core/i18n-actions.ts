@@ -76,6 +76,30 @@ const ACTION_TRANSLATIONS: Record<string, ActionTranslation> = {
   'Trace': { my: 'ခြေရာခံမည်', status: 'pending_native_review' },
   'Verify': { my: 'စိစစ်အတည်ပြုမည်', status: 'pending_native_review' }, // may fold into Confirm -- needs a native call, not guessed here
   'Disconnect': { my: 'ဆက်သွယ်မှု ဖြတ်တောက်မည်', status: 'pending_native_review' },
+  // DESIGN-PROGRAM batch 2, Option B (composed-label design note in
+  // hq/strategy/DESIGN-PROGRAM.md): whole composed phrases as first-class entries,
+  // because a verb-only gloss cannot distinguish "Save client setup" from "Save
+  // restore point" for a Burmese-first reader. Drafted from the confirmed verbs
+  // above as building blocks (Save သိမ်းမည်, Open ဖွင့်မည်, Sign in ဝင်ရောက်မည်,
+  // Export ထုတ်ယူမည်, Clear ရှင်းလင်းမည်, Add ထည့်မည်) plus the app's loanword
+  // convention (ကုမ္ပဏီ company, ဖိုင် file, အော်ဒါ order, ပက်ကက် packet). Object
+  // marker ကို is dropped for button brevity except where an untranslated product
+  // name precedes the verb. ALL of these stay pending_native_review -- rule 1
+  // above means none of them renders until a native speaker signs each one off.
+  'Back to sign in': { my: 'ဝင်ရောက်ရန်သို့ ပြန်သွားမည်', status: 'pending_native_review' },
+  'Find my company': { my: 'ကျွန်ုပ်၏ကုမ္ပဏီ ရှာမည်', status: 'pending_native_review' },
+  'Open company': { my: 'ကုမ္ပဏီ ဖွင့်မည်', status: 'pending_native_review' },
+  'Open my Shop': { my: 'ကျွန်ုပ်၏ Shop ကို ဖွင့်မည်', status: 'pending_native_review' }, // "Shop" is the product name; native call needed on Shop vs ဆိုင်
+  'Company sign in': { my: 'ကုမ္ပဏီအကောင့်ဖြင့် ဝင်ရောက်မည်', status: 'pending_native_review' },
+  'Company login': { my: 'ကုမ္ပဏီအကောင့် ဝင်ရောက်မည်', status: 'pending_native_review' }, // near-synonym of "Company sign in"; reviewer may unify the two Burmese forms
+  'Save client setup': { my: 'ဖောက်သည်စီစဉ်မှု သိမ်းမည်', status: 'pending_native_review' }, // persists a form -- reviewer should check သိမ်းမည် carries "keep this record", not "download"
+  'Save restore point': { my: 'ပြန်လည်ရယူရန်အမှတ် သိမ်းမည်', status: 'pending_native_review' },
+  'Save my claim file': { my: 'ကျွန်ုပ်၏တောင်းဆိုချက်ဖိုင် သိမ်းမည်', status: 'pending_native_review' }, // downloads to disk -- the sense-drift case from the design note; may need a different verb than the form-saving entries
+  'Export full evidence': { my: 'အထောက်အထားအပြည့်အစုံ ထုတ်ယူမည်', status: 'pending_native_review' },
+  'Clear packet': { my: 'ပက်ကက် ရှင်းလင်းမည်', status: 'pending_native_review' }, // ပက်ကက် is a raw transliteration; native call needed on a plainer word for a pasted data blob
+  'Clear order packet': { my: 'အော်ဒါပက်ကက် ရှင်းလင်းမည်', status: 'pending_native_review' },
+  'Load sample packet': { my: 'နမူနာပက်ကက် ထည့်မည်', status: 'pending_native_review' },
+  'Load sample order packet': { my: 'နမူနာအော်ဒါပက်ကက် ထည့်မည်', status: 'pending_native_review' },
 }
 
 // The bilingual pattern already used everywhere in this app (SettingsPage.tsx,

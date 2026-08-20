@@ -1072,7 +1072,10 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || !coreShellSource.includes('const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null')
   || !coreShellSource.includes('const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))')
   || !coreShellSource.includes('const accountEntryRoute = loginRoute || sensitiveAccountRoute')
-  || !coreShellSource.includes('to={companyLoginPath}>Company login</Link>')
+  // Lockstep with DESIGN-PROGRAM batch 2 (Option B): the sidebar door renders through
+  // bi('Company login'), whose table entry is pending_native_review, so the visible
+  // output is still the exact English string this pin has always protected.
+  || !coreShellSource.includes("to={companyLoginPath}>{bi('Company login')}</Link>")
   || !coreShellSource.includes('aria-label="Company login"')
   || coreShellSource.includes('to={companyLoginPath}>Company sign in</Link>')
   || coreShellSource.includes('aria-label="Company sign in"')
