@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v10"
+CONTRACT = "supermega_private_trial_database_v11"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 ACTIVATION_EVIDENCE_CONTRACT = "supermega_managed_activation_evidence_v1"
@@ -29,7 +29,7 @@ SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS = frozenset(
@@ -202,6 +202,7 @@ EXPECTED_NON_OWNER_ACL = frozenset(
         ("schema", SCHEMA, BACKEND_ROLE, "USAGE", False),
         ("table", "trial_schema_meta", BACKEND_ROLE, "SELECT", False),
         ("table", "workspace_memberships", BACKEND_ROLE, "SELECT", False),
+        ("table", "workspace_memberships", BACKEND_ROLE, "INSERT", False),
         ("table", "workspace_state", BACKEND_ROLE, "SELECT", False),
         ("table", "workspace_state", BACKEND_ROLE, "INSERT", False),
         ("table", "workspace_state", BACKEND_ROLE, "UPDATE", False),
@@ -211,6 +212,7 @@ EXPECTED_NON_OWNER_ACL = frozenset(
         ("table", "approval_requests", BACKEND_ROLE, "INSERT", False),
         ("table", "approval_requests", BACKEND_ROLE, "UPDATE", False),
         ("table", "workspace_access_controls", BACKEND_ROLE, "SELECT", False),
+        ("table", "workspace_access_controls", BACKEND_ROLE, "INSERT", False),
         ("function", "workspace_is_active", BACKEND_ROLE, "EXECUTE", False),
         ("function", "actor_workspace_directory", BACKEND_ROLE, "EXECUTE", False),
         ("function", "supabase_session_is_active", BACKEND_ROLE, "EXECUTE", False),
@@ -400,6 +402,20 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
         "qual": ("app.workspace_id", "active"),
         "check": (),
     },
+    "workspace_access_controls_self_serve_insert": {
+        "table": "workspace_access_controls",
+        "command": "INSERT",
+        "permissive": "PERMISSIVE",
+        "qual": (),
+        "check": (
+            "app.workspace_id",
+            "app.actor_id",
+            "app.actor_kind",
+            "human",
+            "self_serve_claim_v1",
+            "active",
+        ),
+    },
     "workspace_memberships_access_gate": {
         "table": "workspace_memberships",
         "command": "ALL",
@@ -413,6 +429,20 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
         "permissive": "PERMISSIVE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "active"),
         "check": (),
+    },
+    "workspace_memberships_self_serve_insert": {
+        "table": "workspace_memberships",
+        "command": "INSERT",
+        "permissive": "PERMISSIVE",
+        "qual": (),
+        "check": (
+            "app.workspace_id",
+            "app.actor_id",
+            "human",
+            "active",
+            "workspace_access_controls",
+            "self_serve_claim_v1",
+        ),
     },
     "workspace_state_member_read": {
         "table": "workspace_state",
@@ -538,6 +568,10 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
         "qual": "69de59bcd4afae8fbd45a1f90dbe0513d14c3b4b168ea102636f9abb6f6daadd",
         "check": None,
     },
+    "workspace_access_controls_self_serve_insert": {
+        "qual": None,
+        "check": "5ad38c2accb211f72152b09fc0d9ecf0af10b3d446f594bed9d91111a943b3ab",
+    },
     "workspace_memberships_access_gate": {
         "qual": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
         "check": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
@@ -545,6 +579,10 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
     "workspace_memberships_self_read": {
         "qual": "c80e91747fc9319e19ff36d373cb2d07e01ea65c4085d8e766902b67b488b0b7",
         "check": None,
+    },
+    "workspace_memberships_self_serve_insert": {
+        "qual": None,
+        "check": "07bf986e840d33e2681b98000b0c30e16907bb17148cbcfed045fa8674bd11d6",
     },
     "workspace_state_member_read": {
         "qual": "0fd69d13f5845335429f2bc0254d43285c74db27185502b49d71277a1b037e29",
@@ -2257,7 +2295,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v10 schema contract; this flag never applies migrations.",
+        help="Require the complete v11 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(

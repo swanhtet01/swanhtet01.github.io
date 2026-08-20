@@ -95,6 +95,12 @@ MIGRATION_V10 = (
     / "migrations"
     / "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql"
 )
+MIGRATION_V11 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260816120000_private_trial_backend_v11_self_serve_grants.sql"
+)
 MIGRATIONS = (
     MIGRATION_PREFLIGHT,
     MIGRATION_V1,
@@ -107,6 +113,7 @@ MIGRATIONS = (
     MIGRATION_V8,
     MIGRATION_V9,
     MIGRATION_V10,
+    MIGRATION_V11,
 )
 
 PRIVATE_SCHEMA = "app_private"
@@ -141,6 +148,8 @@ EXPECTED_POLICIES = (
     "approval_requests_capability_insert",
     "approval_requests_capability_update",
     "workspace_access_controls_member_read",
+    "workspace_access_controls_self_serve_insert",
+    "workspace_memberships_self_serve_insert",
     "trial_schema_meta_backend_read",
 )
 EXPECTED_TRIGGERS = (
@@ -221,7 +230,7 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_migrations_are_unchanged_and_v8_v9_v10_are_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v8_through_v11_are_additive(self) -> None:
         preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
@@ -233,6 +242,7 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         v8 = _normalized_sql(MIGRATION_V8)
         v9 = _normalized_sql(MIGRATION_V9)
         v10 = _normalized_sql(MIGRATION_V10)
+        v11 = _normalized_sql(MIGRATION_V11)
         self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
         self.assertIn("membership.roleid = backend_record.oid", preflight)
         self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
@@ -304,6 +314,10 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         )
         self.assertIn("to supermega_trial_backend", v10)
         self.assertIn("set schema_version = 10", v10)
+        self.assertIn("private trial backend v11 requires schema version 10", v11)
+        self.assertIn("create policy workspace_access_controls_self_serve_insert", v11)
+        self.assertIn("create policy workspace_memberships_self_serve_insert", v11)
+        self.assertIn("set schema_version = 11", v11)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -1194,6 +1208,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     "approval_requests_capability_insert",
                     "approval_requests_capability_update",
                     "workspace_access_controls_member_read",
+                    "workspace_access_controls_self_serve_insert",
+                    "workspace_memberships_self_serve_insert",
                     "trial_schema_meta_backend_read",
                 ]
                 TRIGGERS = [
@@ -1433,6 +1449,20 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         "qual": "(component = 'private_trial_backend'::text)",
                         "with_check": None,
                     },
+                    "workspace_access_controls_self_serve_insert": {
+                        "table": "workspace_access_controls",
+                        "command": "INSERT",
+                        "permissive": "PERMISSIVE",
+                        "qual": None,
+                        "with_check": "((workspace_id = ( SELECT current_setting('app.workspace_id'::text, true) AS current_setting)) AND (owner_actor_id = ( SELECT current_setting('app.actor_id'::text, true) AS current_setting)) AND (( SELECT current_setting('app.actor_kind'::text, true) AS current_setting) = 'human'::text) AND (authorization_contract = 'self_serve_claim_v1'::text) AND (status = 'active'::text))",
+                    },
+                    "workspace_memberships_self_serve_insert": {
+                        "table": "workspace_memberships",
+                        "command": "INSERT",
+                        "permissive": "PERMISSIVE",
+                        "qual": None,
+                        "with_check": "((workspace_id = ( SELECT current_setting('app.workspace_id'::text, true) AS current_setting)) AND (actor_id = ( SELECT current_setting('app.actor_id'::text, true) AS current_setting)) AND (actor_kind = 'human'::text) AND (status = 'active'::text) AND (EXISTS ( SELECT 1 FROM app_private.workspace_access_controls ac WHERE ((ac.workspace_id = workspace_memberships.workspace_id) AND (ac.owner_actor_id = workspace_memberships.actor_id) AND (ac.status = 'active'::text) AND (ac.authorization_contract = 'self_serve_claim_v1'::text)))))",
+                    },
                 })
                 for contract in POLICY_CONTRACTS.values():
                     contract.setdefault("permissive", "PERMISSIVE")
@@ -1511,6 +1541,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     ("schema", "app_private", "supermega_trial_backend", "USAGE"),
                     ("table", "trial_schema_meta", "supermega_trial_backend", "SELECT"),
                     ("table", "workspace_memberships", "supermega_trial_backend", "SELECT"),
+                    ("table", "workspace_memberships", "supermega_trial_backend", "INSERT"),
                     ("table", "workspace_state", "supermega_trial_backend", "SELECT"),
                     ("table", "workspace_state", "supermega_trial_backend", "INSERT"),
                     ("table", "workspace_state", "supermega_trial_backend", "UPDATE"),
@@ -1520,6 +1551,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     ("table", "approval_requests", "supermega_trial_backend", "INSERT"),
                     ("table", "approval_requests", "supermega_trial_backend", "UPDATE"),
                     ("table", "workspace_access_controls", "supermega_trial_backend", "SELECT"),
+                    ("table", "workspace_access_controls", "supermega_trial_backend", "INSERT"),
                     ("function", "workspace_is_active", "supermega_trial_backend", "EXECUTE"),
                     ("function", "actor_workspace_directory", "supermega_trial_backend", "EXECUTE"),
                     ("function", "supabase_session_is_active", "supermega_trial_backend", "EXECUTE"),
@@ -1562,7 +1594,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 10,
+                        schema_version=0 if scenario == "wrong_version" else 11,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -1739,7 +1771,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 10,
+                                schema_version=0 if scenario == "wrong_version" else 11,
                             )
                         ]
                     if "buckets_table_exists" in q and "objects_table_exists" in q:
@@ -2411,7 +2443,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v10")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v11")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -2463,7 +2495,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 10,
+                "version": 11,
             },
         )
         self.assertEqual(
@@ -2489,8 +2521,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         self.assertEqual(
             evidence.get("grant"),
             {
-                "runtime_acl_entries": 15,
-                "expected_runtime_acl_entries": 15,
+                "runtime_acl_entries": 17,
+                "expected_runtime_acl_entries": 17,
                 "default_acl_entries": 0,
             },
         )
