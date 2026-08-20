@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopBusinessTemplates } from '../products/shop/business-templates'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
@@ -41,6 +41,7 @@ import {
   type ActionDomain,
   type PendingAccountableAction,
 } from './workspace-runtime'
+import { getStorageDurability, subscribeStorageDurability } from './storage-durability'
 import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
@@ -1367,7 +1368,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
-  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
+  const storageDurability = useSyncExternalStore(subscribeStorageDurability, getStorageDurability)
   // The installed sample id is either an industry pack id or a business template id;
   // comparing only the pack id reported a successful template install as "preserved".
   const installedShopSampleId = commerceWorkingSampleCatalogId(commerce)
@@ -2694,7 +2696,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </section>
   })() : null
 
-  const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
+  const commerceWriteBanner = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}`
@@ -2713,6 +2715,65 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? <Link to="/settings/#controls">Open Settings</Link>
         : null}
   </div>
+
+  // Durable-storage warning. Only meaningful for a local workspace: a company account
+  // keeps the record server-side, so browser eviction there costs a cache, not the books.
+  // Quota outranks eviction risk -- "writes are failing now" beats "writes may be cleared
+  // later" -- and neither is shown while the browser is still being asked.
+  const storageDurabilityNotice = managedIdentity || !(storageDurability.quotaExceeded || storageDurability.state === 'denied')
+    ? null
+    : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'evictable'} role="alert">
+      <span className="status-pill pending">{storageDurability.quotaExceeded ? 'Storage full' : 'Records at risk'}</span>
+      <p>{storageDurability.quotaExceeded
+        ? 'This device has run out of storage space. New Shop entries may not be saved until space is freed up on the device.'
+        : 'This browser would not promise to keep Shop records on this device. If the device runs low on space, records saved here can be cleared without warning.'}</p>
+      {storageDurability.quotaExceeded
+        ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
+        : <Link to="/settings/#controls">Open Settings</Link>}
+    </div>
+
+  // Stuck-till escape hatch. 'conflict' and 'unavailable' both hold canWrite false with
+  // no offered way forward -- the pending branch above gets "Reload Shop", these got
+  // nothing, so an interrupted sale could freeze the till until someone cleared site
+  // data by hand (which would take the committed records with it).
+  //
+  // The evidence is rendered above the control on purpose: the operator has to be able
+  // to see the actionId, reason and evidence reference of the change they are throwing
+  // away. When the outbox cannot be read at all, no discard is offered -- refusing to
+  // discard something unseen is the safe failure, not a worse one.
+  const commerceStuckRecoveryPanel = managedIdentity || !(commerceSync.status === 'conflict' || commerceSync.status === 'unavailable')
+    ? null
+    : <details className="evidence-disclosure commerce-stuck-recovery" open>
+      <summary><span>Unsent Shop change is holding the till</span><strong>{commerceSync.status === 'conflict' ? 'Conflict' : 'Recovery unavailable'}</strong></summary>
+      <p className="panel-copy">A change from an interrupted session was saved for recovery but never applied to the record, so Shop has paused new entries. Reload Shop to try recovering it again. If it cannot be recovered, discard it below: that removes only this unsent change, and everything already saved to the Shop record stays exactly as it is.</p>
+      {commerceStuckRecovery.loading ? <p className="form-notice">Reading the unsent change on this device.</p> : null}
+      {commerceStuckRecovery.loadError
+        ? <p className="form-notice" data-tone="error">{commerceStuckRecovery.loadError} Nothing is offered for discard while the unsent change cannot be read, so no record can be thrown away unseen.</p>
+        : null}
+      {commerceStuckRecovery.intents.length
+        ? <div className="stuck-change-list">{commerceStuckRecovery.intents.map((intent) => <article key={intent.commandId}>
+          <div><strong>{intent.eventType}</strong><small>{intent.evidence.actionId} · {intent.evidence.actor} · {formatTime(intent.evidence.capturedAt)}</small></div>
+          <p>{intent.evidence.reason}</p>
+          <small>Evidence: {intent.evidence.evidenceReference}</small>
+          <button
+            className="core-button compact"
+            disabled={Boolean(commerceStuckRecovery.discarding)}
+            onClick={() => { void discardStuckCommerceChange(intent.commandId) }}
+            type="button"
+          >{commerceStuckRecovery.discarding === intent.commandId ? 'Discarding' : 'Discard this unsent change'}</button>
+        </article>)}</div>
+        : null}
+      {!commerceStuckRecovery.loading && !commerceStuckRecovery.loadError && !commerceStuckRecovery.intents.length
+        ? <p className="form-notice">No unsent change is left on this device. Reload Shop to start taking entries again.</p>
+        : null}
+      {commerceStuckRecovery.discardError ? <p className="form-notice" data-tone="error">{commerceStuckRecovery.discardError}</p> : null}
+    </details>
+
+  const commerceBoundary = <>
+    {commerceWriteBanner}
+    {storageDurabilityNotice}
+    {commerceStuckRecoveryPanel}
+  </>
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
   // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage

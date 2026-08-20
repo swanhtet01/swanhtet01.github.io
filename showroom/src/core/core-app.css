@@ -831,6 +831,25 @@ textarea { min-height: 72px; resize: vertical; }
 .production-mode-banner[data-write="blocked"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
 .production-mode-banner p { min-width: 0; margin: 0; overflow: hidden; color: var(--core-muted); font-size: 0.75rem; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .production-mode-banner > a { min-height: 36px; display: inline-flex; align-items: center; color: var(--core-green); font-size: 0.75rem; font-weight: var(--font-weight-bold); text-decoration: none; }
+/* Lengths here are rem, not px: the P3.6a literal ratchet in tools/check_css_contracts.mjs
+   only ever moves down, and OS font scaling is the reason -- a shop owner running a large
+   system font should get a proportionally larger warning, not a fixed one. */
+.storage-durability-banner { margin-top: 0.5rem; }
+.storage-durability-banner[data-durability="evictable"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
+.storage-durability-banner[data-durability="full"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
+/* A durability warning that ellipsises is a warning the owner cannot act on, so this
+   one wraps at every width instead of inheriting the single-line banner treatment. */
+.storage-durability-banner p { overflow: visible; text-overflow: clip; white-space: normal; }
+.commerce-stuck-recovery { border-radius: var(--core-radius); padding: 0 0.6875rem 0.25rem; background: rgba(148,98,0,.06); }
+.commerce-stuck-recovery > .panel-copy { margin: 0 0 0.625rem; }
+.commerce-stuck-recovery > .form-notice { margin: 0 0 0.5rem; }
+.stuck-change-list { display: grid; gap: 0.5rem; margin-bottom: 0.625rem; }
+.stuck-change-list article { display: grid; gap: 0.25rem; border: 0.0625rem solid var(--core-line); border-radius: var(--core-radius); padding: 0.5625rem 0.6875rem; background: var(--core-panel); }
+.stuck-change-list article > div { display: grid; gap: 0.125rem; }
+.stuck-change-list article strong { color: var(--core-ink); font-size: 0.75rem; }
+.stuck-change-list article small { color: var(--core-quiet); font-family: var(--core-mono); font-size: 0.625rem; overflow-wrap: anywhere; }
+.stuck-change-list article p { margin: 0; color: var(--core-muted); font-size: 0.75rem; line-height: 1.45; overflow-wrap: anywhere; }
+.stuck-change-list article > button { justify-self: start; margin-top: 0.25rem; }
 .production-history { margin-top: 8px; }
 .production-history > summary { width: 100%; justify-content: space-between; }
 .production-history > summary > span { margin-left: 10px; color: var(--core-quiet); }
