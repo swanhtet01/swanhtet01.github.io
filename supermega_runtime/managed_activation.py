@@ -477,6 +477,23 @@ def _owner_capabilities(product: str) -> list[str]:
     return sorted(_BASE_OWNER_CAPABILITIES | _PRODUCT_CAPABILITIES[product])
 
 
+def validate_managed_trial_request(value: object) -> dict[str, Any]:
+    """Validate owner-reviewed product evidence and return a redacted binding."""
+
+    source = _source_request(value)
+    return {
+        "contract": SOURCE_REQUEST_CONTRACT,
+        "product": source["product"],
+        "workspaceLabel": source["workspaceLabel"],
+        "ownerLabel": source["ownerLabel"],
+        "templateId": source["raw"]["templateId"],
+        "requestDigest": _digest(source["raw"]),
+        "evidence": deepcopy(source["evidence"]),
+        "rawRecordsIncluded": False,
+        "secretValuesExposed": False,
+    }
+
+
 def owner_capabilities_for_products(products: Sequence[str]) -> list[str]:
     normalized = tuple(products)
     if not normalized or len(normalized) > len(_PRODUCT_CAPABILITIES) or len(set(normalized)) != len(normalized):
@@ -2118,5 +2135,6 @@ __all__ = [
     "compile_multi_product_activation_plan",
     "main",
     "validate_activation_plan",
+    "validate_managed_trial_request",
     "validate_multi_product_activation_plan",
 ]

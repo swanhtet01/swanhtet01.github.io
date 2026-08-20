@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from tools.assess_client_activation_readiness import (
     CONTRACT,
@@ -129,6 +130,91 @@ class ClientActivationReadinessTests(unittest.TestCase):
             report["gates"]["hostedPostgres17ProofReady"] = True
             with self.assertRaises(ClientActivationReadinessError):
                 verify_client_activation_readiness(report, preparation, portal)
+
+    def test_complete_reviewed_requests_advance_to_target_binding_only(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-readiness-complete-") as temporary:
+            directory = Path(temporary)
+            preparation_path = self._preparation(directory, real_client_data=True)
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            portal = build_client_portal_provisioning_bundle(preparation)
+            requests = [
+                {"product": "shop", "templateId": "social-commerce"},
+                {"product": "website", "templateId": "lead-generation"},
+                {"product": "ecommerce", "templateId": "social-storefront"},
+            ]
+
+            def validate(request: dict[str, str]) -> dict[str, object]:
+                return {
+                    "contract": "supermega.managed_trial_request.v1",
+                    "product": request["product"],
+                    "workspaceLabel": "Lotus Wellness Spa",
+                    "ownerLabel": "Mya Mya Win",
+                    "templateId": request["templateId"],
+                    "requestDigest": "sha256:" + {
+                        "shop": "1", "website": "2", "ecommerce": "3",
+                    }[request["product"]] * 64,
+                    "evidence": {},
+                    "rawRecordsIncluded": False,
+                    "secretValuesExposed": False,
+                }
+
+            with mock.patch(
+                "tools.assess_client_activation_readiness.validate_managed_trial_request",
+                side_effect=validate,
+            ):
+                partial = build_client_activation_readiness(preparation, portal, requests[:1])
+                self.assertEqual(partial["status"], "blocked_for_real_client_evidence")
+                self.assertEqual(partial["products"][0]["managedTrialRequestStatus"], "verified")
+                self.assertEqual(partial["products"][1]["managedTrialRequestStatus"], "not_supplied")
+                self.assertFalse(partial["gates"]["allManagedTrialRequestsReady"])
+                self.assertNotIn("managed_trial_request_required:shop", partial["blockingGates"])
+                self.assertIn("managed_trial_request_required:website", partial["blockingGates"])
+
+                report = build_client_activation_readiness(preparation, portal, requests)
+                self.assertEqual(report["status"], "ready_for_target_binding")
+                self.assertTrue(report["gates"]["allManagedTrialRequestsReady"])
+                self.assertTrue(report["gates"]["allAcceptedProductOutcomesReady"])
+                self.assertTrue(report["gates"]["allApprovedAiContextsReady"])
+                self.assertTrue(all(row["managedTrialRequestStatus"] == "verified" for row in report["products"]))
+                self.assertNotIn("managed_trial_request_required:shop", report["blockingGates"])
+                self.assertIn("hosted_postgres17_proof_required", report["blockingGates"])
+                self.assertFalse(report["gates"]["hostedPostgres17ProofReady"])
+
+    def test_request_identity_mismatch_and_noncanonical_order_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-readiness-request-reject-") as temporary:
+            directory = Path(temporary)
+            preparation_path = self._preparation(directory, real_client_data=True)
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            portal = build_client_portal_provisioning_bundle(preparation)
+
+            def validate(request: dict[str, str]) -> dict[str, object]:
+                return {
+                    "product": request["product"],
+                    "workspaceLabel": request.get("workspace", "Lotus Wellness Spa"),
+                    "ownerLabel": "Mya Mya Win",
+                    "templateId": request["templateId"],
+                    "requestDigest": "sha256:" + "4" * 64,
+                }
+
+            with mock.patch(
+                "tools.assess_client_activation_readiness.validate_managed_trial_request",
+                side_effect=validate,
+            ):
+                with self.assertRaisesRegex(ClientActivationReadinessError, "order"):
+                    build_client_activation_readiness(
+                        preparation,
+                        portal,
+                        [
+                            {"product": "website", "templateId": "lead-generation"},
+                            {"product": "shop", "templateId": "social-commerce"},
+                        ],
+                    )
+                with self.assertRaisesRegex(ClientActivationReadinessError, "does not match"):
+                    build_client_activation_readiness(
+                        preparation,
+                        portal,
+                        [{"product": "shop", "templateId": "social-commerce", "workspace": "Other Tenant"}],
+                    )
 
 
 if __name__ == "__main__":

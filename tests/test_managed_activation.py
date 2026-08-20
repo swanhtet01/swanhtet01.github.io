@@ -30,6 +30,7 @@ from supermega_runtime.managed_activation import (
     compile_multi_product_activation_plan,
     main,
     validate_activation_plan,
+    validate_managed_trial_request,
     validate_multi_product_activation_plan,
     _validate_admin_target,
 )
@@ -490,6 +491,18 @@ class FakeCursor:
 
 
 class ManagedActivationPlanTests(unittest.TestCase):
+    def test_managed_trial_request_validator_returns_only_redacted_binding(self) -> None:
+        validated = validate_managed_trial_request(managed_trial_request_for("ecommerce"))
+        self.assertEqual(validated["contract"], "supermega.managed_trial_request.v1")
+        self.assertEqual(validated["product"], "ecommerce")
+        self.assertEqual(validated["workspaceLabel"], "Mingalar Fresh Mart")
+        self.assertEqual(validated["ownerLabel"], "Swan Htet")
+        self.assertEqual(validated["templateId"], "social-storefront")
+        self.assertRegex(validated["requestDigest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertFalse(validated["rawRecordsIncluded"])
+        self.assertFalse(validated["secretValuesExposed"])
+        self.assertNotIn("raw", validated)
+
     def test_multi_product_plan_is_one_tenant_with_union_capabilities(self) -> None:
         plan = compile_multi_product_activation_plan(
             [managed_trial_request_for("shop"), managed_trial_request_for("plant")],

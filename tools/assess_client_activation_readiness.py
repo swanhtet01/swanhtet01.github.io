@@ -19,9 +19,19 @@ from tools.prepare_client_portal_provisioning import (
     _verify_preparation,
     verify_client_portal_provisioning_bundle,
 )
+from supermega_runtime.managed_activation import (
+    ManagedActivationError,
+    validate_managed_trial_request,
+)
 
 
-CONTRACT = "supermega.client_activation_readiness.v1"
+CONTRACT = "supermega.client_activation_readiness.v2"
+_ACTIVATION_PRODUCT = {
+    "commerce": "shop",
+    "production": "plant",
+    "website": "website",
+    "ecommerce": "ecommerce",
+}
 _SYNTHETIC_IDENTITY = re.compile(
     r"(?:\bpilot\b|\bdemo\b|\btest\b|placeholder|not named|implementation owner)",
     re.IGNORECASE,
@@ -55,6 +65,7 @@ def _identity_is_real(value: object) -> bool:
 def build_client_activation_readiness(
     preparation: Mapping[str, Any],
     portal_bundle: Mapping[str, Any],
+    managed_requests: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     verified_portal = verify_client_portal_provisioning_bundle(portal_bundle, preparation)
     client = preparation.get("client")
@@ -66,12 +77,35 @@ def build_client_activation_readiness(
     owner = client.get("owner")
     workspace_ready = _identity_is_real(workspace)
     owner_ready = _identity_is_real(owner)
+    validated_requests = [validate_managed_trial_request(request) for request in managed_requests]
+    request_products = [request["product"] for request in validated_requests]
+    canonical_request_products = [
+        _ACTIVATION_PRODUCT[str(product["product"])]
+        for product in products
+        if _ACTIVATION_PRODUCT[str(product["product"])] in request_products
+    ]
+    if request_products != canonical_request_products or len(set(request_products)) != len(request_products):
+        raise ClientActivationReadinessError(
+            "Managed trial requests must be unique and follow the selected product order."
+        )
+    requests_by_product = {request["product"]: request for request in validated_requests}
     product_rows = []
     for product in products:
         if not isinstance(product, Mapping):
             raise ClientActivationReadinessError("Client product preparation is invalid.")
         source_mode = product.get("sourceMode")
         data_ready = source_mode == "client_csv" and int(product.get("rowCount", 0)) > 0
+        activation_product = _ACTIVATION_PRODUCT[str(product["product"])]
+        managed_request = requests_by_product.get(activation_product)
+        if managed_request is not None and (
+            managed_request["workspaceLabel"] != workspace
+            or managed_request["ownerLabel"] != owner
+            or managed_request["templateId"] != product["templateId"]
+        ):
+            raise ClientActivationReadinessError(
+                f"Managed trial request identity or template does not match {product['label']}."
+            )
+        request_ready = managed_request is not None
         product_rows.append({
             "product": product["product"],
             "productId": next(
@@ -83,17 +117,21 @@ def build_client_activation_readiness(
             "sourceMode": source_mode,
             "rowCount": product["rowCount"],
             "dataStatus": "reviewed_client_data" if data_ready else "sample_fixture_only",
-            "acceptedOutcomeStatus": "not_supplied",
-            "approvedAiContextStatus": "not_supplied",
-            "managedTrialRequestStatus": "not_supplied",
+            "acceptedOutcomeStatus": "verified" if request_ready else "not_supplied",
+            "approvedAiContextStatus": "verified" if request_ready else "not_supplied",
+            "managedTrialRequestStatus": "verified" if request_ready else "not_supplied",
+            "managedTrialRequestDigest": managed_request["requestDigest"] if request_ready else None,
             "nextAction": (
-                "Run one measurable workflow, accept the outcome, approve the summary-only AI context, and export the managed trial request."
+                "This product request is verified and ready to bind into the tenant activation plan."
+                if request_ready and data_ready
+                else "Run one measurable workflow, accept the outcome, approve the summary-only AI context, and export the managed trial request."
                 if data_ready
                 else "Replace the sample fixture with reviewed client CSV data before measuring a product outcome."
             ),
         })
 
     all_client_data_ready = all(row["dataStatus"] == "reviewed_client_data" for row in product_rows)
+    all_managed_requests_ready = len(validated_requests) == len(product_rows)
     blocking_gates = []
     if not workspace_ready:
         blocking_gates.append("real_workspace_identity_required")
@@ -102,11 +140,12 @@ def build_client_activation_readiness(
     for row in product_rows:
         if row["dataStatus"] != "reviewed_client_data":
             blocking_gates.append(f"reviewed_client_data_required:{row['productId']}")
-        blocking_gates.extend((
-            f"accepted_product_outcome_required:{row['productId']}",
-            f"approved_ai_context_required:{row['productId']}",
-            f"managed_trial_request_required:{row['productId']}",
-        ))
+        if row["managedTrialRequestStatus"] != "verified":
+            blocking_gates.extend((
+                f"accepted_product_outcome_required:{row['productId']}",
+                f"approved_ai_context_required:{row['productId']}",
+                f"managed_trial_request_required:{row['productId']}",
+            ))
     blocking_gates.extend((
         "supabase_owner_identity_required",
         "owner_activation_approval_required",
@@ -116,8 +155,12 @@ def build_client_activation_readiness(
 
     payload: dict[str, Any] = {
         "contract": CONTRACT,
-        "version": 1,
-        "status": "blocked_for_real_client_evidence",
+        "version": 2,
+        "status": (
+            "ready_for_target_binding"
+            if workspace_ready and owner_ready and all_client_data_ready and all_managed_requests_ready
+            else "blocked_for_real_client_evidence"
+        ),
         "client": {
             "workspace": workspace,
             "owner": owner,
@@ -127,6 +170,9 @@ def build_client_activation_readiness(
         "source": {
             "preparationDigest": preparation["bundleDigest"],
             "portalProvisioningDigest": verified_portal["bundleDigest"],
+            "managedTrialRequestDigests": [
+                request["requestDigest"] for request in validated_requests
+            ],
         },
         "products": product_rows,
         "gates": {
@@ -134,9 +180,9 @@ def build_client_activation_readiness(
             "realWorkspaceIdentityReady": workspace_ready,
             "namedClientOwnerReady": owner_ready,
             "allReviewedClientDataReady": all_client_data_ready,
-            "allAcceptedProductOutcomesReady": False,
-            "allApprovedAiContextsReady": False,
-            "allManagedTrialRequestsReady": False,
+            "allAcceptedProductOutcomesReady": all_managed_requests_ready,
+            "allApprovedAiContextsReady": all_managed_requests_ready,
+            "allManagedTrialRequestsReady": all_managed_requests_ready,
             "supabaseOwnerIdentityReady": False,
             "ownerActivationApprovalReady": False,
             "protectedReleaseReady": False,
@@ -169,8 +215,9 @@ def verify_client_activation_readiness(
     report: Mapping[str, Any],
     preparation: Mapping[str, Any],
     portal_bundle: Mapping[str, Any],
+    managed_requests: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
-    expected = build_client_activation_readiness(preparation, portal_bundle)
+    expected = build_client_activation_readiness(preparation, portal_bundle, managed_requests)
     if dict(report) != expected:
         raise ClientActivationReadinessError("Activation readiness report is stale or altered.")
     return deepcopy(expected)
@@ -193,6 +240,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("command", choices=("assess", "verify"))
     parser.add_argument("--preparation", required=True)
     parser.add_argument("--portal-bundle", required=True)
+    parser.add_argument("--managed-request-file", action="append", default=[])
     parser.add_argument("--report")
     parser.add_argument("--output")
     return parser
@@ -203,17 +251,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         preparation = _verify_preparation(args.preparation)
         portal_bundle = _read_json(args.portal_bundle, "Portal provisioning bundle")
+        managed_requests = [
+            _read_json(path, f"Managed trial request {index}")
+            for index, path in enumerate(args.managed_request_file, start=1)
+        ]
         if args.command == "assess":
             if not args.output or args.report:
                 raise ClientActivationReadinessError("Assess requires --output only.")
-            report = build_client_activation_readiness(preparation, portal_bundle)
+            report = build_client_activation_readiness(preparation, portal_bundle, managed_requests)
             output = _write_exclusive(args.output, report)
             result = {"output": str(output), **report}
         else:
             if not args.report or args.output:
                 raise ClientActivationReadinessError("Verify requires --report only.")
             report = _read_json(args.report, "Activation readiness report")
-            result = verify_client_activation_readiness(report, preparation, portal_bundle)
+            result = verify_client_activation_readiness(
+                report, preparation, portal_bundle, managed_requests
+            )
         print(json.dumps({
             "ok": True,
             "contract": CONTRACT,
@@ -225,7 +279,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             "productionActivationPerformed": False,
         }, ensure_ascii=False, separators=(",", ":")))
         return 0
-    except (ClientActivationReadinessError, ClientPortalProvisioningError, KeyError, TypeError, ValueError) as exc:
+    except (
+        ClientActivationReadinessError,
+        ClientPortalProvisioningError,
+        ManagedActivationError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
         print(json.dumps({
             "ok": False,
             "contract": CONTRACT,
