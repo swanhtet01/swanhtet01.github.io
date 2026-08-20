@@ -24,7 +24,6 @@ from supermega_runtime.trial_store import TrialValidationError
 
 SOURCE_REQUEST_CONTRACT = "supermega.managed_trial_request.v1"
 ACTIVATION_PLAN_CONTRACT = "supermega.managed_workspace_activation_plan.v1"
-MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT = "supermega.managed_workspace_activation_plan.v2"
 ACTIVATION_RECEIPT_CONTRACT = "supermega.managed_workspace_activation_receipt.v2"
 SUSPENSION_RECEIPT_CONTRACT = "supermega.managed_workspace_suspension_receipt.v2"
 ACTIVATION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_activation_event.v1"
@@ -477,18 +476,6 @@ def _owner_capabilities(product: str) -> list[str]:
     return sorted(_BASE_OWNER_CAPABILITIES | _PRODUCT_CAPABILITIES[product])
 
 
-def owner_capabilities_for_products(products: Sequence[str]) -> list[str]:
-    normalized = tuple(products)
-    if not normalized or len(normalized) > len(_PRODUCT_CAPABILITIES) or len(set(normalized)) != len(normalized):
-        raise ManagedActivationError("Managed activation products must be unique and non-empty.")
-    if any(product not in _PRODUCT_CAPABILITIES for product in normalized):
-        raise ManagedActivationError("Managed activation product is unsupported.")
-    capabilities = set(_BASE_OWNER_CAPABILITIES)
-    for product in normalized:
-        capabilities.update(_PRODUCT_CAPABILITIES[product])
-    return sorted(capabilities)
-
-
 def compile_activation_plan(
     request: object,
     *,
@@ -578,78 +565,6 @@ def compile_activation_plan(
     }
     plan["planDigest"] = _digest(plan)
     return validate_activation_plan(plan, now=generated)
-
-
-def compile_multi_product_activation_plan(
-    requests: Sequence[object],
-    *,
-    workspace_id: str,
-    owner_actor_id: str,
-    approval_id: str,
-    approved_by: str,
-    approved_at: str,
-    project_ref: str,
-    release_commit: str,
-    admin_ca_sha256: str,
-    now: datetime | None = None,
-) -> dict[str, Any]:
-    """Bind several independently reviewed products to one atomic tenant activation."""
-
-    generated = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    source_plans = [
-        compile_activation_plan(
-            request,
-            workspace_id=workspace_id,
-            owner_actor_id=owner_actor_id,
-            approval_id=approval_id,
-            approved_by=approved_by,
-            approved_at=approved_at,
-            project_ref=project_ref,
-            release_commit=release_commit,
-            admin_ca_sha256=admin_ca_sha256,
-            now=generated,
-        )
-        for request in requests
-    ]
-    products = [plan["product"] for plan in source_plans]
-    canonical_order = [product for product in _PRODUCT_CAPABILITIES if product in products]
-    if products != canonical_order or len(products) < 2 or len(set(products)) != len(products):
-        raise ManagedActivationError("Multi-product activation requests must be unique and canonically ordered.")
-    first = source_plans[0]
-    identity_fields = ("createdAt", "expiresAt", "workspaceId", "workspaceLabel", "ownerActorId", "ownerLabel", "approval", "target")
-    if any(any(plan[field] != first[field] for field in identity_fields) for plan in source_plans[1:]):
-        raise ManagedActivationError("Multi-product activation identity or target changed between products.")
-    source_digest = _digest([plan["planDigest"] for plan in source_plans])
-    activation_id = str(uuid5(NAMESPACE_URL, f"{MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT}:{first['workspaceId']}:{first['ownerActorId']}:{source_digest}"))
-    compensation_authorization_id = str(
-        uuid5(UUID(approval_id), f"{MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT}:automatic-compensation:{activation_id}")
-    )
-    plan: dict[str, Any] = {
-        "contract": MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
-        "version": 2,
-        "activationId": activation_id,
-        "createdAt": first["createdAt"],
-        "expiresAt": first["expiresAt"],
-        "sourceRequestDigest": source_digest,
-        "workspaceId": first["workspaceId"],
-        "workspaceLabel": first["workspaceLabel"],
-        "ownerActorId": first["ownerActorId"],
-        "ownerLabel": first["ownerLabel"],
-        "products": products,
-        "ownerCapabilities": owner_capabilities_for_products(products),
-        "approval": deepcopy(first["approval"]),
-        "target": deepcopy(first["target"]),
-        "sourcePlans": deepcopy(source_plans),
-        "operations": deepcopy(first["operations"]),
-        "rollback": {
-            **deepcopy(first["rollback"]),
-            "authorizationId": compensation_authorization_id,
-        },
-        "forbiddenActions": deepcopy(first["forbiddenActions"]),
-        "secretValuesExposed": False,
-    }
-    plan["planDigest"] = _digest(plan)
-    return validate_multi_product_activation_plan(plan, now=generated)
 
 
 def validate_activation_plan(
@@ -818,97 +733,6 @@ def validate_activation_plan(
     if activation_id != expected_activation_id:
         raise ManagedActivationError("Managed activation identity is invalid.")
     return deepcopy(dict(plan))
-
-
-def validate_multi_product_activation_plan(
-    value: object,
-    *,
-    now: datetime | None = None,
-    require_current: bool = False,
-) -> dict[str, Any]:
-    plan = _exact(
-        value,
-        (
-            "contract", "version", "activationId", "createdAt", "expiresAt",
-            "sourceRequestDigest", "workspaceId", "workspaceLabel", "ownerActorId",
-            "ownerLabel", "products", "ownerCapabilities", "approval", "target",
-            "sourcePlans", "operations", "rollback", "forbiddenActions",
-            "secretValuesExposed", "planDigest",
-        ),
-        "Multi-product managed activation plan",
-    )
-    if plan["contract"] != MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT or plan["version"] != 2:
-        raise ManagedActivationError("Multi-product managed activation plan contract is invalid.")
-    created = _timestamp(plan["createdAt"], "Activation creation timestamp")
-    expires = _timestamp(plan["expiresAt"], "Activation expiry timestamp")
-    if expires - created != PLAN_TTL:
-        raise ManagedActivationError("Managed activation plan lifetime is invalid.")
-    if require_current and expires < (now or datetime.now(timezone.utc)).astimezone(timezone.utc):
-        raise ManagedActivationError("Managed activation plan expired and must be rebuilt from current evidence.")
-    source_plans_value = plan["sourcePlans"]
-    if not isinstance(source_plans_value, list) or len(source_plans_value) < 2 or len(source_plans_value) > len(_PRODUCT_CAPABILITIES):
-        raise ManagedActivationError("Multi-product activation source plans are incomplete.")
-    source_plans = [validate_activation_plan(source, now=now, require_current=require_current) for source in source_plans_value]
-    products = [source["product"] for source in source_plans]
-    canonical_order = [product for product in _PRODUCT_CAPABILITIES if product in products]
-    if products != canonical_order or len(set(products)) != len(products) or plan["products"] != products:
-        raise ManagedActivationError("Multi-product activation products are invalid.")
-    first = source_plans[0]
-    identity_fields = ("createdAt", "expiresAt", "workspaceId", "workspaceLabel", "ownerActorId", "ownerLabel", "approval", "target")
-    if any(any(source[field] != first[field] for field in identity_fields) for source in source_plans[1:]):
-        raise ManagedActivationError("Multi-product activation identity or target changed between products.")
-    for field in identity_fields:
-        if plan[field] != first[field]:
-            raise ManagedActivationError("Multi-product activation envelope changed reviewed identity or target.")
-    capabilities = plan["ownerCapabilities"]
-    if not isinstance(capabilities, list) or capabilities != owner_capabilities_for_products(products):
-        raise ManagedActivationError("Multi-product activation owner capabilities are invalid.")
-    source_digest = _digest([source["planDigest"] for source in source_plans])
-    if plan["sourceRequestDigest"] != source_digest:
-        raise ManagedActivationError("Multi-product activation source digest is invalid.")
-    activation_id = _uuid(plan["activationId"], "Activation ID")
-    expected_activation_id = str(
-        uuid5(NAMESPACE_URL, f"{MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT}:{first['workspaceId']}:{first['ownerActorId']}:{source_digest}")
-    )
-    if activation_id != expected_activation_id:
-        raise ManagedActivationError("Multi-product activation identity is invalid.")
-    if plan["operations"] != first["operations"] or plan["forbiddenActions"] != first["forbiddenActions"]:
-        raise ManagedActivationError("Multi-product activation boundaries changed.")
-    rollback = _exact(
-        plan["rollback"],
-        ("operation", "authorizationId", "authorizationScope", "trigger", "deletesCustomerData", "restoresBrowserLocalMode"),
-        "Activation rollback",
-    )
-    expected_authorization_id = str(
-        uuid5(UUID(str(first["approval"]["approvalId"])), f"{MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT}:automatic-compensation:{activation_id}")
-    )
-    if (
-        rollback["authorizationId"] != expected_authorization_id
-        or {key: rollback[key] for key in rollback if key != "authorizationId"}
-        != {key: first["rollback"][key] for key in first["rollback"] if key != "authorizationId"}
-    ):
-        raise ManagedActivationError("Multi-product activation rollback is invalid.")
-    if plan["secretValuesExposed"] is not False:
-        raise ManagedActivationError("Managed activation plan must not expose secrets.")
-    plan_digest = plan["planDigest"]
-    if not isinstance(plan_digest, str) or not _SHA256.fullmatch(plan_digest):
-        raise ManagedActivationError("Managed activation digest is invalid.")
-    recomputed = deepcopy(dict(plan))
-    del recomputed["planDigest"]
-    if _digest(recomputed) != plan_digest:
-        raise ManagedActivationError("Managed activation plan digest is invalid.")
-    return deepcopy(dict(plan))
-
-
-def _validate_supported_activation_plan(
-    value: object,
-    *,
-    now: datetime | None = None,
-    require_current: bool = False,
-) -> dict[str, Any]:
-    if isinstance(value, Mapping) and value.get("contract") == MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT:
-        return validate_multi_product_activation_plan(value, now=now, require_current=require_current)
-    return validate_activation_plan(value, now=now, require_current=require_current)
 
 
 def _row_value(row: object, key: str, index: int) -> Any:
@@ -1353,7 +1177,7 @@ class ManagedWorkspaceProvisioner:
         verified_owner_session_id: str,
         decision_note: str,
     ) -> dict[str, Any]:
-        plan = _validate_supported_activation_plan(plan_value, require_current=True)
+        plan = validate_activation_plan(plan_value, require_current=True)
         verified_owner = _uuid(verified_owner_actor_id, "Verified owner actor ID")
         verified_session = _uuid(verified_owner_session_id, "Verified owner session ID")
         note = _visible_text(decision_note, "Activation authorization note", 500)
@@ -1433,7 +1257,7 @@ class ManagedWorkspaceProvisioner:
             connection.close()
 
     def inspect(self, plan_value: object) -> dict[str, Any]:
-        plan = _validate_supported_activation_plan(plan_value)
+        plan = validate_activation_plan(plan_value)
         connection = self._connect()
         try:
             with connection.transaction():
@@ -1484,7 +1308,7 @@ class ManagedWorkspaceProvisioner:
             connection.close()
 
     def apply(self, plan_value: object) -> dict[str, Any]:
-        plan = _validate_supported_activation_plan(plan_value, require_current=True)
+        plan = validate_activation_plan(plan_value, require_current=True)
         connection = self._connect()
         try:
             with connection.transaction():
@@ -1554,15 +1378,10 @@ class ManagedWorkspaceProvisioner:
                         "sourceRequestDigest": plan["sourceRequestDigest"],
                         "approval": plan["approval"],
                         "target": plan["target"],
+                        "product": plan["product"],
                         "ownerCapabilities": plan["ownerCapabilities"],
-                        "evidence": plan.get("evidence", {
-                            source["product"]: source["evidence"] for source in plan.get("sourcePlans", [])
-                        }),
+                        "evidence": plan["evidence"],
                     }
-                    if "products" in plan:
-                        payload["products"] = plan["products"]
-                    else:
-                        payload["product"] = plan["product"]
                     cursor.execute(
                         """
                         insert into app_private.workspace_events (
@@ -1601,7 +1420,7 @@ class ManagedWorkspaceProvisioner:
         suspended_by: str,
         reason: str,
     ) -> dict[str, Any]:
-        plan = _validate_supported_activation_plan(plan_value)
+        plan = validate_activation_plan(plan_value)
         approval_id = _approval_id(suspension_approval_id, "Suspension approval ID")
         actor = _uuid(suspended_by, "Suspension operator actor ID")
         note = _visible_text(reason, "Suspension reason", 500)
@@ -2096,14 +1915,11 @@ __all__ = [
     "ACTIVATION_AUTHORIZATION_CONTRACT",
     "ACTIVATION_PLAN_CONTRACT",
     "ACTIVATION_RECEIPT_CONTRACT",
-    "MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT",
     "ManagedActivationConflict",
     "ManagedActivationError",
     "ManagedWorkspaceProvisioner",
     "SUSPENSION_RECEIPT_CONTRACT",
     "compile_activation_plan",
-    "compile_multi_product_activation_plan",
     "main",
     "validate_activation_plan",
-    "validate_multi_product_activation_plan",
 ]
