@@ -232,12 +232,8 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
   const [resolved, setResolved] = useState<{ key: string; access: ManagedPortalAccess }>({ key: 'local', access: localPortalAccess })
 
   useEffect(() => {
+    if (!enabled || !selectedWorkspace) return undefined
     let active = true
-    if (!enabled || !selectedWorkspace) {
-      setResolved({ key: accessKey, access: localPortalAccess })
-      return () => { active = false }
-    }
-    setResolved({ key: accessKey, access: { status: 'checking', products: [], workspaceId: '' } })
     void import('./managed-trial')
       .then(async ({ currentManagedIdentity, loadManagedBootstrap, managedProductsFromBootstrap }) => {
         const identity = await currentManagedIdentity()
@@ -272,6 +268,7 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
     return () => { active = false }
   }, [accessKey, enabled, selectedWorkspace])
 
+  if (!enabled || !selectedWorkspace) return localPortalAccess
   if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
   return resolved.access
 }
