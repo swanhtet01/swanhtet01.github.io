@@ -2976,7 +2976,10 @@ if (!coreSource.includes("from './commerce-order-draft'")
   || !rejectedEcommerceNavigationBlock.includes("navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })")
   || !coreSource.includes('Loading orders')
   || !coreSource.includes('Confirmed order left a saved recovery copy')
-  || !coreSource.includes('Recovery unavailable')
+  // Pinned as the whole order-draft expression rather than the bare 'Recovery unavailable'
+  // label: PR #505's stuck-till panel introduced a second occurrence of that label, after
+  // which the short form could no longer fail even if this composer control were deleted.
+  || !coreSource.includes("orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'")
   || !coreSource.includes('expectedInvalidFingerprint: invalidFingerprintAtDiscard')
   || !coreSource.includes('Unfinished order saved on this device')
   || !coreSource.includes('Source-message and Ecommerce links are never recovered.')
