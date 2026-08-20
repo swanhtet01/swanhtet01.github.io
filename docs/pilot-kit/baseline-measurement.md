@@ -2,7 +2,7 @@
 
 Fill this in WITH the shop owner, in person, before day 1 of the five-day pilot. Print it or copy it into a private note; it stays in the founder's private workspace.
 
-Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v4`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `bounded-managed-pilot-rehearsal` can be prepared, and the Shop work order `shop-managed-order-close-pilot` names its own requirement plainly: "named operator, baseline, and five-day evidence plan" (`hq/portfolio.json`). The four derived numbers in section 4 are exactly the baseline fields the pilot handoff generator (tools/create_shop_pilot_handoff.mjs, npm script `client:pilot:handoff`) refuses to run without.
+Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v4`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `managed-production-activation` can produce accepted Shop-pilot evidence, and the Shop work order `shop-managed-order-close-pilot` names its own requirement plainly: "named operator, baseline, and five-day evidence plan" (`hq/portfolio.json`). The four derived numbers in section 4 are exactly the baseline fields the pilot handoff generator (tools/create_shop_pilot_handoff.mjs, npm script `client:pilot:handoff`) refuses to run without.
 
 ## Rules of measurement
 
