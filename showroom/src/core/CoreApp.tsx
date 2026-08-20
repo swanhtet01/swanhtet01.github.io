@@ -912,9 +912,19 @@ const ownerFacingActionErrors: readonly { match: RegExp; message: string }[] = [
   },
 ]
 
+// Validator strings are recognisable by shape: an array index like `orders[3]` or a dotted
+// internal field path like `completion.capturedAt`. Most refusals in this app already raise
+// sentences written for the owner ('The Shop state changed ... Nothing was written.'), and
+// replacing those with a generic line would lose information rather than add it. Only rewrite
+// what actually reads as machine output.
+const technicalErrorShape = /\[\d+\]|\b[a-z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*\b/
+
 function ownerFacingActionError(detail: string) {
-  return ownerFacingActionErrors.find((entry) => entry.match.test(detail))?.message
-    ?? 'This change was not applied, so nothing was recorded. Your existing records are untouched.'
+  const known = ownerFacingActionErrors.find((entry) => entry.match.test(detail))
+  if (known) return known.message
+  return technicalErrorShape.test(detail)
+    ? 'This change was not applied, so nothing was recorded. Your existing records are untouched.'
+    : detail
 }
 
 function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
