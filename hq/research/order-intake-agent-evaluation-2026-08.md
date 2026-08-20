@@ -639,3 +639,32 @@ future model change brings p95 under 5s, this amendment retires.
   trips the platform safety classifier); it should be run by the founder in
   a normal shell with `OPENAI_API_KEY` exported, or from CI with the key as
   a secret, then scored with `python tools/evaluate_order_intake_results.py`.
+- **Run 6 attempt (2026-08-20): NOT RUN — blocked, nothing measured, nothing
+  counts toward the gate.** Full write-up:
+  `hq/research/order-intake-eval-run6-attempt-2026-08-20.md`. The blocker is
+  now larger than the run-5 note described. Two independent causes: (a) no
+  `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` in the agent environment, so
+  `order_intake_provider_from_environment()` returns None and the runner exits
+  2 with `order_intake_api_key_missing` having made zero network calls (the
+  designed fail-closed path, pinned by
+  `tests/test_order_intake_provider.py::test_selection_never_performs_network_io`);
+  and (b) **new** — the agent sandbox's outbound proxy answers 403 to CONNECT
+  for `OPENAI_RESPONSES_URL` (3/3 attempts, unauthenticated), while
+  `ANTHROPIC_MESSAGES_URL` sits on the proxy's direct-connect list and is
+  reachable. So exporting a key inside an agent sandbox would still not produce
+  run 6; the run needs a shell with real egress to the OpenAI endpoint. The
+  reachable Anthropic provider is deliberately NOT used as a substitute: it
+  pins `claude-sonnet-5`, a different model class from the `gpt-5-mini`
+  reasoning-effort-low path runs 2-5 used and that amendment 1's relaxed p95
+  was justified against, so scoring it against these thresholds would be a
+  second baseline mislabelled as run 6. What WAS confirmed offline, and is a
+  harness proof only rather than any gate evidence:
+  `tools/run_order_intake_eval.py --self-test` passes 20/20 (it builds drafts
+  from the corpus's own expected values, so it is tautological with respect to
+  model quality) and all 44 tests in `tests/test_order_intake.py` +
+  `tests/test_order_intake_provider.py` are green, i.e. the post-#425 corpus,
+  draft builder, negation guard and scorer still agree with each other.
+  Correction effort was NOT recorded in either of its two senses — the scorer
+  proxy `required_correction_rate` and the §9 human
+  `fields_corrected / total_extracted_fields` are both downstream of a live
+  run. No stub provider was written and no results document was fabricated.

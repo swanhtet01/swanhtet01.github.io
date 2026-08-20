@@ -81,6 +81,14 @@ Ranked; each item names its gate.
    quoting its source text. Gate: run the server-only eval, record correction
    effort. First and only until its eval passes. This is the single
    highest-value AI feature for the Myanmar channel-commerce reality.
+   **Status 2026-08-20: run 6 attempted, BLOCKED, nothing measured —
+   `hq/research/order-intake-eval-run6-attempt-2026-08-20.md`. Two independent
+   blockers: no provider key in an agent environment (fails closed correctly,
+   zero network calls, verified), and the agent proxy denies CONNECT to the
+   OpenAI endpoint every prior run used, so a key alone would not unblock it.
+   Needs a founder or CI shell with egress to that endpoint and
+   `OPENAI_API_KEY` exported. Do not substitute the reachable Anthropic path —
+   different model class, that would be a second baseline, not run 6.**
 2. **Daily close owner brief.** Plain-language end-of-day narrative from
    on-device data that already exists (`shop-daily-close-summary.ts`,
    `shop-ar-aging-summary.ts`, `shop-order-exception-summary.ts`). Zero new
@@ -136,8 +144,16 @@ status column in §1 for each. The operative forward sequence is now:
 3. E1 photo follow-through if wanted: photos in the exported/published site
    are a separate decision (published markup is built by `website-export.ts`,
    untouched so far).
-4. AI item 1 (order-intake eval) can run in parallel any time — it is
-   server-only and spends no hosted gate.
+4. AI item 1 (order-intake eval) is server-only and spends no hosted gate, but
+   **it cannot run from an agent lane at all** — this line previously said it
+   "can run in parallel any time" and that sent a 2026-08-20 attempt at it.
+   Two independent blockers, both verified that day: no provider credential is
+   readable from an agent environment (the harness fails closed correctly and
+   makes zero network calls), and the agent proxy denies CONNECT to the OpenAI
+   endpoint every prior run used — so a key alone would not unblock it. It
+   needs a founder or CI shell with egress to that endpoint. See §2 item 1's
+   status block and `hq/research/order-intake-eval-run6-attempt-2026-08-20.md`
+   before spending another lane on it.
 5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
    decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
 6. Scaling-ceiling work, from `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md`

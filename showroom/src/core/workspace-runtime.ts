@@ -15,10 +15,13 @@ import {
   acknowledgeLocalCommerceSyncIntent,
   checkingCommerceSyncStatus,
   managedCommerceSyncStatus,
+  readLocalCommerceSyncIntents,
   recoverLocalCommerceSyncOutbox,
   stageLocalCommerceSyncIntent,
+  type CommerceSyncIntent,
   type CommerceSyncStatus,
 } from './commerce-sync-outbox'
+import { requestStorageDurability } from './storage-durability'
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
@@ -505,6 +508,23 @@ function managedCommerceView(record: ManagedStateRecord, workspaceId: string): C
   return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
 }
 
+export type CommerceStuckRecovery = {
+  // The unsent changes still sitting in the outbox, each carrying the evidence the
+  // operator confirmed at the time. Empty until a stuck status asks for them.
+  intents: readonly CommerceSyncIntent[]
+  loading: boolean
+  // Why the stuck changes could not be listed. When this is set the UI must NOT offer a
+  // discard: nothing may be thrown away that the operator was not shown first.
+  loadError: string
+  // commandId currently being discarded, so its own control can show progress.
+  discarding: string
+  discardError: string
+}
+
+const idleStuckRecovery: CommerceStuckRecovery = {
+  intents: [], loading: false, loadError: '', discarding: '', discardError: '',
+}
+
 export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
   const [localSnapshot, setLocalSnapshot] = useState<CommerceWorkspaceView>(() => {
     const local = loadCommerceWorkspace()
@@ -523,6 +543,17 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     setSyncStatus(next)
   }, [])
 
+  // Stuck-till recovery. When a sync intent is staged but the process dies before the
+  // workspace write commits, recovery reports 'conflict' (the saved change no longer
+  // matches the workspace) or 'unavailable' (the outbox itself could not be reached).
+  // Both leave canWrite false, which freezes every till control with no way out but a
+  // reload that finds the same stuck record again.
+  const [stuckRecovery, setStuckRecovery] = useState<CommerceStuckRecovery>(idleStuckRecovery)
+  // Bumped after a discard so the list is re-read from the outbox rather than assumed.
+  // Without this, discarding one of two stuck records leaves the status on 'conflict',
+  // the effect's deps unchanged, and the discarded record still on screen.
+  const [stuckRefresh, setStuckRefresh] = useState(0)
+
   useEffect(() => {
     identityRef.current = managedIdentity
     snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
@@ -540,6 +571,13 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       }
     }
     let active = true
+    // Shop first-open on a local (signed-out) workspace is the moment durable storage
+    // starts to matter: from here on, this browser holds the only copy of the shop's
+    // records. Fired here rather than in main.tsx so the marketing site never asks, and
+    // deliberately not awaited -- the answer only drives a warning banner, so it must
+    // not delay recovery, the first write, or first paint. Memoised inside the module,
+    // so the several surfaces that mount this hook still produce exactly one request.
+    void requestStorageDurability()
     recoverLocalCommerceSyncOutbox()
       .then((status) => {
         if (!active || identityRef.current) return
@@ -575,6 +613,72 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     window.addEventListener('storage', refreshFromStorage)
     return () => window.removeEventListener('storage', refreshFromStorage)
   }, [managedIdentity])
+
+  // Load the stuck change's evidence as soon as the till freezes, so the recovery
+  // control can show what it would discard before the operator commits to discarding it.
+  const stuck = !managedIdentity && (syncStatus.status === 'conflict' || syncStatus.status === 'unavailable')
+  useEffect(() => {
+    if (!stuck) {
+      setStuckRecovery((current) => current === idleStuckRecovery ? current : idleStuckRecovery)
+      return undefined
+    }
+    let active = true
+    setStuckRecovery((current) => ({ ...current, loading: true, loadError: '' }))
+    readLocalCommerceSyncIntents()
+      .then((intents) => {
+        if (active) setStuckRecovery((current) => ({ ...current, intents, loading: false, loadError: '' }))
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setStuckRecovery((current) => ({
+          ...current,
+          intents: [],
+          loading: false,
+          loadError: error instanceof Error ? error.message : 'The unsent Shop change could not be read on this device.',
+        }))
+      })
+    return () => { active = false }
+  }, [stuck, stuckRefresh])
+
+  // Discard exactly one unsent change, named by commandId.
+  //
+  // This closes the outbox record and writes an 'abandoned' receipt. It does NOT touch
+  // the committed workspace: the change being discarded is by definition one that never
+  // reached COMMERCE_KEY, so no confirmed sale, payment or stock movement can be lost
+  // through this path. Recovery is then re-run so a till that is now clean unfreezes
+  // without a reload, and so a second stuck record is surfaced rather than assumed gone.
+  const discardStuckChange = useCallback(async (commandId: string) => {
+    setStuckRecovery((current) => ({ ...current, discarding: commandId, discardError: '' }))
+    try {
+      await abandonLocalCommerceSyncIntent(commandId)
+    } catch (error) {
+      setStuckRecovery((current) => ({
+        ...current,
+        discarding: '',
+        discardError: error instanceof Error ? error.message : 'The unsent Shop change could not be discarded.',
+      }))
+      return
+    }
+    try {
+      const status = await recoverLocalCommerceSyncOutbox()
+      if (identityRef.current) return
+      const local = loadCommerceWorkspace()
+      const next = { state: local.state, mode: 'local' as const, workspaceId: '', version: null, error: local.error, writeReady: !local.error && commerceWorkspaceCanWrite() }
+      snapshotRef.current = next
+      setLocalSnapshot(next)
+      updateSyncStatus(status)
+      setStuckRecovery((current) => ({ ...current, discarding: '', discardError: '' }))
+      setStuckRefresh((count) => count + 1)
+    } catch (error) {
+      // The record is already discarded; only the re-check failed. Report that honestly
+      // rather than implying the discard did not happen.
+      setStuckRecovery((current) => ({
+        ...current,
+        discarding: '',
+        discardError: error instanceof Error ? error.message : 'Shop recovery could not be re-checked. Reload Shop.',
+      }))
+    }
+  }, [updateSyncStatus])
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -759,7 +863,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   const canWrite = managedIdentity
     ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
     : visible.mode === 'local' && !visible.error && visible.writeReady && syncStatus.status === 'ready'
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus] as const
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange] as const
 }
 
 type ProductionWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'
