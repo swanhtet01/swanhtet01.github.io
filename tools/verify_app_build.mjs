@@ -19431,7 +19431,12 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // Tenant-aware portal routing adds a small lazy entitlement boundary while the
 // initial-route budget remains independently enforced above. Keep total output
 // growth bounded to a narrow 10 KB allowance rather than weakening that gate.
-if (bytes > 3_060_000) fail(`artifact_budget:${bytes}`)
+// RAISE 2026-08-20 (durable local writes and client error reporting, PR #505):
+// fresh native-loader dist measured 3_063_086 after storage durability,
+// crash-safe retry state, and the user-visible persistence error boundary.
+// 3_082_000 retains ~18_914 bytes of headroom, matching the established
+// measured-feature budget pattern without relaxing the initial-route gate.
+if (bytes > 3_082_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
