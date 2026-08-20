@@ -97,6 +97,7 @@ const bundle = await build({
     contents: `
       export {
         MANAGED_SHOP_ONBOARDING_HINT, MANAGED_SHOP_ONBOARDING_INTRO,
+        MANAGED_SHOP_ONBOARDING_JOURNEY,
         managedShopOnboardingNotice, provisionLocalShopBusinessTemplateSample,
         readLocalShopBusinessTemplateId,
       } from './product-onboarding-runtime.ts'
@@ -118,6 +119,7 @@ const bundle = await build({
 
 const {
   MANAGED_SHOP_ONBOARDING_HINT, MANAGED_SHOP_ONBOARDING_INTRO,
+  MANAGED_SHOP_ONBOARDING_JOURNEY,
   managedShopOnboardingNotice, provisionLocalShopBusinessTemplateSample,
   readLocalShopBusinessTemplateId,
   shopBusinessTemplates,
@@ -139,10 +141,15 @@ const INSTALL_CLAIMS = [
   /\byour catalog and stock are ready\b/i,
 ]
 
+check(MANAGED_SHOP_ONBOARDING_JOURNEY && typeof MANAGED_SHOP_ONBOARDING_JOURNEY === 'object', 'the managed Shop journey copy is exported')
+
 for (const [label, copy] of [
   ['the managed notice', managedShopOnboardingNotice('Spa and beauty')],
   ['the managed submit hint', MANAGED_SHOP_ONBOARDING_HINT],
   ['the managed intro copy', MANAGED_SHOP_ONBOARDING_INTRO],
+  ['the managed journey outcome', MANAGED_SHOP_ONBOARDING_JOURNEY.outcome],
+  ['the managed journey detail', MANAGED_SHOP_ONBOARDING_JOURNEY.detail],
+  ['the managed journey action label', MANAGED_SHOP_ONBOARDING_JOURNEY.actionLabel],
 ]) {
   check(typeof copy === 'string' && copy.trim().length > 0, `${label} is a non-empty string`)
   for (const claim of INSTALL_CLAIMS) {
@@ -156,6 +163,29 @@ check(/first real item/i.test(spaNotice), 'the managed notice points at the real
 check(/nothing was added|no sample records|do not get sample records/i.test(spaNotice), 'the managed notice states plainly that nothing was added')
 check(/Open Shop/i.test(spaNotice), 'the managed notice names the destination, matching the "Open my Shop" button the owner sees next')
 check(/first real item/i.test(MANAGED_SHOP_ONBOARDING_HINT), 'the submit hint says what the tap will actually do, BEFORE the owner taps it')
+
+// The loudest promise on the page is the "First useful result" panel and the submit button, both
+// rendered before the owner taps anything. For a company account the browser-local wording -- a
+// sample sale on a catalog that is "ready" -- is false in every clause, so the managed journey
+// must replace all three fields and must not smuggle the old claim back in.
+check(
+  !/sample sale/i.test(MANAGED_SHOP_ONBOARDING_JOURNEY.outcome)
+  && /first real item/i.test(MANAGED_SHOP_ONBOARDING_JOURNEY.outcome),
+  `the managed first useful result is the real one, got: ${MANAGED_SHOP_ONBOARDING_JOURNEY.outcome}`,
+)
+check(
+  !/catalog and stock are ready|tap an item/i.test(MANAGED_SHOP_ONBOARDING_JOURNEY.detail),
+  `the managed journey detail does not promise a catalog to tap, got: ${MANAGED_SHOP_ONBOARDING_JOURNEY.detail}`,
+)
+check(
+  !/start selling\b/i.test(MANAGED_SHOP_ONBOARDING_JOURNEY.actionLabel),
+  `the managed action label does not promise selling before an item exists, got: ${MANAGED_SHOP_ONBOARDING_JOURNEY.actionLabel}`,
+)
+check(
+  !('firstTaskPath' in MANAGED_SHOP_ONBOARDING_JOURNEY),
+  'the managed journey does not redirect the owner elsewhere -- Shop returns its "Create the real catalog" '
+  + 'boundary for a managed account on any tab, so the existing first-task path already lands her there',
+)
 
 // The notice must be built from the argument, not be a fixed string that happens to mention a spa.
 check(

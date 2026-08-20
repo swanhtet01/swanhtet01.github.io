@@ -23,6 +23,7 @@ import {
 import {
   MANAGED_SHOP_ONBOARDING_HINT,
   MANAGED_SHOP_ONBOARDING_INTRO,
+  MANAGED_SHOP_ONBOARDING_JOURNEY,
   managedShopOnboardingNotice,
   provisionLocalPlantWorkingSample,
   provisionLocalShopBusinessTemplateSample,
@@ -127,7 +128,15 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [businessTypeOpen, setBusinessTypeOpen] = useState(() => product === 'commerce')
 
   const onboardingProduct = productContracts[product]
-  const onboardingJourney = onboardingJourneys[product]
+  // Shop setup for a signed-in company account. Starter data is browser-local by construction, so
+  // this lane installs nothing and must not say it did -- every piece of copy below, and the
+  // provisioning branch itself, hang off this one flag.
+  const managedCommerce = product === 'commerce' && Boolean(managedIdentity)
+  // The journey the page advertises. A company account is promised the result it will actually
+  // get -- its first real item -- instead of a sample sale on a catalog it is never given.
+  const onboardingJourney = managedCommerce
+    ? { ...onboardingJourneys[product], ...MANAGED_SHOP_ONBOARDING_JOURNEY }
+    : onboardingJourneys[product]
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
   const onboardingTemplate = setup.product === product
@@ -135,10 +144,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     : product === 'commerce'
       ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
       : templateFor(product, '')
-  // Shop setup for a signed-in company account. Starter data is browser-local by construction, so
-  // this lane installs nothing and must not say it did -- the whole of the copy and the branch
-  // below hang off this one flag.
-  const managedCommerce = product === 'commerce' && Boolean(managedIdentity)
   // The trade she actually picked, named the way the picker named it, so the notice can carry her
   // choice forward instead of dropping it.
   const managedShopBusinessTypeName = selectedBusinessTemplate?.name.en ?? selectedShopIndustryPack.name

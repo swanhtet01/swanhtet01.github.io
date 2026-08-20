@@ -211,6 +211,24 @@ export const MANAGED_SHOP_ONBOARDING_HINT =
 export const MANAGED_SHOP_ONBOARDING_INTRO =
   'Your company account holds real records only. Name this workspace, then add your own items in Shop.'
 
+/**
+ * Replaces the commerce entry in onboardingJourneys for a company account. The browser-local
+ * wording it stands in for -- "Complete a sample sale" / "A realistic catalog and stock are ready.
+ * Tap an item, choose payment, then create the order." / "Create Shop and start selling" -- is the
+ * loudest promise on the page and it is made BEFORE the owner taps anything. None of it is true
+ * for her: there is no catalog to tap and no sample sale to complete. She does still get a first
+ * useful result, it is just a different one, so it is named rather than removed.
+ *
+ * firstTaskPath is deliberately not overridden. Shop returns its "Create the real catalog"
+ * boundary for a managed account whatever tab is asked for, so the existing path lands her exactly
+ * on the step this copy promises.
+ */
+export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
+  outcome: 'Add your first real item',
+  detail: 'Shop opens on your company catalog setup. Enter one item with its price and opening count, and you can sell it straight away.',
+  actionLabel: 'Create Shop and add your first item',
+}
+
 export function provisionLocalShopIndustryPack(
   industryPackId: ShopIndustryPackId,
   planningDay = new Date().toISOString().slice(0, 10),
