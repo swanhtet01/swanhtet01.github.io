@@ -7592,9 +7592,19 @@ async function verifyShopDemandIntelligenceRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-demand-intelligence.ts')).href}?shop-demand-intelligence-verify=${Date.now()}`)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-demand-commerce-verify=${Date.now()}`)
-    const state = commerce.createSeedCommerce()
+    // Seed and projection MUST share one clock. createSeedCommerce() with no
+    // argument anchors to the frozen deterministicSeedNow (2026-07-23), so
+    // projecting against Date.now() turned this check into a calendar time
+    // bomb: it went red on 2026-08-20 when the seeded completed sale aged out
+    // of the 28-day lookback, with no code change. The real app never hits
+    // this -- it seeds at install time (commerce-workspace.ts persistInitialState
+    // passes Date.now()) -- so this was a harness bug, not a product one.
+    // Anchor both to an explicit instant and the check measures the projection
+    // arithmetic it is meant to measure, forever.
+    const seedNow = Date.parse('2026-07-23T08:00:00.000Z')
+    const state = commerce.createSeedCommerce(seedNow)
     const before = JSON.stringify(state)
-    const asOf = Date.now() + 60_000
+    const asOf = seedNow + 60_000
     const projection = model.projectShopDemandIntelligence(state, asOf)
     const completedSale = projection.rows.find((row) => row.sku === 'SM-1004')
     assert(projection.contract === 'supermega.shop.demand-intelligence.v1'
