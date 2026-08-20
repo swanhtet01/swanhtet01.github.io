@@ -841,7 +841,11 @@ textarea { min-height: 72px; resize: vertical; }
    one wraps at every width instead of inheriting the single-line banner treatment. */
 .storage-durability-banner p { overflow: visible; text-overflow: clip; white-space: normal; }
 .commerce-stuck-recovery { border-radius: var(--core-radius); padding: 0 0.6875rem 0.25rem; background: rgba(148,98,0,.06); }
-.commerce-stuck-recovery > .panel-copy { margin: 0 0 0.625rem; }
+/* Top margin only. The bottom belongs to the disclosure house rule
+   (.evidence-disclosure .panel-copy, same 0-2-0 specificity but later in the file), the
+   same way this panel's padding-bottom defers to .evidence-disclosure[open]. Writing a
+   bottom here would lose on source order and read as live. */
+.commerce-stuck-recovery > .panel-copy { margin-top: 0; }
 .commerce-stuck-recovery > .form-notice { margin: 0 0 0.5rem; }
 .stuck-change-list { display: grid; gap: 0.5rem; margin-bottom: 0.625rem; }
 .stuck-change-list article { display: grid; gap: 0.25rem; border: 0.0625rem solid var(--core-line); border-radius: var(--core-radius); padding: 0.5625rem 0.6875rem; background: var(--core-panel); }
