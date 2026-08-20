@@ -7592,9 +7592,16 @@ async function verifyShopDemandIntelligenceRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-demand-intelligence.ts')).href}?shop-demand-intelligence-verify=${Date.now()}`)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-demand-commerce-verify=${Date.now()}`)
-    const state = commerce.createSeedCommerce()
+    // Seed at the projection clock. The seed default is the DETERMINISTIC demo clock
+    // (2026-07-23T08:00Z), so projecting seeded orders at wall-clock Date.now() was a time bomb:
+    // the completed sale aged out of the 28-day lookback exactly 28 days after the seed date and
+    // the check failed on 2026-08-20 with no code change anywhere. Passing `now` keeps every
+    // seeded offset (order at now-5h) inside the window forever without touching the product's
+    // deterministic seed default.
+    const seedNow = Date.now()
+    const state = commerce.createSeedCommerce(seedNow)
     const before = JSON.stringify(state)
-    const asOf = Date.now() + 60_000
+    const asOf = seedNow + 60_000
     const projection = model.projectShopDemandIntelligence(state, asOf)
     const completedSale = projection.rows.find((row) => row.sku === 'SM-1004')
     assert(projection.contract === 'supermega.shop.demand-intelligence.v1'
