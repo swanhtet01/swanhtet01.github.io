@@ -1,6 +1,8 @@
 import { myanmarBusinessDate, type CommerceOrder, type CommerceState } from './commerce-workspace.ts'
-import { catalogNameSellsShopService, shopServiceForCatalogName } from './shop-service-catalog-pairing.ts'
-import { validateShopServiceSchedule, type ShopService, type ShopServiceBooking, type ShopServiceSchedule } from './shop-service-scheduling.ts'
+import {
+  shopServiceForCatalogName, validateShopServiceSchedule,
+  type ShopService, type ShopServiceBooking, type ShopServiceSchedule,
+} from './shop-service-scheduling.ts'
 
 /**
  * Which treatments completed today never reached the till?
@@ -54,27 +56,6 @@ export type ShopAppointmentTillReconciliation = {
   /** Only treatments with a shortfall. A clean day produces an empty list and renders nothing. */
   gaps: ShopAppointmentTillGap[]
 }
-
-/**
- * Does this counter line sell that bookable treatment?
- *
- * The rule itself is shared -- see shop-service-catalog-pairing.ts -- because the build-time
- * pairing guard, the Burmese name wiring and this projection must never disagree about what
- * "sells" means. Order lines snapshot the catalog name at sale time, so the rule that pairs a
- * catalog row to a service pairs a sold line to it unchanged.
- *
- * PRICE IS DELIBERATELY NOT REQUIRED here, and this is where this file departs from the pairing
- * test. That test asserts a shipped invariant about seed data; this asks a question about a real
- * trading day, and the harms are asymmetric. A gap this misses leaves the owner exactly where she
- * is today -- no worse. A gap this invents tells her a treatment was never paid for when in fact
- * she discounted it, comped it, or took it against a voucher, and the obvious response to being
- * told that is to charge the customer a second time.
- *
- * Name matching alone also avoids the failure the pairing guard recorded against itself: a
- * t-shirt satisfied "Personal shopping" purely because both cost 15,000 MMK. Price equality is
- * not evidence that two things are the same thing.
- */
-export const commerceLineSellsShopService = catalogNameSellsShopService
 
 type TillLine = { name: string; quantity: number }
 

@@ -21,9 +21,10 @@ const bundle = await build({
     contents: `export {
       createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
       advanceShopServiceBooking, validateShopServiceSchedule, projectShopServiceSchedule,
+      catalogNameSellsShopService,
     } from './shop-service-scheduling.ts'
     export {
-      commerceLineSellsShopService, projectShopAppointmentTillReconciliation,
+      projectShopAppointmentTillReconciliation,
     } from './shop-appointment-till-reconciliation.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/scheduling-test-entry.ts',
@@ -39,7 +40,7 @@ const bundle = await build({
 const {
   createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
   advanceShopServiceBooking, validateShopServiceSchedule, projectShopServiceSchedule,
-  commerceLineSellsShopService, projectShopAppointmentTillReconciliation,
+  catalogNameSellsShopService, projectShopAppointmentTillReconciliation,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -288,10 +289,10 @@ const tillLegacy = projectShopAppointmentTillReconciliation(spaBook, {
 check(tillLegacy.gaps.every((gap) => gap.serviceId !== treatmentOil.id), 'a line-less legacy order still settles its treatment')
 
 // --- the pairing rule itself ---------------------------------------------------
-check(commerceLineSellsShopService('Traditional Myanmar massage 60 min', treatmentMassage), 'the shipped catalog name pairs its treatment')
-check(commerceLineSellsShopService('Traditional Myanmar massage', treatmentMassage), 'an exactly-named line pairs it too')
-check(!commerceLineSellsShopService('Traditional Myanmar massages', treatmentMassage), 'a longer word is not a duration suffix')
-check(!commerceLineSellsShopService('Cotton spa robe', treatmentMassage), 'an unrelated item does not pair')
+check(catalogNameSellsShopService('Traditional Myanmar massage 60 min', treatmentMassage), 'the shipped catalog name pairs its treatment')
+check(catalogNameSellsShopService('Traditional Myanmar massage', treatmentMassage), 'an exactly-named line pairs it too')
+check(!catalogNameSellsShopService('Traditional Myanmar massages', treatmentMassage), 'a longer word is not a duration suffix')
+check(!catalogNameSellsShopService('Cotton spa robe', treatmentMassage), 'an unrelated item does not pair')
 
 // --- it is a projection, not a posting mechanism -------------------------------
 // If this ever mutates, it is auto-posting money on the owner's behalf.

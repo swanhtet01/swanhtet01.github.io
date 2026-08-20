@@ -17,7 +17,7 @@ import {
   type CommerceItem,
 } from './commerce-workspace.ts'
 import { plantImportDueAt } from './managed-trial.ts'
-import { withShopServiceMyanmarNames } from './shop-service-catalog-pairing.ts'
+import { withShopServiceMyanmarNames } from './shop-service-scheduling.ts'
 import {
   appendGuidedSampleProductionActivity,
   GUIDED_SAMPLE_PRODUCTION_ACTOR,

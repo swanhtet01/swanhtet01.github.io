@@ -6799,7 +6799,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         {appointmentTillReconciliation.gaps.map((gap) => <li key={gap.serviceId}>
           <div>
             <strong>{gap.serviceName}</strong>
-            {gap.serviceNameMy ? <small lang="my">{gap.serviceNameMy}</small> : null}
+            {gap.serviceNameMy ? <small className="shop-product-my" lang="my">{gap.serviceNameMy}</small> : null}
             <small>{gap.unpostedCount} of {gap.completedCount} completed · {gap.chargedQuantity} rung up · {formatMoney(gap.unitPriceMmk)} each</small>
           </div>
           <div>

@@ -28,7 +28,7 @@ const bundle = await build({
       export { clientImportTemplate, createClientImportPreview } from './client-onboarding.ts'
       export { shopIndustryPacks, shopIndustryPack, createShopServiceSchedule } from './shop-service-scheduling.ts'
       export { shopBusinessTemplates, isShopServiceSku, shopBusinessTemplateSaleTotalMmk } from '../products/shop/business-templates.ts'
-      export { withShopServiceMyanmarNames } from './shop-service-catalog-pairing.ts'
+      export { withShopServiceMyanmarNames } from './shop-service-scheduling.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/pack-pairing-entry.ts',
