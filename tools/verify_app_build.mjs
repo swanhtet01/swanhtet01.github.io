@@ -9012,6 +9012,7 @@ async function verifyClientOnboardingRuntime() {
     assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
     const spaPreset = model.clientDemoPresets.find((preset) => preset.id === 'service-business')
     const spaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Private spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
+    assert(spaBlueprint.products.map((product) => product.product).join(',') === 'commerce,website,ecommerce', 'client_demo_spa_connected_products_missing')
     const spaExtension = await extensionModel.buildClientExtensionManifest(spaBlueprint, {
       id: 'ext-spa-membership',
       label: 'Spa membership packages',
@@ -9215,18 +9216,8 @@ async function verifyClientOnboardingRuntime() {
     const customPlantPreview = await model.createClientImportPreview(model.clientImportTemplate('production', 'production-control'), 'production', undefined, 'custom-plant.csv', 'production-control')
     const customPlantPackage = model.buildClientImportStagingPackage(customPlantPreview, { workflowTemplateId: 'production-control', workspace: 'Integrated Factory', owner: 'General manager', plantIndustryPackId: 'batch-process' })
     assert(customPlantPackage.plantIndustryPackId === 'batch-process', 'client_demo_custom_plant_pack_not_bound')
-    const schoolBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
-    assert(schoolBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
-    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({
-      workspace: 'Learning Centre',
-      owner: 'School administrator',
-      presetId: 'service-business',
-      shopIndustryPackId: 'school',
-      selections: [
-        ...model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections,
-        { product: 'ecommerce', templateId: 'social-storefront' },
-      ],
-    })
+    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
+    assert(schoolIntegratedBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
     const schoolShopProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'commerce')
     const schoolWebsiteProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'website')
     const schoolEcommerceProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'ecommerce')

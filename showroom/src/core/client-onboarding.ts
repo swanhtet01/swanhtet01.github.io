@@ -729,13 +729,14 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
   {
     id: 'service-business',
     name: 'Beauty & spa',
-    description: 'Appointments, treatments, retail products, service sales, and accountable follow-up.',
+    description: 'Appointments, treatments, counter sales, a client website, and Shop-reviewed home-care pickup requests.',
     shopIndustryPackId: 'spa',
     plantIndustryPackId: 'general-manufacturing',
     shopBusinessTemplateId: 'beauty-spa',
     selections: [
       { product: 'commerce', templateId: 'social-commerce' },
       { product: 'website', templateId: 'lead-generation' },
+      { product: 'ecommerce', templateId: 'social-storefront' },
     ],
   },
 ]
