@@ -19830,6 +19830,49 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // Re-measured on a fresh dist/ with #520/#521/#522 and this branch all present:
 // 3_064_424 bytes, ~5_576 under the 3_070_000 ceiling, which is kept rather
 // than raised. No app code was shrunk to fit.
+// RAISE 2026-08-21 (re-measurement, not a feature): origin/main at f39dfe50 measures
+// 3_064_548 on a fresh dist/ -- only ~5_452 under the ceiling, where every previous
+// raise deliberately left ~17_000-19_000. At that margin the next branches trip this
+// guard for reasons that have nothing to do with their own content, which is how a
+// budget stops being read as a signal. #524 already paid that tax: it removed a chunk
+// boundary and real duplication to land 81 bytes under, rather than raise the number.
+//
+// WHAT THE GROWTH BOUGHT, and why the raw total overstates it. The whole +6_429 from
+// #519 is one file: sw.js went 1_654 -> 8_155 (+6_501), the app code moved +310, and
+// index.html/404.html together SHRANK 382 bytes as their inline blocks became files.
+// sw.js is never on any route's critical path -- it is fetched once as the worker
+// script. So this guard charged #519 for precisely the change that most reduces what a
+// shop actually pays: after install the till is offline-capable and repeat visits cost
+// ~0 wire bytes.
+//
+// THE WIRE COST, measured because the raw total does not imply it. Shop route, gzip -9
+// over the entry chunk plus its real transitive closure (document graph + core-app +
+// the Shop screens it lazily pulls; Plant and the ecommerce buying lifecycle excluded
+// because the counter does not pull them):
+//     Shop counter first paint   451_954 gzip (441.4 KB) / 379_824 brotli (370.9 KB)
+//     Shop route, every tab      478_840 gzip (467.6 KB) / 403_327 brotli (393.9 KB)
+// Same measurement at f39dfe50^ (before the worker): 451_529 and 478_414 gzip. The
+// route grew 425 bytes gzipped, 0.09%. The thing the owner feels did not regress; only
+// the thing this guard counts did.
+//
+// LOCAL vs CI, because entries above have compared the two without saying so: the
+// only build-varying field is dist/__release.json's `commit`, which is "local" here
+// and the 40-char SHA under CI's SUPERMEGA_RELEASE_COMMIT. CI therefore measures ~35
+// bytes MORE than the same tree does locally (3_064_583 for this one). Nothing else
+// in dist/ carries it, and the build is otherwise byte-identical run to run -- two
+// consecutive fresh builds both measured 3_064_548.
+//
+// Raised to 3_085_000: covers the measured 3_064_548 with ~20_452 bytes of headroom,
+// the same order the ~17_150 / ~18_824 / ~19_123 raises above gave. No app code was
+// shrunk and no user-visible text was touched to fit this number.
+//
+// PROPOSED, NOT DONE HERE: this ceiling sums raw on-disk bytes across all of dist/,
+// which counts chunks no single visitor downloads and -- as above -- can move opposite
+// to the wire cost. A truer guard is the Shop route's COMPRESSED closure, which the
+// numbers above show is already computable from the built assets, and which the
+// initial_javascript_budget below already walks a smaller version of. Swapping what a
+// guard means is a bigger change than editing its number, so it deserves its own review
+// rather than riding along with a re-measurement.
 // MERGE 2026-08-21: the Spa portal branch measured 3_080_236 before absorbing
 // G3's offline shell and sealed service worker. The fresh combined artifact is
 // 3_087_367 bytes. Raise the ceiling to 3_100_000, leaving 12_633 bytes while
