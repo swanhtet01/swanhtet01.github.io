@@ -453,3 +453,285 @@ test('a local shop does confirm local mode, once both answers are in', async () 
   assert.equal(frame('enterprise', false, null), false, 'still waiting on the probe')
   assert.equal(frame('enterprise', true, null), true, 'signed out on an enterprise runtime is a local shop')
 })
+
+// ---------------------------------------------------------------------------
+// The escape hatch itself -- can the device the meter is warning actually produce
+// the backup the meter tells it to produce?
+//
+// The section above measures how close a Shop is to its own wall and tells the owner
+// to "Export a backup from Settings". That advice is only worth giving if the door
+// opens. It belongs in this file for the same reason the meter does: both are about
+// what this browser is the only copy of, and whether it is about to stop coping.
+//
+// WHAT WAS MEASURED, AND WHY IT MATTERS. An earlier batch established that a
+// commerce-ONLY workspace at 97.7% of the byte ceiling backs up in 29 ms and 2.28 MB,
+// and flagged the multi-product case as the one thing it could not close. Driving the
+// real transitions on 2026-08-21 closed it, and the answer is that the room is not
+// comfortable:
+//
+//   - Shop is hard-bounded. COMMERCE_SYNC_MAX_STATE_BYTES gates every local write, so a
+//     Shop workspace can never exceed 2 MiB -- about 1,190 completed sales at the 1,755
+//     bytes/sale a restocking shop actually costs.
+//   - Every record is JSON escaped INSIDE a JSON string in the backup envelope, which
+//     inflates it by about 1.12x. Shop alone at its ceiling therefore already spends
+//     50.3% of the 5 MiB backup file.
+//   - Plant has NO byte ceiling anywhere in the codebase and no headroom meter of its
+//     own, and costs about 2,085 bytes per job with its shift output records. So the
+//     remaining half of the file is spent by roughly 1,200 Plant jobs, and past that the
+//     backup refuses.
+//
+// The tests below therefore do two different jobs. The first two are a squeeze guard:
+// they pin that the file still holds a realistic two-product device, and go red if
+// either ceiling rises or either per-record cost grows. The rest are about what the
+// owner is TOLD when it does not fit, because a silent refusal here is the failure this
+// product already found in its sister POS.
+//
+// Every figure is derived at run time. Nothing below is a number somebody wrote down.
+
+const backupBundle = await build({
+  stdin: {
+    contents: `
+      export {
+        collectLocalWorkspaceBackup, describeLocalWorkspaceBackupRefusal,
+        localWorkspaceBackupRefusalMessage,
+        LOCAL_WORKSPACE_BACKUP_MAX_BYTES, LOCAL_WORKSPACE_BACKUP_MAX_RECORDS,
+      } from './local-workspace-backup.ts'
+      export { createSeedCommerce, COMMERCE_KEY } from './commerce-workspace.ts'
+      export { COMMERCE_SYNC_MAX_STATE_BYTES } from './commerce-sync-outbox.ts'
+      export {
+        createSeedProduction, registerProductionJob, recordProductionOutput, PRODUCTION_KEY,
+      } from './production-workspace.ts'
+      export { createInitialWorkspace, WEBSITE_STORAGE_KEY } from '../products/website/website-model.ts'
+    `,
+    resolveDir: 'showroom/src/core',
+    sourcefile: 'showroom/src/core/backup-headroom-entry.ts',
+    loader: 'ts',
+  },
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  write: false,
+  logLevel: 'error',
+})
+const {
+  collectLocalWorkspaceBackup, describeLocalWorkspaceBackupRefusal,
+  localWorkspaceBackupRefusalMessage,
+  LOCAL_WORKSPACE_BACKUP_MAX_BYTES, LOCAL_WORKSPACE_BACKUP_MAX_RECORDS,
+  createSeedCommerce, COMMERCE_KEY, COMMERCE_SYNC_MAX_STATE_BYTES,
+  createSeedProduction, registerProductionJob, recordProductionOutput, PRODUCTION_KEY,
+  createInitialWorkspace, WEBSITE_STORAGE_KEY,
+} = await import(`data:text/javascript;base64,${Buffer.from(backupBundle.outputFiles[0].contents).toString('base64')}`)
+
+const encodedBytes = (text) => new TextEncoder().encode(text).byteLength
+const weighState = (state) => encodedBytes(JSON.stringify(state))
+
+function backupStorage(records) {
+  const map = new Map(Object.entries(records))
+  return {
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => { map.set(key, String(value)) },
+    removeItem: (key) => { map.delete(key) },
+    key: (index) => [...map.keys()][index] ?? null,
+    get length() { return map.size },
+  }
+}
+
+// A stored record of an EXACT byte size whose content is real serialized workspace text
+// repeated, not a run of one character. The distinction is the whole point: what inflates a
+// record inside the backup envelope is escaping its quotes and backslashes, so filler with
+// no quotes in it would measure a cost no real device pays.
+function recordOfBytes(sample, targetBytes) {
+  const unit = JSON.stringify(sample)
+  const unitBytes = encodedBytes(unit)
+  // The repeat count is computed rather than appended in a loop. These fixtures run to
+  // several MB, and re-weighing a growing string on every pass took half a minute per case.
+  const repeats = Math.max(0, Math.floor(targetBytes / unitBytes) - 1)
+  const text = unit.repeat(repeats)
+  const padding = targetBytes - encodedBytes(text)
+  assert.ok(padding >= 0, 'record filler overshot its target size')
+  return text + 'x'.repeat(padding)
+}
+
+const backupAt = '2026-08-21T04:00:00.000Z'
+function producedBytes(records) {
+  const backup = collectLocalWorkspaceBackup(backupStorage(records), backupAt)
+  return backup ? encodedBytes(JSON.stringify(backup)) : null
+}
+
+// A Plant workspace built by driving the real transitions -- registerProductionJob followed
+// by the shift output records a job actually accumulates. Nothing here is shaped by hand.
+let plantProofSeq = 0
+function plantProof(label, ms) {
+  plantProofSeq += 1
+  return {
+    actionId: `ACT-A5B6${plantProofSeq.toString(16).padStart(4, '0').toUpperCase()}-0000-4000-8000-${plantProofSeq.toString(16).padStart(12, '0').toUpperCase()}`,
+    capturedAt: new Date(ms).toISOString(),
+    actor: 'U Aung Ko',
+    reason: `Backup headroom fixture ${label}`,
+    evidenceReference: `BACKUP-HEADROOM-${label}`,
+  }
+}
+const OUTPUT_RECORDS_PER_JOB = 4
+function buildPlant(jobCount) {
+  let plant = createSeedProduction()
+  const dueBase = Date.UTC(2026, 9, 1, 2, 0, 0)
+  for (let index = 0; index < jobCount; index += 1) {
+    const at = Date.UTC(2026, 8, 1, 2, 0, 0) + index * 600_000
+    const id = `JOB-HEADROOM-${index}`
+    const registered = registerProductionJob(plant, {
+      id,
+      line: `Line ${String((index % 6) + 1).padStart(2, '0')}`,
+      product: `Batch ${['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'][index % 5]} ${index}`,
+      target: 1200,
+      output: 0,
+      owner: `Line ${String((index % 6) + 1).padStart(2, '0')} lead`,
+      priority: ['urgent', 'normal', 'low'][index % 3],
+      dueAt: new Date(dueBase + index * 3_600_000).toISOString(),
+    }, plantProof(`JOB-${index}`, at))
+    assert.ok(registered, `the Plant fixture job ${index} was refused by registerProductionJob`)
+    plant = registered
+    for (let run = 0; run < OUTPUT_RECORDS_PER_JOB; run += 1) {
+      const recorded = recordProductionOutput(plant, id, 50, `SHIFT-${index}-${run}`, plantProof(`OUT-${index}-${run}`, at + (run + 1) * 60_000))
+      assert.ok(recorded, `the Plant fixture output ${index}/${run} was refused by recordProductionOutput`)
+      plant = recorded
+    }
+  }
+  return plant
+}
+
+// The per-job cost, measured at two sizes so the rate is PROVEN linear before it is
+// multiplied out to a plant no test could afford to build one job at a time. An earlier
+// suite in this programme passed against a hardcoded count that happened to match its
+// fixture; a measured rate that is never checked for linearity is the same mistake wearing
+// a different hat.
+const plantSeedBytes = weighState(createSeedProduction())
+const plantRateSmall = (weighState(buildPlant(50)) - plantSeedBytes) / 50
+const plantRateLarge = (weighState(buildPlant(100)) - plantSeedBytes) / 100
+const PLANT_BYTES_PER_JOB = plantRateLarge
+
+const shopAtCeiling = recordOfBytes(createSeedCommerce(), COMMERCE_SYNC_MAX_STATE_BYTES)
+const websiteRecord = JSON.stringify(createInitialWorkspace())
+
+test('the Plant cost per job is linear, so it can be multiplied rather than built', () => {
+  assert.equal(encodedBytes(shopAtCeiling), COMMERCE_SYNC_MAX_STATE_BYTES, 'the Shop fixture did not land on the enforced ceiling')
+  const drift = Math.abs(plantRateLarge - plantRateSmall) / plantRateSmall
+  assert.ok(drift < 0.02, `Plant growth is no longer linear (${plantRateSmall.toFixed(1)} then ${plantRateLarge.toFixed(1)} bytes/job, ${(drift * 100).toFixed(2)}% drift) -- every size below is extrapolated from this rate and would now be wrong`)
+})
+
+// --- the squeeze guard ----------------------------------------------------------------
+
+test('a Shop at its enforced ceiling still fits in the backup file, and the cost is the escaping', () => {
+  const produced = producedBytes({ [COMMERCE_KEY]: shopAtCeiling })
+  assert.ok(produced, 'a Shop at its own enforced write ceiling must be able to produce a backup')
+  assert.ok(produced <= LOCAL_WORKSPACE_BACKUP_MAX_BYTES, 'the produced backup exceeded the cap it was checked against')
+  // Every record is escaped inside a JSON string, so the file is always bigger than what is
+  // stored. The guard is on the RATIO rather than on the byte figure: if escaping ever
+  // stopped inflating, the sums below would be measuring something other than a backup.
+  const inflation = produced / COMMERCE_SYNC_MAX_STATE_BYTES
+  assert.ok(inflation > 1, 'a backup that does not inflate its records is not escaping them')
+  assert.ok(inflation < 1.35, `record escaping now costs ${inflation.toFixed(4)}x, far above the ~1.12x measured -- the multi-product budget below was sized against the old figure`)
+})
+
+// The failure this exists to prevent: a shop at her own ceiling ALSO running Plant, told by
+// the meter to take a backup, finding that she cannot. Shop is bounded and Plant is not, so
+// the only thing standing between an owner and that page is that the two together still fit.
+// Plant's share is stated as a working profile rather than a number: two jobs a working day
+// for a year. If the Shop ceiling rises, or either per-record cost grows, this goes red.
+const PLANT_JOBS_PER_WORKING_DAY = 2
+const WORKING_DAYS_PER_YEAR = 250
+const PLANT_YEAR_OF_JOBS = PLANT_JOBS_PER_WORKING_DAY * WORKING_DAYS_PER_YEAR
+
+test('a Shop at its ceiling running a year of Plant jobs can still be backed up', () => {
+  const plantYearBytes = Math.round(plantSeedBytes + PLANT_YEAR_OF_JOBS * PLANT_BYTES_PER_JOB)
+  const produced = producedBytes({
+    [COMMERCE_KEY]: shopAtCeiling,
+    [PRODUCTION_KEY]: recordOfBytes(createSeedProduction(), plantYearBytes),
+    [WEBSITE_STORAGE_KEY]: websiteRecord,
+  })
+  assert.ok(
+    produced,
+    `a device holding Shop at its ${COMMERCE_SYNC_MAX_STATE_BYTES.toLocaleString()}-byte ceiling plus ${PLANT_YEAR_OF_JOBS} Plant jobs (${plantYearBytes.toLocaleString()} bytes at ${PLANT_BYTES_PER_JOB.toFixed(1)} bytes/job) can no longer produce a backup -- the storage meter tells this owner to export one`,
+  )
+  assert.ok(
+    produced <= LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
+    `the two-product backup is ${produced.toLocaleString()} bytes against a ${LOCAL_WORKSPACE_BACKUP_MAX_BYTES.toLocaleString()} cap`,
+  )
+})
+
+// --- what the owner is told when it does NOT fit ---------------------------------------
+
+// A device over the cap by construction: Shop at its ceiling plus enough Plant to spend the
+// rest of the file. The size is derived from the cap, never written down.
+function oversizeDevice() {
+  return {
+    [COMMERCE_KEY]: shopAtCeiling,
+    [PRODUCTION_KEY]: recordOfBytes(createSeedProduction(), LOCAL_WORKSPACE_BACKUP_MAX_BYTES),
+    [WEBSITE_STORAGE_KEY]: websiteRecord,
+  }
+}
+
+test('a device that cannot be backed up says which limit it hit, not nothing', () => {
+  const records = oversizeDevice()
+  assert.equal(producedBytes(records), null, 'the oversize fixture was supposed to be refused')
+  const refusal = describeLocalWorkspaceBackupRefusal(backupStorage(records), backupAt)
+  assert.ok(refusal, 'a device that cannot produce a backup must be able to say why -- a disabled button is not an answer')
+  assert.equal(refusal.reason, 'too_large')
+  assert.equal(refusal.maxBytes, LOCAL_WORKSPACE_BACKUP_MAX_BYTES)
+  assert.ok(refusal.bytes > refusal.maxBytes, 'the reported size must be the one that failed the check')
+  assert.equal(refusal.records, Object.keys(records).length, 'the reported record count must be what the device actually holds')
+})
+
+test('the other refusal -- too many records -- is told apart from too many bytes', () => {
+  const records = {}
+  for (let index = 0; index <= LOCAL_WORKSPACE_BACKUP_MAX_RECORDS; index += 1) {
+    records[`supermega.shop.loyalty.v1.managed:workspace-${index}`] = JSON.stringify({ enabled: true, index })
+  }
+  const refusal = describeLocalWorkspaceBackupRefusal(backupStorage(records), backupAt)
+  assert.ok(refusal, 'a device over the record cap must also be able to say why')
+  assert.equal(refusal.reason, 'too_many_records', 'a device refused for its record COUNT must not be told its records are too large')
+  assert.equal(refusal.maxRecords, LOCAL_WORKSPACE_BACKUP_MAX_RECORDS)
+  assert.ok(refusal.bytes < refusal.maxBytes, 'this fixture is tiny -- if it is over on bytes the fixture is wrong, not the code')
+})
+
+// The property that makes the sentence trustworthy: the reason shown and the decision made
+// come from the same weighing. Swept across sizes straddling the cap rather than probed at
+// one, because a refusal that disagrees with the button on ONE size is a refusal that lies.
+test('the reason can never disagree with the decision that produced it', () => {
+  for (let step = -3; step <= 3; step += 1) {
+    const target = Math.round(LOCAL_WORKSPACE_BACKUP_MAX_BYTES - (COMMERCE_SYNC_MAX_STATE_BYTES / 2) + step * 40_000)
+    const records = { [PRODUCTION_KEY]: recordOfBytes(createSeedProduction(), target) }
+    const produced = producedBytes(records)
+    const refusal = describeLocalWorkspaceBackupRefusal(backupStorage(records), backupAt)
+    assert.equal(
+      produced === null,
+      refusal !== null,
+      `at ${target.toLocaleString()} stored bytes the backup ${produced === null ? 'refused' : 'succeeded'} but the reason said ${refusal === null ? 'nothing was wrong' : refusal.reason}`,
+    )
+  }
+})
+
+test('the refusal names the cause in the units the storage meter uses, and warns that reset lost its safety net', () => {
+  const refusal = describeLocalWorkspaceBackupRefusal(backupStorage(oversizeDevice()), backupAt)
+  const message = localWorkspaceBackupRefusalMessage(refusal)
+  // The meter renders MB as bytes/1048576 to two places. An owner sent here BY that meter has
+  // to be able to hold the two readings side by side, so the refusal must not switch units.
+  assert.ok(message.includes(`${(refusal.bytes / 1048576).toFixed(2)} MB`), `the refusal does not state the size in the meter's own MB units: ${message}`)
+  assert.ok(message.includes(`${(refusal.maxBytes / 1048576).toFixed(2)} MB`), 'the refusal does not state what a backup file can carry')
+  assert.match(message, /Nothing has been lost/, 'the first fear on reading that a backup failed is that the records are already gone')
+  assert.match(message, /Download sales archive/, 'a refusal with no remaining action is a dead end')
+  assert.match(message, /do not reset this device/, 'reset takes a restore point first, so this owner has no safety net under the destructive control on the same page')
+
+  const countRefusal = { reason: 'too_many_records', bytes: 1_000, maxBytes: LOCAL_WORKSPACE_BACKUP_MAX_BYTES, records: 300, maxRecords: LOCAL_WORKSPACE_BACKUP_MAX_RECORDS }
+  const countMessage = localWorkspaceBackupRefusalMessage(countRefusal)
+  assert.match(countMessage, /300 separate records/, 'a device refused on its record count must be told about records, not megabytes')
+  assert.ok(!countMessage.includes('MB of records'), 'a record-count refusal must not report a size as the cause')
+})
+
+// The sentence has to reach the page. Read from the shipping source rather than
+// reimplemented, so deleting the render deletes the guard's subject too and this fails.
+test('the settings page renders the refusal instead of only a disabled button', async () => {
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  assert.match(page, /localWorkspaceBackupRefusalMessage\(backupRefusal\)/, 'the workspace controls page no longer renders the refusal message')
+  assert.match(page, /backupRefusal \?[\s\S]{0,200}role="alert"/, 'the refusal is no longer announced -- the owner was sent to this page by a warning')
+  assert.match(page, /describeLocalWorkspaceBackupRefusal/, 'the page no longer asks why the backup was refused')
+})
