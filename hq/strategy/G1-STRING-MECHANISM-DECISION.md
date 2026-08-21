@@ -33,7 +33,7 @@ meets* — is preserved in both recommendations.
 
 | | Recommendation | Gated on? |
 | --- | --- | --- |
-| **String attributes** | **R1 — move the string out of the attribute and into a content slot; keep `bi()` unchanged.** No new function. `aria-labelledby` where visible text already exists, an `sr-only` node where it does not, `aria-labelledby` + `aria-describedby` where the control has data as well as an action. **Recommended pending AT verification (§3.1)** — not decided. | **Wiring: neither.** Ships ahead of sign-off exactly as #536 did. **First `confirmed` flip of any string that becomes an accessible name: founder-gated** on question 5, and should follow the AT check. |
+| **String attributes** | **R1 — move the string out of the attribute and into a content slot; keep `bi()` unchanged.** No new function. `aria-labelledby` where visible text already exists, an `sr-only` node where it does not, `aria-labelledby` + `aria-describedby` where the control has data as well as an action. **Recommended pending AT verification (§3.1)** — not decided. | **Wiring: neither.** Ships ahead of sign-off exactly as #536 did. **Further `confirmed` flips of name-bearing strings: founder-gated** on question 5 — *not* the "first" one, since §3.1a finds 7 such sites already live on merged `main`, which makes the AT check validation of shipped behaviour with a defined remediation path. |
 | **The 3 sites R1 cannot reach** (2 `placeholder`, 1 `alt`; the `title` duplicates a converted `aria-label`) | **Two placeholders are ordinary table entries — they are visual-only and are not accessible names. The `alt` is the one genuine AT-facing residue.** | Placeholders: **neither**. `alt`: **founder-gated** on the same question 5 as every other name. `Guest` was previously deferred here **on a false dependency, withdrawn in §3.6**. |
 | **Parameterised strings** | **R2 — a second table entry shape: a template pair whose Burmese half carries its own `{placeholder}` positions, substituted independently, behind the same confirmed-only gate.** | **Neither, to ship the mechanism.** Per-line content is native-speaker-gated as always. **One new founder question (numeral script, §4.5) blocks confirming the first count template** — but not shipping the mechanism. |
 
@@ -198,8 +198,10 @@ re-derive in three minutes against any Chrome build.
   recorded rather than papered over.
 
 **Consequence for this document: R1 is RECOMMENDED, PENDING AT VERIFICATION —
-not decided.** What would settle it, and should be done before the first table
-entry reaching an accessible name is flipped to `confirmed`:
+not decided.** And note what that verification is *not*: §3.1a below establishes
+that bilingual accessible names are **already live on merged `main`**, so this
+check validates shipped behaviour rather than gating future work. What would
+settle it:
 
 1. TalkBack + Chrome on an Android phone of the class a Yangon till actually
    runs on: is a Burmese TTS voice even installed by default, and how is
@@ -209,6 +211,94 @@ entry reaching an accessible name is flipped to `confirmed`:
 3. Both against a control converted by R1 and one using a joined `aria-label`,
    to confirm empirically that they are indistinguishable — the measurement
    above says they must be, but it measures the browser, not the AT.
+
+### 3.1a Bilingual accessible names are ALREADY SHIPPED — CORRECTED 2026-08-21
+
+A second correction, in the same shape as the first, and it changes what the
+verification in §3.1 *is*.
+
+> **WITHDRAWN:** "the founder question gates the first `confirmed` flip of any
+> string that becomes an accessible name" — and, in the revision before it,
+> "R1 keeps this answerable later."
+
+**There is no first flip. It already happened, on merged `main`, and #536 is
+what shipped it.** `bi()` renders its bilingual span *inside* controls, and a
+control with no `aria-label` takes its accessible name from its contents — so
+every already-`confirmed` entry reached from a control is, today, producing
+exactly the mixed-language flat string whose AT behaviour §3.1 correctly marks
+**not established**.
+
+Enumerated against `origin/main`, cross-referencing every `bi()` call in the
+app — **53 occurrences on 41 source lines, 45 distinct keys** — against the 33
+`confirmed` keys. **7 call sites, 5 distinct strings, all inside
+a `<button>` or `<Link>`** — i.e. all of them accessible names, none merely
+visible text:
+
+| Site | String | Path |
+| --- | --- | --- |
+| `CoreApp.tsx:1022` | `Cancel` | Cashier — the accountable-action gate the counter's *Review order* opens |
+| `CoreApp.tsx:1280` | `Clear` | Cashier — cart header |
+| `PaymentQr.tsx:72` | `Close` | Cashier — merchant QR dialog |
+| `ReceiptDialog.tsx:234` | `Close` | Cashier — receipt dialog |
+| `SettingsPage.tsx:2084` | `Open` | Back office |
+| `SettingsPage.tsx:2105` | `Back` | Back office |
+| `SettingsPage.tsx:2233` | `Cancel` | Back office |
+
+Measured on the **exact shipped markup** — `bi()`'s real output shape from
+`i18n-actions.ts:198`, `<span class="bi-label">Clear · <span
+lang="my">ရှင်းလင်းမည်</span></span>` inside a `<button>` — Chrome 152 computes
+the name `"Clear · ရှင်းလင်းမည်"`, `type: computedString`, no language field.
+(`ရှင်းလင်းမည်` is the CONFIRMED `Clear`, `i18n-actions.ts:67`.)
+
+**Three consequences, and they are what this correction is for:**
+
+1. **The AT check is validation of shipped behaviour, not a gate on future
+   work.** §3.1 framed it as a prerequisite. It is not — the exposure exists
+   now. Reframed accordingly wherever it appears.
+2. **Its priority rises.** It was scheduled as "before the first confirmation";
+   it should now be done because something is already live, and it is the
+   cheapest way to find out whether #536's two visible wins carry a hidden
+   cost.
+3. **It needs a remediation path, defined below**, because "the check comes
+   back negative" now means "something live needs changing", not "do not start".
+
+**Remediation if the check is negative.** The honest answer is cheap, and it is
+cheap *because of how the table was built*:
+
+- **Primary: flip the affected entries back to `pending_native_review`.** One
+  line each in `ACTION_TRANSLATIONS`, no call site moves, and `bi()` returns
+  plain English immediately for every site at once. This is the same one-line
+  status edit that sign-off uses, run backwards. It is genuinely available and
+  it is what the confirmed/pending gate is *for* — the gate was built so an
+  unreviewed string never reaches an operator, and it works identically for a
+  string that turns out to be unreadable rather than unreviewed.
+- **The catch, stated so nobody treats the revert as free:** it is technically
+  trivial and *visible to users*. Flipping `Close` back removes the only
+  Burmese on a non-cash sale (the QR dialog and the receipt), which is exactly
+  the thing #536 pulled the QR dialog into the slice to make consistent. So the
+  revert is a **founder decision on a marginal result**, not an automatic
+  rollback — and on a clearly negative result it is simply the right call.
+- **If the result is "names are wrong but visible text is fine"**, the shape
+  that survives is a single-language accessible name beside bilingual visible
+  text — which means choosing *which* language, which is the language-setting
+  pass §3.5 defers. That is the expensive branch, and it is the one worth
+  knowing about early rather than late.
+
+**And stated accurately in the other direction, because overstating this would
+be its own error.** The live surface is **5 distinct strings, 7 sites, 3 of
+them back office**; on the cashier path it is `Cancel`, `Clear` and `Close` —
+three short, high-frequency, `Close`/`Cancel`-class controls whose meaning a
+cashier also gets from position, icon and context. A mixed flat name may well
+be perfectly usable, or mildly verbose, or genuinely bad; **that is precisely
+what is unverified.** This is a check to run, not an incident. Nothing here
+says the surface is broken — only that we do not know, and that we are already
+shipping the thing we do not know about.
+
+Neither #536 nor the first two revisions of this document noticed this, for a
+reason worth recording: #536's own PR body *did* say "two strings DO change:
+`Clear` and `Close`", and measured them visually at two viewports in both
+themes. What nobody asked was what those two strings do to an **accessible
+name** — a surface with no visual regression to catch it.
 
 ### 3.2 Recommendation R1 — content-slot conversion, re-derived on what survives
 
@@ -403,9 +493,12 @@ deferral.
 established that R1 and a string mechanism produce the same flat name, so
 *"should a screen reader ever read a control's name in two languages?"* applies
 to **every R1-converted control the moment its table entry is confirmed** — not
-to three leftover sites. It is promoted accordingly: it now gates the first
-`confirmed` flip of any string that becomes an accessible name, R1's included,
-and §3.1 names the verification that would answer it.
+to three leftover sites. And §3.1a goes further: it does not wait for a
+conversion either, because **7 already-confirmed strings render inside controls
+on merged `main` today**. So the question is not a gate anyone is standing in
+front of; it is an open question about behaviour already in front of users,
+§3.1 names the check that answers it, and §3.1a names what to do if the answer
+is bad.
 
 **What is actually left, and why each is cheap:**
 
@@ -428,13 +521,14 @@ neither is a screen-reader string.
   `bi()` under the same confirmed-only gate, so English renders until each line
   is signed off and the wiring lands first, exactly as #536's did. Rows 9 and
   14 need **no new table entries at all**.
-- **The first `confirmed` flip of any string that becomes an accessible name:
-  founder-gated**, on question 5, and it should not happen before the AT
-  verification in §3.1. This is new in this revision and it is the honest
-  consequence of the flat-string finding: R1 does not escape that question, it
-  only defers it to the same point every other bilingual string reaches it.
-  Exactly parallel to R2's numeral finding (§4.5) — mechanism free, first
-  confirmation gated.
+- **Further `confirmed` flips of strings that become accessible names:
+  founder-gated**, on question 5. **Corrected:** an earlier revision called this
+  "the *first* such flip". There is no first — §3.1a enumerates 7 sites and 5
+  distinct strings already live on merged `main`, 4 of them on the cashier path.
+  So the AT check in §3.1 validates shipped behaviour and carries a remediation
+  path (§3.1a), and question 5 gates *additional* exposure rather than the
+  opening of it. R1 does not escape the question; neither does anything already
+  merged.
 - **The two placeholders: neither-gated.** Ordinary table entries; see §3.6.
 - **The `title`: neither-gated, and recommended left alone** as not reachable
   on the target device.
@@ -537,16 +631,24 @@ app. Nothing here changes that ruling.
   across a catalogue. This document does not know which classifier any of these
   strings wants and deliberately does not guess; it is a reviewer question, and
   `{n} items` may be the one string the reviewer answers with "rephrase it".
-- **Item-name parameters — better than expected, but not solved.** Rows 6, 11
-  and 12 interpolate `item.name`, the owner's own catalogue text, which under
-  Option A's logic is code-mixing. Verified in source: `CommerceItem` already
-  carries an optional **`nameMy`** (`commerce-workspace.ts:61`), validated
-  (`:2534`, `:6433`), and the counter already renders it in both the tile and
-  the cart line. So the composer can interpolate `item.nameMy ?? item.name` and
-  these sites get a genuinely Burmese noun in a Burmese frame **whenever the
-  owner filled the field in**. It is optional, most catalogues will not have
-  it, and the fallback is still code-mixed — but the data source exists and
-  should be used rather than worked around.
+- **Item-name parameters — CORRECTED 2026-08-21: these are R1's job, not
+  R2's.** An earlier revision told the R2 composer to interpolate
+  `item.nameMy ?? item.name` for rows 6, 11 and 12. That contradicts §3.4,
+  which moved those three rows onto R1's `aria-labelledby` path and turned
+  their keys static; following both would rebuild the parameterised composer
+  work this document's recommendation and sizing now exclude. **There is one
+  mechanism for these sites and it is R1.** The product name reaches the
+  accessible name because the referenced node *is* the name node — `nameMy`
+  arrives as markup the counter already renders (`item.nameMy`, tile and cart
+  line), with its own `lang="my"`, and no interpolation, no composer and no
+  template are involved. `CommerceItem.nameMy` is real and validated
+  (`commerce-workspace.ts:61`, `:2534`, `:6433`), it is optional, and most
+  catalogues will not have it — in which case the referenced node is the
+  English name, exactly as today.
+  **What survives for R2** is the general principle, for any *future*
+  item-name-parameterised string R2 genuinely does reach: prefer the data
+  layer's own Burmese noun over interpolating English into a Burmese frame.
+  On the counter slice after §3.4, that set is empty.
 - **Brand-name parameters.** Row 14 interpolates `{method}`, which batch 3
   refused to translate on purpose. The frame can be Burmese; whether a Latin
   brand token inside a Burmese frame reads correctly is a reviewer question,
@@ -675,9 +777,14 @@ document adds two, both new, neither answerable by an engineer:
    in two languages? **This is not a question about leftover sites.** §3.1
    measured that every mechanism — R1's nodes, a joined `aria-label`, even
    `lang` on the element — produces the same flat mixed-language string, so the
-   question gates the first `confirmed` flip of **any** string that becomes an
-   accessible name, R1's included. §3.1 names the AT verification that should
-   precede answering it. The reviewer's half: on a control whose name is
+   question reaches **any** string that becomes an accessible name, R1's
+   included. **And it is overdue, not upcoming:** §3.1a enumerates **7 such
+   names already live on merged `main`** (5 distinct strings; 4 sites on the
+   cashier path), shipped by #536. So the AT check in §3.1 validates behaviour
+   that is already in front of users, and §3.1a defines the remediation path if
+   it comes back negative — a one-line status flip per entry, cheap by
+   construction but visible to users, hence a founder call on a marginal
+   result. The reviewer's half: on a control whose name is
    `[action phrase] + [product name]`, English wants the verb first and Burmese
    is verb-final, and one flat name can carry only one order (§3.4). Which
    order, and is the compromise acceptable in the half they read?
@@ -697,7 +804,7 @@ document adds two, both new, neither answerable by an engineer:
 | R2 content batches (the remaining ~13 templates) | **S** each | **Yes** |
 | The 2 placeholders (ordinary table entries) + the `Guest` correction | **S** — a drafting batch; the search placeholder also wants a design pass on the visible label | **Yes** |
 | The `alt` (1 site) | **not sized — founder-gated on question 5** | n/a |
-| **AT verification (§3.1)** — prerequisite to confirming any name-bearing string | **S**, but needs a device and a screen reader this sandbox does not have | n/a — it is a check, not a ship |
+| **AT verification (§3.1)** — validation of behaviour ALREADY SHIPPED (§3.1a), not a prerequisite | **S**, but needs a device and a screen reader this sandbox does not have | n/a — it is a check, not a ship |
 
 **What this does not close, plainly:**
 
@@ -722,6 +829,11 @@ document adds two, both new, neither answerable by an engineer:
   in this sandbox, and W3C/MDN are blocked by this environment's egress proxy.
   What *was* measured is the browser boundary (Chrome 152 via the DevTools
   Protocol, §3.1 and §3.4) — the computed name, not the announcement.
+- **Bilingual accessible names are already live and unverified** (§3.1a): 7
+  sites, 5 distinct strings, 4 on the cashier path, shipped by #536. This
+  document does not close that; it names it, sizes it, and defines what to do
+  if the AT check goes against it. Running that check is the single most
+  overdue item here.
 - **R1's justification is now narrower than it was, and R1 itself is
   "recommended pending AT verification", not decided.** If the check in §3.1
   says a mixed-language name is unusable, the answer changes for every

@@ -888,12 +888,20 @@ readable without opening it:
   reach, only **one** (the QR image's `alt`) is actually an accessible name:
   both placeholders are visual-only, and the `title` duplicates a converted
   `aria-label`.
-- **Gating is not what the first revision said.** Because every mechanism lands
-  on the same flat string, the founder question — should a screen reader read a
-  name in two languages? — gates the first `confirmed` flip of **any**
-  name-bearing string, R1's included, not three leftover sites. Wiring stays
-  ungated; the first confirmation does not. Exactly parallel to R2's numeral
-  finding.
+- **Gating is not what the first revision said, twice over.** Because every
+  mechanism lands on the same flat string, the founder question — should a
+  screen reader read a name in two languages? — reaches **any** name-bearing
+  string, R1's included, not three leftover sites. And it is not a question
+  about a *first* flip either: batch 3 already shipped it. 7 call sites across
+  4 files render an already-`confirmed` entry inside a `<button>` or `<Link>`
+  (`Cancel`, `Clear`, `Close`, `Open`, `Back` — 4 of the 7 on the cashier
+  path), so those controls' accessible names are mixed-language flat strings on
+  merged `main` today. The AT check is therefore **validation of shipped
+  behaviour**, it is the most overdue item in that document, and it carries a
+  defined remediation path: flipping the affected entries back to
+  `pending_native_review` returns every site to English in one line each — cheap
+  by construction, but visible to users, so a founder call on a marginal
+  result. Wiring stays ungated.
 - **Option A stays rejected** and Option C is untouched; §5 of that document
   argues it explicitly against this section rather than around it.
 - **Two new questions for the reviewer packet**, numbered 4 and 5 there:

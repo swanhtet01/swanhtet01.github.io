@@ -481,7 +481,10 @@ batch — this is the part that needs FURTHER BATCHES, not further review:
   ahead of sign-off. Two things gate the first CONFIRMED flip rather than the
   build: the numeral-script question, and — because every mechanism computes the
   same flat accessible name — whether a screen reader should read a name in two
-  languages, which wants a real-device AT check first.)
+  languages. That second one is OVERDUE, not upcoming: 7 already-confirmed
+  strings render inside controls on merged main, 4 on the cashier path, so their
+  accessible names are mixed-language today. Wants a real-device AT check;
+  remediation if negative is a one-line status flip back to pending.)
 
 ALSO NOT CLOSED:
   - Every string is drafted, none is reviewed. Until a native speaker signs them
