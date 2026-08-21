@@ -30,7 +30,17 @@ const readyInput = {
   operationalProblem: 'Reduce manual order re-entry and make close exceptions reviewable.',
   startDate: '2026-08-03',
   reviewDate: '2026-08-07',
-  baseline: { weeklyOrders: 120, medianMinutesPerOrder: 8, weeklyExceptionCount: 12, closeMinutesPerDay: 45 },
+  baseline: {
+    weeklyOrders: 120,
+    medianMinutesPerOrder: 8,
+    weeklyExceptionCount: 12,
+    closeMinutesPerDay: 45,
+    clientImportRowCount: 40,
+    weeklyPackageSales: 12,
+    weeklyTreatmentRedemptions: 24,
+    medianMinutesPerRedemption: 3,
+    weeklyPackageCorrectionCount: 2,
+  },
   fixedPilotFeeUsd: 500,
   isolatedNonProductionTenantApproved: true,
   namedOperatorAuthorized: true,
@@ -73,6 +83,13 @@ const ownerInput = {
   ownerReviewedCommercialDraft: true,
   contactIsNamedOperator: true,
   contactBaselineReviewed: true,
+  spaBaseline: {
+    clientImportRowCount: readyInput.baseline.clientImportRowCount,
+    weeklyPackageSales: readyInput.baseline.weeklyPackageSales,
+    weeklyTreatmentRedemptions: readyInput.baseline.weeklyTreatmentRedemptions,
+    medianMinutesPerRedemption: readyInput.baseline.medianMinutesPerRedemption,
+    weeklyPackageCorrectionCount: readyInput.baseline.weeklyPackageCorrectionCount,
+  },
 }
 
 function readyDecisionArtifacts() {
@@ -98,7 +115,18 @@ test('builds the exact five-day named-operator handoff required by PILOT-001', (
   const handoff = buildShopPilotHandoff(readyInput)
   assert.equal(handoff.status, 'ready-for-private-pilot')
   assert.equal(handoff.pilot.durationDays, 5)
+  assert.equal(handoff.pilot.profile, 'spa-prepaid-membership-v1')
+  assert.equal(handoff.workOrderId, 'shop-spa-owner-pilot')
   assert.equal(handoff.evidencePlan.length, 5)
+  assert.deepEqual(handoff.acceptance.requiredJourney, [
+    'reviewed_client_import',
+    'reconciled_package_sale',
+    'matching_completed_treatment',
+    'immutable_package_redemption',
+    'reviewed_daily_close',
+    'workspace_backup_and_recovery',
+  ])
+  assert.equal(handoff.acceptance.sampleEvidenceCanCloseGate, false)
   assert.deepEqual(handoff.blockers, [])
   assert.equal(handoff.acceptance.improvementClaimAllowedBeforeReview, false)
   assert.equal(handoff.authority.productionActivationAllowed, false)
@@ -126,6 +154,8 @@ test('keeps the handoff blocked until every owner gate is explicit', () => {
 test('rejects weak baselines, invalid dates, and oversized identity data', () => {
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, reviewDate: '2026-08-08' }), /review_date_must_close_five_day_plan/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, baseline: { ...readyInput.baseline, weeklyOrders: 0 } }), /baseline_weekly_orders_invalid/)
+  assert.throws(() => buildShopPilotHandoff({ ...readyInput, baseline: { ...readyInput.baseline, weeklyPackageSales: 0 } }), /baseline_weekly_package_sales_invalid/)
+  assert.throws(() => buildShopPilotHandoff({ ...readyInput, pilotProfile: 'generic-retail' }), /pilot_profile_unsupported/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, operatorName: 'x'.repeat(181) }), /operator_name_invalid/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, fixedPilotFeeUsd: -1 }), /fixed_pilot_fee_usd_invalid/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, sourceLeadDigest: 'a'.repeat(64) }), /shop_contact_source_binding_incomplete/)
@@ -134,6 +164,9 @@ test('rejects weak baselines, invalid dates, and oversized identity data', () =>
 test('renders a commercial draft without claiming payment, deployment, or improvement', () => {
   const markdown = renderShopPilotHandoff(readyInput)
   assert.match(markdown, /Fixed five-day pilot fee: \*\*\$500\*\*/)
+  assert.match(markdown, /Work order: shop-spa-owner-pilot/)
+  assert.match(markdown, /Weekly prepaid package sales: 12/)
+  assert.match(markdown, /Sample data cannot close the real-client gate/)
   assert.match(markdown, /does not contact the customer, accept payment, deploy software, or prove hosted activation/)
   assert.doesNotMatch(markdown, /guaranteed|production ready|payment accepted/i)
 })
@@ -157,6 +190,7 @@ test('rejects non-Shop events and refuses to infer that a contact is the pilot o
   assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, workflow: 'website' } }, ownerInput), /shop_contact_event_required/)
   assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, contactIsNamedOperator: false }), /shop_contact_operator_confirmation_required/)
   assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, contactBaselineReviewed: false }), /shop_contact_baseline_review_required/)
+  assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, spaBaseline: { ...ownerInput.spaBaseline, weeklyPackageSales: 0 } }), /baseline_weekly_package_sales_invalid/)
   assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, raw: {} } }, ownerInput), /shop_contact_qualification_required/)
   assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, baseline: { ...readyInput.baseline, weeklyOrders: 121 } }), /shop_contact_baseline_mismatch/)
   assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, lead_id: '' } }, ownerInput), /contact_lead_id_required/)
@@ -188,7 +222,7 @@ test('CLI writes and verifies one private artifact exclusively while reporting m
     const first = spawnSync(process.execPath, command, { encoding: 'utf8' })
     assert.equal(first.status, 0, first.stderr)
     const receipt = JSON.parse(first.stdout)
-    assert.equal(receipt.contract, 'supermega.shop.pilot_handoff.v2')
+    assert.equal(receipt.contract, 'supermega.shop.pilot_handoff.v3')
     assert.equal(receipt.mode, 'create')
     assert.equal(receipt.status, 'ready-for-private-pilot')
     assert.equal(receipt.externalWritesPerformed, false)
@@ -441,6 +475,13 @@ const readyOwnerInput = {
   fixedPilotFeeUsd: 500,
   contactIsNamedOperator: true,
   contactBaselineReviewed: true,
+  spaBaseline: {
+    clientImportRowCount: 40,
+    weeklyPackageSales: 12,
+    weeklyTreatmentRedemptions: 24,
+    medianMinutesPerRedemption: 3,
+    weeklyPackageCorrectionCount: 2,
+  },
   isolatedNonProductionTenantApproved: true,
   namedOperatorAuthorized: true,
   pilotDataHandlingApproved: true,
@@ -461,6 +502,13 @@ test('runs the complete private workspace lifecycle without external action', as
     assert.match(sanitizedContact, /workspace-private@example\.com/)
     assert.doesNotMatch(sanitizedContact, /private_note|private-source|private\.example\.invalid/)
     assert.match(await readFile(join(workspace, 'README.md'), 'utf8'), /Nothing here sends a message, accepts payment, deploys, activates production, or writes hosted data/)
+    assert.deepEqual(JSON.parse(await readFile(join(workspace, 'owner-input.json'), 'utf8')).spaBaseline, {
+      clientImportRowCount: null,
+      weeklyPackageSales: null,
+      weeklyTreatmentRedemptions: null,
+      medianMinutesPerRedemption: null,
+      weeklyPackageCorrectionCount: null,
+    })
     assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-input-required')
 
     await assert.rejects(() => prepareShopPilotSalesWorkspace(workspace), /shop_contact_operator_confirmation_required/)

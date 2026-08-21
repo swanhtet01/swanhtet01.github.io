@@ -4,16 +4,16 @@ Updated: 2026-08-21
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `12ade3db2a73a586f244dd4e3e26cc4d9bb868fc`
-Live state observed: `2026-08-03T14:46:45.695Z`
+Live release commit: `a8fad84e96ada08d2dcb923eec203cdff1604a73`
+Live state observed: `2026-08-21T04:58:02.649Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
 Live managed persistence ready: `false`
 Live security ready: `false`
 
-Product checkpoint: unpublished `e7f97463fdfab7d8a39bb0691febe3a0bc2d5ff4` on `codex/spa-client-activation-20260821`; 651/651 serial checks passed. Read the current branch tip from Git; no external write is claimed.
-Live freshness: the fields above are retained history; the bounded handoff fetch was unavailable on 2026-08-21.
+Product checkpoint: owner-review handoff `d8164a0c` passed 651/651 on `codex/spa-client-activation-20260821`. Read current HEAD before release; later work is not covered.
+Live freshness: `supermega.release-handoff.v2` refreshed paired identity and remote main on 2026-08-21. Operations stay fail-closed pending post-deploy proof.
 
 ## North-star outcome
 
@@ -44,6 +44,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant quality problems now require structured CAPA evidence before an actionable record can close.
 - Shop now has native Spa packages: reconciled, non-refunded sales fund balances; a completed matching treatment for the same customer consumes one immutable session, server-rechecked.
+- Spa pilot handoff v3 requires import, package sale, matching treatment/redemption, correction, balance, close, backup, and recovery proof; samples cannot close `shop-spa-owner-pilot`.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
@@ -54,10 +55,10 @@ Research decisions are in `hq/research/`; roadmap: `hq/TIMELINE.md`; agent plan:
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Candidate `e7f97463` passes the complete 651-step serial app gate. A 390 px rendered Shop check has no horizontal overflow, error overlay, or captured console warning; this proves the local candidate, not production deployment.
+- Candidate `d8164a0c` passed the complete 651-step serial app gate twice, including the independent release-handoff run. A 390 px rendered Shop check on the earlier native-package checkpoint had no horizontal overflow, error overlay, or captured console warning; neither proves production deployment.
 - The deterministic 12-profile rehearsal passes 24 rows. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero.
-- Both domains serve deployed `12ade3db2a73a586f244dd4e3e26cc4d9bb868fc` after guarded release `31941210015`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
+- Both domains serve deployed `a8fad84e96ada08d2dcb923eec203cdff1604a73`; the handoff proved paired brand, context, and catalog identities match. Retained prior evidence says the scheduler ceiling is one job, and exact live verification passes. The fresh identity packet did not re-run scheduler proof.
 - Working-set trim is non-terminating and stops no process. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -70,7 +71,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack live product activation proof; model calls fail closed.
 - The digest-bound managed readiness ledger records protected PostgreSQL 17 at schema v11 with zero local-target drift, metadata RLS, browser-role denial, and a clear Security Advisor. It does not authorize a tenant or production release.
 - Storage privacy, managed persistence, and self-serve isolation have bounded proof records, but the live products remain isolated samples and no named customer tenant is activated.
-- Live HQ and both domains agree on `12ade3db`; no release drift is present. Two hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, managed persistence, and the live product contract prerequisites are ready-hosted); external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `a8fad84e`; no release drift is present. Two hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, managed persistence, and the live product contract prerequisites are ready-hosted); external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
 - The deleted isolated-v11 self-serve proof covers six RLS and replay controls. A real tenant still awaits the founder `production_activation` decision in `hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
@@ -88,8 +89,8 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Refresh the exact GitHub/live handoff when bounded network reads are available.
-2. Owner-review the normal branch push, merge, and paired production workflow as
+1. Owner-review the normal initial branch push for the exact freshly verified candidate.
+2. Review the published branch, then separately owner-review merge and paired production workflow as
    separate gates; never infer them from the green local candidate.
 3. Run post-deploy desktop/mobile and tenant-isolation proof on the exact release.
 4. Replace the Spa sample identities with one named owner and reviewed business

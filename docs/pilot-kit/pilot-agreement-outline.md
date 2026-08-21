@@ -6,7 +6,7 @@ NOT LEGAL ADVICE. This is an outline of talking points to align on with the desi
 
 - The working Shop product, free, on their own device. The approved framing is `Free product. Managed intelligence.` — the free lane needs `No account or model call required`, and the pilot runs entirely in it.
 - Five founder-led days rehearsing reviewed client import, prepaid package sale, matching treatment redemption, daily close, and recovery, with the founder on-site per the [acceptance checklist](acceptance-checklist.md).
-- Their own measured numbers, before and after: baseline first, then the five pilot measurements (`median_minutes_per_order`, `weekly_exception_rate`, `close_minutes_per_day`, `operator_corrections`, `reload_and_retry_result`). The numbers belong to them.
+- Their own measured numbers, before and after: the operating baseline plus `client_import_minutes`, `package_sale_minutes`, `treatment_redemption_minutes`, `package_balance_result`, `close_minutes_per_day`, `operator_corrections`, and `reload_and_retry_result`. The numbers belong to them.
 - A backup of their workspace at the end (`Download workspace backup`), whatever they decide.
 
 ## What the partner gives

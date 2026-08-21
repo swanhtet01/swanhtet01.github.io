@@ -64,6 +64,13 @@ function ownerTemplate() {
     fixedPilotFeeUsd: null,
     contactIsNamedOperator: false,
     contactBaselineReviewed: false,
+    spaBaseline: {
+      clientImportRowCount: null,
+      weeklyPackageSales: null,
+      weeklyTreatmentRedemptions: null,
+      medianMinutesPerRedemption: null,
+      weeklyPackageCorrectionCount: null,
+    },
     isolatedNonProductionTenantApproved: false,
     namedOperatorAuthorized: false,
     pilotDataHandlingApproved: false,
@@ -78,7 +85,7 @@ Do not commit, publish, sync publicly, or send this folder. It contains one cust
 
 ## 1. Review the intake
 
-Open \`contact-event.json\`, then complete \`owner-input.json\`. Every authority flag starts false. Confirm the named operator and captured baseline; choose an isolated non-production tenant, exact five-day dates, and the reviewed pilot fee.
+Open \`contact-event.json\`, then complete \`owner-input.json\`. Every authority flag starts false. Confirm the named operator and captured Shop baseline; measure the Spa client-import, prepaid-package, treatment-redemption, and correction fields; then choose an isolated non-production tenant, exact five-day dates, and the reviewed pilot fee.
 
 ## 2. Prepare the private handoff and reply
 

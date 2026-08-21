@@ -163,12 +163,12 @@ for (const name of ['baseline-measurement.md', 'acceptance-checklist.md', 'pilot
 }
 
 const kitBaseline = read(`${kitDir}/baseline-measurement.md`)
-for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day']) {
+for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day', 'client_import_row_count', 'weekly_package_sales', 'weekly_treatment_redemptions', 'median_minutes_per_redemption', 'weekly_package_correction_count']) {
   check(kitBaseline.includes(`\`${fieldName}\``), `pilot_kit_baseline_field:${fieldName}`)
 }
 
 const kitAcceptance = read(`${kitDir}/acceptance-checklist.md`)
-for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 'close_minutes_per_day', 'operator_corrections', 'reload_and_retry_result']) {
+for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 'close_minutes_per_day', 'operator_corrections', 'reload_and_retry_result', 'client_import_minutes', 'package_sale_minutes', 'treatment_redemption_minutes', 'package_balance_result']) {
   check(kitAcceptance.includes(`\`${measurement}\``), `pilot_kit_acceptance_measurement:${measurement}`)
 }
 for (const gateName of ['isolatedNonProductionTenantApproved', 'namedOperatorAuthorized', 'pilotDataHandlingApproved', 'ownerReviewedCommercialDraft']) {

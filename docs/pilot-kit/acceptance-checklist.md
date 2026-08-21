@@ -35,17 +35,17 @@ Any run failing any condition is recorded as not accepted, with the correction m
 
 Each day's focus and proof line is verbatim from the generator's evidence plan.
 
-### Day 1 — Baseline and operator walkthrough
+### Day 1 — Baseline and client-import review
 
-Proof: `Record the baseline metrics and complete one observation-only walkthrough.`
+Proof: `Record the Spa baseline, review the client import, and resolve every row before applying sample data.`
 
 - [ ] Baseline numbers from the form re-confirmed with the owner on-site.
-- [ ] One observation-only walkthrough: the founder demonstrates the order flow on the working sample (`/shop/?tab=counter`, then `Review order`, `Create order`, and the order steps in `/shop/?tab=orders`); the operator watches. No evidence run is counted today.
+- [ ] Review the client import preview with the owner. Resolve duplicates, missing identities, and invalid rows before applying sample data. No sample row counts as client evidence.
 - [ ] Evidence captured: baseline sheet finalized; walkthrough noted with date, time, and who was present.
 
 ### Day 2 — Client import and package sale
 
-Proof: `Create and human-confirm test orders; record completion time and corrections.`
+Proof: `Create and human-confirm a package sale for the reviewed client; reconcile payment and record completion time and corrections.`
 
 - [ ] The operator reviews a sample client import, resolves any correction, sells a Spa prepaid package to the matching client, reconciles payment, and completes the order.
 - [ ] Per run, record: run number, minutes taken, review outcome (correct or not), corrections needed, wrong-target actions (must be zero), external effects (must be none).
@@ -53,26 +53,26 @@ Proof: `Create and human-confirm test orders; record completion time and correct
 
 ### Day 3 — Treatment and governed redemption
 
-Proof: `Run a reviewed close and one controlled exception without external posting.`
+Proof: `Complete the matching treatment, record one immutable redemption, and prove mismatched or ineligible redemptions are refused.`
 
 - [ ] The operator schedules and completes the treatment that matches the purchased package, then records one immutable package redemption.
 - [ ] One controlled mismatch is rehearsed (wrong customer, wrong treatment, unreconciled payment, or refunded package); the system must refuse redemption without an external effect.
 - [ ] A reviewed daily close: the operator runs `Save daily close` and the owner checks the day's numbers against the paper day book. Record close minutes for comparison with `close_minutes_per_day`.
 
-### Day 4 — Close and recovery
+### Day 4 — Daily close and recovery
 
-Proof: `Rehearse one return exception plus reload and safe retry evidence.`
+Proof: `Run a reviewed close, reload the workspace, and prove safe retry without duplicate sale, treatment, or redemption events.`
 
 - [ ] One correction or refund boundary is rehearsed end to end — part of the process `shop-spa-owner-pilot` names.
 - [ ] Reload evidence: close and reopen the browser mid-day and confirm the record survived; retry a step safely and confirm no duplicate was created. This is the `reload_and_retry_result` measurement.
 - [ ] Stock checked against reality on `/shop/?tab=inventory` after the return.
 
-### Day 5 — Replay, export, and acceptance
+### Day 5 — Replay, export, and owner acceptance
 
-Proof: `Verify retained evidence, compare measurements, and record the operator decision.`
+Proof: `Verify retained package balance and evidence, compare measurements, create a backup, and record the owner decision.`
 
 - [ ] All per-run records and daily closes gathered and counted: total runs, accepted runs, best consecutive accepted streak.
-- [ ] Comparison against the baseline, per the generator: `Compare median order time, exception rate, close time, operator corrections, and reload/retry evidence with the recorded baseline.`
+- [ ] Comparison against the baseline, per the generator: `Compare import time, package-sale time, treatment-redemption time, package balance, close time, operator corrections, and reload/retry evidence with the recorded baseline.`
 - [ ] The operator's decision recorded in their own words. No improvement claim is made before this review — the handoff contract records `improvementClaimAllowedBeforeReview` as false.
 - [ ] Owner keeps a backup of their workspace (`Download workspace backup`).
 
@@ -87,6 +87,10 @@ The handoff contract requires exactly these, and the daily records above produce
 | `close_minutes_per_day` | Timed daily close, days 2 through 5 |
 | `operator_corrections` | Corrections column of the per-run records |
 | `reload_and_retry_result` | Day 4 reload and safe-retry rehearsal |
+| `client_import_minutes` | Day 1 reviewed import preparation |
+| `package_sale_minutes` | Day 2 reconciled prepaid package sale |
+| `treatment_redemption_minutes` | Day 3 completed treatment and immutable redemption |
+| `package_balance_result` | Day 5 retained balance reconciliation |
 
 ## Boundary for all five days
 
