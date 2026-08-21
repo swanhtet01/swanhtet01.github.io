@@ -10,6 +10,7 @@ import type { ClientSolutionId } from './client-onboarding'
 import {
   managedProductIsVisible,
   managedProductPath,
+  productSwitcherVisible,
   resolveManagedProductHome,
   resolveManagedProductRoute,
 } from './managed-product-access'
@@ -131,12 +132,6 @@ function rememberLastProduct(storage: Pick<Storage, 'setItem'>, product: ClientS
 type NavigationItem = { to: string; label: string; end?: boolean }
 
 const productsNavigation: NavigationItem = { to: '/?choose=1', label: 'Switch product', end: true }
-const productNavigation: Record<ClientSolutionId, NavigationItem> = {
-  commerce: { to: '/shop/', label: 'Shop' },
-  production: { to: '/plant/', label: 'Plant' },
-  website: { to: '/website/', label: 'Website' },
-  ecommerce: { to: '/ecommerce/', label: 'Ecommerce' },
-}
 
 const THEME_KEY = 'supermega-interface-theme'
 const SETUP_KEY = 'supermega.setup.v3'
@@ -468,12 +463,15 @@ export function CoreLayout() {
     : settingsProduct
       ? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }
       : { to: '/settings/#controls', label: 'Recovery' }
-  const activeNavigation: NavigationItem[] = routeProduct
-    ? [productNavigation[routeProduct], productsNavigation]
-    : setupRoute
-      ? [setupNavigation, productsNavigation]
-      : [productsNavigation]
-  const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []
+  const canSwitchProduct = runtime.status !== 'checking'
+    && productSwitcherVisible(portalAccess.status, portalAccess.products)
+  const activeNavigation: NavigationItem[] = internalBuilderRoute
+    ? [setupNavigation]
+    : (routeProduct || setupRoute) && canSwitchProduct
+      ? [productsNavigation]
+      : []
+  const mobileNavigation = activeNavigation
+  const showSignupLink = !accountEntryRoute && !routeProduct && !setupRoute
   // Design phase 3 "bottom-nav work modes", Shop slice: on phones the fixed
   // bottom bar carries Shop's four task modes instead of the two-link product
   // nav. Resolution of the active tab is shared with OperationsPage
@@ -559,13 +557,13 @@ export function CoreLayout() {
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
-        <nav className="core-nav" aria-label="Application">
+        {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
-        </nav>
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link signup-shell-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        </nav> : null}
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{showSignupLink ? <Link className="account-shell-link signup-shell-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link className="account-shell-link mobile-signup-topbar-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{showSignupLink ? <Link className="account-shell-link mobile-signup-topbar-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -576,7 +574,7 @@ export function CoreLayout() {
             users inside one product. It is a plain Link with no active state:
             on /?choose=1 routeProduct is null and this bar never renders. */}
         {routeProduct === 'commerce'
-          ? <nav className="mobile-nav mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{bi(tab.label)}</Link>)}<Link to="/?choose=1">Products</Link></nav>
+          ? <nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{bi(tab.label)}</Link>)}{canSwitchProduct ? <Link to="/?choose=1">Switch</Link> : null}</nav>
           : mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">

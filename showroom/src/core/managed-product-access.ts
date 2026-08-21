@@ -27,6 +27,13 @@ export function managedProductIsVisible(
   return assignedProducts.includes(product)
 }
 
+export function productSwitcherVisible(
+  status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
+  assignedProducts: readonly ClientSolutionId[],
+) {
+  return status === 'local' || status === 'ready' && assignedProducts.length > 1
+}
+
 export function resolveManagedProductRoute(
   requestedProduct: ClientSolutionId | null,
   assignedProducts: readonly ClientSolutionId[],

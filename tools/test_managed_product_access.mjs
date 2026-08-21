@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   managedProductIsVisible,
   managedProductPath,
+  productSwitcherVisible,
   resolveManagedProductHome,
   resolveManagedProductRoute,
 } from '../showroom/src/core/managed-product-access.ts'
@@ -52,6 +53,15 @@ test('the managed launcher shows only assigned products', () => {
     assigned,
   )
   assert.equal(managedProductIsVisible(['commerce'], 'ecommerce'), false)
+})
+
+test('the product switcher appears only when there is somewhere authorized to switch', () => {
+  assert.equal(productSwitcherVisible('local', []), true)
+  assert.equal(productSwitcherVisible('ready', ['commerce']), false)
+  assert.equal(productSwitcherVisible('ready', ['commerce', 'website']), true)
+  assert.equal(productSwitcherVisible('checking', []), false)
+  assert.equal(productSwitcherVisible('reauthenticate', []), false)
+  assert.equal(productSwitcherVisible('error', []), false)
 })
 
 test('shows only connection flows backed by the tenant product assignments', () => {
