@@ -7,6 +7,7 @@ import {
   resolveManagedProductHome,
   resolveManagedProductRoute,
 } from '../showroom/src/core/managed-product-access.ts'
+import { managedProductConnections } from '../showroom/src/core/managed-product-connections.ts'
 
 const products = ['commerce', 'production', 'website', 'ecommerce']
 const paths = ['/shop/', '/plant/', '/website/', '/ecommerce/']
@@ -51,6 +52,28 @@ test('the managed launcher shows only assigned products', () => {
     assigned,
   )
   assert.equal(managedProductIsVisible(['commerce'], 'ecommerce'), false)
+})
+
+test('shows only connection flows backed by the tenant product assignments', () => {
+  assert.deepEqual(
+    managedProductConnections(['commerce', 'production', 'website', 'ecommerce']).map(({ id }) => id),
+    ['online-orders', 'demand-to-production', 'website-intake'],
+  )
+  assert.deepEqual(
+    managedProductConnections(['commerce', 'ecommerce']).map(({ id }) => id),
+    ['online-orders'],
+  )
+  assert.deepEqual(managedProductConnections(['ecommerce']), [])
+  assert.deepEqual(managedProductConnections(['production', 'website']), [])
+})
+
+test('connection decisions do not mutate or reveal unassigned products', () => {
+  const assigned = Object.freeze(['commerce', 'website'])
+  const connections = managedProductConnections(assigned)
+  assert.deepEqual(assigned, ['commerce', 'website'])
+  assert.deepEqual(connections.map(({ products }) => products), [['commerce', 'website']])
+  assert.equal(JSON.stringify(connections).includes('production'), false)
+  assert.equal(JSON.stringify(connections).includes('ecommerce'), false)
 })
 
 test('an authorized deep-link wins and opens its exact product', () => {

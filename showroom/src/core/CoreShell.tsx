@@ -18,6 +18,7 @@ import { clientSetupPath, readProductSetup, type SetupProductId } from './produc
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
+const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
 
 function signupProductSlug(product: SetupProductId) {
   if (product === 'commerce') return 'shop'
@@ -724,8 +725,9 @@ export function ProductHomePage() {
             </Link>
         })}
       </nav>
+      {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products} /></Suspense> : null}
       {!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
-      <p className="product-home-note">{managedPortal ? 'Your company products share one account while preserving product-specific roles and data access.' : 'Your product workspaces stay separate. Opening a sample does not change another product.'}</p>
+      <p className="product-home-note">{managedPortal ? 'Each product keeps its own workspace, roles, and data access. Only purchased product connections appear above.' : 'Your product workspaces stay separate. Opening a sample does not change another product.'}</p>
     </div>
   )
 }
