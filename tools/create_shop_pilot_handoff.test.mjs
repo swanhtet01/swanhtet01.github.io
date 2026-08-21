@@ -22,6 +22,7 @@ import {
   initShopPilotSalesWorkspace,
   initShopPilotSalesWorkspaceFromBundle,
   prepareShopPilotSalesWorkspace,
+  prepareShopPilotClientLaunch,
   renderShopPilotOwnerInputForm,
   renderShopPilotStarterForm,
   verifyShopPilotIntakeStarter,
@@ -640,6 +641,25 @@ test('runs the complete private workspace lifecycle without external action', as
     assert.equal(clientPortal.activationStatus, 'not_applied')
     assert.match(await readFile(join(clientWorkspace, '_templates', 'commerce.csv'), 'utf8'), /SPA-SVC-MASSAGE/)
     assert.doesNotMatch(await readFile(join(clientWorkspace, 'CONTACT-INTAKE.json'), 'utf8'), /Workspace Operator|workspace-private@example\.com/)
+    const clientLaunchWorkspace = join(parent, 'private-client-launch')
+    const clientLaunch = await prepareShopPilotClientLaunch(workspace, clientLaunchWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z')
+    assert.equal(clientLaunch.stage, 'private-client-launch-board-ready')
+    assert.equal(clientLaunch.productCount, 1)
+    assert.equal(clientLaunch.privateArtifactsCreated, 2)
+    assert.equal(clientLaunch.externalWritesPerformed, false)
+    assert.equal(clientLaunch.tenantWritesPerformed, false)
+    assert.equal(clientLaunch.productionActivationPerformed, false)
+    assert.match(clientLaunch.preparationDigest, /^sha256:[0-9a-f]{64}$/)
+    assert.match(clientLaunch.launchBoardDigest, /^sha256:[0-9a-f]{64}$/)
+    const launchArtifacts = await Promise.all([
+      readFile(join(clientLaunchWorkspace, 'client-preparation.private.json'), 'utf8'),
+      readFile(join(clientLaunchWorkspace, 'client-launch-board.private.json'), 'utf8'),
+    ])
+    assert.doesNotMatch(launchArtifacts.join('\n'), /Workspace Operator|workspace-private@example\.com/)
+    await assert.rejects(
+      () => prepareShopPilotClientLaunch(workspace, clientLaunchWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z'),
+      /client_workspace_init_exists/,
+    )
     assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-decision-required')
     await assert.rejects(() => prepareShopPilotSalesWorkspace(workspace), /shop_pilot_workspace_prepared_outputs_exist/)
 
@@ -699,6 +719,7 @@ test('CLI initializes and verifies a metadata-only private workspace', async () 
   const starter = join(parent, 'starter')
   const bundlePath = join(parent, 'intake.json')
   const bundledWorkspace = join(parent, 'bundled-workspace')
+  const clientLaunchWorkspace = join(parent, 'client-launch-workspace')
   const tool = resolve('tools/manage_shop_pilot_workspace.mjs')
   try {
     await writeFile(eventPath, JSON.stringify(contactEvent))
@@ -715,6 +736,22 @@ test('CLI initializes and verifies a metadata-only private workspace', async () 
     assert.equal(bundleInitialized.status, 0, bundleInitialized.stderr)
     assert.equal(JSON.parse(bundleInitialized.stdout).stage, 'owner-input-required')
     assert.doesNotMatch(bundleInitialized.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)
+    const bundledPrepared = spawnSync(process.execPath, [tool, '--prepare', '--workspace', bundledWorkspace], { encoding: 'utf8' })
+    assert.equal(bundledPrepared.status, 0, bundledPrepared.stderr)
+    const clientLaunch = spawnSync(process.execPath, [
+      tool,
+      '--prepare-client-launch',
+      '--workspace', bundledWorkspace,
+      '--client-workspace', clientLaunchWorkspace,
+      '--implementation-owner', 'Responsible delivery operator',
+    ], { encoding: 'utf8' })
+    assert.equal(clientLaunch.status, 0, clientLaunch.stderr)
+    const launchReceipt = JSON.parse(clientLaunch.stdout)
+    assert.equal(launchReceipt.stage, 'private-client-launch-board-ready')
+    assert.equal(launchReceipt.privateArtifactsCreated, 2)
+    assert.equal(launchReceipt.externalWritesPerformed, false)
+    assert.equal(launchReceipt.productionActivationPerformed, false)
+    assert.doesNotMatch(clientLaunch.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)
 
     const initialized = spawnSync(process.execPath, [tool, '--init', '--contact-event', eventPath, '--workspace', workspace], { encoding: 'utf8' })
     assert.equal(initialized.status, 0, initialized.stderr)

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,12 +15,21 @@ import {
   sanitizeShopPilotContactEvent,
   shopPilotInputFromContactEvent,
 } from './create_shop_pilot_handoff.mjs'
-import { initializeClientWorkspaceFromShopPilot } from './prepare_client_demo.mjs'
+import {
+  initializeClientWorkspaceFromShopPilot,
+  prepareClientDemo,
+  writeClientDemoPreparation,
+} from './prepare_client_demo.mjs'
 
 export const SHOP_PILOT_SALES_WORKSPACE_CONTRACT = 'supermega.shop.pilot_sales_workspace.v2'
 export const SHOP_PILOT_SALES_PREPARED_CONTRACT = 'supermega.shop.pilot_sales_prepared.v2'
 export const SHOP_PILOT_INTAKE_STARTER_CONTRACT = 'supermega.shop.pilot_intake_starter.v1'
 export const SHOP_PILOT_INTAKE_BUNDLE_CONTRACT = 'supermega.shop.pilot_intake_bundle.v1'
+export const SHOP_PILOT_CLIENT_LAUNCH_CONTRACT = 'supermega.shop.pilot_client_launch.v1'
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url))
+const CLIENT_PREPARATION_FILE = 'client-preparation.private.json'
+const CLIENT_LAUNCH_BOARD_FILE = 'client-launch-board.private.json'
 
 const FILES = {
   manifest: 'workspace.json',
@@ -707,6 +718,75 @@ export async function createShopPilotClientWorkspace(workspace, clientWorkspace,
   }
 }
 
+function pythonExecutable() {
+  if (process.env.SUPERMEGA_PYTHON?.trim()) return process.env.SUPERMEGA_PYTHON.trim()
+  const local = process.platform === 'win32'
+    ? resolve(ROOT, '.venv', 'Scripts', 'python.exe')
+    : resolve(ROOT, '.venv', 'bin', 'python')
+  if (existsSync(local)) return local
+  return process.platform === 'win32' ? 'python' : 'python3'
+}
+
+function runClientLaunchBoard(command, preparationPath, boardPath) {
+  const artifactOption = command === 'prepare' ? '--output' : '--board'
+  const result = spawnSync(
+    pythonExecutable(),
+    [
+      '-s',
+      resolve(ROOT, 'tools', 'prepare_client_launch_board.py'),
+      command,
+      '--preparation', preparationPath,
+      artifactOption, boardPath,
+    ],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    },
+  )
+  if (result.error || result.status !== 0 || result.signal || !result.stdout?.trim()) {
+    throw new Error(`shop_pilot_client_launch_board_${command}_failed`)
+  }
+  let parsed
+  try { parsed = JSON.parse(result.stdout) } catch { throw new Error(`shop_pilot_client_launch_board_${command}_invalid`) }
+  if (
+    parsed.ok !== true
+    || parsed.contract !== 'supermega.client_launch_board.v1'
+    || parsed.tenantWritesPerformed !== false
+    || parsed.productionActivationPerformed !== false
+  ) throw new Error(`shop_pilot_client_launch_board_${command}_invalid`)
+  return parsed
+}
+
+export async function prepareShopPilotClientLaunch(workspace, clientWorkspace, implementationOwner, reviewedAt = new Date().toISOString()) {
+  const portal = await createShopPilotClientWorkspace(workspace, clientWorkspace, implementationOwner, reviewedAt)
+  const preparationPath = resolve(clientWorkspace, CLIENT_PREPARATION_FILE)
+  const boardPath = resolve(clientWorkspace, CLIENT_LAUNCH_BOARD_FILE)
+  const preparation = await prepareClientDemo({ dataDirectory: clientWorkspace, preparedAt: reviewedAt })
+  await writeClientDemoPreparation(preparation, preparationPath)
+  const preparedBoard = runClientLaunchBoard('prepare', preparationPath, boardPath)
+  const verifiedBoard = runClientLaunchBoard('verify', preparationPath, boardPath)
+  if (preparedBoard.boardDigest !== verifiedBoard.boardDigest) throw new Error('shop_pilot_client_launch_board_binding_invalid')
+  return {
+    contract: SHOP_PILOT_CLIENT_LAUNCH_CONTRACT,
+    stage: 'private-client-launch-board-ready',
+    productCount: portal.productCount,
+    connectionCount: verifiedBoard.connectionCount,
+    blockingGateCount: verifiedBoard.blockingGateCount,
+    preparationDigest: preparation.bundleDigest,
+    launchBoardDigest: verifiedBoard.boardDigest,
+    containsClientData: portal.containsClientData,
+    privateArtifactsCreated: 2,
+    humanReviewRequired: preparation.controls.humanReviewRequired,
+    activationStatus: portal.activationStatus,
+    externalWritesPerformed: false,
+    modelCallsPerformed: false,
+    tenantWritesPerformed: false,
+    productionActivationPerformed: false,
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const workspaceIndex = args.indexOf('--workspace')
@@ -719,10 +799,11 @@ async function main() {
   const decide = args.includes('--decide')
   const verify = args.includes('--verify')
   const createClientWorkspace = args.includes('--create-client-workspace')
+  const prepareClientLaunch = args.includes('--prepare-client-launch')
   const clientWorkspaceIndex = args.indexOf('--client-workspace')
   const implementationOwnerIndex = args.indexOf('--implementation-owner')
-  if ([start, verifyStarter, init, prepare, decide, verify, createClientWorkspace].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
-    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--start | --verify-starter | --init (--contact-event event.json | --intake-bundle bundle.json) | --prepare | --decide | --verify | --create-client-workspace --client-workspace new-private-directory --implementation-owner name) --workspace private-directory')
+  if ([start, verifyStarter, init, prepare, decide, verify, createClientWorkspace, prepareClientLaunch].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
+    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--start | --verify-starter | --init (--contact-event event.json | --intake-bundle bundle.json) | --prepare | --decide | --verify | --create-client-workspace | --prepare-client-launch --client-workspace new-private-directory --implementation-owner name) --workspace private-directory')
   }
   let result
   if (start || verifyStarter) {
@@ -737,11 +818,13 @@ async function main() {
     result = hasContact
       ? await initShopPilotSalesWorkspace(await readJson(resolve(args[contactIndex + 1])), args[workspaceIndex + 1])
       : await initShopPilotSalesWorkspaceFromBundle(await readJson(resolve(args[bundleIndex + 1])), args[workspaceIndex + 1])
-  } else if (createClientWorkspace) {
+  } else if (createClientWorkspace || prepareClientLaunch) {
     if (args.length !== 7 || clientWorkspaceIndex < 0 || !args[clientWorkspaceIndex + 1] || implementationOwnerIndex < 0 || !args[implementationOwnerIndex + 1]) {
       throw new Error('shop_pilot_client_workspace_arguments_invalid')
     }
-    result = await createShopPilotClientWorkspace(args[workspaceIndex + 1], args[clientWorkspaceIndex + 1], args[implementationOwnerIndex + 1])
+    result = prepareClientLaunch
+      ? await prepareShopPilotClientLaunch(args[workspaceIndex + 1], args[clientWorkspaceIndex + 1], args[implementationOwnerIndex + 1])
+      : await createShopPilotClientWorkspace(args[workspaceIndex + 1], args[clientWorkspaceIndex + 1], args[implementationOwnerIndex + 1])
   } else {
     if (args.length !== 3 || contactIndex >= 0 || bundleIndex >= 0) throw new Error('shop_pilot_workspace_arguments_invalid')
     if (prepare) result = await prepareShopPilotSalesWorkspace(args[workspaceIndex + 1])

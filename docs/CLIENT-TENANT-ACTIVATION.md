@@ -19,7 +19,7 @@ performing a hosted write:
 
 ```powershell
 npm.cmd run client:pilot:workspace -- `
-  --create-client-workspace `
+  --prepare-client-launch `
   --workspace C:\private\spa-pilot `
   --client-workspace C:\private\spa-client-portal `
   --implementation-owner "Responsible SuperMega operator"
@@ -27,14 +27,16 @@ npm.cmd run client:pilot:workspace -- `
 
 The command requires the prepared pilot stage and every owner gate, selects the
 `service-business` / beauty-and-spa template, retains only source digests in the
-new workspace, and leaves activation at `not_applied`. Prepare and verify that
-portal workspace locally before compiling the launch board.
+new workspace, prepares the selected Shop data, and creates and verifies
+`client-preparation.private.json` plus `client-launch-board.private.json` in one
+local operation. Its terminal response contains only counts, digests, and false
+external-action controls. Activation remains `not_applied`.
 
-After `client:prepare` produces the reviewed private preparation, compile one
-operator-facing board before preparing an activation target. It lists only the
-client's selected products, exact setup routes, entitlement-valid connections,
-custom-solution lifecycle, evidence gaps, and next actions. It contains no raw
-client rows or secrets and cannot activate a tenant.
+The launch board lists only the client's selected products, exact setup routes,
+entitlement-valid connections, custom-solution lifecycle, evidence gaps, and
+next actions. It contains no raw client rows or secrets and cannot activate a
+tenant. The lower-level commands remain available when an operator needs to
+prepare or verify artifacts separately:
 
 ```powershell
 npm run client:launch:board -- `
