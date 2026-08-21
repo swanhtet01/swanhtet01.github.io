@@ -250,17 +250,44 @@ const REGRESSIONS = [
 const liveSheets = STYLESHEETS.map((path) => ({ path, source: read(path) }))
 const sourceOf = (path) => liveSheets.find((sheet) => sheet.path === path).source
 const findingKey = (finding) => `${finding.defeated.selector} ${finding.property}`
+const regressionsPresentInTree = []
 
 for (const regression of REGRESSIONS) {
   let patched = sourceOf(CORE_CSS)
+  let alreadyRegressed = false
   for (const [fixed, broken] of regression.patches) {
-    const occurrences = patched.split(fixed).length - 1
+    const fixedCount = patched.split(fixed).length - 1
+    if (fixedCount === 1) {
+      const before = patched
+      patched = patched.replace(fixed, broken)
+      // The revert must actually change the source. A no-op patch would leave the fixture scanning
+      // the FIXED stylesheet and then "proving" the scanner finds the defect in it -- which it would
+      // not, so this would surface as a blindness failure rather than silently passing. Asserted
+      // anyway, because a fixture that quietly reverts nothing is the exact shape of the vacuous
+      // checks this file exists to avoid.
+      check(patched !== before, `${regression.name}: reverting its fix must change ${CORE_CSS}`)
+      continue
+    }
+    // The fixed form is gone. Either the defect is back in the tree -- in which case this fixture
+    // needs no patch, the tree IS the fixture, and the live gate below will fail too -- or the rule
+    // was legitimately rewritten and the anchor needs re-pointing. Distinguishing the two is what
+    // stops a real regression from being reported as a confusing "stale fixture" error, and stops a
+    // rewrite from silently reverting nothing and passing.
+    if (patched.split(broken).length - 1 >= 1) {
+      alreadyRegressed = true
+      continue
+    }
     check(
-      occurrences === 1,
-      `${regression.name}: its anchor must appear exactly once in ${CORE_CSS}, got ${occurrences}. The fixture is STALE -- re-anchor it against the rule as it now reads. Do not delete it: it is the only proof this scanner still catches a defect it was built for.`,
+      false,
+      `${regression.name}: its anchor appears ${fixedCount} times in ${CORE_CSS} and the defective form is not present either. The fixture is STALE -- re-anchor it against the rule as it now reads. Do not delete it: it is the only proof this scanner still catches a defect it was built for.`,
     )
-    patched = patched.replace(fixed, broken)
   }
+  // Deliberately does NOT throw here. When the defect is back in the tree, the unpatched source is
+  // already the fixture, so the expected-findings assertion below still proves the scanner detects
+  // it -- and the live gate at the foot of this file then fails with the full, actionable report of
+  // which declarations are being suppressed and where. Throwing here would replace that report with
+  // a fixture-bookkeeping error, which is the less useful of the two failures.
+  if (alreadyRegressed) regressionsPresentInTree.push(regression.name)
 
   const sheets = liveSheets.map((sheet) => (sheet.path === CORE_CSS ? { ...sheet, source: patched } : sheet))
   const result = scan({ sheets })
