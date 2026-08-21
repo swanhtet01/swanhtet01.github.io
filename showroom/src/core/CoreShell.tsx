@@ -7,6 +7,12 @@ import { bi } from './i18n-actions'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
+import {
+  managedProductIsVisible,
+  managedProductPath,
+  resolveManagedProductHome,
+  resolveManagedProductRoute,
+} from './managed-product-access'
 import { currentManagedWorkspace } from './managed-workspace-selection'
 import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
 
@@ -99,19 +105,9 @@ const checkingRuntime: RuntimeHealth = {
 
 const LAST_PRODUCT_KEY = 'supermega.last-product.v1'
 const DEFAULT_ENTRY_PRODUCT: ClientSolutionId = 'commerce'
-const productWorkspacePaths: Record<ClientSolutionId, string> = {
-  commerce: '/shop/',
-  production: '/plant/',
-  website: '/website/',
-  ecommerce: '/ecommerce/',
-}
 
 function isClientSolutionId(value: unknown): value is ClientSolutionId {
   return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
-}
-
-function productWorkspacePath(product: ClientSolutionId) {
-  return productWorkspacePaths[product]
 }
 
 function readLastProduct(storage: Pick<Storage, 'getItem'>): ClientSolutionId | null {
@@ -503,10 +499,12 @@ export function CoreLayout() {
             ? 'Plant'
             : 'Products'
   const navigationClass = (_to: string, isActive: boolean) => isActive ? 'active' : ''
+  const managedRouteDecision = portalAccess.status === 'ready'
+    ? resolveManagedProductRoute(requestedProduct, portalAccess.products)
+    : { kind: 'allow' as const }
   const managedProductAllowed = !requestedProduct
     || portalAccess.status === 'local'
-    || (portalAccess.status === 'ready' && portalAccess.products.includes(requestedProduct))
-  const managedFallbackProduct = portalAccess.status === 'ready' ? portalAccess.products[0] : null
+    || (portalAccess.status === 'ready' && managedRouteDecision.kind === 'allow')
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -590,8 +588,8 @@ export function CoreLayout() {
                     : requestedProduct && portalAccess.status === 'error'
                       ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Product access needs attention" />
                       : requestedProduct && !managedProductAllowed
-                        ? managedFallbackProduct
-                          ? <Navigate replace to={productWorkspacePath(managedFallbackProduct)} />
+                        ? managedRouteDecision.kind === 'redirect'
+                          ? <Navigate replace to={managedRouteDecision.path} />
                           : <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
                         : <Outlet context={runtime} />}
               </RouteErrorBoundary>
@@ -648,18 +646,22 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
   }
   if (portalAccess.status === 'ready') {
     const requestedRouteProduct = route ? productFromPathname(route) : null
-    const assignedRoute = requestedRouteProduct && portalAccess.products.includes(requestedRouteProduct) ? route : null
-    const rememberedProduct = lastProduct && portalAccess.products.includes(lastProduct) ? lastProduct : null
-    const entryProduct = rememberedProduct ?? portalAccess.products[0]
-    if (assignedRoute) return <Navigate replace to={assignedRoute} />
-    if (choosingProduct || !entryProduct) return <ProductHomePage />
-    return <Navigate replace to={productWorkspacePath(entryProduct)} />
+    const decision = resolveManagedProductHome({
+      requestedProduct: requestedRouteProduct,
+      requestedPath: route,
+      rememberedProduct: lastProduct,
+      choosingProduct,
+      assignedProducts: portalAccess.products,
+    })
+    return decision.kind === 'launcher'
+      ? <ProductHomePage />
+      : <Navigate replace to={decision.path} />
   }
   return route
     ? <Navigate replace to={route} />
     : choosingProduct
       ? <ProductHomePage />
-      : <Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
+      : <Navigate replace to={managedProductPath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
 }
 
 export function ProductHomePage() {
@@ -707,7 +709,7 @@ export function ProductHomePage() {
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
-          if (managedPortal && !portalAccess.products.includes(setupKey)) return null
+          if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
           const setup = productSetups?.[setupKey]
           const workspaceName = setup?.startedAt ? setup.workspace : null
           return <Link aria-label={`Open ${name} workspace`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
