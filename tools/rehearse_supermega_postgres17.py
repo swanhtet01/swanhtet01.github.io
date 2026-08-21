@@ -3408,7 +3408,7 @@ def _verify_restored_data(
         11,
         11,
         7,
-        20,
+        23,
         3,
         approved_context["contextDigest"],
         expected_profile["profileDigest"],
