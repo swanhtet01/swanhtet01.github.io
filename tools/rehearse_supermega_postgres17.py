@@ -731,6 +731,34 @@ def _seed_v1_upgrade_data(admin_database_url: str) -> None:
             )
             cursor.execute(
                 """
+                insert into app_private.workspace_events (
+                  event_id, workspace_id, command_id, command_fingerprint,
+                  surface, event_type, actor_id, actor_kind,
+                  expected_version, resulting_version, payload_json, result_json
+                )
+                select
+                  md5('rehearsal-entitlement-event:' || workspace_id)::uuid,
+                  workspace_id,
+                  md5('rehearsal-entitlement-command:' || workspace_id)::uuid,
+                  md5('rehearsal-entitlement-a:' || workspace_id)
+                    || md5('rehearsal-entitlement-b:' || workspace_id),
+                  'company',
+                  'company.workspace.activated',
+                  owner_actor_id,
+                  'human',
+                  null,
+                  null,
+                  jsonb_build_object('products', to_jsonb(products)),
+                  jsonb_build_object('status', 'activated')
+                from (values
+                  ('rehearsal-a', 'owner-a', array['shop']::text[]),
+                  ('rehearsal-b', 'owner-b', array['plant']::text[]),
+                  ('rehearsal-product', 'owner-product', array['shop', 'website']::text[])
+                ) as fixture(workspace_id, owner_actor_id, products)
+                """
+            )
+            cursor.execute(
+                """
                 insert into app_private.workspace_state
                   (workspace_id, surface, version, state_json, updated_by)
                 values

@@ -100,6 +100,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         source = REHEARSAL.read_text(encoding="utf-8")
         self.assertIn("if position == 1:", source)
         self.assertIn("_seed_v1_upgrade_data(admin_database_url)", source)
+        self.assertIn("company.workspace.activated", source)
+        self.assertIn("rehearsal-entitlement-event:", source)
         self.assertIn("'legacy-workspace', 'shop'", source)
         self.assertIn("membership[0] != \"legacy\"", source)
         self.assertIn("list(membership[1]) != [\"commerce.write\"]", source)
