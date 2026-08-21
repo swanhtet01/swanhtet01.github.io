@@ -213,7 +213,7 @@ test('createSelfServeWorkspace fails closed when managed auth is not configured'
   }
 })
 
-test('managed product access is derived only from verified tenant surfaces', () => {
+test('managed product access requires explicit activation-derived entitlements for every product', () => {
   const identity = { workspaceId: WORKSPACE_ID, userId: session.user.id, email: session.user.email }
   const bootstrap = {
     identity: { workspace_id: WORKSPACE_ID, actor_id: session.user.id, actor_kind: 'human' },
@@ -226,7 +226,7 @@ test('managed product access is derived only from verified tenant surfaces', () 
     },
     approvals: [],
   }
-  assert.deepEqual(managedProductsFromBootstrap(bootstrap, identity), ['commerce', 'website', 'ecommerce'])
+  assert.deepEqual(managedProductsFromBootstrap(bootstrap, identity), [])
   assert.deepEqual(
     managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['commerce'] } }, identity),
     ['commerce'],

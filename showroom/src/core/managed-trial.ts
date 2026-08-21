@@ -2440,14 +2440,10 @@ export function managedProductsFromBootstrap(
       return Boolean(verified.states.website)
     })
   }
-  const products: ClientSolutionId[] = []
-  if (verified.states.commerce) products.push('commerce')
-  if (verified.states.production) products.push('production')
-  if (verified.states.website) products.push('website')
-  // Ecommerce is the customer-facing storefront over the tenant's Shop catalog,
-  // orders, stock, and fulfilment state. It never becomes a separate authority.
-  if (verified.states.commerce) products.push('ecommerce')
-  return products
+  // A state row proves that a surface exists, not that the signed-in company
+  // purchased its product. Managed portals therefore fail closed when an old
+  // bootstrap omits the immutable activation-derived entitlement list.
+  return []
 }
 
 export function requireManagedSurfaceState(
