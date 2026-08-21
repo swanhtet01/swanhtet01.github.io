@@ -33,7 +33,7 @@ _ACTIVATION_PRODUCT = {
     "ecommerce": "ecommerce",
 }
 _SYNTHETIC_IDENTITY = re.compile(
-    r"(?:\bpilot\b|\bdemo\b|\btest\b|placeholder|not named|implementation owner)",
+    r"(?:\bsample\b|\bsynthetic\b|\bfake\b|\bpilot\b|\bdemo\b|\btest\b|placeholder|not named|implementation owner|supermega implementation)",
     re.IGNORECASE,
 )
 
@@ -94,7 +94,12 @@ def build_client_activation_readiness(
         if not isinstance(product, Mapping):
             raise ClientActivationReadinessError("Client product preparation is invalid.")
         source_mode = product.get("sourceMode")
-        data_ready = source_mode == "client_csv" and int(product.get("rowCount", 0)) > 0
+        data_ready = (
+            workspace_ready
+            and owner_ready
+            and source_mode == "client_csv"
+            and int(product.get("rowCount", 0)) > 0
+        )
         activation_product = _ACTIVATION_PRODUCT[str(product["product"])]
         managed_request = requests_by_product.get(activation_product)
         if managed_request is not None and (
@@ -190,10 +195,16 @@ def build_client_activation_readiness(
         },
         "blockingGates": blocking_gates,
         "nextActions": [
-            "Replace synthetic workspace and implementation-owner labels with the real business and named client owner.",
-            "Replace every selected product sample fixture with reviewed client CSV data.",
-            "For each product, run one measurable workflow and retain the owner-accepted outcome digest.",
-            "For each product, approve the summary-only AI context and export its managed trial request.",
+            *([] if workspace_ready and owner_ready else [
+                "Replace synthetic workspace and implementation-owner labels with the real business and named client owner.",
+            ]),
+            *([] if all_client_data_ready else [
+                "Replace every selected product sample fixture with reviewed client CSV data.",
+            ]),
+            *([] if all_managed_requests_ready else [
+                "For each product, run one measurable workflow and retain the owner-accepted outcome digest.",
+                "For each product, approve the summary-only AI context and export its managed trial request.",
+            ]),
             "Bind the requests to one Supabase owner, one approval, one protected release, and one v2 tenant activation plan.",
             "Rehearse on hosted PostgreSQL 17 before the separately approved production activation.",
         ],

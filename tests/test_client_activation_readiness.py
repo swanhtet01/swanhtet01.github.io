@@ -38,7 +38,14 @@ def _run(*arguments: object) -> subprocess.CompletedProcess[str]:
 
 
 class ClientActivationReadinessTests(unittest.TestCase):
-    def _preparation(self, directory: Path, *, real_client_data: bool) -> Path:
+    def _preparation(
+        self,
+        directory: Path,
+        *,
+        real_client_data: bool,
+        workspace: str | None = None,
+        owner: str | None = None,
+    ) -> Path:
         intake = directory / "intake"
         initialized = _run(
             "node", PREPARE_TOOL, "--init", intake,
@@ -48,8 +55,8 @@ class ClientActivationReadinessTests(unittest.TestCase):
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
         profile_path = intake / "client.json"
         profile = json.loads(profile_path.read_text(encoding="utf-8"))
-        profile["workspace"] = "Lotus Wellness Spa" if real_client_data else "Beauty Spa Client Pilot"
-        profile["owner"] = "Mya Mya Win" if real_client_data else "Swan Htet - implementation owner"
+        profile["workspace"] = workspace or ("Lotus Wellness Spa" if real_client_data else "Beauty Spa Client Pilot")
+        profile["owner"] = owner or ("Mya Mya Win" if real_client_data else "Swan Htet - implementation owner")
         profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if real_client_data:
             for product in ("commerce", "website", "ecommerce"):
@@ -119,6 +126,27 @@ class ClientActivationReadinessTests(unittest.TestCase):
             self.assertFalse(report["gates"]["allAcceptedProductOutcomesReady"])
             self.assertIn("accepted_product_outcome_required:shop", report["blockingGates"])
             self.assertNotIn("reviewed_client_data_required:shop", report["blockingGates"])
+
+    def test_sample_labels_cannot_turn_present_csv_files_into_real_client_evidence(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-sample-label-readiness-") as temporary:
+            directory = Path(temporary)
+            preparation_path = self._preparation(
+                directory,
+                real_client_data=True,
+                workspace="Golden Lotus Spa - SAMPLE",
+                owner="SuperMega Implementation - SAMPLE",
+            )
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            portal = build_client_portal_provisioning_bundle(preparation)
+            report = build_client_activation_readiness(preparation, portal)
+
+            self.assertFalse(report["client"]["workspaceIdentityReady"])
+            self.assertFalse(report["client"]["namedClientOwnerReady"])
+            self.assertFalse(report["gates"]["allReviewedClientDataReady"])
+            self.assertTrue(all(row["dataStatus"] == "sample_fixture_only" for row in report["products"]))
+            self.assertIn("real_workspace_identity_required", report["blockingGates"])
+            self.assertIn("named_client_owner_required", report["blockingGates"])
+            self.assertIn("reviewed_client_data_required:shop", report["blockingGates"])
 
     def test_report_verification_rejects_tampering(self) -> None:
         with tempfile.TemporaryDirectory(prefix="supermega-readiness-tamper-") as temporary:
