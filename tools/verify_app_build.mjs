@@ -3737,7 +3737,27 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !coreSource.includes('prepareManagedEcommerceShopDraftV2')
   || !coreSource.includes('setExtraOrderLines(remainingLines.map')
   || !coreSource.includes('separate Shop action gate')) fail('managed_ecommerce_inbox_contract_missing')
-if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
+// An inventory, not a sample. This guard was a single `includes('src/products')` pin, which
+// said nothing about the other source roots -- and showroom/src/analytics/ shipped underneath
+// it: metrics-collector.ts is imported by main.tsx and seven product modules, and eslint never
+// saw the directory. Proven 2026-08-21 by putting two hard errors (no-explicit-any,
+// no-unused-vars) in that file: `npm --prefix showroom run lint` stayed at its 17-warning
+// baseline and exit 0, and this check stayed green. Every directory under showroom/src that
+// holds TypeScript must now be named in the lint script, so the next new one cannot slip in.
+const showroomLintScript = String(appPackage.scripts?.lint ?? '')
+const showroomSourceRoot = resolve(root, 'showroom', 'src')
+const typedShowroomSourceRoots = []
+for (const entry of await readdir(showroomSourceRoot, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue
+  const contents = await walk(resolve(showroomSourceRoot, entry.name))
+  if (contents.some((path) => /\.tsx?$/.test(path))) typedShowroomSourceRoots.push(entry.name)
+}
+const unlintedShowroomSourceRoots = typedShowroomSourceRoots
+  .filter((name) => !showroomLintScript.includes(`src/${name}`))
+  .sort()
+if (!showroomLintScript.includes('src/products') || unlintedShowroomSourceRoots.length) {
+  fail(`prototype_sources_not_linted:${unlintedShowroomSourceRoots.join('|') || 'src/products'}`)
+}
 if (!websiteSource.includes('Nothing has been deployed.')
   || !websiteSource.includes('Nothing was deployed.')
   || websiteSource.includes('Approved site file saved and confirmed. No deployment occurred.')
@@ -20322,6 +20342,16 @@ else {
   const initialJavascriptBytes = (await Promise.all([...initialJavascriptAssets].map(async (asset) => (
     await stat(resolve(dist, 'assets', asset))
   ).size))).reduce((total, size) => total + size, 0)
+  // FLOOR before ceiling -- the same rule the shop-route closure above states, applied to the
+  // other graph walk. This budget AND the eager-load check below both read
+  // initialJavascriptAssets, so a walk that stops resolving specifiers (a bundler output-format
+  // change the regex above no longer matches) makes both pass while seeing only the entry
+  // chunk. Proven 2026-08-21 by breaking that regex: the graph fell from 4 assets / 294,567
+  // bytes to 1 / 249,633 and the gate still reported ok:true, with the eager-load check
+  // scanning a one-asset set. Raise the ceiling for real product value as usual; when a real
+  // reduction trips the floor, lower the floor in the same commit and say what shrank.
+  if (initialJavascriptAssets.size < 3) fail(`initial_javascript_graph_implausible:${initialJavascriptAssets.size}`)
+  if (initialJavascriptBytes < 260_000) fail(`initial_javascript_budget_implausible:${initialJavascriptBytes}`)
   if (initialJavascriptBytes > 300_000) fail(`initial_javascript_budget:${initialJavascriptBytes}`)
   if ([...initialJavascriptAssets].some((asset) => /^(?:core-app|commerce-model|operating-models|shop-planning-models|website-model)-/.test(asset))) {
     fail('product_operations_eagerly_loaded_on_home')
