@@ -515,13 +515,30 @@ function collectBackupRefusal(): LocalWorkspaceBackupRefusal | null {
   return typeof window === 'undefined' ? null : describeLocalWorkspaceBackupRefusal(window.localStorage)
 }
 
-function backupHref(backup: LocalWorkspaceBackup | null) {
-  return backup ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(backup, null, 2))}` : '#'
+// The bytes of the backup file, and nothing else. Kept as its own function so the artifact
+// can be weighed without a DOM: this string IS the file that lands on the owner's disk, so a
+// test that pins this pins what she gets. The `null, 2` is load-bearing -- an owner who opens
+// this file to check it is looking at the only human-readable copy of her device.
+function backupFileText(backup: LocalWorkspaceBackup) {
+  return JSON.stringify(backup, null, 2)
 }
 
 function backupFilename(backup: LocalWorkspaceBackup | null) {
   const day = backup?.createdAt.slice(0, 10) || new Date().toISOString().slice(0, 10)
   return `supermega-workspace-backup-${day}.json`
+}
+
+// Hand a file to the browser, then let go of it. Both downloads on this page mint an object
+// URL, and an object URL that is never revoked pins its whole buffer for the life of the page
+// -- at the workspace ceiling that is megabytes, on the device least able to spare them. One
+// place that gets the revocation right, rather than two that each have to remember.
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.download = filename
+  anchor.href = url
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export function WorkspaceControlsPage() {
@@ -542,7 +559,6 @@ export function WorkspaceControlsPage() {
   const [resetBusy, setResetBusy] = useState(false)
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNotice, setArchiveNotice] = useState('')
-  const backupDownload = useMemo(() => ({ href: backupHref(currentBackup), filename: backupFilename(currentBackup) }), [currentBackup])
   const backupRefusal = useMemo(() => (currentBackup ? null : collectBackupRefusal()), [currentBackup])
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
@@ -608,6 +624,30 @@ export function WorkspaceControlsPage() {
     }
   }
 
+  // Built on the click, for the same reason downloadSalesArchive below is -- and for a worse
+  // case than the archive's.
+  //
+  // This used to be a memoised data: URL, built on mount whether or not Download was ever
+  // pressed. Measured 2026-08-21 against a Shop at its enforced 2 MiB ceiling (~1,190
+  // completed sales, a 2,346,066-byte backup file): serialising, pretty-printing and
+  // percent-encoding it cost 15.1 ms of a 23.1 ms mount path on a desktop -- 65% of the
+  // mount -- and left a 3,779,526-character string alive for the life of the page. That is
+  // 1.61x the file it carries, because percent-encoding a pretty-printed JSON encodes every
+  // quote, brace, newline and indent space. A cheap Android tablet pays several times the
+  // desktop figure, and the device nearest the ceiling is both the slowest and the one with
+  // the least memory to spare. Almost nobody presses Download.
+  //
+  // Same 2,346,066 bytes, byte for byte: a Blob carries the string's UTF-8 directly, which is
+  // exactly what the data: URL decoded to. No BOM -- unlike the CSV below, this file is read
+  // back by loadBackupFile, and a BOM is not JSON.
+  // Through downloadBlob, which revokes: keeping a data: URL alive on mount and swapping it
+  // for an object URL that is never released would have traded one megabyte-shaped leak for
+  // another and bought the owner nothing.
+  function downloadWorkspaceBackup() {
+    if (!currentBackup) return
+    downloadBlob(backupFilename(currentBackup), new Blob([backupFileText(currentBackup)], { type: 'application/json;charset=utf-8' }))
+  }
+
   // Built on demand rather than in a memo. At the workspace ceiling the archive is ~700 KB of
   // CSV over ~1,250 sales and costs about 80 ms on a desktop -- fine for a button press,
   // wasteful on every render of a settings page, and this runs on cheap Android tablets.
@@ -626,17 +666,13 @@ export function WorkspaceControlsPage() {
         return
       }
       const filename = `supermega-shop-archive-${archive.generatedAt.slice(0, 10)}-${archive.digest.slice(7, 15)}.csv`
-      // A Blob, not a data: URL. Every other export on this page fits in a memoised data URL,
-      // but this one is ~700 KB at the ceiling and encodeURIComponent would make a ~3.5 MB
-      // string of it -- the shop nearest the ceiling is the one least able to afford that.
+      // A Blob, not a data: URL. This one is ~700 KB at the ceiling and encodeURIComponent
+      // would make a ~3.5 MB string of it -- the shop nearest the ceiling is the one least
+      // able to afford that. The workspace backup above now follows the same rule, and both
+      // hand off through downloadBlob so neither can forget to revoke.
       // The U+FEFF byte-order mark every other CSV in this app carries, so a spreadsheet
       // opens Burmese product and customer names as UTF-8 instead of mojibake.
-      const url = URL.createObjectURL(new Blob([`\uFEFF${commerceWorkspaceArchiveCsv(archive)}`], { type: 'text/csv;charset=utf-8' }))
-      const anchor = document.createElement('a')
-      anchor.download = filename
-      anchor.href = url
-      anchor.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      downloadBlob(filename, new Blob([`\uFEFF${commerceWorkspaceArchiveCsv(archive)}`], { type: 'text/csv;charset=utf-8' }))
       // Every number here is read back off the artifact that was just written, so the sentence
       // cannot drift from the file. The uncovered count is stated even when it is the boring
       // case, because "nothing is missing" is only worth saying if the same sentence would
@@ -739,7 +775,7 @@ export function WorkspaceControlsPage() {
           <div><span className="core-eyebrow">Browser workspace</span><h2>Save or restore your work.</h2><p>A restore point stays on this device. A downloaded backup can be kept somewhere safer.</p></div>
           <div className="trial-actions">
             <button className="core-button" onClick={saveRestorePoint} type="button">Save restore point</button>
-            {currentBackup ? <a className="core-button" download={backupDownload.filename} href={backupDownload.href}>Download workspace backup</a> : <button className="core-button" disabled type="button">Backup unavailable</button>}
+            {currentBackup ? <button className="core-button" onClick={downloadWorkspaceBackup} type="button">Download workspace backup</button> : <button className="core-button" disabled type="button">Backup unavailable</button>}
             <label className="core-button">Load backup file<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadBackupFile(file) }} type="file" /></label>
           </div>
           {/* A disabled button on its own is the shape of the disaster this product already
