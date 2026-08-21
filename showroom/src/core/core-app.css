@@ -1004,6 +1004,9 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-help { margin: 0; color: var(--core-muted); font-size: 0.625rem; }
 .product-onboarding-help a { color: var(--core-ink); font-weight: var(--font-weight-bold); text-underline-offset: 3px; }
 .product-onboarding-help a:hover { color: var(--core-green); }
+.product-onboarding-recovery { display: grid; justify-items: start; gap: var(--space-2); border: 0.0625rem solid color-mix(in srgb, var(--core-warn) 34%, var(--core-line)); border-radius: var(--radius-md); padding: var(--space-3); background: color-mix(in srgb, var(--core-warn) 7%, var(--core-panel)); }
+.product-onboarding-recovery p { margin: 0; color: var(--core-ink); font-size: 0.6875rem; line-height: 1.5; }
+.product-onboarding-recovery .core-button { min-height: 2.75rem; }
 .product-onboarding-peer-name { color: var(--core-green); font-weight: 760; }
 .product-onboarding-owner-drift { border-left: 3px solid var(--core-green); padding-left: 10px; }
 .business-template-picker { display: grid; gap: 10px; }

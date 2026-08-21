@@ -530,6 +530,7 @@ export function WorkspaceControlsPage() {
   const [notice, setNotice] = useState('')
   const [restoreBusy, setRestoreBusy] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
+
   const [resetBusy, setResetBusy] = useState(false)
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNotice, setArchiveNotice] = useState('')
@@ -725,7 +726,9 @@ export function WorkspaceControlsPage() {
           <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} scope={shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)} />
         </section>
 
-        <section className="core-panel trial-control-panel">
+        {/* Native anchor scrolling fires before this lazy route has rendered the target. The ref
+            repeats it at mount so recovery opens here instead of 2,000px above this panel. */}
+        <section className="core-panel trial-control-panel" id="workspace-recovery" ref={window.location.hash === '#workspace-recovery' ? (node) => node?.scrollIntoView({ block: 'start' }) : undefined}>
           <div><span className="core-eyebrow">Browser workspace</span><h2>Save or restore your work.</h2><p>A restore point stays on this device. A downloaded backup can be kept somewhere safer.</p></div>
           <div className="trial-actions">
             <button className="core-button" onClick={saveRestorePoint} type="button">Save restore point</button>

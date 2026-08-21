@@ -59,7 +59,7 @@ function SettingsEntry() {
     return <Suspense fallback={<ProductLoading name="product setup" />}><ProductOnboardingPage product={product} /></Suspense>
   }
 
-  if (location.hash === '#controls') {
+  if (location.hash === '#controls' || location.hash === '#workspace-recovery') {
     return <Suspense fallback={<ProductLoading name="workspace controls" />}><WorkspaceControlsPage /></Suspense>
   }
 

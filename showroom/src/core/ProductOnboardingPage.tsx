@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate, useOutletContext } from 'react-router'
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
@@ -176,6 +176,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
+  // A schedule that predates the current integrity contract is protected, so provisioning must
+  // fail closed. The error used to be rendered as one sentence with no action, leaving a new owner
+  // unable to finish setup and unable to discover the backup-and-reset controls that can recover
+  // the device without silently deleting appointment evidence.
+  const appointmentRecoveryRequired = product === 'commerce'
+    && notice.startsWith('Saved appointments are unreadable')
 
   useEffect(() => {
     if (setup.product === product) return undefined
@@ -443,7 +449,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
-          <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
+          {appointmentRecoveryRequired ? (
+            <div aria-live="assertive" className="product-onboarding-recovery" role="alert">
+              <p>{notice}</p>
+              <Link className="core-button" to="/settings/#workspace-recovery">Export or reset this device</Link>
+            </div>
+          ) : <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>}
         </form>
       </div>
     </div>
