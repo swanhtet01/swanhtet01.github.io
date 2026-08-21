@@ -20005,13 +20005,25 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // total moved 3_074_752 -> 3_074_787. This guard therefore needs no headroom for that
 // difference at all, which is a reason to prefer it beyond the accounting.
 //
-// Ceiling 475_000: 7_235 bytes of headroom, 1.55%. Sized from what it has to catch and
-// what it must not, both run rather than estimated (see the PR). Across three real
-// builds #519 moved this number +466 while adding +6_429 to the raw total, so ordinary
-// work of that shape spends a few hundred bytes here and the headroom holds for several
-// such changes. A 40 KB module added to CoreApp.tsx trips it. When it does trip,
-// re-measure on a fresh dist/ and record what the growth bought, exactly as the entries
-// above do -- do not carry 467_765 forward.
+// SIZED FROM REAL BUILDS, not estimated. Three fresh builds of this repo's own history,
+// each measured by this same walk:
+//     42aaa6c6  pre-#519    464_717 br q3  (449_041 gzip -9)   raw total 3_058_119
+//     f39dfe50  #519        465_032 br q3  (449_464 gzip -9)   raw total 3_064_548
+//     f3cacb09  main today  467_765 br q3  (452_137 gzip -9)   raw total 3_074_787
+// #519 cost the till 315 bytes and cost the OLD guard 6_429 -- a 20x misattribution, and
+// the direction that matters: the file it was charged for is the one that makes repeat
+// visits free. (The gzip column reproduces #526's independently taken +425 as +423, from
+// a different closure rule, which is the cross-check that the boundary here is sane.)
+// The four PRs between #519 and today moved it +2_733 in total, ~680 bytes each.
+//
+// Ceiling 475_000: 7_235 bytes of headroom, 1.55%, so roughly ten PRs of that observed
+// shape before it trips -- a slower cadence than the raw ceiling above, which was raised
+// four times in two days. It still trips on a single real regression: 40 KB of ordinary
+// product code added to a module CoreApp.tsx statically imports (+42_133 raw, in the
+// shared capability-tiers chunk) measures +8_211 here and fails this check, while being
+// invisible to a raw total that any other chunk's shrinkage could offset. Both
+// directions were run against real builds, not argued; the PR records them. When it trips, re-measure on a fresh dist/ and record what the growth bought,
+// exactly as the entries above do -- do not carry 467_765 forward.
 let shopRouteWireBytes = 0
 let shopRouteAssetCount = 0
 const CDN_BROTLI_QUALITY = 3
