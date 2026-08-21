@@ -45,7 +45,7 @@ import {
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
 import {
-  commerceOrderAcknowledgement,
+  commerceOrderAcknowledgementReader,
   commerceOrderCorrectionExpectation,
   commerceStorefrontOrderTimeline,
   commerceStorefrontRequests,
@@ -325,6 +325,29 @@ export function EcommerceBuyingWorkspace({
     const localOnlyRequests = activeBuyingState.requests.filter((request) => !sharedRequestIds.has(request.id))
     return commerceStorefrontOrderTimeline(commerceState, [...sharedRequests, ...localOnlyRequests])
   }, [activeBuyingState.requests, commerceState])
+  // One validated workspace for every intent on this screen, not one per intent.
+  //
+  // The cancellation, amendment and reschedule loops below each ask for an order
+  // acknowledgement per intent, and commerceOrderAcknowledgement validates the ENTIRE
+  // workspace on every call. Unlike the Shop map #539 fixed, these three loops are not in a
+  // memo at all -- they are in the component body, so they re-ran on every keystroke in the
+  // customer name, phone or address fields.
+  //
+  // Measured 2026-08-21 against the buying contract's own enforced ceiling, driven through
+  // the real exported transitions (100 requests, 100 orders, 100 cancellation intents -- the
+  // most the contract will hold; see the note in test_ecommerce_order_coexistence.mjs) on a
+  // workspace at its 2 MiB storage ceiling (2,192 orders, 2,096,352 bytes):
+  //
+  //   as shipped        100 validations   5.8 s per render     56.8 s over ten renders
+  //   one reader        one validation    0.07 s               0.68 s over ten renders
+  //   memoized here     one validation    0.07 s               0.07 s over ten renders
+  //
+  // Keyed on commerceState, which is a new object only when the workspace actually changes,
+  // so typing in a field no longer revalidates anything. Reading many documents out of one
+  // validated state is sound because validateCommerceState is a predicate rather than a
+  // normaliser -- pinned in test_commerce_state_validator.mjs -- and every document still
+  // comes from a state that was validated; the same state is now checked once, not 100 times.
+  const readOrderAcknowledgement = useMemo(() => commerceOrderAcknowledgementReader(commerceState), [commerceState])
   const latestRequestEntry = latestRequest
     ? combinedOrderTimeline.find((entry) => entry.request.id === latestRequest.id) ?? null
     : null
@@ -398,7 +421,7 @@ export function EcommerceBuyingWorkspace({
       outcomes.push({ intent, kind: 'kept', decidedAt: decision.createdAt, refundStatus: 'none' })
       return outcomes
     }
-    const acknowledgement = entry?.order ? commerceOrderAcknowledgement(commerceState, entry.order.id) : null
+    const acknowledgement = entry?.order ? readOrderAcknowledgement(entry.order.id) : null
     if (acknowledgement?.cancellation.state === 'cancelled'
       && acknowledgement.evidence.sourceRecordId === intent.sourceRequestId
       && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) {
@@ -414,7 +437,7 @@ export function EcommerceBuyingWorkspace({
       statuses.push({ intent, state: 'replacement_created', replacementOrderId: replacementEntry.order.id })
       return statuses
     }
-    const acknowledgement = originalEntry?.order ? commerceOrderAcknowledgement(commerceState, originalEntry.order.id) : null
+    const acknowledgement = originalEntry?.order ? readOrderAcknowledgement(originalEntry.order.id) : null
     if (acknowledgement?.cancellation.state === 'cancelled'
       && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) {
       statuses.push({ intent, state: 'replacement_needed', replacementOrderId: '' })
@@ -438,7 +461,7 @@ export function EcommerceBuyingWorkspace({
       statuses.push({ intent, state: 'replacement_created', replacementOrderId: replacementEntry.order.id })
       return statuses
     }
-    const acknowledgement = originalEntry?.order ? commerceOrderAcknowledgement(commerceState, originalEntry.order.id) : null
+    const acknowledgement = originalEntry?.order ? readOrderAcknowledgement(originalEntry.order.id) : null
     if (acknowledgement?.cancellation.state === 'cancelled'
       && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) {
       statuses.push({ intent, state: 'replacement_needed', replacementOrderId: '' })
