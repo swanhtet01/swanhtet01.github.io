@@ -9,6 +9,7 @@ import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceO
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
+import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
@@ -166,6 +167,7 @@ import {
   type CommerceTaxConfiguration,
   type CommerceTaxMode,
   type CommerceCustomerCreditPolicyStatus,
+  type CommerceDailyCloseExport,
   type CommerceOrderAcknowledgement,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
@@ -1786,13 +1788,25 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (names.length === 1) return names[0]
     return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`
   }
+  // The artifact stays memoised: four places on this screen read whether it exists to decide
+  // what to say ("CSV ready", "Export ready", "Review import"), so it is genuinely consumed on
+  // every render. The FILE is not. It used to be spelled out here as a percent-encoded data:
+  // URL and held for the life of the page.
+  //
+  // Measured 2026-08-21 against a Shop driven to its enforced 2 MiB ceiling through the real
+  // transitions (1,453 orders, 1,244 completed, one saved close): the close CSV is 509,334
+  // bytes and its data: URL 758,928 -- 1.49x, because percent-encoding escapes every comma,
+  // quote and newline. This memo is keyed on `commerce`, which is a new object after every
+  // sale, so that string was rebuilt and re-retained on every sale all day, for a file an
+  // owner downloads at most once a day. The till sits on this screen; the settings page #535
+  // fixed is opened rarely, and this one is never closed.
   const latestCloseDownload = useMemo(() => {
     if (!latestClose) return null
     const artifact = commerceDailyCloseExport(commerce, latestClose.id)
     if (!artifact) return null
     return {
+      artifact,
       filename: `supermega-shop-close-${artifact.businessDate}-${artifact.digest.slice(7, 15)}.csv`,
-      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceDailyCloseCsv(artifact)}`)}`,
     }
   }, [commerce, latestClose])
   const latestAccountingDownload = useMemo(() => {
@@ -6925,7 +6939,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
       <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
       {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
-      {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
+      {latestCloseDownload ? <button className="core-button" data-close-export="accounting-csv-v1" onClick={() => downloadBlob(latestCloseDownload.filename, new Blob([closeExportFileText(latestCloseDownload.artifact)], { type: 'text/csv;charset=utf-8' }))} type="button">Download close CSV</button> : null}
       {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
         <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
         <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href} onClick={() => emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })}>Download accounting CSV</a>
@@ -7160,6 +7174,41 @@ function OrderCalculationNote({ order }: { order: CommerceOrder }) {
   return <small data-order-calculation-note="true" data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}>{formatCommerceCalculation(order.calculation)}</small>
 }
 
+// The bytes of the acknowledgement file, and nothing else. Kept as its own function so the
+// artifact can be weighed without a DOM: this string IS the file the customer is handed, so a
+// test that pins this pins what she gets.
+//
+// The U+FEFF byte-order mark is load-bearing and must stay. This file is opened by whatever
+// the customer has -- Notepad, a spreadsheet, a phone viewer -- and without the mark a Burmese
+// customer or product name comes back as mojibake. It is the opposite call from the workspace
+// backup on the settings page, which must NOT carry one because loadBackupFile JSON.parses it
+// back and a BOM is not JSON. Nothing reads this file back in.
+function orderAcknowledgementFileText(artifact: CommerceOrderAcknowledgement) {
+  return `\uFEFF${commerceOrderAcknowledgementText(artifact)}`
+}
+
+// The bytes of the daily close CSV, on the same terms: this string IS the file, and it carries
+// the same U+FEFF every other CSV in this app carries so a spreadsheet opens Burmese product
+// and customer names as UTF-8 rather than mojibake.
+function closeExportFileText(artifact: CommerceDailyCloseExport) {
+  return `\uFEFF${commerceDailyCloseCsv(artifact)}`
+}
+
+// Built on the click, not once per order on the render path.
+//
+// The map above holds one entry per order and used to carry a percent-encoded data: URL in
+// each. Measured 2026-08-21 on a Shop driven to its enforced 2 MiB ceiling through the real
+// transitions (1,453 orders): 1,332,424 bytes of acknowledgement text became 1,852,602 bytes
+// of data: URL, all of it alive for the life of the page -- half a megabyte more than the
+// settings-page backup #535 removed, on the screen that is never closed rather than one that
+// is rarely opened. The map is keyed on `commerce`, a new object after every sale, so every
+// sale rebuilt all 1,453 of them. At most one is ever downloaded.
+//
+// The ARTIFACT still has to be built here: `Boolean(acknowledgement)` decides whether this
+// order shows any secondary actions at all, and "View receipt" hands the artifact straight to
+// the dialog. Only the file is deferred, and building it from an artifact already in hand
+// measured 0.011 ms -- nothing, next to the 53.9 ms the artifact itself costs. See the note on
+// that cost in the PR: it is a separate and much larger bug than this one.
 function orderAcknowledgementDownload(commerce: CommerceState, orderId: string) {
   try {
     const artifact = commerceOrderAcknowledgement(commerce, orderId)
@@ -7168,7 +7217,6 @@ function orderAcknowledgementDownload(commerce: CommerceState, orderId: string) 
     return {
       artifact,
       filename: `supermega-${safeOrderId}-acknowledgement.txt`,
-      href: `data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceOrderAcknowledgementText(artifact)}`)}`,
     }
   } catch {
     return null
@@ -7176,6 +7224,21 @@ function orderAcknowledgementDownload(commerce: CommerceState, orderId: string) 
 }
 
 type OrderAcknowledgementDownload = NonNullable<ReturnType<typeof orderAcknowledgementDownload>>
+
+// The two receipt controls an order carries, in one place. The active order list and the
+// archive below it rendered a byte-identical copy of this pair each; they are the two controls
+// that must agree about what a receipt IS, so keeping two copies in step was a standing
+// invitation to drift. A fragment, so the rendered DOM is exactly what it was.
+function OrderReceiptActions({ acknowledgement, onViewReceipt }: {
+  acknowledgement: OrderAcknowledgementDownload | undefined
+  onViewReceipt: (artifact: CommerceOrderAcknowledgement) => void
+}) {
+  if (!acknowledgement) return null
+  return <>
+    <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button>
+    <button className="text-link subtle" data-order-acknowledgement="local-download" onClick={() => downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)], { type: 'text/plain;charset=utf-8' }))} type="button">Download acknowledgement</button>
+  </>
+}
 
 function OrderList({
   acknowledgementDownloads,
@@ -7263,8 +7326,7 @@ function OrderList({
           <div>
             {settleSaleIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
             {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
-            {acknowledgement ? <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button> : null}
-            {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
+            <OrderReceiptActions acknowledgement={acknowledgement} onViewReceipt={onViewReceipt} />
             {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
           </div>
         </details> : null}
@@ -7450,8 +7512,7 @@ function ClosedOrderHistory({
       <div className="order-archive-actions">
         <b>{formatMoney(adjustedTotal)}</b>
         {adjustedTotal !== order.total ? <small>original {formatMoney(order.total)}</small> : null}
-        {acknowledgement ? <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button> : null}
-        {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
+        <OrderReceiptActions acknowledgement={acknowledgement} onViewReceipt={onViewReceipt} />
         {order.status === 'completed' && (returnable || editing) ? <button
           aria-expanded={editing}
           className="text-link"
