@@ -724,7 +724,11 @@ test('the refusal names the cause in the units the storage meter uses, and warns
   const countRefusal = { reason: 'too_many_records', bytes: 1_000, maxBytes: LOCAL_WORKSPACE_BACKUP_MAX_BYTES, records: 300, maxRecords: LOCAL_WORKSPACE_BACKUP_MAX_RECORDS }
   const countMessage = localWorkspaceBackupRefusalMessage(countRefusal)
   assert.match(countMessage, /300 separate records/, 'a device refused on its record count must be told about records, not megabytes')
-  assert.ok(!countMessage.includes('MB of records'), 'a record-count refusal must not report a size as the cause')
+  assert.ok(!/\d MB/.test(countMessage), `a record-count refusal must not name a size as the cause: ${countMessage}`)
+  // The size the bytes message reports is the size of the FILE, not of the records. Escaping
+  // adds about 12%, so "this device holds N MB" would be wrong by that margin and would match
+  // no other figure in the product.
+  assert.ok(!/holds [\d.]+ MB/.test(message), `the refusal reports the file size as though it were the stored size: ${message}`)
 })
 
 // The sentence has to reach the page. Read from the shipping source rather than

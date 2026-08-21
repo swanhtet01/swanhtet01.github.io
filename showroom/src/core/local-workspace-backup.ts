@@ -146,10 +146,14 @@ export function restoreLocalWorkspaceBackupFromEvidence(value: unknown) {
  * Saying so here is the difference between a warning and a trap.
  */
 export function localWorkspaceBackupRefusalMessage(refusal: LocalWorkspaceBackupRefusal) {
-  const held = refusal.reason === 'too_many_records'
-    ? `${refusal.records.toLocaleString()} separate records and a backup file can carry ${refusal.maxRecords.toLocaleString()}`
-    : `${(refusal.bytes / 1048576).toFixed(2)} MB of records and a backup file can carry ${(refusal.maxBytes / 1048576).toFixed(2)} MB`
-  return `This device cannot be backed up to a file. It holds ${held}. Nothing has been lost and your records are still on this device, but there is no file that can put this device back the way it is now. Keep a readable copy of your sales with Download sales archive below, and do not reset this device until a backup succeeds.`
+  // `bytes` is the size of the FILE these records would make, not the size of the records
+  // themselves -- escaping them inside the envelope adds about 12%. Saying "this device holds
+  // 5.74 MB" would be wrong by that margin, and would not match any figure she can see
+  // anywhere else in the product.
+  const cause = refusal.reason === 'too_many_records'
+    ? `It holds ${refusal.records.toLocaleString()} separate records and a backup file can carry ${refusal.maxRecords.toLocaleString()}.`
+    : `Its records would need a ${(refusal.bytes / 1048576).toFixed(2)} MB file and a backup file can carry ${(refusal.maxBytes / 1048576).toFixed(2)} MB.`
+  return `This device cannot be backed up to a file. ${cause} Nothing has been lost and your records are still on this device, but there is no file that can put this device back the way it is now. Keep a readable copy of your sales with Download sales archive below, and do not reset this device until a backup succeeds.`
 }
 
 function lockNameForWorkspaceKey(key: string): string | null {
