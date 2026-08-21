@@ -20179,10 +20179,11 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // measured on a Shop driven to its enforced 2 MiB ceiling through the real transitions
 // (1,453 orders, 1,244 completed). Both memos are keyed on `commerce`, a new object after
 // every sale, so a till rebuilt all of it on every sale for files almost nobody downloads.
-// The +174 splits +96 into core-app and +78 into the shared capability-tiers chunk, where
-// Rollup places the new leaf helper showroom/src/core/download-file.ts. It was paid down
-// from +305 by de-duplicating the receipt control pair the order list and the archive each
-// carried a byte-identical copy of, and by inlining two single-use wrappers. NO COPY, no
+// Measured per asset: +91 into core-app (whose RAW size FALLS 46 bytes) and +78 into the
+// shared capability-tiers chunk, where Rollup places the new leaf helper download-file.ts.
+// It was paid down from +305 by de-duplicating the receipt control pair that the order list
+// and the archive each carried a byte-identical copy of, and by inlining two single-use
+// wrappers. NO COPY, no
 // affordance and no behaviour was cut to reach it; the four remaining CSV data: URLs on that
 // screen were measured (10,305 / 83,244 bytes, and two that produce nothing on a realistic
 // workspace) and deliberately LEFT rather than changed for consistency.
