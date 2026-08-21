@@ -1,4 +1,6 @@
-// Contract guard for reserveCommerceOrder -- the write boundary for every Shop sale.
+// Contract guard for a Shop order's integrity, on both sides of the record.
+//
+// WRITE -- reserveCommerceOrder, the boundary every Shop sale crosses.
 //
 // The counter UI computes a display total (CoreApp.tsx sums price x quantity), but
 // that number is provisional. reserveCommerceOrder recomputes the calculation from
@@ -7,6 +9,12 @@
 //
 // That is the property that keeps a shop's books honest: the stored total is derived
 // from catalog prices at write time, never accepted from the caller. It had no test.
+//
+// READ -- commerceOrderAcknowledgement, the sealed document that order becomes. Its integrity
+// rests on the same validator the write side does: a shop must never be handed a document
+// derived from a workspace nobody checked. The last section of this file pins that the
+// document is unchanged, that it still cannot be produced from an unvalidated state, and how
+// many times one state is validated to produce a screen full of them.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -16,7 +24,11 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder } from './commerce-workspace.ts'`,
+    contents: `export {
+      createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder,
+      cancelCommerceOrder, receiveCommerceStock, validateCommerceState,
+      commerceOrderAcknowledgement, commerceOrderAcknowledgementReader,
+    } from './commerce-workspace.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/order-integrity-entry.ts',
     loader: 'ts',
@@ -28,7 +40,11 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder } = await import(
+const {
+  createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder,
+  cancelCommerceOrder, receiveCommerceStock, validateCommerceState,
+  commerceOrderAcknowledgement, commerceOrderAcknowledgementReader,
+} = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -229,5 +245,198 @@ check(reusedId === null, 'reusing one actionId across composed transitions is re
 // Composing returns new states; the accepted-order snapshot it started from is untouched.
 const baseOrderAfter = settleBase.orders.find((candidate) => candidate.id === 'ORD-TEST-1')
 check(baseOrderAfter.status === 'confirmed' && baseOrderAfter.paymentStatus === 'pending', 'the composition does not mutate the state it was given')
+
+// --- READ: the sealed document, and how many times a workspace is checked to make one ----
+//
+// commerceOrderAcknowledgement validated the ENTIRE workspace once per order. The Shop screen
+// holds one acknowledgement per order and rebuilds them from a state that is a new object
+// after every sale, so a till at the byte ceiling paid that validation 1,262 times after every
+// sale: about 50 seconds, of which 97% was the repeated validation (measured 2026-08-21 on a
+// workspace driven to its enforced 2 MiB ceiling through these same transitions).
+//
+// The fix is not to validate less. It is to validate one state ONCE and read many documents
+// out of it, which is what commerceOrderAcknowledgementReader does, and which is only sound
+// because validateCommerceState is a predicate rather than a normaliser -- pinned next door in
+// test_commerce_state_validator.mjs. Three properties have to hold together, and each is
+// asserted here against transitions this file drove rather than against a fixture written by
+// hand:
+//
+//   1. the document did not change;
+//   2. it still cannot be produced from a state nobody validated; and
+//   3. one screenful of documents costs ONE validation, not one per document.
+//
+// (3) is counted, not timed. A millisecond threshold on a shared CI runner is a guard that
+// cries wolf; a count of how many times the validator was entered is exact on any machine.
+
+const ACK_PROOF = {
+  actor: OPERATOR,
+  reason: 'Acknowledgement fixture',
+  evidenceReference: 'ACK-EV-0001',
+  actionId: 'ACT-ACK-BASE',
+  capturedAt: '2026-07-23T09:05:00.000Z',
+}
+const ackProof = (label, minute) => ({
+  ...ACK_PROOF,
+  actionId: `ACT-ACK-${label}`,
+  evidenceReference: `ACK-EV-${label}`,
+  capturedAt: `2026-07-23T09:${String(minute).padStart(2, '0')}:00.000Z`,
+})
+
+// Every branch the acknowledgement builder has: an order at each open stage, a completed and
+// reconciled one, and a cancelled one (the only branch that reads release movements and the
+// only one that can report a cancellation state). A fixture of completed orders alone would
+// compare the two paths across half the code.
+let ackState = createSeedCommerce()
+const ackItem = ackState.items.find((candidate) => candidate.onHand > 2)
+ackState = receiveCommerceStock(ackState, ackItem.sku, 60, ackProof('RESTOCK', 1))
+check(Boolean(ackState), 'the acknowledgement fixture can restock, or there is nothing to sell')
+const ACK_SHAPES = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
+const ackOrderIds = []
+for (let index = 0; index < 15; index += 1) {
+  const id = `ORD-ACK-${index}`
+  const minute = 10 + index
+  const shape = ACK_SHAPES[index % ACK_SHAPES.length]
+  let next = reserveCommerceOrder(ackState, {
+    ...orderFor([{ sku: ackItem.sku, name: ackItem.name, variant: ackItem.variant, quantity: 1 + (index % 3), unitPriceMmk: ackItem.price }]),
+    id,
+    createdAt: `2026-07-23T09:${String(minute).padStart(2, '0')}:00.000Z`,
+    customer: index % 2 ? 'Ma Thida' : 'Guest',
+    payment: index % 2 ? 'KBZPay' : 'Cash',
+    fulfilmentReference: `Counter handoff ${id}`,
+    promisedAt: `2026-07-23T1${index % 5}:30:00.000Z`,
+  }, ackProof(`RESERVE-${index}`, minute))
+  check(Boolean(next), `${id}: the fixture sale reserves`)
+  if (shape === 'preparing' || shape === 'ready' || shape === 'completed') {
+    next = advanceCommerceOrder(next, id, 'confirmed', ackProof(`PREP-${index}`, minute))
+  }
+  if (shape === 'ready' || shape === 'completed') {
+    next = advanceCommerceOrder(next, id, 'preparing', ackProof(`READY-${index}`, minute))
+  }
+  if (shape === 'completed') {
+    next = reconcileCommercePayment(next, id, ackProof(`RECON-${index}`, minute))
+    next = advanceCommerceOrder(next, id, 'ready', ackProof(`DONE-${index}`, minute))
+  }
+  if (shape === 'cancelled') {
+    next = cancelCommerceOrder(next, id, ackProof(`CANCEL-${index}`, minute))
+  }
+  check(Boolean(next), `${id}: the fixture sale reaches ${shape}`)
+  ackState = next
+  ackOrderIds.push(id)
+}
+const ackAllIds = ackState.orders.map((order) => order.id)
+check(Boolean(validateCommerceState(ackState)), 'the driven acknowledgement fixture is itself a valid workspace')
+
+// The fixture must actually exercise the branches, or (1) below compares two paths over one.
+const ackShapesPresent = new Set(ackState.orders
+  .filter((order) => ackOrderIds.includes(order.id))
+  .map((order) => order.status))
+check(ackShapesPresent.has('cancelled'), 'the fixture carries a cancelled order -- the only branch that reads release movements')
+check(ackShapesPresent.has('completed'), 'and a completed one')
+check(ackShapesPresent.size >= 4, `the fixture carries at least four order shapes (has: ${[...ackShapesPresent].sort().join(', ')})`)
+
+// --- 1. the document did not change ------------------------------------------
+// Both paths are RUN and their output compared: the single-order entry point, which validates
+// on every call, against the reader, which validates once. Nothing here is written down, so
+// there is no side for a mistake to hide on.
+//
+// Asked twice, and asked in reverse, because the reader remembers what it built: a cache keyed
+// on the wrong thing would hand back another order's document, and a fixture that asked once
+// in list order would never notice.
+const ackEager = new Map(ackAllIds.map((id) => [id, JSON.stringify(commerceOrderAcknowledgement(ackState, id) ?? null)]))
+const ackReadOnce = commerceOrderAcknowledgementReader(ackState)
+const ackShuffled = [...ackAllIds].reverse()
+const ackLazy = new Map(ackShuffled.map((id) => [id, JSON.stringify(ackReadOnce(id) ?? null)]))
+const ackLazyAgain = new Map(ackAllIds.map((id) => [id, JSON.stringify(ackReadOnce(id) ?? null)]))
+const ackProduced = ackAllIds.filter((id) => ackEager.get(id) !== 'null')
+check(ackProduced.length >= 10, `the fixture produces enough acknowledgements to compare (produced ${ackProduced.length} from ${ackAllIds.length} orders)`)
+const ackDiverged = ackAllIds.filter((id) => ackLazy.get(id) !== ackEager.get(id) || ackLazyAgain.get(id) !== ackEager.get(id))
+check(
+  ackDiverged.length === 0,
+  `every acknowledgement is byte-identical whether the workspace was validated once or once per order (diverged: ${ackDiverged.join(', ')})`,
+)
+// The digest is the document's own seal over its own projection, so an artifact that changed
+// anywhere changes here too. Compared in order, so a reader handing back the right documents
+// against the wrong ids fails.
+check(
+  JSON.stringify(ackProduced.map((id) => JSON.parse(ackLazy.get(id)).digest))
+    === JSON.stringify(ackProduced.map((id) => JSON.parse(ackEager.get(id)).digest)),
+  'and carries the same seal, against the same order, as the document the per-order path produced',
+)
+// An order the state does not hold is absent, not an error: the screen asks for whatever it is
+// rendering and expects nothing back for an order that cannot produce a document.
+check(ackReadOnce('ORD-NOT-IN-THIS-WORKSPACE') === null, 'the reader returns nothing for an order the validated state does not hold')
+
+// --- 2. it cannot be produced from a state nobody validated -------------------
+// Each corruption below is one the VALIDATOR catches and the acknowledgement builder does not
+// look at -- an order total edited away from its own calculation is copied nowhere into the
+// document, so a builder reading a state directly would seal and hand over a document for a
+// workspace whose books do not add up. Both ways in must refuse, and the reader must refuse at
+// construction, so there is no reader to ask in the first place.
+function refusesUnvalidated(mutate, label) {
+  const corrupted = structuredClone(ackState)
+  mutate(corrupted)
+  checks += 1
+  assert.throws(() => validateCommerceState(corrupted), undefined, `${label}: the validator must reject this, or the case proves nothing`)
+  const target = corrupted.orders.find((order) => order.status === 'completed') ?? corrupted.orders[0]
+  checks += 1
+  assert.throws(
+    () => commerceOrderAcknowledgement(corrupted, target.id),
+    undefined,
+    `${label}: an acknowledgement was produced from a state the validator rejects`,
+  )
+  checks += 1
+  assert.throws(
+    () => commerceOrderAcknowledgementReader(corrupted),
+    undefined,
+    `${label}: a reader was handed out for a state the validator rejects`,
+  )
+}
+refusesUnvalidated(
+  (state) => { state.orders.find((candidate) => candidate.calculation).total += 1 },
+  'an order total edited away from its calculation',
+)
+refusesUnvalidated(
+  (state) => { state.orders.push({ ...state.orders[0] }) },
+  'a duplicated order id',
+)
+refusesUnvalidated(
+  (state) => { state.movements = state.movements.filter((movement) => movement.kind !== 'reserve') },
+  'a workspace whose reservations have been deleted from under its orders',
+)
+refusesUnvalidated(
+  (state) => { state.schema = 'supermega.commerce.workspace.v1' },
+  'a workspace on a schema this build does not understand',
+)
+
+// --- 3. one screenful costs one validation ------------------------------------
+// Counted by giving the state's own `schema` field a getter. validateCommerceState reads it
+// once, first thing, before it can reject anything, and nothing else on the read path touches
+// it -- so this counts entries into the validator exactly, on any machine, with no clock
+// involved. A count of zero would mean the validator was never entered at all, which is the
+// failure the second assertion below exists to make loud.
+function countValidations(subject) {
+  const value = subject.schema
+  let reads = 0
+  Object.defineProperty(subject, 'schema', { configurable: true, enumerable: true, get() { reads += 1; return value } })
+  return () => reads
+}
+{
+  const counted = structuredClone(ackState)
+  const validations = countValidations(counted)
+  ackAllIds.forEach((id) => commerceOrderAcknowledgement(counted, id))
+  const perOrder = validations()
+  check(
+    perOrder === ackAllIds.length,
+    `the single-order entry point validates the whole workspace once per order (expected ${ackAllIds.length}, counted ${perOrder})`,
+  )
+  const readAll = commerceOrderAcknowledgementReader(counted)
+  const atConstruction = validations() - perOrder
+  check(atConstruction === 1, `the reader validates once, at construction (counted ${atConstruction})`)
+  ackAllIds.forEach((id) => readAll(id))
+  check(
+    validations() === perOrder + 1,
+    `and never again, however many documents are read out of it (counted ${validations() - perOrder - 1} more over ${ackAllIds.length} orders)`,
+  )
+}
 
 console.log(`commerce order integrity contract: ${checks} checks passed`)
