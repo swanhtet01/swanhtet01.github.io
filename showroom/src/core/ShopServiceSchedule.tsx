@@ -255,7 +255,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       const available = availableSpaMembershipForBooking(commerce, schedule, bookingId)
       const next = redeemSpaMembershipSession(schedule, commerce, bookingId, proof('Used after the completed treatment was checked by the responsible Spa operator.'))
       if (next === schedule) {
-        setNotice('This appointment already used its package session.')
+        setNotice(`This ${vocabulary.singular} already used its package session.`)
         return
       }
       const remaining = Math.max(0, (available?.remaining ?? 1) - 1)
