@@ -9423,6 +9423,38 @@ async function verifyClientOnboardingRuntime() {
     const otherSpaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Other spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
     await rejects(() => extensionModel.verifyClientExtensionManifest(spaExtension, otherSpaBlueprint), 'client_extension_cross_tenant_blueprint_accepted')
     await rejects(() => extensionModel.verifyClientExtensionManifest({ ...spaExtension, outcome: 'Changed after review.' }, spaBlueprint), 'client_extension_tamper_accepted')
+    const extensionDigest = (character) => `sha256:${character.repeat(64)}`
+    const spaExtensionPlan = await extensionModel.buildClientExtensionActivationPlan(spaExtension, spaBlueprint, {
+      implementationVersion: 1,
+      implementationDigest: extensionDigest('1'),
+      migrationDigest: extensionDigest('2'),
+      rollbackDigest: extensionDigest('3'),
+      securityReviewDigest: extensionDigest('4'),
+      securityReviewedBy: 'Named security reviewer',
+      securityReviewedAt: '2026-08-21T01:00:00.000Z',
+      approvedBy: spaBlueprint.client.owner,
+      approvedAt: '2026-08-21T02:00:00.000Z',
+    })
+    const canonicalExtensionFixture = (value) => {
+      if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return JSON.stringify(value)
+      if (Array.isArray(value)) return `[${value.map(canonicalExtensionFixture).join(',')}]`
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalExtensionFixture(value[key])}`).join(',')}}`
+    }
+    const portalPayload = {
+      contract: 'supermega.client_portal_activation_manifest.v1',
+      version: 1,
+      status: 'approved_plan_not_applied',
+      tenant: { workspaceId: '11111111-1111-4111-8111-111111111111', workspaceLabel: spaBlueprint.client.workspace, ownerActorId: '22222222-2222-4222-8222-222222222222', ownerLabel: spaBlueprint.client.owner, products: ['shop', 'website', 'ecommerce'] },
+      portal: { bundleDigest: extensionDigest('5'), productBindings: [{ product: 'shop', runtimeProduct: 'commerce' }, { product: 'website', runtimeProduct: 'website' }, { product: 'ecommerce', runtimeProduct: 'ecommerce' }], crossTenantReadsAllowed: false, crossProductWritesAllowed: false },
+      customSolutions: { activationStatus: 'not_applied', tenantBound: true, purchasedBaseProductRequired: true, securityReviewRequired: true, namedOwnerApprovalRequired: true, crossProductWritesAllowed: false },
+      authority: { humanApprovalBound: true, tenantWritesPerformed: false, providerCallsPerformed: false, externalMessagesSent: false, deploymentPerformed: false, productionActivationPerformed: false },
+    }
+    const portalManifest = { ...portalPayload, manifestDigest: `sha256:${createHash('sha256').update(canonicalExtensionFixture(portalPayload)).digest('hex')}` }
+    const portalBinding = await extensionModel.buildClientExtensionPortalBinding(spaExtension, spaExtensionPlan, spaBlueprint, portalManifest)
+    assert(portalBinding.schema === extensionModel.CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA && portalBinding.tenant.workspaceId === portalManifest.tenant.workspaceId, 'client_extension_portal_tenant_binding_missing')
+    assert(portalBinding.module.productEntitlement === 'shop' && portalBinding.authority.baseProductPurchased === true, 'client_extension_portal_product_entitlement_missing')
+    assert(portalBinding.authority.status === 'approved-not-applied' && portalBinding.authority.tenantWritesPerformed === false && portalBinding.controls.separateActivationRequired === true, 'client_extension_portal_binding_crossed_activation_boundary')
+    await rejects(() => extensionModel.buildClientExtensionPortalBinding(spaExtension, spaExtensionPlan, spaBlueprint, { ...portalManifest, tenant: { ...portalManifest.tenant, workspaceLabel: 'Other tenant' } }), 'client_extension_portal_cross_tenant_binding_accepted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
     assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
     const starterJobIds = new Set()

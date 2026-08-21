@@ -3,6 +3,7 @@ import type { ClientDemoBlueprint, ClientSolutionId } from './client-onboarding.
 
 export const CLIENT_EXTENSION_MANIFEST_SCHEMA = 'supermega.client_extension_manifest.v1' as const
 export const CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA = 'supermega.client_extension_activation_plan.v1' as const
+export const CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA = 'supermega.client_extension_portal_binding.v1' as const
 
 export type ClientExtensionMode = 'read-only' | 'draft-only' | 'reviewed-write'
 export type ClientExtensionRequestedAction = 'read' | 'draft' | 'propose-write'
@@ -115,11 +116,102 @@ export type ClientExtensionActivationPlan = {
   digest: string
 }
 
+export type ClientExtensionPortalContext = {
+  contract: 'supermega.client_portal_activation_manifest.v1'
+  manifestDigest: string
+  status: 'approved_plan_not_applied'
+  tenant: {
+    workspaceId: string
+    workspaceLabel: string
+    ownerActorId: string
+    ownerLabel: string
+    products: string[]
+  }
+  portal: {
+    bundleDigest: string
+    productBindings: Array<{
+      product: string
+      runtimeProduct: ClientSolutionId
+    }>
+    crossTenantReadsAllowed: false
+    crossProductWritesAllowed: false
+  }
+  customSolutions: {
+    activationStatus: 'not_applied'
+    tenantBound: true
+    purchasedBaseProductRequired: true
+    securityReviewRequired: true
+    namedOwnerApprovalRequired: true
+    crossProductWritesAllowed: false
+  }
+  authority: {
+    humanApprovalBound: true
+    tenantWritesPerformed: false
+    providerCallsPerformed: false
+    externalMessagesSent: false
+    deploymentPerformed: false
+    productionActivationPerformed: false
+  }
+  [key: string]: unknown
+}
+
+export type ClientExtensionPortalBinding = {
+  schema: typeof CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA
+  extensionManifestDigest: string
+  extensionActivationPlanDigest: string
+  blueprintDigest: string
+  portalManifestDigest: string
+  portalBundleDigest: string
+  tenant: {
+    workspaceId: string
+    workspaceLabel: string
+    ownerActorId: string
+    ownerLabel: string
+  }
+  module: {
+    id: string
+    label: string
+    baseProduct: ClientSolutionId
+    productEntitlement: string
+    domain: ClientCapabilityDomain
+    mode: ClientExtensionMode
+    records: string[]
+    roles: string[]
+    implementationVersion: number
+    implementationDigest: string
+  }
+  authority: {
+    status: 'approved-not-applied'
+    tenantScoped: true
+    baseProductPurchased: true
+    crossProductWritesAllowed: false
+    tenantWritesPerformed: false
+    providerCallsPerformed: false
+    deploymentPerformed: false
+    productionActivationPerformed: false
+  }
+  controls: {
+    exactPortalManifestRequired: true
+    exactExtensionPlanRequired: true
+    workspaceIdBindingRequired: true
+    namedOwnerBindingRequired: true
+    purchasedBaseProductRequired: true
+    separateActivationRequired: true
+  }
+  digest: string
+}
+
 const ID = /^ext-[a-z][a-z0-9-]{1,58}$/
 const RECORD_ID = /^[a-z][a-z0-9_]{1,63}$/
 const DOMAIN: readonly ClientCapabilityDomain[] = ['operations', 'master-data', 'finance', 'customer', 'supply-chain', 'quality', 'workforce', 'governance', 'intelligence', 'integration']
 const MODE: readonly ClientExtensionMode[] = ['read-only', 'draft-only', 'reviewed-write']
 const SHA256 = /^sha256:[a-f0-9]{64}$/
+const PRODUCT_ENTITLEMENT: Record<ClientSolutionId, string> = {
+  commerce: 'shop',
+  production: 'plant',
+  website: 'website',
+  ecommerce: 'ecommerce',
+}
 
 function bounded(value: string, label: string, maximum: number) {
   const normalized = value.trim()
@@ -152,6 +244,22 @@ function requestedActions(mode: ClientExtensionMode): ClientExtensionRequestedAc
 async function sha256(value: unknown) {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
   const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value)
+  if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`
+  }
+  throw new Error('Portal manifest contains a non-canonical value.')
+}
+
+async function canonicalDigest(value: unknown) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(value)))
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
 
@@ -348,5 +456,117 @@ export async function verifyClientExtensionActivationPlan(
     }
   } catch {
     throw new Error('The client extension activation plan is invalid, stale, approved by another owner, or changed after review.')
+  }
+}
+
+export async function buildClientExtensionPortalBinding(
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+): Promise<ClientExtensionPortalBinding> {
+  const manifestVerification = await verifyClientExtensionManifest(manifest, blueprint)
+  const planVerification = await verifyClientExtensionActivationPlan(activationPlan, manifest, blueprint)
+  const portalDigest = evidenceDigest(portal.manifestDigest, 'Portal manifest digest')
+  const portalPayload = { ...portal } as Record<string, unknown>
+  delete portalPayload.manifestDigest
+  if (await canonicalDigest(portalPayload) !== portalDigest) throw new Error('The client portal manifest digest is invalid.')
+  if (portal.contract !== 'supermega.client_portal_activation_manifest.v1'
+    || portal.status !== 'approved_plan_not_applied'
+    || portal.authority?.humanApprovalBound !== true
+    || portal.authority?.tenantWritesPerformed !== false
+    || portal.authority?.providerCallsPerformed !== false
+    || portal.authority?.externalMessagesSent !== false
+    || portal.authority?.deploymentPerformed !== false
+    || portal.authority?.productionActivationPerformed !== false
+    || portal.portal?.crossTenantReadsAllowed !== false
+    || portal.portal?.crossProductWritesAllowed !== false
+    || portal.customSolutions?.activationStatus !== 'not_applied'
+    || portal.customSolutions?.tenantBound !== true
+    || portal.customSolutions?.purchasedBaseProductRequired !== true
+    || portal.customSolutions?.securityReviewRequired !== true
+    || portal.customSolutions?.namedOwnerApprovalRequired !== true
+    || portal.customSolutions?.crossProductWritesAllowed !== false) {
+    throw new Error('The client portal is not an approved no-write custom-solution target.')
+  }
+  const workspaceLabel = bounded(portal.tenant?.workspaceLabel, 'Portal workspace label', 60)
+  const ownerLabel = bounded(portal.tenant?.ownerLabel, 'Portal owner label', 80)
+  if (workspaceLabel !== manifest.workspace || workspaceLabel !== blueprint.client.workspace) throw new Error('The extension workspace does not match the tenant portal.')
+  if (ownerLabel !== blueprint.client.owner || activationPlan.reviews.ownerActivation.approvedBy !== ownerLabel) throw new Error('The extension owner approval does not match the tenant portal owner.')
+  const productEntitlement = PRODUCT_ENTITLEMENT[manifest.baseProduct]
+  const productBindings = portal.portal?.productBindings
+  if (!Array.isArray(portal.tenant?.products)
+    || !portal.tenant.products.includes(productEntitlement)
+    || !Array.isArray(productBindings)
+    || !productBindings.some((binding) => binding?.product === productEntitlement && binding.runtimeProduct === manifest.baseProduct)) {
+    throw new Error('The extension base product is not purchased and bound to this tenant portal.')
+  }
+  const payload: Omit<ClientExtensionPortalBinding, 'digest'> = {
+    schema: CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA,
+    extensionManifestDigest: manifestVerification.digest,
+    extensionActivationPlanDigest: planVerification.digest,
+    blueprintDigest: manifestVerification.blueprintDigest,
+    portalManifestDigest: portalDigest,
+    portalBundleDigest: evidenceDigest(portal.portal.bundleDigest, 'Portal bundle digest'),
+    tenant: {
+      workspaceId: bounded(portal.tenant.workspaceId, 'Portal workspace id', 80),
+      workspaceLabel,
+      ownerActorId: bounded(portal.tenant.ownerActorId, 'Portal owner actor id', 160),
+      ownerLabel,
+    },
+    module: {
+      id: manifest.id,
+      label: manifest.label,
+      baseProduct: manifest.baseProduct,
+      productEntitlement,
+      domain: manifest.domain,
+      mode: manifest.authority.requestedMode,
+      records: [...manifest.records],
+      roles: [...manifest.roles],
+      implementationVersion: activationPlan.implementation.version,
+      implementationDigest: activationPlan.implementation.digest,
+    },
+    authority: {
+      status: 'approved-not-applied',
+      tenantScoped: true,
+      baseProductPurchased: true,
+      crossProductWritesAllowed: false,
+      tenantWritesPerformed: false,
+      providerCallsPerformed: false,
+      deploymentPerformed: false,
+      productionActivationPerformed: false,
+    },
+    controls: {
+      exactPortalManifestRequired: true,
+      exactExtensionPlanRequired: true,
+      workspaceIdBindingRequired: true,
+      namedOwnerBindingRequired: true,
+      purchasedBaseProductRequired: true,
+      separateActivationRequired: true,
+    },
+  }
+  return { ...payload, digest: await sha256(payload) }
+}
+
+export async function verifyClientExtensionPortalBinding(
+  value: unknown,
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+) {
+  try {
+    const rebuilt = await buildClientExtensionPortalBinding(manifest, activationPlan, blueprint, portal)
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    return {
+      ok: true as const,
+      contract: CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA,
+      digest: rebuilt.digest,
+      portalManifestDigest: rebuilt.portalManifestDigest,
+      workspaceId: rebuilt.tenant.workspaceId,
+      status: rebuilt.authority.status,
+    }
+  } catch {
+    throw new Error('The client extension portal binding is invalid, cross-tenant, unentitled, stale, or changed after review.')
   }
 }

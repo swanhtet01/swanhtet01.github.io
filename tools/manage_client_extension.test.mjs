@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -17,7 +18,13 @@ function output(result) {
   return JSON.parse((result.stdout || result.stderr).trim())
 }
 
-test('internal extension tool creates and verifies a no-write request and activation plan', async () => {
+function canonicalJson(value) {
+  if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`
+}
+
+test('internal extension tool creates and verifies a tenant-bound no-write extension lifecycle', async () => {
   const directory = await mkdtemp(resolve(tmpdir(), 'supermega-extension-'))
   const intake = resolve(directory, 'intake')
   const initialized = run(prepare, '--init', intake, '--preset', 'service-business', '--products', 'shop,website,ecommerce')
@@ -73,6 +80,58 @@ test('internal extension tool creates and verifies a no-write request and activa
   const verifiedPlan = run(tool, 'verify-plan', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath)
   assert.equal(verifiedPlan.status, 0, verifiedPlan.stderr)
   assert.equal(output(verifiedPlan).externalWritesPerformed, false)
+
+  const portalPayload = {
+    contract: 'supermega.client_portal_activation_manifest.v1',
+    version: 1,
+    status: 'approved_plan_not_applied',
+    tenant: {
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      workspaceLabel: 'Named Spa Workspace',
+      ownerActorId: '22222222-2222-4222-8222-222222222222',
+      ownerLabel: 'Named Spa Owner',
+      products: ['shop', 'website', 'ecommerce'],
+    },
+    portal: {
+      bundleDigest: digest('5'),
+      productBindings: [{ product: 'shop', runtimeProduct: 'commerce' }, { product: 'website', runtimeProduct: 'website' }, { product: 'ecommerce', runtimeProduct: 'ecommerce' }],
+      crossTenantReadsAllowed: false,
+      crossProductWritesAllowed: false,
+    },
+    customSolutions: {
+      activationStatus: 'not_applied',
+      tenantBound: true,
+      purchasedBaseProductRequired: true,
+      securityReviewRequired: true,
+      namedOwnerApprovalRequired: true,
+      crossProductWritesAllowed: false,
+    },
+    authority: {
+      humanApprovalBound: true,
+      tenantWritesPerformed: false,
+      providerCallsPerformed: false,
+      externalMessagesSent: false,
+      deploymentPerformed: false,
+      productionActivationPerformed: false,
+    },
+  }
+  const portalPath = resolve(directory, 'portal-activation.json')
+  await writeFile(portalPath, `${JSON.stringify({ ...portalPayload, manifestDigest: `sha256:${createHash('sha256').update(canonicalJson(portalPayload)).digest('hex')}` }, null, 2)}\n`)
+  const bindingPath = resolve(directory, 'portal-binding.json')
+  const bound = run(tool, 'bind-portal', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--output', bindingPath)
+  assert.equal(bound.status, 0, bound.stderr)
+  assert.equal(output(bound).status, 'approved-not-applied')
+  assert.equal(output(bound).workspaceId, portalPayload.tenant.workspaceId)
+  assert.equal(output(bound).externalWritesPerformed, false)
+  const verifiedBinding = run(tool, 'verify-portal-binding', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath)
+  assert.equal(verifiedBinding.status, 0, verifiedBinding.stderr)
+  assert.equal(output(verifiedBinding).status, 'approved-not-applied')
+  const tamperedBinding = JSON.parse(await readFile(bindingPath, 'utf8'))
+  tamperedBinding.tenant.workspaceId = '33333333-3333-4333-8333-333333333333'
+  await writeFile(bindingPath, `${JSON.stringify(tamperedBinding, null, 2)}\n`)
+  const rejectedBinding = run(tool, 'verify-portal-binding', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath)
+  assert.notEqual(rejectedBinding.status, 0)
+  assert.match(output(rejectedBinding).error, /invalid|cross-tenant|changed/)
 
   const tampered = JSON.parse(await readFile(planPath, 'utf8'))
   tampered.implementation.version = 2

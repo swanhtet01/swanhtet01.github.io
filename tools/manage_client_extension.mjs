@@ -64,6 +64,8 @@ async function loadModel() {
           verifyClientExtensionManifest,
           buildClientExtensionActivationPlan,
           verifyClientExtensionActivationPlan,
+          buildClientExtensionPortalBinding,
+          verifyClientExtensionPortalBinding,
         } from './client-extension-manifest.ts'
       `,
       resolveDir: resolve(root, 'showroom', 'src', 'core'),
@@ -110,14 +112,16 @@ async function verifiedBlueprint(path, model) {
 
 async function main(argv) {
   const { command, values } = argumentsFrom(argv)
-  if (!['request', 'verify-request', 'plan', 'verify-plan'].includes(command)) {
-    throw new Error('Command must be request, verify-request, plan, or verify-plan.')
+  if (!['request', 'verify-request', 'plan', 'verify-plan', 'bind-portal', 'verify-portal-binding'].includes(command)) {
+    throw new Error('Command must be request, verify-request, plan, verify-plan, bind-portal, or verify-portal-binding.')
   }
   const allowedArguments = {
     request: ['--preparation', '--request', '--created-at', '--output'],
     'verify-request': ['--preparation', '--manifest'],
     plan: ['--preparation', '--manifest', '--evidence', '--output'],
     'verify-plan': ['--preparation', '--manifest', '--plan'],
+    'bind-portal': ['--preparation', '--manifest', '--plan', '--portal', '--output'],
+    'verify-portal-binding': ['--preparation', '--manifest', '--plan', '--portal', '--binding'],
   }[command]
   if ([...values.keys()].some((key) => !allowedArguments.includes(key))) {
     throw new Error(`Command ${command} received an unsupported argument.`)
@@ -154,7 +158,29 @@ async function main(argv) {
   }
 
   const plan = await readJson(required(values, '--plan'), 'Extension activation plan')
-  const verified = await model.verifyClientExtensionActivationPlan(plan, manifest, blueprint)
+  if (command === 'verify-plan') {
+    const verified = await model.verifyClientExtensionActivationPlan(plan, manifest, blueprint)
+    return { ...verified, externalWritesPerformed: false }
+  }
+
+  const portal = await readJson(required(values, '--portal'), 'Client portal activation manifest')
+  if (command === 'bind-portal') {
+    const binding = await model.buildClientExtensionPortalBinding(manifest, plan, blueprint, portal)
+    const output = await writeExclusive(required(values, '--output'), binding)
+    return {
+      ok: true,
+      contract: binding.schema,
+      output,
+      digest: binding.digest,
+      portalManifestDigest: binding.portalManifestDigest,
+      workspaceId: binding.tenant.workspaceId,
+      status: binding.authority.status,
+      externalWritesPerformed: false,
+    }
+  }
+
+  const binding = await readJson(required(values, '--binding'), 'Client extension portal binding')
+  const verified = await model.verifyClientExtensionPortalBinding(binding, manifest, plan, blueprint, portal)
   return { ...verified, externalWritesPerformed: false }
 }
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -8,7 +9,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export { buildClientDemoBlueprint, clientDemoPresets } from './client-onboarding.ts'
-      export { buildClientExtensionManifest, verifyClientExtensionManifest, buildClientExtensionActivationPlan, verifyClientExtensionActivationPlan } from './client-extension-manifest.ts'
+      export { buildClientExtensionManifest, verifyClientExtensionManifest, buildClientExtensionActivationPlan, verifyClientExtensionActivationPlan, buildClientExtensionPortalBinding, verifyClientExtensionPortalBinding } from './client-extension-manifest.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/client-extension-test-entry.ts',
@@ -97,4 +98,74 @@ await assert.rejects(model.buildClientExtensionActivationPlan(manifest, blueprin
 await assert.rejects(model.buildClientExtensionActivationPlan(manifest, blueprint, { ...activationEvidence, approvedAt: '2026-08-21T00:00:00.000Z' }), /predate/)
 await assert.rejects(model.buildClientExtensionActivationPlan(manifest, blueprint, { ...activationEvidence, rollbackDigest: digest('2') }), /independently digest-bound/)
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 26, digest: manifest.digest, activationPlanDigest: activationPlan.digest, blueprintDigest: manifest.blueprintDigest }))
+const canonicalJson = (value) => {
+  if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`
+}
+const portal = (overrides = {}) => {
+  const payload = {
+    contract: 'supermega.client_portal_activation_manifest.v1',
+    version: 1,
+    status: 'approved_plan_not_applied',
+    tenant: {
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      workspaceLabel: blueprint.client.workspace,
+      ownerActorId: '22222222-2222-4222-8222-222222222222',
+      ownerLabel: blueprint.client.owner,
+      products: ['shop', 'website', 'ecommerce'],
+      ...overrides.tenant,
+    },
+    portal: {
+      bundleDigest: digest('5'),
+      productBindings: [
+        { product: 'shop', runtimeProduct: 'commerce' },
+        { product: 'website', runtimeProduct: 'website' },
+        { product: 'ecommerce', runtimeProduct: 'ecommerce' },
+      ],
+      crossTenantReadsAllowed: false,
+      crossProductWritesAllowed: false,
+      ...overrides.portal,
+    },
+    customSolutions: {
+      activationStatus: 'not_applied',
+      tenantBound: true,
+      purchasedBaseProductRequired: true,
+      securityReviewRequired: true,
+      namedOwnerApprovalRequired: true,
+      crossProductWritesAllowed: false,
+    },
+    authority: {
+      humanApprovalBound: true,
+      tenantWritesPerformed: false,
+      providerCallsPerformed: false,
+      externalMessagesSent: false,
+      deploymentPerformed: false,
+      productionActivationPerformed: false,
+    },
+  }
+  return { ...payload, manifestDigest: `sha256:${createHash('sha256').update(canonicalJson(payload)).digest('hex')}` }
+}
+const portalManifest = portal()
+const portalBinding = await model.buildClientExtensionPortalBinding(manifest, activationPlan, blueprint, portalManifest)
+assert.equal(portalBinding.schema, 'supermega.client_extension_portal_binding.v1')
+assert.equal(portalBinding.tenant.workspaceId, portalManifest.tenant.workspaceId)
+assert.equal(portalBinding.module.productEntitlement, 'shop')
+assert.equal(portalBinding.authority.status, 'approved-not-applied')
+assert.equal(portalBinding.authority.tenantWritesPerformed, false)
+assert.equal(portalBinding.controls.separateActivationRequired, true)
+assert.deepEqual(await model.verifyClientExtensionPortalBinding(portalBinding, manifest, activationPlan, blueprint, portalManifest), {
+  ok: true,
+  contract: 'supermega.client_extension_portal_binding.v1',
+  digest: portalBinding.digest,
+  portalManifestDigest: portalManifest.manifestDigest,
+  workspaceId: portalManifest.tenant.workspaceId,
+  status: 'approved-not-applied',
+})
+await assert.rejects(model.buildClientExtensionPortalBinding(manifest, activationPlan, blueprint, portal({ tenant: { workspaceLabel: 'Another tenant' } })), /does not match/)
+await assert.rejects(model.buildClientExtensionPortalBinding(manifest, activationPlan, blueprint, portal({ tenant: { products: ['website', 'ecommerce'] }, portal: { productBindings: [{ product: 'website', runtimeProduct: 'website' }, { product: 'ecommerce', runtimeProduct: 'ecommerce' }] } })), /not purchased/)
+const tamperedPortalBinding = structuredClone(portalBinding)
+tamperedPortalBinding.tenant.workspaceId = '33333333-3333-4333-8333-333333333333'
+await assert.rejects(model.verifyClientExtensionPortalBinding(tamperedPortalBinding, manifest, activationPlan, blueprint, portalManifest), /invalid|cross-tenant|changed/)
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 36, digest: manifest.digest, activationPlanDigest: activationPlan.digest, portalBindingDigest: portalBinding.digest, blueprintDigest: manifest.blueprintDigest }))
