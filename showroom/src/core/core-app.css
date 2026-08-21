@@ -12,14 +12,43 @@
   --core-panel-raised: #eef4ef;
   --core-ink: #17231d;
   --core-muted: #56665d;
-  --core-quiet: #5f6f67;
+  /* Was #5f6f67, which fell under the 4.5:1 AA floor on five light surfaces -- not the two
+     that were filed. Measured with getComputedStyle on a dev server, each ratio named by the
+     SELECTOR it was read from rather than by the surface it was assumed to belong to:
+       .storage-headroom-detail on .storage-durability-banner[data-durability="full"]  4.38
+       .supplier-performance-heading small (surface #e2edea)                            4.43
+       .storage-headroom-detail on .storage-durability-banner[data-headroom="tight"]    4.47
+       .inventory-autopilot-rows span small (surface #e7f1ef)                           4.61  (passed)
+       .stock-receipt-preview small        (surface #e7f1ef)                            4.61  (passed)
+     The #e2edea one is on the Shop inventory tab and has nothing to do with a banner; a
+     banner-local fix would have left it under the floor. Darkened 4% along its own hue, which
+     is monotonic in light mode: --core-quiet carries text only on light surfaces, and its
+     three non-text uses (two 5-6px dots at :168/:313 and a 3px border-left at :801) all gain
+     contrast by darkening. Worst surface is now 4.65:1. Dark mode is untouched -- .theme-dark
+     redeclares --core-quiet as #7a8a9c and never sees this value. */
+  --core-quiet: #5b6b63;
   --core-line: rgba(31, 68, 51, .12);
   --core-line-strong: rgba(31, 68, 51, .2);
   --core-green: #0b745e;
   --core-green-soft: rgba(11, 116, 94, .1);
   --core-success: #0b745e;
   --core-success-soft: rgba(11, 116, 94, .1);
-  --core-warn: #946200;
+  /* Was #946200, under the 4.5:1 AA floor wherever a warning pill sits on a tinted banner.
+     Measured by selector, not by assumed surface:
+       .status-pill.pending on .storage-durability-banner[data-durability="full"]      4.32
+       .status-pill.pending on .storage-durability-banner[data-headroom="tight"]       4.42
+       .status-pill.pending on .production-mode-banner[data-write="blocked"]           4.42
+       .shop-product-tile small.is-low (surface #eef4ef)                               4.70  (passed)
+     Darkened 4% along its own hue. Unlike --core-quiet this token is not purely text: it also
+     paints two dots (:315/:906), four border-lefts (:802/:908/:2922 and :541's inset shadow)
+     -- all non-text, all improved by darkening -- and it feeds two color-mix SURFACES that do
+     carry text: .plant-next-work.is-blocked (7% warn on --core-panel, :533) and
+     .shop-today-module-grid > a[data-tone="attention"] b (14% warn on --core-panel, :2438).
+     Both were measured before and after; see the PR. The 14% one darkens its text and its
+     background together and comes out ahead; the 7% one moves by 0.03 and stays well clear.
+     Worst surface is now 4.62:1. Dark mode is untouched -- .theme-dark redeclares
+     --core-warn as #ffcc7a. --core-warning is an alias of this token and moves with it. */
+  --core-warn: #8e5e00;
   --core-danger: #b42336;
   --core-radius: 14px;
   --core-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -854,16 +883,34 @@ textarea { min-height: 72px; resize: vertical; }
    CONTRAST, read out of the browser on the composited tint with the real markup, not
    estimated from token values. Which pill renders depends on the variant: the urgent banner
    uses .status-pill.danger, every other tinted banner uses .status-pill.pending.
-     dark   --core-muted 8.79, --core-quiet 5.48, --core-green 13.49, pending pill 13.07,
-            danger pill 8.17. (The amber tint matches these to within 0.02.)
-     light  --core-muted 5.01, --core-green 4.71, danger pill 5.35 -- but --core-quiet is
-            4.47 on amber / 4.38 on red, and the pending pill 4.42 on amber / 4.32 on red.
-   Those last two are BELOW the 4.5:1 AA floor at the size they render. They are pre-existing
-   -- the light tints have looked like this since they shipped -- and are filed rather than
-   changed here, because raising them means altering a token or a tint, which is a colour
-   decision. A previous note here claimed --core-quiet was 4.80:1 in light/urgent; it
-   measures 4.38:1, so do not carry that figure forward. Nothing in the dark column is
-   below 5.48:1. */
+   EACH FIGURE IS NAMED BY THE SELECTOR IT WAS MEASURED ON, not by the token or the surface it
+   is assumed to belong to. That mislabel is how a wrong number survived here twice: a note
+   once claimed "--core-quiet 4.80:1 in light/urgent", and --core-quiet is a token used on 156
+   selectors -- the figure was unfalsifiable without knowing which element carried it. The
+   element on this banner is `.storage-headroom-detail`, and it measures 4.64 on red today.
+     dark (unchanged by the AA lane -- .theme-dark declares its own --core-quiet/--core-warn)
+       .status-pill.pending             13.07 red / 13.08 amber
+       .status-pill.danger               8.17 red
+       .production-mode-banner p         8.79 red / 8.80 amber
+       .storage-headroom-detail          5.48 red / 5.49 amber
+       .production-mode-banner > a      13.49 red / 13.51 amber
+     light (after darkening --core-quiet #5f6f67 -> #5b6b63 and --core-warn #946200 -> #8e5e00)
+       .status-pill.pending              4.62 red / 4.72 amber   (was 4.32 / 4.42 -- both AA fails)
+       .storage-headroom-detail          4.64 red / 4.75 amber   (was 4.38 / 4.47 -- both AA fails)
+       .status-pill.danger               5.35 red                (unchanged)
+       .production-mode-banner p         5.01 red / 5.12 amber   (unchanged, --core-muted)
+       .production-mode-banner > a       4.71 red / 4.82 amber   (unchanged, --core-green)
+   Every figure above is now at or over the 4.5:1 AA floor, but the margins are thin and the
+   red tint is what makes them thin: the three tightest are `.status-pill.pending` 4.62,
+   `.storage-headroom-detail` 4.64 and `.production-mode-banner > a` 4.71, all on red. The
+   first two moved with this lane's tokens; the third is --core-green and did NOT move -- it
+   was 4.71 before and after, and it is the one with no pin recomputing it. Deepen the red
+   tint and all three fall; the AA-floor pins catch the first two (verified by raising the
+   tint alpha to .20, which reports 3.82) and would not catch the link.
+   The AA-floor section of tools/test_theme_surface_contract.mjs recomputes these four
+   figures from the live token values so they cannot silently drift back. Note that the rest
+   of that suite passing is NOT evidence these are right -- it skips listed surfaces as
+   exceptions, and text once shipped at 1.01:1 with it fully green. */
 .storage-durability-banner[data-headroom="tight"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
 .storage-durability-banner[data-headroom="urgent"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
 /* The raw number, kept quiet: an owner who wants it can read it, one who does not is not
@@ -1733,7 +1780,29 @@ textarea { min-height: 72px; resize: vertical; }
 .theme-dark .core-main { background: transparent; }
 .theme-dark .core-nav a:hover { background: rgba(86,240,193,.07); }
 .theme-dark .core-nav a.active { border-color: rgba(86,240,193,.22); background: rgba(86,240,193,.1); }
-.theme-dark .core-button { border-color: var(--core-line-strong); background: #121a23; color: var(--core-ink); }
+/* THE SAME CASCADE TRAP AS THE BANNERS -- disarmed the same way. Only `background` differs
+   from the base rule here. `.core-button` at :180 already declares
+   `border: 1px solid var(--core-line-strong)` and `color: var(--core-ink)`, and BOTH tokens
+   retint themselves inside .theme-dark, so restating them painted nothing new. They were not
+   merely redundant: this rule is 0-2-0 and sits ~1550 lines AFTER `.core-button.danger`
+   (:188, also 0-2-0), so source order handed them the win and the destructive-action button
+   lost its red text and its red border in dark mode -- it rendered identical to an ordinary
+   button, which is a safety affordance failing, not a cosmetic one.
+   Measured with getComputedStyle before the removal: `.core-button.danger` computed
+   color rgb(245,248,251) and border-color rgba(166,190,214,.24), byte-identical to the plain
+   `.core-button` control beside it. Its own declarations (--core-danger and
+   rgba(255,123,141,.4)) never reached the screen.
+   `background: #121a23` is the one declaration doing real work: the base rule paints a
+   hardcoded `background: #fff`, so the flip IS load-bearing and stays.
+   Checked before removing, because that check is what makes this safe: no other rule in any
+   of the four stylesheets declares `color` or `border-color` on a `.core-button` selector --
+   every one of the ~50 others sets layout only (width / min-height / flex). So the two
+   removed declarations were defeating exactly one rule, `.core-button.danger`, and nothing
+   else changes. `.core-button:hover` (:1737) and `.core-button.primary` (:1738) are 0-3-0
+   and 0-3-0 and sit later still; both are unaffected, verified by measurement.
+   See THE CONVENTION on the banner rule below: a `.theme-dark <class>` rule declares only
+   what actually differs from the base rule. Do not restate a base-rule token here. */
+.theme-dark .core-button { background: #121a23; }
 .theme-dark .core-button:hover { border-color: var(--core-green); background: rgba(86,240,193,.1); }
 .theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: var(--core-on-accent); }
 .theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
