@@ -757,12 +757,28 @@ export function extractShapes(source, file) {
   const shapes = []
   const offsets = lineIndex(source)
   let unresolved = 0
-  const tagPattern = /<([A-Za-z][A-Za-z0-9.]*)(?=[\s/>])/g
+  // The open-element stack, so every shape knows its ancestors WITHIN THIS FILE. Without it a
+  // finding about `.website-recovery-actions > button.is-quiet` names whichever `button.is-quiet`
+  // the scan happened to reach first -- which, on the real repo, was a button in a different
+  // component that the rule never touches. A finding that points at the wrong element is worse than
+  // no finding, so ancestry is verified rather than assumed whenever a selector demands one.
+  // Fragments (`<>...</>`) are correctly transparent: they never match the tag pattern, so they are
+  // neither pushed nor popped, which is exactly how they behave in the DOM.
+  const stack = []
+  const tagPattern = /<(\/?)([A-Za-z][A-Za-z0-9.]*)(?=[\s/>])/g
   let match
   while ((match = tagPattern.exec(source))) {
-    const tagName = match[1]
+    const closing = match[1] === '/'
+    const tagName = match[2]
+    if (closing) {
+      for (let i = stack.length - 1; i >= 0; i -= 1) {
+        if (stack[i].tagName === tagName) { stack.length = i; break }
+      }
+      continue
+    }
     const end = findTagEnd(source, match.index + match[0].length)
     if (end < 0) continue
+    const selfClosing = source[end - 1] === '/'
     const attributesText = source.slice(match.index + match[0].length, end)
     const attributes = new Map()
     let classes = null
@@ -794,19 +810,67 @@ export function extractShapes(source, file) {
       attributes.set(name.toLowerCase(), values === OPAQUE ? ATTRIBUTE_UNKNOWN : values)
     }
 
+    const tag = /^[a-z]/.test(tagName) ? tagName.toLowerCase() : (COMPONENT_TAGS.get(tagName) ?? null)
+    const line = lineAt(offsets, match.index)
+    // For ANCESTOR purposes an element is the union of every class any branch can give it: a
+    // container's identity is what a descendant rule keys off, and a container written with a
+    // ternary is still that container in both branches.
+    const unionClasses = new Set((classes ?? []).flatMap((text) => text.split(/\s+/).filter(Boolean)))
+    const ancestors = stack.map((frame) => ({ tag: frame.tag, classes: frame.classes }))
+    if (!selfClosing) stack.push({ tagName, tag, classes: unionClasses })
+
     if (opaqueClass) { unresolved += 1; continue }
     if (classes === null) continue
 
-    const tag = /^[a-z]/.test(tagName) ? tagName.toLowerCase() : (COMPONENT_TAGS.get(tagName) ?? null)
-    const line = lineAt(offsets, match.index)
     // Each alternative of a ternary is its own element state, never merged.
     for (const classText of classes) {
       const classList = classText.split(/\s+/).filter(Boolean)
       if (!classList.length) continue
-      shapes.push({ file, line, tag, classes: new Set(classList), attributes, raw: classText })
+      shapes.push({ file, line, tag, classes: new Set(classList), attributes, ancestors, raw: classText })
     }
   }
   return { shapes, unresolved }
+}
+
+// Does this shape's recorded ancestry satisfy the selector's? Ancestor compounds are walked from
+// the innermost outwards: `>` demands the immediate parent, a descendant combinator scans upwards.
+// The AMBIENT theme compound is skipped -- it is on the shell root, which is above everything and
+// therefore above whatever slice of the tree this file contains.
+//
+// Returns null when the selector demands an ancestry this file cannot speak to (the chain runs off
+// the top of the file into a parent component). That is reported as unverified, never as a match:
+// guessing here is what produced a finding pointing at the wrong button.
+export function verifyAncestry(parsed, shape) {
+  let compounds = parsed.compounds.slice(0, -1)
+  let combinators = parsed.combinators.slice()
+  if (compounds.length && isAmbientCompound(compounds[0]) && combinators[0] === ' ') {
+    compounds = compounds.slice(1)
+    combinators = combinators.slice(1)
+  }
+  if (!compounds.length) return true
+
+  const chain = shape.ancestors
+  let position = chain.length - 1
+  for (let index = compounds.length - 1; index >= 0; index -= 1) {
+    const compound = compounds[index]
+    const combinator = combinators[index] ?? ' '
+    if (combinator === '+' || combinator === '~') return null
+    const satisfies = (frame) =>
+      compound.classes.every((className) => frame.classes.has(className)) &&
+      (!compound.tag || frame.tag === compound.tag) &&
+      !compound.attributes.length && !compound.id
+    if (combinator === '>') {
+      if (position < 0) return null
+      if (!satisfies(chain[position])) return false
+      position -= 1
+      continue
+    }
+    let found = -1
+    for (let i = position; i >= 0; i -= 1) if (satisfies(chain[i])) { found = i; break }
+    if (found < 0) return position < 0 ? null : false
+    position = found - 1
+  }
+  return true
 }
 
 function findTagEnd(source, from) {
@@ -1079,6 +1143,7 @@ export function scanCascade(cascade, shapes) {
   let unconfirmedPairs = 0
   let restoredPairs = 0
   let refinementPairs = 0
+  let unverifiedPairs = 0
 
   // Index shapes by class so the pair search is not quadratic over 2500 elements.
   const shapesByClass = new Map()
@@ -1159,15 +1224,28 @@ export function scanCascade(cascade, shapes) {
         // visible here at all. Matched jointly, so mutually exclusive attribute states cannot pose
         // as a co-occurrence.
         const pairCompounds = [earlier.parsed.subject, later.parsed.subject]
+        const needsAncestry = earlier.strippedAncestry !== '' || later.strippedAncestry !== ''
         let witness = null
         let witnessConfidence = MATCH_NO
+        let sawUnverifiable = false
         for (const shape of candidateShapes(earlier.parsed.subject, later.parsed.subject)) {
           const confidence = matchCompounds(pairCompounds, shape)
           if (confidence === MATCH_NO) continue
+          if (needsAncestry) {
+            // Both selectors demand the same chain, so verifying either verifies both.
+            const verified = verifyAncestry(later.parsed, shape) ?? verifyAncestry(earlier.parsed, shape)
+            if (verified === null) { sawUnverifiable = true; continue }
+            if (verified === false) continue
+          }
           if (confidence > witnessConfidence) { witness = shape; witnessConfidence = confidence }
           if (confidence === MATCH_YES) break
         }
-        if (!witness) continue
+        if (!witness) {
+          // A pair whose only candidate elements have ancestry this scanner cannot trace is a pair
+          // it must not name an element for. Counted, not reported.
+          if (sawUnverifiable) unverifiedPairs += 1
+          continue
+        }
         matchedShapePairs += 1
         // A witness that only MAYBE-matches (a dynamic attribute value, an unparsed selector) is
         // evidence the collision is possible, not that it happens. Those are counted and left out
@@ -1239,7 +1317,7 @@ export function scanCascade(cascade, shapes) {
   })
 
   deduped.sort((x, y) => Number(y.redundant) - Number(x.redundant) || x.defeated.path.localeCompare(y.defeated.path) || x.defeated.line - y.defeated.line || x.property.localeCompare(y.property))
-  return { findings: deduped, comparedPairs, matchedShapePairs, unconfirmedPairs, restoredPairs, refinementPairs, candidatePairs, deferredPairs }
+  return { findings: deduped, comparedPairs, matchedShapePairs, unconfirmedPairs, restoredPairs, refinementPairs, unverifiedPairs, candidatePairs, deferredPairs }
 }
 
 // The element a rule was WRITTEN FOR: exactly the conditions its own subject demands, nothing
@@ -1252,7 +1330,7 @@ function syntheticShape(compound) {
     if (attribute.operator === '=' && attribute.value !== null) attributes.set(attribute.name, [attribute.value])
     else attributes.set(attribute.name, ATTRIBUTE_UNKNOWN)
   }
-  return { file: '<synthetic>', line: 0, tag: compound.tag, classes: new Set(compound.classes), attributes, raw: '' }
+  return { file: '<synthetic>', line: 0, tag: compound.tag, classes: new Set(compound.classes), attributes, ancestors: [], raw: '' }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1293,4 +1371,4 @@ export function formatFinding(finding) {
   return lines.join('\n')
 }
 
-export { MATCH_YES, MATCH_MAYBE, MATCH_NO, AMBIENT_CLASSES, ROOT }
+export { MATCH_YES, MATCH_MAYBE, MATCH_NO, AMBIENT_CLASSES, ROOT, ATTRIBUTE_UNKNOWN, OPAQUE, SHORTHAND_PARENT }
