@@ -855,12 +855,23 @@ readable without opening it:
 
 - **String attributes: no new function.** Move the string out of the attribute
   into a content slot and call today's `bi()` — `aria-labelledby` where visible
-  text already exists, an `sr-only` node where it does not. An `aria-label` is
-  a flat string with nowhere to hang `lang="my"`, so any string-returning
-  sibling of `bi()` ships an unmarked mixed-language accessible name
-  permanently; a node keeps the halves separable and keeps the decision open.
-  This is a rendering-site change, **not** a translation-policy change: every
-  string it reaches becomes an ordinary Option B entry.
+  text already exists, an `sr-only` node where it does not, and
+  `aria-labelledby` + `aria-describedby` where the control has data as well as
+  an action. This is a rendering-site change, **not** a translation-policy
+  change: every string it reaches becomes an ordinary Option B entry.
+- **Recommended PENDING AT VERIFICATION, not decided** — and the reason matters
+  for anyone reading the first revision of that document. It originally argued
+  that a node "keeps the halves separable" where a joined string cannot. That
+  is **retracted**: the accessible name computation returns a **flat string**,
+  and Chrome 152 was measured over the DevTools Protocol confirming that
+  `aria-label`, an `sr-only` child with `lang="my"`, `aria-labelledby`, and
+  `lang` on the element all compute the **byte-identical** name with no
+  language field anywhere. R1 and a string-returning `biAttr()` give a screen
+  reader the same thing. R1 still wins, on narrower grounds — no second
+  renderer and no second pinned gate, two sites needing no table entry that
+  satisfy WCAG 2.5.3 structurally, and it is the only route to the
+  subtree-override fix and to `item.nameMy`. What would settle it: a real
+  screen reader on the target device. There is none in this sandbox.
 - **Parameterised strings: extend B's entry shape from a literal to a
   template.** The key is the English template with its placeholders; the value
   carries a Burmese template with its own placeholder positions; the composer
@@ -871,11 +882,18 @@ readable without opening it:
   through the existing gate. That property is why they were chosen over the
   alternatives.
 - **The true scope is smaller than batch 3 implied.** 14 attribute sites on the
-  counter slice, not a class — 10 `aria-label` (all reachable, neither
-  founder- nor native-gated), and a 4-site residue (2 `placeholder`, 1 `alt`,
-  1 `title`) that is **founder-gated** on one question and recommended
-  deferred. `ReceiptDialog` contributes zero. `Find or scan an item` was never
-  an attribute.
+  counter slice, not a class — 10 `aria-label`, all reachable, and the wiring
+  for them is neither founder- nor native-gated. `ReceiptDialog` contributes
+  zero. `Find or scan an item` was never an attribute. Of the 4 sites R1 cannot
+  reach, only **one** (the QR image's `alt`) is actually an accessible name:
+  both placeholders are visual-only, and the `title` duplicates a converted
+  `aria-label`.
+- **Gating is not what the first revision said.** Because every mechanism lands
+  on the same flat string, the founder question — should a screen reader read a
+  name in two languages? — gates the first `confirmed` flip of **any**
+  name-bearing string, R1's included, not three leftover sites. Wiring stays
+  ungated; the first confirmation does not. Exactly parallel to R2's numeral
+  finding.
 - **Option A stays rejected** and Option C is untouched; §5 of that document
   argues it explicitly against this section rather than around it.
 - **Two new questions for the reviewer packet**, numbered 4 and 5 there:
@@ -886,8 +904,12 @@ readable without opening it:
 - The census also found a live accessibility defect unrelated to Burmese: the
   counter's product tile `aria-label` overrides its own subtree, so a
   screen-reader user hears neither the price, nor the stock level, nor
-  `item.nameMy`. Fixing it and solving the Burmese problem there are the same
-  edit.
+  `item.nameMy`. The fix is `aria-labelledby` for the action plus
+  `aria-describedby` for the data — **not** naming the tile from its contents,
+  which was the first revision's proposal and which loses the verb entirely
+  (measured: it also fuses the price to the stock count). A useful side effect:
+  it turns the tile's and the steppers' three parameterised labels into static
+  keys, removing them from R2's dependency list.
 
 ## Verification recipe for design PRs
 

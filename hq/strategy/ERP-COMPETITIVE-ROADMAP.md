@@ -475,9 +475,13 @@ batch — this is the part that needs FURTHER BATCHES, not further review:
   across roughly half the counter's words. That is progress, not resolution.
 
   MECHANISM DECIDED 2026-08-21, not yet built: `hq/strategy/G1-STRING-MECHANISM-DECISION.md`
-  (attributes = 14 sites, not a class; 10 reachable with no new mechanism and no
-  gate; 4-site residue is founder-gated. Parameterised = template-pair entries.
-  Both ship ahead of sign-off.)
+  (attributes = 14 sites, not a class; 10 reachable with no new mechanism, and
+  the WIRING for them is ungated. Only 1 of the 4 remaining sites is actually an
+  accessible name. Parameterised = template-pair entries. Both mechanisms ship
+  ahead of sign-off. Two things gate the first CONFIRMED flip rather than the
+  build: the numeral-script question, and — because every mechanism computes the
+  same flat accessible name — whether a screen reader should read a name in two
+  languages, which wants a real-device AT check first.)
 
 ALSO NOT CLOSED:
   - Every string is drafted, none is reviewed. Until a native speaker signs them

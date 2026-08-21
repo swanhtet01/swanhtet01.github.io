@@ -7,6 +7,15 @@ Builds on: `DESIGN-PROGRAM.md` "EN/MY composed labels — mechanism decision"
 (Option A/B/C, recommendation **B scoped by traffic**) and its batch-3 entry
 (PR #536, the counter slice).
 
+**REVISED 2026-08-21** after Codex review of PR #541. Three findings, all
+verified, all applied: the accessible name is a **flat string**, which
+retracts R1's original justification and makes R1 *recommended pending AT
+verification* rather than decided (§3.1, §3.2, §3.5); naming the product tile
+from its contents loses the action verb, so the fix changed shape (§3.4); and
+the `Guest` deferral rested on a **false dependency**, now withdrawn in full
+(§3.6). The site census, R2, the ICU rejection and the subtree-override finding
+are unchanged.
+
 PR #536 wired the counter and then said, correctly, that roughly half a
 cashier's words are still English and that the remainder needs *a mechanism
 decision, not further review*. This is that decision. It covers the two
@@ -24,14 +33,16 @@ meets* — is preserved in both recommendations.
 
 | | Recommendation | Gated on? |
 | --- | --- | --- |
-| **String attributes** | **R1 — move the string out of the attribute and into a content slot; keep `bi()` unchanged.** No new function. `aria-labelledby` where visible text already exists, an `sr-only` node where it does not. | **Neither**, for all 10 `aria-label` sites. Ships ahead of sign-off exactly as #536 did. |
-| **The 4 sites R1 cannot reach** (2 `placeholder`, 1 `alt`, 1 `title`) | **Defer. Build nothing.** | **Founder-gated**, and the question is stated verbatim in §3.6. Two of the four are not reachable on a touch till at all. |
+| **String attributes** | **R1 — move the string out of the attribute and into a content slot; keep `bi()` unchanged.** No new function. `aria-labelledby` where visible text already exists, an `sr-only` node where it does not, `aria-labelledby` + `aria-describedby` where the control has data as well as an action. **Recommended pending AT verification (§3.1)** — not decided. | **Wiring: neither.** Ships ahead of sign-off exactly as #536 did. **First `confirmed` flip of any string that becomes an accessible name: founder-gated** on question 5, and should follow the AT check. |
+| **The 3 sites R1 cannot reach** (2 `placeholder`, 1 `alt`; the `title` duplicates a converted `aria-label`) | **Two placeholders are ordinary table entries — they are visual-only and are not accessible names. The `alt` is the one genuine AT-facing residue.** | Placeholders: **neither**. `alt`: **founder-gated** on the same question 5 as every other name. `Guest` was previously deferred here **on a false dependency, withdrawn in §3.6**. |
 | **Parameterised strings** | **R2 — a second table entry shape: a template pair whose Burmese half carries its own `{placeholder}` positions, substituted independently, behind the same confirmed-only gate.** | **Neither, to ship the mechanism.** Per-line content is native-speaker-gated as always. **One new founder question (numeral script, §4.5) blocks confirming the first count template** — but not shipping the mechanism. |
 
 Both recommendations preserve the property that made #536 shippable: `bi()`
 falls back to English for anything not `confirmed`, so wiring lands ahead of
 review and sign-off stays a per-line status flip. That property weighed more
-than anything else in choosing between the options below.
+than anything else in choosing between the options below — and after the §3.1
+correction it is the *only* argument that separates R1 from the alternative it
+was originally chosen over, so it is doing more work here than it looks.
 
 ---
 
@@ -83,14 +94,14 @@ payment-QR dialog.
 | 3 | search `<input>`, CoreApp:1261 | `placeholder="Search or scan SKU"` | static, **visible** | **residue** — no node exists. **Pinned**, verify:5818 |
 | 4 | `BarcodeScanButton` call, CoreApp:1261 | `label` → `aria-label` ×2 | static control | `sr-only` node (prop shape change) |
 | 5 | same | `label` → `title` | static, **visible on hover** | **residue** |
-| 6 | product tile `<button>`, CoreApp:1266 | `aria-label={`Add ${item.name} to this sale`}` | **parameterised** control | content-derived name — see §3.4 |
-| 7 | quantity badge `<span>`, CoreApp:1269 | `aria-label={`${quantity} in sale`}` | **parameterised**, **currently dead** — see §3.4 | delete or promote to content |
+| 6 | product tile `<button>`, CoreApp:1266 | `aria-label={`Add ${item.name} to this sale`}` | parameterised today, **becomes STATIC** under §3.4 | `aria-labelledby` (verb + name) + `aria-describedby` (data) |
+| 7 | quantity badge `<span>`, CoreApp:1269 | `aria-label={`${quantity} in sale`}` | **currently dead** — see §3.4 | delete the attribute; the node becomes part of the description |
 | 8 | cart backdrop `<button>`, CoreApp:1276 | `aria-label="Close current sale"` | static, empty control | `sr-only` node |
 | 9 | `<aside>` current sale, CoreApp:1277 | `aria-label="Current sale"` | static landmark; **table entry exists** | `aria-labelledby` → the header's existing `bi('Current sale')` |
 | 10 | cart close `<button>`, CoreApp:1278 | `aria-label="Close current sale"` | static, `×` glyph | `sr-only` node + `aria-hidden` on `×` |
-| 11 | stepper `<button>`, CoreApp:1280 | `aria-label={`Remove one ${item.name}`}` | **parameterised** control | `sr-only` node + template (needs R2) |
-| 12 | stepper `<button>`, CoreApp:1280 | `aria-label={`Add one ${item.name}`}` | **parameterised** control | `sr-only` node + template (needs R2) |
-| 13 | customer `<input>`, CoreApp:1283 | `placeholder="Guest"` | static, **visible**, has a code twin | **residue** — see §3.6 |
+| 11 | stepper `<button>`, CoreApp:1280 | `aria-label={`Remove one ${item.name}`}` | parameterised today, **becomes STATIC** under §3.4 | `aria-labelledby` (verb + line name) |
+| 12 | stepper `<button>`, CoreApp:1280 | `aria-label={`Add one ${item.name}`}` | parameterised today, **becomes STATIC** under §3.4 | `aria-labelledby` (verb + line name) |
+| 13 | customer `<input>`, CoreApp:1283 | `placeholder="Guest"` | static, **visible**, **not** an accessible name | **residue, but an ordinary table entry** — the "code twin" objection is withdrawn, §3.6 |
 | 14 | QR `<dialog>`, PaymentQr | `aria-label={`${method} payment QR`}` | parameterised on a **refused** brand token | `aria-labelledby` → the dialog's existing `bi('Scan to pay')` + `<h2>{method}</h2>` |
 | 15 | QR `<img>`, PaymentQr | `alt={`${method} merchant payment QR`}` | parameterised | **residue** |
 
@@ -98,8 +109,10 @@ payment-QR dialog.
 kinds, and that split is exactly why the `BarcodeScanButton` conversion is not
 free.)
 
-**10 `aria-label` sites → R1 reaches all of them.** **4 string-only residue
-sites** (rows 3, 5, 13, 15) → §3.6.
+**10 `aria-label` sites → R1 reaches all of them.** **4 string-only sites**
+(rows 3, 5, 13, 15), of which §3.6 finds only **one** (row 15, the `alt`) is
+actually an accessible name; the two placeholders are visual-only and the
+`title` duplicates a converted `aria-label`.
 
 ### 2.3 Parameterised strings — 15 distinct, 16 sites
 
@@ -108,7 +121,7 @@ sites** (rows 3, 5, 13, 15) → §3.6.
 | `ShopCounter` | `{pack} working sample`; `{firstWorkflow} {pack} sample items are loaded.`; `{n} open orders`; `{n} low stock`; `{n} in stock`; `{n} item` / `{n} items` (two sites: cart header + mobile cart bar); `{price} each`; `{customer} · {n} pts` |
 | `PaymentQrButton` | `Show {method} QR · {amountDue}`; `No {method} QR saved on this device yet.` |
 | `ReceiptDialog` | `Discount ({code})`; `Tax ({code})`; `Due {date}`; `Promised {date}`; `{date} · {channel}` |
-| plus, as attributes | rows 6, 7, 11, 12, 14, 15 of §2.2 |
+| plus, as attributes | rows 6, 7, 11, 12, 14, 15 of §2.2 — **reduced to rows 14 and 15 by §3.4**, which turns the three tile/stepper verbs into static keys and deletes row 7 |
 
 ### 2.4 The third bullet of #536's list needs no mechanism at all
 
@@ -134,43 +147,109 @@ problems:
 
 ## 3. Problem 1 — string attributes
 
-### 3.1 The constraint that decides it
+### 3.1 What the accessible name actually is — CORRECTED 2026-08-21
 
-`aria-label` is a flat DOMString. **There is nowhere inside it to mark a
-language change.** `lang` is an element attribute: it applies to the element's
-content *and* to the whole of its `aria-label`, so setting `lang="my"` on a
-button whose label reads `English · Burmese` declares the English half Burmese
-too. There is no attribute-level equivalent of the `<span lang="my">` that
-`bi()` already emits.
+**An earlier revision of this document rested R1 on the claim that "a node keeps
+the halves separable; a joined string cannot be un-joined." That claim is
+withdrawn.** It is true of the DOM and false of what reaches an assistive
+technology. Codex raised it in review of PR #541; it was checked and it holds.
 
-That is not a preference. It is the shape of the platform, and it means any
-string-returning mechanism ships an **unmarked mixed-language string** — one
-accessible name, one declared language, two languages inside it.
+The accessible name computation produces a **flat string**. It does not carry
+descendant `lang` ranges into the exposed name. So a control converted by R1
+exposes exactly the same unmarked mixed-language name that `biAttr()` would
+have produced — which was the sole ground on which §3.5 rejected `biAttr()`.
 
-A content-derived accessible name is the only form that *can* carry `lang`,
-because the name is computed from a subtree and the subtree keeps its markup.
-Whether a given screen reader then switches voice mid-name is
-assistive-technology dependent and **was not tested here** — this sandbox has
-no screen reader. What is certain is the asymmetry: the content form leaves the
-information present for an AT that uses it; the string form destroys it before
-the AT ever sees it.
+**Measured, not asserted.** Chrome 152 headless over the DevTools Protocol
+(`Accessibility.getPartialAXTree`), four markup shapes, one string, Burmese
+taken from the CONFIRMED `Close` entry (`i18n-actions.ts:40`):
 
-### 3.2 Recommendation R1 — content-slot conversion, no new function
+| Shape | Computed name |
+| --- | --- |
+| `aria-label="Close · ပိတ်မည်"` (the `biAttr()` shape) | `"Close · ပိတ်မည်"` |
+| `sr-only` child containing `<span lang="my">` (R1 shape 2) | `"Close · ပိတ်မည်"` |
+| `aria-labelledby` → node containing `<span lang="my">` (R1 shape 1) | `"Close · ပိတ်မည်"` |
+| `aria-label` + `lang="my"` on the button | `"Close · ပိတ်မည်"` |
 
-Move the string from the attribute into a node, and call the `bi()` that
-already exists. Three shapes, in preference order:
+**Byte-identical in all four.** The protocol types the result
+`"type": "computedString"` and exposes no language field on the name or on any
+of its sources; a full-AX-tree dump for the page contains no `language`
+property at all. Reproduce with
+`scratchpad/axprobe.mjs` / `axprobe2.mjs` from the PR branch discussion, or
+re-derive in three minutes against any Chrome build.
 
-1. **`aria-labelledby` pointing at text already on screen.** Zero new strings,
-   zero new table entries. Rows 9 and 14 are pure instances: the `<aside>`'s
-   own header already renders `bi('Current sale')`, and the QR dialog already
-   renders `bi('Scan to pay')` beside `<h2>{method}</h2>`. `ReceiptDialog`
-   shipped this shape already.
+**Which part of this is spec and which is implementation:**
+
+- **Spec.** The accessible name computation is defined to return a flat string;
+  platform accessibility APIs expose a control's name as a plain string
+  property with no per-range language. This is the shape of the platform, not a
+  Chrome choice, and no browser can preserve the ranges while conforming.
+- **Implementation, measured here.** Chrome 152 confirms it, and further shows
+  that `aria-label` *prunes the accessibility subtree* (the button exposed 0 AX
+  children) while content-derived naming *preserves it* (2 AX children). That
+  is a real asymmetry, and it is deliberately **not** load-bearing below: it
+  affects what an AT can reach when reading the document, not what a user hears
+  when they tab onto the control, which is the flat name and is identical.
+- **Not established, and not establishable here.** What a screen reader
+  *does* with a mixed-language flat name — one voice for the whole string, a
+  fallback, silence on the half it cannot pronounce — is AT- and
+  platform-specific. **There is no assistive technology in this sandbox**, and
+  W3C and MDN are both blocked by this environment's egress proxy, so the
+  primary spec text could not be quoted first-hand either. Both limits are
+  recorded rather than papered over.
+
+**Consequence for this document: R1 is RECOMMENDED, PENDING AT VERIFICATION —
+not decided.** What would settle it, and should be done before the first table
+entry reaching an accessible name is flipped to `confirmed`:
+
+1. TalkBack + Chrome on an Android phone of the class a Yangon till actually
+   runs on: is a Burmese TTS voice even installed by default, and how is
+   `"Total · <MY>"` announced on focus?
+2. NVDA + Chrome on Windows as a second data point, with automatic language
+   switching both on and off.
+3. Both against a control converted by R1 and one using a joined `aria-label`,
+   to confirm empirically that they are indistinguishable — the measurement
+   above says they must be, but it measures the browser, not the AT.
+
+### 3.2 Recommendation R1 — content-slot conversion, re-derived on what survives
+
+Still R1, on different and narrower grounds. Move the string out of the
+attribute into a content slot and call today's `bi()`:
+
+1. **`aria-labelledby` pointing at text already on screen.** Rows 9 and 14.
+   Zero new strings, zero new table entries.
 2. **An `sr-only` node inside the control**, with `aria-hidden="true"` on any
-   decorative glyph. Rows 1, 2, 4, 8, 10. The counter already does this at
-   CoreApp:1261, and `.sr-only` is one line of `core-app.css` (:116).
-3. **Content-derived naming** — drop the attribute and let the control name
-   itself from what it already shows. Row 6; see §3.4, where it also fixes a
-   bug.
+   decorative glyph. Rows 1, 2, 4, 8, 10.
+3. **`aria-labelledby` + `aria-describedby`** where the control has data worth
+   exposing as well as an action to name. Rows 6, 11, 12 — see §3.4, which is
+   corrected from the earlier revision.
+
+**Grounds, with the retracted one removed:**
+
+- **Cost.** R1 adds no function. `biAttr()` is a second renderer that needs its
+  own duplicated confirmed-gate and its own pin (§6 argues why duplication is
+  correct there — which means the cost lands twice).
+- **Two sites need no table entry at all**, and shape 1 keeps the accessible
+  name equal to the visible label **structurally, forever**, including after a
+  status flip. WCAG 2.5.3 Label in Name is satisfied by construction rather
+  than by two strings being kept in sync by hand. `biAttr()` can match the
+  visible label only as long as somebody remembers to use the same key.
+- **It is the only way to fix the subtree-override defect** (§3.4), which is a
+  live accessibility bug independent of Burmese and cannot be fixed while the
+  name comes from `aria-label`.
+- **`nameMy` reaches the user.** The tile's shape-3 conversion exposes the
+  owner's own Burmese product name, which no attribute mechanism reaches
+  without new call-site code.
+- **Reversibility is symmetric and is no longer claimed.** Both `bi()` and a
+  hypothetical `biAttr()` are single functions; either could be changed in one
+  place later. The earlier revision claimed this as an R1 advantage. It is not.
+
+**If AT verification comes back saying a mixed-language name is unusable**, the
+answer is the same for R1 and for `biAttr()` — neither mechanism should render
+a bilingual accessible name, and the question becomes which single language the
+name carries, which is the language-setting pass §3.5 defers. R1 does not
+prejudge that any more than `biAttr()` would; it is simply cheaper to reach
+from, because the halves are still separate *in the source*, which is where a
+future change would be made.
 
 ### 3.3 What R1 costs, stated so nobody discovers it mid-PR
 
@@ -180,130 +259,186 @@ already exists. Three shapes, in preference order:
   hides `+` and `→` this way, so the pattern exists — but a missed
   `aria-hidden` is silent, invisible in review, and audible only to the one
   user who cannot see the screen. It needs a pin (§6).
+- **Inline content concatenates without separators.** Measured: a button whose
+  content is `<b>Rice 5kg</b><small lang="my">…</small><b>3500</b><small>12 in
+  stock</small><span>2</span>` computes the name
+  `"Rice 5kgဆန်350012 in stock2"` — run-together, unreadable, and a price
+  fused to a stock count. Naive content-derived naming is not a drop-in
+  anywhere the control has more than one child. This is why §3.4's
+  recommendation changed.
 - **`BarcodeScanButton` needs a prop split.** One `label: string` currently
-  feeds `aria-label` twice and `title` once. Naming it from content means the
-  aria half becomes a node and the `title` half stays a string — the prop
-  cannot be one thing any more. This component has **five other call sites**
-  (catalog SKU ×2, Plant job card, Plant material, counter), all outside the
-  counter slice, so the change has to keep the string form working for them.
-  This is the single most expensive site in the census; it may be worth its own
-  PR, or worth deferring with the residue.
-- **Row 7 (`{quantity} in sale`) should probably be deleted, not translated.**
-  See §3.4.
+  feeds `aria-label` twice and `title` once. Naming from content means the aria
+  half becomes a node and the `title` half stays a string. This component has
+  **five other call sites** (catalog SKU ×2, Plant job card, Plant material,
+  counter), all outside the counter slice. It is the most expensive site in the
+  census and may deserve its own PR, or deferral.
 
-### 3.4 A bug the census found, which R1 fixes as a side effect
+### 3.4 The subtree-override defect, and the right fix — CORRECTED 2026-08-21
 
-`aria-labelledby` beats `aria-label`, and `aria-label` beats the element's
-contents. The product tile is:
+`aria-labelledby` beats `aria-label`, which beats the element's contents. The
+counter's product tile sets `aria-label` on the `<button>`, so its entire
+subtree is overridden. A screen-reader user hears **"Add Rice 5kg to this
+sale"** and hears **neither the price, nor the stock level, nor the quantity
+already in the sale** — and never `item.nameMy`, the Burmese product name the
+shop owner typed in themselves. The quantity badge carries its own `aria-label`
+on a role-less `<span>` *inside* that override; it is part of no accessible
+name and is not announced at all.
 
-```
-<button aria-label={`Add ${item.name} to this sale`} …>
-  <ProductPhoto …/>
-  <span className="shop-product-copy">
-    <strong>{item.name}</strong>
-    {item.nameMy ? <small lang="my">{item.nameMy}</small> : null}
-    <b>{formatMoney(item.price)}</b>
-    <small>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small>
-  </span>
-  {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : …}
-</button>
-```
+That finding stands. **The fix proposed in the earlier revision — "name the
+tile from its contents" — was wrong**, and Codex was right to flag it: content
+naming carries no verb, so a user tabbing between product tiles would never
+learn that activating one adds it to the sale. The page heading is not part of
+each button's name. It would have traded one defect for another. Measured, it
+is worse than that: content naming at this site also produces the run-together
+string in §3.3.
 
-The button's own `aria-label` overrides that entire subtree. So a screen-reader
-user at this counter hears **"Add Rice 5kg to this sale"** and hears **neither
-the price, nor the stock level, nor the quantity already in the sale** — and
-never `item.nameMy`, the Burmese product name the shop owner typed in
-themselves, which is sitting right there in the markup. Row 7's
-`{quantity} in sale` is on a `<span>` with no role *inside* that override; it
-is not part of any accessible name and, as far as this census can determine, is
-never announced at all.
+**Corrected recommendation — name the action, describe the data:**
 
-This is a live accessibility defect independent of Burmese. It is also the
-strongest single argument for R1: naming the tile from its contents fixes the
-price, the stock line, the quantity badge **and** picks up `nameMy` for free,
-which is more Burmese than any table entry could have bought at this site.
-Whoever implements row 6 should treat it as a correctness fix that happens to
-serve G1, and should verify the resulting name in a real AT rather than by
-reading the code.
+- `aria-labelledby` → a hidden node carrying the action phrase, plus the
+  existing product-name nodes.
+- `aria-describedby` → the price, stock and quantity nodes.
 
-### 3.5 Rejected for problem 1
+Measured on the real shape:
 
-- **`biAttr(en): string` returning `"English · Burmese"`.** The obvious option,
-  and the cheap one — it would be ~6 lines, reuse the same gate, and keep the
-  English fallback, so it *is* shippable ahead of sign-off. Rejected as the
-  **default** because of §3.1: it produces an unmarked mixed-language
-  accessible name, permanently. A node can be filtered later (render one half,
-  both halves, or a per-viewer choice) because the halves stay separable in the
-  tree; **a joined string cannot be un-joined.** Choosing the string form now
-  forecloses a decision that has not been taken yet — including the language
-  setting #536 deliberately did not add. It is not rejected on merit for the
-  residue in §3.6, where no node exists; it is rejected as the mechanism for
-  the 10 sites where a node does.
-- **`aria-label` plus `lang="my"` on the element.** Declares the English half
-  Burmese and the visible English text Burmese along with it. Strictly worse
-  than doing nothing.
+| | Result |
+| --- | --- |
+| name | `"Add to this sale · ထည့်မည် Rice 5kg"` |
+| description | `"3500 12 in stock 2 in sale"` |
+
+(`ထည့်မည်` is the CONFIRMED `Add`, `i18n-actions.ts:42`; `Rice 5kg` is a
+throwaway English fixture, not a catalogue entry.)
+
+Three consequences worth having:
+
+- **The action phrase becomes a STATIC key.** `Add to this sale` rather than
+  `Add {name} to this sale`, because the name arrives from a separate
+  referenced node. Same for `Add one` / `Remove one` at rows 11 and 12. **That
+  removes rows 6, 11 and 12 from R2's dependency list** — three of the six
+  parameterised attribute rows become ordinary Option B entries, and R2's
+  attribute-side dependency drops to rows 7 (dead, to be deleted) and 14
+  (brand-name frame).
+- **Order is the author's, not the DOM's.** Measured:
+  `aria-labelledby="verb name"` gives `"Add to this sale · ထည့်မည် Rice 5kg"`
+  and `aria-labelledby="name verb"` gives `"Rice 5kg Add to this sale ·
+  ထည့်မည်"` — the id list wins over document order.
+- **And that creates a question only the reviewer can answer.** English wants
+  the verb first; Burmese is verb-final. One flat name cannot do both, and the
+  order is fixed at build time. This is the composed-label problem again, in
+  the accessible name. It argues the action phrase should be **one whole table
+  entry the reviewer writes as a unit**, never assembled from parts — which is
+  Option B's rule, applied here. Added to the reviewer packet as part of
+  question 5.
+
+`aria-describedby` announcement is verbosity-dependent in most screen readers
+and is on by default in the common configurations; that, like everything else
+in §3.1, wants the AT verification before it is called done.
+
+### 3.5 Rejected for problem 1 — restated after the §3.1 correction
+
+- **`biAttr(en): string` returning `"English · Burmese"`.** The earlier revision
+  rejected this because it produces an unmarked mixed-language accessible name.
+  §3.1 measured that **R1 produces exactly the same name**, so that rejection is
+  **withdrawn**. `biAttr()` is *not* worse than R1 in what an AT receives, and
+  it shares R1's decisive practical property: it would reuse the same
+  confirmed-only gate and fall back to English, so it too could ship ahead of
+  sign-off. It is rejected now on the narrower grounds in §3.2 — a second
+  renderer and a second pinned gate to maintain, no structural Label-in-Name
+  guarantee, no route to the subtree-override fix, and no access to `nameMy` —
+  and on the older ground that still stands untouched: it commits the product
+  to a bilingual accessible name before anyone has asked whether that is
+  wanted, whereas R1 reaches the same output through separate source halves
+  that a later decision can act on. **That is a real but modest advantage, and
+  it is stated here as modest.** If the AT verification in §3.1 comes back
+  saying bilingual names are fine and `biAttr()` is materially cheaper for some
+  batch, this document should not be read as forbidding it.
+- **`aria-label` plus `lang="my"` on the element.** Measured in §3.1: same flat
+  name, and the element language would claim the English half is Burmese.
+  Strictly worse than doing nothing. Rejected outright.
 - **Per-language attribute maps behind a language setting** (`aria-label={t(k)}`
-  with one language selected). This is what a conventional i18n stack does, and
-  it is the only shape that gives a screen reader one clean language. It
-  requires the language setting #536 declined to add, whose reasoning
-  (DESIGN-PROGRAM batch 3: what a Burmese-only till costs when ~70% of the app
-  has no Burmese; whether owner and cashier want different answers on one
-  device) is a founder/native question and its own planning pass. **Not
-  rejected on merit — rejected as out of sequence.** If that pass ever runs and
-  says "yes, a setting", R1's content nodes convert to it more cheaply than
-  joined strings would.
+  with one language selected). This is the only shape that gives a screen
+  reader one clean language, and §3.1 raises rather than lowers its standing —
+  if a mixed name proves unusable, this is where the answer lives. It requires
+  the language setting #536 declined to add, whose reasoning (DESIGN-PROGRAM
+  batch 3: what a Burmese-only till costs when ~70% of the app has no Burmese;
+  whether owner and cashier want different answers on one device) is a
+  founder/native question and its own planning pass. **Rejected as out of
+  sequence, not on merit**, and now with a specific trigger for revisiting it:
+  a negative result from §3.1's AT verification.
 - **Sweeping all 446 app-wide sites.** Rejected: G1's whole sequencing argument
   is the counter slice first. 432 of those 446 are back office, Plant, Website
-  and Ecommerce, which §6.4 G1 puts in the L scope, not the M.
+  and Ecommerce — the L scope, not the M.
 
-### 3.6 The residue — 4 sites, and the founder question, stated straight
+### 3.6 The residue — 3 sites, not 4, and one correction to withdraw
 
-R1 cannot reach `placeholder="Search or scan SKU"`, `placeholder="Guest"`,
-`title` on the scan button, or `alt` on the QR image. These are strings by
-construction — a placeholder has no content slot, and neither does `alt`.
+The earlier revision listed four sites R1 cannot reach and deferred all four
+behind a founder decision. **One of the four was deferred on a false
+dependency, and this document asserted it as established.** Correcting it
+explicitly rather than quietly, because it was relayed to the founder as fact:
 
-Recommendation: **defer all four. Build nothing for them now.** Reasons:
+> **WITHDRAWN:** "`placeholder="Guest"` has a code twin —
+> `customer.trim() !== 'Guest'` gates the loyalty chip — so translating the
+> displayed hint decouples it from the sentinel the code compares against …
+> a *behaviour* change wearing a translation's clothes."
 
-- **`title`** renders as a hover tooltip. The counter runs on a phone. It is
-  not reachable on the device that matters, and the same string already reaches
-  a screen reader through `aria-label`.
-- **`alt` on the QR image** is parameterised on `{method}`, which batch 3
-  explicitly **refused** to translate (Cash / KBZPay / WavePay are brand names
-  shown in Latin in this app's own Burmese ledger strings). The dialog around
-  the image is labelled and already renders `bi('Scan to pay')` and
-  `bi('Amount due')`; the image itself is a QR code, which no AT can convey
-  usefully in any language.
-- **`placeholder="Guest"`** has a code twin: `customer.trim() !== 'Guest'`
-  gates the loyalty chip (CoreApp:1285). Translating the displayed hint
-  decouples it from the sentinel the code compares against. Not unfixable, but
-  it means this site is a *behaviour* change wearing a translation's clothes,
-  and it should not ride along in a copy batch.
-- **`placeholder="Search or scan SKU"`** is the only one with a real cost to a
-  Burmese-first cashier — it is the visible hint on the counter's search field.
-  A joined bilingual placeholder roughly doubles its length inside an input on
-  a 375px bar; the honest fix is probably to make the field's `sr-only` label
-  visible and bilingual (R1 already reaches that node) rather than to double
-  the placeholder. **That is a design pass, not a mechanism.**
+**That is wrong.** A `placeholder` never populates the controlled value. While
+the hint is displayed, `customer` is `''` (CoreApp:1283, `value={customer}`,
+state initialised from `restoredDraft?.customer ?? ''`). The guard at
+CoreApp:1291 therefore only ever excludes a value a cashier literally *typed*
+as `Guest`. Translating the hint cannot decouple anything, cannot reach the
+sentinel, and cannot change loyalty behaviour. **`Guest` leaves the residue.**
+It is an ordinary visible string awaiting an ordinary Option B table entry.
 
-**The founder question these four actually raise, asked plainly:** *should a
-screen reader ever read a SuperMega control's name in two languages?* R1 makes
-that answerable later, because it keeps the halves separable. `biAttr()` makes
-it answered now, silently, and permanently. Nobody has asked a Myanmar shop
-owner or a Myanmar AT user this, and this document is not the place to guess
-the answer. Until it is asked, the four residue sites stay English and the
-count stays at four — which is a smaller number than "every aria-label and
-placeholder" implied, and small enough to leave open.
+One true observation survives from the wrong one, and it is not a gate: `Guest`
+**is** a live domain sentinel elsewhere — `CommercePage` substitutes
+`customer.trim() || 'Guest'` for credit review (CoreApp:1636) and receipt
+loyalty skips `customer === 'Guest'` (CoreApp:1959). So the value the system
+stores and compares stays the English literal whatever the hint says. A
+Burmese-first cashier who types a Burmese word for "guest" gets a named
+customer rather than an anonymous one — **which is exactly as true today**, with
+an English hint they may not read. Translating the hint does not create that
+risk; it slightly reduces it. Worth a line in the batch that does it, not a
+deferral.
 
-### 3.7 Gating answer for problem 1
+**And the founder question does not belong to the residue at all.** §3.1
+established that R1 and a string mechanism produce the same flat name, so
+*"should a screen reader ever read a control's name in two languages?"* applies
+to **every R1-converted control the moment its table entry is confirmed** — not
+to three leftover sites. It is promoted accordingly: it now gates the first
+`confirmed` flip of any string that becomes an accessible name, R1's included,
+and §3.1 names the verification that would answer it.
 
-- **The 10 `aria-label` sites: neither founder-gated nor native-speaker-gated.**
-  They call the same `bi()` under the same confirmed-only gate. English renders
-  until a native speaker signs each line off; the wiring lands first, exactly
-  as #536's did. Row 9 and row 14 need **no new table entries at all**.
-- **The 4 residue sites: founder-gated**, on the question in §3.6, and
-  recommended deferred rather than decided.
+**What is actually left, and why each is cheap:**
 
----
+| Site | Is it an accessible name? | Status |
+| --- | --- | --- |
+| `placeholder="Search or scan SKU"` | **No** — the input's name comes from its `sr-only` label (CoreApp:1261) | Visual only. Not an AT question. Doubling it inside a 375px input is a **layout** question; the honest fix is to make the field's label visible and bilingual, which R1 already reaches. Ordinary table entry + a design pass. |
+| `placeholder="Guest"` | **No** — the input's name comes from its wrapping `<label>`, which renders `bi('Customer')` | Visual only. Ordinary table entry. See the withdrawal above. |
+| `title` on `BarcodeScanButton` | Duplicates the `aria-label`, which R1 converts | Hover tooltip on a device with no hover. Leave English; it reaches an AT through the aria half regardless. |
+| `alt` on the QR image | **Yes** | The only genuinely AT-facing string R1 cannot reach. Parameterised on `{method}`, which batch 3 deliberately refused to translate, inside a dialog already labelled by `bi('Scan to pay')` + `<h2>{method}</h2>`. Subject to the same question 5 as every other name. |
+
+So: **two visual-only strings that need nothing but a drafting batch, one
+tooltip not reachable on the target device, and one genuine AT-facing string.**
+Neither placeholder is founder-gated on the screen-reader question, because
+neither is a screen-reader string.
+
+### 3.7 Gating answer for problem 1 — corrected
+
+- **Building and wiring R1: neither founder-gated nor native-speaker-gated.**
+  Unchanged, and still the decisive practical property. R1 calls the same
+  `bi()` under the same confirmed-only gate, so English renders until each line
+  is signed off and the wiring lands first, exactly as #536's did. Rows 9 and
+  14 need **no new table entries at all**.
+- **The first `confirmed` flip of any string that becomes an accessible name:
+  founder-gated**, on question 5, and it should not happen before the AT
+  verification in §3.1. This is new in this revision and it is the honest
+  consequence of the flat-string finding: R1 does not escape that question, it
+  only defers it to the same point every other bilingual string reaches it.
+  Exactly parallel to R2's numeral finding (§4.5) — mechanism free, first
+  confirmation gated.
+- **The two placeholders: neither-gated.** Ordinary table entries; see §3.6.
+- **The `title`: neither-gated, and recommended left alone** as not reachable
+  on the target device.
+- **The `alt`: founder-gated**, on the same question 5 as the rest.
 
 ## 4. Problem 2 — parameterised strings
 
@@ -367,7 +502,9 @@ the wrong trade until the review gate has an equivalent in whatever replaces it.
 ### 4.4 Rejected — reviving Option A for parameterised strings
 
 Verb-only gloss (`Add {name} to this sale` → `… · <Add verb>`) would cover
-every parameterised site for free, with no new review. It is rejected for the
+every parameterised site for free, with no new review. (§3.4 makes three of
+those sites static rather than parameterised, which shrinks what Option A would
+buy here without changing the argument against it.) It is rejected for the
 same reason DESIGN-PROGRAM rejected it as the default: the Burmese half names
 the action and not the target, and the counter is precisely where two
 adjacent controls share a verb — rows 11 and 12 of §2.2 are an `Add one` and a
@@ -501,6 +638,14 @@ and confirming the belt goes red, in the house style:
 4. **The dead `aria-label` on the quantity badge does not come back** (§3.4), a
    negative pin, so the override bug cannot be re-introduced by someone
    "restoring" a label.
+5. **`aria-labelledby` / `aria-describedby` id lockstep** for the §3.4
+   conversion. A referenced id that is renamed or conditionally unrendered
+   makes the accessible name silently fall back — to the run-together content
+   string measured in §3.3, or to nothing. Verified 2026-08-21: **none of the
+   §3.4 sites is currently pinned** (no verifier reference to `to this sale`,
+   `Remove one`, `Add one`, `in sale`, `Sales counter` or `Close current
+   sale`), so this is a new pin rather than a pin move, and the ids and their
+   referencing attributes should be pinned as a pair.
 
 And one standing rule worth adopting now, because it is what made row 2
 expensive: **on the counter, pin the `bi()` call, not the English literal.** A
@@ -525,10 +670,17 @@ document adds two, both new, neither answerable by an engineer:
    (`shop-service-scheduling.ts`); the counter's own numbers are Arabic. The
    answer reaches money formatting, the receipt and the printed
    acknowledgement, so it is not a per-string call. §4.5.
-5. **Two languages in an accessible name (founder).** Should a screen reader
-   ever read a control's name in two languages? R1 keeps this answerable later
-   by keeping the halves separable in the DOM; the four residue sites in §3.6
-   stay English until it is answered. §3.6.
+5. **Two languages in an accessible name (founder), plus one ordering question
+   for the native reviewer.** Should a screen reader ever read a control's name
+   in two languages? **This is not a question about leftover sites.** §3.1
+   measured that every mechanism — R1's nodes, a joined `aria-label`, even
+   `lang` on the element — produces the same flat mixed-language string, so the
+   question gates the first `confirmed` flip of **any** string that becomes an
+   accessible name, R1's included. §3.1 names the AT verification that should
+   precede answering it. The reviewer's half: on a control whose name is
+   `[action phrase] + [product name]`, English wants the verb first and Burmese
+   is verb-final, and one flat name can carry only one order (§3.4). Which
+   order, and is the compromise acceptable in the half they read?
 
 ---
 
@@ -539,11 +691,13 @@ document adds two, both new, neither answerable by an engineer:
 | Piece | Size | Ships before sign-off? |
 | --- | --- | --- |
 | R1, rows 1/2/8/9/10/14 (landmarks + icon buttons + the two zero-entry `aria-labelledby` conversions) | **S** — one PR, ~6 sites, 4 new table entries, 4 new pins | **Yes** |
-| R1, row 6 + row 7 (product tile content-naming, which is also the §3.4 bug fix) | **S–M** — own PR; needs AT verification, not code reading | **Yes** |
+| R1, rows 6/7/11/12 (tile + steppers: `aria-labelledby` for the action, `aria-describedby` for the data — the §3.4 bug fix, and it makes three keys static) | **S–M** — own PR; needs AT verification, not code reading | **Yes** |
 | R1, rows 4/5 (`BarcodeScanButton` prop split, 5 out-of-slice call sites) | **M** — own PR, or defer with the residue | **Yes** |
 | R2 mechanism + 2–3 pilot templates | **S–M** — one PR: composer, entry shape, pins, pilot sites | **Yes** |
 | R2 content batches (the remaining ~13 templates) | **S** each | **Yes** |
-| The 4 residue sites | **not sized — deferred, founder-gated** | n/a |
+| The 2 placeholders (ordinary table entries) + the `Guest` correction | **S** — a drafting batch; the search placeholder also wants a design pass on the visible label | **Yes** |
+| The `alt` (1 site) | **not sized — founder-gated on question 5** | n/a |
+| **AT verification (§3.1)** — prerequisite to confirming any name-bearing string | **S**, but needs a device and a screen reader this sandbox does not have | n/a — it is a check, not a ship |
 
 **What this does not close, plainly:**
 
@@ -564,9 +718,16 @@ document adds two, both new, neither answerable by an engineer:
   (§3.5).
 - **The empty-catalog sentence class** (§2.4) — one site today, no mechanism
   proposed.
-- **Anything about how this sounds in a real screen reader.** Not tested. No AT
-  in this sandbox. §3.4's conversion in particular should be verified on a real
-  device before it is called done.
+- **Anything about how this sounds in a real screen reader.** Not tested; no AT
+  in this sandbox, and W3C/MDN are blocked by this environment's egress proxy.
+  What *was* measured is the browser boundary (Chrome 152 via the DevTools
+  Protocol, §3.1 and §3.4) — the computed name, not the announcement.
+- **R1's justification is now narrower than it was, and R1 itself is
+  "recommended pending AT verification", not decided.** If the check in §3.1
+  says a mixed-language name is unusable, the answer changes for every
+  mechanism at once — R1, `biAttr()`, and the residue alike — and the real
+  answer becomes the language-setting pass §3.5 defers. Nothing here should be
+  read as having settled that.
 
 **No Burmese was invented in this document.** Every Burmese string quoted above
 is cited from source: `ပိတ်မည်` / `ရှင်းလင်းမည်` / `ထည့်မည်` / `ဖယ်ရှားမည်` are
