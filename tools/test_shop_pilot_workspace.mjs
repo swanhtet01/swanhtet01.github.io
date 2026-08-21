@@ -38,6 +38,7 @@ const PATTERN = 'workspace'
 // The lifecycle these tests have to keep covering. Named individually so a rename fails here
 // with the missing name rather than silently shrinking the selection.
 const REQUIRED_TESTS = [
+  'renders an offline responsive workspace owner intake form with closed gates',
   'runs the complete private workspace lifecycle without external action',
   'rejects unsafe initialization and incomplete workspace stages',
   'CLI initializes and verifies a metadata-only private workspace',

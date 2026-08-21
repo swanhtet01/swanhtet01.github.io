@@ -19,6 +19,7 @@ import {
   decideShopPilotSalesWorkspace,
   initShopPilotSalesWorkspace,
   prepareShopPilotSalesWorkspace,
+  renderShopPilotOwnerInputForm,
   verifyShopPilotSalesWorkspace,
 } from './manage_shop_pilot_workspace.mjs'
 
@@ -488,20 +489,54 @@ const readyOwnerInput = {
   ownerReviewedCommercialDraft: true,
 }
 
+test('renders an offline responsive workspace owner intake form with closed gates', () => {
+  const html = renderShopPilotOwnerInputForm()
+  assert.match(html, /<meta name="viewport"/)
+  assert.match(html, /Content-Security-Policy[^>]+default-src 'none'/)
+  assert.match(html, /connect-src 'none'/)
+  assert.match(html, /form-action 'none'/)
+  assert.match(html, /@media \(max-width: 620px\)/)
+  for (const id of [
+    'tenantLabel',
+    'fixedPilotFeeUsd',
+    'startDate',
+    'reviewDate',
+    'clientImportRowCount',
+    'weeklyPackageSales',
+    'weeklyTreatmentRedemptions',
+    'medianMinutesPerRedemption',
+    'weeklyPackageCorrectionCount',
+    'contactIsNamedOperator',
+    'contactBaselineReviewed',
+    'isolatedNonProductionTenantApproved',
+    'namedOperatorAuthorized',
+    'pilotDataHandlingApproved',
+    'ownerReviewedCommercialDraft',
+  ]) assert.match(html, new RegExp(`id="${id}"`))
+  assert.match(html, /link\.download = 'owner-input\.json'/)
+  assert.match(html, /No information was sent/)
+  assert.doesNotMatch(html, /\b(?:fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage)\b/)
+  assert.doesNotMatch(html, /<input[^>]+checked/i)
+  assert.ok(Buffer.byteLength(html, 'utf8') < 30_000)
+})
+
 test('runs the complete private workspace lifecycle without external action', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-sales-workspace-'))
   const workspace = join(parent, 'private-workspace')
   try {
     const initialized = await initShopPilotSalesWorkspace(contactEvent, workspace)
     assert.equal(initialized.stage, 'owner-input-required')
-    assert.equal(initialized.filesCreated, 4)
+    assert.equal(initialized.filesCreated, 5)
     assert.equal(initialized.externalWritesPerformed, false)
-    assert.deepEqual((await readdir(workspace)).sort(), ['README.md', 'contact-event.json', 'owner-input.json', 'workspace.json'])
+    assert.deepEqual((await readdir(workspace)).sort(), ['README.md', 'contact-event.json', 'owner-input-form.html', 'owner-input.json', 'workspace.json'])
 
     const sanitizedContact = await readFile(join(workspace, 'contact-event.json'), 'utf8')
     assert.match(sanitizedContact, /workspace-private@example\.com/)
     assert.doesNotMatch(sanitizedContact, /private_note|private-source|private\.example\.invalid/)
     assert.match(await readFile(join(workspace, 'README.md'), 'utf8'), /Nothing here sends a message, accepts payment, deploys, activates production, or writes hosted data/)
+    const ownerFormPath = join(workspace, 'owner-input-form.html')
+    const ownerForm = await readFile(ownerFormPath, 'utf8')
+    assert.equal(ownerForm, renderShopPilotOwnerInputForm())
     assert.deepEqual(JSON.parse(await readFile(join(workspace, 'owner-input.json'), 'utf8')).spaBaseline, {
       clientImportRowCount: null,
       weeklyPackageSales: null,
@@ -509,6 +544,10 @@ test('runs the complete private workspace lifecycle without external action', as
       medianMinutesPerRedemption: null,
       weeklyPackageCorrectionCount: null,
     })
+    assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-input-required')
+    await writeFile(ownerFormPath, `${ownerForm}\nchanged\n`)
+    await assert.rejects(() => verifyShopPilotSalesWorkspace(workspace), /shop_pilot_workspace_manifest_invalid/)
+    await writeFile(ownerFormPath, ownerForm)
     assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-input-required')
 
     await assert.rejects(() => prepareShopPilotSalesWorkspace(workspace), /shop_contact_operator_confirmation_required/)
@@ -579,7 +618,7 @@ test('CLI initializes and verifies a metadata-only private workspace', async () 
     const initialized = spawnSync(process.execPath, [tool, '--init', '--contact-event', eventPath, '--workspace', workspace], { encoding: 'utf8' })
     assert.equal(initialized.status, 0, initialized.stderr)
     const receipt = JSON.parse(initialized.stdout)
-    assert.equal(receipt.contract, 'supermega.shop.pilot_sales_workspace.v1')
+    assert.equal(receipt.contract, 'supermega.shop.pilot_sales_workspace.v2')
     assert.equal(receipt.stage, 'owner-input-required')
     assert.equal(receipt.customerContactPerformed, false)
     assert.doesNotMatch(initialized.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)

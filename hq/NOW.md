@@ -44,7 +44,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant quality problems now require structured CAPA evidence before an actionable record can close.
 - Shop now has native Spa packages: reconciled, non-refunded sales fund balances; a completed matching treatment for the same customer consumes one immutable session, server-rechecked.
-- Spa pilot handoff v3 requires import, package sale, matching treatment/redemption, correction, balance, close, backup, and recovery proof; samples cannot close `shop-spa-owner-pilot`.
+- Spa pilot v3 requires import, package sale, treatment/redemption, correction, balance, close, backup, and recovery proof; workspace v2 adds a sealed offline owner form. Samples cannot close `shop-spa-owner-pilot`.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 

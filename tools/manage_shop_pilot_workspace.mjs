@@ -14,13 +14,14 @@ import {
   shopPilotInputFromContactEvent,
 } from './create_shop_pilot_handoff.mjs'
 
-export const SHOP_PILOT_SALES_WORKSPACE_CONTRACT = 'supermega.shop.pilot_sales_workspace.v1'
-export const SHOP_PILOT_SALES_PREPARED_CONTRACT = 'supermega.shop.pilot_sales_prepared.v1'
+export const SHOP_PILOT_SALES_WORKSPACE_CONTRACT = 'supermega.shop.pilot_sales_workspace.v2'
+export const SHOP_PILOT_SALES_PREPARED_CONTRACT = 'supermega.shop.pilot_sales_prepared.v2'
 
 const FILES = {
   manifest: 'workspace.json',
   contact: 'contact-event.json',
   owner: 'owner-input.json',
+  ownerForm: 'owner-input-form.html',
   guide: 'README.md',
   handoff: 'private-handoff.md',
   reply: 'private-reply.txt',
@@ -78,6 +79,133 @@ function ownerTemplate() {
   }
 }
 
+export function renderShopPilotOwnerInputForm() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>SuperMega Spa owner intake</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.45 system-ui, sans-serif; color: #17211d; background: #f3f5f1; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { width: min(720px, 100%); margin: 0 auto; padding: 24px 16px 64px; }
+    header, section { background: #fff; border: 1px solid #d8ded8; border-radius: 18px; padding: 20px; margin-bottom: 14px; }
+    h1 { font-size: clamp(1.6rem, 5vw, 2.25rem); line-height: 1.1; margin: 0 0 10px; }
+    h2 { font-size: 1.05rem; margin: 0 0 14px; }
+    p { margin: 8px 0; color: #4a5750; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    label { display: grid; gap: 6px; font-weight: 650; }
+    label span { color: #4a5750; font-size: .86rem; font-weight: 500; }
+    input { min-height: 46px; width: 100%; border: 1px solid #adb8b0; border-radius: 11px; padding: 10px 12px; font: inherit; }
+    input:focus { outline: 3px solid #b9e4ce; border-color: #176946; }
+    .checks { display: grid; gap: 10px; }
+    .check { grid-template-columns: 24px 1fr; align-items: start; font-weight: 550; }
+    .check input { width: 20px; min-height: 20px; margin-top: 2px; }
+    button { width: 100%; min-height: 50px; border: 0; border-radius: 13px; background: #176946; color: white; font: 700 1rem system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: #0e5236; }
+    #status { min-height: 24px; font-weight: 650; }
+    .boundary { border-left: 4px solid #d49a31; padding-left: 12px; }
+    @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } main { padding: 12px 10px 40px; } header, section { border-radius: 14px; padding: 16px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Spa pilot owner intake</h1>
+    <p>Complete this privately with the Spa owner. Nothing is uploaded or sent. The button downloads one local <strong>owner-input.json</strong> file.</p>
+  </header>
+  <section>
+    <h2>1. Pilot setup</h2>
+    <div class="grid">
+      <label>Isolated workspace label <span>Letters, numbers, and hyphens</span><input id="tenantLabel" required pattern="[A-Za-z0-9][A-Za-z0-9-]{2,79}" autocomplete="off"></label>
+      <label>Draft pilot fee (USD) <span>Review only; no payment is accepted</span><input id="fixedPilotFeeUsd" type="number" min="1" max="100000" step="1" required></label>
+      <label>Start date <input id="startDate" type="date" required></label>
+      <label>Review date <span>Automatically start date + 4 days</span><input id="reviewDate" type="date" required readonly></label>
+    </div>
+  </section>
+  <section>
+    <h2>2. Measure the current Spa workflow</h2>
+    <div class="grid">
+      <label>Reviewed client rows <input id="clientImportRowCount" type="number" min="1" max="100000" step="1" required></label>
+      <label>Weekly package sales <input id="weeklyPackageSales" type="number" min="1" max="100000" step="1" required></label>
+      <label>Weekly treatment redemptions <input id="weeklyTreatmentRedemptions" type="number" min="1" max="100000" step="1" required></label>
+      <label>Median minutes per redemption <input id="medianMinutesPerRedemption" type="number" min="0.1" max="1440" step="0.1" required></label>
+      <label>Weekly package corrections <input id="weeklyPackageCorrectionCount" type="number" min="0" max="100000" step="1" required></label>
+    </div>
+  </section>
+  <section>
+    <h2>3. Explicit owner gates</h2>
+    <p class="boundary">Every gate starts off. Check only what the owner has actually reviewed and approved.</p>
+    <div class="checks">
+      <label class="check"><input id="contactIsNamedOperator" type="checkbox"><span>The contact is the named daily operator.</span></label>
+      <label class="check"><input id="contactBaselineReviewed" type="checkbox"><span>The owner reviewed the captured Shop baseline and Spa measurements.</span></label>
+      <label class="check"><input id="isolatedNonProductionTenantApproved" type="checkbox"><span>The owner approved this isolated non-production workspace label.</span></label>
+      <label class="check"><input id="namedOperatorAuthorized" type="checkbox"><span>The named operator is authorized for the five-day rehearsal.</span></label>
+      <label class="check"><input id="pilotDataHandlingApproved" type="checkbox"><span>The owner reviewed private data handling and backup boundaries.</span></label>
+      <label class="check"><input id="ownerReviewedCommercialDraft" type="checkbox"><span>The owner reviewed the draft fee and understands no payment is accepted.</span></label>
+    </div>
+  </section>
+  <section>
+    <button id="download" type="button">Download private owner input</button>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p>Move the downloaded file into this private workspace as <strong>owner-input.json</strong>, replacing only the blank template. Then follow README.md.</p>
+  </section>
+</main>
+<script>
+  'use strict';
+  const field = (id) => document.getElementById(id);
+  const integer = (id) => Number.parseInt(field(id).value, 10);
+  const number = (id) => Number(field(id).value);
+  field('startDate').addEventListener('change', () => {
+    const value = field('startDate').value;
+    if (!value) { field('reviewDate').value = ''; return; }
+    const date = new Date(value + 'T00:00:00.000Z');
+    date.setUTCDate(date.getUTCDate() + 4);
+    field('reviewDate').value = date.toISOString().slice(0, 10);
+  });
+  field('download').addEventListener('click', () => {
+    const required = [...document.querySelectorAll('input[required]')];
+    if (!required.every((input) => input.reportValidity())) {
+      field('status').textContent = 'Complete every required field before downloading.';
+      return;
+    }
+    const payload = {
+      tenantLabel: field('tenantLabel').value.trim(),
+      startDate: field('startDate').value,
+      reviewDate: field('reviewDate').value,
+      fixedPilotFeeUsd: integer('fixedPilotFeeUsd'),
+      contactIsNamedOperator: field('contactIsNamedOperator').checked,
+      contactBaselineReviewed: field('contactBaselineReviewed').checked,
+      spaBaseline: {
+        clientImportRowCount: integer('clientImportRowCount'),
+        weeklyPackageSales: integer('weeklyPackageSales'),
+        weeklyTreatmentRedemptions: integer('weeklyTreatmentRedemptions'),
+        medianMinutesPerRedemption: number('medianMinutesPerRedemption'),
+        weeklyPackageCorrectionCount: integer('weeklyPackageCorrectionCount')
+      },
+      isolatedNonProductionTenantApproved: field('isolatedNonProductionTenantApproved').checked,
+      namedOperatorAuthorized: field('namedOperatorAuthorized').checked,
+      pilotDataHandlingApproved: field('pilotDataHandlingApproved').checked,
+      ownerReviewedCommercialDraft: field('ownerReviewedCommercialDraft').checked
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2) + '\\n'], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'owner-input.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    field('status').textContent = 'Downloaded locally. No information was sent.';
+  });
+</script>
+</body>
+</html>
+`
+}
+
 function guide() {
   return `# PRIVATE - SuperMega Shop pilot sales workspace
 
@@ -85,7 +213,7 @@ Do not commit, publish, sync publicly, or send this folder. It contains one cust
 
 ## 1. Review the intake
 
-Open \`contact-event.json\`, then complete \`owner-input.json\`. Every authority flag starts false. Confirm the named operator and captured Shop baseline; measure the Spa client-import, prepaid-package, treatment-redemption, and correction fields; then choose an isolated non-production tenant, exact five-day dates, and the reviewed pilot fee.
+Open \`owner-input-form.html\` in a browser and complete it privately with the Spa owner. It works offline, sends nothing, and downloads \`owner-input.json\`. Move that downloaded file into this folder, replacing only the blank template. Every authority flag starts false.
 
 ## 2. Prepare the private handoff and reply
 
@@ -140,6 +268,7 @@ export async function initShopPilotSalesWorkspace(contactEvent, workspace) {
   await Promise.all([
     writeFile(target.contact, contactText, { encoding: 'utf8', flag: 'wx' }),
     writeFile(target.owner, json(ownerTemplate()), { encoding: 'utf8', flag: 'wx' }),
+    writeFile(target.ownerForm, renderShopPilotOwnerInputForm(), { encoding: 'utf8', flag: 'wx' }),
     writeFile(target.manifest, json(manifest(contactText)), { encoding: 'utf8', flag: 'wx' }),
     writeFile(target.guide, guide(), { encoding: 'utf8', flag: 'wx' }),
   ])
@@ -147,7 +276,7 @@ export async function initShopPilotSalesWorkspace(contactEvent, workspace) {
     contract: SHOP_PILOT_SALES_WORKSPACE_CONTRACT,
     stage: 'owner-input-required',
     contactEventSha256: sha256(contactText),
-    filesCreated: 4,
+    filesCreated: 5,
     externalWritesPerformed: false,
     customerContactPerformed: false,
   }
@@ -155,14 +284,17 @@ export async function initShopPilotSalesWorkspace(contactEvent, workspace) {
 
 async function readWorkspaceFoundation(workspace) {
   const target = paths(workspace)
-  const [storedContactText, storedContact, storedManifest] = await Promise.all([
+  const [storedContactText, storedContact, storedManifest, storedOwnerForm] = await Promise.all([
     readFile(target.contact, 'utf8'),
     readJson(target.contact),
     readJson(target.manifest),
+    readFile(target.ownerForm, 'utf8'),
   ])
   const sanitizedText = json(sanitizeShopPilotContactEvent(storedContact))
   if (storedContactText !== sanitizedText) throw new Error('shop_pilot_workspace_contact_not_canonical')
   if (
+    storedOwnerForm !== renderShopPilotOwnerInputForm()
+    ||
     storedManifest.contract !== SHOP_PILOT_SALES_WORKSPACE_CONTRACT
     || storedManifest.source?.sanitized !== true
     || storedManifest.source?.contactEventSha256 !== sha256(storedContactText)
