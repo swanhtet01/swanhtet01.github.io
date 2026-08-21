@@ -288,6 +288,8 @@ class FakeDatabase:
         self.current_user = "postgres"
         self.provisioning_role_privileged = True
         self.session_active = True
+        self.auth_users: set[str] = {OWNER_ID}
+        self.anonymous_auth_users: set[str] = set()
 
     def connect(self, _database_url: str):
         return FakeConnection(self)
@@ -371,6 +373,14 @@ class FakeCursor:
             ]
         elif "supabase_session_is_active" in sql:
             self.rows = [{"active": self.database.session_active}]
+        elif "from auth.users" in sql:
+            member_id = str(values[0])
+            self.rows = [{
+                "member_exists": (
+                    member_id in self.database.auth_users
+                    and member_id not in self.database.anonymous_auth_users
+                )
+            }]
         elif "from app_private.approval_requests" in sql and sql.startswith("select"):
             approval_id, workspace_id, command_id, _approval_order = values
             matches = [
@@ -464,7 +474,7 @@ class FakeCursor:
             workspace_id, actor_id = values
             for row in self.database.memberships:
                 if row["workspace_id"] == workspace_id and row["actor_id"] == actor_id and row["status"] == "active":
-                    row["status"] = "suspended"
+                    row["status"] = "revoked" if "set status = 'revoked'" in sql else "suspended"
                     self.rows = [{"updated_at": self.database.clock}]
                     break
         elif sql.startswith("insert into app_private.workspace_events"):

@@ -33,6 +33,35 @@ Add one `--managed-request-file` per purchased product, in canonical Shop,
 Plant, Website, Ecommerce order, as those owner-reviewed outcomes become
 available. The board advances only the gates proved by those exact requests.
 
+## Add staff only after tenant activation
+
+SuperMega does not create an Auth user or send an invitation email as a side
+effect of granting workspace access. Create or invite the person separately
+through a reviewed server-side Supabase Auth administration flow, confirm the
+resulting non-anonymous user UUID, and then prepare a short-lived staff plan:
+
+```powershell
+npm run client:staff-access -- prepare `
+  --activation-plan-file C:\reviewed\beauty-spa-activation-plan.json `
+  --member-actor-id STAFF-SUPABASE-USER-UUID `
+  --member-label "Named staff member" `
+  --role-id product-operator `
+  --approval-id OWNER-STAFF-APPROVAL-UUID `
+  --approved-at 2026-08-21T00:00:00.000Z `
+  --expires-at 2026-08-21T01:00:00.000Z `
+  --output C:\reviewed\beauty-spa-staff-plan.json
+```
+
+The supported roles are `product-viewer`, `product-operator`, and
+`workspace-manager`. Their capabilities are derived from the already activated
+products and never include owner-only company control, baseline approval,
+approval decision, or setup-write authority. `authorize` requires the active
+owner's current Supabase session; `apply` verifies that the named Auth UUID
+already exists before inserting one tenant membership and immutable event;
+`revoke` requires the active owner session again and retains a revocation
+receipt. Email delivery, Auth-user creation, billing, deployment, and product
+purchase changes remain separate actions.
+
 ## Required reviewed inputs
 
 - One current managed trial request per purchased product, in this order:
