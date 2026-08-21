@@ -27,7 +27,6 @@ import {
   MANAGED_SHOP_ONBOARDING_HINT,
   MANAGED_SHOP_ONBOARDING_INTRO,
   MANAGED_SHOP_ONBOARDING_JOURNEY,
-  managedPlantOnboardingNotice,
   managedShopOnboardingNotice,
   provisionLocalPlantWorkingSample,
   provisionLocalShopBusinessTemplateSample,
@@ -45,6 +44,7 @@ import {
 import { signupBusinessChoices } from './signup-trial'
 import {
   plantIndustryPack,
+  plantIndustryPackManagedPlanPath,
   plantIndustryPacks,
   readPlantIndustryPackId,
   savePlantIndustryPackId,
@@ -175,7 +175,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   // The trade, or the plant type, she actually picked -- named the way each picker names it, so
   // the notice can carry her choice forward instead of dropping it.
   const managedShopBusinessTypeName = selectedBusinessTemplate?.name.en ?? selectedShopIndustryPack.name
-  const managedPlantTypeName = selectedPlantIndustryPack.name
   const managedShopIntro = selectedBusinessTemplate
     ? `Name this workspace, then review the ${selectedBusinessTemplate.name.en} starter values before they become company records.`
     : MANAGED_SHOP_ONBOARDING_INTRO
@@ -369,7 +368,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         return
       }
       if (managedProduction) {
-        setNotice(managedPlantOnboardingNotice(managedPlantTypeName))
+        navigate(plantIndustryPackManagedPlanPath(plantIndustryPackId))
         return
       }
       navigate(onboardingJourney.firstTaskPath)

@@ -53,7 +53,7 @@ import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
 import { productImageScopeForWorkspace } from './product-image-store'
 import { SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyRedemptionAllowed, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
-import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
+import { managedPlantStarterPlan, plantIndustryPack, plantIndustryPackIdFromSearch, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
   approveCommercePurchaseBudgetEnvelope,
@@ -7788,7 +7788,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   useEffect(() => { relatedCommerceRef.current = relatedCommerce }, [relatedCommerce])
   useEffect(() => { productionRef.current = production }, [production])
   const [localPlantIndustryPackId] = useState(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
-  const plantIndustryPackId = production.openingPlan?.industryPackId ?? localPlantIndustryPackId
+  const requestedPlantIndustryPackId = plantIndustryPackIdFromSearch(productionLocation.search)
+  const plantIndustryPackId = production.openingPlan?.industryPackId ?? requestedPlantIndustryPackId ?? localPlantIndustryPackId
   const activePlantIndustryPack = plantIndustryPack(plantIndustryPackId)
   const loadedPlantSamplePackId = productionWorkingSamplePackId(production)
   const loadedPlantSamplePack = loadedPlantSamplePackId ? plantIndustryPack(loadedPlantSamplePackId) : null
@@ -7886,19 +7887,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [scheduleDraft, setScheduleDraft] = useState<{ jobId: string; owner: string; priority: ProductionJobPriority; dueAt: string } | null>(null)
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
-  const [planDraft, setPlanDraft] = useState<{ jobId: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string; machineId: string; machineName: string; reason: string; evidenceReference: string }>({
-    jobId: '',
-    line: '',
-    product: '',
-    target: '',
+  const [planDraft, setPlanDraft] = useState<{ jobId: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string; machineId: string; machineName: string; reason: string; evidenceReference: string; reviewed: boolean }>(() => ({
+    ...managedPlantStarterPlan(plantIndustryPackId),
     owner: '',
     priority: 'normal',
     dueAt: defaultJobDueInput(),
-    machineId: '',
-    machineName: '',
     reason: '',
     evidenceReference: '',
-  })
+    reviewed: false,
+  }))
   const [planBusy, setPlanBusy] = useState(false)
   const [planError, setPlanError] = useState('')
   const issueDialogRef = useRef<HTMLDialogElement>(null)
@@ -8533,8 +8530,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const machineName = planDraft.machineName.trim()
     const reason = planDraft.reason.trim()
     const evidenceReference = planDraft.evidenceReference.trim()
-    if (!firstJobId || !line || !product || !owner || owner.length > 120 || !machineId || !machineName || !reason || !evidenceReference || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(jobDueAt.getTime()) || jobDueAt.getTime() <= Date.now()) {
-      setPlanError('Enter one real job with an owner and future due time, one machine, a whole-number target, reason, and evidence reference.')
+    if (!planDraft.reviewed || !firstJobId || !line || !product || !owner || owner.length > 120 || !machineId || !machineName || !reason || !evidenceReference || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(jobDueAt.getTime()) || jobDueAt.getTime() <= Date.now()) {
+      setPlanError('Review every suggested value, then confirm one real job with an owner, future due time, machine, whole-number target, reason, and evidence reference.')
       return
     }
     const proof: ProductionActionProof = {
@@ -8565,8 +8562,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (managedIdentity && effectiveMode !== 'managed-ready') {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Company Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
-      <p className="panel-copy">Start with one real job and one machine. No browser demo jobs, issues, equipment, or output are copied into this workspace.</p>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Plant setup · {activePlantIndustryPack.name}</span><h2>Review your first operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <p className="panel-copy">We suggested one editable job and work centre for {activePlantIndustryPack.name.toLowerCase()}. Confirm them against your real work order. No browser demo jobs, issues, equipment, or output are copied, and no production history will be invented.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
         <div className="form-row"><label>Product or batch<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, product: inputEvent.target.value }))} placeholder="Product name" required value={planDraft.product} /></label><label>Target units<input min="1" onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, target: inputEvent.target.value }))} required step="1" type="number" value={planDraft.target} /></label></div>
@@ -8575,6 +8572,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="form-row"><label>Machine ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineId: inputEvent.target.value }))} placeholder="MC-01" required value={planDraft.machineId} /></label><label>Machine name<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineName: inputEvent.target.value }))} placeholder="Mixer 01" required value={planDraft.machineName} /></label></div>
         <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Shift plan, work order, or count sheet" required value={planDraft.evidenceReference} /></label>
+        <label className="checkbox-row"><input checked={planDraft.reviewed} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reviewed: inputEvent.target.checked }))} required type="checkbox" /><span>I reviewed these values against a real plan. Create only this zero-output job and machine.</span></label>
         <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={planBusy} type="submit">{planBusy ? 'Creating…' : 'Create managed plan'}</button></div>
         <p className="form-notice" role="status">{planError || productionStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
       </form>

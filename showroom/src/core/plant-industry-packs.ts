@@ -21,6 +21,15 @@ export type PlantIndustryPack = {
   }
 }
 
+export type ManagedPlantStarterPlan = {
+  jobId: string
+  line: string
+  product: string
+  target: string
+  machineId: string
+  machineName: string
+}
+
 // Every outputPrefix MUST begin with BATCH. plant-order-foundation.ts validates outputBatchId
 // with identifier(..., 'BATCH') in four places -- the execution plan, recording output,
 // inspection, and batch release -- so a prefix like STYLE or LOT is rejected before a batch
@@ -98,6 +107,38 @@ export function savePlantIndustryPackId(id: PlantIndustryPackId, storage?: Pick<
     // A blocked browser storage policy must not prevent a local demo from opening.
   }
   return accepted
+}
+
+export function plantIndustryPackManagedPlanPath(id: PlantIndustryPackId) {
+  return `/plant/?pack=${encodeURIComponent(plantIndustryPack(id).id)}`
+}
+
+export function plantIndustryPackIdFromSearch(search: string): PlantIndustryPackId | null {
+  const requested = new URLSearchParams(search).get('pack')
+  if (!requested) return null
+  try {
+    return plantIndustryPack(requested).id
+  } catch {
+    return null
+  }
+}
+
+export function managedPlantStarterPlan(id: PlantIndustryPackId): ManagedPlantStarterPlan {
+  const pack = plantIndustryPack(id)
+  const planByPack: Record<PlantIndustryPackId, Pick<ManagedPlantStarterPlan, 'jobId' | 'product'>> = {
+    'general-manufacturing': { jobId: 'JOB-GENERAL-001', product: 'First production order' },
+    'batch-process': { jobId: 'JOB-BATCH-001', product: 'First controlled batch' },
+    'food-beverage': { jobId: 'JOB-FOOD-001', product: 'First food batch' },
+    apparel: { jobId: 'JOB-APPAREL-001', product: 'First style order' },
+    assembly: { jobId: 'JOB-ASSEMBLY-001', product: 'First assembly order' },
+  }
+  return {
+    ...planByPack[id],
+    line: pack.setup.workCentreName,
+    target: '1',
+    machineId: `${pack.setup.workCentrePrefix}-01`,
+    machineName: `${pack.setup.workCentreName} 01`,
+  }
 }
 
 function canonicalIdSegment(value: string) {

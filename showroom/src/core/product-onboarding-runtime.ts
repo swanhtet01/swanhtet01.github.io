@@ -228,7 +228,7 @@ export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
 /**
  * Plant's twin of managedShopOnboardingNotice. Same three jobs, but it names what a managed Plant
  * ACTUALLY asks for next, which is not what Shop asks for: CoreApp's "Create the real operating
- * plan" boundary wants one real job AND the machine that runs it, not a single priced item. Copy
+ * plan" boundary reviews one suggested real job AND the machine that runs it, not a single priced item. Copy
  * that mirrored Shop's "add your first real item" would be a second, smaller lie about the very
  * screen it is sending her to.
  *
@@ -242,8 +242,8 @@ export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
  */
 export function managedPlantOnboardingNotice(plantTypeName: string): string {
   return `${plantTypeName} is saved as your plant type. Company accounts do not get sample records, `
-    + 'so no jobs, machines or output were added to this workspace. Open Plant and enter your first real job. '
-    + 'The job and machine you enter there are the ones your floor runs.'
+    + 'so no jobs, machines or output were added to this workspace. Open Plant and review the suggested first real job. '
+    + 'Only the job and machine you confirm there are written to the company account.'
 }
 
 /**
@@ -251,7 +251,7 @@ export function managedPlantOnboardingNotice(plantTypeName: string): string {
  * shared "Creates local sample records, then opens the first task."
  */
 export const MANAGED_PLANT_ONBOARDING_HINT =
-  'Opens Plant so you can enter your first real job. Nothing is copied into a company account.'
+  'Opens Plant to review an editable first real job and machine. Nothing is written until you confirm real values.'
 
 /**
  * Plant's twin of MANAGED_SHOP_ONBOARDING_INTRO, replacing the same shared "We will add realistic
