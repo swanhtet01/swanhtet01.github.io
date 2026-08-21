@@ -19,6 +19,7 @@ from supermega_runtime.managed_context import (
 )
 from supermega_runtime.managed_activation import (
     ACTIVATION_PLAN_CONTRACT,
+    ACTIVATION_REQUERY_EVIDENCE_CONTRACT,
     ACTIVATION_RECEIPT_CONTRACT,
     MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
     SUSPENSION_RECEIPT_CONTRACT,
@@ -26,10 +27,12 @@ from supermega_runtime.managed_activation import (
     ManagedActivationConflict,
     ManagedActivationError,
     ManagedWorkspaceProvisioner,
+    build_activation_requery_evidence,
     compile_activation_plan,
     compile_multi_product_activation_plan,
     main,
     validate_activation_plan,
+    validate_activation_receipt,
     validate_managed_trial_request,
     validate_multi_product_activation_plan,
     _validate_admin_target,
@@ -694,6 +697,46 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         event = next(iter(self.database.events.values()))
         self.assertEqual(event["payload_json"]["products"], ["shop", "plant"])
 
+    def test_activation_receipt_requires_a_matching_read_only_database_requery(self) -> None:
+        self.authorize()
+        receipt = self.provisioner.apply(self.plan)
+        inspection = self.provisioner.inspect(self.plan)
+        evidence = build_activation_requery_evidence(
+            self.plan,
+            receipt,
+            inspection,
+            observed_at=NOW,
+        )
+
+        self.assertEqual(evidence["contract"], ACTIVATION_REQUERY_EVIDENCE_CONTRACT)
+        self.assertEqual(evidence["status"], "database_activation_verified")
+        self.assertEqual(evidence["activation"]["receiptDigest"], receipt["projectionDigest"])
+        self.assertEqual(evidence["proofs"]["databaseMutationStatementsExecuted"], 0)
+        self.assertTrue(evidence["controls"]["hostedDatabaseReadPerformed"])
+        self.assertTrue(evidence["controls"]["databaseReadOnly"])
+        self.assertFalse(evidence["controls"]["portalSmokePerformed"])
+        self.assertFalse(evidence["controls"]["activationMutationPerformedByThisCommand"])
+        self.assertEqual(
+            evidence["remainingGates"],
+            [
+                "exact_release_live_verification_required",
+                "named_owner_portal_smoke_required",
+                "cross_tenant_denial_smoke_required",
+            ],
+        )
+
+        tampered_receipt = deepcopy(receipt)
+        tampered_receipt["workspaceId"] = "another-workspace"
+        with self.assertRaisesRegex(ManagedActivationError, "does not match"):
+            validate_activation_receipt(tampered_receipt, self.plan)
+        with self.assertRaisesRegex(ManagedActivationError, "exact active tenant"):
+            build_activation_requery_evidence(
+                self.plan,
+                receipt,
+                {**inspection, "membershipCount": 2},
+                observed_at=NOW,
+            )
+
     def test_apply_replay_suspend_and_suspension_replay_are_idempotent(self) -> None:
         preflight = self.provisioner.inspect(self.plan)
         self.assertEqual(preflight["status"], "authorization_required")
@@ -844,6 +887,81 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
 
 
 class ManagedActivationCliTests(unittest.TestCase):
+    def test_requery_writes_create_only_read_only_activation_evidence(self) -> None:
+        database = FakeDatabase()
+        plan = activation_plan()
+        provisioner = ManagedWorkspaceProvisioner(
+            "postgresql://ignored",
+            connection_factory=database.connect,
+        )
+        provisioner.authorize(
+            plan,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+            decision_note="Owner reviewed the exact workspace, release, and plan digest.",
+        )
+        receipt = provisioner.apply(plan)
+        inspection = provisioner.inspect(plan)
+
+        class StubProvisioner:
+            def __init__(self, _database_url: str) -> None:
+                pass
+
+            def inspect(self, _plan: object) -> dict[str, object]:
+                return inspection
+
+        with tempfile.TemporaryDirectory() as directory:
+            plan_path = Path(directory) / "plan.json"
+            receipt_path = Path(directory) / "receipt.json"
+            database_url_path = Path(directory) / "admin-url.txt"
+            output_path = Path(directory) / "requery.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            database_url_path.write_text(
+                "postgresql://postgres:secret@db.example.invalid:5432/postgres?sslmode=require",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with (
+                mock.patch("supermega_runtime.managed_activation._validate_admin_target"),
+                mock.patch("supermega_runtime.managed_activation.ManagedWorkspaceProvisioner", StubProvisioner),
+                contextlib.redirect_stdout(output),
+            ):
+                exit_code = main(
+                    [
+                        "requery",
+                        "--plan-file", str(plan_path),
+                        "--database-url-file", str(database_url_path),
+                        "--receipt-file", str(receipt_path),
+                        "--output", str(output_path),
+                    ]
+                )
+            result = json.loads(output.getvalue())
+            evidence = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(result["status"], "database_activation_verified")
+            self.assertEqual(result["remainingGateCount"], 3)
+            self.assertNotIn("workspaceId", result)
+            self.assertNotIn("ownerActorId", result)
+            self.assertEqual(evidence["contract"], ACTIVATION_REQUERY_EVIDENCE_CONTRACT)
+            self.assertFalse(evidence["controls"]["tenantWritesPerformed"])
+
+            with (
+                mock.patch("supermega_runtime.managed_activation._validate_admin_target"),
+                mock.patch("supermega_runtime.managed_activation.ManagedWorkspaceProvisioner", StubProvisioner),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                second_exit_code = main(
+                    [
+                        "requery",
+                        "--plan-file", str(plan_path),
+                        "--database-url-file", str(database_url_path),
+                        "--receipt-file", str(receipt_path),
+                        "--output", str(output_path),
+                    ]
+                )
+            self.assertEqual(second_exit_code, 1)
+
     def test_pre_authorized_compensation_does_not_depend_on_mutable_release_aliases(self) -> None:
         class StubProvisioner:
             def __init__(self, _database_url: str) -> None:

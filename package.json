@@ -692,6 +692,7 @@
     "client:activation:readiness": "python -s tools/assess_client_activation_readiness.py assess",
     "client:activation:readiness:verify": "python -s tools/assess_client_activation_readiness.py verify",
     "client:activation:readiness:self-test": "python -m unittest tests.test_client_activation_readiness",
+    "client:activation:requery": "python -s -m supermega_runtime.managed_activation requery",
     "client:launch:board": "python -s tools/prepare_client_launch_board.py prepare",
     "client:launch:board:verify": "python -s tools/prepare_client_launch_board.py verify",
     "client:launch:board:self-test": "python -m unittest tests.test_client_launch_board",

@@ -185,6 +185,23 @@ of required surface capabilities, and one immutable activation event carrying
 the explicit product list. Re-running the same command must return an
 idempotent replay; a changed product set must conflict.
 
+Before opening the portal, requery the database and bind the original plan and
+activation receipt into one create-only evidence file:
+
+```powershell
+npm run client:activation:requery -- `
+  --plan-file C:\reviewed\beauty-spa-activation-plan.json `
+  --database-url-file C:\secrets\admin-database-url.txt `
+  --receipt-file C:\reviewed\beauty-spa-activation-receipt.json `
+  --output C:\reviewed\beauty-spa-activation-requery.json
+```
+
+This command uses a read-only transaction and requires the exact approved
+authorization, active workspace access, one matching owner membership, immutable
+activation event, PostgreSQL 17, and managed schema version 11. Its evidence
+still fails closed on the separate live-release, named-owner portal, and
+cross-tenant denial smoke gates.
+
 ## 5. Verify the client portal
 
 1. Sign in as the named owner and request `/api/trial/v1/bootstrap`.

@@ -26,6 +26,7 @@ SOURCE_REQUEST_CONTRACT = "supermega.managed_trial_request.v1"
 ACTIVATION_PLAN_CONTRACT = "supermega.managed_workspace_activation_plan.v1"
 MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT = "supermega.managed_workspace_activation_plan.v2"
 ACTIVATION_RECEIPT_CONTRACT = "supermega.managed_workspace_activation_receipt.v2"
+ACTIVATION_REQUERY_EVIDENCE_CONTRACT = "supermega.managed_workspace_activation_requery_evidence.v1"
 SUSPENSION_RECEIPT_CONTRACT = "supermega.managed_workspace_suspension_receipt.v2"
 ACTIVATION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_activation_event.v1"
 SUSPENSION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_suspension_event.v1"
@@ -940,6 +941,130 @@ def _projection_digest(receipt: Mapping[str, Any]) -> str:
     projection = dict(receipt)
     projection.pop("projectionDigest", None)
     return _digest(projection)
+
+
+def validate_activation_receipt(value: object, plan_value: object) -> dict[str, Any]:
+    plan = _validate_supported_activation_plan(plan_value)
+    if not isinstance(value, Mapping):
+        raise ManagedActivationError("Managed activation receipt must be an object.")
+    receipt = dict(value)
+    expected_keys = {
+        "activationId", "activatedAt", "adminCaSha256", "authority", "contract",
+        "externalActionsPerformed", "localProjectionTrusted", "ownerActorId",
+        "planDigest", "projectRef", "projectionDigest", "releaseCommit", "replayed",
+        "secretValuesExposed", "status", "version", "workspaceId",
+    }
+    if set(receipt) != expected_keys:
+        raise ManagedActivationError("Managed activation receipt fields are invalid.")
+    if (
+        receipt.get("contract") != ACTIVATION_RECEIPT_CONTRACT
+        or receipt.get("version") != 2
+        or receipt.get("status") != "active"
+        or not isinstance(receipt.get("replayed"), bool)
+        or receipt.get("localProjectionTrusted") is not False
+        or receipt.get("secretValuesExposed") is not False
+        or receipt.get("activationId") != plan["activationId"]
+        or receipt.get("planDigest") != plan["planDigest"]
+        or receipt.get("workspaceId") != plan["workspaceId"]
+        or receipt.get("ownerActorId") != plan["ownerActorId"]
+        or receipt.get("projectRef") != plan["target"]["projectRef"]
+        or receipt.get("releaseCommit") != plan["target"]["releaseCommit"]
+        or receipt.get("adminCaSha256") != plan["target"]["adminCaSha256"]
+        or receipt.get("projectionDigest") != _projection_digest(receipt)
+    ):
+        raise ManagedActivationError("Managed activation receipt does not match the reviewed plan.")
+    _timestamp(receipt.get("activatedAt"), "Managed activation receipt timestamp")
+    authority = receipt.get("authority")
+    if (
+        not isinstance(authority, Mapping)
+        or dict(authority) != {
+            "system": "postgresql",
+            "table": "app_private.workspace_events",
+            "commandId": plan["activationId"],
+            "verification": "requery_required",
+        }
+        or receipt.get("externalActionsPerformed") != [
+            "workspace_access_control_insert",
+            "workspace_membership_insert",
+            "immutable_activation_event_insert",
+        ]
+    ):
+        raise ManagedActivationError("Managed activation receipt authority is invalid.")
+    return deepcopy(receipt)
+
+
+def build_activation_requery_evidence(
+    plan_value: object,
+    receipt_value: object,
+    inspection_value: object,
+    *,
+    observed_at: datetime | None = None,
+) -> dict[str, Any]:
+    plan = _validate_supported_activation_plan(plan_value)
+    receipt = validate_activation_receipt(receipt_value, plan)
+    if not isinstance(inspection_value, Mapping):
+        raise ManagedActivationError("Managed activation requery result must be an object.")
+    inspection = dict(inspection_value)
+    if (
+        inspection.get("contract") != "supermega.managed_workspace_activation_preflight.v1"
+        or inspection.get("status") != "active_replay"
+        or inspection.get("ready") is not True
+        or inspection.get("authorizationReady") is not True
+        or inspection.get("workspaceId") != plan["workspaceId"]
+        or inspection.get("projectRef") != plan["target"]["projectRef"]
+        or inspection.get("releaseCommit") != plan["target"]["releaseCommit"]
+        or inspection.get("postgresMajor") != 17
+        or inspection.get("schemaVersion") != TRIAL_SCHEMA_VERSION
+        or inspection.get("membershipCount") != 1
+        or inspection.get("secretValuesExposed") is not False
+        or inspection.get("mutationStatementsExecuted") != 0
+    ):
+        raise ManagedActivationError("Hosted activation requery did not prove the exact active tenant.")
+    observed = observed_at or datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "contract": ACTIVATION_REQUERY_EVIDENCE_CONTRACT,
+        "version": 1,
+        "status": "database_activation_verified",
+        "observedAt": _timestamp_text(observed),
+        "activation": {
+            "activationId": plan["activationId"],
+            "planDigest": plan["planDigest"],
+            "receiptDigest": receipt["projectionDigest"],
+            "activatedAt": receipt["activatedAt"],
+            "workspaceId": plan["workspaceId"],
+            "ownerActorId": plan["ownerActorId"],
+        },
+        "target": {
+            "projectRef": plan["target"]["projectRef"],
+            "releaseCommit": plan["target"]["releaseCommit"],
+            "postgresMajor": 17,
+            "schemaVersion": TRIAL_SCHEMA_VERSION,
+        },
+        "proofs": {
+            "ownerAuthorizationRequeried": True,
+            "workspaceAccessRequeried": True,
+            "singleOwnerMembershipRequeried": True,
+            "immutableActivationEventRequeried": True,
+            "databaseMutationStatementsExecuted": 0,
+        },
+        "remainingGates": [
+            "exact_release_live_verification_required",
+            "named_owner_portal_smoke_required",
+            "cross_tenant_denial_smoke_required",
+        ],
+        "controls": {
+            "containsSecrets": False,
+            "containsRawClientRows": False,
+            "hostedDatabaseReadPerformed": True,
+            "databaseReadOnly": True,
+            "tenantWritesPerformed": False,
+            "deploymentPerformed": False,
+            "portalSmokePerformed": False,
+            "activationMutationPerformedByThisCommand": False,
+        },
+    }
+    payload["evidenceDigest"] = _digest(payload)
+    return payload
 
 
 class ManagedWorkspaceProvisioner:
@@ -1964,7 +2089,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--admin-ca-file", required=True)
     prepare.add_argument("--output", required=True)
     prepare.add_argument("--replace", action="store_true")
-    for command in ("validate", "authorize", "apply", "suspend"):
+    for command in ("validate", "requery", "authorize", "apply", "suspend"):
         operation = subparsers.add_parser(command)
         operation.add_argument("--plan-file", required=True)
         operation.add_argument("--database-url-file", required=True)
@@ -1973,6 +2098,9 @@ def _parser() -> argparse.ArgumentParser:
             operation.add_argument("--production-handoff", action="store_true")
         if command in {"apply", "suspend"}:
             operation.add_argument("--receipt-file", required=True)
+        if command == "requery":
+            operation.add_argument("--receipt-file", required=True)
+            operation.add_argument("--output", required=True)
         if command == "authorize":
             operation.add_argument("--owner-access-token-file", required=True)
             operation.add_argument("--publishable-key-file", required=True)
@@ -2032,6 +2160,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             provisioner = ManagedWorkspaceProvisioner(database_url)
             if args.command == "validate":
                 result = provisioner.inspect(plan)
+            elif args.command == "requery":
+                receipt = _read_json(args.receipt_file, "Managed activation receipt")
+                evidence = build_activation_requery_evidence(plan, receipt, provisioner.inspect(plan))
+                output = Path(args.output).resolve()
+                if output.exists():
+                    raise ManagedActivationError("Requery evidence output already exists and was not replaced.")
+                _write_json(str(output), evidence)
+                result = {
+                    "contract": evidence["contract"],
+                    "status": evidence["status"],
+                    "evidenceDigest": evidence["evidenceDigest"],
+                    "remainingGateCount": len(evidence["remainingGates"]),
+                    "secretValuesExposed": False,
+                    "tenantWritesPerformed": False,
+                    "databaseReadOnly": True,
+                }
             else:
                 if args.confirm_owner_approval != plan["approval"]["approvalId"]:
                     raise ManagedActivationError("Owner approval confirmation does not match the activation plan.")
@@ -2125,16 +2269,19 @@ if __name__ == "__main__":
 __all__ = [
     "ACTIVATION_AUTHORIZATION_CONTRACT",
     "ACTIVATION_PLAN_CONTRACT",
+    "ACTIVATION_REQUERY_EVIDENCE_CONTRACT",
     "ACTIVATION_RECEIPT_CONTRACT",
     "MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT",
     "ManagedActivationConflict",
     "ManagedActivationError",
     "ManagedWorkspaceProvisioner",
+    "build_activation_requery_evidence",
     "SUSPENSION_RECEIPT_CONTRACT",
     "compile_activation_plan",
     "compile_multi_product_activation_plan",
     "main",
     "validate_activation_plan",
+    "validate_activation_receipt",
     "validate_managed_trial_request",
     "validate_multi_product_activation_plan",
 ]
