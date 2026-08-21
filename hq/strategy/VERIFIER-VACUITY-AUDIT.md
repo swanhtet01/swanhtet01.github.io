@@ -48,15 +48,37 @@ src/analytics` directly: 2 errors, exit 1). With that file in the tree:
 
 **Fix.** `showroom/package.json` lint script now includes `src/analytics`, and
 the verifier check is an inventory rather than a sample: every directory under
-`showroom/src` that contains TypeScript must be named in the lint script.
+`showroom/src` that contains TypeScript, **and every loose `.ts`/`.tsx` file
+directly in `showroom/src`**, must be named in the lint script.
 
-**Negative tests on the fix** (each run to red, then restored):
+Two things the inventory deliberately avoids, because a code review of the first
+version found each of them to be the same failure returning by another door:
+
+- It does not use `includes()` on the script text. `src/products` is a *prefix*
+  of `src/products-legacy`, so a substring pin survives a rename that drops the
+  real directory; and `--ignore-pattern src/analytics` names the path precisely
+  in order to skip it, satisfying a substring pin while ESLint ignores the
+  directory. Arguments are tokenised and matched exactly, and flags — plus the
+  value following `--ignore-pattern` / `--ignore-path` — are not targets.
+- It does not look at directories only. A loose `showroom/src/feature-flags.ts`
+  imported from `main.tsx` is byte-for-byte the `src/analytics` defect one
+  directory level up.
+
+`eslint src` / `eslint .` short-circuits the inventory, since either already
+covers every source.
+
+**Negative tests on the fix** (each run, then restored):
 
 | Mutation | Result |
 | --- | --- |
-| remove `src/analytics` from the lint script again | `prototype_sources_not_linted:analytics`, exit 1 |
-| add `showroom/src/newlane/thing.ts` | `prototype_sources_not_linted:newlane`, exit 1 |
-| add `showroom/src/assetsdir/data.json` (no TypeScript) | `"ok": true` — no false positive |
+| remove `src/analytics` from the lint script again | `prototype_sources_not_linted:src/analytics`, exit 1 |
+| add `showroom/src/newlane/thing.ts` | red on the new root, exit 1 |
+| rename the target to `src/products-legacy` (prefix trick) | `prototype_sources_not_linted:src/products`, exit 1 |
+| narrow to `src/analytics/metrics-collector.ts` | `prototype_sources_not_linted:src/analytics`, exit 1 |
+| `--ignore-pattern src/analytics` | `prototype_sources_not_linted:src/analytics`, exit 1 |
+| add loose `showroom/src/feature-flags.ts` | `prototype_sources_not_linted:src/feature-flags.ts`, exit 1 |
+| replace the enumeration with `eslint src scripts eslint.config.js` | `"ok": true` — no false positive |
+| add `showroom/src/assetsdir/data.json` / `showroom/src/data.json` (no TypeScript) | `"ok": true` — no false positive |
 
 `src/analytics` lints clean on main, so the lint baseline stays at 17 warnings.
 

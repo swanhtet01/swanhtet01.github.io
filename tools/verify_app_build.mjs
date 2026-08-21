@@ -3742,21 +3742,44 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
 // it: metrics-collector.ts is imported by main.tsx and seven product modules, and eslint never
 // saw the directory. Proven 2026-08-21 by putting two hard errors (no-explicit-any,
 // no-unused-vars) in that file: `npm --prefix showroom run lint` stayed at its 17-warning
-// baseline and exit 0, and this check stayed green. Every directory under showroom/src that
-// holds TypeScript must now be named in the lint script, so the next new one cannot slip in.
+// baseline and exit 0, and this check stayed green.
+//
+// Two things this deliberately does NOT do, because each was a way the same failure comes
+// back. It does not test the script with `includes()`: `src/products` is a PREFIX of
+// `src/products-legacy`, so a substring pin is satisfied by a rename that drops the real
+// directory, and it is satisfied by `--ignore-pattern src/analytics`, which names the path in
+// order to skip it. Arguments are tokenised and matched exactly, and anything ESLint would
+// read as a flag (or the value following an ignore flag) is not a target. And it does not look
+// at directories only: a loose `showroom/src/feature-flags.ts` next to App.tsx is the same
+// defect one level up, so top-level TypeScript files are inventoried too.
 const showroomLintScript = String(appPackage.scripts?.lint ?? '')
-const showroomSourceRoot = resolve(root, 'showroom', 'src')
-const typedShowroomSourceRoots = []
-for (const entry of await readdir(showroomSourceRoot, { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue
-  const contents = await walk(resolve(showroomSourceRoot, entry.name))
-  if (contents.some((path) => /\.tsx?$/.test(path))) typedShowroomSourceRoots.push(entry.name)
+const showroomLintArguments = showroomLintScript.split(/\s+/).filter(Boolean)
+const showroomLintTargets = new Set()
+for (let index = 1; index < showroomLintArguments.length; index += 1) {
+  const argument = showroomLintArguments[index]
+  if (argument === '--ignore-pattern' || argument === '--ignore-path') { index += 1; continue }
+  if (argument.startsWith('-')) continue
+  showroomLintTargets.add(argument)
 }
-const unlintedShowroomSourceRoots = typedShowroomSourceRoots
-  .filter((name) => !showroomLintScript.includes(`src/${name}`))
-  .sort()
-if (!showroomLintScript.includes('src/products') || unlintedShowroomSourceRoots.length) {
-  fail(`prototype_sources_not_linted:${unlintedShowroomSourceRoots.join('|') || 'src/products'}`)
+const showroomSourceRoot = resolve(root, 'showroom', 'src')
+const showroomSourceEntries = await readdir(showroomSourceRoot, { withFileTypes: true })
+const requiredShowroomLintTargets = []
+for (const entry of showroomSourceEntries) {
+  if (entry.isDirectory()) {
+    const contents = await walk(resolve(showroomSourceRoot, entry.name))
+    if (contents.some((path) => /\.tsx?$/.test(path))) requiredShowroomLintTargets.push(`src/${entry.name}`)
+  } else if (/\.tsx?$/.test(entry.name)) {
+    requiredShowroomLintTargets.push(`src/${entry.name}`)
+  }
+}
+// `eslint src` (or `eslint .`) already covers every one of them; only an enumerated script
+// needs the inventory.
+const showroomLintsEverySource = showroomLintTargets.has('src') || showroomLintTargets.has('.')
+const unlintedShowroomSourceTargets = showroomLintsEverySource
+  ? []
+  : requiredShowroomLintTargets.filter((target) => !showroomLintTargets.has(target)).sort()
+if (unlintedShowroomSourceTargets.length) {
+  fail(`prototype_sources_not_linted:${unlintedShowroomSourceTargets.join('|')}`)
 }
 if (!websiteSource.includes('Nothing has been deployed.')
   || !websiteSource.includes('Nothing was deployed.')
