@@ -21,6 +21,7 @@ import {
   initShopPilotIntakeStarter,
   initShopPilotSalesWorkspace,
   initShopPilotSalesWorkspaceFromBundle,
+  inspectShopClientLaunchStatus,
   prepareShopPilotSalesWorkspace,
   prepareShopPilotClientLaunch,
   renderShopPilotOwnerInputForm,
@@ -623,6 +624,7 @@ test('runs the complete private workspace lifecycle without external action', as
       weeklyPackageCorrectionCount: null,
     })
     assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-input-required')
+    assert.equal((await inspectShopClientLaunchStatus(workspace)).client.stage, 'owner-input-required')
     await writeFile(ownerFormPath, `${ownerForm}\nchanged\n`)
     await assert.rejects(() => verifyShopPilotSalesWorkspace(workspace), /shop_pilot_workspace_manifest_invalid/)
     await writeFile(ownerFormPath, ownerForm)

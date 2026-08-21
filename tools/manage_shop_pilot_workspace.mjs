@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { access, lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,15 +18,18 @@ import {
 import {
   initializeClientWorkspaceFromShopPilot,
   prepareClientDemo,
+  verifyContactClientWorkspace,
   writeClientDemoPreparation,
 } from './prepare_client_demo.mjs'
 import { renderClientLaunchDashboard, verifyClientLaunchDashboard, writeClientLaunchDashboard } from './render_client_launch_dashboard.mjs'
+import { validateReleaseHandoffPacket } from './prepare_release_handoff.mjs'
 
 export const SHOP_PILOT_SALES_WORKSPACE_CONTRACT = 'supermega.shop.pilot_sales_workspace.v2'
 export const SHOP_PILOT_SALES_PREPARED_CONTRACT = 'supermega.shop.pilot_sales_prepared.v2'
 export const SHOP_PILOT_INTAKE_STARTER_CONTRACT = 'supermega.shop.pilot_intake_starter.v1'
 export const SHOP_PILOT_INTAKE_BUNDLE_CONTRACT = 'supermega.shop.pilot_intake_bundle.v1'
 export const SHOP_PILOT_CLIENT_LAUNCH_CONTRACT = 'supermega.shop.pilot_client_launch.v1'
+export const SHOP_CLIENT_LAUNCH_STATUS_CONTRACT = 'supermega.shop.client_launch_status.v1'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const CLIENT_PREPARATION_FILE = 'client-preparation.private.json'
@@ -72,6 +75,65 @@ async function exists(path) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'))
+}
+
+async function readBoundedJson(path, code, maximumBytes = 1024 * 1024) {
+  const metadata = await lstat(path).catch(() => { throw new Error(code) })
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 2 || metadata.size > maximumBytes) throw new Error(code)
+  try { return JSON.parse(await readFile(path, 'utf8')) } catch { throw new Error(code) }
+}
+
+function canonicalJson(value) {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value)
+  if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`
+  }
+  throw new Error('shop_client_launch_status_value_invalid')
+}
+
+function verifyManagedActivationReceipt(receipt) {
+  const expectedKeys = [
+    'activationId', 'activatedAt', 'adminCaSha256', 'authority', 'contract', 'externalActionsPerformed',
+    'localProjectionTrusted', 'ownerActorId', 'planDigest', 'projectRef', 'projectionDigest', 'releaseCommit',
+    'replayed', 'secretValuesExposed', 'status', 'version', 'workspaceId',
+  ]
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)
+    || JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys.sort())
+    || receipt.contract !== 'supermega.managed_workspace_activation_receipt.v2'
+    || receipt.version !== 2
+    || receipt.status !== 'active'
+    || typeof receipt.replayed !== 'boolean'
+    || receipt.localProjectionTrusted !== false
+    || receipt.secretValuesExposed !== false
+    || JSON.stringify(Object.keys(receipt.authority ?? {}).sort()) !== JSON.stringify(['commandId', 'system', 'table', 'verification'])
+    || receipt.authority?.system !== 'postgresql'
+    || receipt.authority?.table !== 'app_private.workspace_events'
+    || receipt.authority?.verification !== 'requery_required'
+    || !Array.isArray(receipt.externalActionsPerformed)
+    || JSON.stringify(receipt.externalActionsPerformed) !== JSON.stringify([
+      'workspace_access_control_insert',
+      'workspace_membership_insert',
+      'immutable_activation_event_insert',
+    ])) throw new Error('shop_client_launch_status_activation_receipt_invalid')
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+  if (!uuid.test(receipt.activationId ?? '')
+    || !uuid.test(receipt.ownerActorId ?? '')
+    || !/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/.test(receipt.workspaceId ?? '')
+    || !/^[a-z0-9]{20}$/.test(receipt.projectRef ?? '')) throw new Error('shop_client_launch_status_activation_receipt_invalid')
+  for (const field of ['planDigest', 'adminCaSha256', 'projectionDigest']) {
+    if (!/^sha256:[0-9a-f]{64}$/.test(receipt[field] ?? '')) throw new Error('shop_client_launch_status_activation_receipt_invalid')
+  }
+  if (!/^[0-9a-f]{40}$/.test(receipt.releaseCommit ?? '')
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(receipt.activatedAt ?? '')
+    || typeof receipt.authority.commandId !== 'string'
+    || receipt.authority.commandId !== receipt.activationId) throw new Error('shop_client_launch_status_activation_receipt_invalid')
+  const projection = structuredClone(receipt)
+  delete projection.projectionDigest
+  const expectedDigest = `sha256:${createHash('sha256').update(canonicalJson(projection)).digest('hex')}`
+  if (receipt.projectionDigest !== expectedDigest) throw new Error('shop_client_launch_status_activation_receipt_invalid')
+  return receipt
 }
 
 function paths(workspace) {
@@ -795,6 +857,137 @@ export async function prepareShopPilotClientLaunch(workspace, clientWorkspace, i
   }
 }
 
+export async function inspectShopClientLaunchStatus(workspace, { releasePacket = null, activationReceipt = null } = {}) {
+  const root = resolve(workspace)
+  const marker = {
+    starter: await exists(resolve(root, STARTER_FILES.manifest)),
+    pilot: await exists(resolve(root, FILES.manifest)),
+    contact: await exists(resolve(root, 'CONTACT-INTAKE.json')),
+    profile: await exists(resolve(root, 'client.json')),
+    preparation: await exists(resolve(root, CLIENT_PREPARATION_FILE)),
+    board: await exists(resolve(root, CLIENT_LAUNCH_BOARD_FILE)),
+    dashboard: await exists(resolve(root, CLIENT_LAUNCH_DASHBOARD_FILE)),
+  }
+  const launchPresence = [marker.preparation, marker.board, marker.dashboard]
+  const launchCandidate = marker.preparation || marker.board
+  if (launchCandidate && !launchPresence.every(Boolean)) throw new Error('shop_client_launch_status_stage_incomplete')
+  if (marker.starter && (marker.pilot || marker.contact || marker.profile || launchCandidate)) throw new Error('shop_client_launch_status_workspace_ambiguous')
+  if (marker.pilot && (marker.contact || marker.profile || launchCandidate)) throw new Error('shop_client_launch_status_workspace_ambiguous')
+  if (marker.contact !== marker.profile) throw new Error('shop_client_launch_status_stage_incomplete')
+
+  let client
+  let clientWorkspaceBinding = null
+  if (launchCandidate) {
+    if (!marker.contact || !marker.profile) throw new Error('shop_client_launch_status_stage_incomplete')
+    const portal = await verifyContactClientWorkspace(root)
+    const preparationPath = resolve(root, CLIENT_PREPARATION_FILE)
+    const boardPath = resolve(root, CLIENT_LAUNCH_BOARD_FILE)
+    const verifiedBoard = runClientLaunchBoard('verify', preparationPath, boardPath)
+    const board = await readJson(boardPath)
+    verifyClientLaunchDashboard(await readFile(resolve(root, CLIENT_LAUNCH_DASHBOARD_FILE), 'utf8'), board)
+    if (verifiedBoard.boardDigest !== board.boardDigest) throw new Error('shop_client_launch_status_board_binding_invalid')
+    clientWorkspaceBinding = board.client?.workspace
+    if (typeof clientWorkspaceBinding !== 'string' || !clientWorkspaceBinding.trim()) throw new Error('shop_client_launch_status_board_binding_invalid')
+    client = {
+      workspaceKind: 'private-client-launch',
+      stage: 'private-client-launch-dashboard-ready',
+      nextAction: 'prepare_owner_review_release_packet',
+      entryFile: CLIENT_LAUNCH_DASHBOARD_FILE,
+      productCount: portal.productCount,
+      blockingGateCount: verifiedBoard.blockingGateCount,
+    }
+  } else if (marker.contact && marker.profile) {
+    const portal = await verifyContactClientWorkspace(root)
+    client = {
+      workspaceKind: 'protected-client-workspace',
+      stage: 'protected-shop-workspace-created',
+      nextAction: 'add_reviewed_product_data_and_prepare_launch',
+      entryFile: 'START-HERE.md',
+      productCount: portal.productCount,
+      blockingGateCount: null,
+    }
+  } else if (marker.pilot) {
+    const pilot = await verifyShopPilotSalesWorkspace(root)
+    const stageAction = {
+      'owner-input-required': ['complete_private_owner_input', 'owner-input-form.html'],
+      'owner-decision-required': ['review_handoff_and_record_owner_decision', 'private-handoff.md'],
+      'approved-for-owner-manual-send': ['prepare_private_client_launch', 'README.md'],
+      'revision-required': ['revise_private_handoff', 'private-handoff.md'],
+      'closed-no-outreach': ['close_or_requalify_pilot', 'owner-decision.json'],
+    }[pilot.stage]
+    if (!stageAction) throw new Error('shop_client_launch_status_pilot_stage_invalid')
+    client = {
+      workspaceKind: 'private-pilot-sales-workspace',
+      stage: pilot.stage,
+      nextAction: stageAction[0],
+      entryFile: stageAction[1],
+      productCount: 1,
+      blockingGateCount: null,
+    }
+  } else if (marker.starter) {
+    await verifyShopPilotIntakeStarter(root)
+    client = {
+      workspaceKind: 'private-pilot-intake-starter',
+      stage: 'private-owner-intake-required',
+      nextAction: 'complete_private_intake_and_download_owner_input',
+      entryFile: STARTER_FILES.form,
+      productCount: 1,
+      blockingGateCount: null,
+    }
+  } else {
+    throw new Error('shop_client_launch_status_workspace_unrecognized')
+  }
+
+  const release = releasePacket
+    ? validateReleaseHandoffPacket(await readBoundedJson(resolve(releasePacket), 'shop_client_launch_status_release_packet_invalid'))
+    : null
+  const activation = activationReceipt
+    ? verifyManagedActivationReceipt(await readBoundedJson(resolve(activationReceipt), 'shop_client_launch_status_activation_receipt_invalid'))
+    : null
+  if (activation && (client.stage !== 'private-client-launch-dashboard-ready'
+    || activation.workspaceId !== clientWorkspaceBinding
+    || (release && activation.releaseCommit !== release.candidate.commit))) {
+    throw new Error('shop_client_launch_status_activation_binding_invalid')
+  }
+  const overallStage = activation
+    ? 'hosted-activation-requery-required'
+    : release && client.stage === 'private-client-launch-dashboard-ready'
+      ? 'owner-release-review-required'
+      : client.stage
+  const nextAction = activation
+    ? 'requery_hosted_activation_and_verify_client_portal'
+    : release && client.stage === 'private-client-launch-dashboard-ready'
+      ? release.nextAction.kind
+      : client.nextAction
+
+  return {
+    contract: SHOP_CLIENT_LAUNCH_STATUS_CONTRACT,
+    overallStage,
+    client,
+    release: release ? {
+      status: 'owner-review-packet-locally-verified',
+      exactCommit: release.candidate.commit,
+      remoteCandidateState: release.remote.candidateBranchState,
+      currentRemoteStateVerified: false,
+    } : { status: 'not-supplied', currentRemoteStateVerified: false },
+    activation: activation ? {
+      status: 'receipt-projection-locally-verified',
+      databaseRequeryRequired: true,
+      hostedActivationProven: false,
+    } : { status: 'not-supplied', databaseRequeryRequired: true, hostedActivationProven: false },
+    nextAction,
+    controls: {
+      privateValuesReturned: false,
+      externalWritesPerformed: false,
+      customerContactPerformed: false,
+      providerCallsPerformed: false,
+      hostedReadsPerformed: false,
+      deploymentPerformed: false,
+      productionActivationPerformed: false,
+    },
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const workspaceIndex = args.indexOf('--workspace')
@@ -806,15 +999,29 @@ async function main() {
   const prepare = args.includes('--prepare')
   const decide = args.includes('--decide')
   const verify = args.includes('--verify')
+  const status = args.includes('--status')
   const createClientWorkspace = args.includes('--create-client-workspace')
   const prepareClientLaunch = args.includes('--prepare-client-launch')
   const clientWorkspaceIndex = args.indexOf('--client-workspace')
   const implementationOwnerIndex = args.indexOf('--implementation-owner')
-  if ([start, verifyStarter, init, prepare, decide, verify, createClientWorkspace, prepareClientLaunch].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
-    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--start | --verify-starter | --init (--contact-event event.json | --intake-bundle bundle.json) | --prepare | --decide | --verify | --create-client-workspace | --prepare-client-launch --client-workspace new-private-directory --implementation-owner name) --workspace private-directory')
+  const releasePacketIndex = args.indexOf('--release-packet')
+  const activationReceiptIndex = args.indexOf('--activation-receipt')
+  if ([start, verifyStarter, init, prepare, decide, verify, status, createClientWorkspace, prepareClientLaunch].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
+    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--start | --verify-starter | --init (--contact-event event.json | --intake-bundle bundle.json) | --prepare | --decide | --verify | --status [--release-packet packet.json] [--activation-receipt receipt.json] | --create-client-workspace | --prepare-client-launch --client-workspace new-private-directory --implementation-owner name) --workspace private-directory')
   }
   let result
-  if (start || verifyStarter) {
+  if (status) {
+    const releasePacket = releasePacketIndex >= 0 ? args[releasePacketIndex + 1] : null
+    const activationReceipt = activationReceiptIndex >= 0 ? args[activationReceiptIndex + 1] : null
+    const expectedLength = 3 + (releasePacket ? 2 : 0) + (activationReceipt ? 2 : 0)
+    if (args.length !== expectedLength
+      || args.filter((value) => value === '--workspace').length !== 1
+      || args.filter((value) => value === '--release-packet').length > 1
+      || args.filter((value) => value === '--activation-receipt').length > 1
+      || (releasePacketIndex >= 0 && !releasePacket)
+      || (activationReceiptIndex >= 0 && !activationReceipt)) throw new Error('shop_client_launch_status_arguments_invalid')
+    result = await inspectShopClientLaunchStatus(args[workspaceIndex + 1], { releasePacket, activationReceipt })
+  } else if (start || verifyStarter) {
     if (args.length !== 3 || contactIndex >= 0 || bundleIndex >= 0) throw new Error('shop_pilot_intake_starter_arguments_invalid')
     result = start
       ? await initShopPilotIntakeStarter(args[workspaceIndex + 1])

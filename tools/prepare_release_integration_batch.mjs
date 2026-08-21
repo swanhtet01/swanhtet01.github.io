@@ -602,8 +602,11 @@ export function validateReleaseSecurityHqComparison(packet) {
   return validateComparison(packet, exactBatch(RELEASE_SECURITY_HQ_BATCH))
 }
 
-function runGit(args) {
-  const result = spawnSync('git', args, {
+export function runGitRead(args, { runner = spawnSync } = {}) {
+  if (!Array.isArray(args) || args.length < 1 || args.some((value) => typeof value !== 'string' || !value)) {
+    fail('release_integration_batch_git_arguments_invalid')
+  }
+  const result = runner('git', ['-c', `safe.directory=${root}`, ...args], {
     cwd: root,
     encoding: 'utf8',
     env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
@@ -611,8 +614,17 @@ function runGit(args) {
     timeout: 60_000,
     windowsHide: true,
   })
-  if (result.error || result.signal || result.status !== 0) fail('release_integration_batch_git_failed')
-  return String(result.stdout || '').trimEnd()
+  if (!result.error && !result.signal && result.status === 0) return String(result.stdout || '').trimEnd()
+  const statusDetail = String(result?.error?.code || result?.signal || `exit-${result?.status ?? 'unknown'}`)
+  const stderrDetail = String(result?.stderr || '').trim().split(/\r?\n/, 1)[0]
+  const detail = `${statusDetail}${stderrDetail ? `-${stderrDetail}` : ''}`
+    .replace(/[^A-Za-z0-9_.-]/g, '_')
+    .slice(0, 180)
+  fail(`release_integration_batch_git_failed:${detail}`)
+}
+
+function runGit(args) {
+  return runGitRead(args)
 }
 
 function readTree(ref, policy) {

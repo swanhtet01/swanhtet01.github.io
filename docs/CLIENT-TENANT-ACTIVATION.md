@@ -51,6 +51,24 @@ npm run client:launch:board:verify -- `
   --board C:\reviewed\client-launch-board.json
 ```
 
+At any point, inspect one private starter, pilot, protected client workspace, or
+launch workspace with one metadata-only command:
+
+```powershell
+npm.cmd run client:pilot:workspace -- `
+  --status `
+  --workspace C:\private\spa-client-launch
+```
+
+The result reports one verified client stage, the safe entry filename, and one
+next action. It never returns client identity or the supplied path. Optionally
+add `--release-packet <packet.json>` and/or
+`--activation-receipt <receipt.json>`. Those options validate the local packet
+or receipt projection only. They do not query GitHub, Vercel, Supabase, or the
+database, so current remote state and hosted activation remain explicitly
+unproven; a database-derived receipt still requires its mandated requery and
+portal smoke test.
+
 Add one `--managed-request-file` per purchased product, in canonical Shop,
 Plant, Website, Ecommerce order, as those owner-reviewed outcomes become
 available. The board advances only the gates proved by those exact requests.
