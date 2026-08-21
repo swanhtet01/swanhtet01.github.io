@@ -13,6 +13,7 @@ import {
   sanitizeShopPilotContactEvent,
   shopPilotInputFromContactEvent,
 } from './create_shop_pilot_handoff.mjs'
+import { initializeClientWorkspaceFromShopPilot } from './prepare_client_demo.mjs'
 
 export const SHOP_PILOT_SALES_WORKSPACE_CONTRACT = 'supermega.shop.pilot_sales_workspace.v2'
 export const SHOP_PILOT_SALES_PREPARED_CONTRACT = 'supermega.shop.pilot_sales_prepared.v2'
@@ -463,6 +464,14 @@ From the SuperMega platform repository, run:
 
 This creates \`private-handoff.md\`, \`private-reply.txt\`, and a digest-bound \`decision-input.json\`. It sends nothing.
 
+## 2b. Create the protected Shop portal workspace
+
+After preparation succeeds, create the client's isolated Spa-configured Shop workspace with one command:
+
+\`npm.cmd run client:pilot:workspace -- --create-client-workspace --workspace "<this-folder>" --client-workspace "<new-private-client-portal-folder>" --implementation-owner "<responsible SuperMega operator>"\`
+
+This retains only reviewed workspace context and source digests, creates the Spa CSV starter locally, and performs no hosted write or activation.
+
 ## 3. Record the owner decision
 
 Review the exact handoff and reply. Edit \`decision-input.json\` with one decision: \`approve-manual-send\`, \`revise\`, or \`decline\`. Add the owner name, exact UTC timestamp, and review note without changing either digest. Then run:
@@ -672,6 +681,32 @@ export async function verifyShopPilotSalesWorkspace(workspace) {
   }
 }
 
+export async function createShopPilotClientWorkspace(workspace, clientWorkspace, implementationOwner, reviewedAt = new Date().toISOString()) {
+  const verified = await verifyShopPilotSalesWorkspace(workspace)
+  if (!['owner-decision-required', 'approved-for-owner-manual-send'].includes(verified.stage)) {
+    throw new Error('shop_pilot_client_workspace_preparation_required')
+  }
+  const { target, contact } = await readWorkspaceFoundation(workspace)
+  const ownerInput = await readJson(target.owner)
+  const initialized = await initializeClientWorkspaceFromShopPilot({
+    directory: clientWorkspace,
+    event: contact,
+    ownerInput,
+    implementationOwner,
+    reviewedAt,
+  })
+  return {
+    contract: initialized.contract,
+    stage: 'protected-shop-workspace-created',
+    productCount: initialized.productCount,
+    templateCount: initialized.templateCount,
+    containsClientData: initialized.containsClientData,
+    activationStatus: initialized.activationStatus,
+    externalWritesPerformed: false,
+    modelCallsPerformed: false,
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const workspaceIndex = args.indexOf('--workspace')
@@ -683,8 +718,11 @@ async function main() {
   const prepare = args.includes('--prepare')
   const decide = args.includes('--decide')
   const verify = args.includes('--verify')
-  if ([start, verifyStarter, init, prepare, decide, verify].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
-    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--start | --verify-starter | --init (--contact-event event.json | --intake-bundle bundle.json) | --prepare | --decide | --verify) --workspace private-directory')
+  const createClientWorkspace = args.includes('--create-client-workspace')
+  const clientWorkspaceIndex = args.indexOf('--client-workspace')
+  const implementationOwnerIndex = args.indexOf('--implementation-owner')
+  if ([start, verifyStarter, init, prepare, decide, verify, createClientWorkspace].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
+    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--start | --verify-starter | --init (--contact-event event.json | --intake-bundle bundle.json) | --prepare | --decide | --verify | --create-client-workspace --client-workspace new-private-directory --implementation-owner name) --workspace private-directory')
   }
   let result
   if (start || verifyStarter) {
@@ -699,6 +737,11 @@ async function main() {
     result = hasContact
       ? await initShopPilotSalesWorkspace(await readJson(resolve(args[contactIndex + 1])), args[workspaceIndex + 1])
       : await initShopPilotSalesWorkspaceFromBundle(await readJson(resolve(args[bundleIndex + 1])), args[workspaceIndex + 1])
+  } else if (createClientWorkspace) {
+    if (args.length !== 7 || clientWorkspaceIndex < 0 || !args[clientWorkspaceIndex + 1] || implementationOwnerIndex < 0 || !args[implementationOwnerIndex + 1]) {
+      throw new Error('shop_pilot_client_workspace_arguments_invalid')
+    }
+    result = await createShopPilotClientWorkspace(args[workspaceIndex + 1], args[clientWorkspaceIndex + 1], args[implementationOwnerIndex + 1])
   } else {
     if (args.length !== 3 || contactIndex >= 0 || bundleIndex >= 0) throw new Error('shop_pilot_workspace_arguments_invalid')
     if (prepare) result = await prepareShopPilotSalesWorkspace(args[workspaceIndex + 1])

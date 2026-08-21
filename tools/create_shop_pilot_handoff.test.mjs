@@ -16,6 +16,7 @@ import {
 } from './create_shop_pilot_handoff.mjs'
 
 import {
+  createShopPilotClientWorkspace,
   decideShopPilotSalesWorkspace,
   initShopPilotIntakeStarter,
   initShopPilotSalesWorkspace,
@@ -632,6 +633,13 @@ test('runs the complete private workspace lifecycle without external action', as
     assert.equal(prepared.stage, 'owner-decision-required')
     assert.equal(prepared.filesCreated, 4)
     assert.equal(prepared.customerContactPerformed, false)
+    const clientWorkspace = join(parent, 'private-client-portal')
+    const clientPortal = await createShopPilotClientWorkspace(workspace, clientWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z')
+    assert.equal(clientPortal.stage, 'protected-shop-workspace-created')
+    assert.equal(clientPortal.productCount, 1)
+    assert.equal(clientPortal.activationStatus, 'not_applied')
+    assert.match(await readFile(join(clientWorkspace, '_templates', 'commerce.csv'), 'utf8'), /SPA-SVC-MASSAGE/)
+    assert.doesNotMatch(await readFile(join(clientWorkspace, 'CONTACT-INTAKE.json'), 'utf8'), /Workspace Operator|workspace-private@example\.com/)
     assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-decision-required')
     await assert.rejects(() => prepareShopPilotSalesWorkspace(workspace), /shop_pilot_workspace_prepared_outputs_exist/)
 
