@@ -12,7 +12,7 @@ Live scheduler configured: `false`
 Live managed persistence ready: `false`
 Live security ready: `false`
 
-Product checkpoint: owner-review handoff `d8164a0c` passed 651/651 on `codex/spa-client-activation-20260821`. Read current HEAD before release; later work is not covered.
+Product checkpoint: current tenant-activation work passed 651/651; release requires current HEAD and a fresh handoff.
 Live freshness: `supermega.release-handoff.v2` refreshed paired identity and remote main on 2026-08-21. Operations stay fail-closed pending post-deploy proof.
 
 ## North-star outcome
@@ -39,6 +39,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 14 files/324,497 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
+- One no-write tenant manifest now binds portal setup, purchased products, templates, managed requests, activation, and custom extensions. Shop-only access excludes Ecommerce; multi-product access keeps one named-owner membership.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs. The accounting export packet now includes both an AP supplier payables handoff CSV (`supermega.commerce.supplier-payables-handoff.v1`) and an AR customer receivables handoff CSV (`supermega.commerce.customer-receivables-handoff.v1`); both are digest-bound, formula-safe, and carry explicit no-payment and no-collection-authority controls.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
@@ -55,7 +56,7 @@ Research decisions are in `hq/research/`; roadmap: `hq/TIMELINE.md`; agent plan:
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Candidate `d8164a0c` passed the complete 651-step serial app gate twice, including the independent release-handoff run. A 390 px rendered Shop check on the earlier native-package checkpoint had no horizontal overflow, error overlay, or captured console warning; neither proves production deployment.
+- Tenant activation passed 651/651 after readiness refresh; the prior Spa packet passed an independent 651/651. Earlier 390 px Shop QA had no overflow, overlay, or console warning. None proves deployment.
 - The deterministic 12-profile rehearsal passes 24 rows. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero.
 - Both domains serve deployed `a8fad84e96ada08d2dcb923eec203cdff1604a73`; the handoff proved paired brand, context, and catalog identities match. Retained prior evidence says the scheduler ceiling is one job, and exact live verification passes. The fresh identity packet did not re-run scheduler proof.
@@ -71,7 +72,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack live product activation proof; model calls fail closed.
 - The digest-bound managed readiness ledger records protected PostgreSQL 17 at schema v11 with zero local-target drift, metadata RLS, browser-role denial, and a clear Security Advisor. It does not authorize a tenant or production release.
 - Storage privacy, managed persistence, and self-serve isolation have bounded proof records, but the live products remain isolated samples and no named customer tenant is activated.
-- Live HQ and both domains agree on `a8fad84e`; no release drift is present. Two hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, managed persistence, and the live product contract prerequisites are ready-hosted); external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `a8fad84e`; no release drift is present. Hosted safety proofs are ready, but one production-activation decision blocks a named tenant and live claim; external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
 - The deleted isolated-v11 self-serve proof covers six RLS and replay controls. A real tenant still awaits the founder `production_activation` decision in `hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.

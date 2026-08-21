@@ -19,9 +19,17 @@ from supermega_runtime.client_provisioning import (
     build_client_provisioning_plan,
     derive_client_provisioning_recipe,
 )
+from supermega_runtime.managed_activation import (
+    ACTIVATION_PLAN_CONTRACT,
+    MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
+    validate_activation_plan,
+    validate_managed_trial_request,
+    validate_multi_product_activation_plan,
+)
 
 
 CONTRACT = "supermega.client_portal_provisioning_bundle.v4"
+ACTIVATION_MANIFEST_CONTRACT = "supermega.client_portal_activation_manifest.v1"
 PREPARATION_CONTRACT = "supermega.client_demo_preparation.v3"
 PRODUCT_ORDER = ("commerce", "production", "website", "ecommerce")
 PRODUCT_IDS = {
@@ -268,6 +276,161 @@ def verify_client_portal_provisioning_bundle(
     return deepcopy(expected)
 
 
+def _validated_activation_plan(value: Mapping[str, Any]) -> dict[str, Any]:
+    contract = value.get("contract")
+    if contract == ACTIVATION_PLAN_CONTRACT:
+        return validate_activation_plan(value, require_current=True)
+    if contract == MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT:
+        return validate_multi_product_activation_plan(value, require_current=True)
+    raise ClientPortalProvisioningError("The managed activation plan contract is unsupported.")
+
+
+def build_client_portal_activation_manifest(
+    bundle: Mapping[str, Any],
+    preparation: Mapping[str, Any],
+    activation_plan: Mapping[str, Any],
+    managed_requests: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Bind reviewed portal setup to one current executable tenant activation plan."""
+
+    verified_bundle = verify_client_portal_provisioning_bundle(bundle, preparation)
+    try:
+        plan = _validated_activation_plan(activation_plan)
+    except (TypeError, ValueError) as exc:
+        raise ClientPortalProvisioningError("The managed activation plan failed validation.") from exc
+
+    access = verified_bundle["tenantAccessPlan"]
+    planned_products = list(access["products"])
+    activated_products = (
+        list(plan["products"])
+        if plan["contract"] == MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT
+        else [plan["product"]]
+    )
+    if activated_products != planned_products:
+        raise ClientPortalProvisioningError(
+            "The activation products do not exactly match the reviewed client portal products."
+        )
+    if (
+        plan["workspaceLabel"] != verified_bundle["client"]["workspace"]
+        or plan["ownerLabel"] != verified_bundle["client"]["owner"]
+    ):
+        raise ClientPortalProvisioningError(
+            "The activation workspace or named owner does not match the reviewed portal bundle."
+        )
+    if plan.get("secretValuesExposed") is not False:
+        raise ClientPortalProvisioningError("The activation plan must not expose secret values.")
+
+    try:
+        request_bindings = [validate_managed_trial_request(request) for request in managed_requests]
+    except (TypeError, ValueError) as exc:
+        raise ClientPortalProvisioningError("A managed trial request failed validation.") from exc
+    if len(request_bindings) != len(planned_products):
+        raise ClientPortalProvisioningError(
+            "Every reviewed portal product requires exactly one managed trial request."
+        )
+    if [binding["product"] for binding in request_bindings] != planned_products:
+        raise ClientPortalProvisioningError(
+            "Managed trial requests do not match the reviewed portal product order."
+        )
+    if any(
+        binding["workspaceLabel"] != verified_bundle["client"]["workspace"]
+        or binding["ownerLabel"] != verified_bundle["client"]["owner"]
+        for binding in request_bindings
+    ):
+        raise ClientPortalProvisioningError(
+            "A managed trial request changed the reviewed workspace or named owner."
+        )
+    source_plans = (
+        list(plan["sourcePlans"])
+        if plan["contract"] == MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT
+        else [plan]
+    )
+    if [source["sourceRequestDigest"] for source in source_plans] != [
+        binding["requestDigest"] for binding in request_bindings
+    ]:
+        raise ClientPortalProvisioningError(
+            "The activation plan is not bound to the exact managed trial requests."
+        )
+
+    product_bindings = []
+    for product, request_binding in zip(verified_bundle["products"], request_bindings, strict=True):
+        if request_binding["templateId"] != product["templateId"]:
+            raise ClientPortalProvisioningError(
+                "A managed trial request changed the reviewed product template."
+            )
+        product_bindings.append({
+            "product": product["productId"],
+            "runtimeProduct": product["product"],
+            "surface": "commerce" if product["product"] == "ecommerce" else product["product"],
+            "templateId": product["templateId"],
+            "setupPath": product["setupPath"],
+            "recipePlanId": product["provisioningPlan"]["planId"],
+            "recipePlanDigest": product["provisioningPlan"]["planDigest"],
+            "sourcePackageDigest": product["source"]["packageDigest"],
+            "managedRequestDigest": request_binding["requestDigest"],
+            "managedEvidence": deepcopy(request_binding["evidence"]),
+        })
+
+    manifest: dict[str, Any] = {
+        "contract": ACTIVATION_MANIFEST_CONTRACT,
+        "version": 1,
+        "status": "approved_plan_not_applied",
+        "tenant": {
+            "workspaceId": plan["workspaceId"],
+            "workspaceLabel": plan["workspaceLabel"],
+            "ownerActorId": plan["ownerActorId"],
+            "ownerLabel": plan["ownerLabel"],
+            "products": planned_products,
+            "membershipRowsPlanned": access["membershipRowsPlanned"],
+        },
+        "portal": {
+            "bundleContract": verified_bundle["contract"],
+            "bundleDigest": verified_bundle["bundleDigest"],
+            "productBindings": product_bindings,
+            "workspaceSelectionRequired": True,
+            "sharedSurfaceDoesNotGrantProduct": True,
+            "crossTenantReadsAllowed": False,
+            "crossProductWritesAllowed": False,
+        },
+        "activation": {
+            "planContract": plan["contract"],
+            "activationId": plan["activationId"],
+            "planDigest": plan["planDigest"],
+            "expiresAt": plan["expiresAt"],
+            "target": deepcopy(plan["target"]),
+            "ownerCapabilities": deepcopy(plan["ownerCapabilities"]),
+            "forbiddenActions": deepcopy(plan["forbiddenActions"]),
+            "plan": deepcopy(plan),
+        },
+        "customSolutions": deepcopy(verified_bundle["customSolutionPolicy"]),
+        "authority": {
+            "humanApprovalBound": True,
+            "tenantWritesPerformed": False,
+            "providerCallsPerformed": False,
+            "externalMessagesSent": False,
+            "deploymentPerformed": False,
+            "productionActivationPerformed": False,
+        },
+    }
+    manifest["manifestDigest"] = _canonical_digest(manifest)
+    return manifest
+
+
+def verify_client_portal_activation_manifest(
+    manifest: Mapping[str, Any],
+    bundle: Mapping[str, Any],
+    preparation: Mapping[str, Any],
+    activation_plan: Mapping[str, Any],
+    managed_requests: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    expected = build_client_portal_activation_manifest(
+        bundle, preparation, activation_plan, managed_requests
+    )
+    if dict(manifest) != expected:
+        raise ClientPortalProvisioningError("The client portal activation manifest is stale or altered.")
+    return deepcopy(expected)
+
+
 def _write_exclusive(path_value: str | Path, value: Mapping[str, Any]) -> Path:
     path = Path(path_value).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -289,6 +452,18 @@ def _parser() -> argparse.ArgumentParser:
     verify = subparsers.add_parser("verify")
     verify.add_argument("--bundle", required=True)
     verify.add_argument("--preparation", required=True)
+    bind = subparsers.add_parser("bind-activation")
+    bind.add_argument("--bundle", required=True)
+    bind.add_argument("--preparation", required=True)
+    bind.add_argument("--activation-plan", required=True)
+    bind.add_argument("--managed-request", action="append", required=True)
+    bind.add_argument("--output", required=True)
+    verify_binding = subparsers.add_parser("verify-activation")
+    verify_binding.add_argument("--manifest", required=True)
+    verify_binding.add_argument("--bundle", required=True)
+    verify_binding.add_argument("--preparation", required=True)
+    verify_binding.add_argument("--activation-plan", required=True)
+    verify_binding.add_argument("--managed-request", action="append", required=True)
     return parser
 
 
@@ -309,7 +484,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "tenantWritesPerformed": False,
                 "productionActivationPerformed": False,
             }
-        else:
+        elif args.command == "verify":
             bundle = _read_json(args.bundle, "Portal provisioning bundle")
             verified = verify_client_portal_provisioning_bundle(bundle, preparation)
             result = {
@@ -318,6 +493,47 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "bundleDigest": verified["bundleDigest"],
                 "productCount": len(verified["products"]),
                 "status": verified["authority"]["status"],
+                "tenantWritesPerformed": False,
+                "productionActivationPerformed": False,
+            }
+        elif args.command == "bind-activation":
+            bundle = _read_json(args.bundle, "Portal provisioning bundle")
+            plan = _read_json(args.activation_plan, "Managed activation plan")
+            requests = [
+                _read_json(path, "Managed trial request")
+                for path in args.managed_request
+            ]
+            manifest = build_client_portal_activation_manifest(
+                bundle, preparation, plan, requests
+            )
+            output = _write_exclusive(args.output, manifest)
+            result = {
+                "ok": True,
+                "contract": ACTIVATION_MANIFEST_CONTRACT,
+                "output": str(output),
+                "manifestDigest": manifest["manifestDigest"],
+                "productCount": len(manifest["tenant"]["products"]),
+                "status": manifest["status"],
+                "tenantWritesPerformed": False,
+                "productionActivationPerformed": False,
+            }
+        else:
+            bundle = _read_json(args.bundle, "Portal provisioning bundle")
+            plan = _read_json(args.activation_plan, "Managed activation plan")
+            manifest = _read_json(args.manifest, "Client portal activation manifest")
+            requests = [
+                _read_json(path, "Managed trial request")
+                for path in args.managed_request
+            ]
+            verified = verify_client_portal_activation_manifest(
+                manifest, bundle, preparation, plan, requests
+            )
+            result = {
+                "ok": True,
+                "contract": ACTIVATION_MANIFEST_CONTRACT,
+                "manifestDigest": verified["manifestDigest"],
+                "productCount": len(verified["tenant"]["products"]),
+                "status": verified["status"],
                 "tenantWritesPerformed": False,
                 "productionActivationPerformed": False,
             }

@@ -6,11 +6,19 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
+from supermega_runtime.managed_activation import (
+    ACTIVATION_PLAN_CONTRACT,
+    MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
+)
 from tools.prepare_client_portal_provisioning import (
+    ACTIVATION_MANIFEST_CONTRACT,
     CONTRACT,
     ClientPortalProvisioningError,
+    build_client_portal_activation_manifest,
     build_client_portal_provisioning_bundle,
+    verify_client_portal_activation_manifest,
     verify_client_portal_provisioning_bundle,
 )
 
@@ -67,6 +75,102 @@ class ClientPortalProvisioningTests(unittest.TestCase):
         )
         self.assertEqual(prepared.returncode, 0, prepared.stderr)
         return preparation_path
+
+    @staticmethod
+    def _activation_plan_for_bundle(bundle: dict[str, object]) -> dict[str, object]:
+        client = bundle["client"]
+        access = bundle["tenantAccessPlan"]
+        assert isinstance(client, dict)
+        assert isinstance(access, dict)
+        products = list(access["products"])
+        source_plans = [
+            {
+                "product": product,
+                "sourceRequestDigest": "sha256:" + str(index + 3) * 64,
+            }
+            for index, product in enumerate(products)
+        ]
+        return {
+            "contract": MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
+            "version": 2,
+            "activationId": "f2dc903c-08f4-49ab-b68c-b108db41be62",
+            "workspaceId": "beauty-spa-client-portal",
+            "workspaceLabel": client["workspace"],
+            "ownerActorId": "c63af44e-b7c1-4dbf-970d-389d5bba93a7",
+            "ownerLabel": client["owner"],
+            "products": products,
+            "sourcePlans": source_plans,
+            "ownerCapabilities": ["commerce.read", "commerce.write", "website.read", "website.write"],
+            "target": {
+                "projectRef": "zvtzwcimpvvtkowflhda",
+                "releaseCommit": "a" * 40,
+                "adminCaSha256": "sha256:" + "1" * 64,
+                "schemaVersion": 11,
+            },
+            "forbiddenActions": ["capture_payments", "publish_domains"],
+            "expiresAt": "2099-01-01T00:00:00.000Z",
+            "planDigest": "sha256:" + "2" * 64,
+            "secretValuesExposed": False,
+        }
+
+    @staticmethod
+    def _managed_request_bindings(
+        bundle: dict[str, object], plan: dict[str, object]
+    ) -> list[dict[str, object]]:
+        client = bundle["client"]
+        products = bundle["products"]
+        source_plans = plan["sourcePlans"]
+        assert isinstance(client, dict)
+        assert isinstance(products, list)
+        assert isinstance(source_plans, list)
+        return [
+            {
+                "contract": "supermega.managed_trial_request.v1",
+                "product": product["productId"],
+                "workspaceLabel": client["workspace"],
+                "ownerLabel": client["owner"],
+                "templateId": product["templateId"],
+                "requestDigest": source_plan["sourceRequestDigest"],
+                "evidence": {
+                    "pilotOutcomeStatus": "improved",
+                    "pilotOutcomeDigest": "sha256:" + "9" * 64,
+                },
+                "rawRecordsIncluded": False,
+                "secretValuesExposed": False,
+            }
+            for product, source_plan in zip(products, source_plans, strict=True)
+        ]
+
+    @staticmethod
+    def _single_activation_plan_for_bundle(bundle: dict[str, object]) -> dict[str, object]:
+        client = bundle["client"]
+        access = bundle["tenantAccessPlan"]
+        assert isinstance(client, dict)
+        assert isinstance(access, dict)
+        products = list(access["products"])
+        assert len(products) == 1
+        return {
+            "contract": ACTIVATION_PLAN_CONTRACT,
+            "version": 1,
+            "activationId": "f2dc903c-08f4-49ab-b68c-b108db41be62",
+            "workspaceId": "beauty-spa-client-portal",
+            "workspaceLabel": client["workspace"],
+            "ownerActorId": "c63af44e-b7c1-4dbf-970d-389d5bba93a7",
+            "ownerLabel": client["owner"],
+            "product": products[0],
+            "sourceRequestDigest": "sha256:" + "3" * 64,
+            "ownerCapabilities": ["commerce.read", "commerce.write"],
+            "target": {
+                "projectRef": "zvtzwcimpvvtkowflhda",
+                "releaseCommit": "a" * 40,
+                "adminCaSha256": "sha256:" + "1" * 64,
+                "schemaVersion": 11,
+            },
+            "forbiddenActions": ["capture_payments", "publish_domains"],
+            "expiresAt": "2099-01-01T00:00:00.000Z",
+            "planDigest": "sha256:" + "2" * 64,
+            "secretValuesExposed": False,
+        }
 
     def test_spa_portal_cli_builds_and_verifies_three_isolated_no_write_plans(self) -> None:
         with tempfile.TemporaryDirectory(prefix="supermega-portal-") as temporary:
@@ -163,6 +267,150 @@ class ClientPortalProvisioningTests(unittest.TestCase):
             stale["products"][0]["packageDigest"] = "sha256:" + "0" * 64
             with self.assertRaises(ClientPortalProvisioningError):
                 verify_client_portal_provisioning_bundle(bundle, stale)
+
+    def test_portal_activation_manifest_binds_one_tenant_products_routes_and_custom_policy(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-portal-activation-") as temporary:
+            preparation_path = self._spa_preparation(Path(temporary))
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            bundle = build_client_portal_provisioning_bundle(preparation)
+            plan = self._activation_plan_for_bundle(bundle)
+            requests = self._managed_request_bindings(bundle, plan)
+            with mock.patch(
+                "tools.prepare_client_portal_provisioning.validate_multi_product_activation_plan",
+                return_value=plan,
+            ), mock.patch(
+                "tools.prepare_client_portal_provisioning.validate_managed_trial_request",
+                side_effect=lambda value: value,
+            ):
+                manifest = build_client_portal_activation_manifest(
+                    bundle, preparation, plan, requests
+                )
+                self.assertEqual(manifest["contract"], ACTIVATION_MANIFEST_CONTRACT)
+                self.assertEqual(manifest["status"], "approved_plan_not_applied")
+                self.assertEqual(
+                    manifest["tenant"]["products"],
+                    ["shop", "website", "ecommerce"],
+                )
+                self.assertEqual(manifest["tenant"]["membershipRowsPlanned"], 1)
+                self.assertEqual(
+                    [item["setupPath"] for item in manifest["portal"]["productBindings"]],
+                    [
+                        "/settings/?product=shop&pack=spa",
+                        "/settings/?product=website&template=lead-generation",
+                        "/settings/?product=ecommerce&template=social-storefront",
+                    ],
+                )
+                self.assertEqual(
+                    manifest["portal"]["productBindings"][-1]["surface"],
+                    "commerce",
+                )
+                self.assertEqual(
+                    manifest["activation"]["planDigest"], plan["planDigest"]
+                )
+                self.assertTrue(manifest["customSolutions"]["tenantBound"])
+                self.assertFalse(manifest["authority"]["tenantWritesPerformed"])
+                self.assertFalse(manifest["authority"]["productionActivationPerformed"])
+                self.assertEqual(
+                    verify_client_portal_activation_manifest(
+                        manifest, bundle, preparation, plan, requests
+                    ),
+                    manifest,
+                )
+
+                tampered = json.loads(json.dumps(manifest))
+                tampered["portal"]["productBindings"][0]["setupPath"] = "/plant/"
+                with self.assertRaises(ClientPortalProvisioningError):
+                    verify_client_portal_activation_manifest(
+                        tampered, bundle, preparation, plan, requests
+                    )
+
+    def test_portal_activation_manifest_rejects_product_or_identity_drift(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-portal-activation-drift-") as temporary:
+            preparation_path = self._spa_preparation(Path(temporary))
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            bundle = build_client_portal_provisioning_bundle(preparation)
+            plan = self._activation_plan_for_bundle(bundle)
+            requests = self._managed_request_bindings(bundle, plan)
+            with mock.patch(
+                "tools.prepare_client_portal_provisioning.validate_multi_product_activation_plan",
+                side_effect=lambda value, **_kwargs: value,
+            ), mock.patch(
+                "tools.prepare_client_portal_provisioning.validate_managed_trial_request",
+                side_effect=lambda value: value,
+            ):
+                wrong_products = json.loads(json.dumps(plan))
+                wrong_products["products"] = ["shop", "website"]
+                with self.assertRaises(ClientPortalProvisioningError):
+                    build_client_portal_activation_manifest(
+                        bundle, preparation, wrong_products, requests
+                    )
+
+                wrong_owner = json.loads(json.dumps(plan))
+                wrong_owner["ownerLabel"] = "Different Owner"
+                with self.assertRaises(ClientPortalProvisioningError):
+                    build_client_portal_activation_manifest(
+                        bundle, preparation, wrong_owner, requests
+                    )
+
+                wrong_template = json.loads(json.dumps(requests))
+                wrong_template[0]["templateId"] = "retail-wholesale"
+                with self.assertRaises(ClientPortalProvisioningError):
+                    build_client_portal_activation_manifest(
+                        bundle, preparation, plan, wrong_template
+                    )
+
+                wrong_digest = json.loads(json.dumps(requests))
+                wrong_digest[0]["requestDigest"] = "sha256:" + "0" * 64
+                with self.assertRaises(ClientPortalProvisioningError):
+                    build_client_portal_activation_manifest(
+                        bundle, preparation, plan, wrong_digest
+                    )
+
+    def test_shop_only_portal_binds_to_single_product_activation_without_ecommerce(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="supermega-shop-activation-") as temporary:
+            preparation_path = self._spa_preparation(Path(temporary), "shop")
+            preparation = json.loads(preparation_path.read_text(encoding="utf-8"))
+            bundle = build_client_portal_provisioning_bundle(preparation)
+            plan = self._single_activation_plan_for_bundle(bundle)
+            product = bundle["products"][0]
+            request = {
+                "contract": "supermega.managed_trial_request.v1",
+                "product": "shop",
+                "workspaceLabel": bundle["client"]["workspace"],
+                "ownerLabel": bundle["client"]["owner"],
+                "templateId": product["templateId"],
+                "requestDigest": plan["sourceRequestDigest"],
+                "evidence": {"pilotOutcomeStatus": "improved"},
+                "rawRecordsIncluded": False,
+                "secretValuesExposed": False,
+            }
+            with mock.patch(
+                "tools.prepare_client_portal_provisioning.validate_activation_plan",
+                return_value=plan,
+            ), mock.patch(
+                "tools.prepare_client_portal_provisioning.validate_managed_trial_request",
+                return_value=request,
+            ):
+                manifest = build_client_portal_activation_manifest(
+                    bundle, preparation, plan, [request]
+                )
+            self.assertEqual(manifest["tenant"]["products"], ["shop"])
+            self.assertEqual(manifest["activation"]["planContract"], ACTIVATION_PLAN_CONTRACT)
+            self.assertEqual(
+                manifest["portal"]["productBindings"],
+                [{
+                    "product": "shop",
+                    "runtimeProduct": "commerce",
+                    "surface": "commerce",
+                    "templateId": product["templateId"],
+                    "setupPath": "/settings/?product=shop&pack=spa",
+                    "recipePlanId": product["provisioningPlan"]["planId"],
+                    "recipePlanDigest": product["provisioningPlan"]["planDigest"],
+                    "sourcePackageDigest": product["source"]["packageDigest"],
+                    "managedRequestDigest": plan["sourceRequestDigest"],
+                    "managedEvidence": {"pilotOutcomeStatus": "improved"},
+                }],
+            )
 
     def test_shop_only_access_does_not_grant_ecommerce_product(self) -> None:
         with tempfile.TemporaryDirectory(prefix="supermega-shop-only-portal-") as temporary:
