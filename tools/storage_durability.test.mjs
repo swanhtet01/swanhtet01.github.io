@@ -841,6 +841,8 @@ test('a device that cannot produce a backup still gets the dead control, not a b
   assert.match(page, /function downloadWorkspaceBackup\(\) \{\s*if \(!currentBackup\) return/, 'the backup click handler no longer refuses to run without a backup')
   // Proven, not just pinned: the device the refusal tests above build has no backup to write.
   assert.equal(collectLocalWorkspaceBackup(backupStorage(oversizeDevice()), backupAt), null, 'the oversize device produced a backup, so the disabled control would be hiding a working file')
+})
+
 // ---------------------------------------------------------------------------
 // Backup headroom -- the meter that has to speak BEFORE the refusal above does.
 //

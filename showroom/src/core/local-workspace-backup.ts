@@ -300,22 +300,37 @@ function jsonStringByteLength(text: string): number {
  * nowhere near.
  *
  * COST, honestly. This is not cheap in absolute terms and the comment should not pretend it
- * is. Measured on the largest device that can produce a backup at ALL -- Shop at its 2 MiB
- * write ceiling plus the Plant record one byte under the wall, a 5,242,880-byte file -- one
- * pass takes about 15 ms on a development desktop, against the ~17 ms the
- * collectLocalWorkspaceBackup that produced its argument already costs. So the settings page
- * roughly doubles a cost it was already paying, at the single worst device this product can
+ * is. Two fixtures, both on a development desktop, both re-measured AFTER #535 moved the
+ * download off the mount path -- a figure quoted against a mount that no longer exists is how
+ * this repo carried a false contrast ratio for weeks.
+ *
+ *   Shop alone at its 2 MiB write ceiling, a 2,341,700-byte backup file:
+ *     collectLocalWorkspaceBackup    7.4 ms   (on mount, unchanged by #535)
+ *     this function                  6.7 ms   (on mount, added here)
+ *   The largest device that can produce a backup at ALL -- that Shop plus the Plant record
+ *   one byte under the wall, a 5,242,880-byte file:
+ *     collectLocalWorkspaceBackup   15.8 ms
+ *     this function                 13.1 ms
+ *
+ * So it roughly doubles the one call it rides on, at the single worst device this product can
  * hold; a shop with a few hundred sales pays a small fraction of that, because the work is
  * linear in what is stored.
  *
- * What makes that acceptable is WHEN it is paid: once per visit to the settings page, in a
+ * In MOUNT terms it is still a large net win, because #535 removed far more than this adds.
+ * On the heavier fixture the settings page cost 50.5 ms to open before #535 -- that same
+ * collect plus the 34.7 ms data: URL it built whether or not Download was ever pressed --
+ * 15.8 ms after it, and 28.9 ms with this meter on top. That is 43% cheaper to open than
+ * before either change. This is not a licence to spend the difference; it is why spending
+ * this much of it is defensible.
+ *
+ * What makes it acceptable is WHEN it is paid: once per visit to the settings page, in a
  * useMemo at mount. Never per render, never per sale, never on the till's path, and never on
  * first paint of any product. It is the same trade the Shop meter made -- one weighing per
  * event that could have changed the answer -- moved to the event that matters here, which is
  * an owner opening the page the backup button lives on.
  *
  * The single pass is also the reason it is written this way rather than as
- * TextEncoder().encode(JSON.stringify(backup)). Measured against the same fixture that
+ * TextEncoder().encode(JSON.stringify(backup)). Measured against the heavier fixture that
  * alternative costs about 18 ms, gives no per-product breakdown, and allocates a second
  * five-megabyte string plus a five-megabyte byte array on a device that is by hypothesis
  * short of room. Summing JSON.stringify per record costs the same 18 ms with the same
