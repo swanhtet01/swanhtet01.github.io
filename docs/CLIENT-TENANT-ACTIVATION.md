@@ -11,6 +11,28 @@ capabilities used by the shared catalog and Shop handoff. Do not invent an
 Ecommerce entitlement, while operational writes stay on the existing commerce
 RLS surface.
 
+## One client launch board first (no provider writes)
+
+After `client:prepare` produces the reviewed private preparation, compile one
+operator-facing board before preparing an activation target. It lists only the
+client's selected products, exact setup routes, entitlement-valid connections,
+custom-solution lifecycle, evidence gaps, and next actions. It contains no raw
+client rows or secrets and cannot activate a tenant.
+
+```powershell
+npm run client:launch:board -- `
+  --preparation C:\reviewed\client-preparation.json `
+  --output C:\reviewed\client-launch-board.json
+
+npm run client:launch:board:verify -- `
+  --preparation C:\reviewed\client-preparation.json `
+  --board C:\reviewed\client-launch-board.json
+```
+
+Add one `--managed-request-file` per purchased product, in canonical Shop,
+Plant, Website, Ecommerce order, as those owner-reviewed outcomes become
+available. The board advances only the gates proved by those exact requests.
+
 ## Required reviewed inputs
 
 - One current managed trial request per purchased product, in this order:
