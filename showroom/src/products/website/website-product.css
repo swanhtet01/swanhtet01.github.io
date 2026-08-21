@@ -3466,7 +3466,23 @@
   color: var(--website-bg);
 }
 
-.theme-dark .website-recovery-actions > button {
+/* THE SAME CASCADE TRAP AS #528 AND #530, third instance, found by tools/check_css_contracts.mjs
+   rule 3 rather than by eye. This rule is 0-2-1 and sits ~440 lines AFTER
+   `.website-recovery-actions > button.is-quiet` (:3031), which is ALSO 0-2-1, so source order
+   handed it the win and the quiet buttons' `color: var(--website-muted)` never rendered in dark.
+   Measured on the composited surface: the quiet button paints --website-panel #0d131b and was
+   getting --website-bg #05080d on it, which is 1.08:1 -- present in the DOM, invisible on screen.
+   As written it is --website-muted #a4b0be at 8.46:1. Those two buttons are "Cancel" and "Remove"
+   in the Website recovery panel, so this was a data-recovery control the owner could not read.
+   Scoped with :not(.is-quiet) rather than re-declaring the colour on a 0-3-1
+   `.theme-dark ... button.is-quiet`: raising specificity repairs the one rule that exists today
+   and leaves the trap armed for the next variant added, which is the reasoning #528 recorded.
+   The declaration is NOT redundant here -- unlike the two earlier instances it does real work and
+   could not simply be deleted. The base rule paints `color: #fff` on --website-green, which is a
+   bright mint in dark where white measures 1.44:1, so the flip is load-bearing for the plain
+   Download button; and `.is-danger` declares no colour of its own, so it takes --website-bg on
+   --website-danger #ff8291 from here too. Both keep it, byte-identical, because both still match. */
+.theme-dark .website-recovery-actions > button:not(.is-quiet) {
   color: var(--website-bg);
 }
 
