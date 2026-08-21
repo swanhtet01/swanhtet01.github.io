@@ -45,10 +45,11 @@ const exactWorkspaceKeys = new Set([
   // deliberately NOT portable in company-backup.ts, the same classification as the local metrics
   // key above.
   'supermega.plant.job-view.v1',
-  // Order-intake correction evidence: digest-only records of where AI got a channel order wrong and
-  // the operator fixed it. It holds no message text and no corrected values, but it is still a record
-  // OF this shop's messages, so "Reset this device" must reach it — a shop that asks for a clean
-  // device should not keep a ledger of digests describing conversations it thinks it erased.
+  // Order-intake correction evidence, v1: the single device-wide key this family used before the
+  // records started naming the operator who reviewed the draft (see the v2 prefix below). Nothing
+  // reads or writes it any more and it is deliberately not migrated — a v1 record predates the
+  // operator identity and inventing one would fabricate it. It stays registered purely so a device
+  // still holding a v1 blob has it erased by "Reset this device" rather than orphaned forever.
   'supermega.shop.order-intake-evidence.v1',
 ])
 
@@ -67,6 +68,12 @@ const workspaceKeyPrefixes = [
   // what makes every projected balance auditable. Registered so reset clears every scope
   // and backups carry them.
   'supermega.shop.loyalty.v1.',
+  // Order-intake correction evidence (order-intake-correction-capture.ts), one record set per
+  // workspace scope ('managed:<id>' / 'local' -- see orderIntakeEvidenceStorageKey). Digest-only:
+  // no message text, no corrected values. It is still a record OF this shop's messages, so "Reset
+  // this device" must reach every scope — a shop that asks for a clean device should not keep a
+  // ledger of digests describing conversations it thinks it erased.
+  'supermega.shop.order-intake-evidence.v2.',
 ]
 
 type WorkspaceStorageReader = Pick<Storage, 'key' | 'length'>
