@@ -1276,8 +1276,18 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, loyaltyPoin
             numeric ones for the description, so a screen reader reads
             "Add to this sale · <my> Rice 5kg ဆန်" then "3500 12 in stock 2 in sale".
             Nothing here is visual: every id is on a node that already rendered, so
-            this changes no layout and no CSS. */}
-        <span className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
+            this changes no layout and no CSS.
+
+            The shared action node is aria-hidden. .sr-only only clips it VISUALLY,
+            so without that a screen-reader user browsing the catalog hears "Add to
+            this sale" once as a stray line of its own -- and hears it even when the
+            search matches nothing and there is no tile to add anything to. Being
+            aria-hidden does not stop it naming the buttons: a node referenced
+            directly by aria-labelledby is included in the name computation whether
+            or not it is hidden. Measured, not assumed -- plain, aria-hidden, and
+            hidden all compute the identical name and description, and only the plain
+            one leaves a traversable StaticText behind. */}
+        <span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item, tileIndex) => {
             const quantity = cart[item.sku] ?? 0

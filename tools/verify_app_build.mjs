@@ -5944,7 +5944,11 @@ if (!shopTileLabelledBy || !shopTileDescribedBy
   // The shared action phrase is a literal in the labelledby list, so it needs its own
   // node, and it must go through bi() rather than being hardcoded English.
   || !shopTileLabelledBy[1].includes("'shop-tile-action'")
-  || !shopCounterContract.includes('<span className="sr-only" id="shop-tile-action">{bi(\'Add to this sale\')}</span>')
+  // aria-hidden is load-bearing, not decoration: .sr-only clips visually only, so
+  // dropping it puts a stray "Add to this sale" line into catalog browsing -- audible
+  // even on an empty catalog with no tile to name. It does not weaken the name, since
+  // a directly-referenced node counts hidden or not (measured on all three shapes).
+  || !shopCounterContract.includes('<span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi(\'Add to this sale\')}</span>')
   || !i18nActionsTable.includes("'Add to this sale':")
   // The regression this whole block exists to prevent: putting an aria-label back on
   // the tile silently re-overrides the subtree and every reference above goes dead.
