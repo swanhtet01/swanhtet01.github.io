@@ -52,21 +52,36 @@ import type { EcommerceOrderRequestV2 } from '../products/ecommerce/ecommerce-bu
 
 const ECOMMERCE_BUYING_LOCAL_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'
 
-// Same raw-localStorage read EcommercePipelineView below uses: readEcommerceBuyingState's
-// validation is async, and every other view on this page reads its workspace state
-// synchronously in useMemo, so this stays consistent with that existing pattern rather than
-// introducing the only async view on the page. Malformed or missing data degrades to an
-// empty queue rather than throwing.
-function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
+// Every report view on this page is the same two wrappers, and each one used to spell the class
+// lists out again -- eleven copies of one and eleven of the other, all of which ship. This chunk
+// carries a documented byte budget (verify_app_build.mjs, workspace_controls_chunk_boundary)
+// precisely because a settings page has no business growing without someone noticing, so the
+// repetition is hoisted rather than paid for eleven times.
+const SETTINGS_SCREEN = 'workspace-screen settings-screen'
+const SETTINGS_STACK = 'settings-control-stack'
+
+// The one raw-localStorage read of the Ecommerce record on this page. readEcommerceBuyingState's
+// validation is async, and every other view here reads its workspace state synchronously in
+// useMemo, so this stays consistent with that existing pattern rather than introducing the only
+// async view on the page. Malformed or missing data degrades to null rather than throwing.
+//
+// Three views wanted this and each had written its own copy, inlining the same 56-character
+// storage key and the same try/parse three times over. That is duplication the till pays for:
+// this chunk is on a byte budget, and a literal repeated in three closures is three literals in
+// the bundle.
+function readEcommerceBuyingRecord(): Record<string, unknown[]> | null {
   try {
-    if (typeof window === 'undefined') return []
+    if (typeof window === 'undefined') return null
     const raw = window.localStorage.getItem(ECOMMERCE_BUYING_LOCAL_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as { requests?: unknown }
-    return Array.isArray(parsed.requests) ? parsed.requests as EcommerceOrderRequestV2[] : []
+    return raw ? JSON.parse(raw) as Record<string, unknown[]> : null
   } catch {
-    return []
+    return null
   }
+}
+
+function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
+  const requests = readEcommerceBuyingRecord()?.requests
+  return Array.isArray(requests) ? requests as EcommerceOrderRequestV2[] : []
 }
 
 function CeoOperatingBriefView() {
@@ -77,12 +92,12 @@ function CeoOperatingBriefView() {
   const plantOee = useMemo(() => projectPlantOeeSummary(production, new Date().toISOString()), [production])
   const websiteLeads = useMemo(() => projectWebsiteLeadSummary(ledger), [ledger])
   const crmJourney = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
-  const ecommerce = useMemo((): EcommercePipelineSummary => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } } catch { return { totalRequests: 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: 0, pendingCancellationIntents: 0 } } }, [])
+  const ecommerce = useMemo((): EcommercePipelineSummary => { const p = readEcommerceBuyingRecord(); return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } }, [])
   const brief = useMemo(() => projectCeoOperatingBrief(shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney, new Date().toISOString()), [shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney])
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Cross-product operating summary. Read-only." eyebrow="CEO brief" title="Operating brief" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         {brief.alerts.length > 0 && <section className="core-panel">
           <div><span className="core-eyebrow">Alerts</span></div>
           <div className="readiness-list">{brief.alerts.map((a, i) => <span key={i}><small>{a.product}</small><strong>{a.message}</strong></span>)}</div>
@@ -111,11 +126,11 @@ function CeoOperatingBriefView() {
 }
 
 function EcommercePipelineView() {
-  const stats = useMemo(() => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return p ? { requests: p.requests?.length ?? 0, returns: p.returnIntents?.length ?? 0, cancels: p.cancellationIntents?.length ?? 0 } : null } catch { return null } }, [])
+  const stats = useMemo(() => { const p = readEcommerceBuyingRecord(); return p ? { requests: p.requests?.length ?? 0, returns: p.returnIntents?.length ?? 0, cancels: p.cancellationIntents?.length ?? 0 } : null }, [])
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Order requests from Ecommerce. Read-only." eyebrow="Ecommerce" title="Pipeline" />
-      <div className="settings-control-stack"><section className="core-panel">
+      <div className={SETTINGS_STACK}><section className="core-panel">
         <div><span className="core-eyebrow">Pipeline</span></div>
         {stats ? <div className="readiness-list">
           <span><small>Requests</small><strong>{stats.requests}</strong></span>
@@ -137,9 +152,9 @@ function CustomerJourneyView() {
     ['Avg orders / customer', summary.uniqueCustomers > 0 ? String(summary.averageOrdersPerCustomer) : '—'],
   ]
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Customer order history from Shop records. Read-only." eyebrow="CRM" title="Customer journey" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel">
           <div><span className="core-eyebrow">Customer summary</span></div>
           <div aria-label="Customer journey summary" className="readiness-list">
@@ -176,9 +191,9 @@ function CrossProductView() {
     ['Closed jobs with receipt gap', summary.closedJobsWithGap ? `${summary.closedJobsWithGap} (${summary.totalReceiptGap} units)` : 'None'],
   ]
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Shop orders linked to Plant jobs. Read-only — nothing is changed." eyebrow="Cross-product" title="Order and production status" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel">
           <div><span className="core-eyebrow">Operating summary</span></div>
           <div aria-label="Cross-product summary" className="readiness-list">
@@ -214,9 +229,9 @@ function WebsiteLeadsView() {
     ['Closure rate', summary.totalLeads > 0 ? `${summary.closureRate}%` : '—'],
   ]
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Lead funnel from Website contact forms. Read-only." eyebrow="Website" title="Lead summary" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel">
           <div><span className="core-eyebrow">Funnel summary</span></div>
           <div aria-label="Website lead summary" className="readiness-list">
@@ -250,9 +265,9 @@ function PlantOeeView() {
     ['Avg job progress', `${summary.avgJobProgress}%`],
   ]
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Job quality and throughput from Plant production records. Read-only." eyebrow="Plant" title="OEE summary" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel">
           <div><span className="core-eyebrow">Production summary</span></div>
           <div aria-label="Plant OEE summary" className="readiness-list">
@@ -286,9 +301,9 @@ function PlantMaintenanceDueView() {
     ['Critical overdue', String(summary.criticalOverdueCount)],
   ]
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Preventive maintenance due dates from equipment maintenance strategy records. Read-only — nothing here starts or completes maintenance work." eyebrow="Plant" title="Maintenance due" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel">
           <div><span className="core-eyebrow">Due summary</span></div>
           <div aria-label="Maintenance due summary" className="readiness-list">
@@ -344,9 +359,9 @@ function EcommerceStaleRequestsView() {
     ['Oldest pending', queue[0] ? `${queue[0].ageHours}h` : '—'],
   ]
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Pending Ecommerce requests Shop hasn't reviewed yet, oldest first. Read-only — no message is sent to any customer from here." eyebrow="Ecommerce" title="Stale request follow-up" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel">
           <div><span className="core-eyebrow">Follow-up queue</span></div>
           <div aria-label="Stale request summary" className="readiness-list">
@@ -388,9 +403,9 @@ function ShopRevenueView() {
     ['Average order value', String(summary.averageOrderValue)],
   ]
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Revenue projection from Shop orders and shift closes. Read-only." eyebrow="Shop" title="Revenue summary" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel">
           <div><span className="core-eyebrow">Revenue summary</span></div>
           <div aria-label="Revenue summary" className="readiness-list">
@@ -432,9 +447,9 @@ function ShopRevenueView() {
 function LocalMetricsView() {
   const events = getSessionEvents()
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading copy="Session activity. Nothing leaves this device." eyebrow="Analytics" title="Session metrics" />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         {events.length === 0
           ? <p className="form-notice">No events yet. Open a product to begin.</p>
           : <table><thead><tr><th>Product</th><th>Action</th></tr></thead><tbody>
@@ -734,14 +749,14 @@ export function WorkspaceControlsPage() {
   }
 
   return (
-    <div className="workspace-screen settings-screen">
+    <div className={SETTINGS_SCREEN}>
       <PageHeading
         actions={<Link className="core-button" to="/">Back to products</Link>}
         copy="Check company readiness and protect the work saved in this browser. Product setup and internal client tools stay separate."
         eyebrow="Workspace controls"
         title="Status and recovery"
       />
-      <div className="settings-control-stack">
+      <div className={SETTINGS_STACK}>
         <section className="core-panel system-boundary-panel">
           <div className="panel-head"><div><span className="core-eyebrow">Company boundary</span><h2>{runtime.writesReady ? 'Company writes are ready' : 'Real changes stay locked'}</h2><p>Local work remains usable while hosted identity, persistence, and security evidence are checked.</p></div><RuntimeBadge status={runtime.status} /></div>
           <div aria-label="Workspace readiness" className="readiness-list">{statusRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
