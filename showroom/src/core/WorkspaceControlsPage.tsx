@@ -10,7 +10,11 @@ import {
   collectLocalWorkspaceBackup,
   describeLocalWorkspaceBackupRefusal,
   listLocalWorkspaceStorageKeys,
+  localWorkspaceBackupHeadroomDetail,
+  localWorkspaceBackupHeadroomLabel,
+  localWorkspaceBackupHeadroomMessage,
   localWorkspaceBackupRefusalMessage,
+  measureLocalWorkspaceBackupHeadroom,
   restoreLocalWorkspaceBackup,
   restoreLocalWorkspaceBackupFromEvidence,
   type LocalWorkspaceBackup,
@@ -560,6 +564,14 @@ export function WorkspaceControlsPage() {
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNotice, setArchiveNotice] = useState('')
   const backupRefusal = useMemo(() => (currentBackup ? null : collectBackupRefusal()), [currentBackup])
+  // The warning that has to arrive BEFORE that refusal does. Measured from the very backup
+  // the button above will download, so the two readings describe one envelope and can never
+  // disagree; and only when there IS one, so this and the refusal are mutually exclusive by
+  // construction rather than by a condition someone has to keep true.
+  const backupHeadroom = useMemo(
+    () => (currentBackup ? measureLocalWorkspaceBackupHeadroom(currentBackup) : null),
+    [currentBackup],
+  )
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
@@ -783,6 +795,28 @@ export function WorkspaceControlsPage() {
               dead control, and is told neither why nor what to do instead. role="alert"
               because she did not open this page idly -- something told her to. */}
           {backupRefusal ? <p className="form-notice" role="alert">{localWorkspaceBackupRefusalMessage(backupRefusal)}</p> : null}
+          {/* The warning that arrives before that refusal does, and the only place on this
+              device where the device-wide limit is spoken about at all.
+              WHY HERE AND NOWHERE ELSE. The limit is the backup FILE, so the only thing an
+              owner can do about it is take one -- and that button is the control directly
+              above this line. Warning her in Shop instead would put a Plant-shaped problem
+              in front of a shop owner counting sales, in a product whose own meter is
+              measuring something else entirely; she would have two storage readings to
+              reconcile and no action in reach of either.
+              SILENT BY DEFAULT, and silent again once the wall is passed: 'clear' renders
+              nothing, and a device over the cap has no headroom to report -- it has the
+              refusal above, which is why these two can never appear together.
+              Same banner element, same data-headroom hook and same pill vocabulary the Shop
+              meter uses, on purpose. It is one storage picture in two places, not two
+              pictures, so an owner who has seen the till warning recognises this on sight. */}
+          {backupHeadroom && backupHeadroom.level !== 'clear'
+            ? <div className="production-mode-banner storage-durability-banner" data-headroom={backupHeadroom.level} role={backupHeadroom.level === 'urgent' ? 'alert' : undefined}>
+              <span className={`status-pill ${backupHeadroom.level === 'urgent' ? 'danger' : 'pending'}`}>{localWorkspaceBackupHeadroomLabel(backupHeadroom)}</span>
+              <p>{localWorkspaceBackupHeadroomMessage(backupHeadroom)}
+                <small className="storage-headroom-detail">{localWorkspaceBackupHeadroomDetail(backupHeadroom)}</small>
+              </p>
+            </div>
+            : null}
         </section>
 
         {/* The sales archive sits BESIDE the workspace backup, not instead of it, and the copy

@@ -498,7 +498,10 @@ const backupBundle = await build({
       export {
         collectLocalWorkspaceBackup, describeLocalWorkspaceBackupRefusal,
         localWorkspaceBackupRefusalMessage,
+        measureLocalWorkspaceBackupHeadroom, localWorkspaceBackupHeadroomMessage,
+        localWorkspaceBackupHeadroomLabel, localWorkspaceBackupHeadroomDetail,
         LOCAL_WORKSPACE_BACKUP_MAX_BYTES, LOCAL_WORKSPACE_BACKUP_MAX_RECORDS,
+        LOCAL_WORKSPACE_BACKUP_TIGHT_RATIO, LOCAL_WORKSPACE_BACKUP_URGENT_RATIO,
       } from './local-workspace-backup.ts'
       export { createSeedCommerce, COMMERCE_KEY } from './commerce-workspace.ts'
       export { COMMERCE_SYNC_MAX_STATE_BYTES } from './commerce-sync-outbox.ts'
@@ -520,7 +523,10 @@ const backupBundle = await build({
 const {
   collectLocalWorkspaceBackup, describeLocalWorkspaceBackupRefusal,
   localWorkspaceBackupRefusalMessage,
+  measureLocalWorkspaceBackupHeadroom, localWorkspaceBackupHeadroomMessage,
+  localWorkspaceBackupHeadroomLabel, localWorkspaceBackupHeadroomDetail,
   LOCAL_WORKSPACE_BACKUP_MAX_BYTES, LOCAL_WORKSPACE_BACKUP_MAX_RECORDS,
+  LOCAL_WORKSPACE_BACKUP_TIGHT_RATIO, LOCAL_WORKSPACE_BACKUP_URGENT_RATIO,
   createSeedCommerce, COMMERCE_KEY, COMMERCE_SYNC_MAX_STATE_BYTES,
   createSeedProduction, registerProductionJob, recordProductionOutput, PRODUCTION_KEY,
   createInitialWorkspace, WEBSITE_STORAGE_KEY,
@@ -835,4 +841,281 @@ test('a device that cannot produce a backup still gets the dead control, not a b
   assert.match(page, /function downloadWorkspaceBackup\(\) \{\s*if \(!currentBackup\) return/, 'the backup click handler no longer refuses to run without a backup')
   // Proven, not just pinned: the device the refusal tests above build has no backup to write.
   assert.equal(collectLocalWorkspaceBackup(backupStorage(oversizeDevice()), backupAt), null, 'the oversize device produced a backup, so the disabled control would be hiding a working file')
+// ---------------------------------------------------------------------------
+// Backup headroom -- the meter that has to speak BEFORE the refusal above does.
+//
+// The refusal cases above are about a device that has already lost its backup. These are
+// about the interval before that, which until now was completely silent: Shop is bounded and
+// metered, Website is structurally bounded, and Plant is bounded by nothing at all, so a
+// device could sit at a green Shop meter and be one Plant job away from never being copyable
+// off again.
+//
+// Everything below is derived at run time from the same fixtures the squeeze guard uses, and
+// the sizes are solved against the real serialiser rather than written down.
+
+// A device whose backup file weighs EXACTLY `targetBytes`, so a threshold can be probed on
+// the byte either side of it. The filler is plain 'x' with nothing to escape, which makes the
+// size solvable in one correction step -- escaping exactness is the subject of its own case
+// below, on real workspace text, and must not be tangled into a threshold probe.
+function deviceOfExactBackupBytes(targetBytes) {
+  const build = (length) => ({ [PRODUCTION_KEY]: 'x'.repeat(length) })
+  const probe = 1_000
+  const measured = producedBytes(build(probe))
+  assert.ok(measured, 'the probe fixture must be small enough to back up')
+  const length = probe + (targetBytes - measured)
+  assert.ok(length > 0, `${targetBytes} bytes is below this fixture's floor`)
+  const records = build(length)
+  assert.equal(producedBytes(records), targetBytes, 'the fixture did not land on its target size')
+  return records
+}
+
+function headroomOf(records) {
+  const backup = collectLocalWorkspaceBackup(backupStorage(records), backupAt)
+  assert.ok(backup, 'this fixture was supposed to be able to produce a backup')
+  return measureLocalWorkspaceBackupHeadroom(backup)
+}
+
+// --- the measure has to be the same measure -------------------------------------------
+
+// The meter weighs the envelope WITHOUT building it, because building it again would
+// allocate a second copy of every record on a device that is by hypothesis short of room.
+// That is only safe if the arithmetic agrees with JSON.stringify byte for byte: a figure that
+// drifted low would show a green meter to a device that cannot back up, which is the exact
+// failure this whole lane exists to remove. Swept over real workspace text AND over the
+// character classes an eyeballed implementation gets wrong -- quotes, backslashes, control
+// characters, multi-byte and astral characters, and a lone surrogate.
+test('the headroom is weighed with the same arithmetic the download is gated on', () => {
+  const cases = [
+    { name: 'a realistic two-product device', records: {
+      [COMMERCE_KEY]: shopAtCeiling,
+      [PRODUCTION_KEY]: JSON.stringify(buildPlant(40)),
+      [WEBSITE_STORAGE_KEY]: websiteRecord,
+    } },
+    { name: 'quotes and backslashes', records: { [PRODUCTION_KEY]: '{"a":"b\\\\c\\"d"}'.repeat(200) } },
+    { name: 'control characters', records: { [PRODUCTION_KEY]: ' \b\t\n\f\r'.repeat(200) } },
+    { name: 'Myanmar and other multi-byte text', records: { [PRODUCTION_KEY]: 'ရန်ကုန် café naïve'.repeat(200) } },
+    { name: 'astral characters', records: { [PRODUCTION_KEY]: '\u{1F600}\u{1D11E}'.repeat(200) } },
+    { name: 'a lone high surrogate', records: { [PRODUCTION_KEY]: `x\uD83D${'y'.repeat(50)}` } },
+    { name: 'a lone low surrogate', records: { [PRODUCTION_KEY]: `x\uDE00${'y'.repeat(50)}` } },
+    { name: 'an empty record', records: { [PRODUCTION_KEY]: '' } },
+  ]
+  for (const { name, records } of cases) {
+    const backup = collectLocalWorkspaceBackup(backupStorage(records), backupAt)
+    assert.ok(backup, `${name}: the fixture must be able to produce a backup`)
+    const truth = encodedBytes(JSON.stringify(backup))
+    assert.equal(measureLocalWorkspaceBackupHeadroom(backup).bytes, truth, `${name}: the meter and the download disagree about the size of the same file`)
+  }
+})
+
+// The record COUNT is the same subject: a meter that only counted bytes would have to be told
+// the count separately, and the two could drift.
+test('the record count the meter reports is the count the file would carry', () => {
+  const records = { [COMMERCE_KEY]: shopAtCeiling, [WEBSITE_STORAGE_KEY]: websiteRecord }
+  const headroom = headroomOf(records)
+  assert.equal(headroom.records, 2)
+  assert.equal(headroom.maxBytes, LOCAL_WORKSPACE_BACKUP_MAX_BYTES)
+  assert.equal(headroom.maxRecords, LOCAL_WORKSPACE_BACKUP_MAX_RECORDS)
+})
+
+// --- silence, and when it ends --------------------------------------------------------
+
+test('a device with room says nothing at all', () => {
+  const headroom = headroomOf(deviceOfExactBackupBytes(Math.round(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * 0.12)))
+  assert.equal(headroom.level, 'clear', 'a device at 12% of the backup cap must not be warned about anything')
+})
+
+test('the quiet notice turns on at 70% of the file and not a byte earlier', () => {
+  const at = Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * LOCAL_WORKSPACE_BACKUP_TIGHT_RATIO)
+  assert.equal(headroomOf(deviceOfExactBackupBytes(at - 1)).level, 'clear')
+  assert.equal(headroomOf(deviceOfExactBackupBytes(at)).level, 'tight')
+})
+
+test('the alert turns on at 90% of the file and not a byte earlier', () => {
+  const at = Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * LOCAL_WORKSPACE_BACKUP_URGENT_RATIO)
+  assert.equal(headroomOf(deviceOfExactBackupBytes(at - 1)).level, 'tight')
+  assert.equal(headroomOf(deviceOfExactBackupBytes(at)).level, 'urgent')
+})
+
+// One device, one pair of thresholds. If the Shop meter ever moves its bands and this does
+// not, an owner has two storage warnings that escalate at different moments and no way to
+// tell that they are measuring different things.
+test('the device meter escalates on the same ratios the Shop meter chose', async () => {
+  const durability = await freshModule()
+  assert.equal(LOCAL_WORKSPACE_BACKUP_TIGHT_RATIO, durability.COMMERCE_HEADROOM_TIGHT_RATIO)
+  assert.equal(LOCAL_WORKSPACE_BACKUP_URGENT_RATIO, durability.COMMERCE_HEADROOM_URGENT_RATIO)
+})
+
+// --- whichever ceiling binds, which is the whole point ---------------------------------
+
+test('a device near the record cap is told about records, not megabytes', () => {
+  const records = {}
+  for (let index = 0; index < Math.round(LOCAL_WORKSPACE_BACKUP_MAX_RECORDS * 0.8); index += 1) {
+    records[`supermega.shop.loyalty.v1.managed:workspace-${index}`] = JSON.stringify({ enabled: true, index })
+  }
+  const headroom = headroomOf(records)
+  assert.ok(headroom.bytes < LOCAL_WORKSPACE_BACKUP_MAX_BYTES * LOCAL_WORKSPACE_BACKUP_TIGHT_RATIO, 'this fixture is tiny -- if it is near the byte cap the fixture is wrong, not the code')
+  assert.equal(headroom.limit, 'records', 'a device comfortable on size but nearly out of record slots must be told about the ceiling it will actually hit')
+  assert.equal(headroom.level, 'tight')
+  const message = localWorkspaceBackupHeadroomMessage(headroom)
+  assert.match(message, /separate records/, 'a device limited by its record count must be told about records')
+  assert.ok(!/ MB/.test(message), `a record-limited device must not be told a size is the problem: ${message}`)
+  assert.match(localWorkspaceBackupHeadroomDetail(headroom), /of 256 records used/)
+})
+
+test('a device near the byte cap is told about size, not records', () => {
+  const headroom = headroomOf(deviceOfExactBackupBytes(Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * 0.95)))
+  assert.equal(headroom.limit, 'bytes')
+  assert.equal(headroom.level, 'urgent')
+  assert.match(localWorkspaceBackupHeadroomMessage(headroom), /MB/)
+})
+
+// --- the failure this lane exists to remove -------------------------------------------
+
+// The bisected wall: a Shop at its own enforced ceiling plus a Plant record of 2,468,949
+// bytes backs up, and one byte more does not. The point is that the LAST device that can
+// still be backed up is screaming about it rather than sitting green -- and that its own
+// Shop meter, measuring Shop's ceilings, would have said nothing at all.
+test('the last device that can still be backed up is already being warned', () => {
+  let low = 0
+  let high = LOCAL_WORKSPACE_BACKUP_MAX_BYTES
+  const deviceWith = (plantBytes) => ({
+    [COMMERCE_KEY]: shopAtCeiling,
+    [PRODUCTION_KEY]: recordOfBytes(createSeedProduction(), plantBytes),
+    [WEBSITE_STORAGE_KEY]: websiteRecord,
+  })
+  assert.ok(producedBytes(deviceWith(low)) !== null, 'the empty-Plant device must back up')
+  assert.equal(producedBytes(deviceWith(high)), null, 'the full-cap-Plant device must not back up')
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2)
+    if (producedBytes(deviceWith(middle)) !== null) low = middle
+    else high = middle
+  }
+  const headroom = headroomOf(deviceWith(low))
+  assert.equal(headroom.level, 'urgent', `the largest device that can still produce a backup (Plant at ${low.toLocaleString()} bytes) is not being warned -- it would meet the wall with no notice at all`)
+  assert.equal(headroom.dominant, 'Plant', 'the owner must be told which product is filling the file, or she cannot tell whether the growth is hers to slow down')
+
+  // ...and the warning opens a long way in front of that wall rather than on it, which is the
+  // whole difference between seeing a wall coming and being told about it on arrival. The
+  // distance is stated in Plant JOBS, measured from this suite's own per-job rate, because
+  // "1.3 MB of notice" means nothing to anybody.
+  let quietLow = 0
+  let quietHigh = low
+  while (quietHigh - quietLow > 1) {
+    const middle = Math.floor((quietLow + quietHigh) / 2)
+    if (headroomOf(deviceWith(middle)).level === 'clear') quietLow = middle
+    else quietHigh = middle
+  }
+  const jobsOfWarning = Math.floor((low - quietHigh) / PLANT_BYTES_PER_JOB)
+  assert.ok(
+    jobsOfWarning >= 500,
+    `this device gets only ${jobsOfWarning} Plant jobs of warning before it can no longer be backed up (first warned at ${quietHigh.toLocaleString()} bytes, wall at ${low.toLocaleString()}) -- a notice that arrives that late is a notice on arrival`,
+  )
+})
+
+// A device that has already crossed the wall must not produce a headroom reading at all:
+// there is nothing left to warn about, only the refusal. This is structural rather than
+// conditional -- there is no backup object to measure -- and the sweep proves that the two
+// states partition every size instead of overlapping or leaving a gap.
+test('a warning and a refusal can never be shown at the same time', () => {
+  for (let step = -3; step <= 3; step += 1) {
+    const target = Math.round(LOCAL_WORKSPACE_BACKUP_MAX_BYTES - (COMMERCE_SYNC_MAX_STATE_BYTES / 2) + step * 40_000)
+    const records = { [PRODUCTION_KEY]: recordOfBytes(createSeedProduction(), target) }
+    const backup = collectLocalWorkspaceBackup(backupStorage(records), backupAt)
+    const refusal = describeLocalWorkspaceBackupRefusal(backupStorage(records), backupAt)
+    assert.equal(
+      backup === null,
+      refusal !== null,
+      `at ${target.toLocaleString()} stored bytes the device is neither warnable nor refusable`,
+    )
+    if (backup) assert.ok(measureLocalWorkspaceBackupHeadroom(backup), 'a device that can back up must be measurable')
+  }
+})
+
+// --- what it says, and what it must never say -----------------------------------------
+
+test('the warning names the size in the same units the refusal will use', () => {
+  const headroom = headroomOf(deviceOfExactBackupBytes(Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * 0.72)))
+  const message = localWorkspaceBackupHeadroomMessage(headroom)
+  // The refusal renders MB as bytes/1048576 to two places. An owner who read this warning
+  // last month has to recognise the refusal as the same measure arriving, not a new one.
+  assert.ok(message.includes(`${(headroom.bytes / 1048576).toFixed(2)} MB`), `the warning does not state this device's size in the refusal's MB units: ${message}`)
+  assert.ok(message.includes(`${(LOCAL_WORKSPACE_BACKUP_MAX_BYTES / 1048576).toFixed(2)} MB`), 'the warning does not state what a backup file can carry')
+  assert.match(message, /Download a workspace backup/, 'a warning with no action is just bad news')
+})
+
+test('the alert says what is lost past the wall, including the restore point', () => {
+  const headroom = headroomOf(deviceOfExactBackupBytes(Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * 0.95)))
+  const message = localWorkspaceBackupHeadroomMessage(headroom)
+  assert.match(message, /while one can still be made/, 'the point of warning early is that the action expires')
+  assert.match(message, /no backup file can be made at all/, 'an owner who is not told the wall is absolute will assume it is a nag')
+  assert.match(message, /Reset this device would have no restore point/, 'reset takes a restore point first, and past the wall it cannot -- saying so is the difference between a warning and a trap')
+})
+
+// Compaction is designed and NOT approved. Copy that hints room can be reclaimed would have
+// an owner wait for a fix that is behind a founder gate instead of taking the backup.
+test('no state of this warning promises that room can be freed up', () => {
+  for (const ratio of [0.72, 0.95]) {
+    const message = localWorkspaceBackupHeadroomMessage(headroomOf(deviceOfExactBackupBytes(Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * ratio))))
+    assert.match(message, /no way to free up room inside SuperMega yet/, `at ${ratio} the warning does not say that room cannot be reclaimed`)
+    assert.ok(!/compact|reclaim|clean ?up|delete old/i.test(message), `at ${ratio} the warning hints at a remedy that does not exist: ${message}`)
+  }
+})
+
+// "Most of it is Plant records" is a claim an owner cannot check, so it may only be made when
+// it is true. On a device where no product holds a majority it must simply not be said.
+test('the warning blames a product only when that product really holds most of the file', () => {
+  const shopHeavy = headroomOf({
+    [COMMERCE_KEY]: shopAtCeiling,
+    [WEBSITE_STORAGE_KEY]: websiteRecord,
+  })
+  assert.equal(shopHeavy.dominant, 'Shop')
+
+  // Shop at its ceiling is under half of a full backup file, so a device that also runs Plant
+  // and Ecommerce at a fair size leaves no product in the majority. Two products would not do:
+  // with only Shop and Plant on a device, one of the two is nearly always over half.
+  const evenlySplit = headroomOf({
+    [COMMERCE_KEY]: shopAtCeiling,
+    [PRODUCTION_KEY]: recordOfBytes(createSeedProduction(), Math.round(COMMERCE_SYNC_MAX_STATE_BYTES / 2)),
+    'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal': recordOfBytes(createSeedProduction(), Math.round(COMMERCE_SYNC_MAX_STATE_BYTES / 2)),
+    [WEBSITE_STORAGE_KEY]: websiteRecord,
+  })
+  assert.notEqual(evenlySplit.level, 'clear', 'this fixture has to be inside the warning band or it proves nothing about the wording')
+  assert.equal(evenlySplit.dominant, null, 'no product holds a majority of this device, so none may be named')
+  const message = localWorkspaceBackupHeadroomMessage(evenlySplit)
+  assert.ok(!/Most of it is/.test(message), `the warning claims a majority that does not exist: ${message}`)
+  // ...but the accounting line still shows the split, because "which product" is exactly what
+  // an owner needs and a refusal to guess must not become a refusal to say anything.
+  const detail = localWorkspaceBackupHeadroomDetail(evenlySplit)
+  assert.match(detail, /Shop /, 'the accounting line no longer names Shop')
+  assert.match(detail, /Plant /, 'the accounting line no longer names Plant')
+})
+
+test('the pill escalates in words, not only in colour', () => {
+  const tight = headroomOf(deviceOfExactBackupBytes(Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * 0.72)))
+  const urgent = headroomOf(deviceOfExactBackupBytes(Math.ceil(LOCAL_WORKSPACE_BACKUP_MAX_BYTES * 0.95)))
+  assert.equal(localWorkspaceBackupHeadroomLabel(tight), 'Backup room filling up')
+  assert.equal(localWorkspaceBackupHeadroomLabel(urgent), 'Backup room almost gone')
+  assert.notEqual(localWorkspaceBackupHeadroomLabel(tight), localWorkspaceBackupHeadroomLabel(urgent), 'a reader who cannot see colour must still be able to tell the two states apart')
+})
+
+// The sentence has to reach the page, beside the control it is about. Read from the shipping
+// source rather than reimplemented, so deleting the render deletes this guard's subject too.
+test('the settings page renders the warning beside the backup control it is about', async () => {
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  assert.match(page, /measureLocalWorkspaceBackupHeadroom\(currentBackup\)/, 'the page no longer measures the device against the backup it is offering')
+  assert.match(page, /localWorkspaceBackupHeadroomMessage\(backupHeadroom\)/, 'the page no longer renders the warning')
+  assert.match(page, /localWorkspaceBackupHeadroomDetail\(backupHeadroom\)/, 'the page no longer renders the accounting line')
+  assert.match(page, /backupHeadroom\.level !== 'clear'/, 'the warning is no longer silent below the threshold')
+  assert.match(page, /backupHeadroom\.level === 'urgent' \? 'alert' : undefined/, 'the warning no longer escalates to an alert, or now alerts at both levels')
+})
+
+// It must NOT reach the till. A device-wide limit rendered in Shop puts a second storage
+// reading in front of an owner counting sales, in the one product whose meter is already
+// measuring something else.
+test('the device warning stays out of the product workspaces', async () => {
+  const coreApp = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  assert.ok(
+    !/measureLocalWorkspaceBackupHeadroom|localWorkspaceBackupHeadroomMessage/.test(coreApp),
+    'the device-wide backup warning has been rendered inside a product workspace -- the Shop meter already occupies that screen, and two storage warnings in one place is the failure this was shaped to avoid',
+  )
 })
