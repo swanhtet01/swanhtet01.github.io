@@ -602,6 +602,34 @@ standalone geometry PR ever; the 9px→10px class of change is exactly the
 big-bang sweep the judges banned. Progress metric: the distinct-value
 count in this table, re-measured whenever this doc is next revised.
 
+**Half-retired class families (added 2026-08-21 by the dead-CSS reclaim PR).**
+That PR deleted 167 rule blocks from core-app.css whose selectors need a class
+token that exists nowhere in the app. Ten families could only be deleted
+*partially*, because their remaining rules are comma-joined with a live
+selector and those joined selectors are verifier-pinned — leaving a stylesheet
+that reads as if the component is still fully styled when it is not. The
+sharpest case is `.segmented-control`: its selected-state rule
+(`button[aria-pressed="true"]`) and `.wide` modifier are gone, but its layout,
+hover, mobile and 44px touch-target rules survive beside `.view-tabs`. Anyone
+reintroducing a segmented control from what the file appears to offer gets a
+control that lays out and hovers correctly and has **no visual selected state**
+— silently unusable, and invisible in review because `.view-tabs` keeps its own
+`[aria-selected="true"]` rule. The same shape applies to
+`.core-main.has-trial-context`, `.command-grid`, `.attention-list`,
+`.module-today`, `.ops-today-grid`, `.catalog-import-autopilot`,
+`.setup-product-grid`, `.product-trial-actions` and `.lifecycle-grid`. Attrition
+rule: the next pass that is *already* moving one of those pinned strings drops
+the dead member from its selector list in passing and says so. Never a
+standalone PR, and never reopen a pin just to finish one of these.
+
+Also parked here, from the same PR: six families are dead but PINNED outright
+(`.setup-launch-pack`/`-rows`, `.setup-pack-summary`, `.setup-workflow-review`,
+`.company-brief-disclosure`, `.plant-production-module`) — ~3,700 source bytes
+of genuine waste whose pins are 44px touch-target and live-site guards
+(`verify_app_build.mjs` :5553-5556, :5579, :5577-5578, :2027/:2029, :2392, and
+`verify_app_release_live.mjs` :510-512). Retiring them is a pin-moving review
+of its own with a negative test per pin, not a byte-reclaim ride-along.
+
 ### Phase-3 exit
 
 Phase 3 is done when: ecommerce live-declaration hex = preview-frame
