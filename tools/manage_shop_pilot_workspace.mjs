@@ -16,6 +16,8 @@ import {
 
 export const SHOP_PILOT_SALES_WORKSPACE_CONTRACT = 'supermega.shop.pilot_sales_workspace.v2'
 export const SHOP_PILOT_SALES_PREPARED_CONTRACT = 'supermega.shop.pilot_sales_prepared.v2'
+export const SHOP_PILOT_INTAKE_STARTER_CONTRACT = 'supermega.shop.pilot_intake_starter.v1'
+export const SHOP_PILOT_INTAKE_BUNDLE_CONTRACT = 'supermega.shop.pilot_intake_bundle.v1'
 
 const FILES = {
   manifest: 'workspace.json',
@@ -28,6 +30,12 @@ const FILES = {
   decisionInput: 'decision-input.json',
   prepared: 'prepared.json',
   decision: 'owner-decision.json',
+}
+
+const STARTER_FILES = {
+  form: 'START-HERE.html',
+  guide: 'README.md',
+  manifest: 'starter.json',
 }
 
 function sha256(value) {
@@ -77,6 +85,238 @@ function ownerTemplate() {
     pilotDataHandlingApproved: false,
     ownerReviewedCommercialDraft: false,
   }
+}
+
+function exactBoolean(value, field) {
+  if (typeof value !== 'boolean') throw new Error(`${field}_invalid`)
+  return value
+}
+
+function exactNumber(value, field, { min, max, integer = false }) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+    throw new Error(`${field}_invalid`)
+  }
+  return value
+}
+
+function exactText(value, field, max = 180) {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field}_required`)
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  if (normalized.length > max || /[\u0000-\u001f\u007f]/.test(normalized)) throw new Error(`${field}_invalid`)
+  return normalized
+}
+
+function normalizeOwnerInputDraft(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('shop_owner_input_required')
+  const tenantLabel = exactText(value.tenantLabel, 'tenant_label', 80)
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{2,79}$/.test(tenantLabel)) throw new Error('tenant_label_invalid')
+  const date = (input, field) => {
+    const normalized = exactText(input, field, 10)
+    const instant = Date.parse(`${normalized}T00:00:00.000Z`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) || !Number.isFinite(instant) || new Date(instant).toISOString().slice(0, 10) !== normalized) {
+      throw new Error(`${field}_invalid`)
+    }
+    return normalized
+  }
+  return {
+    tenantLabel,
+    startDate: date(value.startDate, 'start_date'),
+    reviewDate: date(value.reviewDate, 'review_date'),
+    fixedPilotFeeUsd: exactNumber(value.fixedPilotFeeUsd, 'fixed_pilot_fee_usd', { min: 1, max: 100_000, integer: true }),
+    contactIsNamedOperator: exactBoolean(value.contactIsNamedOperator, 'contact_is_named_operator'),
+    contactBaselineReviewed: exactBoolean(value.contactBaselineReviewed, 'contact_baseline_reviewed'),
+    spaBaseline: {
+      clientImportRowCount: exactNumber(value.spaBaseline?.clientImportRowCount, 'baseline_client_import_row_count', { min: 1, max: 100_000, integer: true }),
+      weeklyPackageSales: exactNumber(value.spaBaseline?.weeklyPackageSales, 'baseline_weekly_package_sales', { min: 1, max: 100_000, integer: true }),
+      weeklyTreatmentRedemptions: exactNumber(value.spaBaseline?.weeklyTreatmentRedemptions, 'baseline_weekly_treatment_redemptions', { min: 1, max: 100_000, integer: true }),
+      medianMinutesPerRedemption: exactNumber(value.spaBaseline?.medianMinutesPerRedemption, 'baseline_median_minutes_per_redemption', { min: 0.1, max: 1_440 }),
+      weeklyPackageCorrectionCount: exactNumber(value.spaBaseline?.weeklyPackageCorrectionCount, 'baseline_weekly_package_correction_count', { min: 0, max: 100_000, integer: true }),
+    },
+    isolatedNonProductionTenantApproved: exactBoolean(value.isolatedNonProductionTenantApproved, 'isolated_non_production_tenant_approved'),
+    namedOperatorAuthorized: exactBoolean(value.namedOperatorAuthorized, 'named_operator_authorized'),
+    pilotDataHandlingApproved: exactBoolean(value.pilotDataHandlingApproved, 'pilot_data_handling_approved'),
+    ownerReviewedCommercialDraft: exactBoolean(value.ownerReviewedCommercialDraft, 'owner_reviewed_commercial_draft'),
+  }
+}
+
+function normalizeIntakeBundle(bundle) {
+  if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle) || bundle.contract !== SHOP_PILOT_INTAKE_BUNDLE_CONTRACT) {
+    throw new Error('shop_pilot_intake_bundle_invalid')
+  }
+  return {
+    contactEvent: sanitizeShopPilotContactEvent(bundle.contactEvent),
+    ownerInput: normalizeOwnerInputDraft(bundle.ownerInput),
+  }
+}
+
+function starterManifest() {
+  return {
+    contract: SHOP_PILOT_INTAKE_STARTER_CONTRACT,
+    stage: 'private-owner-intake-required',
+    outputContract: SHOP_PILOT_INTAKE_BUNDLE_CONTRACT,
+    authority: {
+      automaticSendAllowed: false,
+      paymentAllowed: false,
+      deploymentAllowed: false,
+      productionActivationAllowed: false,
+      hostedWritesAllowed: false,
+    },
+    controls: {
+      privateWorkspace: true,
+      networkAccessAllowed: false,
+      externalWritesPerformed: false,
+      customerContactPerformed: false,
+    },
+  }
+}
+
+function starterGuide() {
+  return `# PRIVATE - Start the first SuperMega Spa client
+
+This folder contains no client data yet. Keep the completed download private and never commit or publish it.
+
+1. Open \`START-HERE.html\` in a browser.
+2. Complete it privately with the Spa owner. Every approval starts unchecked.
+3. Select **Download private intake bundle**. The page works offline and sends nothing.
+4. Move \`shop-pilot-intake.json\` from Downloads into this folder.
+5. From the SuperMega repository, initialize the protected pilot workspace:
+
+\`npm.cmd run client:pilot:workspace -- --init --intake-bundle "<this-folder>\\shop-pilot-intake.json" --workspace "<new-private-client-workspace>"\`
+
+The command creates local preparation artifacts only. It does not send a message, accept payment, deploy, activate production, or write hosted data.
+`
+}
+
+export function renderShopPilotStarterForm() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Start a SuperMega Spa pilot</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.45 system-ui, sans-serif; color: #17211d; background: #edf2ee; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { width: min(760px, 100%); margin: 0 auto; padding: 24px 16px 64px; }
+    header, section { background: #fff; border: 1px solid #d5ddd7; border-radius: 18px; padding: 20px; margin-bottom: 14px; box-shadow: 0 8px 28px rgba(23, 33, 29, .05); }
+    h1 { font-size: clamp(1.65rem, 5vw, 2.35rem); line-height: 1.08; margin: 0 0 10px; }
+    h2 { font-size: 1.08rem; margin: 0 0 14px; }
+    p { margin: 8px 0; color: #4a5750; }
+    .step { color: #176946; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    label { display: grid; gap: 6px; font-weight: 650; }
+    label span { color: #4a5750; font-size: .84rem; font-weight: 500; }
+    input, textarea { min-height: 46px; width: 100%; border: 1px solid #aeb9b1; border-radius: 11px; padding: 10px 12px; font: inherit; }
+    textarea { min-height: 92px; resize: vertical; }
+    input:focus, textarea:focus { outline: 3px solid #b9e4ce; border-color: #176946; }
+    .checks { display: grid; gap: 10px; }
+    .check { grid-template-columns: 24px 1fr; align-items: start; font-weight: 550; }
+    .check input { width: 20px; min-height: 20px; margin-top: 2px; }
+    .boundary { border-left: 4px solid #d49a31; padding-left: 12px; }
+    button { width: 100%; min-height: 52px; border: 0; border-radius: 13px; background: #176946; color: white; font: 750 1rem system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: #0e5236; }
+    #status { min-height: 24px; font-weight: 650; }
+    @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } main { padding: 10px 8px 40px; } header, section { border-radius: 14px; padding: 16px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header><div class="step">Private setup · about 8 minutes</div><h1>Start your Spa workspace</h1><p>Complete this with the Spa owner. Nothing is uploaded or sent. One private file is downloaded to this computer.</p></header>
+  <section><div class="step">1 · Business</div><h2>Who will use it?</h2><div class="grid">
+    <label>Spa business name<input id="company" required maxlength="180" autocomplete="organization"></label>
+    <label>Daily operator name<input id="operatorName" required maxlength="180" autocomplete="name"></label>
+    <label>Operator email<input id="email" required type="email" maxlength="180" autocomplete="email"></label>
+    <label>Operator role<input id="operatorRole" required maxlength="180" placeholder="Spa manager"></label>
+  </div><label>What should SuperMega improve first?<textarea id="goal" required maxlength="500" placeholder="Package sales, treatment redemption, booking, stock or daily close"></textarea></label></section>
+  <section><div class="step">2 · Current workflow</div><h2>Measure today’s process</h2><div class="grid">
+    <label>Weekly orders or bookings<input id="weeklyOrders" type="number" min="1" max="100000" step="1" required></label>
+    <label>Median minutes per order<input id="medianMinutesPerOrder" type="number" min="0.1" max="1440" step="0.1" required></label>
+    <label>Weekly exceptions or corrections<input id="weeklyExceptionCount" type="number" min="0" max="100000" step="1" required></label>
+    <label>Minutes for daily close<input id="closeMinutesPerDay" type="number" min="0" max="1440" step="0.1" required></label>
+    <label>Client rows to import<input id="clientImportRowCount" type="number" min="1" max="100000" step="1" required></label>
+    <label>Weekly package sales<input id="weeklyPackageSales" type="number" min="1" max="100000" step="1" required></label>
+    <label>Weekly treatment redemptions<input id="weeklyTreatmentRedemptions" type="number" min="1" max="100000" step="1" required></label>
+    <label>Minutes per redemption<input id="medianMinutesPerRedemption" type="number" min="0.1" max="1440" step="0.1" required></label>
+    <label>Weekly package corrections<input id="weeklyPackageCorrectionCount" type="number" min="0" max="100000" step="1" required></label>
+  </div></section>
+  <section><div class="step">3 · Five-day pilot</div><h2>Choose the local rehearsal</h2><div class="grid">
+    <label>Private workspace label<span>Letters, numbers and hyphens</span><input id="tenantLabel" required pattern="[A-Za-z0-9][A-Za-z0-9-]{2,79}" autocomplete="off"></label>
+    <label>Draft pilot fee (USD)<span>No payment is taken here</span><input id="fixedPilotFeeUsd" type="number" min="1" max="100000" step="1" required></label>
+    <label>Start date<input id="startDate" type="date" required></label>
+    <label>Review date<span>Automatically start date + 4 days</span><input id="reviewDate" type="date" required readonly></label>
+  </div></section>
+  <section><div class="step">4 · Owner review</div><h2>Confirm only what is true</h2><p class="boundary">Approvals are never inferred. Every box starts unchecked.</p><div class="checks">
+    <label class="check"><input id="contactIsOperator" type="checkbox"><span>The contact is the real daily operator.</span></label>
+    <label class="check"><input id="contactIsNamedOperator" type="checkbox"><span>The owner confirms this person as the named pilot operator.</span></label>
+    <label class="check"><input id="contactBaselineReviewed" type="checkbox"><span>The owner reviewed the measurements above.</span></label>
+    <label class="check"><input id="isolatedNonProductionTenantApproved" type="checkbox"><span>The owner approves an isolated non-production rehearsal workspace.</span></label>
+    <label class="check"><input id="namedOperatorAuthorized" type="checkbox"><span>The named operator is authorized for the five-day rehearsal.</span></label>
+    <label class="check"><input id="pilotDataHandlingApproved" type="checkbox"><span>The owner reviewed private data handling and backup boundaries.</span></label>
+    <label class="check"><input id="ownerReviewedCommercialDraft" type="checkbox"><span>The owner reviewed the draft fee and understands no payment is accepted.</span></label>
+  </div></section>
+  <section><button id="download" type="button">Download private intake bundle</button><p id="status" role="status" aria-live="polite"></p><p>Move <strong>shop-pilot-intake.json</strong> from Downloads into this private folder. Do not email or publish it.</p></section>
+</main>
+<script>
+  'use strict';
+  const field = (id) => document.getElementById(id);
+  const integer = (id) => Number.parseInt(field(id).value, 10);
+  const number = (id) => Number(field(id).value);
+  field('startDate').addEventListener('change', () => {
+    const value = field('startDate').value;
+    if (!value) { field('reviewDate').value = ''; return; }
+    const date = new Date(value + 'T00:00:00.000Z'); date.setUTCDate(date.getUTCDate() + 4); field('reviewDate').value = date.toISOString().slice(0, 10);
+  });
+  field('download').addEventListener('click', () => {
+    const required = [...document.querySelectorAll('input[required], textarea[required]')];
+    if (!required.every((input) => input.reportValidity())) { field('status').textContent = 'Complete every required field before downloading.'; return; }
+    const leadId = 'SPA-' + new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14) + '-' + crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, '0');
+    const payload = {
+      contract: '${SHOP_PILOT_INTAKE_BUNDLE_CONTRACT}',
+      contactEvent: { event: 'supermega.contact.created', record: {
+        lead_id: leadId, workflow: 'commerce', company: field('company').value.trim(), name: field('operatorName').value.trim(), email: field('email').value.trim(), goal: field('goal').value.trim(),
+        raw: { shop: { operator_role: field('operatorRole').value.trim(), weekly_orders: integer('weeklyOrders'), median_minutes_per_order: number('medianMinutesPerOrder'), weekly_exception_count: integer('weeklyExceptionCount'), close_minutes_per_day: number('closeMinutesPerDay'), contact_is_operator: field('contactIsOperator').checked } }
+      } },
+      ownerInput: {
+        tenantLabel: field('tenantLabel').value.trim(), startDate: field('startDate').value, reviewDate: field('reviewDate').value, fixedPilotFeeUsd: integer('fixedPilotFeeUsd'),
+        contactIsNamedOperator: field('contactIsNamedOperator').checked, contactBaselineReviewed: field('contactBaselineReviewed').checked,
+        spaBaseline: { clientImportRowCount: integer('clientImportRowCount'), weeklyPackageSales: integer('weeklyPackageSales'), weeklyTreatmentRedemptions: integer('weeklyTreatmentRedemptions'), medianMinutesPerRedemption: number('medianMinutesPerRedemption'), weeklyPackageCorrectionCount: integer('weeklyPackageCorrectionCount') },
+        isolatedNonProductionTenantApproved: field('isolatedNonProductionTenantApproved').checked, namedOperatorAuthorized: field('namedOperatorAuthorized').checked, pilotDataHandlingApproved: field('pilotDataHandlingApproved').checked, ownerReviewedCommercialDraft: field('ownerReviewedCommercialDraft').checked
+      }
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2) + '\\n'], { type: 'application/json' });
+    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'shop-pilot-intake.json'; link.click(); URL.revokeObjectURL(url);
+    field('status').textContent = 'Downloaded locally. No information was sent.';
+  });
+</script>
+</body>
+</html>
+`
+}
+
+export async function initShopPilotIntakeStarter(workspace) {
+  const root = resolve(workspace)
+  await mkdir(root, { recursive: false })
+  await Promise.all([
+    writeFile(resolve(root, STARTER_FILES.form), renderShopPilotStarterForm(), { encoding: 'utf8', flag: 'wx' }),
+    writeFile(resolve(root, STARTER_FILES.guide), starterGuide(), { encoding: 'utf8', flag: 'wx' }),
+    writeFile(resolve(root, STARTER_FILES.manifest), json(starterManifest()), { encoding: 'utf8', flag: 'wx' }),
+  ])
+  return { contract: SHOP_PILOT_INTAKE_STARTER_CONTRACT, stage: 'private-owner-intake-required', filesCreated: 3, externalWritesPerformed: false, customerContactPerformed: false }
+}
+
+export async function verifyShopPilotIntakeStarter(workspace) {
+  const root = resolve(workspace)
+  const [form, guide, manifest] = await Promise.all([
+    readFile(resolve(root, STARTER_FILES.form), 'utf8'),
+    readFile(resolve(root, STARTER_FILES.guide), 'utf8'),
+    readJson(resolve(root, STARTER_FILES.manifest)),
+  ])
+  if (form !== renderShopPilotStarterForm() || guide !== starterGuide() || JSON.stringify(manifest) !== JSON.stringify(starterManifest())) {
+    throw new Error('shop_pilot_intake_starter_invalid')
+  }
+  return { contract: SHOP_PILOT_INTAKE_STARTER_CONTRACT, stage: 'private-owner-intake-required', verified: true, externalWritesPerformed: false, customerContactPerformed: false }
 }
 
 export function renderShopPilotOwnerInputForm() {
@@ -260,14 +500,14 @@ function manifest(contactText) {
   }
 }
 
-export async function initShopPilotSalesWorkspace(contactEvent, workspace) {
+async function writeShopPilotSalesWorkspace(contactEvent, workspace, ownerInput) {
   const target = paths(workspace)
   const sanitized = sanitizeShopPilotContactEvent(contactEvent)
   const contactText = json(sanitized)
   await mkdir(resolve(workspace), { recursive: false })
   await Promise.all([
     writeFile(target.contact, contactText, { encoding: 'utf8', flag: 'wx' }),
-    writeFile(target.owner, json(ownerTemplate()), { encoding: 'utf8', flag: 'wx' }),
+    writeFile(target.owner, json(ownerInput), { encoding: 'utf8', flag: 'wx' }),
     writeFile(target.ownerForm, renderShopPilotOwnerInputForm(), { encoding: 'utf8', flag: 'wx' }),
     writeFile(target.manifest, json(manifest(contactText)), { encoding: 'utf8', flag: 'wx' }),
     writeFile(target.guide, guide(), { encoding: 'utf8', flag: 'wx' }),
@@ -280,6 +520,15 @@ export async function initShopPilotSalesWorkspace(contactEvent, workspace) {
     externalWritesPerformed: false,
     customerContactPerformed: false,
   }
+}
+
+export async function initShopPilotSalesWorkspace(contactEvent, workspace) {
+  return writeShopPilotSalesWorkspace(contactEvent, workspace, ownerTemplate())
+}
+
+export async function initShopPilotSalesWorkspaceFromBundle(bundle, workspace) {
+  const normalized = normalizeIntakeBundle(bundle)
+  return writeShopPilotSalesWorkspace(normalized.contactEvent, workspace, normalized.ownerInput)
 }
 
 async function readWorkspaceFoundation(workspace) {
@@ -427,19 +676,31 @@ async function main() {
   const args = process.argv.slice(2)
   const workspaceIndex = args.indexOf('--workspace')
   const contactIndex = args.indexOf('--contact-event')
+  const bundleIndex = args.indexOf('--intake-bundle')
+  const start = args.includes('--start')
+  const verifyStarter = args.includes('--verify-starter')
   const init = args.includes('--init')
   const prepare = args.includes('--prepare')
   const decide = args.includes('--decide')
   const verify = args.includes('--verify')
-  if ([init, prepare, decide, verify].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
-    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--init --contact-event event.json | --prepare | --decide | --verify) --workspace private-directory')
+  if ([start, verifyStarter, init, prepare, decide, verify].filter(Boolean).length !== 1 || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
+    throw new Error('usage: node tools/manage_shop_pilot_workspace.mjs (--start | --verify-starter | --init (--contact-event event.json | --intake-bundle bundle.json) | --prepare | --decide | --verify) --workspace private-directory')
   }
   let result
-  if (init) {
-    if (args.length !== 5 || contactIndex < 0 || !args[contactIndex + 1]) throw new Error('shop_pilot_workspace_contact_event_required')
-    result = await initShopPilotSalesWorkspace(await readJson(resolve(args[contactIndex + 1])), args[workspaceIndex + 1])
+  if (start || verifyStarter) {
+    if (args.length !== 3 || contactIndex >= 0 || bundleIndex >= 0) throw new Error('shop_pilot_intake_starter_arguments_invalid')
+    result = start
+      ? await initShopPilotIntakeStarter(args[workspaceIndex + 1])
+      : await verifyShopPilotIntakeStarter(args[workspaceIndex + 1])
+  } else if (init) {
+    const hasContact = contactIndex >= 0 && Boolean(args[contactIndex + 1])
+    const hasBundle = bundleIndex >= 0 && Boolean(args[bundleIndex + 1])
+    if (args.length !== 5 || hasContact === hasBundle) throw new Error('shop_pilot_workspace_intake_source_required')
+    result = hasContact
+      ? await initShopPilotSalesWorkspace(await readJson(resolve(args[contactIndex + 1])), args[workspaceIndex + 1])
+      : await initShopPilotSalesWorkspaceFromBundle(await readJson(resolve(args[bundleIndex + 1])), args[workspaceIndex + 1])
   } else {
-    if (args.length !== 3 || contactIndex >= 0) throw new Error('shop_pilot_workspace_arguments_invalid')
+    if (args.length !== 3 || contactIndex >= 0 || bundleIndex >= 0) throw new Error('shop_pilot_workspace_arguments_invalid')
     if (prepare) result = await prepareShopPilotSalesWorkspace(args[workspaceIndex + 1])
     if (decide) result = await decideShopPilotSalesWorkspace(args[workspaceIndex + 1])
     if (verify) result = await verifyShopPilotSalesWorkspace(args[workspaceIndex + 1])

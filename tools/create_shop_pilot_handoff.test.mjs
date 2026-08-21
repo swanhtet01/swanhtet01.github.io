@@ -17,9 +17,13 @@ import {
 
 import {
   decideShopPilotSalesWorkspace,
+  initShopPilotIntakeStarter,
   initShopPilotSalesWorkspace,
+  initShopPilotSalesWorkspaceFromBundle,
   prepareShopPilotSalesWorkspace,
   renderShopPilotOwnerInputForm,
+  renderShopPilotStarterForm,
+  verifyShopPilotIntakeStarter,
   verifyShopPilotSalesWorkspace,
 } from './manage_shop_pilot_workspace.mjs'
 
@@ -489,6 +493,78 @@ const readyOwnerInput = {
   ownerReviewedCommercialDraft: true,
 }
 
+test('renders a private mobile Spa workspace intake starter with every authority closed', () => {
+  const html = renderShopPilotStarterForm()
+  assert.match(html, /<meta name="viewport"/)
+  assert.match(html, /Content-Security-Policy[^>]+default-src 'none'/)
+  assert.match(html, /connect-src 'none'/)
+  assert.match(html, /form-action 'none'/)
+  assert.match(html, /@media \(max-width: 620px\)/)
+  assert.match(html, /supermega\.shop\.pilot_intake_bundle\.v1/)
+  assert.match(html, /link\.download = 'shop-pilot-intake\.json'/)
+  assert.match(html, /No information was sent/)
+  for (const id of [
+    'company', 'operatorName', 'email', 'operatorRole', 'goal', 'weeklyOrders', 'medianMinutesPerOrder',
+    'weeklyExceptionCount', 'closeMinutesPerDay', 'clientImportRowCount', 'weeklyPackageSales',
+    'weeklyTreatmentRedemptions', 'medianMinutesPerRedemption', 'weeklyPackageCorrectionCount',
+    'tenantLabel', 'fixedPilotFeeUsd', 'startDate', 'reviewDate', 'contactIsOperator',
+    'contactIsNamedOperator', 'contactBaselineReviewed', 'isolatedNonProductionTenantApproved',
+    'namedOperatorAuthorized', 'pilotDataHandlingApproved', 'ownerReviewedCommercialDraft',
+  ]) assert.match(html, new RegExp(`id="${id}"`))
+  assert.doesNotMatch(html, /\b(?:fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage)\b/)
+  assert.doesNotMatch(html, /<input[^>]+checked/i)
+  assert.ok(Buffer.byteLength(html, 'utf8') < 40_000)
+})
+
+test('starts and verifies a blank private Spa intake workspace without client data', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-intake-starter-'))
+  const workspace = join(parent, 'starter')
+  try {
+    const started = await initShopPilotIntakeStarter(workspace)
+    assert.equal(started.stage, 'private-owner-intake-required')
+    assert.equal(started.filesCreated, 3)
+    assert.equal(started.externalWritesPerformed, false)
+    assert.deepEqual((await readdir(workspace)).sort(), ['README.md', 'START-HERE.html', 'starter.json'])
+    const combined = (await Promise.all((await readdir(workspace)).map((name) => readFile(join(workspace, name), 'utf8')))).join('\n')
+    assert.doesNotMatch(combined, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)
+    assert.equal((await verifyShopPilotIntakeStarter(workspace)).verified, true)
+    await writeFile(join(workspace, 'START-HERE.html'), `${renderShopPilotStarterForm()}\nchanged\n`)
+    await assert.rejects(() => verifyShopPilotIntakeStarter(workspace), /shop_pilot_intake_starter_invalid/)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('initializes a protected workspace from one canonical private intake bundle', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-intake-bundle-'))
+  const workspace = join(parent, 'private-workspace')
+  try {
+    const bundle = { contract: 'supermega.shop.pilot_intake_bundle.v1', contactEvent, ownerInput: readyOwnerInput }
+    const initialized = await initShopPilotSalesWorkspaceFromBundle(bundle, workspace)
+    assert.equal(initialized.stage, 'owner-input-required')
+    assert.equal(initialized.externalWritesPerformed, false)
+    assert.deepEqual(JSON.parse(await readFile(join(workspace, 'owner-input.json'), 'utf8')), readyOwnerInput)
+    assert.equal((await verifyShopPilotSalesWorkspace(workspace)).verified, true)
+    assert.equal((await prepareShopPilotSalesWorkspace(workspace)).stage, 'owner-decision-required')
+    const nonOperatorWorkspace = join(parent, 'non-operator')
+    await initShopPilotSalesWorkspaceFromBundle({
+      ...bundle,
+      contactEvent: { ...contactEvent, record: { ...contactEvent.record, raw: { shop: { ...contactEvent.record.raw.shop, contact_is_operator: false } } } },
+    }, nonOperatorWorkspace)
+    await assert.rejects(() => prepareShopPilotSalesWorkspace(nonOperatorWorkspace), /shop_contact_operator_status_required/)
+    await assert.rejects(
+      () => initShopPilotSalesWorkspaceFromBundle({ ...bundle, contract: 'wrong' }, join(parent, 'wrong-contract')),
+      /shop_pilot_intake_bundle_invalid/,
+    )
+    await assert.rejects(
+      () => initShopPilotSalesWorkspaceFromBundle({ ...bundle, ownerInput: { ...readyOwnerInput, contactIsNamedOperator: 'yes' } }, join(parent, 'wrong-owner')),
+      /contact_is_named_operator_invalid/,
+    )
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
 test('renders an offline responsive workspace owner intake form with closed gates', () => {
   const html = renderShopPilotOwnerInputForm()
   assert.match(html, /<meta name="viewport"/)
@@ -612,9 +688,26 @@ test('CLI initializes and verifies a metadata-only private workspace', async () 
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-sales-cli-'))
   const eventPath = join(parent, 'event.json')
   const workspace = join(parent, 'private-workspace')
+  const starter = join(parent, 'starter')
+  const bundlePath = join(parent, 'intake.json')
+  const bundledWorkspace = join(parent, 'bundled-workspace')
   const tool = resolve('tools/manage_shop_pilot_workspace.mjs')
   try {
     await writeFile(eventPath, JSON.stringify(contactEvent))
+    await writeFile(bundlePath, JSON.stringify({ contract: 'supermega.shop.pilot_intake_bundle.v1', contactEvent, ownerInput: readyOwnerInput }))
+
+    const started = spawnSync(process.execPath, [tool, '--start', '--workspace', starter], { encoding: 'utf8' })
+    assert.equal(started.status, 0, started.stderr)
+    assert.equal(JSON.parse(started.stdout).stage, 'private-owner-intake-required')
+    const starterVerified = spawnSync(process.execPath, [tool, '--verify-starter', '--workspace', starter], { encoding: 'utf8' })
+    assert.equal(starterVerified.status, 0, starterVerified.stderr)
+    assert.equal(JSON.parse(starterVerified.stdout).verified, true)
+
+    const bundleInitialized = spawnSync(process.execPath, [tool, '--init', '--intake-bundle', bundlePath, '--workspace', bundledWorkspace], { encoding: 'utf8' })
+    assert.equal(bundleInitialized.status, 0, bundleInitialized.stderr)
+    assert.equal(JSON.parse(bundleInitialized.stdout).stage, 'owner-input-required')
+    assert.doesNotMatch(bundleInitialized.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)
+
     const initialized = spawnSync(process.execPath, [tool, '--init', '--contact-event', eventPath, '--workspace', workspace], { encoding: 'utf8' })
     assert.equal(initialized.status, 0, initialized.stderr)
     const receipt = JSON.parse(initialized.stdout)

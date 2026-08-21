@@ -189,6 +189,7 @@ export function sanitizeShopPilotContactEvent(event) {
 export function shopPilotInputFromContactEvent(event, ownerInput) {
   const sanitizedEvent = sanitizeShopPilotContactEvent(event)
   if (!ownerInput || typeof ownerInput !== 'object' || Array.isArray(ownerInput)) throw new Error('shop_owner_input_required')
+  if (sanitizedEvent.record.raw.shop.contact_is_operator !== true) throw new Error('shop_contact_operator_status_required')
   if (ownerInput.contactIsNamedOperator !== true) throw new Error('shop_contact_operator_confirmation_required')
   if (ownerInput.contactBaselineReviewed !== true) throw new Error('shop_contact_baseline_review_required')
   const leadId = sanitizedEvent.record.lead_id
