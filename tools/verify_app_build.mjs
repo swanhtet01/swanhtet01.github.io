@@ -3745,7 +3745,73 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !coreSource.includes('prepareManagedEcommerceShopDraftV2')
   || !coreSource.includes('setExtraOrderLines(remainingLines.map')
   || !coreSource.includes('separate Shop action gate')) fail('managed_ecommerce_inbox_contract_missing')
-if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
+// An inventory, not a sample. This guard was a single `includes('src/products')` pin, which
+// said nothing about the other source roots -- and showroom/src/analytics/ shipped underneath
+// it: metrics-collector.ts is imported by main.tsx and seven product modules, and eslint never
+// saw the directory. Proven 2026-08-21 by putting two hard errors (no-explicit-any,
+// no-unused-vars) in that file: `npm --prefix showroom run lint` stayed at its 17-warning
+// baseline and exit 0, and this check stayed green.
+//
+// Two things this deliberately does NOT do, because each was a way the same failure comes
+// back. It does not test the script with `includes()`: `src/products` is a PREFIX of
+// `src/products-legacy`, so a substring pin is satisfied by a rename that drops the real
+// directory, and it is satisfied by `--ignore-pattern src/analytics`, which names the path in
+// order to skip it. Arguments are tokenised and matched exactly, and anything ESLint would
+// read as a flag (or the value following an ignore flag) is not a target. And it does not look
+// at directories only: a loose `showroom/src/feature-flags.ts` next to App.tsx is the same
+// defect one level up, so top-level TypeScript files are inventoried too.
+const showroomLintScript = String(appPackage.scripts?.lint ?? '')
+const showroomLintArguments = showroomLintScript.split(/\s+/).filter(Boolean)
+const showroomLintTargets = new Set()
+const showroomLintIgnorePatterns = []
+for (let index = 1; index < showroomLintArguments.length; index += 1) {
+  const argument = showroomLintArguments[index]
+  // An ignore flag's value is not a target -- it names a path in ORDER TO SKIP IT.
+  // --ignore-path points at a file whose contents this cannot read, so it is recorded
+  // as a pattern that matches everything and fails the check outright.
+  if (argument === '--ignore-pattern') { showroomLintIgnorePatterns.push(showroomLintArguments[index + 1] ?? '*'); index += 1; continue }
+  if (argument === '--ignore-path') { showroomLintIgnorePatterns.push('*'); index += 1; continue }
+  if (argument.startsWith('-')) continue
+  showroomLintTargets.add(argument)
+}
+const showroomSourceRoot = resolve(root, 'showroom', 'src')
+const showroomSourceEntries = await readdir(showroomSourceRoot, { withFileTypes: true })
+const requiredShowroomLintTargets = []
+for (const entry of showroomSourceEntries) {
+  if (entry.isDirectory()) {
+    const contents = await walk(resolve(showroomSourceRoot, entry.name))
+    if (contents.some((path) => /\.tsx?$/.test(path))) requiredShowroomLintTargets.push(`src/${entry.name}`)
+  } else if (/\.tsx?$/.test(entry.name)) {
+    requiredShowroomLintTargets.push(`src/${entry.name}`)
+  }
+}
+// `eslint src` (or `eslint .`) reaches every one of them; only an enumerated script needs
+// the target inventory.
+const showroomLintsEverySource = showroomLintTargets.has('src') || showroomLintTargets.has('.')
+// ...but a broad target is NOT proof of coverage on its own, and treating it as proof was
+// this guard's own version of the defect it was written to catch. Found by review 2026-08-21
+// and reproduced before changing anything: with `eslint src --ignore-pattern src/analytics`,
+// two hard errors in showroom/src/analytics/metrics-collector.ts left `npm --prefix showroom
+// run lint` at its 17-warning baseline and exit 0, while `npx eslint src/analytics` reported
+// them -- and this check stayed green, because the broad-target shortcut returned early
+// before any ignore was considered. Coverage is (reached by a target) AND (not subtracted by
+// an ignore), in both branches: an enumerated script can name a root and then ignore it too.
+//
+// Glob semantics are deliberately NOT reimplemented here -- that would be one more place to
+// be subtly wrong, in a check whose whole purpose is not being subtly wrong. It fails closed
+// instead: an ignore pattern subtracts a root if it names that root or a parent of it, and
+// any pattern still holding a wildcard after trailing stars are stripped is treated as
+// subtracting everything.
+const showroomLintIgnores = showroomLintIgnorePatterns.map((pattern) =>
+  pattern.replace(/^\.\//, '').replace(/\/?\*+$/, '').replace(/\/$/, ''))
+const showroomLintIgnoresTarget = (target) => showroomLintIgnores.some((pattern) =>
+  pattern === '' || pattern.includes('*') || pattern === target || target.startsWith(`${pattern}/`))
+const unlintedShowroomSourceTargets = requiredShowroomLintTargets
+  .filter((target) => !(showroomLintsEverySource || showroomLintTargets.has(target)) || showroomLintIgnoresTarget(target))
+  .sort()
+if (unlintedShowroomSourceTargets.length) {
+  fail(`prototype_sources_not_linted:${unlintedShowroomSourceTargets.join('|')}`)
+}
 if (!websiteSource.includes('Nothing has been deployed.')
   || !websiteSource.includes('Nothing was deployed.')
   || websiteSource.includes('Approved site file saved and confirmed. No deployment occurred.')
@@ -20330,6 +20396,16 @@ else {
   const initialJavascriptBytes = (await Promise.all([...initialJavascriptAssets].map(async (asset) => (
     await stat(resolve(dist, 'assets', asset))
   ).size))).reduce((total, size) => total + size, 0)
+  // FLOOR before ceiling -- the same rule the shop-route closure above states, applied to the
+  // other graph walk. This budget AND the eager-load check below both read
+  // initialJavascriptAssets, so a walk that stops resolving specifiers (a bundler output-format
+  // change the regex above no longer matches) makes both pass while seeing only the entry
+  // chunk. Proven 2026-08-21 by breaking that regex: the graph fell from 4 assets / 294,567
+  // bytes to 1 / 249,633 and the gate still reported ok:true, with the eager-load check
+  // scanning a one-asset set. Raise the ceiling for real product value as usual; when a real
+  // reduction trips the floor, lower the floor in the same commit and say what shrank.
+  if (initialJavascriptAssets.size < 3) fail(`initial_javascript_graph_implausible:${initialJavascriptAssets.size}`)
+  if (initialJavascriptBytes < 260_000) fail(`initial_javascript_budget_implausible:${initialJavascriptBytes}`)
   if (initialJavascriptBytes > 300_000) fail(`initial_javascript_budget:${initialJavascriptBytes}`)
   if ([...initialJavascriptAssets].some((asset) => /^(?:core-app|commerce-model|operating-models|shop-planning-models|website-model)-/.test(asset))) {
     fail('product_operations_eagerly_loaded_on_home')
