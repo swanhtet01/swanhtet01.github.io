@@ -143,6 +143,142 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
   }
 }
 
+// ==============================================================================================
+// What a SIGNED-IN (managed) owner is told when she sets up Shop or Plant.
+//
+// Every guided provisioner in this module writes through loadCommerceWorkspace /
+// mutateCommerceWorkspace and mutateProductionWorkingSample, which are window.localStorage. A
+// managed workspace does not read that store at all -- it reads server-authoritative state,
+// written only through saveManagedCommerceCommand / saveManagedProductionCommand ->
+// /api/trial/v1/commands. Measured end to end in hq/research/MANAGED-TEMPLATE-PROVISIONING.md
+// for Shop, and re-measured the same way for Plant when this guard was added: for a managed
+// account BOTH provisioners reported `installed` with ZERO network calls and only browser-local
+// keys written, so the company workspace stayed at version 0 and the product rendered
+// 'managed-unprovisioned' -- while onboarding told the owner her catalog, or her jobs and floor,
+// were ready. A false success, uniform across all ten Shop trades and all five Plant packs.
+//
+// Provisioning a template INTO a managed workspace is a real feature and is not attempted here.
+// For Shop the server's commerce.workspace.initialized contract requires a non-empty catalog and
+// NO operating history, and every template catalog carries an `opening` stock movement per item,
+// so a template state can never satisfy it as written. Plant's production.workspace.initialized
+// is refused outright once jobs, issues, machines or events exist, which a guided sample creates
+// by definition. Until that lands, onboarding stops making the claim and hands the owner to the
+// managed setup step that already exists in each product.
+//
+// The copy lives here, beside the reason, so it cannot drift back into a promise.
+// ==============================================================================================
+
+/**
+ * Shown after a signed-in owner submits Shop setup. It has three jobs, in this order: keep the
+ * trade she just chose (dropping it silently would be its own small lie), say plainly that nothing
+ * was added, and name the one next step so being routed onward reads as the next move rather than
+ * an error.
+ *
+ * It deliberately makes NO claim that her trade was SAVED, because for a company account it is
+ * not. Both writes that would have kept it are browser-local and both are now guarded:
+ * provisionLocalShopIndustryPack (the pack id) and provisionLocalShopBusinessTemplateSample (the
+ * commerce stamp readLocalShopBusinessTemplateId reads back). What survives is only the derived
+ * workflow template on the setup record, and that does not distinguish her trade -- measured, six
+ * of the ten trades persist identically as 'retail-wholesale'. On her next visit
+ * readLocalShopIndustryPackId returns the 'retail' default and readLocalShopBusinessTemplateId
+ * returns null, so the picker shows "Standard sample", not her trade.
+ *
+ * An earlier draft opened with "<trade> is saved as your business type". That is the kind of
+ * technically-not-false sentence this whole module exists to remove: it invites her to believe a
+ * spa catalog is on file and waiting. Contrast managedPlantOnboardingNotice, which DOES say
+ * "saved" -- because Plant's pack id genuinely round-trips.
+ */
+export function managedShopOnboardingNotice(businessTypeName: string): string {
+  return `You chose ${businessTypeName}, but company accounts do not get sample records, `
+    + 'so nothing was added to this workspace. Open Shop and add your first real item. The prices and stock '
+    + 'you enter there are the ones your team sells from.'
+}
+
+/**
+ * The hint under the submit button, so the honest version is read BEFORE the tap, not only after
+ * it. The browser-local wording it replaces is "Creates local sample records, then opens the first
+ * task."
+ */
+export const MANAGED_SHOP_ONBOARDING_HINT =
+  'Opens Shop so you can add your first real item. Nothing is copied into a company account.'
+
+/**
+ * Replaces the panel's "We will add realistic sample records now" intro, which is the same false
+ * promise one step earlier in the flow.
+ */
+export const MANAGED_SHOP_ONBOARDING_INTRO =
+  'Your company account holds real records only. Name this workspace, then add your own items in Shop.'
+
+/**
+ * Replaces the commerce entry in onboardingJourneys for a company account. The browser-local
+ * wording it stands in for -- "Complete a sample sale" / "A realistic catalog and stock are ready.
+ * Tap an item, choose payment, then create the order." / "Create Shop and start selling" -- is the
+ * loudest promise on the page and it is made BEFORE the owner taps anything. None of it is true
+ * for her: there is no catalog to tap and no sample sale to complete. She does still get a first
+ * useful result, it is just a different one, so it is named rather than removed.
+ *
+ * firstTaskPath is deliberately not overridden. Shop returns its "Create the real catalog"
+ * boundary for a managed account whatever tab is asked for, so the existing path lands her exactly
+ * on the step this copy promises.
+ */
+export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
+  outcome: 'Add your first real item',
+  detail: 'Shop opens on your company catalog setup. Enter one item with its price and opening count, and you can sell it straight away.',
+  actionLabel: 'Create Shop and add your first item',
+}
+
+/**
+ * Plant's twin of managedShopOnboardingNotice. Same three jobs, but it names what a managed Plant
+ * ACTUALLY asks for next, which is not what Shop asks for: CoreApp's "Create the real operating
+ * plan" boundary wants one real job AND the machine that runs it, not a single priced item. Copy
+ * that mirrored Shop's "add your first real item" would be a second, smaller lie about the very
+ * screen it is sending her to.
+ *
+ * "is saved as your plant type" is literally true here, and deliberately so:
+ * savePlantIndustryPackId is kept OUTSIDE the managed guard in ProductOnboardingPage, because the
+ * picker's choice is a device preference that readPlantIndustryPackId reads back on her next
+ * visit -- not workspace data a managed account would need the server to hold. Verified as an
+ * EXACT round-trip for all five packs: what she picks is what readPlantIndustryPackId returns
+ * and what the picker shows her again. Shop cannot say the same, which is why its notice
+ * claims nothing about saving -- see managedShopOnboardingNotice above.
+ */
+export function managedPlantOnboardingNotice(plantTypeName: string): string {
+  return `${plantTypeName} is saved as your plant type. Company accounts do not get sample records, `
+    + 'so no jobs, machines or output were added to this workspace. Open Plant and enter your first real job. '
+    + 'The job and machine you enter there are the ones your floor runs.'
+}
+
+/**
+ * Plant's twin of MANAGED_SHOP_ONBOARDING_HINT. The browser-local wording it replaces is the same
+ * shared "Creates local sample records, then opens the first task."
+ */
+export const MANAGED_PLANT_ONBOARDING_HINT =
+  'Opens Plant so you can enter your first real job. Nothing is copied into a company account.'
+
+/**
+ * Plant's twin of MANAGED_SHOP_ONBOARDING_INTRO, replacing the same shared "We will add realistic
+ * sample records now" sentence -- one sentence, shared between the two products, false for both.
+ */
+export const MANAGED_PLANT_ONBOARDING_INTRO =
+  'Your company account holds real records only. Name this workspace, then enter your own jobs in Plant.'
+
+/**
+ * Replaces the production entry in onboardingJourneys for a company account. The browser-local
+ * wording -- "Run a sample production job" / "A scheduled job, materials, and line are ready.
+ * Review the job, then record output." / "Create Plant and open the job" -- is if anything a more
+ * specific promise than Shop's: it names a scheduled job, materials AND a line, none of which
+ * exist in a managed workspace. There is no job to open and no output to record.
+ *
+ * firstTaskPath is deliberately not overridden, for the same reason as Shop: ProductionPage
+ * returns its 'managed-unprovisioned' boundary before it ever reads the requested tab, so
+ * /plant/?tab=production already lands her on the step this copy promises.
+ */
+export const MANAGED_PLANT_ONBOARDING_JOURNEY = {
+  outcome: 'Create your first real job',
+  detail: 'Plant opens on your company plan setup. Enter one real job and the machine that runs it, and your floor is live.',
+  actionLabel: 'Create Plant and add your first job',
+}
+
 /**
  * Install the industry pack's appointment book, PRESERVING any appointment already taken.
  *

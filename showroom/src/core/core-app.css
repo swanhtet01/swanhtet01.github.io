@@ -852,18 +852,28 @@ textarea { min-height: 72px; resize: vertical; }
 /* A durability warning that ellipsises is a warning the owner cannot act on, so this
    one wraps at every width instead of inheriting the single-line banner treatment. */
 .storage-durability-banner p { overflow: visible; text-overflow: clip; white-space: normal; }
-/* Headroom tints. These are 0-3-0 (two classes + an attribute) rather than the 0-2-0 the
-   evictable/full pair above use, and the extra class is load-bearing, not decoration:
-   `.theme-dark .core-panel, .theme-dark .production-mode-banner, ...` further down this
-   file is ALSO 0-2-0 and sits LATER, so it out-cascades an equal-specificity tint -- which
-   is why the two rules above render as a plain untinted panel in dark mode today. At 0-3-0
-   these win in both themes whatever the file order. The colours are the rgba pair already
-   used above, so no new literal enters either ratchet, and no px does either.
-   Contrast measured on both tinted backgrounds in both themes: the quietest text that
-   lands on them is --core-quiet at 4.80:1 (light, urgent); --core-muted is 5.49:1 or
-   better and --core-ink 14.66:1 or better. */
-.production-mode-banner.storage-durability-banner[data-headroom="tight"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
-.production-mode-banner.storage-durability-banner[data-headroom="urgent"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
+/* Headroom tints. These carried an extra `.production-mode-banner` class purely to reach
+   0-3-0 and out-specify `.theme-dark .production-mode-banner`, which was 0-2-0, sat later in
+   the file and therefore beat the 0-2-0 [data-write] and [data-durability] tints above. That
+   rule no longer paints background or border-color (see the note on it further down), so the
+   crutch is gone and all four banner tints are plain 0-2-0 siblings that read the same way.
+   The colours are the rgba pair already used above, so no new literal enters either ratchet,
+   and no px does either.
+   CONTRAST, read out of the browser on the composited tint with the real markup, not
+   estimated from token values. Which pill renders depends on the variant: the urgent banner
+   uses .status-pill.danger, every other tinted banner uses .status-pill.pending.
+     dark   --core-muted 8.79, --core-quiet 5.48, --core-green 13.49, pending pill 13.07,
+            danger pill 8.17. (The amber tint matches these to within 0.02.)
+     light  --core-muted 5.01, --core-green 4.71, danger pill 5.35 -- but --core-quiet is
+            4.47 on amber / 4.38 on red, and the pending pill 4.42 on amber / 4.32 on red.
+   Those last two are BELOW the 4.5:1 AA floor at the size they render. They are pre-existing
+   -- the light tints have looked like this since they shipped -- and are filed rather than
+   changed here, because raising them means altering a token or a tint, which is a colour
+   decision. A previous note here claimed --core-quiet was 4.80:1 in light/urgent; it
+   measures 4.38:1, so do not carry that figure forward. Nothing in the dark column is
+   below 5.48:1. */
+.storage-durability-banner[data-headroom="tight"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
+.storage-durability-banner[data-headroom="urgent"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
 /* The raw number, kept quiet: an owner who wants it can read it, one who does not is not
    made to. Block, so it drops under the sentence instead of becoming a fourth grid child
    of the banner and breaking the three-column template. */
@@ -1711,6 +1721,13 @@ textarea { min-height: 72px; resize: vertical; }
   --core-text: var(--core-ink);
   --core-soft: var(--core-panel-raised);
   --core-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .38);
+  /* The dark elevation shared by the raised surfaces further down. A token rather than a
+     repeated literal because .theme-dark .production-mode-banner needs this shadow WITHOUT
+     the background/border-color its old grouped rule also carried -- see the note there.
+     Declaring the two px lengths once means splitting that rule costs the P3.6a px ratchet
+     nothing. Dark-only on purpose: light surfaces carry their own shadow in their base rule,
+     and nothing outside .theme-dark consumes this. */
+  --core-panel-shadow: 0 18px 48px rgba(0,0,0,.22);
   background: radial-gradient(circle at 72% -10%, rgba(42,120,133,.2), transparent 32%), #05080d;
   color: var(--core-ink);
 }
@@ -1729,7 +1746,29 @@ textarea { min-height: 72px; resize: vertical; }
 .theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: var(--core-on-accent); }
 .theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
 .theme-dark input::placeholder, .theme-dark textarea::placeholder { color: #657386; }
-.theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
+/* CASCADE TRAP, DISARMED -- read this before adding a selector to the rule below.
+   .production-mode-banner used to be a member of this group and did not need to be. The
+   banner's base rule already declares `border: 1px solid var(--core-line)` and
+   `background: var(--core-panel)` -- the SAME tokens, both of which retint themselves inside
+   .theme-dark -- so the only declaration doing real work for the banner was the box-shadow.
+   The other two were not merely redundant. This rule is 0-2-0 and sits ~890 lines AFTER the
+   banner's variant tints, which are also 0-2-0, so source order handed it the win and every
+   tinted banner rendered as a plain untinted panel in dark mode. Measured before the split:
+   [data-write="blocked"] and both [data-durability] states all computed #0d131b, identical to
+   an untinted banner, instead of their amber/red tint.
+   So the banner now takes ONLY the shadow. The three surfaces left in the group genuinely
+   need both declarations: .accountable-action-gate and .receipt-dialog each paint a hardcoded
+   `background: #fff` and a --core-line-strong border in their base rules, so the flip to
+   var(--core-panel)/var(--core-line) is load-bearing for them. .core-panel's pair is redundant
+   the same way the banner's was, but nothing refines .core-panel at 0-2-0, so it is defeating
+   nothing and is left alone rather than churned.
+   THE CONVENTION: a `.theme-dark <class>` rule should declare only what actually differs from
+   the base rule. Restating a token the base rule already uses buys nothing and silently
+   out-cascades every equal-specificity variant that was written earlier in the file.
+   Do not add background or border-color to the banner rule below; that re-arms the trap, and
+   tools/test_theme_surface_contract.mjs fails if you do. */
+.theme-dark .core-panel, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: var(--core-panel-shadow); }
+.theme-dark .production-mode-banner { box-shadow: var(--core-panel-shadow); }
 .theme-dark .runtime-badge.demo, .theme-dark .runtime-badge.enterprise { border-color: rgba(86,240,193,.22); color: var(--core-green); }
 .theme-dark .mobile-nav { border-color: var(--core-line); background: rgba(7,11,17,.97); box-shadow: 0 -12px 34px rgba(0,0,0,.28); }
 .theme-dark .mobile-nav a.active { border-color: var(--core-green); color: var(--core-green); }
