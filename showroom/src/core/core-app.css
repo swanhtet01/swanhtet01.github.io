@@ -3017,8 +3017,20 @@ input, select, textarea { border-color: var(--core-field-line); }
    :lang(my) already carries the taller line-height these glyphs need (see the
    rule further up this file); a wrapped composed label puts the Burmese half
    on its own line, which is exactly where that line-height applies.
+
+   NO `overflow-wrap: anywhere` ANYWHERE HERE, and this is the second thing
+   review caught. It looks like cheap insurance and is not: `anywhere` permits a
+   break between arbitrary Burmese grapheme clusters, and Burmese needs
+   dictionary word-boundary breaking, so it would split a word mid-cluster in
+   exactly the ~75px bar cell this batch exists to protect — correct-looking in
+   review, wrong on the phone, which is the failure this whole block is against.
+   It also drops a flex item's min-content contribution to one character, so a
+   `min-width: auto` sibling (the three compact buttons in
+   `.receipt-dialog-actions`, which do not wrap) could shrink to a sliver
+   rendering one glyph per line. The drafts carry spaces at their real word
+   boundaries and every container below was measured with all 29 flipped to
+   confirmed; nothing needed it.
    ========================================================================== */
-.bi-label { overflow-wrap: anywhere; }
 
 /* The phone bottom bar is the tightest space on the whole surface: five cells
    across a 375px viewport, ~75px each, under `nowrap`/`ellipsis`. Unwrapped, a

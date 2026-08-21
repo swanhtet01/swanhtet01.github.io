@@ -750,10 +750,21 @@ No implementation before both answers are recorded in this section.
 
 Wired 2026-08-21. Scope is the surface a cashier touches and nothing else: the
 four Shop work modes (`commerce-tabs.ts`, rendered by both the phone bottom bar
-and the in-page toolbar), the sales counter, and the receipt dialog. Settings,
-onboarding, Plant, Website and Ecommerce are untouched.
+and the in-page toolbar — the in-page call is guarded on `view === 'commerce'`
+so Plant's strip, which shares that `<nav>`, stays outside this table's blast
+radius), the sales counter, the payment-QR dialog the counter opens for a
+non-cash sale, and the receipt dialog. Settings, onboarding, Plant, Website and
+Ecommerce are untouched.
 
-29 new full-phrase entries (the table goes 61 -> 90; the confirmed count stays
+This is BATCH 1 of the slice, not the slice. What it cannot reach, and why, is
+listed in ERP-COMPETITIVE-ROADMAP §6.4 G1's status note: string attributes
+(`aria-label`, `placeholder`) cannot take a ReactNode at all, and parameterised
+strings ("{n} in stock", "{n} items") are the exact-match limitation the Option
+B analysis above already names. Roughly half the counter's words are in those
+two classes. Whoever picks this up next: those need a mechanism decision, in the
+same shape as the Option A/B/C note above, before any more call sites move.
+
+31 new full-phrase entries (the table goes 61 -> 92; the confirmed count stays
 exactly 33, which is the check that this batch invented no Burmese anyone can
 see), every one `pending_native_review`, drafted only from
 (a) the confirmed verbs already in the table and (b) Burmese nouns this app
@@ -770,6 +781,16 @@ entries were ALREADY confirmed and are now reached from the counter slice —
 of all 29 drafts to `confirmed` (reverted before commit) at 1280×900 and 375×812
 in both themes: no horizontal document scroll, no element past the viewport, and
 every Burmese half inside its container on all four work modes and the receipt.
+
+Findings from the code review on this batch, applied before merge and worth
+keeping: `overflow-wrap: anywhere` was removed from `.bi-label` (it splits
+Burmese mid-cluster and drops a flex item's min-content to one glyph — the
+reasoning is in the CSS); the in-page tab call was scoped to commerce; the
+payment-QR dialog was pulled INTO the slice rather than left out, because its
+Close is the same already-confirmed key the receipt uses and one non-cash sale
+would otherwise show a Burmese Close beside an English one; and the module's
+safety rule 2 was rewritten, because batch 3's `sourced:` entries deliberately
+break the "every translation is new" invariant it stated.
 
 One mechanism addition, and only one: `bi()` now tags its wrapper
 `class="bi-label"`. The phone bottom bar is five cells across a 375px viewport

@@ -5811,6 +5811,7 @@ if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContra
 // guess on a real till, and until now nothing in the belt held it. Losing the gate
 // would not fail any other check, and it would not look like a regression: the
 // surface would simply start rendering ~30 drafted strings nobody signed off.
+const paymentQrSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PaymentQr.tsx'), 'utf8')
 const i18nActionsTable = i18nActionsSource.slice(i18nActionsSource.indexOf('const ACTION_TRANSLATIONS'), i18nActionsSource.indexOf('export function bi('))
 if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') return en")
   // Lockstep pair: bi() emits the class and core-app.css styles it. Split them and the
@@ -5835,7 +5836,18 @@ if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') ret
   || i18nActionsTable.includes("'Products':")
   // Call sites, both navigations and the counter's own controls.
   || !coreShellSource.includes('>{bi(tab.label)}</Link>')
-  || !coreSource.includes('>{bi(tab.label)}</button>')
+  // Plant's task strip renders from the SAME <nav>, so the commerce guard is what
+  // keeps the four Plant/Shop-shared tab ids out of this exact-match table's blast
+  // radius: a later batch confirming a 'Jobs' or 'Problems' entry for some other
+  // surface must not silently make Plant's tabs bilingual without a Plant decision.
+  || !coreSource.includes("type=\"button\">{view === 'commerce' ? bi(tab.label) : tab.label}</button>")
+  // The merchant payment QR dialog opens from the counter's own sale details, and
+  // its Close is the same CONFIRMED key the receipt uses -- unwired, one non-cash
+  // sale would show a Burmese Close and an English Close side by side.
+  || !paymentQrSource.includes("{bi('Scan to pay')}")
+  || !paymentQrSource.includes("{bi('Amount due')}")
+  || !paymentQrSource.includes("{bi('Close')}")
+  || !i18nActionsTable.includes("'Scan to pay':")
   || !shopCounterContract.includes("{bi('Tap an item to add it')}")
   || !shopCounterContract.includes("{bi('Current sale')}")
   || !shopCounterContract.includes("{bi('Clear')}")

@@ -13,13 +13,18 @@ import { createElement, type ReactNode } from 'react'
 //    'confirmed', so adding a pending draft here can never surface an unverified
 //    guess to a real operator. Flip status to 'confirmed' only after a native
 //    Burmese speaker has actually checked the string.
-// 2. Every translation here is genuinely NEW -- none reuses an existing app term,
-//    because no existing Burmese string in the app is an action verb (confirmed by
-//    a full Unicode sweep of every product surface). What the existing vocabulary
-//    DOES set is the register to match: plain second-person tone, no textbook
+// 2. DRAFTING SOURCES, and nothing else. Batches 1 and 2 were entirely new text,
+//    because no existing Burmese string in the app was an action VERB (confirmed by
+//    a full Unicode sweep of every product surface). Batch 3 adds a second source
+//    and deliberately narrows this rule: an entry may reuse a Burmese NOUN this app
+//    already ships in its data layer -- shop-ledger-accounts.ts,
+//    shop-service-scheduling.ts -- and those entries are marked `sourced:` with the
+//    file, precisely so the native reviewer can check them against the ledger and
+//    service names an owner already reads rather than treating them as new coinage.
+//    Anything not marked `sourced:` is new text. What the existing vocabulary sets
+//    either way is the register to match: plain second-person tone, no textbook
 //    jargon, Burmese numerals over Arabic digits, phonetic transliteration for
-//    loanwords -- see shop-ledger-accounts.ts and shop-service-scheduling.ts for
-//    the precedent this follows.
+//    loanwords -- see those two files for the precedent this follows.
 type ActionTranslationStatus = 'confirmed' | 'pending_native_review'
 
 type ActionTranslation = {
@@ -140,6 +145,13 @@ const ACTION_TRANSLATIONS: Record<string, ActionTranslation> = {
   'Review order': { my: 'အော်ဒါ စိစစ်မည်', status: 'pending_native_review' }, // depends on Review စိစစ်မည်, itself still pending above -- confirm that one first, then this
   'Sales paused': { my: 'အရောင်း ခေတ္တရပ်ထား', status: 'pending_native_review' },
   'Create order': { my: 'အော်ဒါ ဖွင့်မည်', status: 'pending_native_review' }, // this button RESERVES stock and opens an order, it does not take money -- reviewer should confirm ဖွင့်မည် reads that way and not as "finish the sale"
+  // -- The merchant payment QR dialog, which opens from the counter's sale details
+  //    when a non-cash method is chosen (PaymentQr.tsx). It is part of the counter
+  //    slice for a concrete reason: its Close button is the same already-CONFIRMED
+  //    key the receipt dialog uses, so leaving this dialog out would have shown one
+  //    Burmese Close and one English Close in the same non-cash sale.
+  'Scan to pay': { my: 'ငွေပေးရန် စကန်ဖတ်ပါ', status: 'pending_native_review' }, // စကန် is a transliteration; reviewer may prefer a native verb for reading a code
+  'Amount due': { my: 'ပေးရန် ပမာဏ', status: 'pending_native_review' },
   // -- The receipt dialog
   'Order record': { my: 'အော်ဒါ မှတ်တမ်း', status: 'pending_native_review' }, // မှတ်တမ်း from the confirmed Record မှတ်တမ်းတင်မည်
   'Subtotal': { my: 'စုစုပေါင်းခွဲ', status: 'pending_native_review' },
