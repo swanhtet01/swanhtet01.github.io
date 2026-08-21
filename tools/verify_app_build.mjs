@@ -56,7 +56,7 @@ let shopProcurementDecisionRuntimeChecks = 0
 let behaviorTrailRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource, i18nActionsSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -103,6 +103,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
   readFile(resolve(root, 'tools', 'ensure_supermega_scheduler.ps1'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-tabs.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'i18n-actions.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
@@ -5801,6 +5802,57 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !coreCssSource.includes('.shop-mobile-cart')
   || !coreCssSource.includes('.shop-current-sale.is-open')) fail('shop_counter_direct_demo_missing')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
+// ERP-COMPETITIVE-ROADMAP G1 — the counter slice is wired for Burmese.
+//
+// WHAT IS ACTUALLY AT RISK HERE, and why these are not decorative pins. The whole
+// batch is safe to ship ahead of native review for exactly one reason: bi() renders
+// English for anything not 'confirmed' (showroom/src/core/i18n-actions.ts rule 1).
+// That single line is the difference between "not translated yet" and an unreviewed
+// guess on a real till, and until now nothing in the belt held it. Losing the gate
+// would not fail any other check, and it would not look like a regression: the
+// surface would simply start rendering ~30 drafted strings nobody signed off.
+const paymentQrSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PaymentQr.tsx'), 'utf8')
+const i18nActionsTable = i18nActionsSource.slice(i18nActionsSource.indexOf('const ACTION_TRANSLATIONS'), i18nActionsSource.indexOf('export function bi('))
+if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') return en")
+  // Lockstep pair: bi() emits the class and core-app.css styles it. Split them and the
+  // phone bottom bar silently goes back to ellipsising away the Burmese half of a
+  // five-across work-mode label -- invisible to every other check in this file.
+  || !i18nActionsSource.includes("createElement('span', { className: 'bi-label' }")
+  || !coreCssSource.includes('.mobile-nav a .bi-label')
+  || !coreCssSource.includes('.product-task-tabs button .bi-label')
+  // The four Shop work modes and the counter/receipt labels have table entries, so a
+  // native reviewer's sign-off is a one-line status flip with zero call-site churn.
+  || !i18nActionsTable.includes("'Today':")
+  || !i18nActionsTable.includes("'Sell':")
+  || !i18nActionsTable.includes("'Orders':")
+  || !i18nActionsTable.includes("'Stock':")
+  || !i18nActionsTable.includes("'Review order':")
+  || !i18nActionsTable.includes("'Create order':")
+  || !i18nActionsTable.includes("'Print receipt':")
+  // The documented refusal. 'Products' in the phone bottom bar opens the SuperMega
+  // product chooser, NOT the shop's goods, one cell away from the Stock tab. The
+  // refusal is recorded in i18n-actions.ts; this is what keeps someone from closing
+  // the "gap" later by adding the obvious wrong word.
+  || i18nActionsTable.includes("'Products':")
+  // Call sites, both navigations and the counter's own controls.
+  || !coreShellSource.includes('>{bi(tab.label)}</Link>')
+  // Plant's task strip renders from the SAME <nav>, so the commerce guard is what
+  // keeps the four Plant/Shop-shared tab ids out of this exact-match table's blast
+  // radius: a later batch confirming a 'Jobs' or 'Problems' entry for some other
+  // surface must not silently make Plant's tabs bilingual without a Plant decision.
+  || !coreSource.includes("type=\"button\">{view === 'commerce' ? bi(tab.label) : tab.label}</button>")
+  // The merchant payment QR dialog opens from the counter's own sale details, and
+  // its Close is the same CONFIRMED key the receipt uses -- unwired, one non-cash
+  // sale would show a Burmese Close and an English Close side by side.
+  || !paymentQrSource.includes("{bi('Scan to pay')}")
+  || !paymentQrSource.includes("{bi('Amount due')}")
+  || !paymentQrSource.includes("{bi('Close')}")
+  || !i18nActionsTable.includes("'Scan to pay':")
+  || !shopCounterContract.includes("{bi('Tap an item to add it')}")
+  || !shopCounterContract.includes("{bi('Current sale')}")
+  || !shopCounterContract.includes("{bi('Clear')}")
+  || !shopCounterContract.includes("{bi('Total')}")
+  || !shopCounterContract.includes("{disabled ? bi('Sales paused') : bi('Review order')}")) fail('shop_counter_bilingual_wiring_missing')
 // Roadmap S3 PR1 — customer loyalty points, accrual only (shop-loyalty.ts).
 // Pins the boundaries that make a points ledger safe in this codebase:
 //   - balances stay a pure projection over the DEVICE-LOCAL key (the managed
@@ -5879,6 +5931,13 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   || !coreSource.includes('Redeem points · ')
   || !coreSource.includes('loyalty={receiptLoyalty}')
   || !receiptDialogSource.includes('Points balance')
+  // G1 counter slice: the receipt dialog's own labels go through bi(), while the
+  // PRINTED acknowledgement stays one declared language. See the scope note in
+  // ReceiptDialog.tsx -- that document is evidence, not a customer slip.
+  || !receiptDialogSource.includes("{bi('Print receipt')}")
+  || !receiptDialogSource.includes("{bi('Total')}")
+  || !receiptDialogSource.includes("{bi('Close')}")
+  || !receiptDialogSource.includes('<!DOCTYPE html>\n<html lang="en">')
   || !workspaceControlsPageSource.includes('Points are redeemed as a discount recorded on the order — 1 point = 1 MMK')) fail('shop_loyalty_redemption_contract_missing')
 // G2 receipt print geometry. A counter receipt goes on a continuous thermal ROLL, so the
 // printed document carries a roll layout by default and a sheet layout only when the print
@@ -6853,7 +6912,12 @@ if (!coreSource.includes('const commerceTab = activeCommerceTab(requestedTab)')
   || !coreSource.includes("const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'")
   || !coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab")
   || !coreSource.includes("!requestedTabIsCanonical")) fail('product_default_tab_not_canonicalized')
-if (!coreSource.includes('{unitCount ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}')
+// Lockstep with the G1 counter slice: the cart's Clear control renders through
+// bi('Clear'), whose table entry is CONFIRMED, so this is one of the two places on
+// the counter where Burmese actually reaches the operator today. The control, its
+// handler and its conditional rendering are what this pin has always protected and
+// they are unchanged; only the label is now composed.
+if (!coreSource.includes('{unitCount ? <button className="text-link" onClick={clearSale} type="button">{bi(\'Clear\')}</button> : null}')
   || !coreSource.includes('{unitCount ? <><div className="shop-sale-details">')
   || !coreSource.includes('disabled={disabled} onClick={reviewSale}')
   || !coreCssSource.includes('.shop-item-search input { min-height: 44px;')) fail('shop_counter_progressive_disclosure_missing')

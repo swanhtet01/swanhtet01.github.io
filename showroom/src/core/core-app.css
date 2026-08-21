@@ -2821,3 +2821,66 @@ input, select, textarea { border-color: var(--core-field-line); }
 .close-anomaly[data-close-anomaly="flagged"] { border-left-color: var(--core-warn); }
 .close-anomaly .panel-copy { margin: 0; }
 .close-anomaly-list { display: grid; gap: var(--space-1); margin: 0; padding-left: var(--space-4); color: var(--core-ink); font-size: var(--font-size-base); line-height: 1.5; }
+
+/* ============================================================================
+   G1 counter slice — bilingual labels (ERP-COMPETITIVE-ROADMAP §6.4 G1).
+   `bi()` (core/i18n-actions.ts) renders a confirmed action as
+   `<span class="bi-label">English · <span lang="my">မြန်မာ</span></span>`.
+   The Burmese half is the half a Burmese-first cashier reads, so every rule
+   here exists to stop a container from hiding it. Nothing paints a surface,
+   introduces a colour, or adds a `:root` token, so there is nothing to mirror
+   in `.theme-dark`; sizes are the existing rem/token ramps.
+
+   Why per-container rules instead of one global one: each of these containers
+   already declares `white-space: nowrap` for a real reason (a tab strip that
+   scrolls, a bar cell that ellipsises), and those reasons still hold for the
+   English-only labels beside them. Only the composed label needs to wrap, and
+   only where the cell is narrower than the composed string.
+
+   NO MEDIA QUERY, deliberately, and not only to keep the px ratchet where it
+   is: `.mobile-nav` is `display: none` above its own breakpoint, so scoping
+   its rule to a width would restate a condition the bar already enforces; and
+   the task strip needs the same treatment at every width, because the strip
+   that scrolls sideways on a desktop is the same strip that becomes a
+   two-column grid on a phone.
+
+   :lang(my) already carries the taller line-height these glyphs need (see the
+   rule further up this file); a wrapped composed label puts the Burmese half
+   on its own line, which is exactly where that line-height applies.
+
+   NO `overflow-wrap: anywhere` ANYWHERE HERE, and this is the second thing
+   review caught. It looks like cheap insurance and is not: `anywhere` permits a
+   break between arbitrary Burmese grapheme clusters, and Burmese needs
+   dictionary word-boundary breaking, so it would split a word mid-cluster in
+   exactly the ~75px bar cell this batch exists to protect — correct-looking in
+   review, wrong on the phone, which is the failure this whole block is against.
+   It also drops a flex item's min-content contribution to one character, so a
+   `min-width: auto` sibling (the three compact buttons in
+   `.receipt-dialog-actions`, which do not wrap) could shrink to a sliver
+   rendering one glyph per line. The drafts carry spaces at their real word
+   boundaries and every container below was measured with all 29 flipped to
+   confirmed; nothing needed it.
+   ========================================================================== */
+
+/* The phone bottom bar is the tightest space on the whole surface: five cells
+   across a 375px viewport, ~75px each, under `nowrap`/`ellipsis`. Unwrapped, a
+   composed work-mode label would ellipsise away the Burmese half entirely —
+   the one failure this whole batch exists to avoid. Wrapping to two lines fits
+   inside the bar's existing single-row min-height, so bar geometry, the scroll
+   padding that clears it and the pinned `.shop-product-shell` offset all stand. */
+.mobile-nav a .bi-label { display: block; overflow: hidden; white-space: normal; line-height: 1.15; }
+.mobile-nav a .bi-label [lang="my"] { display: block; }
+
+/* The in-page task toolbar: a horizontally scrolling strip on desktop, a
+   two-column grid on phones. Its buttons carry a min-height and centre their
+   content, no fixed height, so a second line simply makes the row taller. */
+.product-task-tabs button .bi-label { white-space: normal; line-height: 1.15; }
+
+/* Cart header, counter footer and receipt actions: single-line controls whose
+   English labels are already close to their width. Let the composed label take
+   a second line rather than push its row into a horizontal scroll. */
+.shop-cart-actions .text-link .bi-label,
+.shop-review-sale .bi-label,
+.receipt-dialog-actions .core-button .bi-label { white-space: normal; text-align: left; }
+.shop-review-sale { gap: var(--space-3); }
+.shop-cart-actions { flex-wrap: wrap; }

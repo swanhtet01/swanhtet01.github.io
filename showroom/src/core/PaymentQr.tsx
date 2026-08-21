@@ -17,6 +17,7 @@ import {
   paymentQrSupported,
   putPaymentQr,
 } from './payment-qr-store'
+import { bi } from './i18n-actions'
 import { usePaymentQrImageUrl } from './use-payment-qr-image'
 
 /**
@@ -61,14 +62,14 @@ export function PaymentQrButton({ amountDue, method, scope, settingsHint }: {
     <button className="core-button compact payment-qr-show" onClick={() => setOpen(true)} type="button">Show {method} QR · {amountDue}</button>
     {open ? <dialog aria-label={`${method} payment QR`} className="payment-qr-dialog" onClose={() => setOpen(false)} ref={dialogRef}>
       <header className="payment-qr-head">
-        <span className="core-eyebrow">Scan to pay</span>
+        <span className="core-eyebrow">{bi('Scan to pay')}</span>
         <h2>{method}</h2>
       </header>
       <img alt={`${method} merchant payment QR`} className="payment-qr-image" src={url} />
-      <div className="payment-qr-amount"><small>Amount due</small><strong>{amountDue}</strong></div>
+      <div className="payment-qr-amount"><small>{bi('Amount due')}</small><strong>{amountDue}</strong></div>
       <p className="payment-qr-boundary">The customer scans this code in their own app and types the amount themselves. Check the confirmation on their screen — payment review in Orders stays manual, exactly as before.</p>
       <div className="payment-qr-actions">
-        <button className="core-button compact" onClick={() => setOpen(false)} type="button">Close</button>
+        <button className="core-button compact" onClick={() => setOpen(false)} type="button">{bi('Close')}</button>
       </div>
     </dialog> : null}
   </>
