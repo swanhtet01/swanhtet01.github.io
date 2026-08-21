@@ -183,12 +183,28 @@ re-derive in three minutes against any Chrome build.
   platform accessibility APIs expose a control's name as a plain string
   property with no per-range language. This is the shape of the platform, not a
   Chrome choice, and no browser can preserve the ranges while conforming.
-- **Implementation, measured here.** Chrome 152 confirms it, and further shows
-  that `aria-label` *prunes the accessibility subtree* (the button exposed 0 AX
-  children) while content-derived naming *preserves it* (2 AX children). That
-  is a real asymmetry, and it is deliberately **not** load-bearing below: it
-  affects what an AT can reach when reading the document, not what a user hears
-  when they tab onto the control, which is the flat name and is identical.
+- **Implementation, measured here.** Chrome 152 confirms the flat-string
+  result above.
+  > **WITHDRAWN 2026-08-21 (third correction):** an earlier revision added
+  > "and further shows that `aria-label` *prunes the accessibility subtree*
+  > (the button exposed 0 AX children) while content-derived naming *preserves
+  > it* (2 AX children) — a real asymmetry." **That was a measurement artifact
+  > of my own test markup, not a property of `aria-label`, and it is false.**
+  > The `aria-label` case in that probe had exactly one child and it was
+  > `aria-hidden="true"`; the zero was `aria-hidden` doing its job, not
+  > `aria-label` pruning anything. Re-measured with the confound removed: a
+  > button carrying **the same `aria-label`** and a non-hidden text child keeps
+  > 2 AX children and both `StaticText` nodes, Burmese included. On the real
+  > product-tile shape (img + nested spans) under `aria-label`, all seven
+  > `StaticText` descendants survive un-ignored, `item.nameMy` among them.
+  > **`aria-label` does not prune the accessibility subtree.**
+
+  So there is **no** AX-subtree asymmetry between the mechanisms. No conclusion
+  moves: the claim lived only in this bullet, was flagged non-load-bearing when
+  it was made, and never entered §3.2's grounds for R1 or §3.5's rejection of
+  `biAttr()` — both of which stand unchanged. What it does cost is a caveat
+  this document had leaned on rhetorically in the PR discussion, so it is
+  withdrawn here in full rather than softened.
 - **Not established, and not establishable here.** What a screen reader
   *does* with a mixed-language flat name — one voice for the whole string, a
   fallback, silence on the half it cannot pronounce — is AT- and
