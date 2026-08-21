@@ -32,8 +32,6 @@ _KNOWN_CAPABILITIES = frozenset(
         "production.write",
         "website.read",
         "website.write",
-        "ecommerce.read",
-        "ecommerce.write",
         "company.read",
         "company.write",
         "company.baseline.approve",
@@ -256,7 +254,6 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
     _unique(role_ids, "recipe.roles")
     required_owner_capabilities = {
         "setup.write",
-        f"{runtime_product_id}.write",
         import_spec.required_capability,
         "company.write",
         "company.baseline.approve",
@@ -334,7 +331,8 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
                 raise _fail(f"{transition_field} is not a valid state transition.")
             if transition["event"] not in _KNOWN_EVENTS:
                 raise _fail(f"{transition_field}.event is unsupported.")
-            if not str(transition["event"]).startswith(f"{runtime_product_id}."):
+            event_surface = "commerce" if runtime_product_id == "ecommerce" else runtime_product_id
+            if not str(transition["event"]).startswith(f"{event_surface}."):
                 raise _fail(f"{transition_field}.event crossed the product runtime boundary.")
             if transition["approval"] != "named-human":
                 raise _fail(f"{transition_field}.approval must remain named-human.")

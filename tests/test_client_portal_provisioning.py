@@ -112,7 +112,8 @@ class ClientPortalProvisioningTests(unittest.TestCase):
             self.assertTrue(access["sharedSurfaceDoesNotGrantProduct"])
             self.assertIn("commerce.read", access["ownerCapabilities"])
             self.assertIn("website.read", access["ownerCapabilities"])
-            self.assertIn("ecommerce.read", access["ownerCapabilities"])
+            self.assertNotIn("ecommerce.read", access["ownerCapabilities"])
+            self.assertIn("commerce.read", access["ownerCapabilities"])
             self.assertEqual(
                 access["surfaceBindings"],
                 [

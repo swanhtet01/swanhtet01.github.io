@@ -776,8 +776,6 @@
           "capabilities": [
             "setup.read",
             "setup.write",
-            "ecommerce.read",
-            "ecommerce.write",
             "commerce.read",
             "commerce.write",
             "company.read",
@@ -794,8 +792,6 @@
           "label": "Storefront merchandiser",
           "actorKind": "human",
           "capabilities": [
-            "ecommerce.read",
-            "ecommerce.write",
             "commerce.read",
             "approvals.request"
           ]
@@ -805,7 +801,6 @@
           "label": "Shop order reviewer",
           "actorKind": "human",
           "capabilities": [
-            "ecommerce.read",
             "commerce.read",
             "commerce.write",
             "approvals.read",
@@ -823,17 +818,17 @@
         },
         {
           "id": "storefront-requests",
-          "surface": "ecommerce",
+          "surface": "commerce",
           "keyField": "id",
           "source": "runtime",
-          "requiredCapability": "ecommerce.write"
+          "requiredCapability": "commerce.write"
         },
         {
           "id": "storefront-evidence",
-          "surface": "ecommerce",
+          "surface": "commerce",
           "keyField": "actionId",
           "source": "immutable-events",
-          "requiredCapability": "ecommerce.read"
+          "requiredCapability": "commerce.read"
         }
       ],
       "stateMachines": [
@@ -849,42 +844,42 @@
               "id": "quote-request",
               "fromState": "captured",
               "toState": "quoted",
-              "event": "ecommerce.request.advanced",
+              "event": "commerce.order.advanced",
               "approval": "named-human"
             },
             {
               "id": "queue-shop-review",
               "fromState": "quoted",
               "toState": "review-pending",
-              "event": "ecommerce.request.advanced",
+              "event": "commerce.order.advanced",
               "approval": "named-human"
             },
             {
               "id": "confirm-shop-handoff",
               "fromState": "review-pending",
               "toState": "confirmed",
-              "event": "ecommerce.request.advanced",
+              "event": "commerce.order.advanced",
               "approval": "named-human"
             },
             {
               "id": "cancel-captured",
               "fromState": "captured",
               "toState": "cancelled",
-              "event": "ecommerce.request.cancelled",
+              "event": "commerce.order.cancelled",
               "approval": "named-human"
             },
             {
               "id": "cancel-quoted",
               "fromState": "quoted",
               "toState": "cancelled",
-              "event": "ecommerce.request.cancelled",
+              "event": "commerce.order.cancelled",
               "approval": "named-human"
             },
             {
               "id": "cancel-review",
               "fromState": "review-pending",
               "toState": "cancelled",
-              "event": "ecommerce.request.cancelled",
+              "event": "commerce.order.cancelled",
               "approval": "named-human"
             }
           ]

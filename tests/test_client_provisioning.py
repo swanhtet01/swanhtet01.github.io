@@ -103,10 +103,32 @@ class ClientProvisioningRecipeTests(unittest.TestCase):
         for recipe in _manifest_recipes():
             with self.subTest(recipe=recipe["recipeId"]):
                 crossed = deepcopy(recipe)
-                crossed["stateMachines"][0]["transitions"][0]["event"] = "commerce.order.advanced"
-                if recipe["runtimeProductId"] == "commerce":
-                    crossed["stateMachines"][0]["transitions"][0]["event"] = "website.release.advanced"
+                event_surface = (
+                    "commerce"
+                    if recipe["runtimeProductId"] in {"commerce", "ecommerce"}
+                    else recipe["runtimeProductId"]
+                )
+                crossed["stateMachines"][0]["transitions"][0]["event"] = (
+                    "commerce.order.advanced"
+                    if event_surface != "commerce"
+                    else "website.release.advanced"
+                )
                 self.assert_invalid(crossed)
+
+    def test_ecommerce_recipe_uses_the_real_shared_commerce_engine(self) -> None:
+        recipe = next(item for item in _manifest_recipes() if item["productId"] == "ecommerce")
+        validated = validate_client_provisioning_recipe(recipe)
+        owner = next(role for role in validated["roles"] if role["id"] == "owner")
+        self.assertIn("commerce.read", owner["capabilities"])
+        self.assertIn("commerce.write", owner["capabilities"])
+        self.assertNotIn("ecommerce.read", owner["capabilities"])
+        self.assertNotIn("ecommerce.write", owner["capabilities"])
+        self.assertTrue(all(item["surface"] == "commerce" for item in validated["objects"]))
+        self.assertTrue(all(
+            transition["event"].startswith("commerce.")
+            for machine in validated["stateMachines"]
+            for transition in machine["transitions"]
+        ))
 
     def test_reviewed_product_recipes_cover_all_twelve_client_templates(self) -> None:
         manifest = json.loads(

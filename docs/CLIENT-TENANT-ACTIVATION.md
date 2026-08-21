@@ -5,6 +5,12 @@ only the products that the client approved. Shop and Ecommerce may share the
 commerce data surface, but the immutable activation event preserves them as
 separate portal entitlements.
 
+Ecommerce is therefore activated with the governed `commerce.read/write`
+capabilities used by the shared catalog and Shop handoff. Do not invent an
+`ecommerce.*` database capability: product visibility comes from the immutable
+Ecommerce entitlement, while operational writes stay on the existing commerce
+RLS surface.
+
 ## Required reviewed inputs
 
 - One current managed trial request per purchased product, in this order:
