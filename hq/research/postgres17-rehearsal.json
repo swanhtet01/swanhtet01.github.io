@@ -1,10 +1,10 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-21T00:46:01.416Z",
+  "recordedAt": "2026-08-21T07:12:52.108Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "ed394fd7ada733660e48420fc2db85160ff8b601",
+  "implementationCommit": "31e9e7b79b2ef8f0a1582a27d50b41706ba58570",
   "implementation": {
-    "digest": "sha256:ea9810ea79533ac3f0d10bba2e66fe632ff9ec348a53e97489979132c84a7a97",
+    "digest": "sha256:e15f9e232b732be365d426550c09c47c8388ef121d9ff5efe78784527ede07fd",
     "paths": [
       "supermega_runtime/managed_context.py",
       "supermega_runtime/managed_activation.py",
@@ -25,7 +25,7 @@
       "tools/verify_managed_runtime_environment_values.mjs"
     ]
   },
-  "implementationDigest": "sha256:ea9810ea79533ac3f0d10bba2e66fe632ff9ec348a53e97489979132c84a7a97",
+  "implementationDigest": "sha256:e15f9e232b732be365d426550c09c47c8388ef121d9ff5efe78784527ede07fd",
   "implementationFileCount": 17,
   "localVerification": {
     "command": "npm run database:postgres17:record",
