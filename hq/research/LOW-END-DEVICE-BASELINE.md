@@ -98,6 +98,50 @@ Repeat visit, service worker warm:
 | `/` | **536–596 ms** (2 warm runs) | 345–404 ms | **0** |
 | `/shop/?tab=counter` | **604–660 ms** (3 warm runs, median 616) | 340–370 ms | **0** |
 
+### Which of these numbers are cold, and how that was checked
+
+Because finding 1 below describes a defect that silently turns cold measurements
+into warm ones, this document has to say plainly which side of it every figure
+came from. It does.
+
+**No number in the cold table above was taken from a warm run, and this was
+verified rather than assumed.** The check is decisive: a service-worker-served
+navigation reports **exactly zero** transfer bytes, because those responses never
+reach the page target's `Network` domain. A cold navigation cannot report zero —
+it has to fetch the document, the CSS and the entry JS. So non-zero transfer is
+proof of a cold run.
+
+All six runs behind the cold table reported non-zero transfer:
+
+```
+cold-root-1         /                    js= 97,217  css=34,183   COLD
+cold-root-2         /                    js= 97,217  css=34,183   COLD
+cold-root-3         /                    js=432,113  css=34,183   COLD
+cold-shopcounter-1  /shop/?tab=counter   js=432,113  css=34,183   COLD
+cold-shopcounter-2  /shop/?tab=counter   js=432,113  css=34,183   COLD
+cold-shopcounter-3  /shop/?tab=counter   js=432,113  css=34,183   COLD
+```
+
+For contrast, in the shared-profile sweep only the very first navigation of the
+whole session reported anything at all (466,296 B); all twenty other runs across
+all seven routes reported exactly 0. The workaround held.
+
+Three qualifications, so this is not read as tidier than it is:
+
+- **The warm table is warm on purpose.** Its 0.6 s figures and its "0 bytes off
+  the network" column come from that shared-profile sweep. They are labelled
+  warm, they are *about* the warm case, and they are the one place in this
+  document where the defect's output is the intended measurement.
+- **Two cold `/` runs fetched only the entry set** (97,217 B) rather than the
+  full closure (432,113 B) inside the measurement window. Both are cold — a warm
+  run would read 0 — but they measured less of the route. The 432,113 B closure
+  figure used below therefore comes from the four runs that fetched all of it:
+  all three `/shop/?tab=counter` runs and `/` run 3.
+- **The acknowledgement measurements cannot be affected at all.** That bench
+  never loads a route. It evaluates a bundle in `about:blank` with no network
+  and no service worker in the picture, so cold-versus-warm does not apply to
+  any figure in that section.
+
 ### About the "8.5 seconds of transfer" figure
 
 It roughly holds, and it was never the time to first paint. The Shop route's
@@ -270,6 +314,11 @@ session, while the service worker's Cache Storage lives in the shared profile.
 Every cold number in this document was taken that way. The warm numbers are the
 median-of-three from the single full invocation — a genuinely useful second
 measurement, just not the one the tool claims to be reporting.
+
+Every cold figure in this document was taken that way, and the section
+"Which of these numbers are cold, and how that was checked" above records the
+per-run evidence that the workaround held. Knowing about this defect is not the
+same as being clear of it, so the check is written down rather than asserted.
 
 Not fixed here: this pass was scoped to measure only.
 
