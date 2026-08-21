@@ -3755,9 +3755,14 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
 const showroomLintScript = String(appPackage.scripts?.lint ?? '')
 const showroomLintArguments = showroomLintScript.split(/\s+/).filter(Boolean)
 const showroomLintTargets = new Set()
+const showroomLintIgnorePatterns = []
 for (let index = 1; index < showroomLintArguments.length; index += 1) {
   const argument = showroomLintArguments[index]
-  if (argument === '--ignore-pattern' || argument === '--ignore-path') { index += 1; continue }
+  // An ignore flag's value is not a target -- it names a path in ORDER TO SKIP IT.
+  // --ignore-path points at a file whose contents this cannot read, so it is recorded
+  // as a pattern that matches everything and fails the check outright.
+  if (argument === '--ignore-pattern') { showroomLintIgnorePatterns.push(showroomLintArguments[index + 1] ?? '*'); index += 1; continue }
+  if (argument === '--ignore-path') { showroomLintIgnorePatterns.push('*'); index += 1; continue }
   if (argument.startsWith('-')) continue
   showroomLintTargets.add(argument)
 }
@@ -3772,12 +3777,30 @@ for (const entry of showroomSourceEntries) {
     requiredShowroomLintTargets.push(`src/${entry.name}`)
   }
 }
-// `eslint src` (or `eslint .`) already covers every one of them; only an enumerated script
-// needs the inventory.
+// `eslint src` (or `eslint .`) reaches every one of them; only an enumerated script needs
+// the target inventory.
 const showroomLintsEverySource = showroomLintTargets.has('src') || showroomLintTargets.has('.')
-const unlintedShowroomSourceTargets = showroomLintsEverySource
-  ? []
-  : requiredShowroomLintTargets.filter((target) => !showroomLintTargets.has(target)).sort()
+// ...but a broad target is NOT proof of coverage on its own, and treating it as proof was
+// this guard's own version of the defect it was written to catch. Found by review 2026-08-21
+// and reproduced before changing anything: with `eslint src --ignore-pattern src/analytics`,
+// two hard errors in showroom/src/analytics/metrics-collector.ts left `npm --prefix showroom
+// run lint` at its 17-warning baseline and exit 0, while `npx eslint src/analytics` reported
+// them -- and this check stayed green, because the broad-target shortcut returned early
+// before any ignore was considered. Coverage is (reached by a target) AND (not subtracted by
+// an ignore), in both branches: an enumerated script can name a root and then ignore it too.
+//
+// Glob semantics are deliberately NOT reimplemented here -- that would be one more place to
+// be subtly wrong, in a check whose whole purpose is not being subtly wrong. It fails closed
+// instead: an ignore pattern subtracts a root if it names that root or a parent of it, and
+// any pattern still holding a wildcard after trailing stars are stripped is treated as
+// subtracting everything.
+const showroomLintIgnores = showroomLintIgnorePatterns.map((pattern) =>
+  pattern.replace(/^\.\//, '').replace(/\/?\*+$/, '').replace(/\/$/, ''))
+const showroomLintIgnoresTarget = (target) => showroomLintIgnores.some((pattern) =>
+  pattern === '' || pattern.includes('*') || pattern === target || target.startsWith(`${pattern}/`))
+const unlintedShowroomSourceTargets = requiredShowroomLintTargets
+  .filter((target) => !(showroomLintsEverySource || showroomLintTargets.has(target)) || showroomLintIgnoresTarget(target))
+  .sort()
 if (unlintedShowroomSourceTargets.length) {
   fail(`prototype_sources_not_linted:${unlintedShowroomSourceTargets.join('|')}`)
 }
