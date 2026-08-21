@@ -8,10 +8,13 @@ import {
   LOCAL_WORKSPACE_RESTORE_POINT_KEY,
   applyLocalWorkspaceBackup,
   collectLocalWorkspaceBackup,
+  describeLocalWorkspaceBackupRefusal,
   listLocalWorkspaceStorageKeys,
+  localWorkspaceBackupRefusalMessage,
   restoreLocalWorkspaceBackup,
   restoreLocalWorkspaceBackupFromEvidence,
   type LocalWorkspaceBackup,
+  type LocalWorkspaceBackupRefusal,
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
 import { PaymentQrSettingsControls } from './PaymentQr'
@@ -506,6 +509,12 @@ function collectCurrentBackup() {
   return typeof window === 'undefined' ? null : collectLocalWorkspaceBackup(window.localStorage)
 }
 
+// Only asked when there is no backup, so the second serialisation this costs is paid by the
+// device that already cannot produce a file -- never by the ordinary one.
+function collectBackupRefusal(): LocalWorkspaceBackupRefusal | null {
+  return typeof window === 'undefined' ? null : describeLocalWorkspaceBackupRefusal(window.localStorage)
+}
+
 function backupHref(backup: LocalWorkspaceBackup | null) {
   return backup ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(backup, null, 2))}` : '#'
 }
@@ -534,11 +543,12 @@ export function WorkspaceControlsPage() {
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNotice, setArchiveNotice] = useState('')
   const backupDownload = useMemo(() => ({ href: backupHref(currentBackup), filename: backupFilename(currentBackup) }), [currentBackup])
-  const recordCount = currentBackup ? Object.keys(currentBackup.records).length : 0
+  const backupRefusal = useMemo(() => (currentBackup ? null : collectBackupRefusal()), [currentBackup])
+  const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
     ['Writes', runtime.writesReady ? 'Ready' : 'Locked'],
-    ['Local records', currentBackup ? String(recordCount) : 'Backup unavailable'],
+    ['Local records', currentBackup ? String(recordCount) : `${recordCount} · no backup file possible`],
     ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Open a product and continue working.'],
   ]
   if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
@@ -732,6 +742,11 @@ export function WorkspaceControlsPage() {
             {currentBackup ? <a className="core-button" download={backupDownload.filename} href={backupDownload.href}>Download workspace backup</a> : <button className="core-button" disabled type="button">Backup unavailable</button>}
             <label className="core-button">Load backup file<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadBackupFile(file) }} type="file" /></label>
           </div>
+          {/* A disabled button on its own is the shape of the disaster this product already
+              found in its sister POS: the owner is sent here BY the storage meter, finds a
+              dead control, and is told neither why nor what to do instead. role="alert"
+              because she did not open this page idly -- something told her to. */}
+          {backupRefusal ? <p className="form-notice" role="alert">{localWorkspaceBackupRefusalMessage(backupRefusal)}</p> : null}
         </section>
 
         {/* The sales archive sits BESIDE the workspace backup, not instead of it, and the copy
