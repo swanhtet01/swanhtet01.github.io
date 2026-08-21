@@ -883,15 +883,15 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                   (workspace_id, actor_id, status, capabilities, actor_kind)
                 values
                   ('rehearsal-a', 'owner-a', 'active',
-                    array['commerce.write']::text[], 'human'),
+                    array['company.read', 'commerce.write']::text[], 'human'),
                   ('rehearsal-a', 'approval-reader', 'active',
                     array['approvals.read']::text[], 'human'),
                   ('rehearsal-a', 'website-reader', 'active',
                     array['website.read']::text[], 'human'),
                   ('rehearsal-b', 'owner-b', 'active',
-                   array['production.write']::text[], 'human'),
+                   array['company.read', 'production.write']::text[], 'human'),
                   ('rehearsal-product', 'owner-product', 'active',
-                    array['commerce.write', 'website.write']::text[], 'human'),
+                    array['company.read', 'commerce.write', 'website.write']::text[], 'human'),
                   ('rehearsal-approval', 'approval-agent', 'active',
                     array['approvals.request']::text[], 'agent'),
                   ('rehearsal-approval', 'approval-service', 'active',
@@ -3180,7 +3180,10 @@ def _exercise_runtime(
                         for row in cursor.fetchall()
                     ]
         if (
-            visible_events["owner-a"] != [("commerce", "order.rehearsed")]
+            visible_events["owner-a"] != [
+                ("company", "company.workspace.activated"),
+                ("commerce", "order.rehearsed"),
+            ]
             or visible_events["website-reader"]
             or visible_events["approval-reader"]
         ):
