@@ -3484,6 +3484,14 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('latestRequest.quote.payment.adapter === effectivePaymentAdapter')
   || !ecommerceBuyingUiSource.includes('paymentAdapter: effectivePaymentAdapter')
   || !ecommerceBuyingUiSource.includes('const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])')
+  // The buyer screen's cancellation, amendment and reschedule loops read acknowledgements out
+  // of ONE reader memoized on the workspace, never one validation per intent. They sit in the
+  // component body rather than a memo, so the per-call shape re-validated the whole workspace
+  // on every keystroke: 100 validations and 5.8 s per render at the buying contract's enforced
+  // ceiling. The behaviour is pinned in test_ecommerce_order_coexistence.mjs section 5; these
+  // two lines are what stop the per-call shape creeping back into this file specifically.
+  || !ecommerceBuyingUiSource.includes('const readOrderAcknowledgement = useMemo(() => commerceOrderAcknowledgementReader(commerceState), [commerceState])')
+  || ecommerceBuyingUiSource.includes('commerceOrderAcknowledgement(commerceState')
   || !ecommerceBuyingUiSource.includes('const usingSamplePaymentFallback = !onRecordManagedRequest')
   || !ecommerceBuyingUiSource.includes('&& configuredPaymentPolicies.length === 0')
   || !ecommerceBuyingUiSource.includes('currentPaymentPolicies: checkoutPaymentPolicies')
