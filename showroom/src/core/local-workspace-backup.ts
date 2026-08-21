@@ -299,13 +299,28 @@ function jsonStringByteLength(text: string): number {
  * How close this device is to being unable to produce a backup file, or 'clear' when it is
  * nowhere near.
  *
- * COST. One pass over the records already held in the backup it is given: no storage read, no
- * second serialisation, and no allocation beyond the small per-product tally. Measured on the
- * largest device that can still produce a backup at all -- Shop at its 2 MiB write ceiling
- * plus the Plant record that sits one byte under the wall -- it costs a small fraction of the
- * collectLocalWorkspaceBackup call that produced its argument, once per visit to the settings
- * page, and nothing whatsoever per render or per sale. The measured figures are in the PR
- * that introduced it; the ratio is what carries over to cheap Android hardware.
+ * COST, honestly. This is not cheap in absolute terms and the comment should not pretend it
+ * is. Measured on the largest device that can produce a backup at ALL -- Shop at its 2 MiB
+ * write ceiling plus the Plant record one byte under the wall, a 5,242,880-byte file -- one
+ * pass takes about 15 ms on a development desktop, against the ~17 ms the
+ * collectLocalWorkspaceBackup that produced its argument already costs. So the settings page
+ * roughly doubles a cost it was already paying, at the single worst device this product can
+ * hold; a shop with a few hundred sales pays a small fraction of that, because the work is
+ * linear in what is stored.
+ *
+ * What makes that acceptable is WHEN it is paid: once per visit to the settings page, in a
+ * useMemo at mount. Never per render, never per sale, never on the till's path, and never on
+ * first paint of any product. It is the same trade the Shop meter made -- one weighing per
+ * event that could have changed the answer -- moved to the event that matters here, which is
+ * an owner opening the page the backup button lives on.
+ *
+ * The single pass is also the reason it is written this way rather than as
+ * TextEncoder().encode(JSON.stringify(backup)). Measured against the same fixture that
+ * alternative costs about 18 ms, gives no per-product breakdown, and allocates a second
+ * five-megabyte string plus a five-megabyte byte array on a device that is by hypothesis
+ * short of room. Summing JSON.stringify per record costs the same 18 ms with the same
+ * allocations. Walking each record once is both the cheapest of the three and the only one
+ * that can say which product is filling the file.
  *
  * It is NOT cached, deliberately. A cache would key on the backup object, which is rebuilt on
  * every mount anyway, so it would cost a module-scoped slot to save nothing.
@@ -401,14 +416,23 @@ export function localWorkspaceBackupHeadroomMessage(headroom: LocalWorkspaceBack
   return `${size}${cause}${advice}`
 }
 
-/** The accounting line under the sentence, in the same shape the Shop meter's detail uses. */
+/**
+ * The accounting line under the sentence, in the same shape the Shop meter's detail uses.
+ *
+ * Three products at most, and never one that rounds to 0.00 MB. A product listed at 0.00 MB
+ * reads as a bug or as a rounding lie -- it is neither, it is Website holding three kilobytes
+ * -- and either reading costs the line the credibility it is there to provide.
+ */
 export function localWorkspaceBackupHeadroomDetail(headroom: LocalWorkspaceBackupHeadroom) {
-  const named = headroom.shares.filter((share) => share.product !== null).slice(0, 3)
   if (headroom.limit === 'records') {
+    const named = headroom.shares.filter((share) => share.product !== null).slice(0, 3)
     const parts = named.map((share) => `${share.product} ${share.records.toLocaleString()}`)
     return [`${headroom.records.toLocaleString()} of ${headroom.maxRecords.toLocaleString()} records used`, ...parts].join(' · ')
   }
-  const parts = named.map((share) => `${share.product} ${(share.bytes / 1048576).toFixed(2)} MB`)
+  const parts = headroom.shares
+    .filter((share) => share.product !== null && share.bytes >= 0.005 * 1048576)
+    .slice(0, 3)
+    .map((share) => `${share.product} ${(share.bytes / 1048576).toFixed(2)} MB`)
   return [`${(headroom.bytes / 1048576).toFixed(2)} MB of ${(headroom.maxBytes / 1048576).toFixed(2)} MB used`, ...parts].join(' · ')
 }
 

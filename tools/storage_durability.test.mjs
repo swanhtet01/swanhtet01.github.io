@@ -892,7 +892,7 @@ test('the headroom is weighed with the same arithmetic the download is gated on'
       [WEBSITE_STORAGE_KEY]: websiteRecord,
     } },
     { name: 'quotes and backslashes', records: { [PRODUCTION_KEY]: '{"a":"b\\\\c\\"d"}'.repeat(200) } },
-    { name: 'control characters', records: { [PRODUCTION_KEY]: ' \b\t\n\f\r'.repeat(200) } },
+    { name: 'control characters', records: { [PRODUCTION_KEY]: '\u0000\u0001\b\t\n\f\r\u001f'.repeat(200) } },
     { name: 'Myanmar and other multi-byte text', records: { [PRODUCTION_KEY]: 'ရန်ကုန် café naïve'.repeat(200) } },
     { name: 'astral characters', records: { [PRODUCTION_KEY]: '\u{1F600}\u{1D11E}'.repeat(200) } },
     { name: 'a lone high surrogate', records: { [PRODUCTION_KEY]: `x\uD83D${'y'.repeat(50)}` } },
@@ -1088,6 +1088,19 @@ test('the warning blames a product only when that product really holds most of t
   const detail = localWorkspaceBackupHeadroomDetail(evenlySplit)
   assert.match(detail, /Shop /, 'the accounting line no longer names Shop')
   assert.match(detail, /Plant /, 'the accounting line no longer names Plant')
+})
+
+// A product listed at "0.00 MB" reads as a broken number, and it is the reading an owner will
+// trust least on the one line whose whole job is to be checkable. Website on a real device is
+// three kilobytes, so this is not a hypothetical.
+test('the accounting line never lists a product as 0.00 MB', () => {
+  const detail = localWorkspaceBackupHeadroomDetail(headroomOf({
+    [COMMERCE_KEY]: shopAtCeiling,
+    [PRODUCTION_KEY]: recordOfBytes(createSeedProduction(), 2_400_000),
+    [WEBSITE_STORAGE_KEY]: websiteRecord,
+  }))
+  assert.match(detail, /Plant /, 'the products that actually hold the file must still be named')
+  assert.ok(!/ 0\.00 MB/.test(detail), `the accounting line reports a product as holding nothing: ${detail}`)
 })
 
 test('the pill escalates in words, not only in colour', () => {
