@@ -1312,7 +1312,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
-            const artKind = Math.max(0, items.indexOf(item)) % 5
+            const artKind = items.indexOf(item) % 5
             // Ids are keyed by render position, not by SKU: aria-labelledby takes a
             // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
             // space in it would silently split into two broken references.
