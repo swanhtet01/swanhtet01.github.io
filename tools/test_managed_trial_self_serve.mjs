@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   ManagedTrialError,
   createSelfServeWorkspace,
+  managedBootstrapHasCapability,
   managedProductsFromBootstrap,
   normalizeSelfServeClaimCode,
   requestSelfServeWorkspace,
@@ -248,4 +249,30 @@ test('managed product access requires explicit activation-derived entitlements f
     () => managedProductsFromBootstrap({ ...bootstrap, identity: { ...bootstrap.identity, workspace_id: 'another-company' } }, identity),
     (error) => error instanceof ManagedTrialError && error.code === 'managed_identity_changed',
   )
+})
+
+test('managed staff writes require an explicit valid surface capability', () => {
+  const identity = { workspaceId: WORKSPACE_ID, userId: session.user.id, email: session.user.email }
+  const bootstrap = {
+    identity: { workspace_id: WORKSPACE_ID, actor_id: session.user.id, actor_kind: 'human' },
+    readiness: { capabilities: ['commerce.read', 'company.read'] },
+    states: {},
+    approvals: [],
+  }
+  assert.equal(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'), false)
+  assert.equal(managedBootstrapHasCapability({
+    ...bootstrap,
+    readiness: { capabilities: ['commerce.read', 'commerce.write', 'company.read'] },
+  }, identity, 'commerce.write'), true)
+  assert.equal(managedBootstrapHasCapability({ ...bootstrap, readiness: {} }, identity, 'commerce.write'), false)
+  for (const capabilities of [
+    ['commerce.write', 'commerce.read'],
+    ['commerce.read', 'commerce.read'],
+    ['commerce.read', 'Admin.All'],
+  ]) {
+    assert.throws(
+      () => managedBootstrapHasCapability({ ...bootstrap, readiness: { capabilities } }, identity, 'commerce.write'),
+      (error) => error instanceof ManagedTrialError && error.code === 'managed_bootstrap_invalid',
+    )
+  }
 })

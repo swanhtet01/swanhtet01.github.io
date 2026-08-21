@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
+  managedBootstrapHasCapability,
   managedTrialAuthConfigured,
   ManagedTrialError,
   requireManagedSurfaceState,
@@ -251,12 +252,14 @@ export function useWebsiteWorkspace(): {
   storageMode: StorageMode
   storageIssue: string
   managedActorId: string
+  canWrite: boolean
 } {
   const [initialWorkspace] = useState(loadInitialWorkspace)
   const [workspace, setWorkspace] = useState(initialWorkspace.workspace)
   const [storageMode, setStorageMode] = useState<StorageMode>(initialWorkspace.storageMode)
   const [storageIssue, setStorageIssue] = useState(initialWorkspace.storageIssue)
   const [managedActorId, setManagedActorId] = useState('')
+  const [canWrite, setCanWrite] = useState(true)
   const [repairAvailable, setRepairAvailable] = useState(Boolean(initialWorkspace.invalidCandidate))
   const [repairCandidateRevision, setRepairCandidateRevision] = useState(initialWorkspace.invalidCandidate ? 1 : 0)
   const invalidCandidateRef = useRef<WebsiteInvalidLocalCandidate | null>(initialWorkspace.invalidCandidate)
@@ -265,6 +268,7 @@ export function useWebsiteWorkspace(): {
   const storageModeRef = useRef(initialWorkspace.storageMode)
   const managedVersionRef = useRef(0)
   const managedIdentityRef = useRef<ManagedIdentity | null>(null)
+  const managedCanWriteRef = useRef(true)
   const hydratedRef = useRef(false)
   const queueRef = useRef<Promise<void>>(Promise.resolve())
   const updateRepairCandidate = useCallback((candidate: WebsiteInvalidLocalCandidate | null) => {
@@ -297,42 +301,48 @@ export function useWebsiteWorkspace(): {
         let bootstrap = await loadManagedBootstrap(identity)
         if (!active) return
         const record = requireManagedSurfaceState(bootstrap, 'website', 'Website')
+        let managedCanWrite = managedBootstrapHasCapability(bootstrap, identity, 'website.write')
         let managedWorkspace: WebsiteWorkspace
         let managedVersion = record.version
         if (record.version === 0 && Object.keys(record.state).length === 0) {
           const seed = createInitialWorkspace()
-          const initializationId = commandId()
-          const capturedAt = new Date().toISOString()
-          try {
-            const initialized = await saveManagedWebsiteCommand({
-              commandId: initializationId,
-              eventType: 'website.workspace.initialized',
-              expectedVersion: 0,
-              identity,
-              evidence: {
-                actionId: initializationId,
-                capturedAt,
-                actor: bootstrap.identity.actor_id,
-                reason: 'Initialize managed Website workspace',
-                evidenceReference: 'website:revision:0',
-              },
-              state: seed,
-            })
-            const accepted = acceptManagedWebsiteCommand(seed, initialized, {
-              commandId: initializationId,
-              eventType: 'website.workspace.initialized',
-              priorVersion: 0,
-            })
-            managedWorkspace = accepted.workspace
-            managedVersion = accepted.version
-          } catch (error) {
-            if (!(error instanceof ManagedTrialError) || error.code !== 'trial_version_conflict') throw error
-            bootstrap = await loadManagedBootstrap(identity)
-            const concurrent = requireManagedSurfaceState(bootstrap, 'website', 'Website')
-            const restored = restoreWorkspace(concurrent.state)
-            if (!restored || concurrent.version < 1) throw new Error('Concurrent Website initialization returned invalid state.', { cause: error })
-            managedWorkspace = restored
-            managedVersion = concurrent.version
+          if (!managedCanWrite) {
+            managedWorkspace = seed
+          } else {
+            try {
+              const initializationId = commandId()
+              const capturedAt = new Date().toISOString()
+              const initialized = await saveManagedWebsiteCommand({
+                commandId: initializationId,
+                eventType: 'website.workspace.initialized',
+                expectedVersion: 0,
+                identity,
+                evidence: {
+                  actionId: initializationId,
+                  capturedAt,
+                  actor: bootstrap.identity.actor_id,
+                  reason: 'Initialize managed Website workspace',
+                  evidenceReference: 'website:revision:0',
+                },
+                state: seed,
+              })
+              const accepted = acceptManagedWebsiteCommand(seed, initialized, {
+                commandId: initializationId,
+                eventType: 'website.workspace.initialized',
+                priorVersion: 0,
+              })
+              managedWorkspace = accepted.workspace
+              managedVersion = accepted.version
+            } catch (error) {
+              if (!(error instanceof ManagedTrialError) || error.code !== 'trial_version_conflict') throw error
+              bootstrap = await loadManagedBootstrap(identity)
+              managedCanWrite = managedBootstrapHasCapability(bootstrap, identity, 'website.write')
+              const concurrent = requireManagedSurfaceState(bootstrap, 'website', 'Website')
+              const restored = restoreWorkspace(concurrent.state)
+              if (!restored || concurrent.version < 1) throw new Error('Concurrent Website initialization returned invalid state.', { cause: error })
+              managedWorkspace = restored
+              managedVersion = concurrent.version
+            }
           }
         } else {
           const restored = restoreWorkspace(record.state)
@@ -342,6 +352,8 @@ export function useWebsiteWorkspace(): {
         await requireCurrentManagedIdentity(identity)
         if (!active) return
         managedIdentityRef.current = identity
+        managedCanWriteRef.current = managedCanWrite
+        setCanWrite(managedCanWrite)
         setManagedActorId(bootstrap.identity.actor_id)
         managedVersionRef.current = managedVersion
         workspaceRef.current = managedWorkspace
@@ -354,6 +366,8 @@ export function useWebsiteWorkspace(): {
         if (!active) return
         storageModeRef.current = 'session-only'
         setStorageMode('session-only')
+        managedCanWriteRef.current = false
+        setCanWrite(false)
         if (error instanceof ManagedTrialError && error.code === 'trial_capability_required') {
           const hiddenLocalWorkspace = createInitialWorkspace()
           managedIdentityRef.current = null
@@ -439,6 +453,10 @@ export function useWebsiteWorkspace(): {
             resolve({ ok: false, error: 'Managed Website identity is unavailable. Reload before continuing.' })
             return
           }
+          if (!managedCanWriteRef.current) {
+            resolve({ ok: false, error: 'View only — ask a company owner to assign Website operator access.' })
+            return
+          }
           const transitioned = applyWebsiteWorkspaceUpdate(current, update)
           if (!transitioned.ok) {
             resolve(transitioned)
@@ -480,10 +498,13 @@ export function useWebsiteWorkspace(): {
               try {
                 const bootstrap = await loadManagedBootstrap(managedIdentity)
                 await requireCurrentManagedIdentity(managedIdentity)
+                const refreshedCanWrite = managedBootstrapHasCapability(bootstrap, managedIdentity, 'website.write')
                 const record = requireManagedSurfaceState(bootstrap, 'website', 'Website')
                 const refreshed = restoreWorkspace(record.state)
                 if (!refreshed) throw new Error('The newer managed Website state is invalid.', { cause: error })
                 setManagedActorId(bootstrap.identity.actor_id)
+                managedCanWriteRef.current = refreshedCanWrite
+                setCanWrite(refreshedCanWrite)
                 managedVersionRef.current = record.version
                 workspaceRef.current = refreshed
                 setWorkspace(refreshed)
@@ -494,6 +515,10 @@ export function useWebsiteWorkspace(): {
                 result = { ok: false, error: `Managed Website refresh failed: ${managedFailure(refreshError)}` }
               }
             } else {
+              if (error instanceof ManagedTrialError && error.code === 'trial_capability_required') {
+                managedCanWriteRef.current = false
+                setCanWrite(false)
+              }
               result = { ok: false, error: `Managed Website write failed: ${managedFailure(error)}` }
             }
           }
@@ -597,5 +622,6 @@ export function useWebsiteWorkspace(): {
     storageMode,
     storageIssue,
     managedActorId,
+    canWrite: storageMode !== 'managed' || canWrite,
   }
 }

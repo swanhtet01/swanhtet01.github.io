@@ -713,6 +713,10 @@ class TrialReadiness:
                 "write_enabled": self.write_enabled,
             },
             "blockers": list(self.blockers),
+            # The browser needs the actor's effective, entitlement-filtered
+            # capabilities to render staff portals honestly. This is authority
+            # metadata, not a secret; every write is still re-authorized here.
+            "capabilities": sorted(self.capabilities),
             "premiumUnlocked": self.premium_unlocked,
         }
         if self.product_entitlements is not None:

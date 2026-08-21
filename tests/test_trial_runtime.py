@@ -207,6 +207,10 @@ class TrialRuntimeTests(unittest.TestCase):
             self.assertEqual(bootstrap.status_code, 200)
             body = bootstrap.json()
             self.assertEqual(body["readiness"]["productEntitlements"], ["commerce"])
+            self.assertEqual(
+                body["readiness"]["capabilities"],
+                ["commerce.write", "company.read"],
+            )
             self.assertIn("commerce", body["states"])
             self.assertNotIn("production", body["states"])
             self.assertNotIn("website", body["states"])

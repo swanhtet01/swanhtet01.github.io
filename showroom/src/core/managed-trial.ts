@@ -274,7 +274,10 @@ export type ManagedBootstrap = {
     actor_id: string
     actor_kind: 'human' | 'service' | 'agent'
   }
-  readiness: Record<string, unknown> & { productEntitlements?: ClientSolutionId[] }
+  readiness: Record<string, unknown> & {
+    capabilities?: string[]
+    productEntitlements?: ClientSolutionId[]
+  }
   states: Partial<Record<ManagedSurface, ManagedStateRecord>>
   approvals: ManagedApprovalRecord[]
 }
@@ -2416,6 +2419,29 @@ export function assertManagedBootstrapIdentity(
     })
   }
   return bootstrap as ManagedBootstrap
+}
+
+const MANAGED_CAPABILITY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
+
+export function managedBootstrapHasCapability(
+  bootstrap: unknown,
+  expectedIdentity: ManagedIdentity,
+  capability: 'commerce.write' | 'production.write' | 'website.write',
+): boolean {
+  const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
+  const capabilities = verified.readiness.capabilities
+  // Older or incomplete paired deployments remain readable but never gain
+  // optimistic browser write controls without an explicit server grant.
+  if (capabilities === undefined) return false
+  if (!Array.isArray(capabilities)
+    || capabilities.some((value) => typeof value !== 'string' || !MANAGED_CAPABILITY_PATTERN.test(value))
+    || new Set(capabilities).size !== capabilities.length
+    || JSON.stringify(capabilities) !== JSON.stringify([...capabilities].sort())) {
+    throw new ManagedTrialError('The company account returned invalid staff capabilities.', {
+      code: 'managed_bootstrap_invalid',
+    })
+  }
+  return capabilities.includes(capability)
 }
 
 export function managedProductsFromBootstrap(

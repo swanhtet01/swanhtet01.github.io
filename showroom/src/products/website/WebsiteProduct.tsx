@@ -159,6 +159,7 @@ export function WebsiteProduct() {
     storageMode,
     storageIssue,
     managedActorId,
+    canWrite,
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
@@ -215,6 +216,7 @@ export function WebsiteProduct() {
   const approvalIsCurrent = Boolean(approval)
   const publishIsCurrent = Boolean(publish)
   const starterAvailable = !hasUnsavedChanges && isUntouchedWebsiteStarter(editorWorkspace)
+  const portalViewOnly = storageMode === 'managed' && !canWrite
   const workingSampleTemplate = workspace.workingSample
     ? websiteStarterTemplates.find((template) => template.id === workspace.workingSample?.templateId) ?? null
     : null
@@ -253,7 +255,9 @@ export function WebsiteProduct() {
         }
       : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
-    ? 'Changes are saved to this company account. Nothing has been deployed.'
+    ? portalViewOnly
+      ? 'View only — ask a company owner to assign Website operator access.'
+      : 'Changes are saved to this company account. Nothing has been deployed.'
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
@@ -1109,7 +1113,7 @@ export function WebsiteProduct() {
               <span className="core-eyebrow">Start here</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
               <p>{websiteAgentReason}</p>
-              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
+              <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
             </div>
             <div aria-label="Website today status" className="website-today-metrics" role="group">
               {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
@@ -1228,6 +1232,7 @@ export function WebsiteProduct() {
                 ) : null}
                 <button
                   className={`website-button ${surface === 'preview' && !starterAvailable ? 'is-primary' : 'is-secondary'}`}
+                  disabled={portalViewOnly && surface === 'preview'}
                   onClick={() => {
                     if (surface === 'preview') openContentSurface('work')
                     else previewPage()
@@ -1256,7 +1261,7 @@ export function WebsiteProduct() {
                       {savingDraft ? 'Saving…' : 'Save'}
                     </button>
                   </>
-                ) : storageMode === 'managed' ? canReview ? (
+                ) : storageMode === 'managed' ? canReview && !portalViewOnly ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Prepare file
                   </button>
@@ -1280,11 +1285,11 @@ export function WebsiteProduct() {
                 </header>
 
                 <form className="website-lead-capture-form" onSubmit={captureDemoInquiry}>
-                  <label>Name<input autoComplete="name" maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
-                  <label>Phone or email<input autoComplete="email" maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
-                  <label className="website-lead-request">What do they need?<textarea maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
-                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
-                  <button className="website-button is-primary is-compact" disabled={!readyBuyerCtaPages.length} type="submit">Add inquiry</button>
+                  <label>Name<input autoComplete="name" disabled={portalViewOnly} maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
+                  <label>Phone or email<input autoComplete="email" disabled={portalViewOnly} maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
+                  <label className="website-lead-request">What do they need?<textarea disabled={portalViewOnly} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
+                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} disabled={portalViewOnly} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
+                  <button className="website-button is-primary is-compact" disabled={portalViewOnly || !readyBuyerCtaPages.length} type="submit">{portalViewOnly ? 'View only' : 'Add inquiry'}</button>
                   {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
                 </form>
 
@@ -1292,7 +1297,7 @@ export function WebsiteProduct() {
                 <div className="website-lead-list">
                   {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
                     <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
-                    {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
+                    {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
                   </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, assignment, decision, persistence, and export.</p>}
                 </div>
                 {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
