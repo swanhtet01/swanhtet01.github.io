@@ -2372,8 +2372,8 @@ def _exercise_managed_product_journeys(
             """
         ).fetchall()
     if rows != [
-        ("rehearsal-b", "owner-b", "human", 3),
-        ("rehearsal-product", "owner-product", "human", 9),
+        ("rehearsal-b", "owner-b", "human", 4),
+        ("rehearsal-product", "owner-product", "human", 10),
     ]:
         raise RehearsalFailure("managed_journey_event_attribution_failed")
     return {
