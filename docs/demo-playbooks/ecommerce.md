@@ -7,7 +7,7 @@ Who this is for: sellers who take orders in chat or by phone and want a controll
 The pitch, verbatim from approved copy (eyebrow `Ecommerce maker`):
 
 - `Operating software for Myanmar companies.`
-- `Create an online ordering page connected to Shop.`
+- `Create a Shop-connected ordering page.`
 - `Choose Shop-backed products, build a cart, review a deterministic 15-minute quote, and save a recoverable request receipt. Payment, fulfilment, returns, and refunds are completed in Shop.`
 
 Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it as a working sample and a Shop handoff — never as hosted storefront proof.
