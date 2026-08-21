@@ -10,7 +10,11 @@ import {
   collectLocalWorkspaceBackup,
   describeLocalWorkspaceBackupRefusal,
   listLocalWorkspaceStorageKeys,
+  localWorkspaceBackupHeadroomDetail,
+  localWorkspaceBackupHeadroomLabel,
+  localWorkspaceBackupHeadroomMessage,
   localWorkspaceBackupRefusalMessage,
+  measureLocalWorkspaceBackupHeadroom,
   restoreLocalWorkspaceBackup,
   restoreLocalWorkspaceBackupFromEvidence,
   type LocalWorkspaceBackup,
@@ -48,32 +52,46 @@ import type { EcommerceOrderRequestV2 } from '../products/ecommerce/ecommerce-bu
 
 const ECOMMERCE_BUYING_LOCAL_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'
 
-// Same raw-localStorage read EcommercePipelineView below uses: readEcommerceBuyingState's
-// validation is async, and every other view on this page reads its workspace state
-// synchronously in useMemo, so this stays consistent with that existing pattern rather than
-// introducing the only async view on the page. Malformed or missing data degrades to an
-// empty queue rather than throwing.
-function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
+// The one raw-localStorage read of the Ecommerce record on this page. readEcommerceBuyingState's
+// validation is async, and every other view here reads its workspace state synchronously in
+// useMemo, so this stays consistent with that existing pattern rather than introducing the only
+// async view on the page. Malformed or missing data degrades to null rather than throwing.
+//
+// Three views wanted this and each had written its own copy, inlining the same 56-character
+// storage key and the same try/parse three times over. That is duplication the till pays for:
+// this chunk is on a byte budget, and a literal repeated in three closures is three literals in
+// the bundle.
+function readEcommerceBuyingRecord(): Record<string, unknown[]> | null {
   try {
-    if (typeof window === 'undefined') return []
+    if (typeof window === 'undefined') return null
     const raw = window.localStorage.getItem(ECOMMERCE_BUYING_LOCAL_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as { requests?: unknown }
-    return Array.isArray(parsed.requests) ? parsed.requests as EcommerceOrderRequestV2[] : []
+    return raw ? JSON.parse(raw) as Record<string, unknown[]> : null
   } catch {
-    return []
+    return null
   }
+}
+
+// Written out twice, once in each view that wanted it, including both copies of the empty-ledger
+// literal. Same duplication as the Ecommerce read above and hoisted for the same reason.
+function readLocalWebsiteLeadLedger() {
+  if (typeof window === 'undefined') return { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }
+  return readWebsiteLeadLedger(window.localStorage)
+}
+
+function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
+  const requests = readEcommerceBuyingRecord()?.requests
+  return Array.isArray(requests) ? requests as EcommerceOrderRequestV2[] : []
 }
 
 function CeoOperatingBriefView() {
   const commerce = useMemo(() => loadCommerceWorkspace().state, [])
   const production = useMemo(() => loadProductionWorkspace().state, [])
-  const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
+  const ledger = useMemo(() => readLocalWebsiteLeadLedger(), [])
   const shopRevenue = useMemo(() => projectShopRevenueSummary(commerce), [commerce])
   const plantOee = useMemo(() => projectPlantOeeSummary(production, new Date().toISOString()), [production])
   const websiteLeads = useMemo(() => projectWebsiteLeadSummary(ledger), [ledger])
   const crmJourney = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
-  const ecommerce = useMemo((): EcommercePipelineSummary => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } } catch { return { totalRequests: 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: 0, pendingCancellationIntents: 0 } } }, [])
+  const ecommerce = useMemo((): EcommercePipelineSummary => { const p = readEcommerceBuyingRecord(); return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } }, [])
   const brief = useMemo(() => projectCeoOperatingBrief(shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney, new Date().toISOString()), [shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney])
   return (
     <div className="workspace-screen settings-screen">
@@ -107,7 +125,7 @@ function CeoOperatingBriefView() {
 }
 
 function EcommercePipelineView() {
-  const stats = useMemo(() => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return p ? { requests: p.requests?.length ?? 0, returns: p.returnIntents?.length ?? 0, cancels: p.cancellationIntents?.length ?? 0 } : null } catch { return null } }, [])
+  const stats = useMemo(() => { const p = readEcommerceBuyingRecord(); return p ? { requests: p.requests?.length ?? 0, returns: p.returnIntents?.length ?? 0, cancels: p.cancellationIntents?.length ?? 0 } : null }, [])
   return (
     <div className="workspace-screen settings-screen">
       <PageHeading copy="Order requests from Ecommerce. Read-only." eyebrow="Ecommerce" title="Pipeline" />
@@ -199,7 +217,7 @@ function CrossProductView() {
 }
 
 function WebsiteLeadsView() {
-  const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
+  const ledger = useMemo(() => readLocalWebsiteLeadLedger(), [])
   const summary = useMemo(() => projectWebsiteLeadSummary(ledger), [ledger])
   const summaryRows: Array<readonly [string, string]> = [
     ['Total leads', String(summary.totalLeads)],
@@ -560,6 +578,14 @@ export function WorkspaceControlsPage() {
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNotice, setArchiveNotice] = useState('')
   const backupRefusal = useMemo(() => (currentBackup ? null : collectBackupRefusal()), [currentBackup])
+  // The warning that has to arrive BEFORE that refusal does. Measured from the very backup
+  // the button above will download, so the two readings describe one envelope and can never
+  // disagree; and only when there IS one, so this and the refusal are mutually exclusive by
+  // construction rather than by a condition someone has to keep true.
+  const backupHeadroom = useMemo(
+    () => (currentBackup ? measureLocalWorkspaceBackupHeadroom(currentBackup) : null),
+    [currentBackup],
+  )
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
@@ -783,6 +809,28 @@ export function WorkspaceControlsPage() {
               dead control, and is told neither why nor what to do instead. role="alert"
               because she did not open this page idly -- something told her to. */}
           {backupRefusal ? <p className="form-notice" role="alert">{localWorkspaceBackupRefusalMessage(backupRefusal)}</p> : null}
+          {/* The warning that arrives before that refusal does, and the only place on this
+              device where the device-wide limit is spoken about at all.
+              WHY HERE AND NOWHERE ELSE. The limit is the backup FILE, so the only thing an
+              owner can do about it is take one -- and that button is the control directly
+              above this line. Warning her in Shop instead would put a Plant-shaped problem
+              in front of a shop owner counting sales, in a product whose own meter is
+              measuring something else entirely; she would have two storage readings to
+              reconcile and no action in reach of either.
+              SILENT BY DEFAULT, and silent again once the wall is passed: 'clear' renders
+              nothing, and a device over the cap has no headroom to report -- it has the
+              refusal above, which is why these two can never appear together.
+              Same banner element, same data-headroom hook and same pill vocabulary the Shop
+              meter uses, on purpose. It is one storage picture in two places, not two
+              pictures, so an owner who has seen the till warning recognises this on sight. */}
+          {backupHeadroom && backupHeadroom.level !== 'clear'
+            ? <div className="production-mode-banner storage-durability-banner" data-headroom={backupHeadroom.level} role={backupHeadroom.level === 'urgent' ? 'alert' : undefined}>
+              <span className={`status-pill ${backupHeadroom.level === 'urgent' ? 'danger' : 'pending'}`}>{localWorkspaceBackupHeadroomLabel(backupHeadroom)}</span>
+              <p>{localWorkspaceBackupHeadroomMessage(backupHeadroom)}
+                <small className="storage-headroom-detail">{localWorkspaceBackupHeadroomDetail(backupHeadroom)}</small>
+              </p>
+            </div>
+            : null}
         </section>
 
         {/* The sales archive sits BESIDE the workspace backup, not instead of it, and the copy
