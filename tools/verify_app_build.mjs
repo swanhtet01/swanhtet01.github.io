@@ -20337,7 +20337,10 @@ else {
   // Raised from 40_000 on 2026-08-19 (S3 PR1): the customer-points settings section
   // (LoyaltySettingsControls + honest device-local copy) measured 41,350 bytes.
   // Real product surface, same raise-on-value rule.
-  if (workspaceControlsBytes > 44_000
+  // Raised from 44_000 on 2026-08-21 after main added measured multi-product backup refusal
+  // diagnostics. The merged chunk is 44,215 bytes and now tells an owner why no backup file can
+  // be produced instead of leaving a disabled escape hatch. Keep less than 0.8 KB headroom.
+  if (workspaceControlsBytes > 45_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')
