@@ -20024,6 +20024,36 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // invisible to a raw total that any other chunk's shrinkage could offset. Both
 // directions were run against real builds, not argued; the PR records them. When it trips, re-measure on a fresh dist/ and record what the growth bought,
 // exactly as the entries above do -- do not carry 467_765 forward.
+//
+// MEASUREMENT 2026-08-21 (dead-CSS reclaim, this PR -- a REDUCTION, and neither ceiling
+// moves). Every entry above records growth and asks what it bought. This one records the
+// opposite and is written the same way, because a budget nobody ever sees fall is a budget
+// that only ever ratchets. Baseline on origin/main 1bad0fa8, fresh ROOT `npm run app:build`:
+//     before   468_668 br q3   raw total 3_080_903   (6_332 under this ceiling)
+//     after    466_260 br q3   raw total 3_065_323   (8_740 under this ceiling)
+// -2_408 on the wire, -15_580 raw. The change is the deletion of 167 rule blocks / 17_613
+// source bytes from showroom/src/core/core-app.css whose selectors need a class token that
+// exists nowhere in the app. Liveness was decided against the BUILT bundle, not the source
+// tree: all 40 class tokens that left the stylesheet appear in zero bytes of dist/**.js and
+// dist/**.html, so no selector that could have matched an element was touched and the
+// rendered result is identical by construction. Two false positives a source-only scan
+// produces were caught and kept: `.theme-dark` (CoreShell builds it as `theme-${theme}`)
+// and website-product.css's `.view-content`/`.view-publish` (WebsiteProduct builds them as
+// 'view-' + view) -- template-literal AND concatenation class construction both have to be
+// modelled before a rule can be called dead.
+// NOTHING PRODUCT-FACING WAS CUT, and nothing was cut to fit a number: no copy, no
+// accessibility affordance, no error handling, no behaviour. Six dead-but-PINNED families
+// were deliberately left in place rather than moving their pins to make the number better
+// (.setup-launch-pack/-rows :5553-5556, .setup-pack-summary :5579, .setup-workflow-review
+// :5577-5578, .company-brief-disclosure :2027/:2029, .plant-production-module :2392 plus
+// verify_app_release_live :510-512) -- ~3_700 further source bytes that are real waste but
+// whose pins are 44px touch-target and live-site guards. Retiring those is a pin-moving
+// review of its own, not a byte-reclaim ride-along.
+// The px ratchet in tools/check_css_contracts.mjs self-lowered 2_435 -> 2_268 and hex
+// 99 -> 98 for core-app.css as a side effect, which tightens that guard permanently.
+// The 475_000 ceiling is deliberately NOT lowered to the new number: the point of the work
+// was to give real features room, and re-tightening it here would hand that room straight
+// back.
 let shopRouteWireBytes = 0
 let shopRouteAssetCount = 0
 const CDN_BROTLI_QUALITY = 3
