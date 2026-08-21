@@ -30,12 +30,16 @@ export const LOCAL_WORKSPACE_RESTORE_POINT_KEY = 'supermega.local-workspace-rest
 // reason and no next step. It fails at exactly the moment it matters, and it fails silently.
 //
 // Measured 2026-08-21 by driving the real transitions: a Shop workspace at its enforced
-// 2 MiB ceiling (1,190 completed sales) serialises into the backup envelope at about 1.12x
-// because every record is JSON escaped inside a JSON string. That leaves roughly 2.6 MB for
-// every other product on the device, and Plant costs about 2,085 bytes per job -- so a shop
-// at its own ceiling that also runs Plant crosses the backup cap at somewhere near 1,200
-// Plant jobs. Plant has no byte ceiling and no headroom meter of its own, so nothing warns
-// her on the way there. This type is what lets the page say so.
+// 2 MiB ceiling (1,190 completed sales) serialises into the backup envelope at about 1.12x,
+// because every record is JSON escaped inside a JSON string. Shop alone therefore spends
+// 50.3% of this cap, leaving roughly 2.47 MB for every other product on the device. Plant
+// costs about 2,085 bytes per job with its shift output records, so a shop at her own
+// ceiling who also runs Plant loses the ability to back up at 1,183 Plant jobs -- bisected
+// to the byte, 2,468,949 backs up and 2,468,950 does not.
+//
+// Plant has no byte ceiling anywhere in this codebase and no headroom meter of its own, so
+// nothing warns her on the way there. Until the design gap behind that is closed, the least
+// this page owes her is a reason. This type is what lets it give one.
 export type LocalWorkspaceBackupRefusal = {
   reason: 'too_large' | 'too_many_records'
   bytes: number

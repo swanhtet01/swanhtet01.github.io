@@ -477,8 +477,12 @@ test('a local shop does confirm local mode, once both answers are in', async () 
 //     50.3% of the 5 MiB backup file.
 //   - Plant has NO byte ceiling anywhere in the codebase and no headroom meter of its
 //     own, and costs about 2,085 bytes per job with its shift output records. So the
-//     remaining half of the file is spent by roughly 1,200 Plant jobs, and past that the
-//     backup refuses.
+//     remaining half of the file is spent by 1,183 Plant jobs -- bisected to the byte,
+//     a 2,468,949-byte Plant record backs up and 2,468,950 does not.
+//
+// Read those two together: a shop at her own ceiling is at about 1,190 sales, and the Plant
+// beside her runs out at about 1,180 jobs. On a two-product device each product gets roughly
+// half the room it would have had alone, and neither one is told.
 //
 // The tests below therefore do two different jobs. The first two are a squeeze guard:
 // they pin that the file still holds a realistic two-product device, and go red if
