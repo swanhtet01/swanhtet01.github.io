@@ -900,12 +900,17 @@ textarea { min-height: 72px; resize: vertical; }
        .status-pill.danger               5.35 red                (unchanged)
        .production-mode-banner p         5.01 red / 5.12 amber   (unchanged, --core-muted)
        .production-mode-banner > a       4.71 red / 4.82 amber   (unchanged, --core-green)
-   Every figure above is now at or over the 4.5:1 AA floor. The two that still sit closest are
-   `.production-mode-banner > a` at 4.71 on red and `.status-pill.pending` at 4.62 on red --
-   neither is a token this lane moved, so if the red tint is ever deepened, re-measure both.
-   test_theme_contrast_floor.mjs pins the four repaired figures so they cannot silently drift
-   back; a green test_theme_surface_contract.mjs does NOT cover them (it skips listed surfaces
-   as exceptions, and text once shipped at 1.01:1 with that suite fully green). */
+   Every figure above is now at or over the 4.5:1 AA floor, but the margins are thin and the
+   red tint is what makes them thin: the three tightest are `.status-pill.pending` 4.62,
+   `.storage-headroom-detail` 4.64 and `.production-mode-banner > a` 4.71, all on red. The
+   first two moved with this lane's tokens; the third is --core-green and did NOT move -- it
+   was 4.71 before and after, and it is the one with no pin recomputing it. Deepen the red
+   tint and all three fall; the AA-floor pins catch the first two (verified by raising the
+   tint alpha to .20, which reports 3.82) and would not catch the link.
+   The AA-floor section of tools/test_theme_surface_contract.mjs recomputes these four
+   figures from the live token values so they cannot silently drift back. Note that the rest
+   of that suite passing is NOT evidence these are right -- it skips listed surfaces as
+   exceptions, and text once shipped at 1.01:1 with it fully green. */
 .storage-durability-banner[data-headroom="tight"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
 .storage-durability-banner[data-headroom="urgent"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
 /* The raw number, kept quiet: an owner who wants it can read it, one who does not is not
