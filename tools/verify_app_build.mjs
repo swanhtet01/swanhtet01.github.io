@@ -56,7 +56,7 @@ let shopProcurementDecisionRuntimeChecks = 0
 let behaviorTrailRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource, i18nActionsSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -103,6 +103,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
   readFile(resolve(root, 'tools', 'ensure_supermega_scheduler.ps1'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-tabs.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'i18n-actions.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
@@ -2840,7 +2841,14 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || !workspaceControlsPageSource.includes('title="Status and recovery"')
   || !workspaceControlsPageSource.includes('Product setup and internal client tools stay separate.')
   || !workspaceControlsPageSource.includes('Download workspace backup')
-  || !workspaceControlsPageSource.includes('const backupDownload = useMemo(')
+  // Was `const backupDownload = useMemo(` -- a memoised data: URL built on mount whether or
+  // not Download was ever pressed, at 15.1 ms and 3.78 MB on a device at the workspace
+  // ceiling. Replaced by the click handler, and pinned STRICTER: the shape is named, the
+  // revocation is required beside it, and the eager form is forbidden outright so it cannot
+  // come back the way it arrived.
+  || !workspaceControlsPageSource.includes('function downloadWorkspaceBackup()')
+  || !workspaceControlsPageSource.includes('onClick={downloadWorkspaceBackup}')
+  || workspaceControlsPageSource.includes('data:application/json')
   || !workspaceControlsPageSource.includes('Save restore point')
   || !workspaceControlsPageSource.includes('Load backup file')
   || !workspaceControlsPageSource.includes('Restore previous workspace')
@@ -2855,6 +2863,34 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || workspaceControlsPageSource.includes('SettingsPage')
   || workspaceControlsPageSource.includes("from './CoreApp'")
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => workspaceControlsPageSource.includes(marker))) fail('customer_workspace_controls_not_isolated_or_safe')
+
+// An object URL that is minted and never revoked pins its whole buffer for the life of the
+// page, and at the workspace ceiling that buffer is megabytes -- the same leak, on the same
+// device, that moving the backup off a mount-time data: URL exists to remove.
+//
+// downloadBlob is the one place allowed to mint one, and it must release it. Every other
+// caller has to go through it: an unscoped `includes` for the revoke would be satisfied by
+// whichever download still had a copy of the dance, so each handler is weighed on its own
+// body instead.
+const downloadBlobHelper = workspaceControlsPageSource.slice(
+  workspaceControlsPageSource.indexOf('function downloadBlob(filename: string, blob: Blob)'),
+  workspaceControlsPageSource.indexOf('export function WorkspaceControlsPage()'),
+)
+if (!downloadBlobHelper.includes('URL.createObjectURL(blob)')
+  || !downloadBlobHelper.includes('window.setTimeout(() => URL.revokeObjectURL(url), 0)')) fail('workspace_controls_download_helper_leaks_object_url')
+for (const [handler, next] of [
+  ['function downloadWorkspaceBackup()', 'function downloadSalesArchive()'],
+  ['function downloadSalesArchive()', 'async function resetWorkspace()'],
+]) {
+  const start = workspaceControlsPageSource.indexOf(handler)
+  const end = workspaceControlsPageSource.indexOf(next, start + handler.length)
+  const body = start < 0 || end < 0 ? '' : workspaceControlsPageSource.slice(start, end)
+  if (!body
+    || !body.includes('downloadBlob(')
+    || body.includes('URL.createObjectURL(')
+    || body.includes('encodeURIComponent(')) fail(`workspace_controls_download_leaks_object_url:${handler}`)
+}
+
 if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
   // /signup used to redirect here, which was a dead end: /login is gated on
@@ -5856,6 +5892,57 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !coreCssSource.includes('.shop-mobile-cart')
   || !coreCssSource.includes('.shop-current-sale.is-open')) fail('shop_counter_direct_demo_missing')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
+// ERP-COMPETITIVE-ROADMAP G1 — the counter slice is wired for Burmese.
+//
+// WHAT IS ACTUALLY AT RISK HERE, and why these are not decorative pins. The whole
+// batch is safe to ship ahead of native review for exactly one reason: bi() renders
+// English for anything not 'confirmed' (showroom/src/core/i18n-actions.ts rule 1).
+// That single line is the difference between "not translated yet" and an unreviewed
+// guess on a real till, and until now nothing in the belt held it. Losing the gate
+// would not fail any other check, and it would not look like a regression: the
+// surface would simply start rendering ~30 drafted strings nobody signed off.
+const paymentQrSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PaymentQr.tsx'), 'utf8')
+const i18nActionsTable = i18nActionsSource.slice(i18nActionsSource.indexOf('const ACTION_TRANSLATIONS'), i18nActionsSource.indexOf('export function bi('))
+if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') return en")
+  // Lockstep pair: bi() emits the class and core-app.css styles it. Split them and the
+  // phone bottom bar silently goes back to ellipsising away the Burmese half of a
+  // five-across work-mode label -- invisible to every other check in this file.
+  || !i18nActionsSource.includes("createElement('span', { className: 'bi-label' }")
+  || !coreCssSource.includes('.mobile-nav a .bi-label')
+  || !coreCssSource.includes('.product-task-tabs button .bi-label')
+  // The four Shop work modes and the counter/receipt labels have table entries, so a
+  // native reviewer's sign-off is a one-line status flip with zero call-site churn.
+  || !i18nActionsTable.includes("'Today':")
+  || !i18nActionsTable.includes("'Sell':")
+  || !i18nActionsTable.includes("'Orders':")
+  || !i18nActionsTable.includes("'Stock':")
+  || !i18nActionsTable.includes("'Review order':")
+  || !i18nActionsTable.includes("'Create order':")
+  || !i18nActionsTable.includes("'Print receipt':")
+  // The documented refusal. 'Products' in the phone bottom bar opens the SuperMega
+  // product chooser, NOT the shop's goods, one cell away from the Stock tab. The
+  // refusal is recorded in i18n-actions.ts; this is what keeps someone from closing
+  // the "gap" later by adding the obvious wrong word.
+  || i18nActionsTable.includes("'Products':")
+  // Call sites, both navigations and the counter's own controls.
+  || !coreShellSource.includes('>{bi(tab.label)}</Link>')
+  // Plant's task strip renders from the SAME <nav>, so the commerce guard is what
+  // keeps the four Plant/Shop-shared tab ids out of this exact-match table's blast
+  // radius: a later batch confirming a 'Jobs' or 'Problems' entry for some other
+  // surface must not silently make Plant's tabs bilingual without a Plant decision.
+  || !coreSource.includes("type=\"button\">{view === 'commerce' ? bi(tab.label) : tab.label}</button>")
+  // The merchant payment QR dialog opens from the counter's own sale details, and
+  // its Close is the same CONFIRMED key the receipt uses -- unwired, one non-cash
+  // sale would show a Burmese Close and an English Close side by side.
+  || !paymentQrSource.includes("{bi('Scan to pay')}")
+  || !paymentQrSource.includes("{bi('Amount due')}")
+  || !paymentQrSource.includes("{bi('Close')}")
+  || !i18nActionsTable.includes("'Scan to pay':")
+  || !shopCounterContract.includes("{bi('Tap an item to add it')}")
+  || !shopCounterContract.includes("{bi('Current sale')}")
+  || !shopCounterContract.includes("{bi('Clear')}")
+  || !shopCounterContract.includes("{bi('Total')}")
+  || !shopCounterContract.includes("{disabled ? bi('Sales paused') : bi('Review order')}")) fail('shop_counter_bilingual_wiring_missing')
 // Roadmap S3 PR1 — customer loyalty points, accrual only (shop-loyalty.ts).
 // Pins the boundaries that make a points ledger safe in this codebase:
 //   - balances stay a pure projection over the DEVICE-LOCAL key (the managed
@@ -5934,6 +6021,13 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   || !coreSource.includes('Redeem points · ')
   || !coreSource.includes('loyalty={receiptLoyalty}')
   || !receiptDialogSource.includes('Points balance')
+  // G1 counter slice: the receipt dialog's own labels go through bi(), while the
+  // PRINTED acknowledgement stays one declared language. See the scope note in
+  // ReceiptDialog.tsx -- that document is evidence, not a customer slip.
+  || !receiptDialogSource.includes("{bi('Print receipt')}")
+  || !receiptDialogSource.includes("{bi('Total')}")
+  || !receiptDialogSource.includes("{bi('Close')}")
+  || !receiptDialogSource.includes('<!DOCTYPE html>\n<html lang="en">')
   || !workspaceControlsPageSource.includes('Points are redeemed as a discount recorded on the order — 1 point = 1 MMK')) fail('shop_loyalty_redemption_contract_missing')
 // G2 receipt print geometry. A counter receipt goes on a continuous thermal ROLL, so the
 // printed document carries a roll layout by default and a sheet layout only when the print
@@ -6908,7 +7002,12 @@ if (!coreSource.includes('const commerceTab = activeCommerceTab(requestedTab)')
   || !coreSource.includes("const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'")
   || !coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab")
   || !coreSource.includes("!requestedTabIsCanonical")) fail('product_default_tab_not_canonicalized')
-if (!coreSource.includes('{unitCount ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}')
+// Lockstep with the G1 counter slice: the cart's Clear control renders through
+// bi('Clear'), whose table entry is CONFIRMED, so this is one of the two places on
+// the counter where Burmese actually reaches the operator today. The control, its
+// handler and its conditional rendering are what this pin has always protected and
+// they are unchanged; only the label is now composed.
+if (!coreSource.includes('{unitCount ? <button className="text-link" onClick={clearSale} type="button">{bi(\'Clear\')}</button> : null}')
   || !coreSource.includes('{unitCount ? <><div className="shop-sale-details">')
   || !coreSource.includes('disabled={disabled} onClick={reviewSale}')
   || !coreCssSource.includes('.shop-item-search input { min-height: 44px;')) fail('shop_counter_progressive_disclosure_missing')
@@ -20154,6 +20253,36 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // invisible to a raw total that any other chunk's shrinkage could offset. Both
 // directions were run against real builds, not argued; the PR records them. When it trips, re-measure on a fresh dist/ and record what the growth bought,
 // exactly as the entries above do -- do not carry 467_765 forward.
+//
+// MEASUREMENT 2026-08-21 (dead-CSS reclaim, this PR -- a REDUCTION, and neither ceiling
+// moves). Every entry above records growth and asks what it bought. This one records the
+// opposite and is written the same way, because a budget nobody ever sees fall is a budget
+// that only ever ratchets. Baseline on origin/main 1bad0fa8, fresh ROOT `npm run app:build`:
+//     before   468_668 br q3   raw total 3_080_903   (6_332 under this ceiling)
+//     after    466_260 br q3   raw total 3_065_323   (8_740 under this ceiling)
+// -2_408 on the wire, -15_580 raw. The change is the deletion of 167 rule blocks / 17_613
+// source bytes from showroom/src/core/core-app.css whose selectors need a class token that
+// exists nowhere in the app. Liveness was decided against the BUILT bundle, not the source
+// tree: all 40 class tokens that left the stylesheet appear in zero bytes of dist/**.js and
+// dist/**.html, so no selector that could have matched an element was touched and the
+// rendered result is identical by construction. Two false positives a source-only scan
+// produces were caught and kept: `.theme-dark` (CoreShell builds it as `theme-${theme}`)
+// and website-product.css's `.view-content`/`.view-publish` (WebsiteProduct builds them as
+// 'view-' + view) -- template-literal AND concatenation class construction both have to be
+// modelled before a rule can be called dead.
+// NOTHING PRODUCT-FACING WAS CUT, and nothing was cut to fit a number: no copy, no
+// accessibility affordance, no error handling, no behaviour. Six dead-but-PINNED families
+// were deliberately left in place rather than moving their pins to make the number better
+// (.setup-launch-pack/-rows :5553-5556, .setup-pack-summary :5579, .setup-workflow-review
+// :5577-5578, .company-brief-disclosure :2027/:2029, .plant-production-module :2392 plus
+// verify_app_release_live :510-512) -- ~3_700 further source bytes that are real waste but
+// whose pins are 44px touch-target and live-site guards. Retiring those is a pin-moving
+// review of its own, not a byte-reclaim ride-along.
+// The px ratchet in tools/check_css_contracts.mjs self-lowered 2_435 -> 2_268 and hex
+// 99 -> 98 for core-app.css as a side effect, which tightens that guard permanently.
+// The 475_000 ceiling is deliberately NOT lowered to the new number: the point of the work
+// was to give real features room, and re-tightening it here would hand that room straight
+// back.
 let shopRouteWireBytes = 0
 let shopRouteAssetCount = 0
 const CDN_BROTLI_QUALITY = 3

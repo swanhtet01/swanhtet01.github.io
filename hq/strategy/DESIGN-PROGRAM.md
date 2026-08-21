@@ -602,6 +602,34 @@ standalone geometry PR ever; the 9px→10px class of change is exactly the
 big-bang sweep the judges banned. Progress metric: the distinct-value
 count in this table, re-measured whenever this doc is next revised.
 
+**Half-retired class families (added 2026-08-21 by the dead-CSS reclaim PR).**
+That PR deleted 167 rule blocks from core-app.css whose selectors need a class
+token that exists nowhere in the app. Ten families could only be deleted
+*partially*, because their remaining rules are comma-joined with a live
+selector and those joined selectors are verifier-pinned — leaving a stylesheet
+that reads as if the component is still fully styled when it is not. The
+sharpest case is `.segmented-control`: its selected-state rule
+(`button[aria-pressed="true"]`) and `.wide` modifier are gone, but its layout,
+hover, mobile and 44px touch-target rules survive beside `.view-tabs`. Anyone
+reintroducing a segmented control from what the file appears to offer gets a
+control that lays out and hovers correctly and has **no visual selected state**
+— silently unusable, and invisible in review because `.view-tabs` keeps its own
+`[aria-selected="true"]` rule. The same shape applies to
+`.core-main.has-trial-context`, `.command-grid`, `.attention-list`,
+`.module-today`, `.ops-today-grid`, `.catalog-import-autopilot`,
+`.setup-product-grid`, `.product-trial-actions` and `.lifecycle-grid`. Attrition
+rule: the next pass that is *already* moving one of those pinned strings drops
+the dead member from its selector list in passing and says so. Never a
+standalone PR, and never reopen a pin just to finish one of these.
+
+Also parked here, from the same PR: six families are dead but PINNED outright
+(`.setup-launch-pack`/`-rows`, `.setup-pack-summary`, `.setup-workflow-review`,
+`.company-brief-disclosure`, `.plant-production-module`) — ~3,700 source bytes
+of genuine waste whose pins are 44px touch-target and live-site guards
+(`verify_app_build.mjs` :5553-5556, :5579, :5577-5578, :2027/:2029, :2392, and
+`verify_app_release_live.mjs` :510-512). Retiring them is a pin-moving review
+of its own with a negative test per pin, not a byte-reclaim ride-along.
+
 ### Phase-3 exit
 
 Phase 3 is done when: ecommerce live-declaration hex = preview-frame
@@ -745,6 +773,77 @@ plan...").
    "misleading", those stay English-only until someone phrases them.
 
 No implementation before both answers are recorded in this section.
+
+### Batch 3 — the counter slice (SHIPPED, drafts pending). ERP-COMPETITIVE-ROADMAP §6.4 G1
+
+Wired 2026-08-21. Scope is the surface a cashier touches and nothing else: the
+four Shop work modes (`commerce-tabs.ts`, rendered by both the phone bottom bar
+and the in-page toolbar — the in-page call is guarded on `view === 'commerce'`
+so Plant's strip, which shares that `<nav>`, stays outside this table's blast
+radius), the sales counter, the payment-QR dialog the counter opens for a
+non-cash sale, and the receipt dialog. Settings, onboarding, Plant, Website and
+Ecommerce are untouched.
+
+This is BATCH 1 of the slice, not the slice. What it cannot reach, and why, is
+listed in ERP-COMPETITIVE-ROADMAP §6.4 G1's status note: string attributes
+(`aria-label`, `placeholder`) cannot take a ReactNode at all, and parameterised
+strings ("{n} in stock", "{n} items") are the exact-match limitation the Option
+B analysis above already names. Roughly half the counter's words are in those
+two classes. Whoever picks this up next: those need a mechanism decision, in the
+same shape as the Option A/B/C note above, before any more call sites move.
+
+31 new full-phrase entries (the table goes 61 -> 92; the confirmed count stays
+exactly 33, which is the check that this batch invented no Burmese anyone can
+see), every one `pending_native_review`, drafted only from
+(a) the confirmed verbs already in the table and (b) Burmese nouns this app
+already ships in `shop-ledger-accounts.ts` / `shop-service-scheduling.ts`. The
+`sourced:` comments mark the second class; every other entry carries the specific
+call the reviewer has to make. Two entries were REFUSED rather than drafted and
+the refusal is recorded in the table and pinned in the verifier — `Products` in
+the bottom bar (it opens the product chooser, not the shop's goods, one cell away
+from the Stock tab) and the `Cash / KBZPay / WavePay` payment triple.
+
+What the surface shows today: no change, except the two strings whose table
+entries were ALREADY confirmed and are now reached from the counter slice —
+`Clear` (cart header) and `Close` (receipt dialog). Measured with a scratch flip
+of all 29 drafts to `confirmed` (reverted before commit) at 1280×900 and 375×812
+in both themes: no horizontal document scroll, no element past the viewport, and
+every Burmese half inside its container on all four work modes and the receipt.
+
+Findings from the code review on this batch, applied before merge and worth
+keeping: `overflow-wrap: anywhere` was removed from `.bi-label` (it splits
+Burmese mid-cluster and drops a flex item's min-content to one glyph — the
+reasoning is in the CSS); the in-page tab call was scoped to commerce; the
+payment-QR dialog was pulled INTO the slice rather than left out, because its
+Close is the same already-confirmed key the receipt uses and one non-cash sale
+would otherwise show a Burmese Close beside an English one; and the module's
+safety rule 2 was rewritten, because batch 3's `sourced:` entries deliberately
+break the "every translation is new" invariant it stated.
+
+One mechanism addition, and only one: `bi()` now tags its wrapper
+`class="bi-label"`. The phone bottom bar is five cells across a 375px viewport
+under `nowrap`/`ellipsis`, which would have ellipsised away exactly the Burmese
+half; the class is what lets `core-app.css` let that one label wrap. No media
+query was added (`.mobile-nav` is already `display: none` above its breakpoint),
+so the px ratchet is untouched.
+
+**Still blocked, unchanged:** the two questions above. Batch 3 adds a third for
+the same reviewer — see the per-entry comments, of which `Create order`
+(reserves stock, does not take money), `Stock` (goods, not shares) and
+`Print receipt` (two loanwords in one label) are the ones most likely to come
+back wrong.
+
+**A language setting was NOT added, deliberately.** It is not required for G1's
+counter slice: `bi()` renders English AND Burmese together, so a Burmese-first
+cashier reads the half they need without choosing anything, and a setting would
+buy only the removal of the English half. What that removal actually costs and
+buys is a founder/native question, not an engineering one — whether a Yangon
+counter wants a Burmese-only till at all, whether the owner and the cashier want
+different answers on the same device, and what happens to the ~70% of the app
+that has no Burmese yet when a device says "Burmese only". That is its own
+planning pass. The device-local shape is ready when it is wanted: the
+`shopLoyaltyScopeForWorkspace` / `shop-loyalty.ts` settings pattern is the house
+convention and needs no CommerceState change.
 
 ## Verification recipe for design PRs
 

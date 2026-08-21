@@ -743,3 +743,96 @@ test('the settings page renders the refusal instead of only a disabled button', 
   assert.match(page, /backupRefusal \?[\s\S]{0,200}role="alert"/, 'the refusal is no longer announced -- the owner was sent to this page by a warning')
   assert.match(page, /describeLocalWorkspaceBackupRefusal/, 'the page no longer asks why the backup was refused')
 })
+
+// --- what the download control costs a device that never presses it ---------------------
+//
+// The refusal above is what an owner OVER the cap is told. These are about the owner just
+// under it, who gets a working button and used to pay for it on every visit.
+//
+// backupHref built its artifact in a useMemo on mount: JSON.stringify(backup, null, 2), then
+// encodeURIComponent, then the whole percent-encoded string held in component state for the
+// life of the page -- whether or not Download was ever pressed, and almost nobody presses it.
+// It is now built inside a click handler onto a Blob, the pattern downloadSalesArchive on the
+// same page already used and already explained.
+//
+// The two guards that matter are different in kind. The first is arithmetic and can never be
+// flaky: what the eager form COST, derived from the real ceiling fixture rather than written
+// down. The second is identity: the owner's file did not change. Timing is deliberately not
+// asserted -- a millisecond threshold on shared CI runners is a guard that cries wolf.
+
+const backupAtCeiling = collectLocalWorkspaceBackup(backupStorage({ [COMMERCE_KEY]: shopAtCeiling }), backupAt)
+
+// Exactly what showroom/src/core/WorkspaceControlsPage.tsx built on mount before this change.
+// Kept here so the cost it carried stays measurable after the code that carried it is gone.
+const eagerDataUrl = (backup) => `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(backup, null, 2))}`
+
+test('the eager data: URL cost a device at the ceiling far more than the file it carried', () => {
+  assert.ok(backupAtCeiling, 'a Shop at its enforced ceiling must still be able to produce a backup, or there is nothing to download')
+  const fileBytes = encodedBytes(JSON.stringify(backupAtCeiling, null, 2))
+  const urlBytes = encodedBytes(eagerDataUrl(backupAtCeiling))
+  // Percent-encoding a PRETTY-PRINTED JSON escapes every quote, brace, newline and indent
+  // space, so the overhead is far worse than the ~1.33x a data: URL is usually quoted at.
+  // Asserted as a floor, not a figure: if it ever got cheap the argument would need redoing.
+  const overhead = urlBytes / fileBytes
+  assert.ok(overhead > 1.5, `a data: URL of this file now costs only ${overhead.toFixed(3)}x -- the reason this download stopped being eager no longer holds and the comment on it is stale`)
+  assert.ok(fileBytes > 2_000_000, `the ceiling fixture produces only ${fileBytes.toLocaleString()} bytes -- it is no longer the large workspace this guard is about`)
+  // The number an owner actually paid: megabytes of string, built and retained on mount.
+  assert.ok(urlBytes > 3_000_000, `the eager form measured ${urlBytes.toLocaleString()} bytes on the mount path`)
+})
+
+test('the downloaded backup file is byte-identical to the one the eager data: URL produced', async () => {
+  const url = eagerDataUrl(backupAtCeiling)
+  const prefix = 'data:application/json;charset=utf-8,'
+  assert.ok(url.startsWith(prefix))
+  // What a browser would have written to disk from the old href.
+  const fromDataUrl = decodeURIComponent(url.slice(prefix.length))
+  // What the Blob the click handler now mints carries -- produced by the SHIPPING function,
+  // lifted out of the page source and run, not by a copy of it written here. A copy would
+  // make this test agree with itself rather than with the product: rewriting backupFileText
+  // to drop the indent would leave the hand-written twin passing, and the owner opening the
+  // only readable copy of her device would find one unbroken line. A Blob of a string is its
+  // UTF-8, so what this returns is the byte sequence that lands on her disk.
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  const declaration = page.match(/\nfunction backupFileText\(backup: LocalWorkspaceBackup\) \{\r?\n([\s\S]*?)\r?\n\}/)
+  assert.ok(declaration, 'backupFileText is gone from the settings page, so what the download writes can no longer be weighed here')
+  const fromBlob = new Function('backup', declaration[1])(backupAtCeiling)
+  assert.equal(fromBlob, fromDataUrl, 'the workspace backup file changed content when its download stopped being eager')
+  assert.equal(encodedBytes(fromBlob), encodedBytes(fromDataUrl), 'the workspace backup file changed size when its download stopped being eager')
+  // Not a BOM. The sales archive beside it prepends U+FEFF so a spreadsheet reads Burmese
+  // names as UTF-8, and copying that here would be a real bug: loadBackupFile JSON.parses
+  // this file back in, and it is the only file Shop can read back.
+  assert.ok(!fromBlob.startsWith('\uFEFF'), 'a BOM was added to the workspace backup -- this file is parsed back in, and a BOM is not JSON')
+  assert.deepEqual(JSON.parse(fromBlob), backupAtCeiling, 'the downloaded file no longer round-trips back into the backup it was made from')
+})
+
+test('the settings page builds the backup file on the click, not on mount', async () => {
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  assert.ok(!page.includes('data:application/json'), 'the workspace backup download is building a data: URL again -- at the ceiling that is megabytes of percent-encoded string on a page almost nobody downloads from')
+  assert.match(page, /function downloadWorkspaceBackup\(\) \{/, 'the workspace backup is no longer built by a click handler')
+  assert.match(page, /onClick=\{downloadWorkspaceBackup\}/, 'the Download workspace backup control is no longer wired to the click handler')
+  // The serialisation must not appear on the render path. Everything above the component is
+  // module scope; what matters is that no memo or render expression holds the file.
+  assert.ok(!/useMemo\([^)]*JSON\.stringify\(currentBackup/.test(page), 'the backup file is being serialised in a memo again')
+  assert.ok(!/backupDownload/.test(page), 'the memoised download descriptor is back')
+
+  const handler = page.slice(page.indexOf('function downloadWorkspaceBackup()'), page.indexOf('function downloadSalesArchive()'))
+  assert.ok(handler, 'the workspace backup click handler is gone')
+  assert.match(handler, /downloadBlob\(backupFilename\(currentBackup\), new Blob\(\[backupFileText\(currentBackup\)\]/, 'the backup download no longer mints its file as a Blob')
+  // Trading a retained data: URL for an object URL that is never revoked would leak exactly
+  // the same megabytes and this whole change would have bought nothing. Both downloads on the
+  // page hand off through the one helper that releases what it mints.
+  assert.match(page, /function downloadBlob\(filename: string, blob: Blob\) \{[\s\S]*?URL\.revokeObjectURL\(url\)/, 'the backup object URL is never revoked -- it pins its whole buffer for the life of the page')
+  assert.ok(!handler.includes('URL.createObjectURL('), 'the backup download mints its own object URL again instead of handing off to the helper that revokes')
+  assert.match(page, /function backupFileText\(backup: LocalWorkspaceBackup\) \{\s*return JSON\.stringify\(backup, null, 2\)/, 'the backup file contents changed shape -- this is the only human-readable copy of the owner\'s device')
+})
+
+test('a device that cannot produce a backup still gets the dead control, not a broken file', async () => {
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  // The refused branch must stay unreachable-by-click. A click handler that ran with no
+  // backup would mint an empty or "null" file, which is worse than the disabled button:
+  // the owner would believe she had taken one.
+  assert.match(page, /\{currentBackup \? <button className="core-button" onClick=\{downloadWorkspaceBackup\} type="button">Download workspace backup<\/button> : <button className="core-button" disabled type="button">Backup unavailable<\/button>\}/, 'the refused device no longer gets the disabled control beside the reason')
+  assert.match(page, /function downloadWorkspaceBackup\(\) \{\s*if \(!currentBackup\) return/, 'the backup click handler no longer refuses to run without a backup')
+  // Proven, not just pinned: the device the refusal tests above build has no backup to write.
+  assert.equal(collectLocalWorkspaceBackup(backupStorage(oversizeDevice()), backupAt), null, 'the oversize device produced a backup, so the disabled control would be hiding a working file')
+})
