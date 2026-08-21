@@ -192,10 +192,11 @@ class TrialCommandRequest(_StrictRequest):
 
 
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
-    """Spec step D request contract: { claimCode, businessName }, nothing else."""
+    """One named company and one explicit first-product entitlement."""
 
     claimCode: str = Field(min_length=1, max_length=40)
     businessName: str = Field(min_length=1, max_length=120)
+    product: Literal["commerce", "production", "website", "ecommerce"]
 
 
 class TrialClientImportApplyRequest(_StrictRequest):
@@ -1074,6 +1075,7 @@ def create_trial_router(
                 actor_id=session.actor_id,
                 claim_code=claim_code,
                 business_name=business_name,
+                product=body.product,
                 session_id=session.session_id,
                 identity_provider=session.identity_provider,
             )
@@ -1102,6 +1104,7 @@ def create_trial_router(
                 "workspace_id": result.workspace_id,
                 "label": result.label,
                 "access": result.access,
+                "product": body.product,
             },
             "claim": {
                 "claimCode": result.claim_code,

@@ -78,6 +78,7 @@ class ActivationProductEntitlementTests(unittest.TestCase):
             ("commerce", "ecommerce"),
         )
         self.assertIn("company.workspace.activated", cursor.statement)
+        self.assertIn("company.workspace.created", cursor.statement)
         self.assertEqual(cursor.params, ("spa-tenant",))
 
         self.assertEqual(

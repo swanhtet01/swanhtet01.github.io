@@ -122,7 +122,9 @@ export function ManagedLoginPage() {
     setClaimCodeFieldError(false)
     setNotice('Creating your company from the claim...')
     try {
-      const workspace = await createSelfServeWorkspace(claimCode, businessName)
+      const localTrial = readTrialSignup(window.localStorage)
+      const selectedProduct = localTrial?.product ?? trialSignupProductChoice(productIntent).id
+      const workspace = await createSelfServeWorkspace(claimCode, businessName, selectedProduct)
       setNotice(workspace.created
         ? `${workspace.label} is ready. Opening your company...`
         : `${workspace.label} was already activated with this claim. Opening it...`)

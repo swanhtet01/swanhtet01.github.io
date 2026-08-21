@@ -35,7 +35,7 @@ function activationResponse(overrides = {}) {
   return {
     contract: 'supermega.self_serve_workspace_activation.v1',
     status: 'created',
-    workspace: { workspace_id: WORKSPACE_ID, label: BUSINESS_NAME, access: 'owner' },
+    workspace: { workspace_id: WORKSPACE_ID, label: BUSINESS_NAME, access: 'owner', product: 'commerce' },
     claim: { claimCode: CLAIM_CODE, workspaceId: WORKSPACE_ID },
     created_at: '2026-08-16T00:00:00+00:00',
     idempotent_replay: false,
@@ -71,12 +71,14 @@ test('posts the normalized claim and business name to the workspaces endpoint', 
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       claimCode: CLAIM_CODE,
       businessName: BUSINESS_NAME,
+      product: 'commerce',
     })
     assert.deepEqual(workspace, {
       workspaceId: WORKSPACE_ID,
       label: BUSINESS_NAME,
       access: 'owner',
       claimCode: CLAIM_CODE,
+      product: 'commerce',
       created: true,
     })
   } finally {
@@ -94,6 +96,20 @@ test('maps a replayed activation to created: false', async () => {
     const workspace = await requestSelfServeWorkspace(session, CLAIM_CODE, BUSINESS_NAME)
     assert.equal(workspace.created, false)
     assert.equal(workspace.workspaceId, WORKSPACE_ID)
+  } finally {
+    restore()
+  }
+})
+
+test('carries a non-Shop product into the durable activation request', async () => {
+  const response = activationResponse({
+    workspace: { workspace_id: WORKSPACE_ID, label: BUSINESS_NAME, access: 'owner', product: 'website' },
+  })
+  const { calls, restore } = mockFetch(() => jsonResponse(response))
+  try {
+    const workspace = await requestSelfServeWorkspace(session, CLAIM_CODE, BUSINESS_NAME, 'website')
+    assert.equal(JSON.parse(calls[0].init.body).product, 'website')
+    assert.equal(workspace.product, 'website')
   } finally {
     restore()
   }

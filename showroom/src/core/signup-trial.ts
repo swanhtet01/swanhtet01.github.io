@@ -3,10 +3,9 @@
  *
  * The product had no signup. `/signup` redirected to `/login`, and `/login` is gated on
  * `runtime.status === 'enterprise'` AND `managedTrialAuthConfigured()`, neither of which is true on
- * a static build. So the only way in was a contact form and a wait for a human. There is also no
- * self-serve account creation anywhere: `/api/trial/v1/workspaces` only LISTS companies an
- * already-provisioned member belongs to, and tells everyone else to "Ask the company owner to
- * activate access."
+ * a static build. So the only way in was a contact form and a wait for a human. The hosted
+ * `/api/trial/v1/workspaces` activation path now consumes this device claim and the selected
+ * product, but remains fail-closed until the founder opens its reviewed activation window.
  *
  * This module is deliberately pure -- no window, no clock, no randomness, no fetch. Every guard in
  * tools/ tests plain modules because nothing in this repo can render React, so the logic worth

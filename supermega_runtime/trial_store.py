@@ -168,27 +168,51 @@ SELF_SERVE_MAX_BUSINESS_NAME = 120
 SELF_SERVE_RATE_LIMIT_MAX = 5
 SELF_SERVE_WORKSPACE_EVENT_TYPE = "company.workspace.created"
 SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT = "self_serve_claim_v1"
-# The user names themselves and owns the tenant they created: every read,
-# write, baseline, control, and approval capability on their own workspace.
-SELF_SERVE_OWNER_CAPABILITIES = frozenset(
+# The user names themselves and owns the tenant they created. Company/setup
+# controls are shared, while product capabilities are limited to the one
+# product selected by the device trial. Ecommerce intentionally shares the
+# commerce data surface without granting a Shop portal entitlement.
+_SELF_SERVE_BASE_OWNER_CAPABILITIES = frozenset(
     {
         "approvals.decide",
         "approvals.read",
         "approvals.request",
-        "commerce.read",
-        "commerce.write",
         "company.baseline.approve",
         "company.control.approve",
         "company.read",
         "company.write",
-        "production.read",
-        "production.write",
         "setup.read",
         "setup.write",
-        "website.read",
-        "website.write",
     }
 )
+SELF_SERVE_PRODUCT_CAPABILITIES = {
+    "commerce": frozenset({"commerce.read", "commerce.write"}),
+    "production": frozenset({"production.read", "production.write"}),
+    "website": frozenset({"website.read", "website.write"}),
+    "ecommerce": frozenset({"commerce.read", "commerce.write"}),
+}
+SELF_SERVE_PRODUCT_ACTIVATION_IDS = {
+    "commerce": "shop",
+    "production": "plant",
+    "website": "website",
+    "ecommerce": "ecommerce",
+}
+
+
+def validate_self_serve_product(value: object) -> str:
+    product = str(value or "").strip().lower()
+    if product not in SELF_SERVE_PRODUCT_CAPABILITIES:
+        raise TrialValidationError("self-serve product is invalid.")
+    return product
+
+
+def self_serve_owner_capabilities(product: object) -> frozenset[str]:
+    normalized = validate_self_serve_product(product)
+    return _SELF_SERVE_BASE_OWNER_CAPABILITIES | SELF_SERVE_PRODUCT_CAPABILITIES[normalized]
+
+
+# Compatibility name: the original self-serve contract defaulted to Shop.
+SELF_SERVE_OWNER_CAPABILITIES = self_serve_owner_capabilities("commerce")
 _SELF_SERVE_PROJECT_REF_PATTERN = re.compile(r"^[a-z0-9]{20}$")
 _SELF_SERVE_RELEASE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
@@ -744,6 +768,7 @@ class TrialStore(Protocol):
         actor_id: str,
         claim_code: str,
         business_name: str,
+        product: str = "commerce",
         session_id: str = "",
         identity_provider: str = "supabase",
     ) -> SelfServeWorkspaceResult: ...
@@ -3037,7 +3062,12 @@ def self_serve_workspace_id(claim_code: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"supermega:self-serve-workspace:{claim}"))
 
 
-def _self_serve_command_identity(claim_code: str, business_name: str) -> tuple[str, str, str]:
+def _self_serve_command_identity(
+    claim_code: str,
+    business_name: str,
+    product: str = "commerce",
+) -> tuple[str, str, str]:
+    normalized_product = validate_self_serve_product(product)
     workspace_id = self_serve_workspace_id(claim_code)
     command_id = str(uuid5(UUID(workspace_id), f"self-serve-create:{claim_code}"))
     fingerprint = _canonical_fingerprint(
@@ -3046,6 +3076,7 @@ def _self_serve_command_identity(claim_code: str, business_name: str) -> tuple[s
             "workspace_id": workspace_id,
             "claim_code": claim_code,
             "business_name": business_name,
+            "product": normalized_product,
             "event_type": SELF_SERVE_WORKSPACE_EVENT_TYPE,
         },
     )
@@ -3642,6 +3673,7 @@ class PostgresTrialStore:
         actor_id: str,
         claim_code: str,
         business_name: str,
+        product: str = "commerce",
         session_id: str = "",
         identity_provider: str = "supabase",
     ) -> SelfServeWorkspaceResult:
@@ -3656,7 +3688,11 @@ class PostgresTrialStore:
 
         claim = validate_self_serve_claim_code(claim_code)
         label = validate_self_serve_business_name(business_name)
-        workspace_id, command_id, fingerprint = _self_serve_command_identity(claim, label)
+        normalized_product = validate_self_serve_product(product)
+        owner_capabilities = self_serve_owner_capabilities(normalized_product)
+        workspace_id, command_id, fingerprint = _self_serve_command_identity(
+            claim, label, normalized_product
+        )
         principal = TrialPrincipal(
             workspace_id=workspace_id,
             actor_id=actor_id,
@@ -3742,6 +3778,9 @@ class PostgresTrialStore:
                             owner_membership_active = any(
                                 str(row.get("actor_id", "")) == principal.actor_id
                                 and str(row.get("status", "")) == "active"
+                                and frozenset(
+                                    str(item) for item in (row.get("capabilities") or [])
+                                ) == owner_capabilities
                                 for row in membership_rows
                             )
                             if not owner_membership_active:
@@ -3855,7 +3894,7 @@ class PostgresTrialStore:
                             (
                                 workspace_id,
                                 principal.actor_id,
-                                sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                                sorted(owner_capabilities),
                             ),
                         )
                         result = {
@@ -3866,6 +3905,7 @@ class PostgresTrialStore:
                                 "claim_code": claim,
                                 "owner_actor_id": principal.actor_id,
                                 "event_id": command_id,
+                                "product": normalized_product,
                             }
                         }
                         payload = {
@@ -3875,7 +3915,8 @@ class PostgresTrialStore:
                                 "linkedBy": principal.actor_id,
                             },
                             "businessName": label,
-                            "ownerCapabilities": sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                            "products": [SELF_SERVE_PRODUCT_ACTIVATION_IDS[normalized_product]],
+                            "ownerCapabilities": sorted(owner_capabilities),
                         }
                         cursor.execute(
                             """
@@ -3930,7 +3971,7 @@ class PostgresTrialStore:
                             or frozenset(
                                 str(item) for item in (read_back.get("capabilities") or [])
                             )
-                            != SELF_SERVE_OWNER_CAPABILITIES
+                            != owner_capabilities
                             or str(read_back.get("command_fingerprint", "")) != fingerprint
                         ):
                             raise TrialStoreError(
@@ -4012,8 +4053,9 @@ class PostgresTrialStore:
             from app_private.workspace_events
             where workspace_id = %s
               and surface = 'company'
-              and event_type = 'company.workspace.activated'
-            order by created_at desc
+              and event_type in ('company.workspace.activated', 'company.workspace.created')
+            order by case when event_type = 'company.workspace.activated' then 0 else 1 end,
+                     created_at desc
             limit 1
             """,
             (workspace_id,),
@@ -4691,6 +4733,7 @@ class InMemoryTrialStore:
         self._self_serve_links: dict[str, JsonObject] = {}
         self._self_serve_attempts: dict[str, int] = {}
         self._workspace_labels: dict[str, str] = {}
+        self._workspace_product_entitlements: dict[str, tuple[str, ...]] = {}
         self._lock = RLock()
 
     def provision_membership(
@@ -4721,6 +4764,7 @@ class InMemoryTrialStore:
         actor_id: str,
         claim_code: str,
         business_name: str,
+        product: str = "commerce",
         session_id: str = "",
         identity_provider: str = "supabase",
     ) -> SelfServeWorkspaceResult:
@@ -4732,7 +4776,11 @@ class InMemoryTrialStore:
         actor = str(actor_id or "").strip()
         if not actor:
             raise TrialNotReadyError(("auth_ready",))
-        workspace_id, command_id, fingerprint = _self_serve_command_identity(claim, label)
+        normalized_product = validate_self_serve_product(product)
+        owner_capabilities = self_serve_owner_capabilities(normalized_product)
+        workspace_id, command_id, fingerprint = _self_serve_command_identity(
+            claim, label, normalized_product
+        )
         with self._lock:
             infrastructure_blockers = tuple(
                 name
@@ -4754,7 +4802,12 @@ class InMemoryTrialStore:
                     raise TrialClaimConflict(claim)
                 replay = self._replay(workspace_id, actor, HUMAN_ACTOR_KIND, command_id, fingerprint)
                 membership = self._memberships.get((workspace_id, actor))
-                if replay is None or membership is None or membership[0] != "active":
+                if (
+                    replay is None
+                    or membership is None
+                    or membership[0] != "active"
+                    or membership[2] != owner_capabilities
+                ):
                     raise TrialInvalidTransition(
                         "Self-serve claim history exists without an active owner membership."
                     )
@@ -4783,17 +4836,19 @@ class InMemoryTrialStore:
                 workspace_id=workspace_id,
                 actor_id=actor,
                 actor_kind=HUMAN_ACTOR_KIND,
-                capabilities=sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                capabilities=sorted(owner_capabilities),
             )
             link_record: JsonObject = {
                 "claim_code": claim,
                 "workspace_id": workspace_id,
                 "owner_actor_id": actor,
                 "business_name": label,
+                "product": normalized_product,
                 "linked_at": now,
             }
             self._self_serve_links[claim] = deepcopy(link_record)
             self._workspace_labels[workspace_id] = label
+            self._workspace_product_entitlements[workspace_id] = (normalized_product,)
             result = SelfServeWorkspaceResult(
                 workspace_id=workspace_id,
                 label=label,
@@ -4817,7 +4872,7 @@ class InMemoryTrialStore:
                 stored_membership is None
                 or stored_membership[0] != "active"
                 or stored_membership[1] != HUMAN_ACTOR_KIND
-                or stored_membership[2] != SELF_SERVE_OWNER_CAPABILITIES
+                or stored_membership[2] != owner_capabilities
                 or stored_event is None
                 or stored_event[0] != fingerprint
                 or self._self_serve_links.get(claim) != link_record
@@ -4850,6 +4905,11 @@ class InMemoryTrialStore:
             audit_ready=self.audit_ready,
             write_enabled=self.write_enabled,
             capabilities=capabilities,
+            product_entitlements=(
+                self._workspace_product_entitlements.get(normalized.workspace_id, ())
+                if membership_ready and principal is not None
+                else None
+            ),
         )
 
     def _guard(

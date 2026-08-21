@@ -107,6 +107,7 @@ export type ManagedSelfServeWorkspace = {
   label: string
   access: 'owner'
   claimCode: string
+  product: ClientSolutionId
   /** False when the server replayed an activation this claim already completed. */
   created: boolean
 }
@@ -2884,7 +2885,7 @@ function normalizeSelfServeBusinessName(value: string) {
   return businessName
 }
 
-function parseSelfServeWorkspace(value: unknown, claimCode: string): ManagedSelfServeWorkspace {
+function parseSelfServeWorkspace(value: unknown, claimCode: string, product: ClientSolutionId): ManagedSelfServeWorkspace {
   if (!isRecord(value)
     || value.contract !== SELF_SERVE_WORKSPACE_CONTRACT
     || (value.status !== 'created' && value.status !== 'already_created')
@@ -2906,6 +2907,7 @@ function parseSelfServeWorkspace(value: unknown, claimCode: string): ManagedSelf
     || !workspace.label.trim()
     || workspace.label.length > 120
     || workspace.access !== 'owner'
+    || workspace.product !== product
     || value.claim.workspaceId !== workspace.workspace_id) {
     throw new ManagedTrialError('The workspace activation returned an invalid company.', {
       code: 'self_serve_workspace_invalid',
@@ -2916,6 +2918,7 @@ function parseSelfServeWorkspace(value: unknown, claimCode: string): ManagedSelf
     label: workspace.label.trim(),
     access: 'owner',
     claimCode,
+    product,
     created: value.status === 'created',
   }
 }
@@ -2931,6 +2934,7 @@ export async function requestSelfServeWorkspace(
   session: Session,
   claimCode: string,
   businessName: string,
+  product: ClientSolutionId = 'commerce',
 ): Promise<ManagedSelfServeWorkspace> {
   const claim = normalizeSelfServeClaimCode(claimCode)
   const name = normalizeSelfServeBusinessName(businessName)
@@ -2941,15 +2945,16 @@ export async function requestSelfServeWorkspace(
       authorization: `Bearer ${session.access_token}`,
       'content-type': 'application/json',
     })),
-    body: JSON.stringify({ claimCode: claim, businessName: name }),
+    body: JSON.stringify({ claimCode: claim, businessName: name, product }),
   })
   if (!response.ok) throw await parseError(response)
-  return parseSelfServeWorkspace(await response.json(), claim)
+  return parseSelfServeWorkspace(await response.json(), claim, product)
 }
 
 export async function createSelfServeWorkspace(
   claimCode: string,
   businessName: string,
+  product: ClientSolutionId = 'commerce',
 ): Promise<ManagedSelfServeWorkspace> {
   const supabase = await authClient()
   if (!supabase) {
@@ -2963,7 +2968,7 @@ export async function createSelfServeWorkspace(
       code: 'auth_required',
     })
   }
-  return requestSelfServeWorkspace(data.session, claimCode, businessName)
+  return requestSelfServeWorkspace(data.session, claimCode, businessName, product)
 }
 
 async function parseError(response: Response) {
