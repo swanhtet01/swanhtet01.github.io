@@ -131,6 +131,7 @@ const plantEquipmentMaintenanceStrategySource = await readFile(resolve(root, 'sh
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
 const ecommerceBuyingWorkspaceSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
 const workspaceControlsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'WorkspaceControlsPage.tsx'), 'utf8')
+const downloadFileSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'download-file.ts'), 'utf8')
 const productOnboardingPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
 const productOnboardingRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts'), 'utf8')
 const shopBusinessTemplatesSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts'), 'utf8')
@@ -4219,6 +4220,15 @@ if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
   || !coreSource.includes("data-order-receipt=\"view\"")
   || !coreSource.includes('onViewReceipt={setReceiptAck}')
   || !coreSource.includes('<ReceiptDialog ack={receiptAck}')) fail('customer_receipt_ui_missing')
+// The acknowledgement download used to be a memoised data: URL per order, on a memo keyed on
+// `commerce` -- 1,852,602 bytes rebuilt and retained on every sale at the workspace ceiling.
+// Pinned STRICTER than the href it replaced: the file function is named, the click handler is
+// required, and the eager form is forbidden outright so it cannot come back the way it came.
+if (!coreSource.includes('function orderAcknowledgementFileText(artifact: CommerceOrderAcknowledgement)')
+  || !coreSource.includes('function OrderReceiptActions(')
+  || !coreSource.includes('downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)]')
+  || coreSource.includes('data:text/plain')
+  || coreSource.includes('href={acknowledgement.href}')) fail('order_acknowledgement_download_eager_again')
 if (!coreSource.includes('aria-label="Shop attention"')
   || !coreSource.includes('to="/shop/?tab=inventory"')
   || !coreSource.includes("useState<'manual' | 'message' | 'online'>('manual')")
@@ -4593,6 +4603,10 @@ if (!coreSource.includes('data-tax-configuration="versioned"')
   || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
+  // Same reason, same shape: 758,928 bytes of percent-encoded CSV on the same per-sale memo.
+  || !coreSource.includes('function closeExportFileText(artifact: CommerceDailyCloseExport)')
+  || !coreSource.includes('downloadBlob(latestCloseDownload.filename, new Blob([closeExportFileText(latestCloseDownload.artifact)]')
+  || coreSource.includes('href={latestCloseDownload.href}')
   || !commerceSource.includes('supermega.commerce.daily-close-export.v3')
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
@@ -20153,6 +20167,25 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // The 475_000 ceiling is deliberately NOT lowered to the new number: the point of the work
 // was to give real features room, and re-tightening it here would hand that room straight
 // back.
+//
+// MEASUREMENT 2026-08-21 (Shop eager-download reclaim, this PR). Baseline on origin/main
+// 47321d24 (#535), fresh ROOT `npm run app:build`:
+//     before   467_326 br q3   raw total 3_070_313   (7_674 under this ceiling)
+//     after    467_500 br q3   raw total 3_070_434   (7_500 under this ceiling)
+// +174 on the wire, well inside the ~680-bytes-per-PR cadence this block records above, and
+// no ceiling moves. What it bought is not wire bytes but RUNTIME bytes, which this guard
+// cannot see: 2,611,530 bytes of percent-encoded string that the Shop screen used to build
+// and retain -- 1,852,602 across one data: URL per order plus 758,928 for the close CSV --
+// measured on a Shop driven to its enforced 2 MiB ceiling through the real transitions
+// (1,453 orders, 1,244 completed). Both memos are keyed on `commerce`, a new object after
+// every sale, so a till rebuilt all of it on every sale for files almost nobody downloads.
+// The +174 splits +96 into core-app and +78 into the shared capability-tiers chunk, where
+// Rollup places the new leaf helper showroom/src/core/download-file.ts. It was paid down
+// from +305 by de-duplicating the receipt control pair the order list and the archive each
+// carried a byte-identical copy of, and by inlining two single-use wrappers. NO COPY, no
+// affordance and no behaviour was cut to reach it; the four remaining CSV data: URLs on that
+// screen were measured (10,305 / 83,244 bytes, and two that produce nothing on a realistic
+// workspace) and deliberately LEFT rather than changed for consistency.
 let shopRouteWireBytes = 0
 let shopRouteAssetCount = 0
 const CDN_BROTLI_QUALITY = 3
@@ -20208,6 +20241,13 @@ const bundlerRouteAssets = (source, table, routePattern) => {
   }
   if (bundlerDependencyTable('const x=1') !== null) fail('wire_cost_dependency_table_parser_overmatches')
 }
+// An object URL minted and never revoked pins its whole buffer for the life of the page, and
+// at the workspace ceiling that buffer is megabytes -- the same leak, on the same device, that
+// moving these downloads off render-time data: URLs exists to remove. This is the one place on
+// the Shop route allowed to mint one, and it must release it.
+if (!downloadFileSource.includes('export function downloadBlob(filename: string, blob: Blob)')
+  || !downloadFileSource.includes('URL.createObjectURL(blob)')
+  || !downloadFileSource.includes('window.setTimeout(() => URL.revokeObjectURL(url), 0)')) fail('shared_download_helper_leaks_object_url')
 const documentScripts = [...rootPageSource.matchAll(/<script[^>]+src="\/([^"]+)"/g)].map((match) => match[1])
 const documentStyles = [...rootPageSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)].map((match) => match[1])
 const moduleEntryAsset = documentScripts.find((path) => /^assets\/[^/]+\.js$/.test(path))
