@@ -205,3 +205,11 @@ console.log(`commerce daily close contract: ${checks} checks passed`)
 // a file no gate runs. It asserts and prints its own count, and throws on
 // failure, which fails this step.
 await import('./test_shop_close_anomaly.mjs')
+
+// The workspace archive is built entirely out of the close export this file guards: it walks
+// every close through commerceDailyCloseExport rather than re-projecting the same records,
+// and asserts the two agree. Its contract rides on this gate step for the same reason the
+// anomaly projection above does -- a step of its own would mean a new npm script, and
+// package.json is digest-bound. It stays in its own file because its subject is the archive
+// and not the close, and it asserts and prints its own count, throwing on failure.
+await import('./test_shop_workspace_archive.mjs')

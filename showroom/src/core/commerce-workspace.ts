@@ -37,6 +37,7 @@ export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
+export const COMMERCE_WORKSPACE_ARCHIVE_SCHEMA = 'supermega.commerce.workspace-archive.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -9707,8 +9708,13 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
   ]
 }
 
-export function commerceDailyCloseExport(state: CommerceState, closeId: string): CommerceDailyCloseExport | null {
-  const current = validateCommerceState(state)
+// Split out of commerceDailyCloseExport so a caller that already holds a VALIDATED state can
+// export many closes without paying validateCommerceState once per close. At the byte ceiling
+// that validation dominates everything else: commerceWorkspaceArchive exports every close a
+// shop has ever taken, and re-validating a 2 MiB workspace tens of times over is the
+// difference between an archive a cheap Android tablet can produce and one it cannot. The
+// public entry point below still validates, so its contract is unchanged.
+function commerceDailyCloseExportFrom(current: CommerceState, closeId: string): CommerceDailyCloseExport | null {
   const close = current.closes.find((candidate) => candidate.id === closeId)
   if (!close?.businessDate
     || !close.orderIds
@@ -9785,6 +9791,10 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
     ...artifact,
     digest: `sha256:${sha256Hex(JSON.stringify(commerceDailyCloseExportProjection(artifact)))}`,
   }
+}
+
+export function commerceDailyCloseExport(state: CommerceState, closeId: string): CommerceDailyCloseExport | null {
+  return commerceDailyCloseExportFrom(validateCommerceState(state), closeId)
 }
 
 function commerceCsvCell(value: string | number | null | string[]) {
@@ -9980,6 +9990,299 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     null,
     artifact.digest,
   ]))
+  return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
+}
+
+// ---------------------------------------------------------------------------
+// Workspace archive -- every trading day this device has closed, in one file.
+//
+// WHY THIS EXISTS. The headroom meter (storage-durability.ts) tells an owner near the
+// workspace ceiling to "export a backup from Settings so these records are safe off the
+// device". Two files could have answered that and neither did the whole job:
+//
+//  - The workspace backup (local-workspace-backup.ts) is genuinely lossless and Shop can
+//    genuinely load it back. But it is a map of storage keys to raw JSON strings. Nobody
+//    can read it, and no accountant can be handed it.
+//  - commerceDailyCloseExport produces a readable, digest-sealed CSV -- but the only place
+//    it is surfaced (CoreApp.tsx, the "Last close" disclosure) builds it for latestClose
+//    and nothing else. A shop 38 trading days into its history could download day 38 and
+//    had no route to days 1-37 at all.
+//
+// So the gap was not "a lossless artifact" -- one already ships. It was that a shop's own
+// trading history had no readable form. This archive is that form: it walks every close,
+// reusing the export builder that already exists rather than defining a second projection
+// of the same records.
+//
+// WHAT IT IS NOT. It cannot be loaded back into Shop. There is no importer, and
+// CommerceDailyCloseExportOrder is a narrower record than CommerceOrder, so an importer
+// built on it would be lossy. That is declared in-band as `restorable: false` and said in
+// the owner's own words in the interface, because an export whose limits are only written
+// in a pull request is an export that will be trusted for something it cannot do.
+//
+// COMPLETENESS IS THE WHOLE POINT. An archive that quietly drops a record type is worse
+// than no archive, because the owner stops looking. Two record classes can legitimately
+// fail to reach a close export and both were silently droppable:
+//
+//  - A legacy close taken before evidence fields existed: commerceDailyCloseExportFrom
+//    returns null for it (missing actionId/operator/reason/evidenceReference).
+//  - An order not on any exported close: today's un-closed sales, cancellations, and every
+//    order belonging to a close that fell into the case above.
+//
+// Rather than filter those away, each one becomes a named gap row, and the artifact fails
+// closed unless archived + uncovered accounts for every order in the workspace. The counts
+// are derived from the state being archived on every build; none of them is a constant.
+export type CommerceWorkspaceArchiveGap = {
+  kind: 'close_without_evidence' | 'order_not_on_an_archived_close'
+  id: string
+  detail: string
+}
+
+export type CommerceWorkspaceArchive = {
+  schema: typeof COMMERCE_WORKSPACE_ARCHIVE_SCHEMA
+  workspaceSchema: typeof COMMERCE_WORKSPACE_SCHEMA
+  generatedAt: string
+  closeCount: number
+  archivedCloseCount: number
+  orderCount: number
+  archivedOrderCount: number
+  uncoveredOrderCount: number
+  archivedTotalMmk: number
+  closes: CommerceDailyCloseExport[]
+  gaps: CommerceWorkspaceArchiveGap[]
+  // The posture triple, in the shape the other accountant-facing artifacts use: what this
+  // file cannot do, stated inside the file.
+  restorable: false
+  externalWritesPerformed: false
+  digest: string
+}
+
+function commerceWorkspaceArchiveProjection(artifact: Omit<CommerceWorkspaceArchive, 'digest'>) {
+  return [
+    artifact.schema,
+    artifact.workspaceSchema,
+    artifact.generatedAt,
+    artifact.closeCount,
+    artifact.archivedCloseCount,
+    artifact.orderCount,
+    artifact.archivedOrderCount,
+    artifact.uncoveredOrderCount,
+    artifact.archivedTotalMmk,
+    artifact.restorable,
+    artifact.externalWritesPerformed,
+    // The close digests, not the closes: each close is already sealed by its own
+    // projection, so re-flattening every order here would only duplicate that work at the
+    // exact scale where the cost matters.
+    artifact.closes.map((close) => [close.closeId, close.businessDate, close.digest]),
+    artifact.gaps.map((gap) => [gap.kind, gap.id, gap.detail]),
+  ]
+}
+
+/**
+ * Build a readable archive of every trading day this workspace has closed.
+ *
+ * Read-only by construction: the state is validated once, every close is projected through
+ * the existing export builder, and nothing is written back. Returns null rather than an
+ * incomplete archive if the coverage arithmetic does not account for every order.
+ */
+export function commerceWorkspaceArchive(state: CommerceState, generatedAt: string): CommerceWorkspaceArchive | null {
+  if (!validTimestamp(generatedAt)) return null
+  const current = validateCommerceState(state)
+
+  const closes: CommerceDailyCloseExport[] = []
+  const gaps: CommerceWorkspaceArchiveGap[] = []
+  for (const close of current.closes) {
+    const exported = commerceDailyCloseExportFrom(current, close.id)
+    if (exported) {
+      closes.push(exported)
+      continue
+    }
+    gaps.push({
+      kind: 'close_without_evidence',
+      id: close.id,
+      detail: `Closed ${close.businessDate ?? 'on an unrecorded date'} without the evidence record an export needs, so its ${close.orderIds?.length ?? close.orders} ${(close.orderIds?.length ?? close.orders) === 1 ? 'sale is' : 'sales are'} listed individually below.`,
+    })
+  }
+
+  // Unconditional by design: an order is in this file or it has a row saying it is not, and
+  // there is no third branch that could quietly swallow one. An earlier revision looked up
+  // which close had claimed the order so the row could name it, and that lookup was both
+  // unreachable in practice — a close carries all eight snapshot fields or none, so a close
+  // that cannot be exported has no orderIds to claim with — and a place where a stray
+  // `continue` would drop a record with nothing to catch it.
+  const archivedOrderIds = new Set(closes.flatMap((close) => close.orders.map((order) => order.orderId)))
+  for (const order of current.orders) {
+    if (archivedOrderIds.has(order.id)) continue
+    gaps.push({
+      kind: 'order_not_on_an_archived_close',
+      id: order.id,
+      detail: `Not on a closed day in this file — ${order.status}, payment ${order.paymentStatus}.`,
+    })
+  }
+
+  const archivedOrderCount = archivedOrderIds.size
+  const uncoveredOrderCount = gaps.filter((gap) => gap.kind === 'order_not_on_an_archived_close').length
+  // Fail closed on the one thing this artifact promises. If some order is neither archived
+  // nor named as a gap, the file would understate the shop's history without saying so --
+  // exactly the silence this whole batch exists to remove.
+  if (archivedOrderCount + uncoveredOrderCount !== current.orders.length) return null
+
+  const archivedTotalMmk = closes.reduce((sum, close) => sum + close.totalMmk, 0)
+  if (!Number.isSafeInteger(archivedTotalMmk)) return null
+
+  const artifact: Omit<CommerceWorkspaceArchive, 'digest'> = {
+    schema: COMMERCE_WORKSPACE_ARCHIVE_SCHEMA,
+    workspaceSchema: COMMERCE_WORKSPACE_SCHEMA,
+    generatedAt,
+    closeCount: current.closes.length,
+    archivedCloseCount: closes.length,
+    orderCount: current.orders.length,
+    archivedOrderCount,
+    uncoveredOrderCount,
+    archivedTotalMmk,
+    closes,
+    gaps,
+    restorable: false,
+    externalWritesPerformed: false,
+  }
+  return {
+    ...artifact,
+    digest: `sha256:${sha256Hex(JSON.stringify(commerceWorkspaceArchiveProjection(artifact)))}`,
+  }
+}
+
+export function commerceWorkspaceArchiveCsv(artifact: CommerceWorkspaceArchive) {
+  // Verify before serialising, the way the support-workload and ledger-journal builders do.
+  // commerceDailyCloseCsv does not, and this is the artifact an owner is told to keep for
+  // years -- a tampered or hand-edited archive must refuse to re-serialise rather than
+  // quietly produce a file that disagrees with its own seal.
+  const { digest, ...unsigned } = artifact
+  if (artifact.schema !== COMMERCE_WORKSPACE_ARCHIVE_SCHEMA
+    || digest !== `sha256:${sha256Hex(JSON.stringify(commerceWorkspaceArchiveProjection(unsigned)))}`) {
+    throw new Error('Workspace archive integrity check failed.')
+  }
+  const header = [
+    'archive_schema',
+    'archive_digest',
+    'generated_at',
+    'record_type',
+    'record_detail',
+    'restorable',
+    'close_count',
+    'archived_close_count',
+    'order_count',
+    'archived_order_count',
+    'uncovered_order_count',
+    'close_id',
+    'business_date',
+    'closed_at',
+    'operator',
+    'evidence_reference',
+    'close_digest',
+    'order_id',
+    'order_created_at',
+    'payment_method',
+    'payment_reconciled_at',
+    'payment_evidence_reference',
+    'currency',
+    'catalog_revision',
+    'tax_configuration_revision',
+    'tax_code',
+    'tax_jurisdiction_code',
+    'tax_effective_from',
+    'tax_rate_basis_points',
+    'listed_subtotal_mmk',
+    'subtotal_mmk',
+    'tax_mode',
+    'tax_mmk',
+    'original_total_mmk',
+    'total_mmk',
+    'corrections_json',
+    'calculation_status',
+    'payment_exception_order_ids',
+    'stock_exception_skus',
+  ]
+  const blank = new Array(header.length - 11).fill(null) as Array<string | number | null | string[]>
+  const lead = (recordType: string, detail: string | null): Array<string | number | null | string[]> => [
+    artifact.schema,
+    artifact.digest,
+    artifact.generatedAt,
+    recordType,
+    detail,
+    'no',
+    artifact.closeCount,
+    artifact.archivedCloseCount,
+    artifact.orderCount,
+    artifact.archivedOrderCount,
+    artifact.uncoveredOrderCount,
+  ]
+  const rows: Array<Array<string | number | null | string[]>> = [[
+    ...lead('archive', `Every trading day this device has closed. ${artifact.archivedCloseCount} of ${artifact.closeCount} closed ${artifact.closeCount === 1 ? 'day' : 'days'} and ${artifact.archivedOrderCount} of ${artifact.orderCount} ${artifact.orderCount === 1 ? 'sale' : 'sales'} are in this file. Shop cannot load this file back in.`),
+    ...blank,
+  ]]
+  for (const close of artifact.closes) {
+    rows.push([
+      ...lead('close', null),
+      close.closeId,
+      close.businessDate,
+      close.closedAt,
+      close.operator,
+      close.evidenceReference,
+      close.digest,
+      null, null, null, null, null,
+      'MMK',
+      null, null, null, null, null, null, null, null, null, null, null,
+      close.totalMmk,
+      null,
+      null,
+      close.paymentExceptionOrderIds,
+      close.stockExceptionSkus,
+    ])
+    for (const order of close.orders) {
+      rows.push([
+        ...lead('order', null),
+        close.closeId,
+        close.businessDate,
+        close.closedAt,
+        null,
+        null,
+        close.digest,
+        order.orderId,
+        order.orderCreatedAt,
+        order.paymentMethod,
+        order.paymentReconciledAt,
+        order.paymentEvidenceReference,
+        order.currency,
+        order.catalogRevision,
+        order.taxConfigurationRevision,
+        order.taxCode,
+        order.taxJurisdictionCode,
+        order.taxEffectiveFrom,
+        order.taxRateBasisPoints,
+        order.listedSubtotalMmk,
+        order.subtotalMmk,
+        order.taxMode,
+        order.taxMmk,
+        order.originalTotalMmk,
+        order.totalMmk,
+        JSON.stringify(order.corrections),
+        order.calculationStatus,
+        null,
+        null,
+      ])
+    }
+  }
+  for (const gap of artifact.gaps) {
+    rows.push([
+      ...lead(gap.kind === 'close_without_evidence' ? 'close_not_archived' : 'sale_not_archived', gap.detail),
+      gap.kind === 'close_without_evidence' ? gap.id : null,
+      null, null, null, null, null,
+      gap.kind === 'close_without_evidence' ? null : gap.id,
+      // No money columns are filled on a gap row: a gap says a record is NOT in this file,
+      // and inventing a currency or a zero total for it would let a reader sum the archive
+      // and believe the sum covered everything.
+      ...new Array(header.length - 18).fill(null) as Array<string | number | null | string[]>,
+    ])
+  }
   return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
 }
 
