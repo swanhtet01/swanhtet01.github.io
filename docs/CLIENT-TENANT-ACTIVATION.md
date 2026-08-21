@@ -28,9 +28,12 @@ npm.cmd run client:pilot:workspace -- `
 The command requires the prepared pilot stage and every owner gate, selects the
 `service-business` / beauty-and-spa template, retains only source digests in the
 new workspace, prepares the selected Shop data, and creates and verifies
-`client-preparation.private.json` plus `client-launch-board.private.json` in one
-local operation. Its terminal response contains only counts, digests, and false
-external-action controls. Activation remains `not_applied`.
+`client-preparation.private.json`, `client-launch-board.private.json`, and a
+mobile-friendly `START-HERE.html` founder dashboard in one local operation. The
+dashboard omits client identity and shows only selected products, readiness,
+blockers, connected workflows, and next actions. Its terminal response contains
+only counts, digests, and false external-action controls. Activation remains
+`not_applied`.
 
 The launch board lists only the client's selected products, exact setup routes,
 entitlement-valid connections, custom-solution lifecycle, evidence gaps, and

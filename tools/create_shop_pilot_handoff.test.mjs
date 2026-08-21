@@ -643,9 +643,9 @@ test('runs the complete private workspace lifecycle without external action', as
     assert.doesNotMatch(await readFile(join(clientWorkspace, 'CONTACT-INTAKE.json'), 'utf8'), /Workspace Operator|workspace-private@example\.com/)
     const clientLaunchWorkspace = join(parent, 'private-client-launch')
     const clientLaunch = await prepareShopPilotClientLaunch(workspace, clientLaunchWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z')
-    assert.equal(clientLaunch.stage, 'private-client-launch-board-ready')
+    assert.equal(clientLaunch.stage, 'private-client-launch-dashboard-ready')
     assert.equal(clientLaunch.productCount, 1)
-    assert.equal(clientLaunch.privateArtifactsCreated, 2)
+    assert.equal(clientLaunch.privateArtifactsCreated, 3)
     assert.equal(clientLaunch.externalWritesPerformed, false)
     assert.equal(clientLaunch.tenantWritesPerformed, false)
     assert.equal(clientLaunch.productionActivationPerformed, false)
@@ -654,8 +654,11 @@ test('runs the complete private workspace lifecycle without external action', as
     const launchArtifacts = await Promise.all([
       readFile(join(clientLaunchWorkspace, 'client-preparation.private.json'), 'utf8'),
       readFile(join(clientLaunchWorkspace, 'client-launch-board.private.json'), 'utf8'),
+      readFile(join(clientLaunchWorkspace, 'START-HERE.html'), 'utf8'),
     ])
     assert.doesNotMatch(launchArtifacts.join('\n'), /Workspace Operator|workspace-private@example\.com/)
+    assert.match(launchArtifacts[2], /One clear path to launch/)
+    assert.doesNotMatch(launchArtifacts[2], /<script|fetch\(|XMLHttpRequest|sendBeacon/i)
     await assert.rejects(
       () => prepareShopPilotClientLaunch(workspace, clientLaunchWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z'),
       /client_workspace_init_exists/,
@@ -747,8 +750,8 @@ test('CLI initializes and verifies a metadata-only private workspace', async () 
     ], { encoding: 'utf8' })
     assert.equal(clientLaunch.status, 0, clientLaunch.stderr)
     const launchReceipt = JSON.parse(clientLaunch.stdout)
-    assert.equal(launchReceipt.stage, 'private-client-launch-board-ready')
-    assert.equal(launchReceipt.privateArtifactsCreated, 2)
+    assert.equal(launchReceipt.stage, 'private-client-launch-dashboard-ready')
+    assert.equal(launchReceipt.privateArtifactsCreated, 3)
     assert.equal(launchReceipt.externalWritesPerformed, false)
     assert.equal(launchReceipt.productionActivationPerformed, false)
     assert.doesNotMatch(clientLaunch.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)

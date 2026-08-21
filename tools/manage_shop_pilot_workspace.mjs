@@ -20,6 +20,7 @@ import {
   prepareClientDemo,
   writeClientDemoPreparation,
 } from './prepare_client_demo.mjs'
+import { renderClientLaunchDashboard, verifyClientLaunchDashboard, writeClientLaunchDashboard } from './render_client_launch_dashboard.mjs'
 
 export const SHOP_PILOT_SALES_WORKSPACE_CONTRACT = 'supermega.shop.pilot_sales_workspace.v2'
 export const SHOP_PILOT_SALES_PREPARED_CONTRACT = 'supermega.shop.pilot_sales_prepared.v2'
@@ -30,6 +31,7 @@ export const SHOP_PILOT_CLIENT_LAUNCH_CONTRACT = 'supermega.shop.pilot_client_la
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const CLIENT_PREPARATION_FILE = 'client-preparation.private.json'
 const CLIENT_LAUNCH_BOARD_FILE = 'client-launch-board.private.json'
+const CLIENT_LAUNCH_DASHBOARD_FILE = 'START-HERE.html'
 
 const FILES = {
   manifest: 'workspace.json',
@@ -768,16 +770,22 @@ export async function prepareShopPilotClientLaunch(workspace, clientWorkspace, i
   const preparedBoard = runClientLaunchBoard('prepare', preparationPath, boardPath)
   const verifiedBoard = runClientLaunchBoard('verify', preparationPath, boardPath)
   if (preparedBoard.boardDigest !== verifiedBoard.boardDigest) throw new Error('shop_pilot_client_launch_board_binding_invalid')
+  const board = await readJson(boardPath)
+  const dashboardPath = resolve(clientWorkspace, CLIENT_LAUNCH_DASHBOARD_FILE)
+  const dashboard = renderClientLaunchDashboard(board)
+  const writtenDashboard = await writeClientLaunchDashboard(dashboard, dashboardPath)
+  verifyClientLaunchDashboard(await readFile(dashboardPath, 'utf8'), board)
   return {
     contract: SHOP_PILOT_CLIENT_LAUNCH_CONTRACT,
-    stage: 'private-client-launch-board-ready',
+    stage: 'private-client-launch-dashboard-ready',
     productCount: portal.productCount,
     connectionCount: verifiedBoard.connectionCount,
     blockingGateCount: verifiedBoard.blockingGateCount,
     preparationDigest: preparation.bundleDigest,
     launchBoardDigest: verifiedBoard.boardDigest,
+    launchDashboardDigest: writtenDashboard.digest,
     containsClientData: portal.containsClientData,
-    privateArtifactsCreated: 2,
+    privateArtifactsCreated: 3,
     humanReviewRequired: preparation.controls.humanReviewRequired,
     activationStatus: portal.activationStatus,
     externalWritesPerformed: false,
