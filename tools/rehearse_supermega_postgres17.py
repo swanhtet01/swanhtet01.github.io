@@ -23,6 +23,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
@@ -53,6 +54,7 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+WINDOWS_DIRECT_START_MODE = "codex-sandbox-direct"
 PUBLIC_BROWSER_TABLES = (
     "assets",
     "enterprise_agent_runs",
@@ -413,8 +415,41 @@ def _start_cluster(
     postgres_bin: Path,
     data_directory: Path,
     log_file: Path,
+    port: int,
     environment: dict[str, str],
 ) -> None:
+    if (
+        os.name == "nt"
+        and environment.get("SUPERMEGA_POSTGRES17_WINDOWS_START_MODE")
+        == WINDOWS_DIRECT_START_MODE
+    ):
+        postgres = _binary(postgres_bin, "postgres")
+        pg_isready = _binary(postgres_bin, "pg_isready")
+        with log_file.open("ab", buffering=0) as output:
+            process = subprocess.Popen(
+                [str(postgres), "-D", str(data_directory)],
+                cwd=ROOT,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise RehearsalFailure("postgres_direct_start_failed")
+            ready = _run(
+                [str(pg_isready), "--host", "127.0.0.1", "--port", str(port), "--timeout", "1"],
+                environment=environment,
+                timeout=5,
+            )
+            if ready.returncode == 0:
+                return
+            time.sleep(0.2)
+        process.terminate()
+        raise RehearsalFailure("postgres_direct_start_timeout")
+
     pg_ctl = _binary(postgres_bin, "pg_ctl")
     result = _run_without_inheritable_pipes(
         [
@@ -3358,7 +3393,7 @@ def _verify_restored_data(
 
 def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
     environment = _clean_environment(postgres_bin)
-    required = ("postgres", "initdb", "pg_ctl", "psql", "pg_dump", "pg_restore")
+    required = ("postgres", "initdb", "pg_ctl", "pg_isready", "psql", "pg_dump", "pg_restore")
     available = all(
         (postgres_bin / f"{name}{'.exe' if os.name == 'nt' else ''}").is_file()
         for name in required
@@ -3431,6 +3466,7 @@ def _run_rehearsal(
                 postgres_bin=postgres_bin,
                 data_directory=primary_data_directory,
                 log_file=primary_log_file,
+                port=port,
                 environment=environment,
             )
             started = True
@@ -3548,6 +3584,7 @@ def _run_rehearsal(
                 postgres_bin=postgres_bin,
                 data_directory=restore_data_directory,
                 log_file=restore_log_file,
+                port=restore_port,
                 environment=environment,
             )
             started = True
@@ -3614,6 +3651,12 @@ def _run_rehearsal(
                     "version": version,
                     "tls_active": True,
                     "loopback_only": True,
+                    "start_mode": (
+                        "windows_direct_sandbox"
+                        if environment.get("SUPERMEGA_POSTGRES17_WINDOWS_START_MODE")
+                        == WINDOWS_DIRECT_START_MODE
+                        else "pg_ctl_restricted_token"
+                    ),
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),

@@ -153,7 +153,10 @@ function mappedChecks(rawChecks) {
 
 export function buildSanitizedProof(raw, context) {
   if (raw?.contract !== 'supermega_postgres17_rehearsal_v1' || raw.ok !== true || raw.ready !== true || raw.status !== 'rehearsed') fail('database_rehearsal_not_ready')
-  if (raw.engine?.major !== 17 || raw.engine?.tls_active !== true || raw.engine?.loopback_only !== true) fail('database_rehearsal_engine_invalid')
+  if (raw.engine?.major !== 17
+    || raw.engine?.tls_active !== true
+    || raw.engine?.loopback_only !== true
+    || !['pg_ctl_restricted_token', 'windows_direct_sandbox'].includes(raw.engine?.start_mode)) fail('database_rehearsal_engine_invalid')
   if (raw.migrations?.count !== migrations.length || raw.migrations?.schema_version !== 11 || raw.migrations?.production_validator_ready !== true) fail('database_rehearsal_migrations_invalid')
   if (raw.cleanup_complete !== true || raw.secret_values_exposed !== false || raw.production_mutated !== false || raw.supabase_mutated !== false || raw.vercel_mutated !== false) fail('database_rehearsal_safety_invalid')
   if (raw.storage?.catalog_mode !== 'local_private_fixture' || raw.storage?.hosted_storage_privacy_proof_required !== true) fail('database_rehearsal_storage_boundary_invalid')
@@ -199,6 +202,7 @@ export function buildSanitizedProof(raw, context) {
       observedArchiveSha256: context.archive.sha256,
       tlsActive: raw.engine.tls_active,
       loopbackOnly: raw.engine.loopback_only,
+      startMode: raw.engine.start_mode,
     },
     migration: {
       count: raw.migrations.count,
@@ -246,7 +250,11 @@ export function validateSanitizedProof(proof, currentImplementation) {
   if (proof?.schemaVersion !== DATABASE_REHEARSAL_EVIDENCE_SCHEMA) fail('database_rehearsal_evidence_schema_invalid')
   if (!Number.isFinite(Date.parse(proof.recordedAt))) fail('database_rehearsal_evidence_time_invalid')
   if (proof.implementationDigest !== currentImplementation.digest || proof.implementationFileCount !== currentImplementation.fileCount || proof.implementation?.digest !== currentImplementation.digest || JSON.stringify(proof.implementation?.paths) !== JSON.stringify(currentImplementation.paths)) fail('database_rehearsal_evidence_stale')
-  if (proof.engine?.major !== 17 || proof.engine?.tlsActive !== true || proof.engine?.loopbackOnly !== true || !/^[0-9a-f]{64}$/.test(proof.engine?.observedArchiveSha256 || '')) fail('database_rehearsal_evidence_engine_invalid')
+  if (proof.engine?.major !== 17
+    || proof.engine?.tlsActive !== true
+    || proof.engine?.loopbackOnly !== true
+    || !['pg_ctl_restricted_token', 'windows_direct_sandbox'].includes(proof.engine?.startMode)
+    || !/^[0-9a-f]{64}$/.test(proof.engine?.observedArchiveSha256 || '')) fail('database_rehearsal_evidence_engine_invalid')
   if (proof.migration?.count !== migrations.length || proof.migration?.schemaVersion !== 11 || proof.migration?.productionValidatorReady !== true || proof.recovery?.restoredSchemaVersion !== 11) fail('database_rehearsal_evidence_migrations_invalid')
   if (Object.keys(proof.checks || {}).length !== rawCheckNames.length || Object.values(proof.checks || {}).some((value) => value !== true)) fail('database_rehearsal_evidence_checks_invalid')
   if (proof.storage?.hostedStoragePrivacyProofRequired !== true || proof.storage?.publicBucketCount !== 0) fail('database_rehearsal_evidence_storage_boundary_invalid')

@@ -37,7 +37,7 @@ const context = {
 }
 const raw = {
   contract: 'supermega_postgres17_rehearsal_v1', ok: true, ready: true, status: 'rehearsed',
-  engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true },
+  engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true, start_mode: 'pg_ctl_restricted_token' },
   migrations: { count: 12, schema_version: 11, production_validator_ready: true },
   authority: { actor_identity_source: 'trusted_backend_transaction_context', database_authenticates_individual_actors: false, runtime_credentials_must_remain_server_only: true },
   implementation: { digest: implementation.digest, paths: implementation.paths },
