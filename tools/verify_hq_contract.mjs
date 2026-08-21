@@ -232,7 +232,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.workOrder?.trim()
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 14
+  && portfolio.completedLocalAutomations.length === 15
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -281,6 +281,9 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[13]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[13]?.workOrderId === 'ecommerce-contact-correction-request'
   && portfolio.completedLocalAutomations[13]?.checkpoint === 'ENG-146'
+  && portfolio.completedLocalAutomations[14]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[14]?.workOrderId === 'shop-spa-membership-native'
+  && portfolio.completedLocalAutomations[14]?.checkpoint === 'ENG-147'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
@@ -868,8 +871,13 @@ requireContract('Shop uses the stable commerce runtime',
   && product('shop')?.compatibilityPath === '/operations/commerce/'
   && product('shop')?.surfaces?.join(',') === 'Sell,Orders,Stock'
   && product('shop')?.job?.includes('versioned per-order tax calculation')
+  && product('shop')?.job?.includes('native Spa prepaid-package sales and completed-treatment redemption')
   && product('shop')?.job?.includes('balanced review-only accounting handoff')
-  && product('shop')?.templateContract?.productId === 'commerce')
+  && product('shop')?.templateContract?.productId === 'commerce'
+  && product('shop')?.localAutomation?.workOrderId === 'shop-spa-owner-pilot'
+  && product('shop')?.nextGate?.includes('reconciled package sale')
+  && product('shop')?.nextGate?.includes('matching treatment redemption')
+  && product('shop')?.nextGate?.includes('sample data as client proof'))
 requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',
   enterpriseRoadmap.includes('Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1`')
   && enterpriseRoadmap.includes('Checkpoint `39b7fc2` adds `supermega.commerce.order-calculation.v2`')

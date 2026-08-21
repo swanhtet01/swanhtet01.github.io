@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-11
+Updated: 2026-08-21
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -11,6 +11,9 @@ Live scheduler status: `degraded`
 Live scheduler configured: `false`
 Live managed persistence ready: `false`
 Live security ready: `false`
+
+Product checkpoint: unpublished `e7f97463fdfab7d8a39bb0691febe3a0bc2d5ff4` on `codex/spa-client-activation-20260821`; 651/651 serial checks passed. Read the current branch tip from Git; no external write is claimed.
+Live freshness: the fields above are retained history; the bounded handoff fetch was unavailable on 2026-08-21.
 
 ## North-star outcome
 
@@ -40,16 +43,18 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs. The accounting export packet now includes both an AP supplier payables handoff CSV (`supermega.commerce.supplier-payables-handoff.v1`) and an AR customer receivables handoff CSV (`supermega.commerce.customer-receivables-handoff.v1`); both are digest-bound, formula-safe, and carry explicit no-payment and no-collection-authority controls.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant quality problems now require structured CAPA evidence before an actionable record can close.
+- Shop now has native Spa packages: reconciled, non-refunded sales fund balances; a completed matching treatment for the same customer consumes one immutable session, server-rechecked.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## R&D decisions (2026-08-11)
 
-Five research documents in `hq/research/`: opentelemetry (adopt-with-managed-mode), durable-workflows (adopt-with-managed-mode), order-intake-agent (evaluate), analytics (adopt, implementation-steps-ready), enterprise-capabilities (evaluate, design-ready). Roadmap: `hq/TIMELINE.md`. Agent plan: `hq/AGENT-TEAM-PLAN.md`.
+Research decisions are in `hq/research/`; roadmap: `hq/TIMELINE.md`; agent plan: `hq/AGENT-TEAM-PLAN.md`.
 
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
+- Candidate `e7f97463` passes the complete 651-step serial app gate. A 390 px rendered Shop check has no horizontal overflow, error overlay, or captured console warning; this proves the local candidate, not production deployment.
 - The deterministic 12-profile rehearsal passes 24 rows. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero.
 - Both domains serve deployed `12ade3db2a73a586f244dd4e3e26cc4d9bb868fc` after guarded release `31941210015`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
@@ -62,12 +67,12 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Blockers
 
-- Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
-- Read-only hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v10 with 15 private policies, metadata RLS, and zero workspace data. The public browser quarantine is applied: zero browser-privileged objects remain, the Security Advisor is clear (27 INFO-only accepted default-deny notices), and writes stay off pending storage/recovery proof and owner authorization.
-- The live products remain isolated samples; managed persistence and tenant security are unproven.
+- Website, Plant, Ecommerce, and AI budgets still lack live product activation proof; model calls fail closed.
+- The digest-bound managed readiness ledger records protected PostgreSQL 17 at schema v11 with zero local-target drift, metadata RLS, browser-role denial, and a clear Security Advisor. It does not authorize a tenant or production release.
+- Storage privacy, managed persistence, and self-serve isolation have bounded proof records, but the live products remain isolated samples and no named customer tenant is activated.
 - Live HQ and both domains agree on `12ade3db`; no release drift is present. Two hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, managed persistence, and the live product contract prerequisites are ready-hosted); external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
-- Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch (`hq/readiness/self-serve-pilot-proof.json`): window refusal, isolated owner tenant, idempotent replay, cross-actor `claim_code_conflict`, event immutability, cross-tenant invisibility — all through the session pooler under real RLS. It is not live: production stays at v10 behind the 503 window, so a real tenant awaits the founder `production_activation` decision (`hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`).
+- The deleted isolated-v11 self-serve proof covers six RLS and replay controls. A real tenant still awaits the founder `production_activation` decision in `hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
 ## Decisions in force
@@ -83,11 +88,11 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Land the reviewed branch and promote it.
-2. Fund one isolated branch; finish the four OPS-001 gates — recovery and exact
-   restore, Storage denial, a server-only backend login role, tenant separation.
-3. Enable managed writes for one named Shop operator; measure setup time, daily
-   completion, review effort, recovery.
-4. Then open sign-up: an identity, a workspace bound to it, four products reading
-   it — the unactivated `app_private` v10 model, not new architecture.
-5. Custom work and further SaaS follow one client carried through a portal.
+1. Refresh the exact GitHub/live handoff when bounded network reads are available.
+2. Owner-review the normal branch push, merge, and paired production workflow as
+   separate gates; never infer them from the green local candidate.
+3. Run post-deploy desktop/mobile and tenant-isolation proof on the exact release.
+4. Replace the Spa sample identities with one named owner and reviewed business
+   data, then activate exactly one isolated portal and measure setup and daily use.
+5. Custom work and further SaaS follow that client through the governed extension
+   contract instead of a code fork or another product shell.
