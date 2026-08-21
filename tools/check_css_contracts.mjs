@@ -25,12 +25,27 @@
 //    the sanctioned resilience shape, see index.css's .route-error), so only fallback-less
 //    consumption of an undefined property fails.
 //
+// 3. NO SILENT CASCADE DEFEAT. A later rule at EQUAL specificity out-cascades an earlier one
+//    on source order alone, so a style that was written and reviewed simply never renders,
+//    and nothing warns: both rules parse, both are valid, and the loser leaves no trace.
+//    Shipped twice. `.theme-dark .production-mode-banner` blanked three storage banner tints
+//    in dark mode (#528), and `.theme-dark .core-button` took the red text and the red border
+//    off the destructive-action button (#530). Both times the defeating declarations were
+//    RESTATING tokens the base rule already set, so they painted nothing where they were
+//    written and existed only to win the cascade. Both times it was found by eye, late.
+//    The check lives in tools/test_css_cascade_defeats.mjs and is imported at the foot of this
+//    file. It belongs here rather than in test_theme_surface_contract.mjs because it is not a
+//    theme-surface contract -- it is a cascade contract over the same five stylesheets this
+//    file already reads, and neither known instance is really about colour.
+//    Imported DYNAMICALLY, at the end, so that rules 1 and 2 report and the ratchet lowering
+//    below still writes its new floors before it can throw.
+//
 // Why this is a hand-rolled script and not stylelint: no stylelint dependency or config
 // exists anywhere in the repo (showroom devDependencies are the eslint family, postcss and
 // autoprefixer only), and the repo convention for exactly this kind of check is an .mjs
 // verifier -- tools/test_theme_surface_contract.mjs already parses these same stylesheets
 // with its own scanner. A stylelint install buys a dependency, a config dialect and a
-// plugin to express two rules this file states directly.
+// plugin to express three rules these files state directly.
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -360,3 +375,10 @@ if (lowerings.length) {
 console.log(
   `css contracts: ${checks} checks passed (${liveHexTotal} live hex under ${[...CEILINGS.values()].reduce((a, b) => a + b.hex, 0)} ceiling and ${livePxTotal} live px under ${[...CEILINGS.values()].reduce((a, b) => a + b.px, 0)} ceiling across ${CASCADES.size} stylesheets, ${varUseTotal} var() consumptions all resolving, ${lowerings.length} ceilings lowered)`,
 )
+
+// Rule 3. Imported here rather than at the top so the two ratchets above always get to report and
+// to write their lowered floors, whatever this finds. The module asserts on import and prints its
+// own line, so a defeat fails this step with the offending declarations and the elements they do
+// not render on.
+const { cascadeDefeatReport } = await import('./test_css_cascade_defeats.mjs')
+console.log(cascadeDefeatReport())
