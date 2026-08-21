@@ -5501,7 +5501,16 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...managedTemplateJourney }')
   || !productOnboardingPageSource.includes('Nothing is created until you confirm its values and source.')
   || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_PLANT_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_WEBSITE_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_ECOMMERCE_ONBOARDING_JOURNEY }')
   || !productOnboardingPageSource.includes(': onboardingJourneys[product]')
+  || !productOnboardingPageSource.includes('const [managedIdentity, , managedIdentitySettled] = useManagedIdentity')
+  || !productOnboardingPageSource.includes('managedOnboardingAccountCheckPending(runtime.status, managedIdentitySettled)')
+  || !productOnboardingPageSource.includes('if (accountCheckPending) {')
+  || !productOnboardingPageSource.includes("if (product === 'website' && !managedIdentity) {")
+  || !productOnboardingPageSource.includes("if (product === 'ecommerce' && !managedIdentity) {")
+  || !productOnboardingPageSource.includes('disabled={!workflowReady || workspaceBusy || accountCheckPending}')
+  || !productOnboardingPageSource.includes("managedIdentity ? 'Uses this company account. Nothing is published or sent externally.'")
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
   || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup)')
@@ -8109,7 +8118,7 @@ async function verifyShopBusinessTemplateRuntime() {
   }
 }
 
-// What a signed-in (managed) owner is told when she sets up Shop or Plant.
+// What a signed-in (managed) owner is told when she sets up any customer product.
 //
 // This is the contract file for that screen, so the copy contract lives here beside the source
 // pins above rather than behind its own npm script. It is driven against the EXPORTED strings,
@@ -8127,6 +8136,18 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts')).href}?managed-guided-onboarding-copy-verify=${Date.now()}`)
+
+    for (const [status, settled, expected] of [
+      ['checking', false, true],
+      ['checking', true, true],
+      ['enterprise', false, true],
+      ['enterprise', true, false],
+      ['demo', false, false],
+      ['demo', true, false],
+    ]) {
+      assert(model.managedOnboardingAccountCheckPending(status, settled) === expected,
+        `managed_onboarding_identity_gate_wrong:${status}:${settled}`)
+    }
 
     // Every claim of a completed install, in the wordings this product actually uses. A managed
     // owner must not read any of them, because none of them are true for her.
@@ -8154,6 +8175,16 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
       ['managed_plant_journey_outcome', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.outcome],
       ['managed_plant_journey_detail', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.detail],
       ['managed_plant_journey_action', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_website_hint', model.MANAGED_WEBSITE_ONBOARDING_HINT],
+      ['managed_website_intro', model.MANAGED_WEBSITE_ONBOARDING_INTRO],
+      ['managed_website_journey_outcome', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.outcome],
+      ['managed_website_journey_detail', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.detail],
+      ['managed_website_journey_action', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_ecommerce_hint', model.MANAGED_ECOMMERCE_ONBOARDING_HINT],
+      ['managed_ecommerce_intro', model.MANAGED_ECOMMERCE_ONBOARDING_INTRO],
+      ['managed_ecommerce_journey_outcome', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.outcome],
+      ['managed_ecommerce_journey_detail', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.detail],
+      ['managed_ecommerce_journey_action', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.actionLabel],
     ]) {
       assert(typeof copy === 'string' && copy.trim().length > 0, `${label}_missing`)
       for (const claim of installClaims) assert(!claim.test(copy), `${label}_makes_install_claim:${claim}`)
@@ -8213,12 +8244,30 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
     // her exactly where this copy promises.
     assert(!('firstTaskPath' in model.MANAGED_SHOP_ONBOARDING_JOURNEY), 'managed_shop_journey_redirects')
     assert(!('firstTaskPath' in model.MANAGED_PLANT_ONBOARDING_JOURNEY), 'managed_plant_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_WEBSITE_ONBOARDING_JOURNEY), 'managed_website_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY), 'managed_ecommerce_journey_redirects')
+
+    assert(/no browser sample/i.test(model.MANAGED_WEBSITE_ONBOARDING_HINT), 'managed_website_hint_hides_local_boundary')
+    assert(/homepage/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.outcome), 'managed_website_journey_has_no_first_result')
+    assert(/mobile and desktop/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.detail), 'managed_website_journey_hides_preview_work')
+    assert(/Website/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.actionLabel), 'managed_website_journey_hides_destination')
+    assert(/no sample orders/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_HINT), 'managed_ecommerce_hint_hides_order_boundary')
+    assert(/online store/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.outcome), 'managed_ecommerce_journey_has_no_first_result')
+    assert(/payment/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail)
+      && /Shop handoff/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail), 'managed_ecommerce_journey_hides_connected_setup')
+    assert(/Ecommerce/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.actionLabel), 'managed_ecommerce_journey_hides_destination')
 
     // The two lanes must stay distinguishable. Copy-pasting Shop's wording into Plant is the
     // most likely way this regresses, and it would read as correct.
     assert(model.MANAGED_SHOP_ONBOARDING_HINT !== model.MANAGED_PLANT_ONBOARDING_HINT, 'managed_hints_are_identical')
     assert(model.MANAGED_SHOP_ONBOARDING_INTRO !== model.MANAGED_PLANT_ONBOARDING_INTRO, 'managed_intros_are_identical')
     assert(model.MANAGED_SHOP_ONBOARDING_JOURNEY.outcome !== model.MANAGED_PLANT_ONBOARDING_JOURNEY.outcome, 'managed_journey_outcomes_are_identical')
+    assert(new Set([
+      model.MANAGED_SHOP_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_PLANT_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.outcome,
+    ]).size === 4, 'managed_product_journeys_are_not_distinct')
   } catch (error) {
     fail(`managed_guided_onboarding_copy_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

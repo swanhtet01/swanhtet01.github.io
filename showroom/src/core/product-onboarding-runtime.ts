@@ -277,6 +277,38 @@ export const MANAGED_PLANT_ONBOARDING_JOURNEY = {
   actionLabel: 'Create Plant and add your first job',
 }
 
+export const MANAGED_WEBSITE_ONBOARDING_HINT =
+  'Opens the company Website starter for review. No browser sample is copied into the company account.'
+
+export const MANAGED_WEBSITE_ONBOARDING_INTRO =
+  'Your company Website is server-backed. Name this workspace, then replace the starter text with approved business content.'
+
+export const MANAGED_WEBSITE_ONBOARDING_JOURNEY = {
+  outcome: 'Draft your real homepage',
+  detail: 'Website opens on the company starter. Replace its example text, preview mobile and desktop, then save the reviewed content.',
+  actionLabel: 'Open Website and edit the homepage',
+}
+
+export const MANAGED_ECOMMERCE_ONBOARDING_HINT =
+  'Opens Ecommerce to review the company storefront. No sample orders are created.'
+
+export const MANAGED_ECOMMERCE_ONBOARDING_INTRO =
+  'Your company account holds real order records only. Name this workspace, then review the storefront before taking orders.'
+
+export const MANAGED_ECOMMERCE_ONBOARDING_JOURNEY = {
+  outcome: 'Review your online store',
+  detail: 'Ecommerce opens on company storefront setup. Review catalog source, fulfilment, payment, and Shop handoff before taking orders.',
+  actionLabel: 'Open Ecommerce and review the store',
+}
+
+export function managedOnboardingAccountCheckPending(
+  runtimeStatus: 'checking' | 'enterprise' | 'demo',
+  managedIdentitySettled: boolean,
+): boolean {
+  return runtimeStatus === 'checking'
+    || (runtimeStatus === 'enterprise' && !managedIdentitySettled)
+}
+
 /**
  * Install the industry pack's appointment book, PRESERVING any appointment already taken.
  *

@@ -21,12 +21,19 @@ import {
   type SetupState,
 } from './product-setup'
 import {
+  MANAGED_ECOMMERCE_ONBOARDING_HINT,
+  MANAGED_ECOMMERCE_ONBOARDING_INTRO,
+  MANAGED_ECOMMERCE_ONBOARDING_JOURNEY,
   MANAGED_PLANT_ONBOARDING_HINT,
   MANAGED_PLANT_ONBOARDING_INTRO,
   MANAGED_PLANT_ONBOARDING_JOURNEY,
   MANAGED_SHOP_ONBOARDING_HINT,
   MANAGED_SHOP_ONBOARDING_INTRO,
   MANAGED_SHOP_ONBOARDING_JOURNEY,
+  MANAGED_WEBSITE_ONBOARDING_HINT,
+  MANAGED_WEBSITE_ONBOARDING_INTRO,
+  MANAGED_WEBSITE_ONBOARDING_JOURNEY,
+  managedOnboardingAccountCheckPending,
   managedShopOnboardingNotice,
   provisionLocalPlantWorkingSample,
   provisionLocalShopBusinessTemplateSample,
@@ -100,7 +107,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [setup, setSetup] = useSetupWorkspace()
   const [actions] = useAccountableActions()
   const [production] = useProductionWorkspace()
-  const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [managedIdentity, , managedIdentitySettled] = useManagedIdentity(runtime.status === 'enterprise')
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
@@ -156,6 +163,9 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   // onboarding routes there but does not claim the catalog exists before the owner approves it.
   const managedCommerce = product === 'commerce' && Boolean(managedIdentity)
   const managedProduction = product === 'production' && Boolean(managedIdentity)
+  const managedWebsite = product === 'website' && Boolean(managedIdentity)
+  const managedEcommerce = product === 'ecommerce' && Boolean(managedIdentity)
+  const accountCheckPending = managedOnboardingAccountCheckPending(runtime.status, managedIdentitySettled)
   const managedTemplateJourney = selectedBusinessTemplate ? {
     outcome: `Review the ${selectedBusinessTemplate.name.en} starter catalog`,
     detail: `Check ${selectedBusinessTemplate.catalog.length} items, prices, and opening counts before one server-backed company catalog is created.`,
@@ -165,6 +175,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     ? { ...onboardingJourneys[product], ...managedTemplateJourney }
     : managedProduction
       ? { ...onboardingJourneys[product], ...MANAGED_PLANT_ONBOARDING_JOURNEY }
+      : managedWebsite
+        ? { ...onboardingJourneys[product], ...MANAGED_WEBSITE_ONBOARDING_JOURNEY }
+        : managedEcommerce
+          ? { ...onboardingJourneys[product], ...MANAGED_ECOMMERCE_ONBOARDING_JOURNEY }
       : onboardingJourneys[product]
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
   const onboardingTemplate = setup.product === product
@@ -181,6 +195,24 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const managedShopHint = selectedBusinessTemplate
     ? 'Opens a review of the starter catalog. Nothing is created until you confirm its values and source.'
     : MANAGED_SHOP_ONBOARDING_HINT
+  const managedIntro = managedCommerce
+    ? managedShopIntro
+    : managedProduction
+      ? MANAGED_PLANT_ONBOARDING_INTRO
+      : managedWebsite
+        ? MANAGED_WEBSITE_ONBOARDING_INTRO
+        : managedEcommerce
+          ? MANAGED_ECOMMERCE_ONBOARDING_INTRO
+          : 'We will add realistic sample records now; replace them with your data whenever you are ready.'
+  const managedHint = managedCommerce
+    ? managedShopHint
+    : managedProduction
+      ? MANAGED_PLANT_ONBOARDING_HINT
+      : managedWebsite
+        ? MANAGED_WEBSITE_ONBOARDING_HINT
+        : managedEcommerce
+          ? MANAGED_ECOMMERCE_ONBOARDING_HINT
+          : null
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
@@ -258,6 +290,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
 
   async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (accountCheckPending) {
+      setNotice('Checking whether this workspace uses a company account.')
+      return
+    }
     if (!workflowReady) {
       setNotice('Enter a business name.')
       return
@@ -306,7 +342,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       if (product === 'production' && !managedIdentity) {
         await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
       }
-      if (product === 'website') {
+      if (product === 'website' && !managedIdentity) {
         // Returns { ok, error } instead of throwing. Ignoring it sent the owner into a Website that
         // was never prepared, and told them it was ready.
         const activated = await activateLocalWebsiteWorkingSample({
@@ -397,7 +433,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       />
       <div aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid">
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
-          <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>{managedCommerce ? managedShopIntro : managedProduction ? MANAGED_PLANT_ONBOARDING_INTRO : 'We will add realistic sample records now; replace them with your data whenever you are ready.'}</p></div>
+          <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>{accountCheckPending ? 'Checking whether this is a company workspace before preparing anything.' : managedIntro}</p></div>
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           {product === 'commerce' ? (
@@ -448,8 +484,8 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
             {/* The hint below is the reason the button is disabled. aria-describedby ties them,
                 so a screen reader landing on the disabled control hears "Enter a business name
                 to continue" instead of an unexplained dead end. */}
-            <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small id="product-onboarding-submit-hint">{managedCommerce && workflowReady ? managedShopHint : managedProduction && workflowReady ? MANAGED_PLANT_ONBOARDING_HINT : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy || accountCheckPending} type="submit">{accountCheckPending ? 'Checking company account...' : workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
+            <small id="product-onboarding-submit-hint">{accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
@@ -458,7 +494,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
               <p>{notice}</p>
               <Link className="core-button" to="/settings/#workspace-recovery">Export or reset this device</Link>
             </div>
-          ) : <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>}
+          ) : <p aria-live="polite" className="form-notice">{notice || (accountCheckPending ? 'Checking account access before setup.' : managedIdentity ? 'Uses this company account. Nothing is published or sent externally.' : 'Stays on this device. Nothing is sent or published.')}</p>}
         </form>
       </div>
     </div>
