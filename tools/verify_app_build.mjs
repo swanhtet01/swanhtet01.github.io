@@ -4672,6 +4672,11 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes('Math.ceil(orders.length / pageSize)')
   || !coreSource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
 if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !workspaceRuntimeSource.includes('result.version !== current.version + 1') || !workspaceRuntimeSource.includes('validateCommerceState(result.state)') || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'") || !workspaceRuntimeSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !workspaceRuntimeSource.includes('const latest = loadCommerceWorkspace()') || !workspaceRuntimeSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
+if (!coreSource.includes('initializeManagedTemplateCatalog')
+  || !coreSource.includes('shopBusinessTemplateCommerceItems(managedTemplateId)')
+  || !coreSource.includes('I reviewed the starter prices, opening counts, and reorder levels.')
+  || !coreSource.includes('No sales or customer records were added.')
+  || !productOnboardingPageSource.includes('shopBusinessTemplateManagedCatalogPath(selectedBusinessTemplate.id)')) fail('managed_template_catalog_activation_missing')
 if ((workspaceRuntimeSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
 if (!workspaceRuntimeSource.includes('confirmation?: AccountableAction') || !workspaceRuntimeSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !workspaceRuntimeSource.includes('result.idempotent_replay') || !workspaceRuntimeSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 // A frozen command proof blocks Cancel and Escape while the outcome is unknown. Once a submit has
@@ -5433,7 +5438,8 @@ if (!productSetupSource.includes('templateId: string')
   // are pinned: the local journey is still the base, and each managed override is still applied
   // on top of it.
   || !productOnboardingPageSource.includes('const onboardingJourney = managedCommerce')
-  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_SHOP_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...managedTemplateJourney }')
+  || !productOnboardingPageSource.includes('Nothing is created until you confirm its values and source.')
   || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_PLANT_ONBOARDING_JOURNEY }')
   || !productOnboardingPageSource.includes(': onboardingJourneys[product]')
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
@@ -5604,7 +5610,7 @@ if (!productSetupSource.includes('templateId: string')
   || coreCssSource.includes('.product-onboarding-sample {')
   || !coreCssSource.includes('.product-onboarding-grid { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.product-onboarding-primary .core-button { width: 100%; }')
-  || !coreCssSource.includes('.demo-preset-select,\n.demo-pack-select { display: grid;')
+  || !coreCssSource.replaceAll('\r\n', '\n').includes('.demo-preset-select,\n.demo-pack-select { display: grid;')
   || !coreCssSource.includes('.setup-existing-package')
   || !coreCssSource.includes('.client-system-details > .client-foundation-summary')
   || !coreCssSource.includes('.demo-solution-card[data-selected="true"]')
@@ -7970,6 +7976,7 @@ async function verifyShopBusinessTemplateRuntime() {
       && model.shopBusinessTemplateFromQuery('unknown-type') === null
       && model.shopBusinessTemplateFromQuery(null) === null, 'shop_business_template_query_selection_wrong')
     assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy'
+      && model.shopBusinessTemplateManagedCatalogPath('beauty-spa') === '/shop/?template=beauty-spa'
       && model.shopIndustryPackSetupPath('spa') === '/settings/?product=shop&pack=spa'
       && model.shopBusinessChoiceFromIndustryPack('spa') === 'trade:beauty-spa'
       && model.shopBusinessChoiceFromIndustryPack('gym') === 'pack:gym', 'shop_business_template_setup_path_wrong')

@@ -157,13 +157,11 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
 // 'managed-unprovisioned' -- while onboarding told the owner her catalog, or her jobs and floor,
 // were ready. A false success, uniform across all ten Shop trades and all five Plant packs.
 //
-// Provisioning a template INTO a managed workspace is a real feature and is not attempted here.
-// For Shop the server's commerce.workspace.initialized contract requires a non-empty catalog and
-// NO operating history, and every template catalog carries an `opening` stock movement per item,
-// so a template state can never satisfy it as written. Plant's production.workspace.initialized
-// is refused outright once jobs, issues, machines or events exist, which a guided sample creates
-// by definition. Until that lands, onboarding stops making the claim and hands the owner to the
-// managed setup step that already exists in each product.
+// Named Shop business templates now route to CoreApp's reviewed managed-catalog initializer. It
+// copies only catalog items and accountable baselines after the owner confirms the values and
+// evidence; sample sales, customers, appointments, and local history remain excluded. Generic
+// Shop packs and every Plant pack still use the honest one-record managed setup below because
+// they do not yet have that reviewed server activation path.
 //
 // The copy lives here, beside the reason, so it cannot drift back into a promise.
 // ==============================================================================================

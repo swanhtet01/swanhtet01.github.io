@@ -599,6 +599,10 @@ export function shopBusinessTemplateSetupPath(id: ShopBusinessTemplateId) {
   return `/settings/?product=shop&template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
 }
 
+export function shopBusinessTemplateManagedCatalogPath(id: ShopBusinessTemplateId) {
+  return `/shop/?template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
+}
+
 export function shopBusinessChoiceFromIndustryPack(id: ShopIndustryPackId) {
   const matchingTemplates = shopBusinessTemplates.filter((template) => template.industryPackId === id)
   return matchingTemplates.length === 1 ? `trade:${matchingTemplates[0].id}` : `pack:${id}`
