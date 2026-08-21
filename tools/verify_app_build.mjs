@@ -2,6 +2,7 @@ import { readdir, readFile as readRawFile, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 
 import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
 
@@ -19930,7 +19931,200 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // initial_javascript_budget below already walks a smaller version of. Swapping what a
 // guard means is a bigger change than editing its number, so it deserves its own review
 // rather than riding along with a re-measurement.
-if (bytes > 3_085_000) fail(`artifact_budget:${bytes}`)
+// REPLACED 2026-08-21 (this PR): the ceiling above summed raw on-disk bytes across all
+// of dist/. The measurement recorded in the #519 entry proves that proxy can move
+// OPPOSITE to what a shop owner pays -- it charged #519 +6_429 for a file (sw.js) that
+// is on no route's critical path, while the till's actual wire cost moved 425 bytes and
+// the page shells got SMALLER. It also fails the inverse: 40 KB shoved into the till's
+// critical path is invisible to it if some unrelated chunk shrinks to offset. The
+// history above is kept because the next person needs the argument, not just the number.
+//
+// The raw total is DEMOTED here, not deleted, and not re-tuned. It is now a blowout
+// backstop for the parts of dist/ the route guard cannot see -- sw.js, the PWA icon set,
+// the lazily-loaded Shop tabs, and the other three products' chunks. Widened to
+// 3_250_000 against a measured 3_074_787, which is deliberately far too loose to be a
+// per-feature budget: it should never trip on ordinary product work, and if it does
+// trip, something is structurally wrong rather than merely large. Do NOT raise it to
+// land a feature -- that was the old contract and it is the one being retired. The thing
+// the old ceiling was standing in for is now guarded directly, and harder, just below.
+if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
+
+// ---------------------------------------------------------------------------
+// THE SHOP ROUTE'S COMPRESSED WIRE COST -- what a till pays to open, measured the
+// way the CDN actually serves it.
+//
+// WHICH CLOSURE: first paint, not "every tab visited". First paint is the only number
+// every Shop owner unconditionally pays -- nobody rings up a sale without downloading
+// all of it -- and it is the one the owner feels on a metered phone before the app can
+// take money. "Every tab visited" is paid by nobody in particular: it folds in tabs many
+// shops never open, and below core-app it cannot be split from Plant at all (the same
+// chunk serves /shop and /plant, chosen by a runtime prop), so a "Shop" number built
+// from it would quietly bill the shop for Plant. Bytes deferred into a lazy tab are
+// genuinely cheaper and are meant to read as cheaper here; the demoted total above is
+// what still covers them.
+//
+// GZIP OR BROTLI: brotli, at quality 3, because that is what app.supermega.dev returns.
+// Verified against the live edge rather than assumed -- fetch one asset three ways:
+//     -H 'Accept-Encoding: br, gzip'  ->  Content-Encoding: br   (gzip only without br)
+//     -H 'Accept-Encoding: identity'  ->  237_143 bytes
+//     -H 'Accept-Encoding: br'        ->   77_043 bytes
+// and 77_043 is brotliCompressSync(raw, QUALITY 3).length EXACTLY. Vercel compresses on
+// the fly, so it is q3, not the q11 a local `brotli -11` gives (64_679 for that same
+// file). Two consequences worth writing down: the brotli -11 column in the #519 entry
+// above is ~19% below anything a user ever receives and must not be used as a ceiling;
+// and Vercel's br q3 is LARGER than its own gzip (77_043 vs 75_475), so brotli is both
+// what almost every client negotiates and the worse of the two outcomes. Guarding it
+// covers the gzip-only client too.
+//
+// HOW THE CLOSURE IS COMPUTED: from the bundler's own dependency manifest, never a
+// chunk list. Vite emits __vite__mapDeps into the entry chunk -- the exact asset set the
+// browser fetches for each dynamic import. The walk is: the document, every <script src>
+// and stylesheet it links, the static-import closure of the module entry, and the
+// mapDeps list whose HEAD entry is the operations route chunk. Only one name appears
+// here, `core-app`, and it is not incidental: it is a named manualChunks target in
+// showroom/vite.config.ts and is already pinned twice in this file
+// (product_operations_eagerly_loaded_on_home, operations_route_artifact_missing). Every
+// other member is discovered. A new chunk the route starts pulling is covered the day it
+// lands; that is the decay this repo keeps finding, closed by construction.
+//
+// It also corrects a boundary drawn by hand: the mapDeps list puts website-model and
+// website-leads on the Shop route (core-app -> capability-tiers -> website-model). A
+// hand-picked "Shop chunks" list would have missed 13.6 KB the till really downloads.
+// Re-checked what the #519 measurement excluded, and it still holds: PlantOrderFoundation
+// and ecommerce-buying-lifecycle are reached only by core-app's OWN dynamic imports, so
+// they sit outside first paint, as do all six Shop tab chunks.
+//
+// MEASURED 2026-08-21 on origin/main f3cacb09, fresh `npm run app:build` (the ROOT one;
+// `npm --prefix showroom run build` skips app:release:write and fails the precache seal):
+//     Shop first paint, 24 assets   467_765 brotli q3 (456.8 KB) / 452_137 gzip -9
+//     raw on-disk, same 24 assets   1_748_937
+// LOCAL vs CI: identical, exactly. The ~35-byte gap the entry above records is entirely
+// dist/__release.json's `commit` ("local" vs a 40-char SHA), and __release.json is on no
+// route's critical path, so it is not in this closure. Verified by rebuilding with
+// SUPERMEGA_RELEASE_COMMIT set to a 40-char value: 467_765 both ways, while the raw
+// total moved 3_074_752 -> 3_074_787. This guard therefore needs no headroom for that
+// difference at all, which is a reason to prefer it beyond the accounting.
+//
+// SIZED FROM REAL BUILDS, not estimated. Three fresh builds of this repo's own history,
+// each measured by this same walk:
+//     42aaa6c6  pre-#519    464_717 br q3  (449_041 gzip -9)   raw total 3_058_119
+//     f39dfe50  #519        465_032 br q3  (449_464 gzip -9)   raw total 3_064_548
+//     f3cacb09  main today  467_765 br q3  (452_137 gzip -9)   raw total 3_074_787
+// #519 cost the till 315 bytes and cost the OLD guard 6_429 -- a 20x misattribution, and
+// the direction that matters: the file it was charged for is the one that makes repeat
+// visits free. (The gzip column reproduces #526's independently taken +425 as +423, from
+// a different closure rule, which is the cross-check that the boundary here is sane.)
+// The four PRs between #519 and today moved it +2_733 in total, ~680 bytes each.
+//
+// Ceiling 475_000: 7_235 bytes of headroom, 1.55%, so roughly ten PRs of that observed
+// shape before it trips -- a slower cadence than the raw ceiling above, which was raised
+// four times in two days. It still trips on a single real regression: 40 KB of ordinary
+// product code added to a module CoreApp.tsx statically imports (+42_133 raw, in the
+// shared capability-tiers chunk) measures +8_211 here and fails this check, while being
+// invisible to a raw total that any other chunk's shrinkage could offset. Both
+// directions were run against real builds, not argued; the PR records them. When it trips, re-measure on a fresh dist/ and record what the growth bought,
+// exactly as the entries above do -- do not carry 467_765 forward.
+let shopRouteWireBytes = 0
+let shopRouteAssetCount = 0
+const CDN_BROTLI_QUALITY = 3
+const compressedWireBytes = async (path) => {
+  const buffer = await readRawFile(path)
+  return brotliCompressSync(buffer, {
+    params: {
+      [zlibConstants.BROTLI_PARAM_QUALITY]: CDN_BROTLI_QUALITY,
+      [zlibConstants.BROTLI_PARAM_SIZE_HINT]: buffer.length,
+    },
+  }).length
+}
+const staticImportSpecifiers = (source) => [...source.matchAll(
+  /(?:^|[;\n}])\s*import(?:[^('";]*?from)?\s*["']\.\/([^"']+\.js)["']/g,
+)].map((match) => match[1])
+const bundlerDependencyTable = (source) => {
+  const table = source.match(/__vite__mapDeps=\(i,m=__vite__mapDeps,d=\(m\.f\|\|\(m\.f=(\[[^\]]*\])\)\)\)/)
+  if (!table) return null
+  try {
+    const parsed = JSON.parse(table[1])
+    return Array.isArray(parsed) && parsed.every((entry) => typeof entry === 'string') ? parsed : null
+  } catch { return null }
+}
+const bundlerRouteAssets = (source, table, routePattern) => {
+  const reached = new Set()
+  for (const call of source.matchAll(/__vite__mapDeps\(\[([0-9,]+)\]\)/g)) {
+    const indexes = call[1].split(',').map((index) => Number.parseInt(index, 10))
+    // Vite always emits the dynamically imported chunk as the head of its own dep list,
+    // so the head names the route and the tail is everything that import drags along.
+    if (!routePattern.test(table[indexes[0]] ?? '')) continue
+    for (const index of indexes) if (typeof table[index] === 'string') reached.add(table[index])
+  }
+  return [...reached]
+}
+// Self-test the three parsers against a fixture shaped like real minified output, because
+// a walk that silently matches nothing would pass this guard vacuously rather than fail
+// it. The floor further down is the second half of the same defence.
+{
+  const fixture = 'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/core-app-A1.js","assets/shared-B2.js","assets/other-C3.js"])))=>i.map(i=>d[i]);\n'
+    + 'import{x}from"./shared-B2.js";import"./bare-D4.js";\n'
+    + 'const a=V.lazy(()=>St(()=>import("./core-app-A1.js").then(i=>i.O),__vite__mapDeps([0,1])));'
+    + 'const b=V.lazy(()=>St(()=>import("./other-C3.js"),__vite__mapDeps([2,1])));'
+  const table = bundlerDependencyTable(fixture)
+  const specifiers = staticImportSpecifiers(fixture)
+  if (specifiers.join(',') !== 'shared-B2.js,bare-D4.js') fail(`wire_cost_static_import_parser_wrong:${specifiers.join(',')}`)
+  if (!table || table.length !== 3 || table[0] !== 'assets/core-app-A1.js') fail('wire_cost_dependency_table_parser_wrong')
+  else {
+    // The route's own dep list, and nothing another route's import pulls.
+    const routed = bundlerRouteAssets(fixture, table, /^assets\/core-app-[^/]+\.js$/).sort().join(',')
+    if (routed !== 'assets/core-app-A1.js,assets/shared-B2.js') fail(`wire_cost_route_asset_parser_wrong:${routed}`)
+    // ...and it really can come back empty, which is why the closure is floored below.
+    if (bundlerRouteAssets(fixture, table, /^assets\/no-such-chunk-[^/]+\.js$/).length !== 0) fail('wire_cost_route_asset_parser_overmatches')
+  }
+  if (bundlerDependencyTable('const x=1') !== null) fail('wire_cost_dependency_table_parser_overmatches')
+}
+const documentScripts = [...rootPageSource.matchAll(/<script[^>]+src="\/([^"]+)"/g)].map((match) => match[1])
+const documentStyles = [...rootPageSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)].map((match) => match[1])
+const moduleEntryAsset = documentScripts.find((path) => /^assets\/[^/]+\.js$/.test(path))
+const routeEntrySource = moduleEntryAsset && await exists(resolve(dist, moduleEntryAsset))
+  ? await readFile(resolve(dist, moduleEntryAsset), 'utf8')
+  : null
+const routeDependencyTable = routeEntrySource ? bundlerDependencyTable(routeEntrySource) : null
+if (!routeEntrySource) fail('shop_route_module_entry_missing')
+else if (!routeDependencyTable) fail('shop_route_dependency_table_missing')
+else {
+  const documentGraph = new Set()
+  const visitDocumentAsset = async (asset) => {
+    if (documentGraph.has(asset)) return
+    if (!/^assets\/[A-Za-z0-9_.-]+\.js$/.test(asset)) {
+      fail(`shop_route_asset_invalid:${asset}`)
+      return
+    }
+    if (!await exists(resolve(dist, asset))) {
+      fail(`shop_route_asset_missing:${asset}`)
+      return
+    }
+    documentGraph.add(asset)
+    for (const specifier of staticImportSpecifiers(await readFile(resolve(dist, asset), 'utf8'))) {
+      await visitDocumentAsset(`assets/${specifier}`)
+    }
+  }
+  await visitDocumentAsset(moduleEntryAsset)
+  const routeAssets = bundlerRouteAssets(routeEntrySource, routeDependencyTable, /^assets\/core-app-[^/]+\.js$/)
+  if (!routeAssets.length) fail('shop_route_operations_chunk_unreachable')
+  const shopRouteClosure = [...new Set(['index.html', ...documentScripts, ...documentStyles, ...documentGraph, ...routeAssets])]
+  const missingClosureAssets = (await Promise.all(shopRouteClosure.map(async (path) => (
+    await exists(resolve(dist, path)) ? null : path
+  )))).filter(Boolean)
+  if (missingClosureAssets.length) fail(`shop_route_closure_asset_missing:${missingClosureAssets.join('|')}`)
+  else {
+    shopRouteAssetCount = shopRouteClosure.length
+    shopRouteWireBytes = (await Promise.all(shopRouteClosure.map((path) => (
+      compressedWireBytes(resolve(dist, path))
+    )))).reduce((total, size) => total + size, 0)
+    // FLOOR before ceiling. A guard that can only fail upward is one broken regex away
+    // from passing on an empty set, which has already happened once in this repo.
+    if (shopRouteClosure.length < 12) fail(`shop_route_closure_implausible:${shopRouteClosure.length}`)
+    if (shopRouteWireBytes < 300_000) fail(`shop_route_wire_cost_implausible:${shopRouteWireBytes}`)
+    if (shopRouteWireBytes > 475_000) fail(`shop_route_wire_cost:${shopRouteWireBytes}`)
+  }
+}
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -20446,4 +20640,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes, shopRouteAssetCount, shopRouteWireBytes }, null, 2))
