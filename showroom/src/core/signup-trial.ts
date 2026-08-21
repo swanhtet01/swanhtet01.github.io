@@ -85,6 +85,28 @@ export type TrialSignupInput = {
 
 const TRIAL_PRODUCTS: readonly TrialSignupProduct[] = ['commerce', 'production', 'website', 'ecommerce']
 
+export type TrialSignupProductChoice = {
+  id: TrialSignupProduct
+  slug: 'shop' | 'plant' | 'website' | 'ecommerce'
+  label: 'Shop' | 'Plant' | 'Website' | 'Ecommerce'
+  outcome: string
+  setupPath: string
+  workspacePath: string
+}
+
+export const TRIAL_SIGNUP_PRODUCT_CHOICES: readonly TrialSignupProductChoice[] = [
+  { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Sell, book, stock, and close the day.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
+  { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Plan work, materials, quality, and maintenance.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
+  { id: 'website', slug: 'website', label: 'Website', outcome: 'Build, preview, approve, and publish your business site.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
+  { id: 'ecommerce', slug: 'ecommerce', label: 'Ecommerce', outcome: 'Open a storefront and turn requests into reviewed orders.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
+] as const
+
+export function trialSignupProductChoice(value: unknown): TrialSignupProductChoice {
+  const normalized = trimmed(value).toLowerCase()
+  return TRIAL_SIGNUP_PRODUCT_CHOICES.find((choice) => choice.id === normalized || choice.slug === normalized)
+    ?? TRIAL_SIGNUP_PRODUCT_CHOICES[0]
+}
+
 /** Same bound the rest of onboarding uses for a business name (ProductOnboardingPage requires a
  * non-empty name; client-onboarding bounds workspace strings at 120). */
 const MAX_BUSINESS_NAME = 120

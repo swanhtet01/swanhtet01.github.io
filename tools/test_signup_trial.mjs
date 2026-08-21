@@ -43,6 +43,7 @@ const {
   TRIAL_SIGNUP_KEY,
   TRIAL_SIGNUP_SCHEMA,
   TRIAL_SIGNUP_SCHEMA_V1,
+  TRIAL_SIGNUP_PRODUCT_CHOICES,
   createTrialSignupRecord,
   readTrialSignup,
   restoreTrialSignup,
@@ -50,6 +51,7 @@ const {
   trialSignupClaimFile,
   trialSignupContactUrl,
   trialSignupDoors,
+  trialSignupProductChoice,
   writeTrialSignup,
   signupBusinessChoices,
   shopIndustryPacks,
@@ -71,6 +73,20 @@ function throws(fn, label) {
 const ID = '7f3c92a1-4b8e-4d21-9c07-2ab5e6f10d34'
 const AT = '2026-08-11T02:15:00.000Z'
 const base = { id: ID, createdAt: AT, businessName: 'Yangon Tyre', product: 'commerce' }
+
+// --- every product is an explicit front door ---------------------------------------
+check(
+  TRIAL_SIGNUP_PRODUCT_CHOICES.map((choice) => choice.id).join(',') === 'commerce,production,website,ecommerce',
+  'signup offers the four products once, in canonical order',
+)
+check(new Set(TRIAL_SIGNUP_PRODUCT_CHOICES.map((choice) => choice.slug)).size === 4, 'every signup product has a distinct public slug')
+for (const choice of TRIAL_SIGNUP_PRODUCT_CHOICES) {
+  check(trialSignupProductChoice(choice.id) === choice, `${choice.id}: runtime id resolves to its signup choice`)
+  check(trialSignupProductChoice(choice.slug) === choice, `${choice.slug}: public slug resolves to its signup choice`)
+  check(choice.setupPath.includes(`product=${choice.slug}`), `${choice.label}: setup path preserves product intent`)
+  check(choice.workspacePath.startsWith(`/${choice.slug}/`), `${choice.label}: workspace path is product-specific`)
+}
+check(trialSignupProductChoice('unknown').id === 'commerce', 'unknown product input fails to the visible Shop default')
 
 // --- the record -----------------------------------------------------------------
 const minimal = createTrialSignupRecord(base)
@@ -278,6 +294,15 @@ const appSource = readFileSync('showroom/src/App.tsx', 'utf8')
 check(appSource.includes('<SignupPage /></Suspense>} path="signup"'), '/signup renders the trial page')
 check(!appSource.includes('<Navigate replace to="/login" />} path="signup"'), 'and no longer dead-ends at /login')
 
+const shellSource = readFileSync('showroom/src/core/CoreShell.tsx', 'utf8')
+const loginSource = readFileSync('showroom/src/core/ManagedLoginPage.tsx', 'utf8')
+check(shellSource.split('to={signupPath}').length - 1 === 2, 'desktop and mobile product pages preserve product intent in Free trial links')
+check(loginSource.split('to={signupPath}').length - 1 === 2, 'both login-to-trial links preserve the requested product')
+
+const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
+check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0;'), 'signup controls cannot overflow the mobile content width')
+check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { font-size: 1rem; }'), 'mobile signup inputs retain a zoom-safe font size')
+
 const storageSource = readFileSync('showroom/src/core/local-workspace-storage.ts', 'utf8')
 check(
   storageSource.includes(`'${TRIAL_SIGNUP_KEY}'`),
@@ -292,8 +317,10 @@ check(
   'both consent-style rows share the signup-consent styling',
 )
 check(
-  pageSource.indexOf('I accept the SuperMega trial terms') < pageSource.indexOf('Start my free trial'),
+  pageSource.indexOf('I accept the SuperMega trial terms') < pageSource.indexOf('Start my ${selectedProductChoice.label} trial'),
   'the terms checkbox sits above the submit button',
 )
+check(pageSource.includes("product: selectedProduct"), 'the saved trial records the product the owner selected')
+check(pageSource.includes("selectedProduct === 'commerce' ? selectedProductChoice.workspacePath : selectedProductChoice.setupPath"), 'Shop keeps fast start while other products enter their own setup')
 
 console.log(`signup trial contract: ${checks} checks passed`)

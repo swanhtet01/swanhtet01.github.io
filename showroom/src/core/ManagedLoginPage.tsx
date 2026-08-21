@@ -21,7 +21,7 @@ import {
   type ManagedIdentity,
   type ManagedWorkspaceSignIn,
 } from './managed-trial'
-import { readTrialSignup } from './signup-trial'
+import { readTrialSignup, trialSignupProductChoice } from './signup-trial'
 
 export function ManagedLoginPage() {
   const runtime = useOutletContext<RuntimeHealth>()
@@ -29,6 +29,7 @@ export function ManagedLoginPage() {
   const navigate = useNavigate()
   const productIntent = new URLSearchParams(location.search).get('product')
   const portalEntryPath = managedPortalEntryPath(productIntent)
+  const signupPath = productIntent ? `/signup?product=${trialSignupProductChoice(productIntent).slug}` : '/signup'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [workspaceId, setWorkspaceId] = useState('')
@@ -216,13 +217,13 @@ export function ManagedLoginPage() {
           <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent)}>Forgot password?</Link>
-          <Link className="account-inline-link" to="/signup">No account yet? Free trial</Link>
+          <Link className="account-inline-link" to={signupPath}>No account yet? Free trial</Link>
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? bi('Open company') : bi('Find my company')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
         <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
-        <div className="managed-login-actions"><Link className="core-button primary" to="/signup">Free trial</Link><Link className="core-button" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
+        <div className="managed-login-actions"><Link className="core-button primary" to={signupPath}>Free trial</Link><Link className="core-button" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
       </section>}
     </div>
   )

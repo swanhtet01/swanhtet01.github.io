@@ -13,6 +13,12 @@ import { clientSetupPath, readProductSetup, type SetupProductId } from './produc
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
 
+function signupProductSlug(product: SetupProductId) {
+  if (product === 'commerce') return 'shop'
+  if (product === 'production') return 'plant'
+  return product
+}
+
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
 type RuntimeActivationStep = {
@@ -454,6 +460,11 @@ export function CoreLayout() {
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
   const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
+  const signupPath = routeProduct
+    ? `/signup?product=${signupProductSlug(routeProduct)}`
+    : settingsProduct
+      ? `/signup?product=${signupProductSlug(settingsProduct)}`
+      : '/signup'
   const setupRoute = customerSettingsRoute || internalBuilderRoute
   const setupNavigation: NavigationItem = internalBuilderRoute
     ? { to: '/internal/client-builder/', label: 'Client builder' }
@@ -552,10 +563,10 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link signup-shell-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link signup-shell-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link className="account-shell-link mobile-signup-topbar-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link className="account-shell-link mobile-signup-topbar-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
