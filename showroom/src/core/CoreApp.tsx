@@ -1263,11 +1263,22 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
     }, event.currentTarget)
   }
 
+  const counterContextLabel = industryPack && sampleCatalogActive
+    ? `${industryPack.name} working sample`
+    : industryPack
+      ? 'Existing Shop catalog'
+      : bi('Counter open')
+  const packContext = industryPack
+    ? sampleCatalogActive
+      ? `${industryPack.firstWorkflow} ${industryPack.name} sample items are loaded.`
+      : `Your existing items were kept. The ${industryPack.name} appointment schedule is separate.`
+    : ''
+
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : bi('Counter open')}</span><h2>{bi('Tap an item to add it')}</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <div><span className="core-eyebrow">{counterContextLabel}</span><h2>{bi('Tap an item to add it')}</h2>{industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
         {visibleItems.length ? <div className="shop-item-grid">

@@ -65,7 +65,11 @@ function localHealthPlugin(): Plugin {
 export default defineConfig({
   root: projectRoot,
   publicDir: resolve(projectRoot, 'public-app'),
-  cacheDir: resolve(projectRoot, 'node_modules/.vite'),
+  // Dependencies can be supplied through a read-only/junctioned node_modules on the
+  // Ally release checkout. Vite's optimizer must still be able to replace its temp
+  // directory atomically, so keep generated cache in this checkout's ignored .tmp
+  // directory instead of trying to write through the dependency junction.
+  cacheDir: resolve(projectRoot, '../.tmp/vite-cache'),
   plugins: [
     react(),
     localHealthPlugin(),
