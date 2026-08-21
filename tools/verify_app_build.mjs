@@ -2816,7 +2816,14 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || !workspaceControlsPageSource.includes('title="Status and recovery"')
   || !workspaceControlsPageSource.includes('Product setup and internal client tools stay separate.')
   || !workspaceControlsPageSource.includes('Download workspace backup')
-  || !workspaceControlsPageSource.includes('const backupDownload = useMemo(')
+  // Was `const backupDownload = useMemo(` -- a memoised data: URL built on mount whether or
+  // not Download was ever pressed, at 15.1 ms and 3.78 MB on a device at the workspace
+  // ceiling. Replaced by the click handler, and pinned STRICTER: the shape is named, the
+  // revocation is required beside it, and the eager form is forbidden outright so it cannot
+  // come back the way it arrived.
+  || !workspaceControlsPageSource.includes('function downloadWorkspaceBackup()')
+  || !workspaceControlsPageSource.includes('onClick={downloadWorkspaceBackup}')
+  || workspaceControlsPageSource.includes('data:application/json')
   || !workspaceControlsPageSource.includes('Save restore point')
   || !workspaceControlsPageSource.includes('Load backup file')
   || !workspaceControlsPageSource.includes('Restore previous workspace')
@@ -2831,6 +2838,24 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || workspaceControlsPageSource.includes('SettingsPage')
   || workspaceControlsPageSource.includes("from './CoreApp'")
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => workspaceControlsPageSource.includes(marker))) fail('customer_workspace_controls_not_isolated_or_safe')
+
+// Both downloads on this page mint an object URL, so an unscoped `includes` for the revoke
+// would be satisfied by whichever one still had it. Each handler is therefore weighed on its
+// own body: an object URL that is created and never revoked pins its whole buffer for the
+// life of the page, and at the workspace ceiling that buffer is megabytes.
+for (const [handler, next] of [
+  ['function downloadWorkspaceBackup()', 'function downloadSalesArchive()'],
+  ['function downloadSalesArchive()', 'async function resetWorkspace()'],
+]) {
+  const start = workspaceControlsPageSource.indexOf(handler)
+  const end = workspaceControlsPageSource.indexOf(next, start + handler.length)
+  const body = start < 0 || end < 0 ? '' : workspaceControlsPageSource.slice(start, end)
+  if (!body
+    || !body.includes('URL.createObjectURL(new Blob(')
+    || !body.includes('URL.revokeObjectURL(url)')
+    || body.includes('encodeURIComponent(')) fail(`workspace_controls_download_leaks_object_url:${handler}`)
+}
+
 if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
   // /signup used to redirect here, which was a dead end: /login is gated on
