@@ -4,6 +4,8 @@ import type { ClientDemoBlueprint, ClientSolutionId } from './client-onboarding.
 export const CLIENT_EXTENSION_MANIFEST_SCHEMA = 'supermega.client_extension_manifest.v1' as const
 export const CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA = 'supermega.client_extension_activation_plan.v1' as const
 export const CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA = 'supermega.client_extension_portal_binding.v1' as const
+export const CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA = 'supermega.client_extension_runtime_authorization.v1' as const
+export const CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA = 'supermega.client_extension_activation_receipt.v1' as const
 
 export type ClientExtensionMode = 'read-only' | 'draft-only' | 'reviewed-write'
 export type ClientExtensionRequestedAction = 'read' | 'draft' | 'propose-write'
@@ -201,11 +203,116 @@ export type ClientExtensionPortalBinding = {
   digest: string
 }
 
+export type ClientExtensionRuntimeAuthorizationEvidence = {
+  environment: 'pilot' | 'production'
+  releaseCommit: string
+  approvedBy: string
+  approvedByActorId: string
+  approvedAt: string
+  expiresAt: string
+  idempotencyKey: string
+}
+
+export type ClientExtensionRuntimeAuthorization = {
+  schema: typeof CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA
+  portalBindingDigest: string
+  extensionActivationPlanDigest: string
+  tenant: ClientExtensionPortalBinding['tenant']
+  module: ClientExtensionPortalBinding['module']
+  target: {
+    environment: ClientExtensionRuntimeAuthorizationEvidence['environment']
+    releaseCommit: string
+    idempotencyKey: string
+  }
+  approval: {
+    approvedBy: string
+    approvedByActorId: string
+    approvedAt: string
+    expiresAt: string
+  }
+  authority: {
+    status: 'authorized-not-applied'
+    tenantConfigurationWriteAllowed: true
+    customerRecordWritesAllowed: false
+    crossTenantWritesAllowed: false
+    crossProductWritesAllowed: false
+    providerCallsAllowed: false
+    deploymentAllowed: false
+    externalMessagesAllowed: false
+    writesPerformed: false
+  }
+  controls: {
+    exactPortalBindingRequired: true
+    exactLiveReleaseRequiredAtExecution: true
+    oneTimeIdempotencyRequired: true
+    expiresWithinHours: 24
+    rollbackDigest: string
+    receiptRequired: true
+  }
+  digest: string
+}
+
+export type ClientExtensionActivationReceiptEvidence = {
+  activatedAt: string
+  activatedByActorId: string
+  idempotencyKey: string
+  runtimeRelease: {
+    commit: string
+    brandVersion: string
+    contextVersion: string
+    catalogVersion: string
+  }
+  tenantConfigRevision: number
+  tenantConfigDigest: string
+  executionEvidenceDigest: string
+  rollbackReady: boolean
+  customerRecordWritesPerformed: boolean
+  providerCallsPerformed: boolean
+  deploymentPerformed: boolean
+  externalMessagesSent: boolean
+  crossTenantWritesPerformed: boolean
+  crossProductWritesPerformed: boolean
+}
+
+export type ClientExtensionActivationReceipt = {
+  schema: typeof CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA
+  authorizationDigest: string
+  portalBindingDigest: string
+  tenant: ClientExtensionPortalBinding['tenant']
+  module: ClientExtensionPortalBinding['module']
+  execution: {
+    status: 'active'
+    activatedAt: string
+    activatedByActorId: string
+    idempotencyKey: string
+    runtimeRelease: ClientExtensionActivationReceiptEvidence['runtimeRelease'] & {
+      recordDigest: string
+    }
+    tenantConfigRevision: number
+    tenantConfigDigest: string
+    evidenceDigest: string
+    rollbackReady: true
+  }
+  authority: {
+    tenantConfigurationWritePerformed: true
+    customerRecordWritesPerformed: false
+    providerCallsPerformed: false
+    deploymentPerformed: false
+    externalMessagesSent: false
+    crossTenantWritesPerformed: false
+    crossProductWritesPerformed: false
+  }
+  digest: string
+}
+
 const ID = /^ext-[a-z][a-z0-9-]{1,58}$/
 const RECORD_ID = /^[a-z][a-z0-9_]{1,63}$/
 const DOMAIN: readonly ClientCapabilityDomain[] = ['operations', 'master-data', 'finance', 'customer', 'supply-chain', 'quality', 'workforce', 'governance', 'intelligence', 'integration']
 const MODE: readonly ClientExtensionMode[] = ['read-only', 'draft-only', 'reviewed-write']
 const SHA256 = /^sha256:[a-f0-9]{64}$/
+const GIT_COMMIT = /^[a-f0-9]{40}$/
+const IDEMPOTENCY_KEY = /^[a-z0-9][a-z0-9:._-]{15,179}$/
+const RELEASE_VERSION = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/
 const PRODUCT_ENTITLEMENT: Record<ClientSolutionId, string> = {
   commerce: 'shop',
   production: 'plant',
@@ -568,5 +675,246 @@ export async function verifyClientExtensionPortalBinding(
     }
   } catch {
     throw new Error('The client extension portal binding is invalid, cross-tenant, unentitled, stale, or changed after review.')
+  }
+}
+
+export async function buildClientExtensionRuntimeAuthorization(
+  binding: ClientExtensionPortalBinding,
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+  evidence: ClientExtensionRuntimeAuthorizationEvidence,
+): Promise<ClientExtensionRuntimeAuthorization> {
+  const bindingVerification = await verifyClientExtensionPortalBinding(binding, manifest, activationPlan, blueprint, portal)
+  const releaseCommit = bounded(evidence.releaseCommit, 'Runtime release commit', 40)
+  if (!GIT_COMMIT.test(releaseCommit)) throw new Error('Runtime activation requires an exact lowercase 40-character release commit.')
+  if (!['pilot', 'production'].includes(evidence.environment)) throw new Error('Runtime activation environment must be pilot or production.')
+  const approvedBy = bounded(evidence.approvedBy, 'Runtime activation approver', 80)
+  const approvedByActorId = bounded(evidence.approvedByActorId, 'Runtime activation approver actor id', 160)
+  if (approvedBy !== binding.tenant.ownerLabel || approvedByActorId !== binding.tenant.ownerActorId) {
+    throw new Error('Runtime activation approval must come from the exact tenant portal owner.')
+  }
+  const approvedAt = canonicalTimestamp(evidence.approvedAt)
+  const expiresAt = canonicalTimestamp(evidence.expiresAt)
+  const approvedAtMs = Date.parse(approvedAt)
+  const expiresAtMs = Date.parse(expiresAt)
+  if (approvedAtMs < Date.parse(activationPlan.reviews.ownerActivation.approvedAt)) {
+    throw new Error('Runtime activation approval cannot predate the reviewed extension plan.')
+  }
+  if (expiresAtMs <= approvedAtMs || expiresAtMs - approvedAtMs > 24 * 60 * 60 * 1000) {
+    throw new Error('Runtime activation authorization must expire after approval and within 24 hours.')
+  }
+  const idempotencyKey = bounded(evidence.idempotencyKey, 'Runtime activation idempotency key', 180)
+  if (!IDEMPOTENCY_KEY.test(idempotencyKey)) throw new Error('Runtime activation idempotency key is invalid.')
+
+  const payload: Omit<ClientExtensionRuntimeAuthorization, 'digest'> = {
+    schema: CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA,
+    portalBindingDigest: bindingVerification.digest,
+    extensionActivationPlanDigest: activationPlan.digest,
+    tenant: { ...binding.tenant },
+    module: { ...binding.module, records: [...binding.module.records], roles: [...binding.module.roles] },
+    target: {
+      environment: evidence.environment,
+      releaseCommit,
+      idempotencyKey,
+    },
+    approval: {
+      approvedBy,
+      approvedByActorId,
+      approvedAt,
+      expiresAt,
+    },
+    authority: {
+      status: 'authorized-not-applied',
+      tenantConfigurationWriteAllowed: true,
+      customerRecordWritesAllowed: false,
+      crossTenantWritesAllowed: false,
+      crossProductWritesAllowed: false,
+      providerCallsAllowed: false,
+      deploymentAllowed: false,
+      externalMessagesAllowed: false,
+      writesPerformed: false,
+    },
+    controls: {
+      exactPortalBindingRequired: true,
+      exactLiveReleaseRequiredAtExecution: true,
+      oneTimeIdempotencyRequired: true,
+      expiresWithinHours: 24,
+      rollbackDigest: activationPlan.implementation.rollbackDigest,
+      receiptRequired: true,
+    },
+  }
+  return { ...payload, digest: await sha256(payload) }
+}
+
+export async function verifyClientExtensionRuntimeAuthorization(
+  value: unknown,
+  binding: ClientExtensionPortalBinding,
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+  executionAtValue?: string,
+) {
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid')
+    const candidate = value as Partial<ClientExtensionRuntimeAuthorization>
+    const rebuilt = await buildClientExtensionRuntimeAuthorization(binding, manifest, activationPlan, blueprint, portal, {
+      environment: candidate.target?.environment as ClientExtensionRuntimeAuthorizationEvidence['environment'],
+      releaseCommit: candidate.target?.releaseCommit as string,
+      approvedBy: candidate.approval?.approvedBy as string,
+      approvedByActorId: candidate.approval?.approvedByActorId as string,
+      approvedAt: candidate.approval?.approvedAt as string,
+      expiresAt: candidate.approval?.expiresAt as string,
+      idempotencyKey: candidate.target?.idempotencyKey as string,
+    })
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    const executionAt = executionAtValue === undefined ? null : canonicalTimestamp(executionAtValue)
+    if (executionAt !== null && (Date.parse(executionAt) < Date.parse(rebuilt.approval.approvedAt) || Date.parse(executionAt) > Date.parse(rebuilt.approval.expiresAt))) {
+      throw new Error('expired')
+    }
+    return {
+      ok: true as const,
+      contract: CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA,
+      digest: rebuilt.digest,
+      portalBindingDigest: rebuilt.portalBindingDigest,
+      workspaceId: rebuilt.tenant.workspaceId,
+      releaseCommit: rebuilt.target.releaseCommit,
+      expiresAt: rebuilt.approval.expiresAt,
+      executionAt,
+      executable: executionAt === null ? null : true,
+      status: rebuilt.authority.status,
+    }
+  } catch {
+    throw new Error('The client extension runtime authorization is invalid, expired by contract, cross-tenant, stale, or changed after approval.')
+  }
+}
+
+export async function buildClientExtensionActivationReceipt(
+  authorization: ClientExtensionRuntimeAuthorization,
+  binding: ClientExtensionPortalBinding,
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+  evidence: ClientExtensionActivationReceiptEvidence,
+): Promise<ClientExtensionActivationReceipt> {
+  const activatedAt = canonicalTimestamp(evidence.activatedAt)
+  const authorizationVerification = await verifyClientExtensionRuntimeAuthorization(authorization, binding, manifest, activationPlan, blueprint, portal, activatedAt)
+  const activatedAtMs = Date.parse(activatedAt)
+  if (activatedAtMs < Date.parse(authorization.approval.approvedAt) || activatedAtMs > Date.parse(authorization.approval.expiresAt)) {
+    throw new Error('Extension activation must occur inside the authorized time window.')
+  }
+  const activatedByActorId = bounded(evidence.activatedByActorId, 'Extension activation actor id', 160)
+  if (activatedByActorId !== authorization.approval.approvedByActorId) throw new Error('Extension activation actor does not match the authorized tenant owner.')
+  const idempotencyKey = bounded(evidence.idempotencyKey, 'Extension activation idempotency key', 180)
+  if (idempotencyKey !== authorization.target.idempotencyKey) throw new Error('Extension activation idempotency key does not match the authorization.')
+  const runtimeRelease = {
+    commit: bounded(evidence.runtimeRelease?.commit, 'Runtime release commit', 40),
+    brandVersion: bounded(evidence.runtimeRelease?.brandVersion, 'Runtime brand version', 80),
+    contextVersion: bounded(evidence.runtimeRelease?.contextVersion, 'Runtime context version', 80),
+    catalogVersion: bounded(evidence.runtimeRelease?.catalogVersion, 'Runtime catalog version', 80),
+  }
+  if (runtimeRelease.commit !== authorization.target.releaseCommit || !GIT_COMMIT.test(runtimeRelease.commit)) throw new Error('Extension activation did not run on the exact authorized release.')
+  if (![runtimeRelease.brandVersion, runtimeRelease.contextVersion, runtimeRelease.catalogVersion].every((value) => RELEASE_VERSION.test(value))) {
+    throw new Error('Extension activation runtime release versions are invalid.')
+  }
+  if (!Number.isInteger(evidence.tenantConfigRevision) || evidence.tenantConfigRevision < 1 || evidence.tenantConfigRevision > 2_147_483_647) {
+    throw new Error('Tenant configuration revision must be a positive integer.')
+  }
+  if (evidence.rollbackReady !== true) throw new Error('Extension activation requires rollback readiness.')
+  if (evidence.customerRecordWritesPerformed !== false
+    || evidence.providerCallsPerformed !== false
+    || evidence.deploymentPerformed !== false
+    || evidence.externalMessagesSent !== false
+    || evidence.crossTenantWritesPerformed !== false
+    || evidence.crossProductWritesPerformed !== false) {
+    throw new Error('Extension activation evidence exceeds the tenant configuration write authority.')
+  }
+  const runtimeReleaseRecordDigest = await canonicalDigest(runtimeRelease)
+  const tenantConfigDigest = evidenceDigest(evidence.tenantConfigDigest, 'Tenant configuration digest')
+  const executionEvidenceDigest = evidenceDigest(evidence.executionEvidenceDigest, 'Activation execution evidence digest')
+  if (new Set([runtimeReleaseRecordDigest, tenantConfigDigest, executionEvidenceDigest, activationPlan.implementation.rollbackDigest]).size !== 4) {
+    throw new Error('Release, tenant configuration, execution, and rollback evidence must be independently digest-bound.')
+  }
+
+  const payload: Omit<ClientExtensionActivationReceipt, 'digest'> = {
+    schema: CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA,
+    authorizationDigest: authorizationVerification.digest,
+    portalBindingDigest: binding.digest,
+    tenant: { ...binding.tenant },
+    module: { ...binding.module, records: [...binding.module.records], roles: [...binding.module.roles] },
+    execution: {
+      status: 'active',
+      activatedAt,
+      activatedByActorId,
+      idempotencyKey,
+      runtimeRelease: { ...runtimeRelease, recordDigest: runtimeReleaseRecordDigest },
+      tenantConfigRevision: evidence.tenantConfigRevision,
+      tenantConfigDigest,
+      evidenceDigest: executionEvidenceDigest,
+      rollbackReady: true,
+    },
+    authority: {
+      tenantConfigurationWritePerformed: true,
+      customerRecordWritesPerformed: false,
+      providerCallsPerformed: false,
+      deploymentPerformed: false,
+      externalMessagesSent: false,
+      crossTenantWritesPerformed: false,
+      crossProductWritesPerformed: false,
+    },
+  }
+  return { ...payload, digest: await sha256(payload) }
+}
+
+export async function verifyClientExtensionActivationReceipt(
+  value: unknown,
+  authorization: ClientExtensionRuntimeAuthorization,
+  binding: ClientExtensionPortalBinding,
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+) {
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid')
+    const candidate = value as Partial<ClientExtensionActivationReceipt>
+    const execution = candidate.execution as ClientExtensionActivationReceipt['execution']
+    const authority = candidate.authority as ClientExtensionActivationReceipt['authority']
+    const rebuilt = await buildClientExtensionActivationReceipt(authorization, binding, manifest, activationPlan, blueprint, portal, {
+      activatedAt: execution?.activatedAt,
+      activatedByActorId: execution?.activatedByActorId,
+      idempotencyKey: execution?.idempotencyKey,
+      runtimeRelease: {
+        commit: execution?.runtimeRelease?.commit,
+        brandVersion: execution?.runtimeRelease?.brandVersion,
+        contextVersion: execution?.runtimeRelease?.contextVersion,
+        catalogVersion: execution?.runtimeRelease?.catalogVersion,
+      },
+      tenantConfigRevision: execution?.tenantConfigRevision,
+      tenantConfigDigest: execution?.tenantConfigDigest,
+      executionEvidenceDigest: execution?.evidenceDigest,
+      rollbackReady: execution?.rollbackReady,
+      customerRecordWritesPerformed: authority?.customerRecordWritesPerformed,
+      providerCallsPerformed: authority?.providerCallsPerformed,
+      deploymentPerformed: authority?.deploymentPerformed,
+      externalMessagesSent: authority?.externalMessagesSent,
+      crossTenantWritesPerformed: authority?.crossTenantWritesPerformed,
+      crossProductWritesPerformed: authority?.crossProductWritesPerformed,
+    })
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    return {
+      ok: true as const,
+      contract: CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA,
+      digest: rebuilt.digest,
+      authorizationDigest: rebuilt.authorizationDigest,
+      workspaceId: rebuilt.tenant.workspaceId,
+      tenantConfigRevision: rebuilt.execution.tenantConfigRevision,
+      status: rebuilt.execution.status,
+    }
+  } catch {
+    throw new Error('The client extension activation receipt is invalid, unauthorized, cross-tenant, stale, or changed after execution.')
   }
 }

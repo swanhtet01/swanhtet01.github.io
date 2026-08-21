@@ -126,6 +126,63 @@ test('internal extension tool creates and verifies a tenant-bound no-write exten
   const verifiedBinding = run(tool, 'verify-portal-binding', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath)
   assert.equal(verifiedBinding.status, 0, verifiedBinding.stderr)
   assert.equal(output(verifiedBinding).status, 'approved-not-applied')
+
+  const authorizationEvidencePath = resolve(directory, 'runtime-authorization-evidence.json')
+  await writeFile(authorizationEvidencePath, `${JSON.stringify({
+    environment: 'pilot',
+    releaseCommit: 'a'.repeat(40),
+    approvedBy: 'Named Spa Owner',
+    approvedByActorId: portalPayload.tenant.ownerActorId,
+    approvedAt: '2026-08-21T03:00:00.000Z',
+    expiresAt: '2026-08-21T04:00:00.000Z',
+    idempotencyKey: 'activate:named-spa:ext-spa-membership:v1',
+  }, null, 2)}\n`)
+  const authorizationPath = resolve(directory, 'runtime-authorization.json')
+  const authorized = run(tool, 'authorize-activation', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization-evidence', authorizationEvidencePath, '--output', authorizationPath)
+  assert.equal(authorized.status, 0, authorized.stderr)
+  assert.equal(output(authorized).status, 'authorized-not-applied')
+  assert.equal(output(authorized).workspaceId, portalPayload.tenant.workspaceId)
+  assert.equal(output(authorized).externalWritesPerformed, false)
+  const verifiedAuthorization = run(tool, 'verify-activation-authorization', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--at', '2026-08-21T03:30:00.000Z')
+  assert.equal(verifiedAuthorization.status, 0, verifiedAuthorization.stderr)
+  assert.equal(output(verifiedAuthorization).status, 'authorized-not-applied')
+  assert.equal(output(verifiedAuthorization).executable, true)
+  const expiredAuthorization = run(tool, 'verify-activation-authorization', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--at', '2026-08-21T04:00:00.001Z')
+  assert.notEqual(expiredAuthorization.status, 0)
+
+  const receiptEvidencePath = resolve(directory, 'activation-receipt-evidence.json')
+  await writeFile(receiptEvidencePath, `${JSON.stringify({
+    activatedAt: '2026-08-21T03:30:00.000Z',
+    activatedByActorId: portalPayload.tenant.ownerActorId,
+    idempotencyKey: 'activate:named-spa:ext-spa-membership:v1',
+    runtimeRelease: { commit: 'a'.repeat(40), brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' },
+    tenantConfigRevision: 1,
+    tenantConfigDigest: digest('7'),
+    executionEvidenceDigest: digest('8'),
+    rollbackReady: true,
+    customerRecordWritesPerformed: false,
+    providerCallsPerformed: false,
+    deploymentPerformed: false,
+    externalMessagesSent: false,
+    crossTenantWritesPerformed: false,
+    crossProductWritesPerformed: false,
+  }, null, 2)}\n`)
+  const receiptPath = resolve(directory, 'activation-receipt.json')
+  const recorded = run(tool, 'record-activation', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--receipt-evidence', receiptEvidencePath, '--output', receiptPath)
+  assert.equal(recorded.status, 0, recorded.stderr)
+  assert.equal(output(recorded).status, 'active')
+  assert.equal(output(recorded).tenantConfigRevision, 1)
+  assert.equal(output(recorded).externalWritesPerformed, false)
+  const verifiedReceipt = run(tool, 'verify-activation-receipt', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--receipt', receiptPath)
+  assert.equal(verifiedReceipt.status, 0, verifiedReceipt.stderr)
+  assert.equal(output(verifiedReceipt).status, 'active')
+  const tamperedReceipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+  tamperedReceipt.execution.tenantConfigRevision = 2
+  await writeFile(receiptPath, `${JSON.stringify(tamperedReceipt, null, 2)}\n`)
+  const rejectedReceipt = run(tool, 'verify-activation-receipt', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--receipt', receiptPath)
+  assert.notEqual(rejectedReceipt.status, 0)
+  assert.match(output(rejectedReceipt).error, /invalid|stale|changed/)
+
   const tamperedBinding = JSON.parse(await readFile(bindingPath, 'utf8'))
   tamperedBinding.tenant.workspaceId = '33333333-3333-4333-8333-333333333333'
   await writeFile(bindingPath, `${JSON.stringify(tamperedBinding, null, 2)}\n`)

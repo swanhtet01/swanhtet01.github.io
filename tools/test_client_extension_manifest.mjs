@@ -9,7 +9,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export { buildClientDemoBlueprint, clientDemoPresets } from './client-onboarding.ts'
-      export { buildClientExtensionManifest, verifyClientExtensionManifest, buildClientExtensionActivationPlan, verifyClientExtensionActivationPlan, buildClientExtensionPortalBinding, verifyClientExtensionPortalBinding } from './client-extension-manifest.ts'
+      export { buildClientExtensionManifest, verifyClientExtensionManifest, buildClientExtensionActivationPlan, verifyClientExtensionActivationPlan, buildClientExtensionPortalBinding, verifyClientExtensionPortalBinding, buildClientExtensionRuntimeAuthorization, verifyClientExtensionRuntimeAuthorization, buildClientExtensionActivationReceipt, verifyClientExtensionActivationReceipt } from './client-extension-manifest.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/client-extension-test-entry.ts',
@@ -168,4 +168,79 @@ const tamperedPortalBinding = structuredClone(portalBinding)
 tamperedPortalBinding.tenant.workspaceId = '33333333-3333-4333-8333-333333333333'
 await assert.rejects(model.verifyClientExtensionPortalBinding(tamperedPortalBinding, manifest, activationPlan, blueprint, portalManifest), /invalid|cross-tenant|changed/)
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 36, digest: manifest.digest, activationPlanDigest: activationPlan.digest, portalBindingDigest: portalBinding.digest, blueprintDigest: manifest.blueprintDigest }))
+const runtimeAuthorizationEvidence = {
+  environment: 'pilot',
+  releaseCommit: 'a'.repeat(40),
+  approvedBy: portalBinding.tenant.ownerLabel,
+  approvedByActorId: portalBinding.tenant.ownerActorId,
+  approvedAt: '2026-08-21T03:00:00.000Z',
+  expiresAt: '2026-08-21T04:00:00.000Z',
+  idempotencyKey: 'activate:spa-workspace:ext-spa-membership:v1',
+}
+const runtimeAuthorization = await model.buildClientExtensionRuntimeAuthorization(portalBinding, manifest, activationPlan, blueprint, portalManifest, runtimeAuthorizationEvidence)
+assert.equal(runtimeAuthorization.schema, 'supermega.client_extension_runtime_authorization.v1')
+assert.equal(runtimeAuthorization.portalBindingDigest, portalBinding.digest)
+assert.equal(runtimeAuthorization.authority.status, 'authorized-not-applied')
+assert.equal(runtimeAuthorization.authority.tenantConfigurationWriteAllowed, true)
+assert.equal(runtimeAuthorization.authority.customerRecordWritesAllowed, false)
+assert.equal(runtimeAuthorization.authority.writesPerformed, false)
+assert.equal(runtimeAuthorization.controls.exactLiveReleaseRequiredAtExecution, true)
+assert.deepEqual(await model.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, '2026-08-21T03:30:00.000Z'), {
+  ok: true,
+  contract: 'supermega.client_extension_runtime_authorization.v1',
+  digest: runtimeAuthorization.digest,
+  portalBindingDigest: portalBinding.digest,
+  workspaceId: portalBinding.tenant.workspaceId,
+  releaseCommit: runtimeAuthorizationEvidence.releaseCommit,
+  expiresAt: runtimeAuthorizationEvidence.expiresAt,
+  executionAt: '2026-08-21T03:30:00.000Z',
+  executable: true,
+  status: 'authorized-not-applied',
+})
+await assert.rejects(model.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, '2026-08-21T04:00:00.001Z'), /expired|invalid/)
+await assert.rejects(model.buildClientExtensionRuntimeAuthorization(portalBinding, manifest, activationPlan, blueprint, portalManifest, { ...runtimeAuthorizationEvidence, approvedByActorId: 'another-actor-id' }), /exact tenant portal owner/)
+await assert.rejects(model.buildClientExtensionRuntimeAuthorization(portalBinding, manifest, activationPlan, blueprint, portalManifest, { ...runtimeAuthorizationEvidence, expiresAt: '2026-08-22T03:00:00.001Z' }), /within 24 hours/)
+const tamperedAuthorization = structuredClone(runtimeAuthorization)
+tamperedAuthorization.target.releaseCommit = 'b'.repeat(40)
+await assert.rejects(model.verifyClientExtensionRuntimeAuthorization(tamperedAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest), /invalid|stale|changed/)
+
+const activationReceiptEvidence = {
+  activatedAt: '2026-08-21T03:30:00.000Z',
+  activatedByActorId: portalBinding.tenant.ownerActorId,
+  idempotencyKey: runtimeAuthorization.target.idempotencyKey,
+  runtimeRelease: { commit: runtimeAuthorization.target.releaseCommit, brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' },
+  tenantConfigRevision: 1,
+  tenantConfigDigest: digest('7'),
+  executionEvidenceDigest: digest('8'),
+  rollbackReady: true,
+  customerRecordWritesPerformed: false,
+  providerCallsPerformed: false,
+  deploymentPerformed: false,
+  externalMessagesSent: false,
+  crossTenantWritesPerformed: false,
+  crossProductWritesPerformed: false,
+}
+const activationReceipt = await model.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, activationReceiptEvidence)
+assert.equal(activationReceipt.schema, 'supermega.client_extension_activation_receipt.v1')
+assert.equal(activationReceipt.authorizationDigest, runtimeAuthorization.digest)
+assert.equal(activationReceipt.execution.status, 'active')
+assert.equal(activationReceipt.execution.tenantConfigRevision, 1)
+assert.equal(activationReceipt.authority.tenantConfigurationWritePerformed, true)
+assert.equal(activationReceipt.authority.customerRecordWritesPerformed, false)
+assert.deepEqual(await model.verifyClientExtensionActivationReceipt(activationReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest), {
+  ok: true,
+  contract: 'supermega.client_extension_activation_receipt.v1',
+  digest: activationReceipt.digest,
+  authorizationDigest: runtimeAuthorization.digest,
+  workspaceId: portalBinding.tenant.workspaceId,
+  tenantConfigRevision: 1,
+  status: 'active',
+})
+await assert.rejects(model.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, { ...activationReceiptEvidence, activatedAt: '2026-08-21T04:00:00.001Z' }), /expired|authorized time window/)
+await assert.rejects(model.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, { ...activationReceiptEvidence, runtimeRelease: { ...activationReceiptEvidence.runtimeRelease, commit: 'b'.repeat(40) } }), /exact authorized release/)
+await assert.rejects(model.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, { ...activationReceiptEvidence, providerCallsPerformed: true }), /exceeds/)
+const tamperedReceipt = structuredClone(activationReceipt)
+tamperedReceipt.tenant.workspaceId = '33333333-3333-4333-8333-333333333333'
+await assert.rejects(model.verifyClientExtensionActivationReceipt(tamperedReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest), /invalid|cross-tenant|changed/)
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 56, digest: manifest.digest, activationPlanDigest: activationPlan.digest, portalBindingDigest: portalBinding.digest, runtimeAuthorizationDigest: runtimeAuthorization.digest, activationReceiptDigest: activationReceipt.digest, blueprintDigest: manifest.blueprintDigest }))

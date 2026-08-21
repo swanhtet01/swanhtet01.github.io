@@ -9469,6 +9469,41 @@ async function verifyClientOnboardingRuntime() {
     assert(portalBinding.module.productEntitlement === 'shop' && portalBinding.authority.baseProductPurchased === true, 'client_extension_portal_product_entitlement_missing')
     assert(portalBinding.authority.status === 'approved-not-applied' && portalBinding.authority.tenantWritesPerformed === false && portalBinding.controls.separateActivationRequired === true, 'client_extension_portal_binding_crossed_activation_boundary')
     await rejects(() => extensionModel.buildClientExtensionPortalBinding(spaExtension, spaExtensionPlan, spaBlueprint, { ...portalManifest, tenant: { ...portalManifest.tenant, workspaceLabel: 'Other tenant' } }), 'client_extension_portal_cross_tenant_binding_accepted')
+    const runtimeAuthorization = await extensionModel.buildClientExtensionRuntimeAuthorization(portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, {
+      environment: 'pilot',
+      releaseCommit: 'a'.repeat(40),
+      approvedBy: portalBinding.tenant.ownerLabel,
+      approvedByActorId: portalBinding.tenant.ownerActorId,
+      approvedAt: '2026-08-21T03:00:00.000Z',
+      expiresAt: '2026-08-21T04:00:00.000Z',
+      idempotencyKey: 'activate:private-spa:ext-spa-membership:v1',
+    })
+    assert(runtimeAuthorization.schema === extensionModel.CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA && runtimeAuthorization.portalBindingDigest === portalBinding.digest, 'client_extension_runtime_authorization_binding_missing')
+    assert(runtimeAuthorization.authority.status === 'authorized-not-applied' && runtimeAuthorization.authority.tenantConfigurationWriteAllowed === true && runtimeAuthorization.authority.customerRecordWritesAllowed === false && runtimeAuthorization.authority.writesPerformed === false, 'client_extension_runtime_authorization_too_broad')
+    assert(runtimeAuthorization.controls.exactLiveReleaseRequiredAtExecution === true && runtimeAuthorization.controls.oneTimeIdempotencyRequired === true && runtimeAuthorization.controls.receiptRequired === true, 'client_extension_runtime_execution_controls_missing')
+    const executableAuthorization = await extensionModel.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, '2026-08-21T03:30:00.000Z')
+    assert(executableAuthorization.executable === true && executableAuthorization.executionAt === '2026-08-21T03:30:00.000Z', 'client_extension_runtime_authorization_window_not_enforced')
+    await rejects(() => extensionModel.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, '2026-08-21T04:00:00.001Z'), 'client_extension_expired_runtime_authorization_accepted')
+    await rejects(() => extensionModel.buildClientExtensionRuntimeAuthorization(portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, { environment: 'pilot', releaseCommit: 'a'.repeat(40), approvedBy: portalBinding.tenant.ownerLabel, approvedByActorId: 'another-actor', approvedAt: '2026-08-21T03:00:00.000Z', expiresAt: '2026-08-21T04:00:00.000Z', idempotencyKey: 'activate:private-spa:ext-spa-membership:v1' }), 'client_extension_runtime_cross_owner_authorization_accepted')
+    const activationReceipt = await extensionModel.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, {
+      activatedAt: '2026-08-21T03:30:00.000Z',
+      activatedByActorId: portalBinding.tenant.ownerActorId,
+      idempotencyKey: runtimeAuthorization.target.idempotencyKey,
+      runtimeRelease: { commit: runtimeAuthorization.target.releaseCommit, brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' },
+      tenantConfigRevision: 1,
+      tenantConfigDigest: extensionDigest('7'),
+      executionEvidenceDigest: extensionDigest('8'),
+      rollbackReady: true,
+      customerRecordWritesPerformed: false,
+      providerCallsPerformed: false,
+      deploymentPerformed: false,
+      externalMessagesSent: false,
+      crossTenantWritesPerformed: false,
+      crossProductWritesPerformed: false,
+    })
+    assert(activationReceipt.schema === extensionModel.CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA && activationReceipt.authorizationDigest === runtimeAuthorization.digest && activationReceipt.execution.status === 'active', 'client_extension_activation_receipt_binding_missing')
+    assert(activationReceipt.authority.tenantConfigurationWritePerformed === true && activationReceipt.authority.customerRecordWritesPerformed === false && activationReceipt.authority.providerCallsPerformed === false && activationReceipt.authority.deploymentPerformed === false, 'client_extension_activation_receipt_authority_wrong')
+    await rejects(() => extensionModel.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, { activatedAt: '2026-08-21T03:30:00.000Z', activatedByActorId: portalBinding.tenant.ownerActorId, idempotencyKey: runtimeAuthorization.target.idempotencyKey, runtimeRelease: { commit: runtimeAuthorization.target.releaseCommit, brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' }, tenantConfigRevision: 1, tenantConfigDigest: extensionDigest('7'), executionEvidenceDigest: extensionDigest('8'), rollbackReady: true, customerRecordWritesPerformed: false, providerCallsPerformed: true, deploymentPerformed: false, externalMessagesSent: false, crossTenantWritesPerformed: false, crossProductWritesPerformed: false }), 'client_extension_activation_provider_write_accepted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
     assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
     const starterJobIds = new Set()

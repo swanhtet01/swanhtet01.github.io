@@ -66,6 +66,10 @@ async function loadModel() {
           verifyClientExtensionActivationPlan,
           buildClientExtensionPortalBinding,
           verifyClientExtensionPortalBinding,
+          buildClientExtensionRuntimeAuthorization,
+          verifyClientExtensionRuntimeAuthorization,
+          buildClientExtensionActivationReceipt,
+          verifyClientExtensionActivationReceipt,
         } from './client-extension-manifest.ts'
       `,
       resolveDir: resolve(root, 'showroom', 'src', 'core'),
@@ -112,8 +116,8 @@ async function verifiedBlueprint(path, model) {
 
 async function main(argv) {
   const { command, values } = argumentsFrom(argv)
-  if (!['request', 'verify-request', 'plan', 'verify-plan', 'bind-portal', 'verify-portal-binding'].includes(command)) {
-    throw new Error('Command must be request, verify-request, plan, verify-plan, bind-portal, or verify-portal-binding.')
+  if (!['request', 'verify-request', 'plan', 'verify-plan', 'bind-portal', 'verify-portal-binding', 'authorize-activation', 'verify-activation-authorization', 'record-activation', 'verify-activation-receipt'].includes(command)) {
+    throw new Error('Choose a supported client extension lifecycle command.')
   }
   const allowedArguments = {
     request: ['--preparation', '--request', '--created-at', '--output'],
@@ -122,6 +126,10 @@ async function main(argv) {
     'verify-plan': ['--preparation', '--manifest', '--plan'],
     'bind-portal': ['--preparation', '--manifest', '--plan', '--portal', '--output'],
     'verify-portal-binding': ['--preparation', '--manifest', '--plan', '--portal', '--binding'],
+    'authorize-activation': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization-evidence', '--output'],
+    'verify-activation-authorization': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--at'],
+    'record-activation': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--receipt-evidence', '--output'],
+    'verify-activation-receipt': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--receipt'],
   }[command]
   if ([...values.keys()].some((key) => !allowedArguments.includes(key))) {
     throw new Error(`Command ${command} received an unsupported argument.`)
@@ -180,7 +188,62 @@ async function main(argv) {
   }
 
   const binding = await readJson(required(values, '--binding'), 'Client extension portal binding')
-  const verified = await model.verifyClientExtensionPortalBinding(binding, manifest, plan, blueprint, portal)
+  if (command === 'verify-portal-binding') {
+    const verified = await model.verifyClientExtensionPortalBinding(binding, manifest, plan, blueprint, portal)
+    return { ...verified, externalWritesPerformed: false }
+  }
+
+  if (command === 'authorize-activation') {
+    const evidence = exactKeys(
+      await readJson(required(values, '--authorization-evidence'), 'Runtime activation authorization evidence'),
+      ['environment', 'releaseCommit', 'approvedBy', 'approvedByActorId', 'approvedAt', 'expiresAt', 'idempotencyKey'],
+      'Runtime activation authorization evidence',
+    )
+    const authorization = await model.buildClientExtensionRuntimeAuthorization(binding, manifest, plan, blueprint, portal, evidence)
+    const output = await writeExclusive(required(values, '--output'), authorization)
+    return {
+      ok: true,
+      contract: authorization.schema,
+      output,
+      digest: authorization.digest,
+      portalBindingDigest: authorization.portalBindingDigest,
+      workspaceId: authorization.tenant.workspaceId,
+      releaseCommit: authorization.target.releaseCommit,
+      expiresAt: authorization.approval.expiresAt,
+      status: authorization.authority.status,
+      externalWritesPerformed: false,
+    }
+  }
+
+  const authorization = await readJson(required(values, '--authorization'), 'Runtime activation authorization')
+  if (command === 'verify-activation-authorization') {
+    const verified = await model.verifyClientExtensionRuntimeAuthorization(authorization, binding, manifest, plan, blueprint, portal, required(values, '--at'))
+    return { ...verified, externalWritesPerformed: false }
+  }
+
+  if (command === 'record-activation') {
+    const evidence = exactKeys(
+      await readJson(required(values, '--receipt-evidence'), 'Extension activation receipt evidence'),
+      ['activatedAt', 'activatedByActorId', 'idempotencyKey', 'runtimeRelease', 'tenantConfigRevision', 'tenantConfigDigest', 'executionEvidenceDigest', 'rollbackReady', 'customerRecordWritesPerformed', 'providerCallsPerformed', 'deploymentPerformed', 'externalMessagesSent', 'crossTenantWritesPerformed', 'crossProductWritesPerformed'],
+      'Extension activation receipt evidence',
+    )
+    const receipt = await model.buildClientExtensionActivationReceipt(authorization, binding, manifest, plan, blueprint, portal, evidence)
+    const output = await writeExclusive(required(values, '--output'), receipt)
+    return {
+      ok: true,
+      contract: receipt.schema,
+      output,
+      digest: receipt.digest,
+      authorizationDigest: receipt.authorizationDigest,
+      workspaceId: receipt.tenant.workspaceId,
+      tenantConfigRevision: receipt.execution.tenantConfigRevision,
+      status: receipt.execution.status,
+      externalWritesPerformed: false,
+    }
+  }
+
+  const receipt = await readJson(required(values, '--receipt'), 'Extension activation receipt')
+  const verified = await model.verifyClientExtensionActivationReceipt(receipt, authorization, binding, manifest, plan, blueprint, portal)
   return { ...verified, externalWritesPerformed: false }
 }
 
