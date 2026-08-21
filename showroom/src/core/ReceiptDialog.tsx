@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 import { type CommerceOrderAcknowledgement, commerceOrderAcknowledgementText } from './commerce-workspace'
+import { bi } from './i18n-actions'
 import { PaymentQrButton } from './PaymentQr'
 
 function formatReceiptDate(iso: string) {
@@ -18,6 +19,26 @@ function mmk(amount: number) {
   return `${amount.toLocaleString()} MMK`
 }
 
+// G1 SCOPE BOUNDARY, stated because "Burmese receipt printing" is the competitor
+// claim this batch answers and only half of it is answered here. The DIALOG above is
+// wired for bilingual labels; the PRINTED document below is deliberately not, and it
+// is not an oversight or a size decision.
+//
+// What this prints is commerceOrderAcknowledgementText(ack) — the order
+// ACKNOWLEDGEMENT ARTIFACT, not a shop's customer slip. Its field names are the
+// record's own vocabulary and it carries the confirmation action id, the calculation
+// evidence and the document digest; verify_app_release_live.mjs pins several of its
+// lines in the built chunk, and the same text is what Copy text puts on the clipboard
+// for a support thread. Translating an evidence document's field names is a different
+// decision from translating a button, with a different reviewer and a different
+// failure mode, so it stays one language and the printed document declares that
+// language honestly on its root element below.
+//
+// The customer-facing Burmese slip a Loyverse user is comparing against is a separate
+// artifact this app does not have yet: it needs the shop's own name and address, no
+// evidence identifiers, and a layout decision about Burmese numerals (the register
+// note in i18n-actions.ts prefers them; MMK amounts here are Arabic). That is roadmap
+// work with its own planning pass, not a wrapper around this function.
 // G2 print geometry. A counter receipt is printed on a continuous thermal ROLL,
 // not a sheet, so the printed document carries a roll layout by default and a
 // sheet layout only when the print service reports sheet-sized media. Before
@@ -163,7 +184,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
     <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={onClose} ref={ref}>
       {ack ? <>
         <header className="receipt-dialog-header">
-          <span className="core-eyebrow">Order record</span>
+          <span className="core-eyebrow">{bi('Order record')}</span>
           <h2 id="receipt-dialog-title">{ack.customer}</h2>
           <p>{formatReceiptDate(ack.createdAt)} · {ack.channel}</p>
           <small>{ack.orderId}</small>
@@ -180,18 +201,18 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
           </tbody>
         </table>
         <div className="receipt-dialog-totals">
-          {showSubtotalLine ? <div><span>Subtotal</span><span>{mmk(ack.grossSubtotalMmk)}</span></div> : null}
-          {hasPromotion ? <div><span>Discount{ack.promotion.code ? ` (${ack.promotion.code})` : ''}</span><span>−{mmk(ack.promotion.discountMmk ?? 0)}</span></div> : null}
-          {hasDeliveryFee ? <div><span>Delivery</span><span>{mmk(ack.delivery.feeMmk ?? 0)}</span></div> : null}
-          {hasTax ? <div><span>Tax{ack.tax.code ? ` (${ack.tax.code})` : ''}</span><span>{mmk(ack.tax.taxMmk ?? 0)}</span></div> : null}
-          <div className="receipt-total-row"><strong>Total</strong><strong>{mmk(ack.totalMmk)}</strong></div>
-          {loyalty && loyalty.redeemedPoints > 0 ? <div><span>Points redeemed</span><span>−{loyalty.redeemedPoints.toLocaleString()}</span></div> : null}
-          {loyalty ? <div><span>Points balance</span><span>{loyalty.balancePoints.toLocaleString()}</span></div> : null}
+          {showSubtotalLine ? <div><span>{bi('Subtotal')}</span><span>{mmk(ack.grossSubtotalMmk)}</span></div> : null}
+          {hasPromotion ? <div><span>{bi('Discount')}{ack.promotion.code ? ` (${ack.promotion.code})` : ''}</span><span>−{mmk(ack.promotion.discountMmk ?? 0)}</span></div> : null}
+          {hasDeliveryFee ? <div><span>{bi('Delivery')}</span><span>{mmk(ack.delivery.feeMmk ?? 0)}</span></div> : null}
+          {hasTax ? <div><span>{bi('Tax')}{ack.tax.code ? ` (${ack.tax.code})` : ''}</span><span>{mmk(ack.tax.taxMmk ?? 0)}</span></div> : null}
+          <div className="receipt-total-row"><strong>{bi('Total')}</strong><strong>{mmk(ack.totalMmk)}</strong></div>
+          {loyalty && loyalty.redeemedPoints > 0 ? <div><span>{bi('Points redeemed')}</span><span>−{loyalty.redeemedPoints.toLocaleString()}</span></div> : null}
+          {loyalty ? <div><span>{bi('Points balance')}</span><span>{loyalty.balancePoints.toLocaleString()}</span></div> : null}
         </div>
         <div className="receipt-dialog-payment">
           <strong>{ack.payment.method}</strong>
           <span className={`status-pill ${ack.payment.status === 'reconciled' ? 'approved' : 'pending'}`}>
-            {ack.payment.status === 'reconciled' ? 'Paid' : 'Payment pending'}
+            {ack.payment.status === 'reconciled' ? bi('Paid') : bi('Payment pending')}
           </span>
           {ack.payment.status !== 'reconciled' && ack.payment.dueAt
             ? <small>Due {formatReceiptDate(ack.payment.dueAt)}</small>
@@ -208,9 +229,9 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
         </div> : null}
         <p className="receipt-dialog-notice">{ack.notice}</p>
         <div className="receipt-dialog-actions">
-          <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">Print receipt</button>
-          <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">Copy text</button>
-          <button className="core-button compact" onClick={onClose} type="button">Close</button>
+          <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print receipt')}</button>
+          <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
+          <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
         </div>
       </> : null}
     </dialog>

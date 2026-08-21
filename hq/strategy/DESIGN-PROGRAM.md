@@ -746,6 +746,56 @@ plan...").
 
 No implementation before both answers are recorded in this section.
 
+### Batch 3 — the counter slice (SHIPPED, drafts pending). ERP-COMPETITIVE-ROADMAP §6.4 G1
+
+Wired 2026-08-21. Scope is the surface a cashier touches and nothing else: the
+four Shop work modes (`commerce-tabs.ts`, rendered by both the phone bottom bar
+and the in-page toolbar), the sales counter, and the receipt dialog. Settings,
+onboarding, Plant, Website and Ecommerce are untouched.
+
+29 new full-phrase entries (the table goes 61 -> 90; the confirmed count stays
+exactly 33, which is the check that this batch invented no Burmese anyone can
+see), every one `pending_native_review`, drafted only from
+(a) the confirmed verbs already in the table and (b) Burmese nouns this app
+already ships in `shop-ledger-accounts.ts` / `shop-service-scheduling.ts`. The
+`sourced:` comments mark the second class; every other entry carries the specific
+call the reviewer has to make. Two entries were REFUSED rather than drafted and
+the refusal is recorded in the table and pinned in the verifier — `Products` in
+the bottom bar (it opens the product chooser, not the shop's goods, one cell away
+from the Stock tab) and the `Cash / KBZPay / WavePay` payment triple.
+
+What the surface shows today: no change, except the two strings whose table
+entries were ALREADY confirmed and are now reached from the counter slice —
+`Clear` (cart header) and `Close` (receipt dialog). Measured with a scratch flip
+of all 29 drafts to `confirmed` (reverted before commit) at 1280×900 and 375×812
+in both themes: no horizontal document scroll, no element past the viewport, and
+every Burmese half inside its container on all four work modes and the receipt.
+
+One mechanism addition, and only one: `bi()` now tags its wrapper
+`class="bi-label"`. The phone bottom bar is five cells across a 375px viewport
+under `nowrap`/`ellipsis`, which would have ellipsised away exactly the Burmese
+half; the class is what lets `core-app.css` let that one label wrap. No media
+query was added (`.mobile-nav` is already `display: none` above its breakpoint),
+so the px ratchet is untouched.
+
+**Still blocked, unchanged:** the two questions above. Batch 3 adds a third for
+the same reviewer — see the per-entry comments, of which `Create order`
+(reserves stock, does not take money), `Stock` (goods, not shares) and
+`Print receipt` (two loanwords in one label) are the ones most likely to come
+back wrong.
+
+**A language setting was NOT added, deliberately.** It is not required for G1's
+counter slice: `bi()` renders English AND Burmese together, so a Burmese-first
+cashier reads the half they need without choosing anything, and a setting would
+buy only the removal of the English half. What that removal actually costs and
+buys is a founder/native question, not an engineering one — whether a Yangon
+counter wants a Burmese-only till at all, whether the owner and the cashier want
+different answers on the same device, and what happens to the ~70% of the app
+that has no Burmese yet when a device says "Burmese only". That is its own
+planning pass. The device-local shape is ready when it is wanted: the
+`shopLoyaltyScopeForWorkspace` / `shop-loyalty.ts` settings pattern is the house
+convention and needs no CommerceState change.
+
 ## Verification recipe for design PRs
 
 Per batch: `node tools/run_app_verify.mjs --only verify_app_build.mjs --only

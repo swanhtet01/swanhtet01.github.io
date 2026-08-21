@@ -444,6 +444,28 @@ entirely behind that gate: ship the wiring and the table with strings pending,
 and flipping statuses becomes a review task rather than an engineering task.
 That sequencing is the recommendation.
 
+STATUS 2026-08-21 — the counter slice is WIRED; G1 is now a review task, not an
+engineering one. The four work modes, the counter and the receipt dialog all
+render through `bi()`, with 29 drafted full-phrase entries sitting at
+`pending_native_review` (see DESIGN-PROGRAM.md "Batch 3 — the counter slice").
+The engineering that remains after sign-off is a status flip per line: zero call
+sites move. The counts in the paragraph above are superseded — the table is 90
+entries (47 at the scan, +14 from batch 2, +29 here), still 33 confirmed and now
+57 pending, and `bi()` is called across six files rather than two.
+
+What is NOT closed by that, and should not be read as closed:
+  - Every string is drafted, none is reviewed. Until a native speaker signs them
+    off the till still reads English, which is the whole point of the gate.
+  - The PRINTED receipt is still English and deliberately so — what this app
+    prints is the order acknowledgement (an evidence document carrying action
+    ids and digests), not a shop's customer slip. A Burmese customer slip is a
+    separate artifact this product does not have; see the scope note at the top
+    of `ReceiptDialog.tsx`.
+  - Back office, Settings, onboarding, Plant, Website and Ecommerce are all
+    still English. This closed the M slice, not the L.
+  - No language setting exists and none was added; the reasoning is recorded in
+    DESIGN-PROGRAM.md's batch-3 entry.
+
 ---
 
 **G2 — Receipts are laid out for a sheet of paper, not a roll. (Cheapest high-value fix. Not founder-gated for the fix; the hardware claim still is.)**
