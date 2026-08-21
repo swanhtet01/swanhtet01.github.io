@@ -2839,10 +2839,20 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || workspaceControlsPageSource.includes("from './CoreApp'")
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => workspaceControlsPageSource.includes(marker))) fail('customer_workspace_controls_not_isolated_or_safe')
 
-// Both downloads on this page mint an object URL, so an unscoped `includes` for the revoke
-// would be satisfied by whichever one still had it. Each handler is therefore weighed on its
-// own body: an object URL that is created and never revoked pins its whole buffer for the
-// life of the page, and at the workspace ceiling that buffer is megabytes.
+// An object URL that is minted and never revoked pins its whole buffer for the life of the
+// page, and at the workspace ceiling that buffer is megabytes -- the same leak, on the same
+// device, that moving the backup off a mount-time data: URL exists to remove.
+//
+// downloadBlob is the one place allowed to mint one, and it must release it. Every other
+// caller has to go through it: an unscoped `includes` for the revoke would be satisfied by
+// whichever download still had a copy of the dance, so each handler is weighed on its own
+// body instead.
+const downloadBlobHelper = workspaceControlsPageSource.slice(
+  workspaceControlsPageSource.indexOf('function downloadBlob(filename: string, blob: Blob)'),
+  workspaceControlsPageSource.indexOf('export function WorkspaceControlsPage()'),
+)
+if (!downloadBlobHelper.includes('URL.createObjectURL(blob)')
+  || !downloadBlobHelper.includes('window.setTimeout(() => URL.revokeObjectURL(url), 0)')) fail('workspace_controls_download_helper_leaks_object_url')
 for (const [handler, next] of [
   ['function downloadWorkspaceBackup()', 'function downloadSalesArchive()'],
   ['function downloadSalesArchive()', 'async function resetWorkspace()'],
@@ -2851,8 +2861,8 @@ for (const [handler, next] of [
   const end = workspaceControlsPageSource.indexOf(next, start + handler.length)
   const body = start < 0 || end < 0 ? '' : workspaceControlsPageSource.slice(start, end)
   if (!body
-    || !body.includes('URL.createObjectURL(new Blob(')
-    || !body.includes('URL.revokeObjectURL(url)')
+    || !body.includes('downloadBlob(')
+    || body.includes('URL.createObjectURL(')
     || body.includes('encodeURIComponent(')) fail(`workspace_controls_download_leaks_object_url:${handler}`)
 }
 

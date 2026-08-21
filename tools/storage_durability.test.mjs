@@ -817,10 +817,12 @@ test('the settings page builds the backup file on the click, not on mount', asyn
 
   const handler = page.slice(page.indexOf('function downloadWorkspaceBackup()'), page.indexOf('function downloadSalesArchive()'))
   assert.ok(handler, 'the workspace backup click handler is gone')
-  assert.match(handler, /URL\.createObjectURL\(new Blob\(\[backupFileText\(currentBackup\)\]/, 'the backup download no longer mints its file as a Blob')
+  assert.match(handler, /downloadBlob\(backupFilename\(currentBackup\), new Blob\(\[backupFileText\(currentBackup\)\]/, 'the backup download no longer mints its file as a Blob')
   // Trading a retained data: URL for an object URL that is never revoked would leak exactly
-  // the same megabytes and this whole change would have bought nothing.
-  assert.match(handler, /URL\.revokeObjectURL\(url\)/, 'the backup object URL is never revoked -- it pins its whole buffer for the life of the page')
+  // the same megabytes and this whole change would have bought nothing. Both downloads on the
+  // page hand off through the one helper that releases what it mints.
+  assert.match(page, /function downloadBlob\(filename: string, blob: Blob\) \{[\s\S]*?URL\.revokeObjectURL\(url\)/, 'the backup object URL is never revoked -- it pins its whole buffer for the life of the page')
+  assert.ok(!handler.includes('URL.createObjectURL('), 'the backup download mints its own object URL again instead of handing off to the helper that revokes')
   assert.match(page, /function backupFileText\(backup: LocalWorkspaceBackup\) \{\s*return JSON\.stringify\(backup, null, 2\)/, 'the backup file contents changed shape -- this is the only human-readable copy of the owner\'s device')
 })
 

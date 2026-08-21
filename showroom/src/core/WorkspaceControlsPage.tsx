@@ -528,6 +528,19 @@ function backupFilename(backup: LocalWorkspaceBackup | null) {
   return `supermega-workspace-backup-${day}.json`
 }
 
+// Hand a file to the browser, then let go of it. Both downloads on this page mint an object
+// URL, and an object URL that is never revoked pins its whole buffer for the life of the page
+// -- at the workspace ceiling that is megabytes, on the device least able to spare them. One
+// place that gets the revocation right, rather than two that each have to remember.
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.download = filename
+  anchor.href = url
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export function WorkspaceControlsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
   // Payment QR records are workspace-scoped (payment-qr-store.ts money-path note):
@@ -627,17 +640,12 @@ export function WorkspaceControlsPage() {
   // Same 2,346,066 bytes, byte for byte: a Blob carries the string's UTF-8 directly, which is
   // exactly what the data: URL decoded to. No BOM -- unlike the CSV below, this file is read
   // back by loadBackupFile, and a BOM is not JSON.
+  // Through downloadBlob, which revokes: keeping a data: URL alive on mount and swapping it
+  // for an object URL that is never released would have traded one megabyte-shaped leak for
+  // another and bought the owner nothing.
   function downloadWorkspaceBackup() {
     if (!currentBackup) return
-    // Revoked on the next tick exactly as the sales archive does. An object URL that is never
-    // revoked pins its whole buffer for the life of the page, which is the leak this change
-    // exists to remove -- keeping it would have traded one megabyte-shaped leak for another.
-    const url = URL.createObjectURL(new Blob([backupFileText(currentBackup)], { type: 'application/json;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.download = backupFilename(currentBackup)
-    anchor.href = url
-    anchor.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    downloadBlob(backupFilename(currentBackup), new Blob([backupFileText(currentBackup)], { type: 'application/json;charset=utf-8' }))
   }
 
   // Built on demand rather than in a memo. At the workspace ceiling the archive is ~700 KB of
@@ -658,17 +666,13 @@ export function WorkspaceControlsPage() {
         return
       }
       const filename = `supermega-shop-archive-${archive.generatedAt.slice(0, 10)}-${archive.digest.slice(7, 15)}.csv`
-      // A Blob, not a data: URL. Every other export on this page fits in a memoised data URL,
-      // but this one is ~700 KB at the ceiling and encodeURIComponent would make a ~3.5 MB
-      // string of it -- the shop nearest the ceiling is the one least able to afford that.
+      // A Blob, not a data: URL. This one is ~700 KB at the ceiling and encodeURIComponent
+      // would make a ~3.5 MB string of it -- the shop nearest the ceiling is the one least
+      // able to afford that. The workspace backup above now follows the same rule, and both
+      // hand off through downloadBlob so neither can forget to revoke.
       // The U+FEFF byte-order mark every other CSV in this app carries, so a spreadsheet
       // opens Burmese product and customer names as UTF-8 instead of mojibake.
-      const url = URL.createObjectURL(new Blob([`\uFEFF${commerceWorkspaceArchiveCsv(archive)}`], { type: 'text/csv;charset=utf-8' }))
-      const anchor = document.createElement('a')
-      anchor.download = filename
-      anchor.href = url
-      anchor.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      downloadBlob(filename, new Blob([`\uFEFF${commerceWorkspaceArchiveCsv(archive)}`], { type: 'text/csv;charset=utf-8' }))
       // Every number here is read back off the artifact that was just written, so the sentence
       // cannot drift from the file. The uncovered count is stated even when it is the boring
       // case, because "nothing is missing" is only worth saying if the same sentence would
