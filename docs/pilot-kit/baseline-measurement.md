@@ -1,8 +1,8 @@
 # Shop pilot baseline measurement form
 
-Fill this in WITH the shop owner, in person, before day 1 of the five-day pilot. Print it or copy it into a private note; it stays in the founder's private workspace.
+Fill this in WITH the Spa owner, in person, before day 1 of the five-day pilot. Keep it in the founder's private workspace.
 
-Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v4`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `managed-production-activation` can produce accepted Shop-pilot evidence, and the Shop work order `shop-managed-order-close-pilot` names its own requirement plainly: "named operator, baseline, and five-day evidence plan" (`hq/portfolio.json`). The four derived numbers in section 4 are exactly the baseline fields the pilot handoff generator (tools/create_shop_pilot_handoff.mjs, npm script `client:pilot:handoff`) refuses to run without.
+Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v4`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `managed-production-activation` can produce accepted Shop-pilot evidence. The Shop work order `shop-spa-owner-pilot` requires a named Spa owner, reviewed client import, package sale, matching treatment redemption, daily close, recovery, and five-day evidence (`hq/portfolio.json`). The four derived numbers in section 4 remain the baseline fields required by tools/create_shop_pilot_handoff.mjs and npm script `client:pilot:handoff`.
 
 ## Rules of measurement
 
@@ -23,14 +23,14 @@ Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness
 
 ## 2. The measured process (what)
 
-The Shop work order `shop-managed-order-close-pilot` pins the process: one order taken from creation to close, plus the return exception. Capture it in the owner's words.
+The Shop work order `shop-spa-owner-pilot` pins the process: import one client, sell and reconcile one prepaid package, complete the matching treatment, redeem one package use, close the day, and prove recovery. Capture the current manual equivalent in the owner's words.
 
 | Field | Value |
 | --- | --- |
 | The process in one sentence | |
-| Where an order starts (walk-in, phone call, social message, ...) | |
-| Where an order ends (payment in hand, goods handed over, book updated) | |
-| How a return or wrong order is handled today | |
+| Where a booking or package sale starts (walk-in, phone call, social message, ...) | |
+| Where it ends (payment reconciled, treatment completed, package balance updated, book closed) | |
+| How a wrong package, treatment, payment, or client record is corrected today | |
 | Where the record lives today (notebook, phone, nowhere) | |
 
 ## 3. Observed runs (minimum three)

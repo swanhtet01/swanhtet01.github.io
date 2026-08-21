@@ -387,26 +387,22 @@ whole performance queue.
 
 ### Risk 3 — Running the pilot kit and calling it "the pilot" would overclaim the Shop gate
 
-**Evidence.** `hq/portfolio.json`'s `shop-managed-order-close-pilot` requires
-"One authenticated order-to-close and return-exception pilot **on isolated
-hosted tenant**; named operator, baseline, and five-day evidence plan."
-`docs/pilot-kit/README.md` states the kit "produces everything EXCEPT that
-clause", and `docs/pilot-kit/acceptance-checklist.md`'s mapping table marks the
-hosted-tenant row "**NOT satisfied by this kit.** Founder-only" and warns "Do
-not present a completed local rehearsal as if it were that hosted evidence
-run." The failure mode is not technical: it is that after five genuinely good
-days with a real shop, the natural thing to say is "the Shop pilot is done" —
-and the gate is still open, so any downstream claim, invoice justification, or
-enterprise-ladder step built on it is an overclaim in a repo whose entire
-differentiator is that it does not overclaim.
+**Evidence.** `hq/portfolio.json`'s `shop-spa-owner-pilot` requires a named Spa
+owner to complete reviewed client import, reconciled package sale, matching
+treatment redemption, daily close, and recovery on an isolated hosted tenant.
+It also requires setup time, correction effort, and five-day evidence, and
+explicitly rejects sample data as client proof. `docs/pilot-kit/README.md` and
+`docs/pilot-kit/acceptance-checklist.md` therefore frame browser-local work as
+rehearsal only. The failure mode is not technical: five good days with sample
+data still leave the real-client gate open, so downstream claims or invoice
+justification would overstate the evidence.
 
 **Cheapest mitigation.** Zero build cost: schedule step 4 and step 7 of the
 critical path in the same fortnight, exactly as `PRODUCTION-ACTIVATION-RUNBOOK.md`
 §5 already sequences them ("Once the window is open and one real tenant exists,
-run the five-day order-to-close + return-exception evidence plan"). Run the
-local five days as recruitment and operator training; run them again on the
-real tenant as evidence. And write "rehearsal" on the local artifacts, in those
-words, the day they are produced.
+run the five-day evidence plan"). Run the local Spa package flow as recruitment
+and operator training; run it again with the named owner and reviewed client
+data on the real tenant as evidence. Keep "rehearsal" on every local artifact.
 
 ---
 
@@ -445,9 +441,9 @@ the founder can do, per the cited contract in each row.
    together per "The schema-version trap" (critical-path steps 6–7).
 2. **Create and verify tenant #1** — the runbook's "Verify end-to-end" block.
    Activation permits a tenant; it does not create one (critical-path step 8).
-3. **The hosted acceptance run** for `shop-managed-order-close-pilot` on that
-   tenant, using the operator and baseline produced by `docs/pilot-kit/` —
-   runbook §5, and the only thing that closes the Shop `nextGate` in
+3. **The hosted acceptance run** for `shop-spa-owner-pilot` on that tenant,
+   using the named Spa owner, reviewed client data, and baseline produced by
+   `docs/pilot-kit/` — the only thing that closes the Shop `nextGate` in
    `hq/portfolio.json`.
 4. **Invoice → transfer → `confirm-payment` → `grant-entitlement`** via
    `python -m supermega_runtime.billing_rail`, once D1 and D2 exist. Four

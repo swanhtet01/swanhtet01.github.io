@@ -1,6 +1,6 @@
 # Shop pilot rehearsal checklist — the five-day preparation plan
 
-**This is the preparation plan, not the work order's acceptance evidence itself.** The Shop work order's full required proof (`hq/portfolio.json`) is "one authenticated order-to-close and return-exception pilot **on isolated hosted tenant**; named operator, baseline, and five-day evidence plan" — this checklist produces the named operator, the baseline, and a full five-day rehearsal of the plan, all on the browser-local working sample. It does NOT produce the authenticated hosted-tenant run itself; see [README.md](README.md)'s boundary section for why that is a separate, founder-only step this kit does not perform. The readiness ledger's `acceptanceEvidenceRequired` flag (part of the founder decision `managed-production-activation`) is likewise only partially addressed here — this checklist prepares the operator and process, it does not by itself constitute the hosted acceptance evidence that flag names. The five days, their proofs, the four start gates, and the five required measurements are taken verbatim from the pilot handoff generator (tools/create_shop_pilot_handoff.mjs), so the paper plan and the generated private handoff can never disagree.
+**This is preparation, not the hosted pilot's acceptance evidence.** The `shop-spa-owner-pilot` proof in `hq/portfolio.json` is a named Spa owner's reviewed client import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant. This checklist rehearses that flow on browser-local sample data and records the existing five-day measurements; it cannot satisfy `acceptanceEvidenceRequired` or the founder decision `managed-production-activation` by itself.
 
 ## Before day 1 — start gates
 
@@ -23,7 +23,7 @@ Also before day 1:
 
 A pilot run counts as accepted only when all of the following hold, following the owner-observed pilot measurement reference:
 
-1. The run completed — the order reached its end state (or the return exception reached its resolution).
+1. The run completed — the package sale, treatment, redemption, close, or recovery step reached its governed end state.
 2. The end state is verifiable in the record, not just remembered.
 3. The named operator reviewed the run and recorded the outcome as correct.
 4. Zero wrong-target actions — nothing was done to the wrong order, item, or customer record.
@@ -43,27 +43,27 @@ Proof: `Record the baseline metrics and complete one observation-only walkthroug
 - [ ] One observation-only walkthrough: the founder demonstrates the order flow on the working sample (`/shop/?tab=counter`, then `Review order`, `Create order`, and the order steps in `/shop/?tab=orders`); the operator watches. No evidence run is counted today.
 - [ ] Evidence captured: baseline sheet finalized; walkthrough noted with date, time, and who was present.
 
-### Day 2 — Order entry and review
+### Day 2 — Client import and package sale
 
 Proof: `Create and human-confirm test orders; record completion time and corrections.`
 
-- [ ] The operator creates test orders themselves: items in, `Review order`, cashier name at the `Review counter order` gate, `Create order`, then `Start preparing`, `Mark ready`, `Reconcile payment`, `Complete`.
+- [ ] The operator reviews a sample client import, resolves any correction, sells a Spa prepaid package to the matching client, reconciles payment, and completes the order.
 - [ ] Per run, record: run number, minutes taken, review outcome (correct or not), corrections needed, wrong-target actions (must be zero), external effects (must be none).
 - [ ] Day closed with `Save daily close`; note total runs and the consecutive accepted count.
 
-### Day 3 — Daily close and exception
+### Day 3 — Treatment and governed redemption
 
 Proof: `Run a reviewed close and one controlled exception without external posting.`
 
-- [ ] Normal order runs continue; same per-run records as day 2.
-- [ ] One controlled exception is rehearsed (for example a payment mismatch caught at `Reconcile payment`) with no external posting of any kind.
+- [ ] The operator schedules and completes the treatment that matches the purchased package, then records one immutable package redemption.
+- [ ] One controlled mismatch is rehearsed (wrong customer, wrong treatment, unreconciled payment, or refunded package); the system must refuse redemption without an external effect.
 - [ ] A reviewed daily close: the operator runs `Save daily close` and the owner checks the day's numbers against the paper day book. Record close minutes for comparison with `close_minutes_per_day`.
 
-### Day 4 — Return and recovery
+### Day 4 — Close and recovery
 
 Proof: `Rehearse one return exception plus reload and safe retry evidence.`
 
-- [ ] One return exception rehearsed end to end — the process the work order `shop-managed-order-close-pilot` names.
+- [ ] One correction or refund boundary is rehearsed end to end — part of the process `shop-spa-owner-pilot` names.
 - [ ] Reload evidence: close and reopen the browser mid-day and confirm the record survived; retry a step safely and confirm no duplicate was created. This is the `reload_and_retry_result` measurement.
 - [ ] Stock checked against reality on `/shop/?tab=inventory` after the return.
 
@@ -92,14 +92,14 @@ The handoff contract requires exactly these, and the daily records above produce
 
 Nothing on the readiness contract's does-not-authorize list ever happens during these five days: `customer_message`, `payment`, `stock_move`, `hosted_scheduler_activation`, `additional_tenant_activation`, `billing_activation`, or `autonomous_external_write`. The app's own gate states the same boundary: `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
 
-**These five days do not, by themselves, close the Shop work order's gate.** That gate requires the pilot to be run authenticated on an isolated hosted/managed tenant (`hq/portfolio.json`'s `shop-managed-order-close-pilot`) — a separate, later, founder-only step this checklist prepares for but does not perform. Do not present a completed local rehearsal as if it were that hosted evidence run. The founder decision `managed-production-activation` creates only the first named-owner Shop workspace on production; it is not a disposable preview and does not authorize additional tenants, billing, messages, payments, stock moves, schedulers, or autonomous external writes.
+**These five days do not, by themselves, close the Shop work order's gate.** That gate requires `shop-spa-owner-pilot` to run with a real named Spa owner on an isolated hosted tenant. Sample client or package evidence is explicitly rejected. The founder decision `managed-production-activation` creates only the first named-owner Shop workspace on production and authorizes none of the additional external effects listed above.
 
 ## Mapping to the readiness contract
 
 | Contract requirement | Satisfied by |
 | --- | --- |
-| Shop work order's gate, operator/baseline/rehearsal portion — "named operator, baseline, and five-day evidence plan" (`hq/portfolio.json`) | Baseline form section 1 (named business and operator) plus the `namedOperatorAuthorized` gate, and this checklist's daily evidence |
-| Shop work order's gate, hosted-tenant portion — "one authenticated order-to-close and return-exception pilot on isolated hosted tenant" (`hq/portfolio.json`) | **NOT satisfied by this kit.** Founder-only: provisioning and running the pilot on that tenant is a separate step this document does not perform |
+| Shop work order's preparation — named Spa owner, baseline, reviewed import, package sale, treatment redemption, close, and recovery (`hq/portfolio.json`) | Baseline form plus the `namedOperatorAuthorized` gate and this checklist's rehearsal evidence |
+| Shop work order's hosted-tenant proof (`hq/portfolio.json`) | **NOT satisfied by this kit.** Founder-only: provision and run the flow with the real owner and reviewed client data |
 | `measuredBaselineRequired` (readiness ledger operator block) | Baseline form sections 3 through 5 |
 | `acceptanceEvidenceRequired` (readiness ledger operator block) | Prepared, not fully satisfied: this checklist's daily records, the five required measurements, and the day 5 operator decision are the rehearsal evidence; the flag's own hosted acceptance run is the step above, not part of this kit |
 | `approve_runtime_role_provisioning` (decision input) | Founder-only; nothing in this kit performs it |
