@@ -845,6 +845,50 @@ planning pass. The device-local shape is ready when it is wanted: the
 `shopLoyaltyScopeForWorkspace` / `shop-loyalty.ts` settings pattern is the house
 convention and needs no CommerceState change.
 
+### Batch 4 — the mechanism decision batch 3 asked for (DECIDED, not yet built)
+
+`hq/strategy/G1-STRING-MECHANISM-DECISION.md`, 2026-08-21. Batch 3 said the two
+classes it could not reach — string attributes and parameterised strings — need
+a mechanism decision "in the same shape as the Option A/B/C note above, before
+any more call sites move". That document is it. Summary, so this section is
+readable without opening it:
+
+- **String attributes: no new function.** Move the string out of the attribute
+  into a content slot and call today's `bi()` — `aria-labelledby` where visible
+  text already exists, an `sr-only` node where it does not. An `aria-label` is
+  a flat string with nowhere to hang `lang="my"`, so any string-returning
+  sibling of `bi()` ships an unmarked mixed-language accessible name
+  permanently; a node keeps the halves separable and keeps the decision open.
+  This is a rendering-site change, **not** a translation-policy change: every
+  string it reaches becomes an ordinary Option B entry.
+- **Parameterised strings: extend B's entry shape from a literal to a
+  template.** The key is the English template with its placeholders; the value
+  carries a Burmese template with its own placeholder positions; the composer
+  substitutes into each half independently behind the same confirmed-only gate.
+  B's defining property is preserved — the reviewer still writes and signs off
+  the whole phrase, hole included, and chooses where the hole sits.
+- **Both ship ahead of native sign-off**, because both fall back to English
+  through the existing gate. That property is why they were chosen over the
+  alternatives.
+- **The true scope is smaller than batch 3 implied.** 14 attribute sites on the
+  counter slice, not a class — 10 `aria-label` (all reachable, neither
+  founder- nor native-gated), and a 4-site residue (2 `placeholder`, 1 `alt`,
+  1 `title`) that is **founder-gated** on one question and recommended
+  deferred. `ReceiptDialog` contributes zero. `Find or scan an item` was never
+  an attribute.
+- **Option A stays rejected** and Option C is untouched; §5 of that document
+  argues it explicitly against this section rather than around it.
+- **Two new questions for the reviewer packet**, numbered 4 and 5 there:
+  numeral script (founder — Burmese vs Arabic digits inside a `{n}` template;
+  blocks *confirming* the first count template, not building the mechanism),
+  and whether a screen reader should ever read a control's name in two
+  languages (founder).
+- The census also found a live accessibility defect unrelated to Burmese: the
+  counter's product tile `aria-label` overrides its own subtree, so a
+  screen-reader user hears neither the price, nor the stock level, nor
+  `item.nameMy`. Fixing it and solving the Burmese problem there are the same
+  edit.
+
 ## Verification recipe for design PRs
 
 Per batch: `node tools/run_app_verify.mjs --only verify_app_build.mjs --only

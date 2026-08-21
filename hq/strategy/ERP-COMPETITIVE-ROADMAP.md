@@ -474,6 +474,11 @@ batch — this is the part that needs FURTHER BATCHES, not further review:
   A Burmese-first cashier after full sign-off of this batch still meets English
   across roughly half the counter's words. That is progress, not resolution.
 
+  MECHANISM DECIDED 2026-08-21, not yet built: `hq/strategy/G1-STRING-MECHANISM-DECISION.md`
+  (attributes = 14 sites, not a class; 10 reachable with no new mechanism and no
+  gate; 4-site residue is founder-gated. Parameterised = template-pair entries.
+  Both ship ahead of sign-off.)
+
 ALSO NOT CLOSED:
   - Every string is drafted, none is reviewed. Until a native speaker signs them
     off the till reads English, which is the whole point of the gate.
