@@ -47,7 +47,7 @@
     "channel:intake:verify": "node tools/test_channel_order_intake.mjs",
     "channel:ai:verify": "node tools/test_managed_ai_draft.mjs",
     "managed:self-serve:verify": "node tools/test_managed_trial_self_serve.mjs",
-    "managed:product-access:verify": "node --test tools/test_managed_product_access.mjs",
+    "managed:product-access:verify": "node --test tools/test_managed_product_access.mjs && python -m unittest tests.test_product_entitlements tests.test_trial_runtime.TrialRuntimeTests.test_activation_entitlements_override_mismatched_product_capabilities tests.test_trial_runtime.TrialRuntimeTests.test_ecommerce_entitlement_can_use_shared_commerce_state_without_shop_access tests.test_trial_store.TrialStoreTests.test_postgres_guarded_cursor_rolls_back_and_closes_on_failure",
     "journey:channel-order:verify": "node tools/test_channel_to_order_journey.mjs",
     "journey:lifecycle:verify": "node tools/test_order_lifecycle_journey.mjs",
     "journey:close:verify": "node tools/test_order_to_close_journey.mjs",

@@ -58,6 +58,7 @@ ACTIVATION_PRODUCT_ENTITLEMENTS = {
     "website": "website",
     "ecommerce": "ecommerce",
 }
+PRODUCT_ENTITLEMENT_ORDER = tuple(ACTIVATION_PRODUCT_ENTITLEMENTS.values())
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
 # authoritative client->server (or client->Supavisor-pooler) guarantee -- a
@@ -247,6 +248,50 @@ def activation_product_entitlements(payload_value: object) -> tuple[str, ...]:
         return tuple(ACTIVATION_PRODUCT_ENTITLEMENTS[product] for product in products)
     except KeyError:
         return ()
+
+
+def capabilities_for_product_entitlements(
+    capabilities: Sequence[str],
+    product_entitlements: Sequence[str] | None,
+) -> frozenset[str]:
+    """Intersect product capabilities with immutable activation proof.
+
+    ``None`` is reserved for stores that do not provide authoritative product
+    entitlements. An explicit empty or malformed grant keeps company, setup,
+    and approval controls available while denying every product data surface.
+    Ecommerce intentionally authorizes the shared commerce surface without
+    becoming a Shop portal entitlement.
+    """
+
+    granted = frozenset(str(capability).strip() for capability in capabilities)
+    if product_entitlements is None:
+        return granted
+    products = tuple(product_entitlements)
+    if (
+        any(not isinstance(product, str) for product in products)
+        or products != tuple(product for product in PRODUCT_ENTITLEMENT_ORDER if product in products)
+        or len(set(products)) != len(products)
+    ):
+        products = ()
+    allowed_surfaces = {
+        "commerce" if product in {"commerce", "ecommerce"} else product
+        for product in products
+    }
+    product_capabilities = {
+        capability
+        for surface in ("commerce", "production", "website")
+        for capability in (f"{surface}.read", f"{surface}.write")
+    }
+    allowed_capabilities = {
+        capability
+        for surface in allowed_surfaces
+        for capability in (f"{surface}.read", f"{surface}.write")
+    }
+    return frozenset(
+        capability
+        for capability in granted
+        if capability not in product_capabilities or capability in allowed_capabilities
+    )
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
     ("workspace_access_controls", "workspace_access_control_guard"): {
@@ -4033,6 +4078,12 @@ class PostgresTrialStore:
                         self._set_context(cursor, normalized)
                         self._assert_active_identity_session(cursor, normalized)
                         capabilities = self._load_membership(cursor, normalized)
+                        product_entitlements = self._product_entitlements(
+                            cursor, normalized.workspace_id
+                        )
+                        capabilities = capabilities_for_product_entitlements(
+                            capabilities, product_entitlements
+                        )
                         if write:
                             self._assert_audit(cursor)
                     except TrialStoreError:
@@ -4147,6 +4198,9 @@ class PostgresTrialStore:
                             membership_ready = True
                             product_entitlements = self._product_entitlements(
                                 cursor, normalized.workspace_id
+                            )
+                            capabilities = capabilities_for_product_entitlements(
+                                capabilities, product_entitlements
                             )
                             if TRIAL_SCHEMA_VERSION >= 12:
                                 premium_unlocked = self._premium_unlocked(
@@ -4758,6 +4812,26 @@ class InMemoryTrialStore:
             frozenset(str(item).strip() for item in capabilities if str(item).strip()),
         )
 
+    def provision_product_entitlements(
+        self,
+        *,
+        workspace_id: str,
+        products: Sequence[str],
+    ) -> None:
+        """Install authoritative activation proof in the parity test double."""
+
+        normalized = tuple(str(product).strip().lower() for product in products)
+        if (
+            normalized
+            != tuple(product for product in PRODUCT_ENTITLEMENT_ORDER if product in normalized)
+            or len(set(normalized)) != len(normalized)
+        ):
+            raise TrialValidationError("Product entitlements are invalid.")
+        workspace = str(workspace_id).strip()
+        if not workspace:
+            raise TrialValidationError("Workspace ID is required.")
+        self._workspace_product_entitlements[workspace] = normalized
+
     def create_self_serve_workspace(
         self,
         *,
@@ -4895,6 +4969,14 @@ class InMemoryTrialStore:
             membership_ready = status == "active" and member_actor_kind == normalized.actor_kind
             if not membership_ready:
                 capabilities = frozenset()
+        product_entitlements = (
+            self._workspace_product_entitlements.get(normalized.workspace_id)
+            if membership_ready and principal is not None
+            else None
+        )
+        capabilities = capabilities_for_product_entitlements(
+            capabilities, product_entitlements
+        )
         return TrialReadiness(
             backend="memory_test_double",
             database_ready=self.database_ready,
@@ -4905,11 +4987,7 @@ class InMemoryTrialStore:
             audit_ready=self.audit_ready,
             write_enabled=self.write_enabled,
             capabilities=capabilities,
-            product_entitlements=(
-                self._workspace_product_entitlements.get(normalized.workspace_id, ())
-                if membership_ready and principal is not None
-                else None
-            ),
+            product_entitlements=product_entitlements,
         )
 
     def _guard(

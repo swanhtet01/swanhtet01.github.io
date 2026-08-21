@@ -185,6 +185,65 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(self.reducer.calls, 0)
 
+    def test_activation_entitlements_override_mismatched_product_capabilities(self) -> None:
+        store = InMemoryTrialStore(reducer=self.reducer)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=(
+                "company.read",
+                "commerce.write",
+                "production.write",
+                "website.write",
+            ),
+        )
+        store.provision_product_entitlements(
+            workspace_id="workspace-a",
+            products=("commerce",),
+        )
+        with self._client(store) as client:
+            bootstrap = client.get("/api/trial/v1/bootstrap", headers=self._headers())
+            self.assertEqual(bootstrap.status_code, 200)
+            body = bootstrap.json()
+            self.assertEqual(body["readiness"]["productEntitlements"], ["commerce"])
+            self.assertIn("commerce", body["states"])
+            self.assertNotIn("production", body["states"])
+            self.assertNotIn("website", body["states"])
+
+            denied = self._command_body(event_type="production.workspace.initialized")
+            denied["surface"] = "production"
+            response = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=denied,
+            )
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(
+                response.json()["detail"],
+                {"code": "trial_capability_required", "required_capability": "production.write"},
+            )
+
+    def test_ecommerce_entitlement_can_use_shared_commerce_state_without_shop_access(self) -> None:
+        store = InMemoryTrialStore(reducer=self.reducer)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=("commerce.read", "commerce.write", "production.write"),
+        )
+        store.provision_product_entitlements(
+            workspace_id="workspace-a",
+            products=("ecommerce",),
+        )
+        with self._client(store) as client:
+            bootstrap = client.get("/api/trial/v1/bootstrap", headers=self._headers())
+            self.assertEqual(bootstrap.status_code, 200)
+            body = bootstrap.json()
+            self.assertEqual(body["readiness"]["productEntitlements"], ["ecommerce"])
+            self.assertIn("commerce", body["states"])
+            self.assertNotIn("production", body["states"])
+
     def test_successful_state_uses_resolved_workspace_and_actor(self) -> None:
         response = self.client.post(
             "/api/trial/v1/commands",

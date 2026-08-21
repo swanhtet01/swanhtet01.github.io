@@ -3,9 +3,13 @@ from __future__ import annotations
 import unittest
 
 from supermega_runtime.trial_store import (
+    InMemoryTrialStore,
     PostgresTrialStore,
+    TrialPermissionDenied,
+    TrialPrincipal,
     TrialReadiness,
     activation_product_entitlements,
+    capabilities_for_product_entitlements,
 )
 
 
@@ -57,6 +61,81 @@ class ActivationProductEntitlementTests(unittest.TestCase):
 
         legacy = TrialReadiness(**base).to_dict()
         self.assertNotIn("productEntitlements", legacy)
+
+    def test_product_capabilities_are_intersected_with_activation_proof(self) -> None:
+        capabilities = {
+            "approvals.decide",
+            "company.write",
+            "setup.write",
+            "commerce.write",
+            "production.write",
+            "website.read",
+        }
+        self.assertEqual(
+            capabilities_for_product_entitlements(capabilities, ("commerce", "website")),
+            frozenset(
+                {
+                    "approvals.decide",
+                    "company.write",
+                    "setup.write",
+                    "commerce.write",
+                    "website.read",
+                }
+            ),
+        )
+        self.assertEqual(
+            capabilities_for_product_entitlements(capabilities, ("ecommerce",)),
+            frozenset(
+                {
+                    "approvals.decide",
+                    "company.write",
+                    "setup.write",
+                    "commerce.write",
+                }
+            ),
+        )
+
+    def test_empty_or_malformed_activation_proof_denies_every_product_surface(self) -> None:
+        capabilities = {
+            "company.read",
+            "commerce.write",
+            "production.read",
+            "website.write",
+        }
+        expected = frozenset({"company.read"})
+        self.assertEqual(capabilities_for_product_entitlements(capabilities, ()), expected)
+        self.assertEqual(
+            capabilities_for_product_entitlements(capabilities, ("website", "commerce")),
+            expected,
+        )
+
+    def test_legacy_store_without_authoritative_entitlements_preserves_capabilities(self) -> None:
+        capabilities = {"commerce.write", "production.read"}
+        self.assertEqual(
+            capabilities_for_product_entitlements(capabilities, None),
+            frozenset(capabilities),
+        )
+
+    def test_store_data_access_cannot_bypass_activation_entitlements(self) -> None:
+        store = InMemoryTrialStore(
+            reducer=lambda _surface, _event, current, _payload: current,
+        )
+        principal = TrialPrincipal("workspace-a", "owner-a", "human")
+        store.provision_membership(
+            workspace_id=principal.workspace_id,
+            actor_id=principal.actor_id,
+            actor_kind=principal.actor_kind,
+            capabilities=("commerce.write", "production.write", "website.read"),
+        )
+        store.provision_product_entitlements(
+            workspace_id=principal.workspace_id,
+            products=("commerce",),
+        )
+        self.assertEqual(store.get_state(principal, "commerce").surface, "commerce")
+        with self.assertRaises(TrialPermissionDenied):
+            store.get_state(principal, "production")
+        with self.assertRaises(TrialPermissionDenied):
+            store.get_state(principal, "website")
 
     def test_postgres_read_path_uses_the_workspace_activation_event(self) -> None:
         class Cursor:

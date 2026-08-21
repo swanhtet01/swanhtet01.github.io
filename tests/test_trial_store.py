@@ -557,6 +557,10 @@ class TrialStoreTests(unittest.TestCase):
                 events.append("membership_checked")
                 return frozenset()
 
+            def _product_entitlements(self, _cursor, _workspace_id) -> tuple[str, ...]:
+                events.append("entitlements_checked")
+                return ()
+
         store = GuardedStore("postgresql://runtime.invalid/db", reducer=self.reducer)
         with self.assertRaises(SentinelFailure):
             with store._guarded_cursor(self.operator, write=False):
@@ -574,6 +578,7 @@ class TrialStoreTests(unittest.TestCase):
                 "schema_checked",
                 "identity_set",
                 "membership_checked",
+                "entitlements_checked",
                 "operation",
                 "cursor_exit:SentinelFailure",
                 "transaction_rollback",
