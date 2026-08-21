@@ -616,7 +616,7 @@
     "backup:coverage:verify": "node tools/test_backup_covers_business_data.mjs",
     "storefront:rank:verify": "node tools/test_storefront_merchandising_rank.mjs",
     "capability:tiers:verify": "node tools/test_capability_tiers.mjs",
-    "client:extensions:verify": "node tools/test_client_extension_manifest.mjs",
+    "client:extensions:verify": "node tools/test_client_extension_manifest.mjs && node --test tools/manage_client_extension.test.mjs",
     "enterprise:verified-statements:verify": "node tools/test_enterprise_verified_statements.mjs",
     "enterprise:staff-roles:verify": "node tools/test_enterprise_staff_roles.mjs",
     "theme:surfaces:verify": "node tools/test_theme_surface_contract.mjs",

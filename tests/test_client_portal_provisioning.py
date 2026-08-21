@@ -126,7 +126,13 @@ class ClientPortalProvisioningTests(unittest.TestCase):
             self.assertFalse(bundle["portalControls"]["crossTenantReadsAllowed"])
             self.assertFalse(bundle["portalControls"]["crossProductWritesAllowed"])
             self.assertTrue(bundle["customSolutionPolicy"]["tenantBound"])
+            self.assertEqual(bundle["customSolutionPolicy"]["requestContract"], "supermega.client_extension_manifest.v1")
+            self.assertEqual(bundle["customSolutionPolicy"]["activationPlanContract"], "supermega.client_extension_activation_plan.v1")
+            self.assertTrue(bundle["customSolutionPolicy"]["purchasedBaseProductRequired"])
             self.assertTrue(bundle["customSolutionPolicy"]["versionedMigrationRequired"])
+            self.assertTrue(bundle["customSolutionPolicy"]["securityReviewRequired"])
+            self.assertTrue(bundle["customSolutionPolicy"]["namedOwnerApprovalRequired"])
+            self.assertEqual(bundle["customSolutionPolicy"]["activationStatus"], "not_applied")
             self.assertFalse(bundle["authority"]["tenantWritesPerformed"])
 
             verified = _run(

@@ -107,3 +107,47 @@ idempotent replay; a changed product set must conflict.
 
 Deployment, domain publication, billing activation, customer messages, and
 scheduled automations remain separate owner-approved operations.
+
+## Custom client solutions
+
+A custom solution must extend one product already present in the client's
+verified blueprint. First generate and verify a
+`supermega.client_extension_manifest.v1` request. It may depend only on
+capabilities already available to that client, owns records through one base
+product, and cannot request cross-product writes.
+
+Implementation does not activate the request. Before activation, generate and
+verify a `supermega.client_extension_activation_plan.v1` containing four
+independent SHA-256 proofs: implementation, versioned migration, rollback, and
+security review. The named blueprint owner must approve after the security
+review. A valid plan remains `planned-not-applied`; applying tenant changes is a
+separate owner-approved operation and must retain the exact manifest and plan
+digests in its receipt.
+
+Use the internal CLI against the already verified client preparation:
+
+```powershell
+node tools/manage_client_extension.mjs request `
+  --preparation C:\reviewed\private-review.json `
+  --request C:\reviewed\extension-request.json `
+  --created-at 2026-08-21T00:00:00.000Z `
+  --output C:\reviewed\extension-manifest.json
+
+node tools/manage_client_extension.mjs verify-request `
+  --preparation C:\reviewed\private-review.json `
+  --manifest C:\reviewed\extension-manifest.json
+
+node tools/manage_client_extension.mjs plan `
+  --preparation C:\reviewed\private-review.json `
+  --manifest C:\reviewed\extension-manifest.json `
+  --evidence C:\reviewed\extension-activation-evidence.json `
+  --output C:\reviewed\extension-activation-plan.json
+
+node tools/manage_client_extension.mjs verify-plan `
+  --preparation C:\reviewed\private-review.json `
+  --manifest C:\reviewed\extension-manifest.json `
+  --plan C:\reviewed\extension-activation-plan.json
+```
+
+Every output is create-only. Reusing an existing output path fails instead of
+silently replacing reviewed evidence.

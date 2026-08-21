@@ -231,12 +231,18 @@ def build_client_portal_provisioning_bundle(preparation: Mapping[str, Any]) -> d
             "crossProductWritesAllowed": False,
         },
         "customSolutionPolicy": {
+            "requestContract": "supermega.client_extension_manifest.v1",
+            "activationPlanContract": "supermega.client_extension_activation_plan.v1",
             "tenantBound": True,
+            "purchasedBaseProductRequired": True,
             "baseRecipeRequired": True,
             "versionedMigrationRequired": True,
             "digestBoundRollbackRequired": True,
+            "securityReviewRequired": True,
+            "namedOwnerApprovalRequired": True,
             "separateHumanApprovalRequired": True,
             "crossProductWritesAllowed": False,
+            "activationStatus": "not_applied",
         },
         "authority": {
             "status": "planned_not_applied",

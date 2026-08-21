@@ -2,6 +2,7 @@ import { clientCapabilityIdsForProducts, type ClientCapabilityDomain } from './c
 import type { ClientDemoBlueprint, ClientSolutionId } from './client-onboarding.ts'
 
 export const CLIENT_EXTENSION_MANIFEST_SCHEMA = 'supermega.client_extension_manifest.v1' as const
+export const CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA = 'supermega.client_extension_activation_plan.v1' as const
 
 export type ClientExtensionMode = 'read-only' | 'draft-only' | 'reviewed-write'
 export type ClientExtensionRequestedAction = 'read' | 'draft' | 'propose-write'
@@ -56,10 +57,69 @@ export type ClientExtensionManifest = {
   digest: string
 }
 
+export type ClientExtensionActivationEvidence = {
+  implementationVersion: number
+  implementationDigest: string
+  migrationDigest: string
+  rollbackDigest: string
+  securityReviewDigest: string
+  securityReviewedBy: string
+  securityReviewedAt: string
+  approvedBy: string
+  approvedAt: string
+}
+
+export type ClientExtensionActivationPlan = {
+  schema: typeof CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA
+  manifestDigest: string
+  blueprintDigest: string
+  workspace: string
+  baseProduct: ClientSolutionId
+  implementation: {
+    version: number
+    digest: string
+    migrationDigest: string
+    rollbackDigest: string
+  }
+  reviews: {
+    security: {
+      reviewedBy: string
+      reviewedAt: string
+      decision: 'approved'
+      evidenceDigest: string
+    }
+    ownerActivation: {
+      approvedBy: string
+      approvedAt: string
+      decision: 'approved'
+      manifestDigest: string
+      implementationDigest: string
+    }
+  }
+  authority: {
+    status: 'planned-not-applied'
+    tenantWritesPerformed: false
+    providerCallsPerformed: false
+    deploymentPerformed: false
+    productionActivationPerformed: false
+  }
+  controls: {
+    exactManifestRequired: true
+    purchasedBaseProductRequired: true
+    versionedMigrationRequired: true
+    digestBoundRollbackRequired: true
+    securityReviewRequired: true
+    namedOwnerApprovalRequired: true
+    crossProductWritesAllowed: false
+  }
+  digest: string
+}
+
 const ID = /^ext-[a-z][a-z0-9-]{1,58}$/
 const RECORD_ID = /^[a-z][a-z0-9_]{1,63}$/
 const DOMAIN: readonly ClientCapabilityDomain[] = ['operations', 'master-data', 'finance', 'customer', 'supply-chain', 'quality', 'workforce', 'governance', 'intelligence', 'integration']
 const MODE: readonly ClientExtensionMode[] = ['read-only', 'draft-only', 'reviewed-write']
+const SHA256 = /^sha256:[a-f0-9]{64}$/
 
 function bounded(value: string, label: string, maximum: number) {
   const normalized = value.trim()
@@ -93,6 +153,12 @@ async function sha256(value: unknown) {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+function evidenceDigest(value: string, label: string) {
+  const normalized = bounded(value, label, 71)
+  if (!SHA256.test(normalized)) throw new Error(`${label} must be a SHA-256 digest.`)
+  return normalized
 }
 
 export async function buildClientExtensionManifest(
@@ -175,5 +241,112 @@ export async function verifyClientExtensionManifest(value: unknown, blueprint: C
     return { ok: true as const, contract: CLIENT_EXTENSION_MANIFEST_SCHEMA, digest: rebuilt.digest, blueprintDigest: rebuilt.blueprintDigest }
   } catch {
     throw new Error('The client extension manifest is invalid, belongs to another client blueprint, or changed after review.')
+  }
+}
+
+export async function buildClientExtensionActivationPlan(
+  manifest: ClientExtensionManifest,
+  blueprint: ClientDemoBlueprint,
+  evidence: ClientExtensionActivationEvidence,
+): Promise<ClientExtensionActivationPlan> {
+  const verified = await verifyClientExtensionManifest(manifest, blueprint)
+  if (!Number.isInteger(evidence.implementationVersion) || evidence.implementationVersion < 1 || evidence.implementationVersion > 1000) {
+    throw new Error('Implementation version must be an integer from 1 to 1000.')
+  }
+  const implementationDigest = evidenceDigest(evidence.implementationDigest, 'Implementation digest')
+  const migrationDigest = evidenceDigest(evidence.migrationDigest, 'Migration digest')
+  const rollbackDigest = evidenceDigest(evidence.rollbackDigest, 'Rollback digest')
+  const securityReviewDigest = evidenceDigest(evidence.securityReviewDigest, 'Security review digest')
+  if (new Set([implementationDigest, migrationDigest, rollbackDigest, securityReviewDigest]).size !== 4) {
+    throw new Error('Implementation, migration, rollback, and security evidence must be independently digest-bound.')
+  }
+  const securityReviewedAt = canonicalTimestamp(evidence.securityReviewedAt)
+  const approvedAt = canonicalTimestamp(evidence.approvedAt)
+  if (Date.parse(approvedAt) < Date.parse(securityReviewedAt)) {
+    throw new Error('Owner activation approval cannot predate the security review.')
+  }
+  const approvedBy = bounded(evidence.approvedBy, 'Activation approver', 80)
+  const blueprintOwner = bounded(blueprint.client.owner, 'Blueprint owner', 80)
+  if (approvedBy !== blueprintOwner) throw new Error('Activation approval must come from the named client owner.')
+
+  const payload: Omit<ClientExtensionActivationPlan, 'digest'> = {
+    schema: CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA,
+    manifestDigest: verified.digest,
+    blueprintDigest: verified.blueprintDigest,
+    workspace: manifest.workspace,
+    baseProduct: manifest.baseProduct,
+    implementation: {
+      version: evidence.implementationVersion,
+      digest: implementationDigest,
+      migrationDigest,
+      rollbackDigest,
+    },
+    reviews: {
+      security: {
+        reviewedBy: bounded(evidence.securityReviewedBy, 'Security reviewer', 80),
+        reviewedAt: securityReviewedAt,
+        decision: 'approved',
+        evidenceDigest: securityReviewDigest,
+      },
+      ownerActivation: {
+        approvedBy,
+        approvedAt,
+        decision: 'approved',
+        manifestDigest: verified.digest,
+        implementationDigest,
+      },
+    },
+    authority: {
+      status: 'planned-not-applied',
+      tenantWritesPerformed: false,
+      providerCallsPerformed: false,
+      deploymentPerformed: false,
+      productionActivationPerformed: false,
+    },
+    controls: {
+      exactManifestRequired: true,
+      purchasedBaseProductRequired: true,
+      versionedMigrationRequired: true,
+      digestBoundRollbackRequired: true,
+      securityReviewRequired: true,
+      namedOwnerApprovalRequired: true,
+      crossProductWritesAllowed: false,
+    },
+  }
+  return { ...payload, digest: await sha256(payload) }
+}
+
+export async function verifyClientExtensionActivationPlan(
+  value: unknown,
+  manifest: ClientExtensionManifest,
+  blueprint: ClientDemoBlueprint,
+) {
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid')
+    const candidate = value as Partial<ClientExtensionActivationPlan>
+    const implementation = candidate.implementation as ClientExtensionActivationPlan['implementation']
+    const security = candidate.reviews?.security as ClientExtensionActivationPlan['reviews']['security']
+    const approval = candidate.reviews?.ownerActivation as ClientExtensionActivationPlan['reviews']['ownerActivation']
+    const rebuilt = await buildClientExtensionActivationPlan(manifest, blueprint, {
+      implementationVersion: implementation?.version,
+      implementationDigest: implementation?.digest,
+      migrationDigest: implementation?.migrationDigest,
+      rollbackDigest: implementation?.rollbackDigest,
+      securityReviewDigest: security?.evidenceDigest,
+      securityReviewedBy: security?.reviewedBy,
+      securityReviewedAt: security?.reviewedAt,
+      approvedBy: approval?.approvedBy,
+      approvedAt: approval?.approvedAt,
+    })
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    return {
+      ok: true as const,
+      contract: CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA,
+      digest: rebuilt.digest,
+      manifestDigest: rebuilt.manifestDigest,
+      status: rebuilt.authority.status,
+    }
+  } catch {
+    throw new Error('The client extension activation plan is invalid, stale, approved by another owner, or changed after review.')
   }
 }

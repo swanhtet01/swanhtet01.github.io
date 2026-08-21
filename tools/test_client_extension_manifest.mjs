@@ -8,7 +8,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export { buildClientDemoBlueprint, clientDemoPresets } from './client-onboarding.ts'
-      export { buildClientExtensionManifest, verifyClientExtensionManifest } from './client-extension-manifest.ts'
+      export { buildClientExtensionManifest, verifyClientExtensionManifest, buildClientExtensionActivationPlan, verifyClientExtensionActivationPlan } from './client-extension-manifest.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/client-extension-test-entry.ts',
@@ -64,4 +64,37 @@ await assert.rejects(model.buildClientExtensionManifest(blueprint, { ...request,
 await assert.rejects(model.buildClientExtensionManifest(blueprint, { ...request, records: ['MembershipBalance'] }, manifest.createdAt), /snake_case/)
 await assert.rejects(model.buildClientExtensionManifest(blueprint, { ...request, acceptanceCriteria: ['Only one'] }, manifest.createdAt), /acceptance criteria/)
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 15, digest: manifest.digest, blueprintDigest: manifest.blueprintDigest }))
+const digest = (character) => `sha256:${character.repeat(64)}`
+const activationEvidence = {
+  implementationVersion: 1,
+  implementationDigest: digest('1'),
+  migrationDigest: digest('2'),
+  rollbackDigest: digest('3'),
+  securityReviewDigest: digest('4'),
+  securityReviewedBy: 'Named security reviewer',
+  securityReviewedAt: '2026-08-21T01:00:00.000Z',
+  approvedBy: blueprint.client.owner,
+  approvedAt: '2026-08-21T02:00:00.000Z',
+}
+const activationPlan = await model.buildClientExtensionActivationPlan(manifest, blueprint, activationEvidence)
+assert.equal(activationPlan.schema, 'supermega.client_extension_activation_plan.v1')
+assert.equal(activationPlan.manifestDigest, manifest.digest)
+assert.equal(activationPlan.authority.status, 'planned-not-applied')
+assert.equal(activationPlan.authority.tenantWritesPerformed, false)
+assert.equal(activationPlan.controls.crossProductWritesAllowed, false)
+assert.deepEqual(await model.verifyClientExtensionActivationPlan(activationPlan, manifest, blueprint), {
+  ok: true,
+  contract: 'supermega.client_extension_activation_plan.v1',
+  digest: activationPlan.digest,
+  manifestDigest: manifest.digest,
+  status: 'planned-not-applied',
+})
+
+const tamperedPlan = structuredClone(activationPlan)
+tamperedPlan.implementation.version = 2
+await assert.rejects(model.verifyClientExtensionActivationPlan(tamperedPlan, manifest, blueprint), /invalid|stale|changed/)
+await assert.rejects(model.buildClientExtensionActivationPlan(manifest, blueprint, { ...activationEvidence, approvedBy: 'Another owner' }), /named client owner/)
+await assert.rejects(model.buildClientExtensionActivationPlan(manifest, blueprint, { ...activationEvidence, approvedAt: '2026-08-21T00:00:00.000Z' }), /predate/)
+await assert.rejects(model.buildClientExtensionActivationPlan(manifest, blueprint, { ...activationEvidence, rollbackDigest: digest('2') }), /independently digest-bound/)
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 26, digest: manifest.digest, activationPlanDigest: activationPlan.digest, blueprintDigest: manifest.blueprintDigest }))
