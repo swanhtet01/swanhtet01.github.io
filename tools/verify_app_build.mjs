@@ -3916,7 +3916,6 @@ if (!websiteSource.includes('Recovery settings')
   || !productSetupSource.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY')
   || !handoffSource.includes('export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }')
   || coreSource.includes("import('../products/website/website-model')")
-  || coreSource.includes("import('../products/product-handoff')")
   || coreSource.includes("from '../products/website/website-model'")
   || !websiteCssSource.includes('.website-notice-action')) fail('website_session_recovery_missing_or_eager')
 if (!websiteModelSource.includes('repairInvalidWebsiteWorkspace')
@@ -4392,6 +4391,15 @@ if ([
   "from '../../core/managed-trial'",
 ].some((marker) => websiteSource.includes(marker))) fail('website_still_writes_order_intake')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
+if (coreSource.includes("import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'")
+  || coreSource.includes("import { readWebsiteEcommerceHandoff")
+  || !coreSource.includes("lazy(() => import('../products/WebsiteCommerceIntake')")
+  || !coreSource.includes("void import('../products/product-handoff')")
+  || !coreSource.includes('if (managedIdentity || !confirmedLocalShop) return undefined')
+  || !coreSource.includes('[confirmedLocalShop, managedIdentity]')
+  || !coreSource.includes("localWebsiteIntakeRead.status === 'ready'")
+  || !coreSource.includes('Older Website order could not be checked.')
+  || !coreSource.includes('No order was created or changed.')) fail('legacy_website_intake_eager_or_fail_open')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft')
   || !commerceIntakeSource.includes('opaque customer reference generated on completion')
   || !commerceIntakeSource.includes('Create ready order')
@@ -20193,6 +20201,9 @@ else {
   const routeAssets = bundlerRouteAssets(routeEntrySource, routeDependencyTable, /^assets\/core-app-[^/]+\.js$/)
   if (!routeAssets.length) fail('shop_route_operations_chunk_unreachable')
   const shopRouteClosure = [...new Set(['index.html', ...documentScripts, ...documentStyles, ...documentGraph, ...routeAssets])]
+  if (shopRouteClosure.some((path) => /^assets\/(?:website-model|website-leads)-[^/]+\.js$/.test(path))) {
+    fail('shop_route_eagerly_loads_website_compatibility')
+  }
   const missingClosureAssets = (await Promise.all(shopRouteClosure.map(async (path) => (
     await exists(resolve(dist, path)) ? null : path
   )))).filter(Boolean)

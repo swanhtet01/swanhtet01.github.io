@@ -3,10 +3,9 @@ import { shopBusinessTemplates } from '../products/shop/business-templates'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
-import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
-import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
+import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
 import { emitMetric } from '../analytics/metrics-collector'
@@ -268,6 +267,8 @@ import { projectShopAppointmentTillReconciliation } from './shop-appointment-til
 import { decideShopNextAction } from './shop-next-action'
 import { projectShopCloseAnomalyFlags, type ShopCloseAnomalyFlag, type ShopCloseAnomalyFlags } from './shop-close-anomaly-flags'
 import { lockedCapabilityNotice } from './capability-tiers'
+
+const WebsiteCommerceIntake = lazy(() => import('../products/WebsiteCommerceIntake').then((module) => ({ default: module.WebsiteCommerceIntake })))
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -1454,6 +1455,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [shopSchedule, setShopSchedule] = useState<ShopServiceScheduleState | null>(readLocalShopServiceSchedule)
+  const [localWebsiteIntakeRead, setLocalWebsiteIntakeRead] = useState<{
+    status: 'checking' | 'ready' | 'error'
+    intake: WebsiteEcommerceHandoffContext | null
+  }>({ status: 'checking', intake: null })
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
   // Workspace headroom. LOCAL SHOPS ONLY: a company account keeps the ledger server-side
   // and neither local ceiling applies to it (workspace-runtime.ts branches on
@@ -1497,6 +1502,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     commerceRef.current = commerce
   }, [commerce])
+  useEffect(() => {
+    if (managedIdentity || !confirmedLocalShop) return undefined
+    let active = true
+    void import('../products/product-handoff')
+      .then(({ readWebsiteEcommerceHandoff }) => {
+        if (active) setLocalWebsiteIntakeRead({ status: 'ready', intake: readWebsiteEcommerceHandoff() })
+      })
+      .catch(() => {
+        if (active) setLocalWebsiteIntakeRead({ status: 'error', intake: null })
+      })
+    return () => { active = false }
+  }, [confirmedLocalShop, managedIdentity])
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
@@ -1844,10 +1861,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }, [commerce, purchaseOrderClock])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
-  const localWebsiteIntake = managedIdentity ? null : readWebsiteEcommerceHandoff()
+  const localWebsiteIntake = localWebsiteIntakeRead.intake
   const legacyWebsiteWorkWaiting = managedIdentity
     ? websiteIntakes.some((intake) => intake.status === 'pending_confirmation')
-    : Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
+    : confirmedLocalShop && localWebsiteIntakeRead.status === 'ready'
+      && Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
   const storefrontRequests = commerceStorefrontRequests(commerce)
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
@@ -6595,7 +6613,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
         </section>
-        {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></details> : null}
+        {confirmedLocalShop && localWebsiteIntakeRead.status === 'error' ? <div className="website-intake-record"><strong>Older Website order could not be checked.</strong><small>Reload before reviewing older Website handoffs. No order was created or changed.</small></div> : null}
+        {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><Suspense fallback={<div className="website-intake-record"><strong>Opening older Website order…</strong><small>No order is created until you review and confirm it.</small></div>}><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></Suspense></details> : null}
       </div> : null}
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
