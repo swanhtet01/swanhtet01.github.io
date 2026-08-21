@@ -5447,11 +5447,23 @@ function commerceOrderAcknowledgementProjection(
   ]
 }
 
-export function commerceOrderAcknowledgement(
-  state: CommerceState,
+// Split out on the same terms as commerceDailyCloseExportFrom further down, and for a worse
+// case. The Shop screen holds one acknowledgement per order and rebuilds them from a state that
+// is a NEW OBJECT after every sale, so validateCommerceState ran once per order all day.
+// Measured 2026-08-21 on a Shop driven to its enforced 2 MiB ceiling through the real
+// transitions (1,262 orders, 1,081 completed, 2,097,406 bytes): one validation is 31-36 ms and
+// is 97.1% of what one acknowledgement costs, so the map cost about 50 SECONDS after every
+// sale (three runs, medians 47.6 s, 50.6 s, 54.5 s).
+//
+// Hoisting the validation is sound rather than a shortcut, because validateCommerceState is a
+// PREDICATE and not a normaliser: it returns its argument by reference and leaves it byte for
+// byte as it found it. One validation of a state object therefore says exactly what a thousand
+// say about that same object. What changes here is how many times one state is checked, never
+// whether it is -- this function is module-private and every way in validates first.
+function commerceOrderAcknowledgementFrom(
+  current: CommerceState,
   orderId: string,
 ): CommerceOrderAcknowledgement | null {
-  const current = validateCommerceState(state)
   const order = current.orders.find((candidate) => candidate.id === orderId)
   if (!order?.calculation || !order.fulfilment || !order.fulfilmentReference || !order.promisedAt) return null
   const lineSnapshots = validatedOrderLineSnapshots(order)
@@ -5547,6 +5559,36 @@ export function commerceOrderAcknowledgement(
   return {
     ...artifact,
     digest: `sha256:${sha256Hex(JSON.stringify(commerceOrderAcknowledgementProjection(artifact)))}`,
+  }
+}
+
+export function commerceOrderAcknowledgement(
+  state: CommerceState,
+  orderId: string,
+): CommerceOrderAcknowledgement | null {
+  return commerceOrderAcknowledgementFrom(validateCommerceState(state), orderId)
+}
+
+// One validated state, and a way to ask it for acknowledgements one at a time.
+//
+// A screen listing orders needs two things the single-order entry point cannot give it at any
+// sane price: many acknowledgements from ONE state, and only the ones it actually shows. This
+// returns a reader bound to a state that has been validated exactly once, so a caller can ask
+// for whichever orders it renders and pay for nothing else. Asking twice for the same order
+// returns the same artifact -- built once, then remembered for the life of the reader, which
+// lives exactly as long as the state it validated.
+//
+// The reader is the ONLY way out of this module to the unvalidated builder, and it cannot be
+// constructed without validating: an invalid state throws here, at construction, rather than
+// once per order at the call sites.
+export function commerceOrderAcknowledgementReader(state: CommerceState) {
+  const current = validateCommerceState(state)
+  const built = new Map<string, CommerceOrderAcknowledgement | null>()
+  return (orderId: string): CommerceOrderAcknowledgement | null => {
+    if (built.has(orderId)) return built.get(orderId) ?? null
+    const artifact = commerceOrderAcknowledgementFrom(current, orderId)
+    built.set(orderId, artifact)
+    return artifact
   }
 }
 

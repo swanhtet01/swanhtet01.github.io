@@ -80,6 +80,7 @@ import {
   commerceCustomerCreditReview,
   commerceOrderCalculation,
   commerceOrderAcknowledgement,
+  commerceOrderAcknowledgementReader,
   commerceOrderAcknowledgementText,
   commerceOrderCorrectionExpectation,
   commerceOrderAdjustedTotal,
@@ -1770,14 +1771,21 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
-  const orderAcknowledgementDownloads = useMemo(() => {
-    const downloads = new Map<string, OrderAcknowledgementDownload>()
-    commerce.orders.forEach((order) => {
-      const download = orderAcknowledgementDownload(commerce, order.id)
-      if (download) downloads.set(order.id, download)
-    })
-    return downloads
-  }, [commerce])
+  // This memo used to build one acknowledgement for EVERY order in the workspace. It is keyed
+  // on `commerce`, which is a new object after every sale, so a till rebuilt all of them after
+  // every sale -- and commerceOrderAcknowledgement validated the whole workspace once per
+  // order to do it.
+  //
+  // Measured 2026-08-21 on a Shop driven to its enforced 2 MiB ceiling through the real
+  // transitions (1,262 orders, 1,081 completed, 2,097,406 bytes): about 50 SECONDS per sale
+  // (three runs, medians 47.6 s, 50.6 s, 54.5 s). 97% of that was the repeated validation;
+  // the rest was building 1,073 acknowledgements nobody was looking at. This screen shows 189
+  // of them -- every order needing action, plus one eight-row page of the archive.
+  //
+  // So: validated once, and built per order only when a row asks. About 50 ms on the same
+  // fixture (48.3, 50.7, 59.1). Hoisting the validation alone would have been about 150 ms
+  // (137.0, 137.6, 170.3); the rest of the win is not doing the work.
+  const orderAcknowledgementDownloads = useMemo(() => orderAcknowledgementLookup(commerce), [commerce])
   const [receiptAck, setReceiptAck] = useState<CommerceOrderAcknowledgement | null>(null)
   const latestClose = commerce.closes.find((close) => close.operator)
   // Roadmap §2 item 5 — anomaly flags on the close. A pure projection over
@@ -7283,32 +7291,26 @@ function closeExportFileText(artifact: CommerceDailyCloseExport) {
   return `\uFEFF${commerceDailyCloseCsv(artifact)}`
 }
 
-// Built on the click, not once per order on the render path.
+// One row's receipt controls, built when that row asks for them.
 //
-// The map above holds one entry per order and used to carry a percent-encoded data: URL in
-// each. Measured 2026-08-21 on a Shop driven to its enforced 2 MiB ceiling through the real
-// transitions (1,453 orders): 1,332,424 bytes of acknowledgement text became 1,852,602 bytes
-// of data: URL, all of it alive for the life of the page -- half a megabyte more than the
-// settings-page backup #535 removed, on the screen that is never closed rather than one that
-// is rarely opened. The map is keyed on `commerce`, a new object after every sale, so every
-// sale rebuilt all 1,453 of them. At most one is ever downloaded.
+// #538 took the FILE off this path: each of these used to carry a percent-encoded data: URL,
+// 1,852,602 bytes of them alive for the life of the page at the workspace ceiling, rebuilt on
+// every sale for a file at most one order is ever downloaded from. The artifact stayed,
+// because `Boolean(acknowledgement)` decides whether an order shows any secondary actions at
+// all and "View receipt" hands it straight to the dialog -- and it cost 53.9 ms EACH, which
+// that PR filed as the larger bug rather than smuggling into its own change.
 //
-// The ARTIFACT still has to be built here: `Boolean(acknowledgement)` decides whether this
-// order shows any secondary actions at all, and "View receipt" hands the artifact straight to
-// the dialog. Only the file is deferred, and building it from an artifact already in hand
-// measured 0.011 ms -- nothing, next to the 53.9 ms the artifact itself costs. See the note on
-// that cost in the PR: it is a separate and much larger bug than this one.
-function orderAcknowledgementDownload(commerce: CommerceState, orderId: string) {
-  try {
-    const artifact = commerceOrderAcknowledgement(commerce, orderId)
-    if (!artifact) return null
-    const safeOrderId = artifact.orderId.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'order'
-    return {
-      artifact,
-      filename: `supermega-${safeOrderId}-acknowledgement.txt`,
-    }
-  } catch {
-    return null
+// This is that bug. The 53.9 ms was validateCommerceState re-checking the whole workspace once
+// per order; the state is now validated once by the caller, and `read` is bound to it. Nothing
+// about the document changed -- see the three properties pinned in
+// tools/test_commerce_order_integrity.mjs.
+function orderAcknowledgementDownload(read: (orderId: string) => CommerceOrderAcknowledgement | null, orderId: string) {
+  const artifact = read(orderId)
+  if (!artifact) return null
+  const safeOrderId = artifact.orderId.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'order'
+  return {
+    artifact,
+    filename: `supermega-${safeOrderId}-acknowledgement.txt`,
   }
 }
 
@@ -7329,6 +7331,25 @@ function OrderReceiptActions({ acknowledgement, onViewReceipt }: {
   </>
 }
 
+// Asked, not enumerated. The order list and the archive each render a handful of rows and ask
+// this for those rows only; nothing else is ever built. It carries a `get` so the two call
+// sites read as they always did, but it is a lookup and not a collection -- there is no set of
+// downloads standing by behind it, which is the whole point.
+type OrderAcknowledgementLookup = { get: (orderId: string) => OrderAcknowledgementDownload | undefined }
+
+// One validation of this workspace, then a document per row that asks for one. A workspace this
+// device cannot validate answers nothing for every order, which is exactly what the per-order
+// try/catch this replaced did -- it returned null for each order in turn.
+function orderAcknowledgementLookup(commerce: CommerceState): OrderAcknowledgementLookup {
+  let read: ReturnType<typeof commerceOrderAcknowledgementReader>
+  try {
+    read = commerceOrderAcknowledgementReader(commerce)
+  } catch {
+    return { get: () => undefined }
+  }
+  return { get: (orderId) => orderAcknowledgementDownload(read, orderId) ?? undefined }
+}
+
 function OrderList({
   acknowledgementDownloads,
   orders,
@@ -7342,7 +7363,7 @@ function OrderList({
   onSettleSale,
   onViewReceipt,
 }: {
-  acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
+  acknowledgementDownloads: OrderAcknowledgementLookup
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
   disabled: boolean
@@ -7470,7 +7491,7 @@ function ClosedOrderHistory({
   supportResolutionDraft,
   supportWorkloadDownload,
 }: {
-  acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
+  acknowledgementDownloads: OrderAcknowledgementLookup
   canCorrect: (orderId: string) => boolean
   canReturn: (orderId: string) => boolean
   correctionCalculation: ReturnType<typeof commerceCorrectionCalculation>
