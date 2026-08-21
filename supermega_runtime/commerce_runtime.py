@@ -224,8 +224,19 @@ _MAX_MOVEMENT_ID_LENGTH = 2_000
 _SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
 _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
-    {"service_registered", "resource_registered", "booking_scheduled", "booking_advanced", "booking_cancelled"}
+    {
+        "service_registered",
+        "resource_registered",
+        "booking_scheduled",
+        "booking_advanced",
+        "booking_cancelled",
+        "package_redeemed",
+    }
 )
+_SPA_MEMBERSHIP_PACKAGES = {
+    "service-session": ("SPA-PACK-MASSAGE-5", 5),
+    "service-facial": ("SPA-PACK-FACIAL-3", 3),
+}
 _SUPPORT_INTENT_ID_PATTERN = re.compile(
     r"ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
@@ -1120,6 +1131,13 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             (event["type"] == "service_registered" and subject_id not in service_ids)
             or (event["type"] == "resource_registered" and subject_id not in resource_ids)
             or (event["type"].startswith("booking_") and subject_id not in booking_ids)
+            or (
+                event["type"] == "package_redeemed"
+                and not any(
+                    booking["id"] == subject_id and booking["status"] == "completed"
+                    for booking in bookings
+                )
+            )
         ):
             raise TrialValidationError(f"{field} references an unknown subject.")
         _text(event.get("actor"), f"{field}.actor", maximum=120)
@@ -10340,6 +10358,57 @@ def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
     return _validate_service_schedule(value) if value is not None else None
 
 
+def _spa_membership_session_available(
+    commerce: Mapping[str, Any],
+    schedule: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> bool:
+    booking_by_id = {booking["id"]: booking for booking in schedule["bookings"]}
+    booking = booking_by_id.get(event["subjectId"])
+    event_at = datetime.fromisoformat(event["happenedAt"].replace("Z", "+00:00"))
+    if (
+        schedule["industryPackId"] != "spa"
+        or booking is None
+        or booking["status"] != "completed"
+        or booking["customerName"] == "Guest"
+        or event_at < datetime.fromisoformat(booking["updatedAt"].replace("Z", "+00:00"))
+    ):
+        return False
+    package = _SPA_MEMBERSHIP_PACKAGES.get(booking["serviceId"])
+    if package is None:
+        return False
+    package_sku, sessions_per_purchase = package
+    purchased = 0
+    for order in commerce.get("orders", []):
+        paid_at = order.get("paymentReconciledAt")
+        if (
+            order["customer"] != booking["customerName"]
+            or order["status"] != "completed"
+            or order["paymentStatus"] != "reconciled"
+            or order["refundStatus"] != "none"
+            or paid_at is None
+            or datetime.fromisoformat(paid_at.replace("Z", "+00:00")) > event_at
+        ):
+            continue
+        for line in order.get("lines", []):
+            if line["sku"] == package_sku:
+                purchased += line["quantity"] * sessions_per_purchase
+    redeemed = 0
+    for prior in schedule["events"][:-1]:
+        if prior["type"] != "package_redeemed":
+            continue
+        if prior["subjectId"] == booking["id"]:
+            return False
+        prior_booking = booking_by_id.get(prior["subjectId"])
+        if (
+            prior_booking is not None
+            and prior_booking["customerName"] == booking["customerName"]
+            and prior_booking["serviceId"] == booking["serviceId"]
+        ):
+            redeemed += 1
+    return purchased > redeemed
+
+
 def _require_service_schedule_unchanged(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -10406,6 +10475,22 @@ def _validate_service_schedule_saved(
             and after["bookings"][-1]["updatedAt"] == latest["happenedAt"]
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
+        )
+    elif event_type == "package_redeemed":
+        completed_subject = next(
+            (
+                booking
+                for booking in after["bookings"]
+                if booking["id"] == latest["subjectId"] and booking["status"] == "completed"
+            ),
+            None,
+        )
+        valid_change = (
+            completed_subject is not None
+            and _spa_membership_session_available(current, after, latest)
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+            and after["bookings"] == before["bookings"]
         )
     else:
         before_by_id = {booking["id"]: booking for booking in before["bookings"]}

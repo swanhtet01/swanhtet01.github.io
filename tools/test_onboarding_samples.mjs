@@ -111,6 +111,9 @@ check(
   new Set(commerceSamples).size === commerceSamples.length,
   `each pack's commerce sample is distinct, got ${new Set(commerceSamples).size} distinct of ${commerceSamples.length}`,
 )
+const spaPackSample = clientImportTemplate('commerce', undefined, { shopIndustryPackId: 'spa' })
+check(spaPackSample.includes('SPA-PACK-MASSAGE-5,Myanmar massage package 5 sessions'), 'the Spa starter can sell the native five-session massage package')
+check(spaPackSample.includes('SPA-PACK-FACIAL-3,Facial treatment package 3 sessions'), 'the Spa starter can sell the native three-session facial package')
 
 // Internal client provisioning must use the same rich Spa trade the product picker installs.
 // A generic pack-only CSV has treatments, but not the retail products, sample-ready stock, and

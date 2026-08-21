@@ -25,6 +25,14 @@ import {
   type ShopServiceBookingStatus,
   type ShopServiceSchedule,
 } from './shop-service-scheduling'
+import {
+  availableSpaMembershipForBooking,
+  redeemSpaMembershipSession,
+  spaMembershipBalances,
+  type SpaMembershipCommerceView,
+} from './shop-spa-membership'
+
+const emptyMembershipCommerce: SpaMembershipCommerceView = { orders: [] }
 
 const statusLabels: Record<ShopServiceBookingStatus, string> = {
   held: 'Held',
@@ -60,7 +68,7 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: { actor?: string; disabled?: boolean; initiallyOpen?: boolean; onScheduleChange?: (schedule: ShopServiceSchedule) => void }) {
+export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = emptyMembershipCommerce, disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: { actor?: string; commerce?: SpaMembershipCommerceView; disabled?: boolean; initiallyOpen?: boolean; onScheduleChange?: (schedule: ShopServiceSchedule) => void }) {
   const [initial] = useState(initialSchedule)
   const [schedule, setScheduleState] = useState<ShopServiceSchedule | null>(initial.schedule)
   // Every path that changes the book goes through here, so an observer -- today, the close
@@ -83,6 +91,16 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
   const managedSaveBusyRef = useRef(false)
   const schedulePanelRef = useRef<HTMLDetailsElement>(null)
   const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
+  const membershipBalances = useMemo(() => schedule ? spaMembershipBalances(commerce, schedule) : [], [commerce, schedule])
+  const membershipByBookingId = useMemo(() => {
+    if (!schedule || !membershipBalances.length) return new Map<string, (typeof membershipBalances)[number]>()
+    const balancesByCustomerService = new Map(membershipBalances.map((balance) => [`${balance.customer}\u0000${balance.serviceId}`, balance]))
+    const redeemedBookingIds = new Set(schedule.events.filter((event) => event.type === 'package_redeemed').map((event) => event.subjectId))
+    return new Map(schedule.bookings.flatMap((booking) => {
+      const balance = balancesByCustomerService.get(`${booking.customerName.trim()}\u0000${booking.serviceId}`)
+      return booking.status === 'completed' && !redeemedBookingIds.has(booking.id) && balance && balance.remaining > 0 ? [[booking.id, balance] as const] : []
+    }))
+  }, [membershipBalances, schedule])
   // A restaurant sees "Reservations" and a school sees "Classes"; the generic
   // "appointment" made every pack read as the same untailored template. The
   // action notices need it too, so it is derived here rather than at render.
@@ -231,6 +249,22 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
     }
   }
 
+  function redeemPackage(bookingId: string) {
+    if (!schedule) return
+    try {
+      const available = availableSpaMembershipForBooking(commerce, schedule, bookingId)
+      const next = redeemSpaMembershipSession(schedule, commerce, bookingId, proof('Used after the completed treatment was checked by the responsible Spa operator.'))
+      if (next === schedule) {
+        setNotice('This appointment already used its package session.')
+        return
+      }
+      const remaining = Math.max(0, (available?.remaining ?? 1) - 1)
+      commit(next, `Package session used · ${remaining} left.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The package session could not be used.')
+    }
+  }
+
   function createService(event: FormEvent) {
     event.preventDefault()
     if (!schedule) return
@@ -277,6 +311,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
         <span><small>Services</small><strong>{projection.activeServices}</strong></span>
         <span><small>Staff / rooms</small><strong>{projection.activeResources}</strong></span>
       </div>
+      {schedule.industryPackId === 'spa' && membershipBalances.length ? <div className="service-schedule-summary" aria-label="Prepaid package summary">
+        <span><small>Package customers</small><strong>{new Set(membershipBalances.map((balance) => balance.customer)).size}</strong></span>
+        <span><small>Sessions left</small><strong>{membershipBalances.reduce((total, balance) => total + balance.remaining, 0)}</strong></span>
+        <span><small>Sessions used</small><strong>{membershipBalances.reduce((total, balance) => total + balance.redeemed, 0)}</strong></span>
+      </div> : null}
       <form className="service-booking-form" onSubmit={createBooking}>
         <div><span className="core-eyebrow">New {vocabulary.singular}</span><h3>{vocabulary.holdAction}</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>
@@ -293,10 +332,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
           const service = serviceById.get(booking.serviceId)
           const resource = resourceById.get(booking.resourceId)
           const saleSku = shopServiceSaleSku(schedule.industryPackId, booking.serviceId)
+          const membership = membershipByBookingId.get(booking.id)
           return <article key={booking.id}>
             <time dateTime={booking.startsAt}><strong>{new Date(booking.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong><small>{new Date(booking.startsAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></time>
             <div><strong>{booking.customerName}</strong><small>{service?.name} · {resource?.name} · {booking.contact}</small>{booking.note ? <em>{booking.note}</em> : null}</div>
-            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{booking.status === 'checked_in' && saleSku ? <Link className="core-button compact" state={{ shopCounterCustomer: booking.customerName, shopCounterSearch: saleSku }} to="/shop/?tab=counter">Charge at counter</Link> : null}{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
+            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{membership ? <button className="core-button compact" disabled={disabled} onClick={() => redeemPackage(booking.id)} type="button">Use package · {membership.remaining} left</button> : null}{booking.status === 'checked_in' && saleSku ? <Link className="core-button compact" state={{ shopCounterCustomer: booking.customerName, shopCounterSearch: saleSku }} to="/shop/?tab=counter">Charge at counter</Link> : null}{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
           </article>
         }) : <p className="form-notice">Hold the first {vocabulary.singular} above. Nothing is sent to the customer or an external calendar.</p>}
       </section>

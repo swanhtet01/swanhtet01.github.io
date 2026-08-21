@@ -70,7 +70,7 @@ export type ShopServiceBooking = {
 
 export type ShopServiceScheduleEvent = {
   revision: number
-  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled'
+  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'package_redeemed'
   subjectId: string
   actor: string
   reason: string
@@ -390,7 +390,9 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (state.events.length !== state.revision) throw new Error('Shop service schedule evidence is incomplete.')
   state.events.forEach((event, index) => {
     if (event.revision !== index + 1) throw new Error('Shop service schedule evidence revisions are not continuous.')
+    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'package_redeemed'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
     boundedText(event.subjectId, 'Evidence subject', 80)
+    if (event.type === 'package_redeemed' && !state.bookings.some((booking) => booking.id === event.subjectId && booking.status === 'completed')) throw new Error('Package redemption must reference a completed booking.')
     boundedText(event.actor, 'Evidence actor', 120)
     boundedText(event.reason, 'Evidence reason', 240)
     validIso(event.happenedAt, 'Evidence time')
