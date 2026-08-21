@@ -6056,6 +6056,54 @@ if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') ret
   || !shopCounterContract.includes("{bi('Clear')}")
   || !shopCounterContract.includes("{bi('Total')}")
   || !shopCounterContract.includes("{disabled ? bi('Sales paused') : bi('Review order')}")) fail('shop_counter_bilingual_wiring_missing')
+// The product tile's accessible NAME is assembled by REFERENCE -- aria-labelledby
+// for the identifying nodes, aria-describedby for the numeric ones -- because an
+// aria-label on a button replaces its whole subtree, which is how the tile came to
+// announce neither the price, nor the stock level, nor the quantity in the sale,
+// nor item.nameMy (the Burmese product name the OWNER typed in).
+//
+// This is a lockstep guard, and it is here because the failure is silent. Rename or
+// conditionally drop one referenced id and the name does not go missing -- it falls
+// back to content-derived naming, which measures as "Rice 5kgဆန်350012 in stock2":
+// no action verb and the price fused to the stock count. That is a plausible-looking
+// string, so nothing downstream would notice, and no other check in this belt reads
+// an accessible name.
+//
+// FLOOR before ceiling, per the initial-JS guard's rule: an id list that collapses to
+// empty must fail, not pass vacuously on a set with nothing left to check.
+const shopTileButton = shopCounterContract.slice(
+  shopCounterContract.indexOf('<button aria-describedby='),
+  shopCounterContract.indexOf('className="shop-product-tile"') + 60)
+const shopTileLabelledBy = shopCounterContract.match(/const labelledBy = \[([^\]]*)\]/)
+const shopTileDescribedBy = shopCounterContract.match(/const describedBy = \[([^\]]*)\]/)
+const shopTileReferenced = [shopTileLabelledBy?.[1] ?? '', shopTileDescribedBy?.[1] ?? '']
+  .flatMap((list) => [...list.matchAll(/\b([a-z][A-Za-z]*Id)\b/g)].map((m) => m[1]))
+const shopTileUnique = [...new Set(shopTileReferenced)]
+if (!shopTileLabelledBy || !shopTileDescribedBy
+  // Floor: the six ids the tile actually references. Fewer means an id list was
+  // emptied or the destructuring shape changed, and the checks below would then be
+  // asserting over nothing.
+  || shopTileUnique.length < 6
+  // Every referenced id must be BOTH declared and placed on a rendered node.
+  || shopTileUnique.some((id) => !shopCounterContract.includes(`const ${id} = \`shop-tile-`))
+  || shopTileUnique.some((id) => !shopCounterContract.includes(`id={${id}}`))
+  // The shared action phrase is a literal in the labelledby list, so it needs its own
+  // node, and it must go through bi() rather than being hardcoded English.
+  || !shopTileLabelledBy[1].includes("'shop-tile-action'")
+  // aria-hidden is load-bearing, not decoration: .sr-only clips visually only, so
+  // dropping it puts a stray "Add to this sale" line into catalog browsing -- audible
+  // even on an empty catalog with no tile to name. It does not weaken the name, since
+  // a directly-referenced node counts hidden or not (measured on all three shapes).
+  || !shopCounterContract.includes('<span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi(\'Add to this sale\')}</span>')
+  || !i18nActionsTable.includes("'Add to this sale':")
+  // The regression this whole block exists to prevent: putting an aria-label back on
+  // the tile silently re-overrides the subtree and every reference above goes dead.
+  || shopTileButton.includes('aria-label=')
+  || !shopTileButton.includes('aria-labelledby={labelledBy}')
+  || !shopTileButton.includes('aria-describedby={describedBy}')
+  // The quantity badge keeps its own aria-label: it is what aria-describedby resolves
+  // to for the "N in sale" half of the description.
+  || !shopCounterContract.includes('aria-label={`${quantity} in sale`}')) fail('shop_tile_accessible_name_not_referenced')
 // Roadmap S3 PR1 — customer loyalty points, accrual only (shop-loyalty.ts).
 // Pins the boundaries that make a points ledger safe in this codebase:
 //   - balances stay a pure projection over the DEVICE-LOCAL key (the managed

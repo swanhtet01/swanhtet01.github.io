@@ -138,6 +138,16 @@ const ACTION_TRANSLATIONS: Record<string, ActionTranslation> = {
   'Your sale is empty': { my: 'အရောင်းစာရင်း ဗလာဖြစ်နေသည်', status: 'pending_native_review' },
   'Tap any product to begin.': { my: 'စတင်ရန် ပစ္စည်းတစ်ခုကို နှိပ်ပါ။', status: 'pending_native_review' }, // စတင် from the confirmed Start
   'Out of stock': { my: 'ကုန်ပစ္စည်း ပြတ်နေသည်', status: 'pending_native_review' },
+  // The product tile's accessible NAME. Reached via aria-labelledby rather than
+  // aria-label so the tile's own subtree (price, stock, quantity, and the owner-typed
+  // item.nameMy) survives instead of being overridden -- see the tile in CoreApp.tsx.
+  // Reviewer question this one carries and the other counter entries do not: the
+  // composed name is ONE flat string in source order, so English (verb-first) and
+  // Burmese (verb-final) cannot both put the verb where their grammar wants it
+  // relative to the product name that follows. The draft below keeps the verb phrase
+  // whole in both halves; a reviewer may instead want the Burmese half to read as a
+  // bare noun-phrase target. Do not confirm this entry without settling that.
+  'Add to this sale': { my: 'ဤအရောင်းထဲ ထည့်မည်', status: 'pending_native_review' }, // ထည့်မည် is the confirmed Add; အရောင်း sourced: shop-service-scheduling.ts အရောင်းဆိုင်
   'No matching item. Search by name or SKU.': { my: 'ကိုက်ညီသော ပစ္စည်းမရှိပါ။ အမည် သို့မဟုတ် SKU ဖြင့် ရှာပါ။', status: 'pending_native_review' }, // SKU stays Latin: it is what is printed on the shelf label
   'Customer': { my: 'ဖောက်သည်', status: 'pending_native_review' }, // sourced: ဖောက်သည် (shop-ledger-accounts.ts accounts_receivable)
   'Payment': { my: 'ငွေပေးချေမှု', status: 'pending_native_review' },

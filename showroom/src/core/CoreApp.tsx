@@ -1281,14 +1281,53 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
           <div><span className="core-eyebrow">{counterContextLabel}</span><h2>{bi('Tap an item to add it')}</h2>{industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
+        {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
+            button replaces its whole subtree in the accessibility tree, so the
+            previous `aria-label={`Add ${item.name} to this sale`}` announced the
+            action and the English name and then nothing else: not the price, not
+            the stock level, not the quantity already in the sale, and never
+            item.nameMy -- the Burmese product name the owner typed in themselves.
+            The quantity badge's own aria-label sat inside that override and was
+            announced nowhere.
+
+            Naming the tile from its CONTENTS instead is not the fix and was
+            measured to be worse: it yields "Rice 5kgဆန်350012 in stock2", losing
+            the action verb and fusing the price to the stock count. aria-labelledby
+            picks the identifying nodes for the name and aria-describedby the
+            numeric ones for the description, so a screen reader reads
+            "Add to this sale · <my> Rice 5kg ဆန်" then "3500 12 in stock 2 in sale".
+            Nothing here is visual: every id is on a node that already rendered, so
+            this changes no layout and no CSS.
+
+            The shared action node is aria-hidden. .sr-only only clips it VISUALLY,
+            so without that a screen-reader user browsing the catalog hears "Add to
+            this sale" once as a stray line of its own -- and hears it even when the
+            search matches nothing and there is no tile to add anything to. Being
+            aria-hidden does not stop it naming the buttons: a node referenced
+            directly by aria-labelledby is included in the name computation whether
+            or not it is hidden. Measured, not assumed -- plain, aria-hidden, and
+            hidden all compute the identical name and description, and only the plain
+            one leaves a traversable StaticText behind. */}
+        <span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
         {visibleItems.length ? <div className="shop-item-grid">
-          {visibleItems.map((item) => {
+          {visibleItems.map((item, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
             const artKind = Math.max(0, items.indexOf(item)) % 5
-            return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
+            // Ids are keyed by render position, not by SKU: aria-labelledby takes a
+            // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
+            // space in it would silently split into two broken references.
+            const nameId = `shop-tile-name-${tileIndex}`
+            const myId = `shop-tile-my-${tileIndex}`
+            const variantId = `shop-tile-variant-${tileIndex}`
+            const priceId = `shop-tile-price-${tileIndex}`
+            const stockId = `shop-tile-stock-${tileIndex}`
+            const quantityId = `shop-tile-quantity-${tileIndex}`
+            const labelledBy = ['shop-tile-action', nameId, item.nameMy ? myId : '', item.variant ? variantId : ''].filter(Boolean).join(' ')
+            const describedBy = [priceId, stockId, quantity ? quantityId : ''].filter(Boolean).join(' ')
+            return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
-              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
+              <span className="shop-product-copy"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}<b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
+              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
           })}
         </div> : <Empty>{items.length
