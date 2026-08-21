@@ -474,6 +474,18 @@ batch — this is the part that needs FURTHER BATCHES, not further review:
   A Burmese-first cashier after full sign-off of this batch still meets English
   across roughly half the counter's words. That is progress, not resolution.
 
+  MECHANISM DECIDED 2026-08-21, not yet built: `hq/strategy/G1-STRING-MECHANISM-DECISION.md`
+  (attributes = 14 sites, not a class; 10 reachable with no new mechanism, and
+  the WIRING for them is ungated. Only 1 of the 4 remaining sites is actually an
+  accessible name. Parameterised = template-pair entries. Both mechanisms ship
+  ahead of sign-off. Two things gate the first CONFIRMED flip rather than the
+  build: the numeral-script question, and — because every mechanism computes the
+  same flat accessible name — whether a screen reader should read a name in two
+  languages. That second one is OVERDUE, not upcoming: 7 already-confirmed
+  strings render inside controls on merged main, 4 on the cashier path, so their
+  accessible names are mixed-language today. Wants a real-device AT check;
+  remediation if negative is a one-line status flip back to pending.)
+
 ALSO NOT CLOSED:
   - Every string is drafted, none is reviewed. Until a native speaker signs them
     off the till reads English, which is the whole point of the gate.
