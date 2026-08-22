@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import test from 'node:test'
 
@@ -323,7 +323,7 @@ test('Git tree reads trust only this checkout and still fail closed', () => {
   })
   assert.equal(output, 'verified')
   assert.equal(observedArgs[0], '-c')
-  assert.match(observedArgs[1], /^safe\.directory=.*supermega-release-candidate-20260820$/)
+  assert.equal(observedArgs[1], `safe.directory=${resolve(import.meta.dirname, '..')}`)
   assert.deepEqual(observedArgs.slice(2), ['show', 'HEAD:package.json'])
   assert.throws(
     () => runGitRead(['show', 'HEAD:package.json'], {
