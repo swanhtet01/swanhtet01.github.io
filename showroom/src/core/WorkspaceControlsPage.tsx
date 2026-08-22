@@ -10,7 +10,11 @@ import {
   collectLocalWorkspaceBackup,
   describeLocalWorkspaceBackupRefusal,
   listLocalWorkspaceStorageKeys,
+  localWorkspaceBackupHeadroomDetail,
+  localWorkspaceBackupHeadroomLabel,
+  localWorkspaceBackupHeadroomMessage,
   localWorkspaceBackupRefusalMessage,
+  measureLocalWorkspaceBackupHeadroom,
   restoreLocalWorkspaceBackup,
   restoreLocalWorkspaceBackupFromEvidence,
   type LocalWorkspaceBackup,
@@ -561,6 +565,13 @@ export function WorkspaceControlsPage() {
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNotice, setArchiveNotice] = useState('')
   const backupRefusal = useMemo(() => (currentBackup ? null : collectBackupRefusal()), [currentBackup])
+  // This measures the exact backup offered by the button, not a second storage snapshot.
+  // A device that has crossed the limit has no backup object, so warning and refusal are
+  // mutually exclusive by construction.
+  const backupHeadroom = useMemo(
+    () => (currentBackup ? measureLocalWorkspaceBackupHeadroom(currentBackup) : null),
+    [currentBackup],
+  )
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
@@ -786,6 +797,21 @@ export function WorkspaceControlsPage() {
               dead control, and is told neither why nor what to do instead. role="alert"
               because she did not open this page idly -- something told her to. */}
           {backupRefusal ? <p className="form-notice" role="alert">{localWorkspaceBackupRefusalMessage(backupRefusal)}</p> : null}
+          {backupHeadroom && backupHeadroom.level !== 'clear'
+            ? <div
+              className="production-mode-banner storage-durability-banner"
+              data-headroom={backupHeadroom.level}
+              role={backupHeadroom.level === 'urgent' ? 'alert' : undefined}
+            >
+              <span className={`status-pill ${backupHeadroom.level === 'urgent' ? 'danger' : 'pending'}`}>
+                {localWorkspaceBackupHeadroomLabel(backupHeadroom)}
+              </span>
+              <p>
+                {localWorkspaceBackupHeadroomMessage(backupHeadroom)}
+                <small className="storage-headroom-detail">{localWorkspaceBackupHeadroomDetail(backupHeadroom)}</small>
+              </p>
+            </div>
+            : null}
         </section>
 
         {/* The sales archive sits BESIDE the workspace backup, not instead of it, and the copy
