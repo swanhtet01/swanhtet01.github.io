@@ -8,6 +8,7 @@ import test from 'node:test'
 
 import { buildClientPortalLaunchProof } from './assemble_client_portal_launch_proof.mjs'
 import { buildReleaseHandoff, validateWorkflowAuthority } from './prepare_release_handoff.mjs'
+import { portalEvidenceBindingDigest } from './verify_hosted_product_acceptance.mjs'
 
 const commit = 'a'.repeat(40)
 const workspaceId = 'workspace-owner'
@@ -122,10 +123,12 @@ function portalSmoke() {
   }
 }
 
-function productAcceptance() {
+function productAcceptance({ portal = portalSmoke(), portalArtifactDigest = `sha256:${'6'.repeat(64)}` } = {}) {
   return {
-    contract: 'supermega.hosted_product_acceptance_smoke.v1', status: 'passed', capturedAt: '2026-08-22T03:00:00.000Z',
+    contract: 'supermega.hosted_product_acceptance_smoke.v2', status: 'passed', capturedAt: '2026-08-22T03:00:00.000Z',
     target: { exactReleaseCommit: commit, workspaceDigest: sha256(workspaceId), ownerDigest: sha256(ownerId), ownerApprovalDigest: sha256('approval-id'), expectedProducts: ['commerce', 'website'] },
+    prerequisitePortalArtifactDigest: portalArtifactDigest,
+    prerequisitePortalBindingDigest: portalEvidenceBindingDigest(portal),
     products: ['commerce', 'website'].map((product) => ({ product, ownerReadbackPassed: true, crossTenantDenied: true, replayPassed: true, stateDigest: `sha256:${'3'.repeat(64)}` })),
     summary: { productCount: 2, newlyWritten: 2, idempotentExisting: 0, ownerReadbacksPassed: 2, crossTenantDenialsPassed: 2, replaysPassed: 2 },
     boundaries: { productStateMutationsPerformed: false, deploymentPerformed: false, billingActivated: false, customerMessagesSent: false, scheduledAutomationEnabled: false, credentialsPersisted: false, clientIdentifiersPersisted: false, secretValuesExposed: false },
@@ -187,6 +190,14 @@ test('rejects tampered activation evidence and incomplete acceptance proof', () 
   const incomplete = productAcceptance()
   incomplete.products[0].crossTenantDenied = false
   assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: incomplete })), /launch_acceptance_product_invalid/)
+
+  const substitutedPortal = portalSmoke()
+  substitutedPortal.release.service = 'substituted-service'
+  assert.throws(() => buildClientPortalLaunchProof(input({ portalSmoke: substitutedPortal })), /launch_acceptance_portal_binding_mismatch/)
+
+  const detachedAcceptance = productAcceptance()
+  detachedAcceptance.prerequisitePortalArtifactDigest = `sha256:${'8'.repeat(64)}`
+  assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: detachedAcceptance })), /launch_acceptance_portal_artifact_mismatch/)
 })
 
 test('CLI writes one exclusive metadata-only launch proof', async () => {
@@ -198,11 +209,14 @@ test('CLI writes one exclusive metadata-only launch proof', async () => {
     acceptance: join(directory, 'acceptance.json'),
     output: join(directory, 'launch-proof.json'),
   }
+  const portal = portalSmoke()
+  const portalRaw = JSON.stringify(portal)
+  const acceptance = productAcceptance({ portal, portalArtifactDigest: sha256(portalRaw) })
   await Promise.all([
     writeFile(files.release, JSON.stringify(releaseHandoff())),
     writeFile(files.activation, JSON.stringify(activationRequery())),
-    writeFile(files.portal, JSON.stringify(portalSmoke())),
-    writeFile(files.acceptance, JSON.stringify(productAcceptance())),
+    writeFile(files.portal, portalRaw),
+    writeFile(files.acceptance, JSON.stringify(acceptance)),
   ])
   const args = [
     resolve('tools/assemble_client_portal_launch_proof.mjs'),

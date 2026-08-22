@@ -6,12 +6,13 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { validateReleaseHandoffPacket } from './prepare_release_handoff.mjs'
+import { portalEvidenceBindingDigest } from './verify_hosted_product_acceptance.mjs'
 
 export const CLIENT_PORTAL_LAUNCH_PROOF_CONTRACT = 'supermega.client_portal_launch_proof.v1'
 
 const ACTIVATION_CONTRACT = 'supermega.managed_workspace_activation_requery_evidence.v2'
 const PORTAL_CONTRACT = 'supermega.hosted_client_portal_smoke.v1'
-const ACCEPTANCE_CONTRACT = 'supermega.hosted_product_acceptance_smoke.v1'
+const ACCEPTANCE_CONTRACT = 'supermega.hosted_product_acceptance_smoke.v2'
 const PRODUCT_ORDER = ['commerce', 'production', 'website', 'ecommerce']
 const PRODUCT_ALIASES = new Map([['shop', 'commerce'], ['plant', 'production']])
 const PRODUCT_ROUTES = new Map([
@@ -151,7 +152,9 @@ function validateAcceptance(value) {
     && isRecord(value.target)
     && Array.isArray(value.products)
     && isRecord(value.summary)
-    && isRecord(value.boundaries), 'launch_acceptance_invalid')
+    && isRecord(value.boundaries)
+    && exactDigest(value.prerequisitePortalArtifactDigest, 'launch_acceptance_portal_artifact_digest_invalid')
+    && exactDigest(value.prerequisitePortalBindingDigest, 'launch_acceptance_portal_binding_digest_invalid'), 'launch_acceptance_invalid')
   const products = canonicalProducts(value.target.expectedProducts, 'launch_acceptance_products_invalid')
   assert(value.products.length === products.length
     && value.summary.productCount === products.length
@@ -208,6 +211,10 @@ export function buildClientPortalLaunchProof({ releaseHandoff, activationRequery
   assert(baseUrl.protocol === 'https:' && baseUrl.origin === 'https://app.supermega.dev', 'launch_portal_origin_invalid')
   const artifacts = ['releaseHandoff', 'activationRequery', 'portalSmoke', 'productAcceptance']
   assert(artifacts.every((key) => /^sha256:[0-9a-f]{64}$/.test(String(artifactDigests[key] || ''))), 'launch_artifact_digests_invalid')
+  assert(acceptance.value.prerequisitePortalArtifactDigest === artifactDigests.portalSmoke,
+    'launch_acceptance_portal_artifact_mismatch')
+  assert(acceptance.value.prerequisitePortalBindingDigest === portalEvidenceBindingDigest(portal.value),
+    'launch_acceptance_portal_binding_mismatch')
 
   return {
     contract: CLIENT_PORTAL_LAUNCH_PROOF_CONTRACT,
@@ -229,6 +236,7 @@ export function buildClientPortalLaunchProof({ releaseHandoff, activationRequery
       sharedAuthenticatedWorkspace: true,
       productEntitlementsEnforced: true,
       writeReadbackVerifiedPerProduct: true,
+      acceptanceBoundToPortalArtifact: true,
     },
     customSolutions: {
       lifecycle: 'available_post_launch',

@@ -327,6 +327,12 @@ orders, inventory, jobs, leads, pages, payments, messages, or customer records.
 Retries reuse the same deterministic probe IDs and create no duplicate events.
 The output remains create-only and stores digests instead of client identifiers
 or credentials. Deployment, billing, messaging, and automation remain false.
+Keep `SUPERMEGA_HOSTED_PORTAL_EVIDENCE_FILE` pointed at the create-only portal
+smoke artifact while running acceptance. Acceptance reads that artifact,
+repeats the hosted portal checks, and records both its exact file digest and a
+timestamp-independent full-evidence binding. It fails before an acceptance
+event if the release, HTTP response evidence, tenant denial, entitlements,
+capabilities, or runtime posture changed.
 
 Finally, bind the reviewed release handoff, database requery, portal smoke, and
 per-product acceptance into one create-only launch proof:
@@ -343,6 +349,9 @@ npm run client:portal:launch-proof -- `
 The launch proof fails closed unless every artifact names the same immutable
 release, hashed workspace, hashed owner, hashed owner approval, and canonically
 ordered product set.
+It also requires the acceptance artifact to name the exact portal-smoke file
+digest and the same full portal-evidence binding, preventing a stale or
+substituted smoke result from being paired with a newer acceptance run.
 It also requires database activation before portal isolation, and portal
 isolation before product write/read-back acceptance. The resulting artifact
 contains the exact entitled product links under `app.supermega.dev`, but no raw

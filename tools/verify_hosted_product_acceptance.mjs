@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { verifyHostedClientPortal } from './verify_hosted_client_portal.mjs'
 
-const CONTRACT = 'supermega.hosted_product_acceptance_smoke.v1'
+const CONTRACT = 'supermega.hosted_product_acceptance_smoke.v2'
 const CONFIRMATION = 'RECORD HOSTED PRODUCT ACCEPTANCE'
 const PRODUCTS = ['commerce', 'production', 'website', 'ecommerce']
 const ALIASES = new Map([['shop', 'commerce'], ['plant', 'production']])
@@ -32,6 +32,21 @@ function isRecord(value) {
 
 function sha256(value) {
   return `sha256:${createHash('sha256').update(String(value), 'utf8').digest('hex')}`
+}
+
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
+  if (isRecord(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`
+  return JSON.stringify(value)
+}
+
+export function portalEvidenceBindingDigest(value) {
+  assert(isRecord(value)
+    && value.contract === 'supermega.hosted_client_portal_smoke.v1'
+    && value.status === 'passed'
+    && typeof value.capturedAt === 'string', 'prerequisite_portal_evidence_invalid')
+  const { capturedAt: _capturedAt, ...stableEvidence } = value
+  return sha256(canonical(stableEvidence))
 }
 
 function products(value) {
@@ -153,6 +168,8 @@ export async function verifyHostedProductAcceptance({
   ownerApprovalId,
   ownerToken,
   deniedToken,
+  prerequisitePortalEvidence,
+  prerequisitePortalArtifactDigest,
   confirmation,
   productionHandoff = false,
   fetchImpl = fetch,
@@ -183,6 +200,15 @@ export async function verifyHostedProductAcceptance({
     allowHttp,
     capturedAt,
   })
+  const prerequisiteCapturedAt = Date.parse(prerequisitePortalEvidence?.capturedAt)
+  const acceptanceCapturedAt = Date.parse(capturedAt)
+  assert(Number.isFinite(prerequisiteCapturedAt)
+    && Number.isFinite(acceptanceCapturedAt)
+    && prerequisiteCapturedAt <= acceptanceCapturedAt, 'prerequisite_portal_time_invalid')
+  const prerequisiteBindingDigest = portalEvidenceBindingDigest(prerequisitePortalEvidence)
+  assert(prerequisiteBindingDigest === portalEvidenceBindingDigest(portal), 'prerequisite_portal_changed')
+  const portalArtifactDigest = String(prerequisitePortalArtifactDigest || '').toLowerCase()
+  assert(/^sha256:[0-9a-f]{64}$/.test(portalArtifactDigest), 'prerequisite_portal_artifact_digest_invalid')
 
   const acceptedProducts = []
   let newlyWritten = 0
@@ -270,7 +296,8 @@ export async function verifyHostedProductAcceptance({
       ownerApprovalDigest: sha256(approvalId),
       expectedProducts: expectedProductList,
     },
-    prerequisitePortalEvidenceDigest: sha256(JSON.stringify(portal)),
+    prerequisitePortalArtifactDigest: portalArtifactDigest,
+    prerequisitePortalBindingDigest: prerequisiteBindingDigest,
     products: acceptedProducts,
     summary: {
       productCount: acceptedProducts.length,
@@ -311,6 +338,18 @@ async function requiredFile(value, code) {
   return (await readFile(resolve(path), 'utf8')).trim()
 }
 
+async function requiredJsonArtifact(value, code) {
+  const path = String(value || '').trim()
+  assert(path, code)
+  const raw = await readFile(resolve(path), 'utf8')
+  assert(raw.length > 0 && raw.length <= 1024 * 1024, `${code}_size`)
+  try {
+    return { value: JSON.parse(raw), digest: sha256(raw) }
+  } catch {
+    fail(`${code}_json_invalid`)
+  }
+}
+
 function mockFetch() {
   const commit = 'a'.repeat(40)
   const events = new Map()
@@ -346,14 +385,32 @@ function mockFetch() {
 }
 
 async function selfTest() {
-  const input = {
+  const fetchImpl = mockFetch()
+  const portalInput = {
     appBaseUrl: 'http://127.0.0.1:4173', allowHttp: true, expectedCommit: 'a'.repeat(40),
     expectedProducts: 'shop,website', expectedWorkspaceId: 'workspace-owner', expectedOwnerId: 'owner-actor',
-    ownerApprovalId: '11111111-1111-4111-8111-111111111111', ownerToken: 'owner-token-1234567890',
-    deniedToken: 'denied-token-123456789', confirmation: CONFIRMATION, productionHandoff: true,
+    ownerToken: 'owner-token-1234567890', deniedToken: 'denied-token-123456789',
     capturedAt: '2026-08-22T00:00:00.000Z',
   }
-  const evidence = await verifyHostedProductAcceptance({ ...input, fetchImpl: mockFetch() })
+  const prerequisitePortalEvidence = await verifyHostedClientPortal({
+    baseUrl: portalInput.appBaseUrl,
+    expectedCommit: portalInput.expectedCommit,
+    expectedProducts: portalInput.expectedProducts,
+    expectedWorkspaceId: portalInput.expectedWorkspaceId,
+    expectedOwnerId: portalInput.expectedOwnerId,
+    ownerToken: portalInput.ownerToken,
+    deniedToken: portalInput.deniedToken,
+    fetchImpl,
+    allowHttp: true,
+    capturedAt: portalInput.capturedAt,
+  })
+  const input = {
+    ...portalInput,
+    ownerApprovalId: '11111111-1111-4111-8111-111111111111', confirmation: CONFIRMATION,
+    productionHandoff: true, prerequisitePortalEvidence,
+    prerequisitePortalArtifactDigest: sha256(JSON.stringify(prerequisitePortalEvidence)),
+  }
+  const evidence = await verifyHostedProductAcceptance({ ...input, fetchImpl })
   assert(evidence.status === 'passed' && evidence.summary.productCount === 2 && evidence.summary.newlyWritten === 2, 'self_test_positive_failed')
   assert(evidence.products.every((entry) => entry.ownerReadbackPassed && entry.crossTenantDenied && entry.replayPassed), 'self_test_product_proof_failed')
   const rendered = JSON.stringify(evidence)
@@ -369,19 +426,29 @@ async function selfTest() {
     confirmationDenied = String(error?.message || '').startsWith('production_handoff_confirmation_required:')
   }
   assert(confirmationDenied, 'self_test_missing_confirmation_accepted')
-  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 9 }, null, 2))
+  let changedPortalDenied = false
+  try {
+    const changedPortal = structuredClone(prerequisitePortalEvidence)
+    changedPortal.runtime.writesEnabled = false
+    await verifyHostedProductAcceptance({ ...input, prerequisitePortalEvidence: changedPortal, fetchImpl: mockFetch() })
+  } catch (error) {
+    changedPortalDenied = String(error?.message || '').startsWith('prerequisite_portal_changed:')
+  }
+  assert(changedPortalDenied, 'self_test_changed_prerequisite_portal_accepted')
+  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 10 }, null, 2))
 }
 
 async function main() {
   if (process.argv.includes('--self-test')) return selfTest()
   const productionHandoff = process.argv.includes('--production-handoff')
   const expectedCommit = process.argv.includes('--current-head') ? currentHead() : String(process.env.EXPECTED_RELEASE_COMMIT || '').trim()
-  const [workspaceId, ownerId, approvalId, ownerAccessToken, deniedAccessToken] = await Promise.all([
+  const [workspaceId, ownerId, approvalId, ownerAccessToken, deniedAccessToken, prerequisitePortal] = await Promise.all([
     requiredFile(process.env.SUPERMEGA_EXPECTED_WORKSPACE_ID_FILE, 'expected_workspace_id_file_required'),
     requiredFile(process.env.SUPERMEGA_EXPECTED_OWNER_ID_FILE, 'expected_owner_id_file_required'),
     requiredFile(process.env.SUPERMEGA_OWNER_APPROVAL_ID_FILE, 'owner_approval_id_file_required'),
     requiredFile(process.env.SUPERMEGA_OWNER_ACCESS_TOKEN_FILE, 'owner_access_token_file_required'),
     requiredFile(process.env.SUPERMEGA_DENIED_ACCESS_TOKEN_FILE, 'denied_access_token_file_required'),
+    requiredJsonArtifact(process.env.SUPERMEGA_HOSTED_PORTAL_EVIDENCE_FILE, 'hosted_portal_evidence_file_required'),
   ])
   const evidence = await verifyHostedProductAcceptance({
     appBaseUrl: process.env.SUPERMEGA_HOSTED_PORTAL_BASE_URL || 'https://app.supermega.dev',
@@ -392,6 +459,8 @@ async function main() {
     ownerApprovalId: approvalId,
     ownerToken: ownerAccessToken,
     deniedToken: deniedAccessToken,
+    prerequisitePortalEvidence: prerequisitePortal.value,
+    prerequisitePortalArtifactDigest: prerequisitePortal.digest,
     confirmation: process.env.SUPERMEGA_HOSTED_ACCEPTANCE_CONFIRMATION,
     productionHandoff,
   })
