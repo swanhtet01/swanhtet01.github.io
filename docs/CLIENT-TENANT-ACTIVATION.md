@@ -408,5 +408,8 @@ node tools/manage_client_extension.mjs verify-plan `
   --plan C:\reviewed\extension-activation-plan.json
 ```
 
-Every output is create-only. Reusing an existing output path fails instead of
-silently replacing reviewed evidence.
+Every artifact output is create-only. Reusing an existing output path fails
+instead of silently replacing reviewed evidence. Successful CLI receipts
+expose only a SHA-256 workspace digest, never the raw workspace UUID or client
+records; the reviewed artifacts retain the tenant binding needed by later
+verification.

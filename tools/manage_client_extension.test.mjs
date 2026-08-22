@@ -18,6 +18,13 @@ function output(result) {
   return JSON.parse((result.stdout || result.stderr).trim())
 }
 
+function assertMetadataOnlyReceipt(receipt, workspaceId) {
+  assert.equal(receipt.workspaceId, undefined)
+  assert.equal(receipt.workspaceDigest, `sha256:${createHash('sha256').update(workspaceId).digest('hex')}`)
+  assert.equal(receipt.clientIdentifiersExposed, false)
+  assert.doesNotMatch(JSON.stringify(receipt), new RegExp(workspaceId))
+}
+
 function canonicalJson(value) {
   if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
@@ -121,11 +128,12 @@ test('internal extension tool creates and verifies a tenant-bound no-write exten
   const bound = run(tool, 'bind-portal', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--output', bindingPath)
   assert.equal(bound.status, 0, bound.stderr)
   assert.equal(output(bound).status, 'approved-not-applied')
-  assert.equal(output(bound).workspaceId, portalPayload.tenant.workspaceId)
+  assertMetadataOnlyReceipt(output(bound), portalPayload.tenant.workspaceId)
   assert.equal(output(bound).externalWritesPerformed, false)
   const verifiedBinding = run(tool, 'verify-portal-binding', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath)
   assert.equal(verifiedBinding.status, 0, verifiedBinding.stderr)
   assert.equal(output(verifiedBinding).status, 'approved-not-applied')
+  assertMetadataOnlyReceipt(output(verifiedBinding), portalPayload.tenant.workspaceId)
 
   const authorizationEvidencePath = resolve(directory, 'runtime-authorization-evidence.json')
   await writeFile(authorizationEvidencePath, `${JSON.stringify({
@@ -141,12 +149,13 @@ test('internal extension tool creates and verifies a tenant-bound no-write exten
   const authorized = run(tool, 'authorize-activation', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization-evidence', authorizationEvidencePath, '--output', authorizationPath)
   assert.equal(authorized.status, 0, authorized.stderr)
   assert.equal(output(authorized).status, 'authorized-not-applied')
-  assert.equal(output(authorized).workspaceId, portalPayload.tenant.workspaceId)
+  assertMetadataOnlyReceipt(output(authorized), portalPayload.tenant.workspaceId)
   assert.equal(output(authorized).externalWritesPerformed, false)
   const verifiedAuthorization = run(tool, 'verify-activation-authorization', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--at', '2026-08-21T03:30:00.000Z')
   assert.equal(verifiedAuthorization.status, 0, verifiedAuthorization.stderr)
   assert.equal(output(verifiedAuthorization).status, 'authorized-not-applied')
   assert.equal(output(verifiedAuthorization).executable, true)
+  assertMetadataOnlyReceipt(output(verifiedAuthorization), portalPayload.tenant.workspaceId)
   const expiredAuthorization = run(tool, 'verify-activation-authorization', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--at', '2026-08-21T04:00:00.001Z')
   assert.notEqual(expiredAuthorization.status, 0)
 
@@ -173,9 +182,11 @@ test('internal extension tool creates and verifies a tenant-bound no-write exten
   assert.equal(output(recorded).status, 'active')
   assert.equal(output(recorded).tenantConfigRevision, 1)
   assert.equal(output(recorded).externalWritesPerformed, false)
+  assertMetadataOnlyReceipt(output(recorded), portalPayload.tenant.workspaceId)
   const verifiedReceipt = run(tool, 'verify-activation-receipt', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--receipt', receiptPath)
   assert.equal(verifiedReceipt.status, 0, verifiedReceipt.stderr)
   assert.equal(output(verifiedReceipt).status, 'active')
+  assertMetadataOnlyReceipt(output(verifiedReceipt), portalPayload.tenant.workspaceId)
   const tamperedReceipt = JSON.parse(await readFile(receiptPath, 'utf8'))
   tamperedReceipt.execution.tenantConfigRevision = 2
   await writeFile(receiptPath, `${JSON.stringify(tamperedReceipt, null, 2)}\n`)

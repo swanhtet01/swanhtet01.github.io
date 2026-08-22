@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
@@ -6,6 +7,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const maxBytes = 1024 * 1024
+
+function metadataOnlyReceipt(value) {
+  const { workspaceId, ...receipt } = value
+  return {
+    ...receipt,
+    ...(workspaceId ? { workspaceDigest: `sha256:${createHash('sha256').update(String(workspaceId), 'utf8').digest('hex')}` } : {}),
+    clientIdentifiersExposed: false,
+  }
+}
 
 function argumentsFrom(argv) {
   const [command, ...rest] = argv
@@ -248,13 +258,14 @@ async function main(argv) {
 }
 
 try {
-  console.log(JSON.stringify(await main(process.argv.slice(2))))
+  console.log(JSON.stringify(metadataOnlyReceipt(await main(process.argv.slice(2)))))
 } catch (error) {
   console.error(JSON.stringify({
     ok: false,
     contract: 'supermega.client_extension_tool.v1',
     error: String(error instanceof Error ? error.message : error).slice(0, 240),
     externalWritesPerformed: false,
+    clientIdentifiersExposed: false,
   }))
   process.exitCode = 1
 }
