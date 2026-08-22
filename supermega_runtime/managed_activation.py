@@ -26,7 +26,7 @@ SOURCE_REQUEST_CONTRACT = "supermega.managed_trial_request.v1"
 ACTIVATION_PLAN_CONTRACT = "supermega.managed_workspace_activation_plan.v1"
 MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT = "supermega.managed_workspace_activation_plan.v2"
 ACTIVATION_RECEIPT_CONTRACT = "supermega.managed_workspace_activation_receipt.v2"
-ACTIVATION_REQUERY_EVIDENCE_CONTRACT = "supermega.managed_workspace_activation_requery_evidence.v1"
+ACTIVATION_REQUERY_EVIDENCE_CONTRACT = "supermega.managed_workspace_activation_requery_evidence.v2"
 SUSPENSION_RECEIPT_CONTRACT = "supermega.managed_workspace_suspension_receipt.v2"
 ACTIVATION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_activation_event.v1"
 SUSPENSION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_suspension_event.v1"
@@ -1023,7 +1023,7 @@ def build_activation_requery_evidence(
     observed = observed_at or datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "contract": ACTIVATION_REQUERY_EVIDENCE_CONTRACT,
-        "version": 1,
+        "version": 2,
         "status": "database_activation_verified",
         "observedAt": _timestamp_text(observed),
         "activation": {
@@ -1033,6 +1033,8 @@ def build_activation_requery_evidence(
             "activatedAt": receipt["activatedAt"],
             "workspaceId": plan["workspaceId"],
             "ownerActorId": plan["ownerActorId"],
+            "ownerApprovalDigest": f"sha256:{sha256(str(plan['approval']['approvalId']).encode('utf-8')).hexdigest()}",
+            "products": list(plan["products"] if "products" in plan else [plan["product"]]),
         },
         "target": {
             "projectRef": plan["target"]["projectRef"],

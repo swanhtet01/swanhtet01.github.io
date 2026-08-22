@@ -696,6 +696,13 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         self.assertIn("production.write", capabilities)
         event = next(iter(self.database.events.values()))
         self.assertEqual(event["payload_json"]["products"], ["shop", "plant"])
+        evidence = build_activation_requery_evidence(
+            self.plan,
+            activated,
+            self.provisioner.inspect(self.plan),
+            observed_at=NOW,
+        )
+        self.assertEqual(evidence["activation"]["products"], ["shop", "plant"])
 
     def test_activation_receipt_requires_a_matching_read_only_database_requery(self) -> None:
         self.authorize()
@@ -711,6 +718,11 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         self.assertEqual(evidence["contract"], ACTIVATION_REQUERY_EVIDENCE_CONTRACT)
         self.assertEqual(evidence["status"], "database_activation_verified")
         self.assertEqual(evidence["activation"]["receiptDigest"], receipt["projectionDigest"])
+        self.assertEqual(evidence["activation"]["products"], ["shop"])
+        self.assertEqual(
+            evidence["activation"]["ownerApprovalDigest"],
+            f"sha256:{sha256(APPROVAL_ID.encode('utf-8')).hexdigest()}",
+        )
         self.assertEqual(evidence["proofs"]["databaseMutationStatementsExecuted"], 0)
         self.assertTrue(evidence["controls"]["hostedDatabaseReadPerformed"])
         self.assertTrue(evidence["controls"]["databaseReadOnly"])

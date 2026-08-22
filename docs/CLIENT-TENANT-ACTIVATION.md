@@ -265,6 +265,33 @@ Retries reuse the same deterministic probe IDs and create no duplicate events.
 The output remains create-only and stores digests instead of client identifiers
 or credentials. Deployment, billing, messaging, and automation remain false.
 
+Finally, bind the reviewed release handoff, database requery, portal smoke, and
+per-product acceptance into one create-only launch proof:
+
+```powershell
+npm run client:portal:launch-proof -- `
+  --release-handoff C:\reviewed\release-handoff.json `
+  --activation-requery C:\reviewed\beauty-spa-activation-requery.json `
+  --portal-smoke C:\reviewed\beauty-spa-hosted-portal-smoke.json `
+  --product-acceptance C:\reviewed\beauty-spa-product-acceptance.json `
+  --output C:\reviewed\beauty-spa-client-portal-launch-proof.json
+```
+
+The launch proof fails closed unless every artifact names the same immutable
+release, hashed workspace, hashed owner, hashed owner approval, and canonically
+ordered product set.
+It also requires database activation before portal isolation, and portal
+isolation before product write/read-back acceptance. The resulting artifact
+contains the exact entitled product links under `app.supermega.dev`, but no raw
+workspace ID, owner ID, access token, approval ID, or client row. Its status
+`ready_for_named_use` proves tenant access, isolation, and bounded data-path
+acceptance; it does not claim that a client's real operating workflow, business
+outcome, billing, messages, integrations, or custom extension has been accepted.
+
+Activation requery evidence v2 includes the exact reviewed product set so a
+later proof cannot silently add or remove a portal entitlement. Older v1
+requery evidence must be regenerated from the database before launch proof.
+
 Deployment, domain publication, billing activation, customer messages, and
 scheduled automations remain separate owner-approved operations.
 
