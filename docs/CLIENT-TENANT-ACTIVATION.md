@@ -73,6 +73,45 @@ Add one `--managed-request-file` per purchased product, in canonical Shop,
 Plant, Website, Ecommerce order, as those owner-reviewed outcomes become
 available. The board advances only the gates proved by those exact requests.
 
+## Establish the named owner before tenant activation
+
+Do not put a service-role key, owner access token, or raw owner email in a plan,
+terminal argument, repository, or handoff. Store the owner email in a one-line
+private file and prepare a one-hour, owner-approved invitation plan. This step
+does not create a user or send email:
+
+```powershell
+npm run client:owner-identity -- prepare `
+  --project-ref PRODUCTION-SUPABASE-PROJECT-REF `
+  --release-commit EXACT-PROTECTED-RELEASE-SHA `
+  --workspace-label "Named client business" `
+  --owner-label "Named client owner" `
+  --owner-email-file C:\private\owner-email.txt `
+  --approval-id OWNER-APPROVAL-UUID `
+  --approved-at 2026-08-22T00:00:00.000Z `
+  --expires-at 2026-08-22T01:00:00.000Z `
+  --output C:\reviewed\owner-identity-plan.json
+```
+
+The reviewed server-side Auth administrator may separately execute the exact
+invitation through Supabase. That action sends email and is not performed by
+this tool. After the owner accepts the invitation, confirms the address, and
+signs in at `https://app.supermega.dev/account/setup`, prove the exact named
+identity against Supabase Auth's live `/auth/v1/user` endpoint:
+
+```powershell
+npm run client:owner-identity -- verify-existing `
+  --plan C:\reviewed\owner-identity-plan.json `
+  --owner-token-file C:\private\owner-access-token.txt `
+  --publishable-key-file C:\private\supabase-publishable-key.txt `
+  --output C:\reviewed\owner-identity-proof.json
+```
+
+The proof contains the owner UUID required by the activation plan, but only
+digests of the email and active session. It creates no workspace membership and
+makes no provider write. Authorization remains in the tenant membership and
+capability tables; editable `user_metadata` is never an authorization source.
+
 ## Add staff only after tenant activation
 
 SuperMega does not create an Auth user or send an invitation email as a side
