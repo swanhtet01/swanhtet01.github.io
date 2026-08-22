@@ -24,7 +24,7 @@ import {
 import {
   clearUnreadableShopSchedule,
   prepareUnreadableShopScheduleRecovery,
-} from '../showroom/src/core/shop-schedule-recovery.ts'
+} from '../showroom/src/core/shop-recover.ts'
 
 const PLANNING_DAY = '2026-08-07'
 const MIDDAY_MMT = new Date(`${PLANNING_DAY}T05:30:00.000Z`)

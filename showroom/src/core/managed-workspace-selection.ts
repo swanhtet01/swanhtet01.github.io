@@ -7,7 +7,7 @@ const DEFAULT_WORKSPACE_ID = String(BUILD_ENV.VITE_SUPERMEGA_TRIAL_WORKSPACE_ID 
 
 export function currentManagedWorkspace() {
   try {
-    const stored = window.localStorage.getItem(MANAGED_WORKSPACE_STORAGE_KEY) ?? ''
+    const stored = localStorage.getItem(MANAGED_WORKSPACE_STORAGE_KEY) ?? ''
     if (MANAGED_WORKSPACE_ID_PATTERN.test(stored)) return stored
   } catch {
     // The configured workspace remains available when storage is disabled.

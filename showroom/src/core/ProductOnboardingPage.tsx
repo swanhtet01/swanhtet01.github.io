@@ -4,7 +4,6 @@ import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
 import { PageHeading, type RuntimeHealth } from './CoreShell'
-import { downloadBlob } from './download-file'
 import {
   buildPlantGuidedShiftCloseOutcomeMetric,
   buildShopGuidedSaleOutcomeMetric,
@@ -63,10 +62,6 @@ import {
   shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
-import {
-  clearUnreadableShopSchedule,
-  prepareUnreadableShopScheduleRecovery,
-} from './shop-schedule-recovery'
 import {
   useAccountableActions,
   useManagedIdentity,
@@ -429,10 +424,17 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     })
   }
 
-  function recoverUnreadableAppointments() {
+  async function recoverUnreadableAppointments() {
     if (workspaceBusy) return
     setWorkspaceBusy(true)
     try {
+      const [{ downloadBlob }, {
+        clearUnreadableShopSchedule,
+        prepareUnreadableShopScheduleRecovery,
+      }] = await Promise.all([
+        import('./download-file'),
+        import('./shop-recover'),
+      ])
       const recovery = prepareUnreadableShopScheduleRecovery(window.localStorage)
       downloadBlob(
         recovery.filename,
