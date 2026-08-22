@@ -238,9 +238,32 @@ The create-only evidence contains SHA-256 digests instead of workspace or owner
 identifiers and never persists either token. It proves portal read access and
 HTTP-level tenant denial; it does not deploy, mutate tenant data, prove a
 bounded write/read-back, activate billing, send messages, or enable scheduled
-automations. Complete the separate bounded record write/read-back and database
-row-isolation smoke for every purchased product before calling a client portal
-fully accepted.
+automations.
+
+After the read-only smoke passes, record the owner-approved bounded acceptance
+event for every purchased product. This is a production database write, so the
+approval UUID and exact confirmation remain separate from routine verification:
+
+```powershell
+$env:SUPERMEGA_OWNER_APPROVAL_ID_FILE = 'C:\secrets\owner-approval-id.txt'
+$env:SUPERMEGA_HOSTED_ACCEPTANCE_CONFIRMATION = 'RECORD HOSTED PRODUCT ACCEPTANCE'
+$env:SUPERMEGA_HOSTED_ACCEPTANCE_EVIDENCE_FILE = 'C:\reviewed\beauty-spa-product-acceptance.json'
+npm run client:portal:hosted-acceptance -- --production-handoff
+```
+
+The command first repeats the exact-release, owner-portal, entitlement, and
+unrelated-user checks above. It then derives one deterministic probe UUID per
+approved product and performs four checks: insert or exact replay, owner
+read-back, unrelated-user denial, and exact idempotent replay. Each event binds
+the workspace, owner approval, product, release commit, current product-state
+version, and current state digest. It is append-only and does not increment or
+change product state.
+
+The command can therefore prove the hosted write path without creating fake
+orders, inventory, jobs, leads, pages, payments, messages, or customer records.
+Retries reuse the same deterministic probe IDs and create no duplicate events.
+The output remains create-only and stores digests instead of client identifiers
+or credentials. Deployment, billing, messaging, and automation remain false.
 
 Deployment, domain publication, billing activation, customer messages, and
 scheduled automations remain separate owner-approved operations.

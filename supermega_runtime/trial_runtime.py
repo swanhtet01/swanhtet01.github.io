@@ -66,6 +66,7 @@ from supermega_runtime.production_material_handoff import (
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
+    PRODUCT_ACCEPTANCE_SURFACES,
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,
     CommandResult,
@@ -189,6 +190,14 @@ class TrialCommandRequest(_StrictRequest):
     event_type: str = Field(min_length=1, max_length=80)
     expected_version: int = Field(ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TrialProductAcceptanceRequest(_StrictRequest):
+    probe_id: UUID
+    owner_approval_id: UUID
+    product: Literal["commerce", "production", "website", "ecommerce"]
+    release_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    confirmation: Literal["RECORD HOSTED PRODUCT ACCEPTANCE"]
 
 
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
@@ -2090,6 +2099,55 @@ def create_trial_router(
             **_command_response(result),
         }
 
+    @router.post("/product-acceptance")
+    def record_product_acceptance(
+        request: Request,
+        body: TrialProductAcceptanceRequest,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        readiness = _readiness(store, principal)
+        surface = PRODUCT_ACCEPTANCE_SURFACES[body.product]
+        _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[surface])
+        if (
+            readiness.product_entitlements is None
+            or body.product not in readiness.product_entitlements
+        ):
+            raise _error(
+                403,
+                "trial_product_entitlement_required",
+                required_product=body.product,
+            )
+        acceptance = _invoke(
+            lambda: store.record_product_acceptance(
+                principal,
+                probe_id=body.probe_id,
+                owner_approval_id=body.owner_approval_id,
+                product=body.product,
+                release_commit=body.release_commit,
+            )
+        )
+        return {
+            "acceptance": acceptance.to_dict(),
+            "product_state_mutated": False,
+            "external_writes_performed": not acceptance.idempotent_replay,
+            "secret_values_exposed": False,
+        }
+
+    @router.get("/product-acceptance/{probe_id}")
+    def read_product_acceptance(probe_id: UUID, request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        acceptance = _invoke(
+            lambda: store.get_product_acceptance(principal, probe_id=probe_id)
+        )
+        return {
+            "acceptance": acceptance.to_dict(),
+            "product_state_mutated": False,
+            "external_writes_performed": False,
+            "secret_values_exposed": False,
+        }
+
     @router.post("/commands")
     def trial_command(request: Request, body: TrialCommandRequest) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
@@ -2365,6 +2423,7 @@ __all__ = [
     "TrialApprovalDecisionRequest",
     "TrialApprovalRequest",
     "TrialCommandRequest",
+    "TrialProductAcceptanceRequest",
     "TrialSelfServeWorkspaceRequest",
     "TrialSignupSession",
     "create_trial_router",

@@ -185,6 +185,88 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(self.reducer.calls, 0)
 
+    def test_product_acceptance_is_owner_gated_idempotent_and_tenant_isolated(self) -> None:
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-a",
+            products=("commerce", "website"),
+        )
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-b",
+            products=("commerce",),
+        )
+        probe_id = str(uuid4())
+        owner_approval_id = str(uuid4())
+        body = {
+            "probe_id": probe_id,
+            "owner_approval_id": owner_approval_id,
+            "product": "commerce",
+            "release_commit": "a" * 40,
+            "confirmation": "RECORD HOSTED PRODUCT ACCEPTANCE",
+        }
+
+        recorded = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json=body,
+        )
+        self.assertEqual(recorded.status_code, 200)
+        recorded_body = recorded.json()
+        self.assertTrue(recorded_body["external_writes_performed"])
+        self.assertFalse(recorded_body["product_state_mutated"])
+        self.assertFalse(recorded_body["secret_values_exposed"])
+        acceptance = recorded_body["acceptance"]
+        self.assertEqual(acceptance["probe_id"], probe_id)
+        self.assertEqual(acceptance["owner_approval_id"], owner_approval_id)
+        self.assertEqual(acceptance["product"], "commerce")
+        self.assertEqual(acceptance["surface"], "commerce")
+        self.assertEqual(acceptance["release_commit"], "a" * 40)
+        self.assertEqual(acceptance["state_version"], 0)
+        self.assertRegex(acceptance["state_digest"], r"^sha256:[0-9a-f]{64}$")
+
+        readback = self.client.get(
+            f"/api/trial/v1/product-acceptance/{probe_id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(readback.status_code, 200)
+        self.assertEqual(readback.json()["acceptance"], acceptance)
+        self.assertFalse(readback.json()["external_writes_performed"])
+
+        replay = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json=body,
+        )
+        self.assertEqual(replay.status_code, 200)
+        self.assertFalse(replay.json()["external_writes_performed"])
+        self.assertTrue(replay.json()["acceptance"]["idempotent_replay"])
+
+        changed = {**body, "owner_approval_id": str(uuid4())}
+        conflict = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json=changed,
+        )
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+
+        unentitled = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json={**body, "probe_id": str(uuid4()), "product": "ecommerce"},
+        )
+        self.assertEqual(unentitled.status_code, 403)
+        self.assertEqual(
+            unentitled.json()["detail"]["code"],
+            "trial_product_entitlement_required",
+        )
+
+        cross_tenant = self.client.get(
+            f"/api/trial/v1/product-acceptance/{probe_id}",
+            headers=self._headers("other-operator-session"),
+        )
+        self.assertEqual(cross_tenant.status_code, 404)
+        self.assertEqual(cross_tenant.json()["detail"]["code"], "trial_not_found")
+
     def test_activation_entitlements_override_mismatched_product_capabilities(self) -> None:
         store = InMemoryTrialStore(reducer=self.reducer)
         store.provision_membership(

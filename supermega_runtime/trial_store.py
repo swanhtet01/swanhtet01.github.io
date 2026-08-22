@@ -59,6 +59,14 @@ ACTIVATION_PRODUCT_ENTITLEMENTS = {
     "ecommerce": "ecommerce",
 }
 PRODUCT_ENTITLEMENT_ORDER = tuple(ACTIVATION_PRODUCT_ENTITLEMENTS.values())
+PRODUCT_ACCEPTANCE_SURFACES = {
+    "commerce": "commerce",
+    "production": "production",
+    "website": "website",
+    "ecommerce": "commerce",
+}
+PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"
+PRODUCT_ACCEPTANCE_EVENT_TYPE = "client.product_acceptance.recorded"
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
 # authoritative client->server (or client->Supavisor-pooler) guarantee -- a
@@ -764,6 +772,33 @@ class CommandResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ProductAcceptanceRecord:
+    probe_id: str
+    owner_approval_id: str
+    product: str
+    surface: str
+    release_commit: str
+    state_version: int
+    state_digest: str
+    recorded_at: str
+    idempotent_replay: bool = False
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "contract": PRODUCT_ACCEPTANCE_CONTRACT,
+            "probe_id": self.probe_id,
+            "owner_approval_id": self.owner_approval_id,
+            "product": self.product,
+            "surface": self.surface,
+            "release_commit": self.release_commit,
+            "state_version": self.state_version,
+            "state_digest": self.state_digest,
+            "recorded_at": self.recorded_at,
+            "idempotent_replay": self.idempotent_replay,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ApprovalRecord:
     approval_id: str
     command_id: str
@@ -825,6 +860,23 @@ class TrialStore(Protocol):
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState: ...
 
     def list_approvals(self, principal: TrialPrincipal, *, limit: int = 50) -> list[ApprovalRecord]: ...
+
+    def record_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+        owner_approval_id: str | UUID,
+        product: str,
+        release_commit: str,
+    ) -> ProductAcceptanceRecord: ...
+
+    def get_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+    ) -> ProductAcceptanceRecord: ...
 
     def apply_command(
         self,
@@ -3077,6 +3129,65 @@ def _canonical_fingerprint(kind: str, payload: Mapping[str, Any]) -> str:
     return sha256(encoded).hexdigest()
 
 
+def _normalize_acceptance_product(product: object) -> tuple[str, str]:
+    normalized = str(product or "").strip().lower()
+    surface = PRODUCT_ACCEPTANCE_SURFACES.get(normalized)
+    if surface is None:
+        raise TrialValidationError("Unsupported product acceptance target.")
+    return normalized, surface
+
+
+def _normalize_release_commit(value: object) -> str:
+    commit = str(value or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise TrialValidationError("release_commit must be an immutable Git SHA.")
+    return commit
+
+
+def _product_acceptance_record(
+    value: Mapping[str, Any],
+    *,
+    idempotent_replay: bool = False,
+) -> ProductAcceptanceRecord:
+    product, surface = _normalize_acceptance_product(value.get("product"))
+    probe_id = _normalize_uuid(value.get("probe_id", ""), field_name="probe_id")
+    owner_approval_id = _normalize_uuid(
+        value.get("owner_approval_id", ""),
+        field_name="owner_approval_id",
+    )
+    release_commit = _normalize_release_commit(value.get("release_commit"))
+    state_version = value.get("state_version")
+    state_digest = str(value.get("state_digest") or "")
+    recorded_at = str(value.get("recorded_at") or "")
+    if (
+        value.get("contract") != PRODUCT_ACCEPTANCE_CONTRACT
+        or value.get("surface") != surface
+        or not isinstance(state_version, int)
+        or isinstance(state_version, bool)
+        or state_version < 0
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", state_digest)
+        or not recorded_at
+    ):
+        raise TrialStoreError("Product acceptance evidence is invalid.")
+    try:
+        parsed_recorded_at = datetime.fromisoformat(recorded_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise TrialStoreError("Product acceptance evidence is invalid.") from exc
+    if parsed_recorded_at.tzinfo is None:
+        raise TrialStoreError("Product acceptance evidence is invalid.")
+    return ProductAcceptanceRecord(
+        probe_id=probe_id,
+        owner_approval_id=owner_approval_id,
+        product=product,
+        surface=surface,
+        release_commit=release_commit,
+        state_version=state_version,
+        state_digest=state_digest,
+        recorded_at=recorded_at,
+        idempotent_replay=idempotent_replay,
+    )
+
+
 def validate_self_serve_claim_code(value: object) -> str:
     claim_code = str(value or "").strip()
     if not SELF_SERVE_CLAIM_CODE_PATTERN.fullmatch(claim_code):
@@ -4552,6 +4663,158 @@ class PostgresTrialStore:
             state=next_state,
         )
 
+    def record_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+        owner_approval_id: str | UUID,
+        product: str,
+        release_commit: str,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        owner_approval_id_value = _normalize_uuid(
+            owner_approval_id,
+            field_name="owner_approval_id",
+        )
+        product_value, surface = _normalize_acceptance_product(product)
+        release_commit_value = _normalize_release_commit(release_commit)
+        normalized = principal.normalized()
+        payload: JsonObject = {
+            "contract": PRODUCT_ACCEPTANCE_CONTRACT,
+            "probe_id": probe_id_value,
+            "owner_approval_id": owner_approval_id_value,
+            "product": product_value,
+            "surface": surface,
+            "release_commit": release_commit_value,
+        }
+        fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
+        with self._guarded_cursor(
+            normalized,
+            write=True,
+            capability=_required_surface_capability(surface),
+        ) as (cursor, _capabilities):
+            if product_value not in self._product_entitlements(
+                cursor,
+                normalized.workspace_id,
+            ):
+                raise TrialPermissionDenied(f"product.{product_value}")
+            self._lock(cursor, f"{normalized.workspace_id}:acceptance:{probe_id_value}")
+            replay = self._load_event_replay(
+                cursor,
+                workspace_id=normalized.workspace_id,
+                command_id=probe_id_value,
+                fingerprint=fingerprint,
+            )
+            if replay is not None:
+                return _product_acceptance_record(replay, idempotent_replay=True)
+            cursor.execute(
+                """
+                select version, state_json
+                from app_private.workspace_state
+                where workspace_id = %s and surface = %s
+                """,
+                (normalized.workspace_id, surface),
+            )
+            state_row = cursor.fetchone() or {}
+            state_version = int(state_row.get("version", 0) or 0)
+            state = state_row.get("state_json", {}) or {}
+            if isinstance(state, str):
+                state = json.loads(state)
+            state_value = _json_object(state, field_name="acceptance state")
+            state_digest = f"sha256:{_canonical_fingerprint('product_state', state_value)}"
+            recorded_at = _utc_now()
+            result = ProductAcceptanceRecord(
+                probe_id=probe_id_value,
+                owner_approval_id=owner_approval_id_value,
+                product=product_value,
+                surface=surface,
+                release_commit=release_commit_value,
+                state_version=state_version,
+                state_digest=state_digest,
+                recorded_at=recorded_at,
+            ).to_dict()
+            cursor.execute(
+                """
+                insert into app_private.workspace_events
+                  (event_id, workspace_id, command_id, command_fingerprint, surface,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json, created_at)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s::jsonb, %s::jsonb, %s::timestamptz)
+                """,
+                (
+                    str(uuid4()),
+                    normalized.workspace_id,
+                    probe_id_value,
+                    fingerprint,
+                    surface,
+                    PRODUCT_ACCEPTANCE_EVENT_TYPE,
+                    normalized.actor_id,
+                    normalized.actor_kind,
+                    state_version,
+                    state_version,
+                    json.dumps(payload, ensure_ascii=False),
+                    json.dumps(result, ensure_ascii=False),
+                    recorded_at,
+                ),
+            )
+            cursor.execute(
+                """
+                select result_json
+                from app_private.workspace_events
+                where workspace_id = %s and command_id = %s
+                  and event_type = %s
+                """,
+                (
+                    normalized.workspace_id,
+                    probe_id_value,
+                    PRODUCT_ACCEPTANCE_EVENT_TYPE,
+                ),
+            )
+            readback_row = cursor.fetchone()
+            if not isinstance(readback_row, Mapping):
+                raise TrialStoreError("Product acceptance evidence could not be read back.")
+            readback = readback_row.get("result_json") or {}
+            if isinstance(readback, str):
+                readback = json.loads(readback)
+            record = _product_acceptance_record(readback)
+            if record.to_dict() != result:
+                raise TrialStoreError("Product acceptance evidence could not be read back.")
+            return record
+
+    def get_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        normalized = principal.normalized()
+        with self._guarded_cursor(normalized, write=False) as (cursor, capabilities):
+            cursor.execute(
+                """
+                select surface, result_json
+                from app_private.workspace_events
+                where workspace_id = %s and command_id = %s
+                  and event_type = %s
+                """,
+                (
+                    normalized.workspace_id,
+                    probe_id_value,
+                    PRODUCT_ACCEPTANCE_EVENT_TYPE,
+                ),
+            )
+            row = cursor.fetchone()
+            if not isinstance(row, Mapping):
+                raise TrialNotFound()
+            surface = _normalize_surface(str(row.get("surface") or ""))
+            _require_surface_read_capability(capabilities, surface)
+            result = row.get("result_json") or {}
+            if isinstance(result, str):
+                result = json.loads(result)
+            return _product_acceptance_record(result)
+
     def create_approval(
         self,
         principal: TrialPrincipal,
@@ -5234,6 +5497,91 @@ class InMemoryTrialStore:
                     (normalized.workspace_id, commerce_action_id)
                 ] = command_id_value
             return result
+
+    def record_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+        owner_approval_id: str | UUID,
+        product: str,
+        release_commit: str,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        owner_approval_id_value = _normalize_uuid(
+            owner_approval_id,
+            field_name="owner_approval_id",
+        )
+        product_value, surface = _normalize_acceptance_product(product)
+        release_commit_value = _normalize_release_commit(release_commit)
+        payload: JsonObject = {
+            "contract": PRODUCT_ACCEPTANCE_CONTRACT,
+            "probe_id": probe_id_value,
+            "owner_approval_id": owner_approval_id_value,
+            "product": product_value,
+            "surface": surface,
+            "release_commit": release_commit_value,
+        }
+        fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
+        with self._lock:
+            normalized, _readiness = self._guard(
+                principal,
+                write=True,
+                capability=_required_surface_capability(surface),
+            )
+            if (
+                _readiness.product_entitlements is None
+                or product_value not in _readiness.product_entitlements
+            ):
+                raise TrialPermissionDenied(f"product.{product_value}")
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                probe_id_value,
+                fingerprint,
+            )
+            if replay is not None:
+                return _product_acceptance_record(replay, idempotent_replay=True)
+            state = self._states.get(
+                (normalized.workspace_id, surface),
+                TrialState(normalized.workspace_id, surface, 0, {}),
+            )
+            record = ProductAcceptanceRecord(
+                probe_id=probe_id_value,
+                owner_approval_id=owner_approval_id_value,
+                product=product_value,
+                surface=surface,
+                release_commit=release_commit_value,
+                state_version=state.version,
+                state_digest=f"sha256:{_canonical_fingerprint('product_state', state.state)}",
+                recorded_at=_utc_now(),
+            )
+            self._events[(normalized.workspace_id, probe_id_value)] = (
+                fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
+                record.to_dict(),
+            )
+            return _product_acceptance_record(
+                self._events[(normalized.workspace_id, probe_id_value)][3]
+            )
+
+    def get_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        with self._lock:
+            normalized, readiness = self._guard(principal, write=False)
+            row = self._events.get((normalized.workspace_id, probe_id_value))
+            if row is None:
+                raise TrialNotFound()
+            record = _product_acceptance_record(row[3])
+            _require_surface_read_capability(readiness.capabilities, record.surface)
+            return record
 
     def create_approval(
         self,
