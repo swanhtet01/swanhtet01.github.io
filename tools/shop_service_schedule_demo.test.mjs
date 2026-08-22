@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   GUIDED_SAMPLE_SCHEDULE_ACTOR,
   SHOP_SERVICE_SCHEDULE_SCHEMA,
+  SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   advanceShopServiceBooking,
   cancelShopServiceBooking,
   createShopServiceSchedule,
@@ -20,6 +21,10 @@ import {
   shopScheduleVocabulary,
   validateShopServiceSchedule,
 } from '../showroom/src/core/shop-service-scheduling.ts'
+import {
+  clearUnreadableShopSchedule,
+  prepareUnreadableShopScheduleRecovery,
+} from '../showroom/src/core/shop-schedule-recovery.ts'
 
 const PLANNING_DAY = '2026-08-07'
 const MIDDAY_MMT = new Date(`${PLANNING_DAY}T05:30:00.000Z`)
@@ -237,6 +242,45 @@ test('readShopServiceSchedule returns a fresh schedule for null, round-trips val
     () => readShopServiceSchedule('{not valid json}'),
     /unreadable/i,
   )
+})
+
+test('unreadable appointment recovery backs up the device before clearing only the unchanged corrupt record', () => {
+  const records = new Map([[SHOP_SERVICE_SCHEDULE_STORAGE_KEY, '{old unreadable appointment data}']])
+  const storage = {
+    get length() { return records.size },
+    getItem: (key) => records.get(key) ?? null,
+    key: (index) => [...records.keys()][index] ?? null,
+    removeItem: (key) => { records.delete(key) },
+  }
+  const recovery = prepareUnreadableShopScheduleRecovery(storage, '2026-08-22T10:00:00.000Z')
+  assert.equal(recovery.filename, 'supermega-workspace-before-appointment-recovery-2026-08-22.json')
+  assert.equal(recovery.backup.records[SHOP_SERVICE_SCHEDULE_STORAGE_KEY], recovery.raw)
+  assert.equal(records.has(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), true)
+  assert.deepEqual(clearUnreadableShopSchedule(storage, recovery.raw), {
+    cleared: true,
+    storageKey: SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
+  })
+  assert.equal(records.has(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), false)
+})
+
+test('appointment recovery refuses readable or changed records without deleting them', () => {
+  const valid = JSON.stringify(createShopServiceSchedule('spa'))
+  const validRecords = new Map([[SHOP_SERVICE_SCHEDULE_STORAGE_KEY, valid]])
+  const storageFor = (records) => ({
+    get length() { return records.size },
+    getItem: (key) => records.get(key) ?? null,
+    key: (index) => [...records.keys()][index] ?? null,
+    removeItem: (key) => { records.delete(key) },
+  })
+  assert.throws(() => prepareUnreadableShopScheduleRecovery(storageFor(validRecords)), /readable or no longer exists/)
+  assert.equal(validRecords.get(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), valid)
+
+  const changedRecords = new Map([[SHOP_SERVICE_SCHEDULE_STORAGE_KEY, '{old corrupt value}']])
+  const changedStorage = storageFor(changedRecords)
+  const recovery = prepareUnreadableShopScheduleRecovery(changedStorage, '2026-08-22T10:00:00.000Z')
+  changedRecords.set(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, '{new corrupt value}')
+  assert.throws(() => clearUnreadableShopSchedule(changedStorage, recovery.raw), /changed or became readable/)
+  assert.equal(changedRecords.get(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), '{new corrupt value}')
 })
 
 test('booking the same resource during an overlapping window throws', () => {

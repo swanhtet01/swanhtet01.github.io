@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
 import { PageHeading, type RuntimeHealth } from './CoreShell'
+import { downloadBlob } from './download-file'
 import {
   buildPlantGuidedShiftCloseOutcomeMetric,
   buildShopGuidedSaleOutcomeMetric,
@@ -62,6 +63,10 @@ import {
   shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
+import {
+  clearUnreadableShopSchedule,
+  prepareUnreadableShopScheduleRecovery,
+} from './shop-schedule-recovery'
 import {
   useAccountableActions,
   useManagedIdentity,
@@ -424,6 +429,24 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     })
   }
 
+  function recoverUnreadableAppointments() {
+    if (workspaceBusy) return
+    setWorkspaceBusy(true)
+    try {
+      const recovery = prepareUnreadableShopScheduleRecovery(window.localStorage)
+      downloadBlob(
+        recovery.filename,
+        new Blob([`${JSON.stringify(recovery.backup, null, 2)}\n`], { type: 'application/json' }),
+      )
+      clearUnreadableShopSchedule(window.localStorage, recovery.raw)
+      setNotice('Workspace backup downloaded. Unreadable appointments were cleared; create Shop again to load the Spa starter data.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Appointment recovery could not be completed. Nothing was cleared.')
+    } finally {
+      setWorkspaceBusy(false)
+    }
+  }
+
   return (
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
@@ -492,7 +515,9 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           {appointmentRecoveryRequired ? (
             <div aria-live="assertive" className="product-onboarding-recovery" role="alert">
               <p>{notice}</p>
-              <Link className="core-button" to="/settings/#workspace-recovery">Export or reset this device</Link>
+              <p>This downloads a full local workspace backup, then removes only the unreadable appointment record. Valid or changed appointments are never cleared.</p>
+              <button className="core-button" disabled={workspaceBusy} onClick={recoverUnreadableAppointments} type="button">{workspaceBusy ? 'Preparing recovery...' : 'Download backup and clear appointments'}</button>
+              <Link to="/settings/#workspace-recovery">Review all recovery options</Link>
             </div>
           ) : <p aria-live="polite" className="form-notice">{notice || (accountCheckPending ? 'Checking account access before setup.' : managedIdentity ? 'Uses this company account. Nothing is published or sent externally.' : 'Stays on this device. Nothing is sent or published.')}</p>}
         </form>
