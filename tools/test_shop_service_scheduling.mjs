@@ -20,8 +20,12 @@ const bundle = await build({
   stdin: {
     contents: `export {
       createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
-      advanceShopServiceBooking, validateShopServiceSchedule, projectShopServiceSchedule,
-      catalogNameSellsShopService,
+      advanceShopServiceBooking, prepareShopServiceCharge,
+      validateShopServiceSchedule, projectShopServiceSchedule, readShopServiceSchedule,
+      catalogNameSellsShopService, shopServiceSaleSku,
+      anonymizeShopServiceClient, recordShopServiceClientExport,
+      setShopServiceClientRetention, shopServiceClientAnonymizationReadiness,
+      shopServiceClientCsv,
     } from './shop-service-scheduling.ts'
     export {
       projectShopAppointmentTillReconciliation,
@@ -39,8 +43,12 @@ const bundle = await build({
 
 const {
   createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
-  advanceShopServiceBooking, validateShopServiceSchedule, projectShopServiceSchedule,
-  catalogNameSellsShopService, projectShopAppointmentTillReconciliation,
+  advanceShopServiceBooking, prepareShopServiceCharge,
+  validateShopServiceSchedule, projectShopServiceSchedule, readShopServiceSchedule,
+  catalogNameSellsShopService, shopServiceSaleSku, projectShopAppointmentTillReconciliation,
+  anonymizeShopServiceClient, recordShopServiceClientExport,
+  setShopServiceClientRetention, shopServiceClientAnonymizationReadiness,
+  shopServiceClientCsv,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -57,6 +65,10 @@ const schedule = createShopServiceSchedule('spa')
 check(schedule.services.length > 0, 'the spa pack ships services')
 check(schedule.resources.length > 0, 'and resources to deliver them')
 check(schedule.bookings.length === 0, 'with an empty appointment book')
+check(shopServiceSaleSku('spa', 'service-session') === 'SPA-SVC-MASSAGE', 'a reviewed Spa treatment maps to its exact counter SKU')
+check(shopServiceSaleSku('spa', 'service-herbal-steam') === 'SPA-SVC-STEAM', 'the Spa map includes the complete treatment menu')
+check(shopServiceSaleSku('spa', 'custom-service') === null, 'a custom Spa service is never guessed')
+check(shopServiceSaleSku('gym', 'service-session') === null, 'another industry never inherits the Spa mapping')
 
 const service = schedule.services[0]
 const resource = schedule.resources[0]
@@ -72,13 +84,14 @@ const proof = (happenedAt = '2026-07-24T08:00:00.000Z') => ({
 
 const book = (state, startsAt, resourceId = resource.id, customerName = 'May') =>
   scheduleShopServiceBooking(state, {
-    customerName, contact: '09-777-000111', serviceId: service.id, resourceId, startsAt,
+    customerName, contact: '09-777-000111', appointmentUpdates: 'declined', serviceId: service.id, resourceId, startsAt,
   }, proof())
 
 // --- a first booking ----------------------------------------------------------
 const START = '2026-07-25T03:00:00.000Z'
 const first = book(schedule, START)
 check(first.bookings.length === 1, 'a booking is recorded')
+check(first.clients.length === 1 && first.bookings[0].clientId === first.clients[0].id, 'the booking is linked to one privacy-minimal client record')
 const booking = first.bookings[0]
 check(booking.status === 'held', 'and starts held rather than confirmed')
 check(
@@ -103,6 +116,52 @@ for (const [label, startsAt] of overlapping) {
 // This is the other half. A guard using <= would refuse these and make the book unusable.
 const backToBack = book(first, booking.endsAt)
 check(backToBack.bookings.length === 2, 'a booking starting exactly when the previous one ends IS allowed')
+check(backToBack.clients.length === 1, 'a matching contact reuses one client record')
+
+rejects(
+  () => book(first, booking.endsAt, resource.id, 'Different customer'),
+  'a contact already bound to a client cannot silently change identity',
+)
+
+const updatesAllowed = scheduleShopServiceBooking(schedule, {
+  customerName: 'Mya', contact: '09-777-000222', appointmentUpdates: 'allowed', serviceId: service.id,
+  resourceId: resource.id, startsAt: START,
+}, proof())
+check(updatesAllowed.clients[0].appointmentUpdates === 'allowed' && updatesAllowed.clients[0].consentRecordedAt === proof().happenedAt, 'allowed appointment updates retain explicit consent evidence')
+
+const legacyV2 = {
+  ...first,
+  schema: 'supermega.shop.service_schedule.v2',
+  clients: undefined,
+  bookings: first.bookings.map(({ clientId: _clientId, appointmentUpdates: _appointmentUpdates, ...legacy }) => legacy),
+}
+const migratedV2 = readShopServiceSchedule(JSON.stringify(legacyV2))
+check(migratedV2.schema === 'supermega.shop.service_schedule.v4' && migratedV2.clients.length === 1, 'a v2 appointment book migrates to privacy-minimal clients')
+check(migratedV2.bookings[0].appointmentUpdates === 'not_recorded', 'legacy bookings do not invent messaging consent')
+const legacyV3 = { ...first, schema: 'supermega.shop.service_schedule.v3', privacyPolicy: undefined }
+const migratedV3 = readShopServiceSchedule(JSON.stringify(legacyV3))
+check(migratedV3.schema === 'supermega.shop.service_schedule.v4' && migratedV3.privacyPolicy.clientRetentionDays === null, 'a v3 schedule migrates to an explicit unset retention policy')
+
+// --- owner-governed privacy lifecycle ----------------------------------------
+rejects(() => setShopServiceClientRetention(first, 29, proof()), 'retention shorter than 30 days is refused')
+const privacyClosed = cancelShopServiceBooking(first, booking.id, proof('2026-07-24T08:30:00.000Z'))
+const retained = setShopServiceClientRetention(privacyClosed, 30, proof('2026-07-24T09:00:00.000Z'))
+check(retained.privacyPolicy.clientRetentionDays === 30 && retained.events.at(-1).type === 'client_retention_set', 'owner retention is explicit and evidenced')
+const csvInjectionSchedule = scheduleShopServiceBooking(schedule, {
+  customerName: '=SUM(A1:A2)', contact: '+959000000', appointmentUpdates: 'declined', serviceId: service.id,
+  resourceId: resource.id, startsAt: START,
+}, proof())
+check(shopServiceClientCsv(csvInjectionSchedule).includes("\"'=SUM(A1:A2)\"") && shopServiceClientCsv(csvInjectionSchedule).includes("\"'+959000000\""), 'client CSV neutralizes spreadsheet formulas')
+const exported = recordShopServiceClientExport(retained, `sha256:${'a'.repeat(64)}`, proof('2026-07-24T09:01:00.000Z'))
+check(exported.events.at(-1).type === 'client_exported', 'client export appends an attributable digest receipt')
+check(!shopServiceClientAnonymizationReadiness(first, booking.clientId, [], new Date('2026-09-01T00:00:00.000Z')).allowed, 'an open visit blocks anonymization')
+const due = shopServiceClientAnonymizationReadiness(retained, booking.clientId, [], new Date('2026-07-25T00:00:00.000Z'))
+check(!due.allowed && Boolean(due.dueAt), 'active retention blocks anonymization with a due date')
+const ready = shopServiceClientAnonymizationReadiness(retained, booking.clientId, [], new Date('2026-09-01T00:00:00.000Z'))
+check(ready.allowed, 'a closed unpaid-free visit can reach owner anonymization review after retention')
+const anonymized = anonymizeShopServiceClient(retained, booking.clientId, [], proof('2026-09-01T00:00:00.000Z'))
+check(anonymized.clients[0].anonymizedAt && anonymized.clients[0].contact.startsWith('anonymized:'), 'anonymization removes the client contact')
+check(anonymized.bookings[0].note === '' && anonymized.bookings[0].customerName.startsWith('Former client'), 'anonymization scrubs linked appointment identity and notes')
 
 const justBefore = book(first, new Date(Date.parse(START) - DURATION * 60_000).toISOString())
 check(justBefore.bookings.length === 2, 'and one ending exactly when the next begins is allowed too')
@@ -136,7 +195,7 @@ const noService = {
 rejects(() => book(noService, START), 'booking an inactive service is refused')
 rejects(
   () => scheduleShopServiceBooking(schedule, {
-    customerName: 'May', contact: '09-777-000111', serviceId: 'SVC-DOES-NOT-EXIST',
+    customerName: 'May', contact: '09-777-000111', appointmentUpdates: 'declined', serviceId: 'SVC-DOES-NOT-EXIST',
     resourceId: resource.id, startsAt: START,
   }, proof()),
   'booking a service that does not exist is refused',
@@ -147,7 +206,7 @@ rejects(() => book(schedule, 'not a date'), 'a booking with an unparseable start
 rejects(() => book(schedule, START, resource.id, ''), 'a booking with no customer name is refused')
 rejects(
   () => scheduleShopServiceBooking(schedule, {
-    customerName: 'May', contact: '09-777-000111', serviceId: service.id, resourceId: resource.id, startsAt: START,
+    customerName: 'May', contact: '09-777-000111', appointmentUpdates: 'declined', serviceId: service.id, resourceId: resource.id, startsAt: START,
   }, { actor: '', reason: 'r', happenedAt: '2026-07-24T08:00:00.000Z' }),
   'a booking with no named actor is refused',
 )
@@ -193,7 +252,7 @@ const tillProof = () => ({
   happenedAt: new Date(Date.parse(`${TILL_DAY}T00:00:00.000Z`) + (tillClock += 1) * 60_000).toISOString(),
 })
 function completeTreatment(state, serviceId, resourceId, startsAt, customerName, advances = 3) {
-  let next = scheduleShopServiceBooking(state, { customerName, contact: '09-450-000-111', serviceId, resourceId, startsAt }, tillProof())
+  let next = scheduleShopServiceBooking(state, { customerName, contact: `test-${customerName}`, appointmentUpdates: 'declined', serviceId, resourceId, startsAt }, tillProof())
   const bookingId = next.bookings[next.bookings.length - 1].id
   for (let step = 0; step < advances; step += 1) next = advanceShopServiceBooking(next, bookingId, tillProof())
   return { state: next, bookingId }

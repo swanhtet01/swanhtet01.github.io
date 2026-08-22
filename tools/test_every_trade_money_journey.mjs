@@ -6,9 +6,8 @@
 // every seed-based test and broke every real shop.
 //
 // So this runs the money journey a design partner does on day one -- reserve, prepare, ready,
-// reconcile, complete, close, hand off to accounting -- against ALL SEVEN business template
-// catalogs as they are actually installed: template plus demo seed, seventeen or eighteen
-// items, in catalog order rather than alphabetical.
+// reconcile, complete, close, hand off to accounting -- against every business template
+// catalog exactly as it is installed, in catalog order rather than alphabetical.
 //
 // The result today is that all seven pass, which is worth pinning rather than assuming: it
 // says the seed-based fixtures elsewhere are not hiding a dependency on catalog shape in the

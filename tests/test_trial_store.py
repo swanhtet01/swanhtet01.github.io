@@ -557,6 +557,10 @@ class TrialStoreTests(unittest.TestCase):
                 events.append("membership_checked")
                 return frozenset()
 
+            def _product_entitlements(self, _cursor, _workspace_id) -> tuple[str, ...]:
+                events.append("entitlements_checked")
+                return ()
+
         store = GuardedStore("postgresql://runtime.invalid/db", reducer=self.reducer)
         with self.assertRaises(SentinelFailure):
             with store._guarded_cursor(self.operator, write=False):
@@ -574,6 +578,7 @@ class TrialStoreTests(unittest.TestCase):
                 "schema_checked",
                 "identity_set",
                 "membership_checked",
+                "entitlements_checked",
                 "operation",
                 "cursor_exit:SentinelFailure",
                 "transaction_rollback",
@@ -873,6 +878,113 @@ class TrialStoreTests(unittest.TestCase):
         self.assertNotIn("decided_at =", decision_update[0].lower())
         self.assertNotIn("created_at", decision_event[0].lower())
         self.assertIn(expected_decided_at, json.loads(str(decision_event[1][-1]))["approval"]["decided_at"])
+
+    def test_postgres_product_acceptance_is_durable_idempotent_and_state_preserving(self) -> None:
+        class AcceptanceCursor:
+            def __init__(self):
+                self.query = ""
+                self.executions: list[tuple[str, tuple[object, ...]]] = []
+                self.stored_fingerprint = ""
+                self.stored_result: dict[str, object] | None = None
+
+            def execute(self, query: str, parameters: tuple[object, ...] = ()) -> None:
+                self.query = " ".join(query.split()).lower()
+                self.executions.append((self.query, parameters))
+                if "insert into app_private.workspace_events" in self.query:
+                    self.stored_fingerprint = str(parameters[3])
+                    self.stored_result = json.loads(str(parameters[11]))
+
+            def fetchone(self) -> dict[str, object] | None:
+                if "select command_fingerprint, result_json" in self.query:
+                    if self.stored_result is None:
+                        return None
+                    return {
+                        "command_fingerprint": self.stored_fingerprint,
+                        "result_json": deepcopy(self.stored_result),
+                    }
+                if "select version, state_json" in self.query:
+                    return {"version": 3, "state_json": {"orders": [{"id": "order-a"}]}}
+                if "select result_json" in self.query:
+                    return {"result_json": deepcopy(self.stored_result)}
+                return None
+
+        class AcceptanceStore(PostgresTrialStore):
+            def __init__(self, cursor: AcceptanceCursor):
+                super().__init__("postgres://runtime", reducer=RecordingReducer(), write_enabled=True)
+                self.cursor = cursor
+
+            @contextmanager
+            def _guarded_cursor(self, *_args, **_kwargs):
+                yield self.cursor, frozenset({"commerce.write"})
+
+            @staticmethod
+            def _product_entitlements(_cursor, _workspace_id):
+                return ("commerce",)
+
+        cursor = AcceptanceCursor()
+        store = AcceptanceStore(cursor)
+        probe_id = str(uuid4())
+        owner_approval_id = str(uuid4())
+        recorded = store.record_product_acceptance(
+            self.operator,
+            probe_id=probe_id,
+            owner_approval_id=owner_approval_id,
+            product="commerce",
+            release_commit="a" * 40,
+        )
+        self.assertEqual(recorded.probe_id, probe_id)
+        self.assertEqual(recorded.owner_approval_id, owner_approval_id)
+        self.assertEqual(recorded.state_version, 3)
+        self.assertRegex(recorded.state_digest, r"^sha256:[0-9a-f]{64}$")
+        self.assertFalse(recorded.idempotent_replay)
+
+        event_insert = next(
+            entry for entry in cursor.executions
+            if "insert into app_private.workspace_events" in entry[0]
+        )
+        self.assertEqual(event_insert[1][4], "commerce")
+        self.assertEqual(event_insert[1][5], "client.product_acceptance.recorded")
+        self.assertEqual(event_insert[1][8], 3)
+        self.assertEqual(event_insert[1][9], 3)
+        self.assertFalse(any("update app_private.workspace_state" in query for query, _ in cursor.executions))
+
+        replay = store.record_product_acceptance(
+            self.operator,
+            probe_id=probe_id,
+            owner_approval_id=owner_approval_id,
+            product="commerce",
+            release_commit="a" * 40,
+        )
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(
+            sum("insert into app_private.workspace_events" in query for query, _ in cursor.executions),
+            1,
+        )
+
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.record_product_acceptance(
+                self.operator,
+                probe_id=probe_id,
+                owner_approval_id=str(uuid4()),
+                product="commerce",
+                release_commit="a" * 40,
+            )
+
+    def test_product_acceptance_rejects_timezone_ambiguous_evidence(self) -> None:
+        evidence = {
+            "contract": trial_store_module.PRODUCT_ACCEPTANCE_CONTRACT,
+            "probe_id": str(uuid4()),
+            "owner_approval_id": str(uuid4()),
+            "product": "shop",
+            "surface": "commerce",
+            "release_commit": "a" * 40,
+            "state_version": 0,
+            "state_digest": "sha256:" + "0" * 64,
+            "recorded_at": "2026-08-22T00:00:00",
+        }
+
+        with self.assertRaises(trial_store_module.TrialStoreError):
+            trial_store_module._product_acceptance_record(evidence)
 
     def test_auth_and_active_membership_are_required_for_writes(self) -> None:
         unauthenticated = TrialPrincipal("workspace-a", "actor-operator", "human", authenticated=False)

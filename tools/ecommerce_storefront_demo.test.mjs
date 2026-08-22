@@ -182,17 +182,10 @@ test('working-sample SKUs are recoverable and exclude the generic Shop seed item
   const skus = commerceWorkingSampleSkus(state)
   assert.deepEqual(skus, ['SPA-FACIAL', 'SPA-MASSAGE', 'SPA-OIL', 'SPA-SCRUB'])
   assert.ok(skus.every((sku) => sku.startsWith('SPA-')))
-  // The install is NOT on a clean slate. installCommerceWorkingSampleCatalog
-  // (commerce-workspace.ts) refuses any base that is not byte-identical to createSeedCommerce()
-  // and then layers the sample on top, so the seed's SM- items are a PRECONDITION of the install
-  // and necessarily survive it. The original assertion here claimed the opposite; it had never
-  // run, because this file is unreachable from app:verify. What actually keeps demo household
-  // goods off a client storefront is the recovery filter below plus workingSamplePlan's
-  // preferred-SKU ranking, which has its own test in this file.
-  assert.ok(
-    state.items.some((item) => item.sku.startsWith('SM-')),
-    'the seed base survives the install by design -- the installer requires an exact-seed base',
-  )
+  // The exact untouched seed is only a replaceability proof. Once proven, client setup removes
+  // its generic household rows so the Shop counter and inventory contain the selected business
+  // template rather than two unrelated catalogs.
+  assert.ok(!state.items.some((item) => item.sku.startsWith('SM-')), 'generic seed SKUs do not survive client template setup')
   assert.ok(!skus.some((sku) => sku.startsWith('SM-')), 'working-sample SKU recovery excludes the seed SKUs')
 })
 
@@ -302,10 +295,11 @@ test('provisioning seeds one pending request that never earns the Shop proof', a
 // must be revisited rather than silently continuing to assert the fallback.
 //
 // CONTENT GAP (not a code defect): Ecommerce storefront copy -- summary, featured/rest collection
-// labels, merchandising note, hero SKUs -- is unwritten for 8 of the 10 Shop trades: mini-mart,
-// pharmacy, phone-electronics, fashion, tea-coffee, auto-parts, restaurant, beauty-spa. Writing it
-// requires a native Myanmar retail writer, not an agent inventing trade language.
-const STOREFRONT_TRADES_WITH_COPY = ['bakery', 'hardware']
+// labels, merchandising note, hero SKUs -- is still unwritten for 7 of the 10 Shop trades:
+// mini-mart, pharmacy, phone-electronics, fashion, tea-coffee, auto-parts, and restaurant.
+// Beauty Spa reuses the already-reviewed Spa onboarding and Website promises and stays explicit
+// that Ecommerce takes home-care pickup requests rather than booking treatments.
+const STOREFRONT_TRADES_WITH_COPY = ['bakery', 'beauty-spa', 'hardware']
 
 // The generic social-storefront wording every trade without written copy falls back to. Pinned as
 // literals, deliberately: workingSamplePlan's null-trade branch must stay byte-identical, which is
@@ -367,31 +361,36 @@ test('exactly the trades with written Ecommerce copy resolve to a trade storefro
   assert.equal(ecommerceTradeStorefront(null), null, 'no trade resolves to no trade copy')
 })
 
-test('a spa storefront falls back to generic wording -- spa copy is unwritten', async () => {
-  // beauty-spa IS a real Shop trade and readLocalShopBusinessTemplateId resolves it, so the
-  // plumbing reaches the trade table intact. It still gets generic wording, because the table has
-  // no beauty-spa entry. That distinction is the whole point: this is missing content, not a
-  // resolver falling back by mistake.
+test('a spa storefront uses honest home-care pickup wording without claiming appointment booking', async () => {
   const { ecommerceTradeStorefront } = await import(
     '../showroom/src/products/ecommerce/ecommerce-trade-storefront.ts'
   )
-  assert.equal(ecommerceTradeStorefront('beauty-spa'), null, 'beauty-spa has no written storefront copy')
+  const spaCopy = ecommerceTradeStorefront('beauty-spa')
+  assert.ok(spaCopy, 'beauty-spa must carry written storefront copy')
+  assert.equal(spaCopy.collections.featured, 'Home care')
+  assert.equal(spaCopy.collections.rest, 'More for your routine')
+  assert.deepEqual(spaCopy.preferredSkus, ['SPA-OIL-100ML', 'SPA-COMPRESS'])
+  assert.deepEqual(spaCopy.guidedOrder, { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' })
+  const summary = spaCopy.summary('Yangon Wellness Spa')
+  assert.match(summary, /home-care products/i)
+  assert.match(summary, /pickup/i)
+  assert.doesNotMatch(summary, /book|appointment/i, 'Ecommerce must not claim to book Spa treatments')
 
   const resolved = await activateStorefront(packWorkspace('beauty-spa', 'Beauty spa', SPA_ITEMS), 'Yangon Wellness Spa')
   const resolvedCollections = [...new Set(resolved.map((row) => row.collection))].sort()
   assert.deepEqual(
     resolvedCollections,
-    [...GENERIC_SOCIAL_COLLECTIONS].sort(),
-    'a resolvable trade with no written copy gets the documented generic fallback',
+    ['Home care', 'More for your routine'].sort(),
+    'a resolvable Spa trade gets its reviewed home-care collections',
   )
-  assert.ok(!resolvedCollections.includes('Treatments'), 'no spa vocabulary exists to be emitted yet')
+  assert.ok(resolved.every((row) => /treatment suitability|counter stock|pickup time/i.test(row.note)))
 
-  // The unresolvable-pack case ('spa' is not a ShopBusinessTemplateId) must read the same.
+  // The unresolvable pack id remains generic; the trade-specific copy is never guessed.
   const unresolved = await activateStorefront(spaWorkspace(), 'Yangon Wellness Spa')
   assert.deepEqual(
     [...new Set(unresolved.map((row) => row.collection))].sort(),
-    resolvedCollections,
-    'an unresolvable pack id reads identically to a resolvable trade with no copy',
+    [...GENERIC_SOCIAL_COLLECTIONS].sort(),
+    'an unresolvable pack id keeps the documented generic fallback',
   )
   // Client products still lead the storefront -- that half of the feature does work.
   assert.ok(

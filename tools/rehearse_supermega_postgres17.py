@@ -23,6 +23,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
@@ -45,6 +46,7 @@ MIGRATIONS = (
     "20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "20260803063822_private_trial_backend_v9_metadata_rls.sql",
     "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+    "20260816120000_private_trial_backend_v11_self_serve_grants.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -52,6 +54,7 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+WINDOWS_DIRECT_START_MODE = "codex-sandbox-direct"
 PUBLIC_BROWSER_TABLES = (
     "assets",
     "enterprise_agent_runs",
@@ -96,6 +99,7 @@ IMPLEMENTATION_PATHS = (
     "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
     "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+    "supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql",
     "supabase/rehearsal/20260804_public_browser_quarantine.sql",
     "tools/activate_supermega_database.ps1",
     "tools/rehearse_supermega_postgres17.py",
@@ -411,8 +415,41 @@ def _start_cluster(
     postgres_bin: Path,
     data_directory: Path,
     log_file: Path,
+    port: int,
     environment: dict[str, str],
 ) -> None:
+    if (
+        os.name == "nt"
+        and environment.get("SUPERMEGA_POSTGRES17_WINDOWS_START_MODE")
+        == WINDOWS_DIRECT_START_MODE
+    ):
+        postgres = _binary(postgres_bin, "postgres")
+        pg_isready = _binary(postgres_bin, "pg_isready")
+        with log_file.open("ab", buffering=0) as output:
+            process = subprocess.Popen(
+                [str(postgres), "-D", str(data_directory)],
+                cwd=ROOT,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise RehearsalFailure("postgres_direct_start_failed")
+            ready = _run(
+                [str(pg_isready), "--host", "127.0.0.1", "--port", str(port), "--timeout", "1"],
+                environment=environment,
+                timeout=5,
+            )
+            if ready.returncode == 0:
+                return
+            time.sleep(0.2)
+        process.terminate()
+        raise RehearsalFailure("postgres_direct_start_timeout")
+
     pg_ctl = _binary(postgres_bin, "pg_ctl")
     result = _run_without_inheritable_pipes(
         [
@@ -846,21 +883,49 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                   (workspace_id, actor_id, status, capabilities, actor_kind)
                 values
                   ('rehearsal-a', 'owner-a', 'active',
-                    array['commerce.write']::text[], 'human'),
+                    array['company.read', 'commerce.write']::text[], 'human'),
                   ('rehearsal-a', 'approval-reader', 'active',
                     array['approvals.read']::text[], 'human'),
                   ('rehearsal-a', 'website-reader', 'active',
                     array['website.read']::text[], 'human'),
                   ('rehearsal-b', 'owner-b', 'active',
-                   array['production.write']::text[], 'human'),
+                   array['company.read', 'production.write']::text[], 'human'),
                   ('rehearsal-product', 'owner-product', 'active',
-                    array['commerce.write', 'website.write']::text[], 'human'),
+                    array['company.read', 'commerce.write', 'website.write']::text[], 'human'),
                   ('rehearsal-approval', 'approval-agent', 'active',
                     array['approvals.request']::text[], 'agent'),
                   ('rehearsal-approval', 'approval-service', 'active',
                    array['approvals.decide']::text[], 'service'),
                   ('rehearsal-approval', 'approval-owner', 'active',
                    array['approvals.decide']::text[], 'human')
+                """
+            )
+            cursor.execute(
+                """
+                insert into app_private.workspace_events (
+                  event_id, workspace_id, command_id, command_fingerprint,
+                  surface, event_type, actor_id, actor_kind,
+                  expected_version, resulting_version, payload_json, result_json
+                )
+                select
+                  md5('rehearsal-entitlement-event:' || workspace_id)::uuid,
+                  workspace_id,
+                  md5('rehearsal-entitlement-command:' || workspace_id)::uuid,
+                  md5('rehearsal-entitlement-a:' || workspace_id)
+                    || md5('rehearsal-entitlement-b:' || workspace_id),
+                  'company',
+                  'company.workspace.activated',
+                  owner_actor_id,
+                  'human',
+                  null,
+                  null,
+                  jsonb_build_object('products', to_jsonb(products)),
+                  jsonb_build_object('status', 'activated')
+                from (values
+                  ('rehearsal-a', 'owner-a', array['shop']::text[]),
+                  ('rehearsal-b', 'owner-b', array['plant']::text[]),
+                  ('rehearsal-product', 'owner-product', array['shop', 'website']::text[])
+                ) as fixture(workspace_id, owner_actor_id, products)
                 """
             )
 
@@ -2307,8 +2372,8 @@ def _exercise_managed_product_journeys(
             """
         ).fetchall()
     if rows != [
-        ("rehearsal-b", "owner-b", "human", 3),
-        ("rehearsal-product", "owner-product", "human", 9),
+        ("rehearsal-b", "owner-b", "human", 4),
+        ("rehearsal-product", "owner-product", "human", 10),
     ]:
         raise RehearsalFailure("managed_journey_event_attribution_failed")
     return {
@@ -3115,7 +3180,10 @@ def _exercise_runtime(
                         for row in cursor.fetchall()
                     ]
         if (
-            visible_events["owner-a"] != [("commerce", "order.rehearsed")]
+            visible_events["owner-a"] != [
+                ("company", "company.workspace.activated"),
+                ("commerce", "order.rehearsed"),
+            ]
             or visible_events["website-reader"]
             or visible_events["approval-reader"]
         ):
@@ -3337,10 +3405,10 @@ def _verify_restored_data(
             """
         ).fetchone()
     if row != (
-        10,
+        11,
         11,
         7,
-        20,
+        23,
         3,
         approved_context["contextDigest"],
         expected_profile["profileDigest"],
@@ -3356,7 +3424,7 @@ def _verify_restored_data(
 
 def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
     environment = _clean_environment(postgres_bin)
-    required = ("postgres", "initdb", "pg_ctl", "psql", "pg_dump", "pg_restore")
+    required = ("postgres", "initdb", "pg_ctl", "pg_isready", "psql", "pg_dump", "pg_restore")
     available = all(
         (postgres_bin / f"{name}{'.exe' if os.name == 'nt' else ''}").is_file()
         for name in required
@@ -3392,6 +3460,12 @@ def _run_rehearsal(
         _emit(preflight, evidence_file)
         return 2
 
+    # The runtime schema contract is process-scoped for this disposable v11
+    # rehearsal. The launcher is a short-lived child process, so this cannot
+    # alter the caller or any hosted environment.
+    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "11"
+    os.environ["SUPERMEGA_OTEL_DISABLED"] = "1"
+
     admin_password = _password()
     runtime_password = _password()
     cleanup_complete = False
@@ -3423,6 +3497,7 @@ def _run_rehearsal(
                 postgres_bin=postgres_bin,
                 data_directory=primary_data_directory,
                 log_file=primary_log_file,
+                port=port,
                 environment=environment,
             )
             started = True
@@ -3540,6 +3615,7 @@ def _run_rehearsal(
                 postgres_bin=postgres_bin,
                 data_directory=restore_data_directory,
                 log_file=restore_log_file,
+                port=restore_port,
                 environment=environment,
             )
             started = True
@@ -3606,10 +3682,16 @@ def _run_rehearsal(
                     "version": version,
                     "tls_active": True,
                     "loopback_only": True,
+                    "start_mode": (
+                        "windows_direct_sandbox"
+                        if environment.get("SUPERMEGA_POSTGRES17_WINDOWS_START_MODE")
+                        == WINDOWS_DIRECT_START_MODE
+                        else "pg_ctl_restricted_token"
+                    ),
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 10,
+                    "schema_version": 11,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -3642,7 +3724,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 10,
+                    "restored_schema_version": 11,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,

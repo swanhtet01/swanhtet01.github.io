@@ -1,0 +1,1012 @@
+{
+  "contract": "supermega.client_provisioning_recipe_registry.v1",
+  "recipes": [
+    {
+      "contract": "supermega.client_provisioning_recipe.v1",
+      "recipeId": "shop.social-commerce",
+      "recipeVersion": 1,
+      "productId": "shop",
+      "runtimeProductId": "commerce",
+      "templateId": "social-commerce",
+      "compatibleFromVersions": [
+        0,
+        1
+      ],
+      "roles": [
+        {
+          "id": "owner",
+          "label": "Shop owner",
+          "actorKind": "human",
+          "capabilities": [
+            "setup.read",
+            "setup.write",
+            "commerce.read",
+            "commerce.write",
+            "company.read",
+            "company.write",
+            "company.baseline.approve",
+            "company.control.approve",
+            "approvals.read",
+            "approvals.request",
+            "approvals.decide"
+          ]
+        },
+        {
+          "id": "order-operator",
+          "label": "Order operator",
+          "actorKind": "human",
+          "capabilities": [
+            "commerce.read",
+            "commerce.write",
+            "approvals.request"
+          ]
+        },
+        {
+          "id": "stock-keeper",
+          "label": "Stock keeper",
+          "actorKind": "human",
+          "capabilities": [
+            "commerce.read",
+            "commerce.write"
+          ]
+        }
+      ],
+      "objects": [
+        {
+          "id": "shop-catalog",
+          "surface": "commerce",
+          "keyField": "sku",
+          "source": "client-import",
+          "requiredCapability": "commerce.write"
+        },
+        {
+          "id": "shop-orders",
+          "surface": "commerce",
+          "keyField": "id",
+          "source": "runtime",
+          "requiredCapability": "commerce.write"
+        },
+        {
+          "id": "shop-evidence",
+          "surface": "commerce",
+          "keyField": "actionId",
+          "source": "immutable-events",
+          "requiredCapability": "commerce.read"
+        }
+      ],
+      "stateMachines": [
+        {
+          "id": "order-fulfilment",
+          "initialState": "confirmed",
+          "terminalStates": [
+            "completed",
+            "cancelled"
+          ],
+          "transitions": [
+            {
+              "id": "start-preparation",
+              "fromState": "confirmed",
+              "toState": "preparing",
+              "event": "commerce.order.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "mark-ready",
+              "fromState": "preparing",
+              "toState": "ready",
+              "event": "commerce.order.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "complete-paid-order",
+              "fromState": "ready",
+              "toState": "completed",
+              "event": "commerce.order.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-confirmed",
+              "fromState": "confirmed",
+              "toState": "cancelled",
+              "event": "commerce.order.cancelled",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-preparing",
+              "fromState": "preparing",
+              "toState": "cancelled",
+              "event": "commerce.order.cancelled",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-ready",
+              "fromState": "ready",
+              "toState": "cancelled",
+              "event": "commerce.order.cancelled",
+              "approval": "named-human"
+            }
+          ]
+        }
+      ],
+      "importMappings": [
+        {
+          "id": "opening-catalog",
+          "objectId": "shop-catalog",
+          "workflowTemplateId": "social-commerce",
+          "fields": [
+            {
+              "target": "sku",
+              "sourceAliases": [
+                "sku",
+                "item_code",
+                "product_code"
+              ]
+            },
+            {
+              "target": "name",
+              "sourceAliases": [
+                "name",
+                "item_name",
+                "product_name"
+              ]
+            },
+            {
+              "target": "onHand",
+              "sourceAliases": [
+                "on_hand",
+                "opening_stock",
+                "quantity"
+              ]
+            },
+            {
+              "target": "reorderAt",
+              "sourceAliases": [
+                "reorder_at",
+                "minimum_stock",
+                "reorder_level"
+              ]
+            },
+            {
+              "target": "price",
+              "sourceAliases": [
+                "price",
+                "price_mmk",
+                "selling_price"
+              ]
+            }
+          ],
+          "previewRequired": true,
+          "humanConfirmationRequired": true
+        }
+      ],
+      "dashboard": {
+        "id": "shop-today",
+        "primaryAction": "Review the earliest promised order",
+        "maxVisiblePanels": 3,
+        "panels": [
+          {
+            "id": "orders-next",
+            "sourceId": "shop-orders",
+            "label": "Orders needing the next step"
+          },
+          {
+            "id": "stock-exceptions",
+            "sourceId": "shop-catalog",
+            "label": "Stock below reorder"
+          },
+          {
+            "id": "evidence-gaps",
+            "sourceId": "shop-evidence",
+            "label": "Actions missing evidence"
+          }
+        ]
+      },
+      "acceptanceChecks": [
+        {
+          "id": "deterministic-plan",
+          "kind": "contract",
+          "required": true
+        },
+        {
+          "id": "compatible-upgrade",
+          "kind": "migration",
+          "required": true
+        },
+        {
+          "id": "digest-bound-rollback",
+          "kind": "rollback",
+          "required": true
+        },
+        {
+          "id": "zero-unapproved-writes",
+          "kind": "security",
+          "required": true
+        },
+        {
+          "id": "task-first-mobile-flow",
+          "kind": "usability",
+          "required": true
+        }
+      ],
+      "migrations": [
+        {
+          "fromVersion": 0,
+          "toVersion": 1,
+          "steps": [
+            {
+              "id": "introduce-social-commerce-recipe",
+              "operation": "plan-create-resources"
+            }
+          ]
+        }
+      ],
+      "rollback": {
+        "strategy": "restore-pre-provision-snapshot",
+        "requiresExactPlanDigest": true,
+        "requiresHumanApproval": true,
+        "steps": [
+          {
+            "id": "verify-plan-identity",
+            "operation": "assert-plan-digest"
+          },
+          {
+            "id": "restore-reviewed-snapshot",
+            "operation": "plan-restore-snapshot"
+          }
+        ]
+      }
+    },
+    {
+      "contract": "supermega.client_provisioning_recipe.v1",
+      "recipeId": "plant.production-control",
+      "recipeVersion": 1,
+      "productId": "plant",
+      "runtimeProductId": "production",
+      "templateId": "production-control",
+      "compatibleFromVersions": [
+        0,
+        1
+      ],
+      "roles": [
+        {
+          "id": "owner",
+          "label": "Plant owner",
+          "actorKind": "human",
+          "capabilities": [
+            "setup.read",
+            "setup.write",
+            "production.read",
+            "production.write",
+            "company.read",
+            "company.write",
+            "company.baseline.approve",
+            "company.control.approve",
+            "approvals.read",
+            "approvals.request",
+            "approvals.decide"
+          ]
+        },
+        {
+          "id": "planner",
+          "label": "Production planner",
+          "actorKind": "human",
+          "capabilities": [
+            "production.read",
+            "production.write",
+            "approvals.request"
+          ]
+        },
+        {
+          "id": "floor-operator",
+          "label": "Floor operator",
+          "actorKind": "human",
+          "capabilities": [
+            "production.read",
+            "production.write"
+          ]
+        }
+      ],
+      "objects": [
+        {
+          "id": "plant-jobs",
+          "surface": "production",
+          "keyField": "jobCode",
+          "source": "client-import",
+          "requiredCapability": "production.write"
+        },
+        {
+          "id": "plant-events",
+          "surface": "production",
+          "keyField": "actionId",
+          "source": "immutable-events",
+          "requiredCapability": "production.read"
+        },
+        {
+          "id": "plant-issues",
+          "surface": "production",
+          "keyField": "id",
+          "source": "runtime",
+          "requiredCapability": "production.write"
+        }
+      ],
+      "stateMachines": [
+        {
+          "id": "job-execution",
+          "initialState": "planned",
+          "terminalStates": [
+            "completed",
+            "cancelled"
+          ],
+          "transitions": [
+            {
+              "id": "release-job",
+              "fromState": "planned",
+              "toState": "released",
+              "event": "production.job.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "start-job",
+              "fromState": "released",
+              "toState": "running",
+              "event": "production.job.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "complete-job",
+              "fromState": "running",
+              "toState": "completed",
+              "event": "production.job.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-planned-job",
+              "fromState": "planned",
+              "toState": "cancelled",
+              "event": "production.job.cancelled",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-released-job",
+              "fromState": "released",
+              "toState": "cancelled",
+              "event": "production.job.cancelled",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-running-job",
+              "fromState": "running",
+              "toState": "cancelled",
+              "event": "production.job.cancelled",
+              "approval": "named-human"
+            }
+          ]
+        }
+      ],
+      "importMappings": [
+        {
+          "id": "opening-production-plan",
+          "objectId": "plant-jobs",
+          "workflowTemplateId": "production-control",
+          "fields": [
+            {
+              "target": "jobCode",
+              "sourceAliases": [
+                "job_code",
+                "work_order"
+              ]
+            },
+            {
+              "target": "productName",
+              "sourceAliases": [
+                "product_name",
+                "item_name"
+              ]
+            },
+            {
+              "target": "targetQuantity",
+              "sourceAliases": [
+                "target_quantity",
+                "planned_units"
+              ]
+            },
+            {
+              "target": "dueDate",
+              "sourceAliases": [
+                "due_date",
+                "promise_date"
+              ]
+            },
+            {
+              "target": "line",
+              "sourceAliases": [
+                "line",
+                "work_centre"
+              ]
+            }
+          ],
+          "previewRequired": true,
+          "humanConfirmationRequired": true
+        }
+      ],
+      "dashboard": {
+        "id": "plant-today",
+        "primaryAction": "Review the next due production job",
+        "maxVisiblePanels": 3,
+        "panels": [
+          {
+            "id": "jobs-next",
+            "sourceId": "plant-jobs",
+            "label": "Jobs needing the next step"
+          },
+          {
+            "id": "floor-exceptions",
+            "sourceId": "plant-issues",
+            "label": "Quality and equipment exceptions"
+          },
+          {
+            "id": "shift-evidence",
+            "sourceId": "plant-events",
+            "label": "Shift actions needing review"
+          }
+        ]
+      },
+      "acceptanceChecks": [
+        {
+          "id": "deterministic-plan",
+          "kind": "contract",
+          "required": true
+        },
+        {
+          "id": "compatible-upgrade",
+          "kind": "migration",
+          "required": true
+        },
+        {
+          "id": "digest-bound-rollback",
+          "kind": "rollback",
+          "required": true
+        },
+        {
+          "id": "zero-unapproved-writes",
+          "kind": "security",
+          "required": true
+        },
+        {
+          "id": "task-first-mobile-flow",
+          "kind": "usability",
+          "required": true
+        }
+      ],
+      "migrations": [
+        {
+          "fromVersion": 0,
+          "toVersion": 1,
+          "steps": [
+            {
+              "id": "introduce-production-control-recipe",
+              "operation": "plan-create-resources"
+            }
+          ]
+        }
+      ],
+      "rollback": {
+        "strategy": "restore-pre-provision-snapshot",
+        "requiresExactPlanDigest": true,
+        "requiresHumanApproval": true,
+        "steps": [
+          {
+            "id": "verify-plan-identity",
+            "operation": "assert-plan-digest"
+          },
+          {
+            "id": "restore-reviewed-snapshot",
+            "operation": "plan-restore-snapshot"
+          }
+        ]
+      }
+    },
+    {
+      "contract": "supermega.client_provisioning_recipe.v1",
+      "recipeId": "website.lead-generation",
+      "recipeVersion": 1,
+      "productId": "website",
+      "runtimeProductId": "website",
+      "templateId": "lead-generation",
+      "compatibleFromVersions": [
+        0,
+        1
+      ],
+      "roles": [
+        {
+          "id": "owner",
+          "label": "Website owner",
+          "actorKind": "human",
+          "capabilities": [
+            "setup.read",
+            "setup.write",
+            "website.read",
+            "website.write",
+            "company.read",
+            "company.write",
+            "company.baseline.approve",
+            "company.control.approve",
+            "approvals.read",
+            "approvals.request",
+            "approvals.decide"
+          ]
+        },
+        {
+          "id": "editor",
+          "label": "Content editor",
+          "actorKind": "human",
+          "capabilities": [
+            "website.read",
+            "website.write",
+            "approvals.request"
+          ]
+        },
+        {
+          "id": "reviewer",
+          "label": "Release reviewer",
+          "actorKind": "human",
+          "capabilities": [
+            "website.read",
+            "approvals.read",
+            "approvals.decide"
+          ]
+        }
+      ],
+      "objects": [
+        {
+          "id": "website-pages",
+          "surface": "website",
+          "keyField": "slug",
+          "source": "client-import",
+          "requiredCapability": "website.write"
+        },
+        {
+          "id": "website-leads",
+          "surface": "website",
+          "keyField": "id",
+          "source": "runtime",
+          "requiredCapability": "website.write"
+        },
+        {
+          "id": "website-evidence",
+          "surface": "website",
+          "keyField": "actionId",
+          "source": "immutable-events",
+          "requiredCapability": "website.read"
+        }
+      ],
+      "stateMachines": [
+        {
+          "id": "website-release",
+          "initialState": "draft",
+          "terminalStates": [
+            "released",
+            "withdrawn"
+          ],
+          "transitions": [
+            {
+              "id": "review-release",
+              "fromState": "draft",
+              "toState": "reviewed",
+              "event": "website.release.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "approve-release",
+              "fromState": "reviewed",
+              "toState": "approved",
+              "event": "website.release.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "record-release",
+              "fromState": "approved",
+              "toState": "released",
+              "event": "website.release.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "withdraw-draft",
+              "fromState": "draft",
+              "toState": "withdrawn",
+              "event": "website.release.withdrawn",
+              "approval": "named-human"
+            },
+            {
+              "id": "withdraw-reviewed",
+              "fromState": "reviewed",
+              "toState": "withdrawn",
+              "event": "website.release.withdrawn",
+              "approval": "named-human"
+            },
+            {
+              "id": "withdraw-approved",
+              "fromState": "approved",
+              "toState": "withdrawn",
+              "event": "website.release.withdrawn",
+              "approval": "named-human"
+            }
+          ]
+        }
+      ],
+      "importMappings": [
+        {
+          "id": "opening-website-pages",
+          "objectId": "website-pages",
+          "workflowTemplateId": "lead-generation",
+          "fields": [
+            {
+              "target": "slug",
+              "sourceAliases": [
+                "slug",
+                "page_path"
+              ]
+            },
+            {
+              "target": "title",
+              "sourceAliases": [
+                "title",
+                "page_title"
+              ]
+            },
+            {
+              "target": "headline",
+              "sourceAliases": [
+                "headline",
+                "hero_headline"
+              ]
+            },
+            {
+              "target": "body",
+              "sourceAliases": [
+                "body",
+                "page_copy"
+              ]
+            },
+            {
+              "target": "contactUrl",
+              "sourceAliases": [
+                "contact_url",
+                "cta_url"
+              ]
+            }
+          ],
+          "previewRequired": true,
+          "humanConfirmationRequired": true
+        }
+      ],
+      "dashboard": {
+        "id": "website-launch",
+        "primaryAction": "Review the next page blocking release",
+        "maxVisiblePanels": 3,
+        "panels": [
+          {
+            "id": "pages-next",
+            "sourceId": "website-pages",
+            "label": "Pages needing the next step"
+          },
+          {
+            "id": "lead-inbox",
+            "sourceId": "website-leads",
+            "label": "Enquiries needing an owner"
+          },
+          {
+            "id": "release-evidence",
+            "sourceId": "website-evidence",
+            "label": "Release proof and approvals"
+          }
+        ]
+      },
+      "acceptanceChecks": [
+        {
+          "id": "deterministic-plan",
+          "kind": "contract",
+          "required": true
+        },
+        {
+          "id": "compatible-upgrade",
+          "kind": "migration",
+          "required": true
+        },
+        {
+          "id": "digest-bound-rollback",
+          "kind": "rollback",
+          "required": true
+        },
+        {
+          "id": "zero-unapproved-writes",
+          "kind": "security",
+          "required": true
+        },
+        {
+          "id": "task-first-mobile-flow",
+          "kind": "usability",
+          "required": true
+        }
+      ],
+      "migrations": [
+        {
+          "fromVersion": 0,
+          "toVersion": 1,
+          "steps": [
+            {
+              "id": "introduce-lead-generation-recipe",
+              "operation": "plan-create-resources"
+            }
+          ]
+        }
+      ],
+      "rollback": {
+        "strategy": "restore-pre-provision-snapshot",
+        "requiresExactPlanDigest": true,
+        "requiresHumanApproval": true,
+        "steps": [
+          {
+            "id": "verify-plan-identity",
+            "operation": "assert-plan-digest"
+          },
+          {
+            "id": "restore-reviewed-snapshot",
+            "operation": "plan-restore-snapshot"
+          }
+        ]
+      }
+    },
+    {
+      "contract": "supermega.client_provisioning_recipe.v1",
+      "recipeId": "ecommerce.social-storefront",
+      "recipeVersion": 1,
+      "productId": "ecommerce",
+      "runtimeProductId": "ecommerce",
+      "templateId": "social-storefront",
+      "compatibleFromVersions": [
+        0,
+        1
+      ],
+      "roles": [
+        {
+          "id": "owner",
+          "label": "Ecommerce owner",
+          "actorKind": "human",
+          "capabilities": [
+            "setup.read",
+            "setup.write",
+            "commerce.read",
+            "commerce.write",
+            "company.read",
+            "company.write",
+            "company.baseline.approve",
+            "company.control.approve",
+            "approvals.read",
+            "approvals.request",
+            "approvals.decide"
+          ]
+        },
+        {
+          "id": "merchandiser",
+          "label": "Storefront merchandiser",
+          "actorKind": "human",
+          "capabilities": [
+            "commerce.read",
+            "approvals.request"
+          ]
+        },
+        {
+          "id": "order-reviewer",
+          "label": "Shop order reviewer",
+          "actorKind": "human",
+          "capabilities": [
+            "commerce.read",
+            "commerce.write",
+            "approvals.read",
+            "approvals.decide"
+          ]
+        }
+      ],
+      "objects": [
+        {
+          "id": "storefront-catalog",
+          "surface": "commerce",
+          "keyField": "sku",
+          "source": "client-import",
+          "requiredCapability": "commerce.write"
+        },
+        {
+          "id": "storefront-requests",
+          "surface": "commerce",
+          "keyField": "id",
+          "source": "runtime",
+          "requiredCapability": "commerce.write"
+        },
+        {
+          "id": "storefront-evidence",
+          "surface": "commerce",
+          "keyField": "actionId",
+          "source": "immutable-events",
+          "requiredCapability": "commerce.read"
+        }
+      ],
+      "stateMachines": [
+        {
+          "id": "request-review",
+          "initialState": "captured",
+          "terminalStates": [
+            "confirmed",
+            "cancelled"
+          ],
+          "transitions": [
+            {
+              "id": "quote-request",
+              "fromState": "captured",
+              "toState": "quoted",
+              "event": "commerce.order.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "queue-shop-review",
+              "fromState": "quoted",
+              "toState": "review-pending",
+              "event": "commerce.order.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "confirm-shop-handoff",
+              "fromState": "review-pending",
+              "toState": "confirmed",
+              "event": "commerce.order.advanced",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-captured",
+              "fromState": "captured",
+              "toState": "cancelled",
+              "event": "commerce.order.cancelled",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-quoted",
+              "fromState": "quoted",
+              "toState": "cancelled",
+              "event": "commerce.order.cancelled",
+              "approval": "named-human"
+            },
+            {
+              "id": "cancel-review",
+              "fromState": "review-pending",
+              "toState": "cancelled",
+              "event": "commerce.order.cancelled",
+              "approval": "named-human"
+            }
+          ]
+        }
+      ],
+      "importMappings": [
+        {
+          "id": "opening-storefront-catalog",
+          "objectId": "storefront-catalog",
+          "workflowTemplateId": "social-storefront",
+          "fields": [
+            {
+              "target": "sku",
+              "sourceAliases": [
+                "sku",
+                "item_code"
+              ]
+            },
+            {
+              "target": "featured",
+              "sourceAliases": [
+                "featured",
+                "is_featured"
+              ]
+            },
+            {
+              "target": "collection",
+              "sourceAliases": [
+                "collection",
+                "collection_name"
+              ]
+            },
+            {
+              "target": "displayName",
+              "sourceAliases": [
+                "display_name",
+                "store_name"
+              ]
+            },
+            {
+              "target": "note",
+              "sourceAliases": [
+                "note",
+                "product_note"
+              ]
+            }
+          ],
+          "previewRequired": true,
+          "humanConfirmationRequired": true
+        }
+      ],
+      "dashboard": {
+        "id": "ecommerce-orders",
+        "primaryAction": "Review the earliest expiring Shop handoff",
+        "maxVisiblePanels": 3,
+        "panels": [
+          {
+            "id": "requests-next",
+            "sourceId": "storefront-requests",
+            "label": "Requests needing Shop review"
+          },
+          {
+            "id": "catalog-readiness",
+            "sourceId": "storefront-catalog",
+            "label": "Products blocked from ordering"
+          },
+          {
+            "id": "handoff-evidence",
+            "sourceId": "storefront-evidence",
+            "label": "Quotes and handoffs needing proof"
+          }
+        ]
+      },
+      "acceptanceChecks": [
+        {
+          "id": "deterministic-plan",
+          "kind": "contract",
+          "required": true
+        },
+        {
+          "id": "compatible-upgrade",
+          "kind": "migration",
+          "required": true
+        },
+        {
+          "id": "digest-bound-rollback",
+          "kind": "rollback",
+          "required": true
+        },
+        {
+          "id": "zero-unapproved-writes",
+          "kind": "security",
+          "required": true
+        },
+        {
+          "id": "task-first-mobile-flow",
+          "kind": "usability",
+          "required": true
+        }
+      ],
+      "migrations": [
+        {
+          "fromVersion": 0,
+          "toVersion": 1,
+          "steps": [
+            {
+              "id": "introduce-social-storefront-recipe",
+              "operation": "plan-create-resources"
+            }
+          ]
+        }
+      ],
+      "rollback": {
+        "strategy": "restore-pre-provision-snapshot",
+        "requiresExactPlanDigest": true,
+        "requiresHumanApproval": true,
+        "steps": [
+          {
+            "id": "verify-plan-identity",
+            "operation": "assert-plan-digest"
+          },
+          {
+            "id": "restore-reviewed-snapshot",
+            "operation": "plan-restore-snapshot"
+          }
+        ]
+      }
+    }
+  ]
+}

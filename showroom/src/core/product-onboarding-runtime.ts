@@ -157,13 +157,11 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
 // 'managed-unprovisioned' -- while onboarding told the owner her catalog, or her jobs and floor,
 // were ready. A false success, uniform across all ten Shop trades and all five Plant packs.
 //
-// Provisioning a template INTO a managed workspace is a real feature and is not attempted here.
-// For Shop the server's commerce.workspace.initialized contract requires a non-empty catalog and
-// NO operating history, and every template catalog carries an `opening` stock movement per item,
-// so a template state can never satisfy it as written. Plant's production.workspace.initialized
-// is refused outright once jobs, issues, machines or events exist, which a guided sample creates
-// by definition. Until that lands, onboarding stops making the claim and hands the owner to the
-// managed setup step that already exists in each product.
+// Named Shop business templates now route to CoreApp's reviewed managed-catalog initializer. It
+// copies only catalog items and accountable baselines after the owner confirms the values and
+// evidence; sample sales, customers, appointments, and local history remain excluded. Generic
+// Shop packs and every Plant pack still use the honest one-record managed setup below because
+// they do not yet have that reviewed server activation path.
 //
 // The copy lives here, beside the reason, so it cannot drift back into a promise.
 // ==============================================================================================
@@ -230,7 +228,7 @@ export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
 /**
  * Plant's twin of managedShopOnboardingNotice. Same three jobs, but it names what a managed Plant
  * ACTUALLY asks for next, which is not what Shop asks for: CoreApp's "Create the real operating
- * plan" boundary wants one real job AND the machine that runs it, not a single priced item. Copy
+ * plan" boundary reviews one suggested real job AND the machine that runs it, not a single priced item. Copy
  * that mirrored Shop's "add your first real item" would be a second, smaller lie about the very
  * screen it is sending her to.
  *
@@ -244,8 +242,8 @@ export const MANAGED_SHOP_ONBOARDING_JOURNEY = {
  */
 export function managedPlantOnboardingNotice(plantTypeName: string): string {
   return `${plantTypeName} is saved as your plant type. Company accounts do not get sample records, `
-    + 'so no jobs, machines or output were added to this workspace. Open Plant and enter your first real job. '
-    + 'The job and machine you enter there are the ones your floor runs.'
+    + 'so no jobs, machines or output were added to this workspace. Open Plant and review the suggested first real job. '
+    + 'Only the job and machine you confirm there are written to the company account.'
 }
 
 /**
@@ -253,7 +251,7 @@ export function managedPlantOnboardingNotice(plantTypeName: string): string {
  * shared "Creates local sample records, then opens the first task."
  */
 export const MANAGED_PLANT_ONBOARDING_HINT =
-  'Opens Plant so you can enter your first real job. Nothing is copied into a company account.'
+  'Opens Plant to review an editable first real job and machine. Nothing is written until you confirm real values.'
 
 /**
  * Plant's twin of MANAGED_SHOP_ONBOARDING_INTRO, replacing the same shared "We will add realistic
@@ -277,6 +275,38 @@ export const MANAGED_PLANT_ONBOARDING_JOURNEY = {
   outcome: 'Create your first real job',
   detail: 'Plant opens on your company plan setup. Enter one real job and the machine that runs it, and your floor is live.',
   actionLabel: 'Create Plant and add your first job',
+}
+
+export const MANAGED_WEBSITE_ONBOARDING_HINT =
+  'Opens the company Website starter for review. No browser sample is copied into the company account.'
+
+export const MANAGED_WEBSITE_ONBOARDING_INTRO =
+  'Your company Website is server-backed. Name this workspace, then replace the starter text with approved business content.'
+
+export const MANAGED_WEBSITE_ONBOARDING_JOURNEY = {
+  outcome: 'Draft your real homepage',
+  detail: 'Website opens on the company starter. Replace its example text, preview mobile and desktop, then save the reviewed content.',
+  actionLabel: 'Open Website and edit the homepage',
+}
+
+export const MANAGED_ECOMMERCE_ONBOARDING_HINT =
+  'Opens Ecommerce to review the company storefront. No sample orders are created.'
+
+export const MANAGED_ECOMMERCE_ONBOARDING_INTRO =
+  'Your company account holds real order records only. Name this workspace, then review the storefront before taking orders.'
+
+export const MANAGED_ECOMMERCE_ONBOARDING_JOURNEY = {
+  outcome: 'Review your online store',
+  detail: 'Ecommerce opens on company storefront setup. Review catalog source, fulfilment, payment, and Shop handoff before taking orders.',
+  actionLabel: 'Open Ecommerce and review the store',
+}
+
+export function managedOnboardingAccountCheckPending(
+  runtimeStatus: 'checking' | 'enterprise' | 'demo',
+  managedIdentitySettled: boolean,
+): boolean {
+  return runtimeStatus === 'checking'
+    || (runtimeStatus === 'enterprise' && !managedIdentitySettled)
 }
 
 /**
@@ -370,6 +400,7 @@ export async function provisionLocalShopWorkingSample(industryPackId: ShopIndust
     return next
   })
   if (!result.ok) throw new Error(result.error)
+  clearInstalledSampleCounterDraft(disposition)
   return disposition
 }
 
@@ -428,7 +459,18 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
     return withActivity
   })
   if (!result.ok) throw new Error(result.error)
+  clearInstalledSampleCounterDraft(disposition)
   return disposition
+}
+
+const SHOP_COUNTER_DRAFT_STORAGE_KEY = 'supermega.shop.counter_draft.v1'
+
+function clearInstalledSampleCounterDraft(disposition: 'installed' | 'current' | 'preserved') {
+  // A newly installed catalog is a new till context. Keeping the previous draft can mix an
+  // unrelated trade's items into the first sale (for example, grocery goods in a Spa setup).
+  // Existing and preserved workspaces keep their in-progress sale; only a successful replacement
+  // clears the stale browser-local draft.
+  if (disposition === 'installed') window.localStorage.removeItem(SHOP_COUNTER_DRAFT_STORAGE_KEY)
 }
 
 /**

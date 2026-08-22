@@ -121,6 +121,10 @@ test('catalog installs into a fresh commerce workspace as a working sample', asy
     })
     assert.ok(installed, `${template.id} did not install`)
     assert.equal(commerce.commerceWorkingSampleCatalogId(installed), template.id)
+    assert.equal(installed.items.length, template.catalog.length, `${template.id} must not retain generic seed products`)
+    assert.ok(!installed.items.some((item) => item.sku.startsWith('SM-')), `${template.id} retained a generic seed SKU`)
+    assert.ok(!installed.orders.some((order) => /^ORD-10(?:39|41|42)$/.test(order.id)), `${template.id} retained generic seed orders`)
+    assert.equal(installed.purchaseOrders.length, 0, `${template.id} retained the generic procurement example`)
     for (const item of template.catalog) {
       const stored = installed.items.find((candidate) => candidate.sku === item.sku)
       assert.ok(stored, `${template.id} missing ${item.sku}`)
@@ -180,6 +184,11 @@ test('deep links select templates and unknown values fall back safely', () => {
   assert.equal(model.shopBusinessTemplateFromQuery(''), null)
   assert.equal(model.shopBusinessTemplateFromQuery(null), null)
   assert.equal(model.shopBusinessTemplateSetupPath('pharmacy'), '/settings/?product=shop&template=pharmacy')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('spa'), 'trade:beauty-spa')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('restaurant'), 'trade:restaurant')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('gym'), 'pack:gym')
+  assert.equal(model.shopBusinessChoiceFromIndustryPack('retail'), 'pack:retail')
+  assert.equal(model.shopIndustryPackSetupPath('spa'), '/settings/?product=shop&pack=spa')
   assert.throws(() => model.shopBusinessTemplate('unknown'))
 })
 
@@ -405,21 +414,22 @@ test('the browser-local lane still installs every trade catalog through the real
   })
 
   try {
-    // loadCommerceWorkspace() seeds the demo seed on empty storage before the template lands on
-    // top of it, so the installed catalog is the seed PLUS the template -- 20 items for a 15-item
-    // template. Derived here rather than hardcoded, so this stays a statement about the lane and
-    // not about today's seed size.
-    const seedItems = commerceModel.createSeedCommerce().items.length
-    assert.ok(seedItems > 0, `the demo seed still carries items, got ${seedItems}`)
+    // The current clean-start contract replaces the generic seed catalog with the selected trade
+    // catalog. Keeping both would put unrelated demo goods beside a spa, pharmacy, or restaurant's
+    // real starter items. The earlier contract test in this file pins that same invariant at the
+    // pure installer; this one proves the browser-local write boundary preserves it.
     assert.equal(model.shopBusinessTemplates.length, 10, 'all ten shipped trade templates are present')
 
     for (const template of model.shopBusinessTemplates) {
-      const store = localStorageStub()
+      const store = localStorageStub({
+        'supermega.shop.counter_draft.v1': JSON.stringify({ cart: { 'OLD-SKU': 1 }, customer: 'Previous sale', payment: 'Cash' }),
+      })
       globalThis.window = { localStorage: store }
       globalThis.localStorage = store
 
       const disposition = await onboardingRuntime.provisionLocalShopBusinessTemplateSample(template.id)
       assert.equal(disposition, 'installed', `${template.id}: a signed-out install still reports 'installed'`)
+      assert.equal(store.map.has('supermega.shop.counter_draft.v1'), false, `${template.id}: installing a new catalog clears the previous till draft`)
 
       const written = store.map.get(commerceKey)
       assert.ok(typeof written === 'string' && written.length > 0, `${template.id}: the browser-local Shop workspace was written`)
@@ -431,8 +441,8 @@ test('the browser-local lane still installs every trade catalog through the real
         `${template.id}: the installed catalog is stamped with this trade`,
       )
       assert.equal(
-        state.items.length, seedItems + template.catalog.length,
-        `${template.id}: the FULL template catalog landed -- expected ${seedItems} seed + ${template.catalog.length} template`,
+        state.items.length, template.catalog.length,
+        `${template.id}: the full selected trade catalog landed without generic seed products`,
       )
 
       for (const catalogItem of template.catalog) {

@@ -185,6 +185,151 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(self.reducer.calls, 0)
 
+    def test_product_acceptance_is_owner_gated_idempotent_and_tenant_isolated(self) -> None:
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-a",
+            products=("commerce", "website"),
+        )
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-b",
+            products=("commerce",),
+        )
+        probe_id = str(uuid4())
+        owner_approval_id = str(uuid4())
+        body = {
+            "probe_id": probe_id,
+            "owner_approval_id": owner_approval_id,
+            "product": "commerce",
+            "release_commit": "a" * 40,
+            "confirmation": "RECORD HOSTED PRODUCT ACCEPTANCE",
+        }
+
+        recorded = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json=body,
+        )
+        self.assertEqual(recorded.status_code, 200)
+        recorded_body = recorded.json()
+        self.assertTrue(recorded_body["external_writes_performed"])
+        self.assertFalse(recorded_body["product_state_mutated"])
+        self.assertFalse(recorded_body["secret_values_exposed"])
+        acceptance = recorded_body["acceptance"]
+        self.assertEqual(acceptance["probe_id"], probe_id)
+        self.assertEqual(acceptance["owner_approval_id"], owner_approval_id)
+        self.assertEqual(acceptance["product"], "commerce")
+        self.assertEqual(acceptance["surface"], "commerce")
+        self.assertEqual(acceptance["release_commit"], "a" * 40)
+        self.assertEqual(acceptance["state_version"], 0)
+        self.assertRegex(acceptance["state_digest"], r"^sha256:[0-9a-f]{64}$")
+
+        readback = self.client.get(
+            f"/api/trial/v1/product-acceptance/{probe_id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(readback.status_code, 200)
+        self.assertEqual(readback.json()["acceptance"], acceptance)
+        self.assertFalse(readback.json()["external_writes_performed"])
+
+        replay = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json=body,
+        )
+        self.assertEqual(replay.status_code, 200)
+        self.assertFalse(replay.json()["external_writes_performed"])
+        self.assertTrue(replay.json()["acceptance"]["idempotent_replay"])
+
+        changed = {**body, "owner_approval_id": str(uuid4())}
+        conflict = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json=changed,
+        )
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+
+        unentitled = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json={**body, "probe_id": str(uuid4()), "product": "ecommerce"},
+        )
+        self.assertEqual(unentitled.status_code, 403)
+        self.assertEqual(
+            unentitled.json()["detail"]["code"],
+            "trial_product_entitlement_required",
+        )
+
+        cross_tenant = self.client.get(
+            f"/api/trial/v1/product-acceptance/{probe_id}",
+            headers=self._headers("other-operator-session"),
+        )
+        self.assertEqual(cross_tenant.status_code, 404)
+        self.assertEqual(cross_tenant.json()["detail"]["code"], "trial_not_found")
+
+    def test_activation_entitlements_override_mismatched_product_capabilities(self) -> None:
+        store = InMemoryTrialStore(reducer=self.reducer)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=(
+                "company.read",
+                "commerce.write",
+                "production.write",
+                "website.write",
+            ),
+        )
+        store.provision_product_entitlements(
+            workspace_id="workspace-a",
+            products=("commerce",),
+        )
+        with self._client(store) as client:
+            bootstrap = client.get("/api/trial/v1/bootstrap", headers=self._headers())
+            self.assertEqual(bootstrap.status_code, 200)
+            body = bootstrap.json()
+            self.assertEqual(body["readiness"]["productEntitlements"], ["commerce"])
+            self.assertEqual(
+                body["readiness"]["capabilities"],
+                ["commerce.write", "company.read"],
+            )
+            self.assertIn("commerce", body["states"])
+            self.assertNotIn("production", body["states"])
+            self.assertNotIn("website", body["states"])
+
+            denied = self._command_body(event_type="production.workspace.initialized")
+            denied["surface"] = "production"
+            response = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=denied,
+            )
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(
+                response.json()["detail"],
+                {"code": "trial_capability_required", "required_capability": "production.write"},
+            )
+
+    def test_ecommerce_entitlement_can_use_shared_commerce_state_without_shop_access(self) -> None:
+        store = InMemoryTrialStore(reducer=self.reducer)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=("commerce.read", "commerce.write", "production.write"),
+        )
+        store.provision_product_entitlements(
+            workspace_id="workspace-a",
+            products=("ecommerce",),
+        )
+        with self._client(store) as client:
+            bootstrap = client.get("/api/trial/v1/bootstrap", headers=self._headers())
+            self.assertEqual(bootstrap.status_code, 200)
+            body = bootstrap.json()
+            self.assertEqual(body["readiness"]["productEntitlements"], ["ecommerce"])
+            self.assertIn("commerce", body["states"])
+            self.assertNotIn("production", body["states"])
+
     def test_successful_state_uses_resolved_workspace_and_actor(self) -> None:
         response = self.client.post(
             "/api/trial/v1/commands",
@@ -528,10 +673,15 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(empty.status_code, 200, empty.text)
         self.assertEqual(
             empty.json(),
-            {"workspace_id": "workspace-a", "version": 1, "schedule": None},
+            {
+                "workspace_id": "workspace-a",
+                "version": 1,
+                "privacy_owner": False,
+                "schedule": None,
+            },
         )
         schedule = {
-            "schema": "supermega.shop.service_schedule.v2",
+            "schema": "supermega.shop.service_schedule.v4",
             "industryPackId": "spa",
             "revision": 1,
             "services": [
@@ -558,6 +708,8 @@ class TrialRuntimeTests(unittest.TestCase):
                     "active": True,
                 }
             ],
+            "privacyPolicy": {"clientRetentionDays": None},
+            "clients": [],
             "bookings": [],
             "events": [
                 {
@@ -640,6 +792,70 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(forbidden_identity.status_code, 422)
         self.assertEqual(forbidden_identity.json()["detail"]["code"], "client_identity_forbidden")
+
+        current_schedule = first.json()["result"]["state"]["serviceSchedule"]
+        retention_at = "2026-07-29T04:06:00.000Z"
+        retention_schedule = {
+            **current_schedule,
+            "revision": 2,
+            "privacyPolicy": {
+                "clientRetentionDays": 365,
+                "updatedAt": retention_at,
+                "updatedBy": "fabricated-client-actor",
+            },
+            "events": [
+                *current_schedule["events"],
+                {
+                    "revision": 2,
+                    "type": "client_retention_set",
+                    "subjectId": "retention-365-days",
+                    "actor": "fabricated-client-actor",
+                    "reason": "Owner approved a 365-day client retention period.",
+                    "happenedAt": retention_at,
+                },
+            ],
+        }
+        owner_required = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 3,
+                "captured_at": retention_at,
+                "schedule": retention_schedule,
+            },
+        )
+        self.assertEqual(owner_required.status_code, 403, owner_required.text)
+        self.assertEqual(owner_required.json()["detail"]["code"], "spa_owner_action_required")
+
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=("commerce.write", "company.write", "product.shop"),
+        )
+        owner_view = client.get(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+        )
+        self.assertTrue(owner_view.json()["privacy_owner"])
+        retained = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 3,
+                "captured_at": retention_at,
+                "schedule": retention_schedule,
+            },
+        )
+        self.assertEqual(retained.status_code, 200, retained.text)
+        retained_schedule = retained.json()["result"]["state"]["serviceSchedule"]
+        server_event = retained_schedule["events"][-1]
+        self.assertEqual(server_event["actor"], "actor-operator")
+        self.assertNotEqual(server_event["happenedAt"], retention_at)
+        self.assertEqual(retained_schedule["privacyPolicy"]["updatedAt"], server_event["happenedAt"])
+        self.assertEqual(retained_schedule["privacyPolicy"]["updatedBy"], "actor-operator")
         client.close()
 
     def test_runtime_checks_membership_and_capability(self) -> None:

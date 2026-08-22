@@ -84,8 +84,9 @@ requireContract('release handoff is exact, review-only, and cannot deploy',
   && releaseHandoff.includes("fail('release_handoff_remote_state_changed')")
   && releaseHandoff.includes("fail('release_handoff_live_state_changed')")
   && releaseHandoff.includes("git('ls-remote', '--heads', 'origin', ref)")
-  && releaseHandoff.includes("args: ['/d', '/s', '/c', 'npm.cmd run app:verify']")
-  && releaseHandoff.includes("return { file: 'npm', args: ['run', 'app:verify'] }")
+  && releaseHandoff.includes('file: process.execPath')
+  && releaseHandoff.includes("args: [resolve(root, 'tools', 'run_app_verify.mjs'), '--serial']")
+  && !releaseHandoff.includes("args: ['/d', '/s', '/c', 'npm.cmd run app:verify']")
   && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseHandoff))
 requireContract('diverged release candidates produce one exact no-write integration plan',
   packageJson.scripts?.['release:integration:prepare'] === 'node tools/prepare_release_integration_plan.mjs'

@@ -27,3 +27,15 @@ export function managedAccountPath(path: '/login' | '/account/recovery', value: 
   const product = accountProductSlug(value)
   return product ? `${path}?product=${encodeURIComponent(product)}` : path
 }
+
+export function managedPortalEntryPath(value: string | null) {
+  const product = accountProductSlug(value)
+  return product ? `/${product}/` : '/?choose=1'
+}
+
+export function alternateManagedWorkspaceId(
+  workspaces: readonly { workspaceId: string }[],
+  currentWorkspaceId: string,
+) {
+  return workspaces.find((workspace) => workspace.workspaceId !== currentWorkspaceId)?.workspaceId ?? ''
+}

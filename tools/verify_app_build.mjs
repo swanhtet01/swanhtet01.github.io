@@ -160,8 +160,12 @@ const productionMaterialHandoffSource = await readFile(resolve(root, 'showroom',
 const shopProductionHandoffUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopProductionHandoff.tsx'), 'utf8')
 const productionMaterialHandoffPython = await readFile(resolve(root, 'supermega_runtime', 'production_material_handoff.py'), 'utf8')
 const managedTrialRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'trial_runtime.py'), 'utf8')
+const hostedProductAcceptanceVerifierSource = await readFile(resolve(root, 'tools', 'verify_hosted_product_acceptance.mjs'), 'utf8')
+const clientPortalLaunchProofSource = await readFile(resolve(root, 'tools', 'assemble_client_portal_launch_proof.mjs'), 'utf8')
+const rootPackageSource = await readFile(resolve(root, 'package.json'), 'utf8')
 const serviceRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'runtime.py'), 'utf8')
 const localDevSource = await readFile(resolve(root, 'tools', 'verify_local_app_dev.mjs'), 'utf8')
+const localAppRunnerSource = await readFile(resolve(root, 'tools', 'run_local_app.mjs'), 'utf8')
 const appLiveVerifierSource = await readFile(resolve(root, 'tools', 'verify_app_release_live.mjs'), 'utf8')
 const businessCommandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'business-command.ts'), 'utf8')
 const companyBriefRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'company_brief.py'), 'utf8')
@@ -184,6 +188,21 @@ const pilotOutcomeHookSource = await readFile(resolve(root, 'showroom', 'src', '
 const companyBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'company-backup.ts'), 'utf8')
 const companyBackupUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'CompanyBackupPanel.tsx'), 'utf8')
 const workspaceStatusPanelSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'WorkspaceStatusPanel.tsx'), 'utf8')
+
+if (!managedActivationSource.includes('ACTIVATION_REQUERY_EVIDENCE_CONTRACT = "supermega.managed_workspace_activation_requery_evidence.v2"')
+  || !managedActivationSource.includes('def validate_activation_receipt(')
+  || !managedActivationSource.includes('def build_activation_requery_evidence(')
+  || !managedActivationSource.includes('"status": "database_activation_verified"')
+  || !managedActivationSource.includes('"hostedDatabaseReadPerformed": True')
+  || !managedActivationSource.includes('"databaseReadOnly": True')
+  || !managedActivationSource.includes('"activationMutationPerformedByThisCommand": False')
+  || !managedActivationSource.includes('"exact_release_live_verification_required"')
+  || !managedActivationSource.includes('"named_owner_portal_smoke_required"')
+  || !managedActivationSource.includes('"cross_tenant_denial_smoke_required"')
+  || !managedActivationSource.includes('if output.exists():')
+  || !managedActivationSource.includes('"products": list(plan["products"] if "products" in plan else [plan["product"]])')
+  || !managedActivationSource.includes('"ownerApprovalDigest": f"sha256:{sha256(str(plan[\'approval\'][\'approvalId\']).encode(\'utf-8\')).hexdigest()}"')
+  || !managedActivationSource.includes('"remainingGateCount": len(evidence["remainingGates"])')) fail('managed_activation_requery_evidence_missing')
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
@@ -310,10 +329,24 @@ if (!coreCssSource.includes('.orders-module { overflow-y: auto; padding: 0 2px 1
   || !coreCssSource.includes('.orders-module > .order-workspace { flex: 0 0 auto; }')) fail('shop_orders_workspace_can_shrink_out_of_view')
 if (!coreCssSource.includes('details:not([open]) > :not(summary) { display: none; }')) fail('closed_details_visibility_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopTodayUiSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_today_side_effect_added')
-if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
+if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v4")
   || !shopServiceScheduleSource.includes("type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'")
   || !shopServiceScheduleSource.includes('provisionEmptyShopServiceSchedule')
   || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA')
+  || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V2')
+  || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V3')
+  || !shopServiceScheduleSource.includes('type ShopServiceClient')
+  || !shopServiceScheduleSource.includes("appointmentUpdates: ShopServiceAppointmentUpdates")
+  || !shopServiceScheduleSource.includes('setShopServiceClientRetention')
+  || !shopServiceScheduleSource.includes('recordShopServiceClientExport')
+  || !shopServiceScheduleSource.includes('shopServiceClientAnonymizationReadiness')
+  || !shopServiceScheduleSource.includes('anonymizeShopServiceClient')
+  || !shopServiceScheduleUiSource.includes('Customer updates')
+  || !shopServiceScheduleUiSource.includes('Contact or client reference *')
+  || !shopServiceScheduleUiSource.includes('Use a non-contact reference when updates are off.')
+  || !shopServiceScheduleUiSource.includes('spa-client-contacts')
+  || !shopServiceScheduleUiSource.includes('Clients and privacy')
+  || !shopServiceScheduleUiSource.includes('Every download') && !shopServiceScheduleUiSource.includes('export receipt is saved before')
   || !shopServiceScheduleSource.includes('scheduleShopServiceBooking')
   || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
   || !shopServiceScheduleSource.includes('registerShopServiceResource')
@@ -321,9 +354,13 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   // The schedule words belong to the pack: a restaurant books reservations and a
   // school books classes. A literal "appointment" in the UI is the regression.
   || !shopServiceScheduleSource.includes('export function shopScheduleVocabulary(')
+  || !shopServiceScheduleSource.includes('export function shopServiceSaleSku(')
   || !shopServiceScheduleUiSource.includes('shopScheduleVocabulary(schedule?.industryPackId ?? ')
+  || !shopServiceScheduleUiSource.includes('shopServiceSaleSku(schedule.industryPackId, booking.serviceId)')
+  || !shopServiceScheduleUiSource.includes('Charge at counter')
+  || !shopServiceScheduleUiSource.includes('shopCounterSearch: saleSku')
   || !shopServiceScheduleUiSource.includes('{vocabulary.holdAction}')
-  || shopServiceScheduleUiSource.split('\n').some((line) => !line.trimStart().startsWith('//') && /appointment/i.test(line))
+  || shopServiceScheduleUiSource.split('\n').some((line) => !line.trimStart().startsWith('//') && /appointment/i.test(line.replaceAll('appointmentUpdates', '')))
   || !shopServiceScheduleUiSource.includes('const agenda = projection.upcoming.length ? projection.upcoming : projection.today')
   || !shopServiceScheduleUiSource.includes('{agenda.length ? agenda.slice(0, 12).map((booking) => {')
   || !shopServiceScheduleUiSource.includes('Services and resources')
@@ -334,6 +371,8 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleUiSource.includes("scrollIntoView({ block: 'start' })")
   || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
   || !coreSource.includes("initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}")
+  || !coreSource.includes('const [query, setQuery] = useState(initialQuery)')
+  || !coreSource.includes('restoredDraft?.customer || initialCustomer')
   || !coreCssSource.includes('.service-booking-form')
   || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'supabase', 'openai', 'anthropic'].some((marker) => `${shopServiceScheduleSource}\n${shopServiceScheduleUiSource}`.toLowerCase().includes(marker.toLowerCase()))) fail('shop_service_schedule_crossed_external_boundary')
@@ -348,10 +387,17 @@ if (!managedTrialSource.includes('loadManagedServiceSchedule')
   || !managedTrialRuntimeSource.includes('@router.post("/commerce/service-schedule")')
   || !managedTrialRuntimeSource.includes('principal.actor_kind != "human"')
   || !managedTrialRuntimeSource.includes('_reject_client_identity(body.schedule')
+  || !managedTrialRuntimeSource.includes('_require_spa_owner_schedule_action')
+  || !managedTrialRuntimeSource.includes('privacy_owner')
+  || !managedTrialRuntimeSource.includes('_current_utc_timestamp()')
   || !managedTrialRuntimeSource.includes('commerce.service_schedule.initialized')
   || !managedCommerceRuntime.includes('commerce.service_schedule.saved')
   || !managedCommerceRuntime.includes('_validate_service_schedule_initialized')
   || !managedCommerceRuntime.includes('_validate_service_schedule_saved')
+  || !managedCommerceRuntime.includes('client_retention_set')
+  || !managedCommerceRuntime.includes('client_exported')
+  || !managedCommerceRuntime.includes('client_anonymized')
+  || !managedCommerceRuntime.includes('_service_client_export_csv')
   || !managedCommerceRuntime.includes('contains overlapping bookings')
   || !managedCommerceRuntime.includes('service schedule evidence history is immutable')
   || !managedTrialStoreRuntime.includes('commerce.service_schedule.initialized')
@@ -1152,6 +1198,8 @@ if (coreSource.includes('function ProductTrialContext')
   || coreSource.includes('>All products</Link>')
   || (coreSource.match(/Resume order/g) ?? []).length !== 1) fail('configured_product_navigation_or_recovery_actions_redundant')
 if (!viteConfigSource.includes("process.env.SUPERMEGA_LOCAL_API?.trim()")
+  || !viteConfigSource.includes("cacheDir: resolve(projectRoot, '../.tmp/vite-cache')")
+  || viteConfigSource.includes("cacheDir: resolve(projectRoot, 'node_modules/.vite')")
   || !viteConfigSource.includes("? { '/api': { target: localApi, changeOrigin: true } }")
   || !viteConfigSource.includes("name: 'supermega-local-health'")
   || !viteConfigSource.includes('configureServer(server)')
@@ -1167,15 +1215,14 @@ if (!viteConfigSource.includes("process.env.SUPERMEGA_LOCAL_API?.trim()")
   || !viteConfigSource.includes('response.statusCode = 200')
   || !viteConfigSource.includes("response.end(request.method === 'HEAD' ? undefined : isolatedHealthBody)")
   || (viteConfigSource.match(/if \(!localApi\) server\.middlewares\.use\(isolatedHealthMiddleware\)/g) ?? []).length !== 2) fail('local_health_not_truthful_or_fail_closed')
+if (!localAppRunnerSource.includes("SUPERMEGA_OTEL_DISABLED: '1'")) fail('local_app_console_telemetry_not_disabled')
 if (coreSource.includes('const setupTemplates =') || coreSource.includes('const setupEntryPoints =')) fail('workflow_contract_duplicated')
 if (!coreShellSource.includes("const productsNavigation: NavigationItem = { to: '/?choose=1', label: 'Switch product', end: true }")
-  || !coreShellSource.includes("commerce: { to: '/shop/', label: 'Shop' }")
-  || !coreShellSource.includes("production: { to: '/plant/', label: 'Plant' }")
-  || !coreShellSource.includes("website: { to: '/website/', label: 'Website' }")
-  || !coreShellSource.includes("ecommerce: { to: '/ecommerce/', label: 'Ecommerce' }")
-  || !coreShellSource.includes('? [productNavigation[routeProduct], productsNavigation]')
+  || !coreShellSource.includes("productSwitcherVisible(portalAccess.status, portalAccess.products)")
+  || !coreShellSource.includes("(routeProduct || setupRoute) && canSwitchProduct")
+  || coreShellSource.includes('const productNavigation:')
   || !coreShellSource.includes("? { to: '/internal/client-builder/', label: 'Client builder' }")
-  || !coreShellSource.includes('? [setupNavigation, productsNavigation]')
+  || !coreShellSource.includes('internalBuilderRoute\n    ? [setupNavigation]')
   || coreShellSource.includes('const navigation = [')
   || coreShellSource.includes("{ to: '/work/', label: 'HQ'")
   || coreShellSource.includes("{ to: '/operations/', label: 'Products'")) fail('first_run_navigation_not_simple')
@@ -1206,23 +1253,19 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   // discoverable door to Company login).
   || coreCssSource.includes('.core-topbar .mobile-account-link')
   || !coreCssSource.includes('.core-topbar .runtime-badge { display: none; }')) fail('managed_account_entry_not_discoverable')
-const shellNavigationContract = coreShellSource.slice(
-  coreShellSource.indexOf('const productNavigation:'),
-  coreShellSource.indexOf('\n}', coreShellSource.indexOf('const productNavigation:')) + 2,
-)
-const shellProductRoutes = [...shellNavigationContract.matchAll(/\{ to: '\/([a-z][a-z0-9-]*)\/', label: '[^']+' \}/g)].map((match) => match[1])
-if (shellProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('shell_product_navigation_drift')
-if (shellNavigationContract.includes("{ to: '/settings/', label: 'Settings' }")) fail('internal_setup_exposed_in_primary_navigation')
+if (coreShellSource.includes("{ to: '/settings/', label: 'Settings' }")) fail('internal_setup_exposed_in_primary_navigation')
 if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : 'Recovery')")
   || !coreShellSource.includes("? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }")
   || !coreShellSource.includes("{ to: '/settings/#controls', label: 'Recovery' }")
   || !coreShellSource.includes('const setupRoute = customerSettingsRoute || internalBuilderRoute')
-  || !coreShellSource.includes('const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []')
+  || !coreShellSource.includes('const mobileNavigation = activeNavigation')
   || !coreShellSource.includes('mobileNavigation.length > 0 ? <nav className="mobile-nav"')
   || !coreShellSource.includes('aria-label="Current product navigation"')
   || !coreShellSource.includes('activeNavigation.map((item)')
   || !coreShellSource.includes('mobileNavigation.map((item)')
-  || !coreCssSource.includes('grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line);')
+  || !coreShellSource.includes("const showSignupLink = !accountEntryRoute && !routeProduct && !setupRoute")
+  || !coreShellSource.includes("{canSwitchProduct ? <Link to=\"/?choose=1\">Switch</Link> : null}")
+  || !coreCssSource.includes('grid-template-columns: repeat(auto-fit,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line);')
   || !coreCssSource.includes('overflow: hidden; border-top: 1px solid var(--core-line);')
   || coreShellSource.includes('aria-label="Mobile product navigation"')
   || coreCssSource.includes('.mobile-nav a:first-child { display: none; }')) fail('client_setup_navigation_separation_missing')
@@ -1240,12 +1283,13 @@ if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settin
 // dropping it strands mobile Shop users inside one product.
 if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from './commerce-tabs'")
   || !coreShellSource.includes("const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(")
-  || !coreShellSource.includes('<nav className="mobile-nav mobile-task-nav" aria-label="Shop task shortcuts">')
+  || !coreShellSource.includes("<nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label=\"Shop task shortcuts\">")
   || !coreShellSource.includes('{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? \'page\' : undefined}')
   || !coreShellSource.includes('to={`/shop/?tab=${tab.id}`}')
-  || !coreShellSource.includes('<Link to="/?choose=1">Products</Link></nav>')
+  || !coreShellSource.includes('{canSwitchProduct ? <Link to="/?choose=1">Switch</Link> : null}</nav>')
   || coreShellSource.includes('mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <NavLink')
-  || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(5,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.mobile-nav.mobile-task-nav.has-switch { grid-template-columns: repeat(5,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }')) fail('shop_mobile_task_nav_missing')
 if (!coreShellSource.includes("theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
   || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
@@ -1385,8 +1429,64 @@ if (!coreShellSource.includes("const LAST_PRODUCT_KEY = 'supermega.last-product.
   || !coreShellSource.includes('? readLastProduct(window.localStorage)')
   || !coreShellSource.includes(': choosingProduct')
   || !coreShellSource.includes('? <ProductHomePage />')
-  || !coreShellSource.includes('<Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />')
+  || !coreShellSource.includes('<Navigate replace to={managedProductPath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />')
   || !coreShellSource.includes('if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)')) fail('remembered_product_entry_missing')
+if (!managedTrialSource.includes('export function managedProductsFromBootstrap(')
+  || !managedTrialSource.includes('const explicit = verified.readiness.productEntitlements')
+  || !managedTrialSource.includes("code: 'managed_bootstrap_invalid'")
+  || !managedTrialSource.includes("if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)")
+  || managedTrialSource.includes("products.push('commerce')")
+  || managedTrialSource.includes("products.push('production')")
+  || managedTrialSource.includes("products.push('website')")
+  || managedTrialSource.includes("products.push('ecommerce')")
+  || !managedTrialSource.includes('bootstrap omits the immutable activation-derived entitlement list')
+  || !coreShellSource.includes("const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)")
+  || !coreShellSource.includes("void import('./managed-trial')")
+  || !coreShellSource.includes('currentManagedWorkspace()')
+  || !coreShellSource.includes("from './managed-product-access'")
+  || !coreShellSource.includes('resolveManagedProductRoute(requestedProduct, portalAccess.products)')
+  || !coreShellSource.includes('resolveManagedProductHome({')
+  || !coreShellSource.includes('if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null')
+  || !coreShellSource.includes('!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null')
+  || !coreShellSource.includes('title="No products assigned"')) fail('managed_product_portal_isolation_missing')
+if (!managedTrialStoreRuntime.includes('"capabilities": sorted(self.capabilities)')
+  || !managedTrialSource.includes('export function managedBootstrapHasCapability(')
+  || !managedTrialSource.includes('if (capabilities === undefined) return false')
+  || !workspaceRuntimeSource.includes("managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write')")
+  || !workspaceRuntimeSource.includes("managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write')")
+  || !websiteWorkspaceSource.includes("managedBootstrapHasCapability(bootstrap, identity, 'website.write')")
+  || !websiteSource.includes("const portalViewOnly = storageMode === 'managed' && !canWrite")
+  || !ecommerceSource.includes("managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')")
+  || !ecommerceSource.includes('const portalViewOnly = Boolean(managedIdentity && !managedCanWrite)')) fail('managed_staff_portals_not_capability_aware')
+if (!managedTrialStoreRuntime.includes('PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"')
+  || !managedTrialStoreRuntime.includes('def record_product_acceptance(')
+  || !managedTrialStoreRuntime.includes('def get_product_acceptance(')
+  || !managedTrialStoreRuntime.includes('state_digest=f"sha256:{_canonical_fingerprint(\'product_state\', state.state)}"')
+  || !managedTrialStoreRuntime.includes('if product_value not in self._product_entitlements(')
+  || !managedTrialRuntimeSource.includes('@router.post("/product-acceptance")')
+  || !managedTrialRuntimeSource.includes('@router.get("/product-acceptance/{probe_id}")')
+  || !managedTrialRuntimeSource.includes('"product_state_mutated": False')
+  || !hostedProductAcceptanceVerifierSource.includes("supermega.hosted_product_acceptance_smoke.v2")
+  || !hostedProductAcceptanceVerifierSource.includes('production_handoff_confirmation_required')
+  || !hostedProductAcceptanceVerifierSource.includes('deterministicProbeId')
+  || !hostedProductAcceptanceVerifierSource.includes('prerequisitePortalArtifactDigest')
+  || !hostedProductAcceptanceVerifierSource.includes('prerequisite_portal_changed')
+  || !hostedProductAcceptanceVerifierSource.includes('trial_membership_required')
+  || !rootPackageSource.includes('client:portal:hosted-acceptance:self-test')) fail('hosted_product_acceptance_contract_missing')
+if (!clientPortalLaunchProofSource.includes("CLIENT_PORTAL_LAUNCH_PROOF_CONTRACT = 'supermega.client_portal_launch_proof.v1'")
+  || !clientPortalLaunchProofSource.includes("const ACTIVATION_CONTRACT = 'supermega.managed_workspace_activation_requery_evidence.v2'")
+  || !clientPortalLaunchProofSource.includes("const ACCEPTANCE_CONTRACT = 'supermega.hosted_product_acceptance_smoke.v2'")
+  || !clientPortalLaunchProofSource.includes('validateReleaseHandoffPacket')
+  || !clientPortalLaunchProofSource.includes('launch_release_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_workspace_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_owner_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_product_set_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_acceptance_portal_artifact_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_acceptance_portal_binding_mismatch')
+  || !clientPortalLaunchProofSource.includes("status: 'ready_for_named_use'")
+  || !clientPortalLaunchProofSource.includes('rawClientIdentifiersPersisted: false')
+  || !clientPortalLaunchProofSource.includes("lifecycle: 'available_post_launch'")
+  || !rootPackageSource.includes('client:portal:launch-proof:self-test')) fail('client_portal_launch_proof_contract_missing')
 if (!operationalReportSource.includes('The source failed validation; no sample values were substituted.')
   || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
   || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
@@ -2802,7 +2902,7 @@ if (!appSource.includes("lazy(() => import('./core/SettingsPage')")
   || !appSource.includes("setupProductFromQuery(new URLSearchParams(location.search).get('product'))")
   || !appSource.includes('<ProductOnboardingPage product={product} />')
   || !appSource.includes('<ProductLoading name="product setup" />')
-  || !settingsEntryContract.includes("if (location.hash === '#controls')")
+  || !settingsEntryContract.includes("if (location.hash === '#controls' || location.hash === '#workspace-recovery')")
   || !settingsEntryContract.includes('<ProductLoading name="workspace controls" />')
   || !settingsEntryContract.includes('<WorkspaceControlsPage />')
   || settingsEntryContract.includes('<SettingsPage />')
@@ -3187,7 +3287,7 @@ if (!ecommerceSource.includes('Stock, payment, delivery, and the final order sta
   || !ecommerceSource.includes('current edits were kept for review')
   || !ecommerceSource.includes('loadManagedBootstrap(identity)')
   || !managedStorefrontSource.includes('result.command_id !== expected.commandId')
-  || !ecommerceSource.includes('disabled={catalogHydrating || draftBusy}')
+  || !ecommerceSource.includes('disabled={portalViewOnly || catalogHydrating || draftBusy}')
   || !ecommerceSource.includes('selectionReviewRequired')
   || !ecommerceSource.includes('Open recovery settings')
   || !ecommerceSource.includes('Saved products no longer in this Shop')
@@ -3344,7 +3444,8 @@ if (addToCartStart < 0
   || !ecommerceSource.includes('onCartChange={setBuyingCart}')
   || !ecommerceSource.includes('onDraft={openShopDraft}')
   || !ecommerceSource.includes('onOpenManagedRequest={managedIdentity ?')
-  || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}')
+  || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}')
+  || !ecommerceSource.includes('disabled={portalViewOnly || catalogHydrating}')
   || !ecommerceSource.includes("onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}")
   || storefrontSavePreviewAdvanceCount !== 2
   || managedStorefrontSave < 0
@@ -3937,7 +4038,8 @@ if (!websiteModelSource.includes("contract: 'supermega.website.working-sample.v1
   || !productOnboardingPageSource.includes('await activateLocalWebsiteWorkingSample({')
   || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'}")
   || !websiteSource.includes('websiteTodayContext')) fail('website_working_sample_activation_missing')
-if ((websiteSource.match(/\{websiteAgentActionLabel\}<\/button>/g) ?? []).length !== 1
+if ((websiteSource.match(/onClick=\{runWebsiteAutopilot\}/g) ?? []).length !== 1
+  || !websiteSource.includes("{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>")
   || websiteSource.includes('onClick={openStarterSetup}')
   || />\s*Customize demo\s*<\/button>/.test(websiteSource)) fail('website_duplicate_starter_action_present')
 if (!websiteModelSource.includes("siteName: 'Mingalar Fresh Mart'")
@@ -4006,7 +4108,6 @@ if (!websiteSource.includes('Recovery settings')
   || !productSetupSource.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY')
   || !handoffSource.includes('export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }')
   || coreSource.includes("import('../products/website/website-model')")
-  || coreSource.includes("import('../products/product-handoff')")
   || coreSource.includes("from '../products/website/website-model'")
   || !websiteCssSource.includes('.website-notice-action')) fail('website_session_recovery_missing_or_eager')
 if (!websiteModelSource.includes('repairInvalidWebsiteWorkspace')
@@ -4075,7 +4176,7 @@ if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') >
 const websiteUnifiedCss = websiteCssSource.slice(websiteCssSource.lastIndexOf('/* Unified Website workflow'))
 if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
   || !websiteSource.includes('className="website-action-bar"')
-  || !websiteSource.includes("storageMode === 'managed' ? canReview ? (")
+  || !websiteSource.includes("storageMode === 'managed' ? canReview && !portalViewOnly ? (")
   || websiteSource.includes('The four-page prototype limit is reached')
   || websiteSource.includes('This prototype is capped at four pages.')
   || !websiteSource.includes('className="website-primary-actions"')
@@ -4090,7 +4191,7 @@ if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
   || websiteSource.includes('splitPreview')
   || websiteSource.includes('className="website-mobile-seo-settings"')
   || ['.website-workspace-nav', '.website-mobile-mode-nav', '.website-mobile-page-bar', '.website-mobile-site-settings', '.website-surface-controls', '.website-split-control', '[data-split='].some((selector) => websiteCssSource.includes(selector))) fail('website_unified_action_bar_missing')
-if (!websiteSource.includes("storageMode === 'managed' ? canReview ? (")
+if (!websiteSource.includes("storageMode === 'managed' ? canReview && !portalViewOnly ? (")
   || !websiteSource.includes("storageMode !== 'session-only' ? (")
   || !websiteSource.includes("view === 'publish' && storageMode === 'session-only'")
   || !websiteSource.includes('<PublishWorkspace')
@@ -4491,6 +4592,15 @@ if ([
   "from '../../core/managed-trial'",
 ].some((marker) => websiteSource.includes(marker))) fail('website_still_writes_order_intake')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
+if (coreSource.includes("import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'")
+  || coreSource.includes("import { readWebsiteEcommerceHandoff")
+  || !coreSource.includes("lazy(() => import('../products/WebsiteCommerceIntake')")
+  || !coreSource.includes("void import('../products/product-handoff')")
+  || !coreSource.includes('if (managedIdentity || !confirmedLocalShop) return undefined')
+  || !coreSource.includes('[confirmedLocalShop, managedIdentity]')
+  || !coreSource.includes("localWebsiteIntakeRead.status === 'ready'")
+  || !coreSource.includes('Older Website order could not be checked.')
+  || !coreSource.includes('No order was created or changed.')) fail('legacy_website_intake_eager_or_fail_open')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft')
   || !commerceIntakeSource.includes('opaque customer reference generated on completion')
   || !commerceIntakeSource.includes('Create ready order')
@@ -4764,6 +4874,21 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes('Math.ceil(orders.length / pageSize)')
   || !coreSource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
 if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !workspaceRuntimeSource.includes('result.version !== current.version + 1') || !workspaceRuntimeSource.includes('validateCommerceState(result.state)') || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'") || !workspaceRuntimeSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !workspaceRuntimeSource.includes('const latest = loadCommerceWorkspace()') || !workspaceRuntimeSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
+if (!coreSource.includes('initializeManagedTemplateCatalog')
+  || !coreSource.includes('shopBusinessTemplateCommerceItems(managedTemplateId)')
+  || !coreSource.includes('I reviewed the starter prices, opening counts, and reorder levels.')
+  || !coreSource.includes('No sales or customer records were added.')
+  || !productOnboardingPageSource.includes('shopBusinessTemplateManagedCatalogPath(selectedBusinessTemplate.id)')) fail('managed_template_catalog_activation_missing')
+if (!productOnboardingPageSource.includes('navigate(plantIndustryPackManagedPlanPath(plantIndustryPackId))')
+  || !coreSource.includes('plantIndustryPackIdFromSearch(productionLocation.search)')
+  || !coreSource.includes('...managedPlantStarterPlan(plantIndustryPackId)')
+  || !coreSource.includes('I reviewed these values against a real plan.')
+  || !coreSource.includes('no production history will be invented')
+  || !coreSource.includes('if (!planDraft.reviewed')
+  || !coreSource.includes("jobs: [{ id: firstJobId, line, product, target: jobTarget, output: 0")
+  || !coreSource.includes("machines: [{ id: machineId, name: machineName, state: 'running' }]")
+  || !plantIndustryPacksSource.includes('export function managedPlantStarterPlan')
+  || !plantIndustryPacksSource.includes('export function plantIndustryPackManagedPlanPath')) fail('managed_plant_starter_plan_activation_missing')
 if ((workspaceRuntimeSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
 if (!workspaceRuntimeSource.includes('confirmation?: AccountableAction') || !workspaceRuntimeSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !workspaceRuntimeSource.includes('result.idempotent_replay') || !workspaceRuntimeSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 // A frozen command proof blocks Cancel and Escape while the outcome is unknown. Once a submit has
@@ -5525,9 +5650,19 @@ if (!productSetupSource.includes('templateId: string')
   // are pinned: the local journey is still the base, and each managed override is still applied
   // on top of it.
   || !productOnboardingPageSource.includes('const onboardingJourney = managedCommerce')
-  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_SHOP_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...managedTemplateJourney }')
+  || !productOnboardingPageSource.includes('Nothing is created until you confirm its values and source.')
   || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_PLANT_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_WEBSITE_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_ECOMMERCE_ONBOARDING_JOURNEY }')
   || !productOnboardingPageSource.includes(': onboardingJourneys[product]')
+  || !productOnboardingPageSource.includes('const [managedIdentity, , managedIdentitySettled] = useManagedIdentity')
+  || !productOnboardingPageSource.includes('managedOnboardingAccountCheckPending(runtime.status, managedIdentitySettled)')
+  || !productOnboardingPageSource.includes('if (accountCheckPending) {')
+  || !productOnboardingPageSource.includes("if (product === 'website' && !managedIdentity) {")
+  || !productOnboardingPageSource.includes("if (product === 'ecommerce' && !managedIdentity) {")
+  || !productOnboardingPageSource.includes('disabled={!workflowReady || workspaceBusy || accountCheckPending}')
+  || !productOnboardingPageSource.includes("managedIdentity ? 'Uses this company account. Nothing is published or sent externally.'")
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
   || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup)')
@@ -5636,8 +5771,19 @@ if (!productSetupSource.includes('templateId: string')
   || productOnboardingPageSource.includes('product-onboarding-demo-action')
   || !productOnboardingPageSource.includes('This setup affects {onboardingProduct.name} only. Your other products stay separate.')
   || !productOnboardingPageSource.includes('Need help bringing real data?')
+  || !productOnboardingPageSource.includes("notice.startsWith('Saved appointments are unreadable')")
+  || !productOnboardingPageSource.includes('prepareUnreadableShopScheduleRecovery(window.localStorage)')
+  || !productOnboardingPageSource.includes('clearUnreadableShopSchedule(window.localStorage, recovery.raw)')
+  || !productOnboardingPageSource.includes('Download backup and clear appointments')
+  || !productOnboardingPageSource.includes('Valid or changed appointments are never cleared.')
+  || !productOnboardingPageSource.includes('to="/settings/#workspace-recovery">Review all recovery options</Link>')
+  || !productOnboardingPageSource.includes('className="product-onboarding-recovery" role="alert"')
+  || !appSource.includes("location.hash === '#controls' || location.hash === '#workspace-recovery'")
+  || !workspaceControlsPageSource.includes('className="core-panel trial-control-panel" id="workspace-recovery"')
+  || !workspaceControlsPageSource.includes("ref={window.location.hash === '#workspace-recovery' ? (node) => node?.scrollIntoView({ block: 'start' }) : undefined}")
   || !coreCssSource.includes('.product-onboarding-help { margin: 0;')
   || !coreCssSource.includes('.product-onboarding-help a:hover { color: var(--core-green); }')
+  || !coreCssSource.includes('.product-onboarding-recovery { display: grid;')
   || productOnboardingPageSource.includes('const [dataSetupOpen, setDataSetupOpen] = useState(false)')
   || productOnboardingPageSource.includes('onToggle={(event) => setDataSetupOpen(event.currentTarget.open)}')
   || productOnboardingPageSource.includes('<ClientDataOnboarding')
@@ -5689,7 +5835,7 @@ if (!productSetupSource.includes('templateId: string')
   || coreCssSource.includes('.product-onboarding-sample {')
   || !coreCssSource.includes('.product-onboarding-grid { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.product-onboarding-primary .core-button { width: 100%; }')
-  || !coreCssSource.includes('.demo-preset-select,\n.demo-pack-select { display: grid;')
+  || !coreCssSource.replaceAll('\r\n', '\n').includes('.demo-preset-select,\n.demo-pack-select { display: grid;')
   || !coreCssSource.includes('.setup-existing-package')
   || !coreCssSource.includes('.client-system-details > .client-foundation-summary')
   || !coreCssSource.includes('.demo-solution-card[data-selected="true"]')
@@ -5880,8 +6026,9 @@ const shopCounterRouteContract = coreSource.slice(coreSource.indexOf("if (tab ==
 if (!shopCounterContract.includes('Tap an item to add it')
   || !shopCounterContract.includes('industryPack.firstWorkflow')
   || !shopCounterContract.includes('sampleCatalogActive')
+  || !shopCounterContract.includes("? 'Existing Shop catalog'")
   || !shopCounterContract.includes('sample items are loaded.')
-  || !shopCounterContract.includes('Existing Shop catalog data was preserved.')
+  || !shopCounterContract.includes('Your existing items were kept. The ${industryPack.name} appointment schedule is separate.')
   || !shopCounterContract.includes('to="/shop/?tab=orders#shop-service-schedule"')
   || !shopCounterContract.includes("['Cash', 'KBZPay', 'WavePay']")
   || !shopCounterContract.includes('function addSearchMatch(event: KeyboardEvent<HTMLInputElement>)')
@@ -8052,10 +8199,10 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.resources.at(-1).kind === 'staff' && state.events.at(-1).type === 'resource_registered', 'shop_service_resource_registration_failed')
     const serviceId = state.services.at(-1).id
     const resourceId = state.resources.at(-1).id
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client A', contact: '09-000-000', serviceId, resourceId, startsAt: '2026-07-29T04:00:00.000Z', note: 'First visit' }, proof(3, 'Reviewed booking request'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client A', contact: '09-000-000', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T04:00:00.000Z', note: 'First visit' }, proof(3, 'Reviewed booking request'))
     const bookingId = state.bookings[0].id
     assert(state.bookings[0].endsAt === '2026-07-29T05:30:00.000Z' && state.bookings[0].status === 'held', 'shop_service_booking_duration_or_initial_state_wrong')
-    assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-111-111', serviceId, resourceId, startsAt: '2026-07-29T05:00:00.000Z' }, proof(4, 'Conflicting request')), 'shop_service_booking_conflict_succeeded')
+    assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-111-111', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T05:00:00.000Z' }, proof(4, 'Conflicting request')), 'shop_service_booking_conflict_succeeded')
     const projected = model.projectShopServiceSchedule(state, new Date('2026-07-29T04:15:00.000Z'))
     assert(projected.today.length === 1 && projected.upcoming.length === 1 && projected.expectedRevenueMmk === 75_000 && projected.awaitingArrival === 1, 'shop_service_schedule_projection_wrong')
     state = model.advanceShopServiceBooking(state, bookingId, proof(5, 'Customer confirmed'))
@@ -8066,11 +8213,11 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.bookings[0].status === 'completed' && state.events.length === state.revision, 'shop_service_booking_completion_or_evidence_failed')
     assertThrows(() => model.advanceShopServiceBooking(state, bookingId, proof(8, 'Invalid extra advance')), 'shop_service_completed_booking_advanced')
     assertThrows(() => model.cancelShopServiceBooking(state, bookingId, proof(9, 'Invalid cancellation')), 'shop_service_completed_booking_cancelled')
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(10, 'Second reviewed booking'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(10, 'Second reviewed booking'))
     const cancellableId = state.bookings.at(-1).id
     state = model.cancelShopServiceBooking(state, cancellableId, proof(11, 'Customer cancelled'))
     assert(state.bookings.at(-1).status === 'cancelled', 'shop_service_booking_cancellation_failed')
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(12, 'Replacement reviewed booking'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(12, 'Replacement reviewed booking'))
     assert(state.bookings.at(-1).status === 'held', 'shop_service_cancelled_slot_not_reusable')
     assertThrows(() => model.validateShopServiceSchedule({ ...state, events: state.events.slice(1) }), 'shop_service_missing_evidence_accepted')
     assertThrows(() => model.readShopServiceSchedule('{"schema":"wrong"}'), 'shop_service_invalid_storage_accepted')
@@ -8096,7 +8243,9 @@ async function verifyShopBusinessTemplateRuntime() {
     || ['Date.now', 'Math.random', 'new Date()', 'crypto.randomUUID', 'performance.now', 'fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'localStorage'].some((marker) => shopBusinessTemplatesSource.includes(marker))
     || !productOnboardingRuntimeSource.includes('export async function provisionLocalShopBusinessTemplateSample')
     || !productOnboardingPageSource.includes('provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)')
-    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
+    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(query.get('template'))")
+    || !productOnboardingPageSource.includes("shopBusinessChoiceFromIndustryPack(pack.id)")
+    || !shopBusinessTemplatesSource.includes('export function shopIndustryPackSetupPath(')
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
     || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
@@ -8163,14 +8312,18 @@ async function verifyShopBusinessTemplateRuntime() {
       && model.shopBusinessTemplateFromQuery(' PHARMACY ') === 'pharmacy'
       && model.shopBusinessTemplateFromQuery('unknown-type') === null
       && model.shopBusinessTemplateFromQuery(null) === null, 'shop_business_template_query_selection_wrong')
-    assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy', 'shop_business_template_setup_path_wrong')
+    assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy'
+      && model.shopBusinessTemplateManagedCatalogPath('beauty-spa') === '/shop/?template=beauty-spa'
+      && model.shopIndustryPackSetupPath('spa') === '/settings/?product=shop&pack=spa'
+      && model.shopBusinessChoiceFromIndustryPack('spa') === 'trade:beauty-spa'
+      && model.shopBusinessChoiceFromIndustryPack('gym') === 'pack:gym', 'shop_business_template_setup_path_wrong')
     assertThrows(() => model.shopBusinessTemplate('unknown'), 'shop_business_unknown_template_accepted')
   } catch (error) {
     fail(`shop_business_template_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
-// What a signed-in (managed) owner is told when she sets up Shop or Plant.
+// What a signed-in (managed) owner is told when she sets up any customer product.
 //
 // This is the contract file for that screen, so the copy contract lives here beside the source
 // pins above rather than behind its own npm script. It is driven against the EXPORTED strings,
@@ -8188,6 +8341,18 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts')).href}?managed-guided-onboarding-copy-verify=${Date.now()}`)
+
+    for (const [status, settled, expected] of [
+      ['checking', false, true],
+      ['checking', true, true],
+      ['enterprise', false, true],
+      ['enterprise', true, false],
+      ['demo', false, false],
+      ['demo', true, false],
+    ]) {
+      assert(model.managedOnboardingAccountCheckPending(status, settled) === expected,
+        `managed_onboarding_identity_gate_wrong:${status}:${settled}`)
+    }
 
     // Every claim of a completed install, in the wordings this product actually uses. A managed
     // owner must not read any of them, because none of them are true for her.
@@ -8215,6 +8380,16 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
       ['managed_plant_journey_outcome', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.outcome],
       ['managed_plant_journey_detail', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.detail],
       ['managed_plant_journey_action', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_website_hint', model.MANAGED_WEBSITE_ONBOARDING_HINT],
+      ['managed_website_intro', model.MANAGED_WEBSITE_ONBOARDING_INTRO],
+      ['managed_website_journey_outcome', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.outcome],
+      ['managed_website_journey_detail', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.detail],
+      ['managed_website_journey_action', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_ecommerce_hint', model.MANAGED_ECOMMERCE_ONBOARDING_HINT],
+      ['managed_ecommerce_intro', model.MANAGED_ECOMMERCE_ONBOARDING_INTRO],
+      ['managed_ecommerce_journey_outcome', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.outcome],
+      ['managed_ecommerce_journey_detail', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.detail],
+      ['managed_ecommerce_journey_action', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.actionLabel],
     ]) {
       assert(typeof copy === 'string' && copy.trim().length > 0, `${label}_missing`)
       for (const claim of installClaims) assert(!claim.test(copy), `${label}_makes_install_claim:${claim}`)
@@ -8274,12 +8449,30 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
     // her exactly where this copy promises.
     assert(!('firstTaskPath' in model.MANAGED_SHOP_ONBOARDING_JOURNEY), 'managed_shop_journey_redirects')
     assert(!('firstTaskPath' in model.MANAGED_PLANT_ONBOARDING_JOURNEY), 'managed_plant_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_WEBSITE_ONBOARDING_JOURNEY), 'managed_website_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY), 'managed_ecommerce_journey_redirects')
+
+    assert(/no browser sample/i.test(model.MANAGED_WEBSITE_ONBOARDING_HINT), 'managed_website_hint_hides_local_boundary')
+    assert(/homepage/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.outcome), 'managed_website_journey_has_no_first_result')
+    assert(/mobile and desktop/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.detail), 'managed_website_journey_hides_preview_work')
+    assert(/Website/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.actionLabel), 'managed_website_journey_hides_destination')
+    assert(/no sample orders/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_HINT), 'managed_ecommerce_hint_hides_order_boundary')
+    assert(/online store/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.outcome), 'managed_ecommerce_journey_has_no_first_result')
+    assert(/payment/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail)
+      && /Shop handoff/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail), 'managed_ecommerce_journey_hides_connected_setup')
+    assert(/Ecommerce/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.actionLabel), 'managed_ecommerce_journey_hides_destination')
 
     // The two lanes must stay distinguishable. Copy-pasting Shop's wording into Plant is the
     // most likely way this regresses, and it would read as correct.
     assert(model.MANAGED_SHOP_ONBOARDING_HINT !== model.MANAGED_PLANT_ONBOARDING_HINT, 'managed_hints_are_identical')
     assert(model.MANAGED_SHOP_ONBOARDING_INTRO !== model.MANAGED_PLANT_ONBOARDING_INTRO, 'managed_intros_are_identical')
     assert(model.MANAGED_SHOP_ONBOARDING_JOURNEY.outcome !== model.MANAGED_PLANT_ONBOARDING_JOURNEY.outcome, 'managed_journey_outcomes_are_identical')
+    assert(new Set([
+      model.MANAGED_SHOP_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_PLANT_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.outcome,
+    ]).size === 4, 'managed_product_journeys_are_not_distinct')
   } catch (error) {
     fail(`managed_guided_onboarding_copy_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -9472,11 +9665,112 @@ async function verifyClientOnboardingRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-onboarding-verify=${Date.now()}`)
     const capabilityModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-capability-plan.ts')).href}?client-capability-verify=${Date.now()}`)
+    const extensionModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-extension-manifest.ts')).href}?client-extension-verify=${Date.now()}`)
     const websiteLeadModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-lead-verify=${Date.now()}`)
     const plantPacks = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts')).href}?plant-packs-verify=${Date.now()}`)
     assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
+    const spaPreset = model.clientDemoPresets.find((preset) => preset.id === 'service-business')
+    const spaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Private spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
+    assert(spaBlueprint.products.map((product) => product.product).join(',') === 'commerce,website,ecommerce', 'client_demo_spa_connected_products_missing')
+    const spaExtension = await extensionModel.buildClientExtensionManifest(spaBlueprint, {
+      id: 'ext-spa-membership',
+      label: 'Spa membership packages',
+      outcome: 'Track reviewed packages and remaining sessions under Shop authority.',
+      baseProduct: 'commerce',
+      domain: 'customer',
+      mode: 'reviewed-write',
+      records: ['membership_plan', 'membership_balance', 'membership_redemption'],
+      roles: ['Spa manager', 'Front desk operator'],
+      dependsOn: ['shop-order-to-cash', 'shop-customer-credit', 'platform-approval'],
+      acceptanceCriteria: ['A named operator can draft without charging.', 'A reviewed Shop payment creates one idempotent balance.'],
+    }, '2026-08-21T00:00:00.000Z')
+    const spaExtensionVerification = await extensionModel.verifyClientExtensionManifest(spaExtension, spaBlueprint)
+    assert(spaExtension.schema === extensionModel.CLIENT_EXTENSION_MANIFEST_SCHEMA && spaExtension.controls.activationStatus === 'not-implemented', 'client_extension_activation_boundary_missing')
+    assert(spaExtension.authority.crossProductWritesAllowed === false && spaExtension.authority.requestedActions.join(',') === 'read,draft,propose-write', 'client_extension_authority_too_broad')
+    assert(spaExtensionVerification.digest === spaExtension.digest && spaExtensionVerification.blueprintDigest === spaExtension.blueprintDigest, 'client_extension_blueprint_binding_missing')
+    const otherSpaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Other spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
+    await rejects(() => extensionModel.verifyClientExtensionManifest(spaExtension, otherSpaBlueprint), 'client_extension_cross_tenant_blueprint_accepted')
+    await rejects(() => extensionModel.verifyClientExtensionManifest({ ...spaExtension, outcome: 'Changed after review.' }, spaBlueprint), 'client_extension_tamper_accepted')
+    const extensionDigest = (character) => `sha256:${character.repeat(64)}`
+    const spaExtensionPlan = await extensionModel.buildClientExtensionActivationPlan(spaExtension, spaBlueprint, {
+      implementationVersion: 1,
+      implementationDigest: extensionDigest('1'),
+      migrationDigest: extensionDigest('2'),
+      rollbackDigest: extensionDigest('3'),
+      securityReviewDigest: extensionDigest('4'),
+      securityReviewedBy: 'Named security reviewer',
+      securityReviewedAt: '2026-08-21T01:00:00.000Z',
+      approvedBy: spaBlueprint.client.owner,
+      approvedAt: '2026-08-21T02:00:00.000Z',
+    })
+    const canonicalExtensionFixture = (value) => {
+      if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return JSON.stringify(value)
+      if (Array.isArray(value)) return `[${value.map(canonicalExtensionFixture).join(',')}]`
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalExtensionFixture(value[key])}`).join(',')}}`
+    }
+    const portalPayload = {
+      contract: 'supermega.client_portal_activation_manifest.v1',
+      version: 1,
+      status: 'approved_plan_not_applied',
+      tenant: { workspaceId: '11111111-1111-4111-8111-111111111111', workspaceLabel: spaBlueprint.client.workspace, ownerActorId: '22222222-2222-4222-8222-222222222222', ownerLabel: spaBlueprint.client.owner, products: ['shop', 'website', 'ecommerce'] },
+      portal: { bundleDigest: extensionDigest('5'), productBindings: [{ product: 'shop', runtimeProduct: 'commerce' }, { product: 'website', runtimeProduct: 'website' }, { product: 'ecommerce', runtimeProduct: 'ecommerce' }], crossTenantReadsAllowed: false, crossProductWritesAllowed: false },
+      customSolutions: { activationStatus: 'not_applied', tenantBound: true, purchasedBaseProductRequired: true, securityReviewRequired: true, namedOwnerApprovalRequired: true, crossProductWritesAllowed: false },
+      authority: { humanApprovalBound: true, tenantWritesPerformed: false, providerCallsPerformed: false, externalMessagesSent: false, deploymentPerformed: false, productionActivationPerformed: false },
+    }
+    const portalManifest = { ...portalPayload, manifestDigest: `sha256:${createHash('sha256').update(canonicalExtensionFixture(portalPayload)).digest('hex')}` }
+    const portalBinding = await extensionModel.buildClientExtensionPortalBinding(spaExtension, spaExtensionPlan, spaBlueprint, portalManifest)
+    assert(portalBinding.schema === extensionModel.CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA && portalBinding.tenant.workspaceId === portalManifest.tenant.workspaceId, 'client_extension_portal_tenant_binding_missing')
+    assert(portalBinding.module.productEntitlement === 'shop' && portalBinding.authority.baseProductPurchased === true, 'client_extension_portal_product_entitlement_missing')
+    assert(portalBinding.authority.status === 'approved-not-applied' && portalBinding.authority.tenantWritesPerformed === false && portalBinding.controls.separateActivationRequired === true, 'client_extension_portal_binding_crossed_activation_boundary')
+    await rejects(() => extensionModel.buildClientExtensionPortalBinding(spaExtension, spaExtensionPlan, spaBlueprint, { ...portalManifest, tenant: { ...portalManifest.tenant, workspaceLabel: 'Other tenant' } }), 'client_extension_portal_cross_tenant_binding_accepted')
+    const runtimeAuthorization = await extensionModel.buildClientExtensionRuntimeAuthorization(portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, {
+      environment: 'pilot',
+      releaseCommit: 'a'.repeat(40),
+      approvedBy: portalBinding.tenant.ownerLabel,
+      approvedByActorId: portalBinding.tenant.ownerActorId,
+      approvedAt: '2026-08-21T03:00:00.000Z',
+      expiresAt: '2026-08-21T04:00:00.000Z',
+      idempotencyKey: 'activate:private-spa:ext-spa-membership:v1',
+    })
+    assert(runtimeAuthorization.schema === extensionModel.CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA && runtimeAuthorization.portalBindingDigest === portalBinding.digest, 'client_extension_runtime_authorization_binding_missing')
+    assert(runtimeAuthorization.authority.status === 'authorized-not-applied' && runtimeAuthorization.authority.tenantConfigurationWriteAllowed === true && runtimeAuthorization.authority.customerRecordWritesAllowed === false && runtimeAuthorization.authority.writesPerformed === false, 'client_extension_runtime_authorization_too_broad')
+    assert(runtimeAuthorization.controls.exactLiveReleaseRequiredAtExecution === true && runtimeAuthorization.controls.oneTimeIdempotencyRequired === true && runtimeAuthorization.controls.receiptRequired === true, 'client_extension_runtime_execution_controls_missing')
+    const executableAuthorization = await extensionModel.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, '2026-08-21T03:30:00.000Z')
+    assert(executableAuthorization.executable === true && executableAuthorization.executionAt === '2026-08-21T03:30:00.000Z', 'client_extension_runtime_authorization_window_not_enforced')
+    await rejects(() => extensionModel.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, '2026-08-21T04:00:00.001Z'), 'client_extension_expired_runtime_authorization_accepted')
+    await rejects(() => extensionModel.buildClientExtensionRuntimeAuthorization(portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, { environment: 'pilot', releaseCommit: 'a'.repeat(40), approvedBy: portalBinding.tenant.ownerLabel, approvedByActorId: 'another-actor', approvedAt: '2026-08-21T03:00:00.000Z', expiresAt: '2026-08-21T04:00:00.000Z', idempotencyKey: 'activate:private-spa:ext-spa-membership:v1' }), 'client_extension_runtime_cross_owner_authorization_accepted')
+    const activationReceipt = await extensionModel.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, {
+      activatedAt: '2026-08-21T03:30:00.000Z',
+      activatedByActorId: portalBinding.tenant.ownerActorId,
+      idempotencyKey: runtimeAuthorization.target.idempotencyKey,
+      runtimeRelease: { commit: runtimeAuthorization.target.releaseCommit, brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' },
+      tenantConfigRevision: 1,
+      tenantConfigDigest: extensionDigest('7'),
+      executionEvidenceDigest: extensionDigest('8'),
+      rollbackReady: true,
+      customerRecordWritesPerformed: false,
+      providerCallsPerformed: false,
+      deploymentPerformed: false,
+      externalMessagesSent: false,
+      crossTenantWritesPerformed: false,
+      crossProductWritesPerformed: false,
+    })
+    assert(activationReceipt.schema === extensionModel.CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA && activationReceipt.authorizationDigest === runtimeAuthorization.digest && activationReceipt.execution.status === 'active', 'client_extension_activation_receipt_binding_missing')
+    assert(activationReceipt.authority.tenantConfigurationWritePerformed === true && activationReceipt.authority.customerRecordWritesPerformed === false && activationReceipt.authority.providerCallsPerformed === false && activationReceipt.authority.deploymentPerformed === false, 'client_extension_activation_receipt_authority_wrong')
+    await rejects(() => extensionModel.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, { activatedAt: '2026-08-21T03:30:00.000Z', activatedByActorId: portalBinding.tenant.ownerActorId, idempotencyKey: runtimeAuthorization.target.idempotencyKey, runtimeRelease: { commit: runtimeAuthorization.target.releaseCommit, brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' }, tenantConfigRevision: 1, tenantConfigDigest: extensionDigest('7'), executionEvidenceDigest: extensionDigest('8'), rollbackReady: true, customerRecordWritesPerformed: false, providerCallsPerformed: true, deploymentPerformed: false, externalMessagesSent: false, crossTenantWritesPerformed: false, crossProductWritesPerformed: false }), 'client_extension_activation_provider_write_accepted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
     assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
+    const starterJobIds = new Set()
+    for (const pack of plantPacks.plantIndustryPacks) {
+      const starter = plantPacks.managedPlantStarterPlan(pack.id)
+      starterJobIds.add(starter.jobId)
+      assert(starter.line === pack.setup.workCentreName && starter.machineId === `${pack.setup.workCentrePrefix}-01` && starter.machineName === `${pack.setup.workCentreName} 01`, `managed_plant_${pack.id}_starter_not_bound_to_pack`)
+      assert(starter.target === '1' && !('output' in starter) && !('events' in starter) && !('issues' in starter), `managed_plant_${pack.id}_starter_invents_history`)
+      const path = plantPacks.plantIndustryPackManagedPlanPath(pack.id)
+      assert(plantPacks.plantIndustryPackIdFromSearch(path.slice(path.indexOf('?'))) === pack.id, `managed_plant_${pack.id}_route_drops_pack`)
+    }
+    assert(starterJobIds.size === plantPacks.plantIndustryPacks.length, 'managed_plant_starter_job_ids_not_unique')
+    assert(plantPacks.plantIndustryPackIdFromSearch('?pack=unsupported') === null, 'managed_plant_invalid_pack_not_rejected')
     const objectIds = new Set()
     for (const productProfile of solutionProducts) {
       const product = productProfile.runtimeId
@@ -9564,7 +9858,9 @@ async function verifyClientOnboardingRuntime() {
     }, '2026-07-29T00:15:00.000Z'), 'website_closed_lead_reopened')
     assert(websiteLeadModel.restoreWebsiteLeadLedger({ ...closedLeadLedger, unexpected: true }) === null, 'website_lead_unknown_field_accepted')
 
-    assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
+    const clientDemoPresetIds = model.clientDemoPresets.map((preset) => preset.id)
+    assert(clientDemoPresetIds.join(',') === 'social-seller,retail-network,food-service,manufacturing,bakery,fashion,service-business'
+      && new Set(clientDemoPresetIds).size === clientDemoPresetIds.length, 'client_demo_presets_missing_or_duplicated')
     assert(capabilityModel.clientCapabilityDependencyLabel('platform-identity') === 'Identity and role boundaries'
       && capabilityModel.clientCapabilityDependencyLabel('shop-order-to-cash') === 'Order to cash'
       && capabilityModel.clientCapabilityDependencyLabel('future-control') === 'future control', 'client_capability_dependency_labels_wrong')
@@ -9628,21 +9924,37 @@ async function verifyClientOnboardingRuntime() {
     const manufacturingBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Factory', owner: 'General manager', presetId: 'manufacturing', selections: manufacturingPreset.selections })
     assert(manufacturingBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce', 'client_demo_manufacturing_product_order_drifted')
     assert(manufacturingBlueprint.integrations.length === 3 && manufacturingBlueprint.integrations.some((integration) => integration.from === 'ecommerce' && integration.to === 'commerce'), 'client_demo_integrations_missing')
+    const bakeryPreset = model.clientDemoPresets.find((preset) => preset.id === 'bakery')
+    const bakeryBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Bakery', owner: 'Bakery manager', presetId: 'bakery', selections: bakeryPreset.selections })
+    const bakeryShopProduct = bakeryBlueprint.products.find((product) => product.product === 'commerce')
+    const bakeryPlantProduct = bakeryBlueprint.products.find((product) => product.product === 'production')
+    const bakeryEcommerceProduct = bakeryBlueprint.products.find((product) => product.product === 'ecommerce')
+    const bakeryShopSkus = new Set(bakeryShopProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+    const bakeryEcommerceSkus = bakeryEcommerceProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+    assert(bakeryBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce'
+      && bakeryShopProduct.sampleCsv.includes('BREAD-WHITE,"White sandwich loaf"')
+      && bakeryPlantProduct.sampleCsv.includes('JOB-BAKE-001,"White sandwich loaf"')
+      && bakeryEcommerceSkus.length >= 2
+      && bakeryEcommerceSkus.every((sku) => bakeryShopSkus.has(sku) && !sku.includes('-SVC-')),
+    'client_demo_bakery_cross_product_template_drifted')
+    const fashionPreset = model.clientDemoPresets.find((preset) => preset.id === 'fashion')
+    const fashionBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Fashion', owner: 'Fashion manager', presetId: 'fashion', selections: fashionPreset.selections })
+    const fashionShopProduct = fashionBlueprint.products.find((product) => product.product === 'commerce')
+    const fashionPlantProduct = fashionBlueprint.products.find((product) => product.product === 'production')
+    const fashionWebsiteProduct = fashionBlueprint.products.find((product) => product.product === 'website')
+    const fashionEcommerceProduct = fashionBlueprint.products.find((product) => product.product === 'ecommerce')
+    const fashionShopSkus = new Set(fashionShopProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+    const fashionEcommerceSkus = fashionEcommerceProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+    assert(fashionPlantProduct.sampleCsv.includes('JOB-FASHION-001,"Cotton T-shirt medium white"')
+      && fashionWebsiteProduct.sampleCsv.includes('Fashion & clothing for shoppers looking for clothing and accessories in their own size')
+      && fashionEcommerceSkus.length >= 2
+      && fashionEcommerceSkus.every((sku) => fashionShopSkus.has(sku)),
+    'client_demo_fashion_cross_product_template_drifted')
     const customPlantPreview = await model.createClientImportPreview(model.clientImportTemplate('production', 'production-control'), 'production', undefined, 'custom-plant.csv', 'production-control')
     const customPlantPackage = model.buildClientImportStagingPackage(customPlantPreview, { workflowTemplateId: 'production-control', workspace: 'Integrated Factory', owner: 'General manager', plantIndustryPackId: 'batch-process' })
     assert(customPlantPackage.plantIndustryPackId === 'batch-process', 'client_demo_custom_plant_pack_not_bound')
-    const schoolBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
-    assert(schoolBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
-    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({
-      workspace: 'Learning Centre',
-      owner: 'School administrator',
-      presetId: 'service-business',
-      shopIndustryPackId: 'school',
-      selections: [
-        ...model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections,
-        { product: 'ecommerce', templateId: 'social-storefront' },
-      ],
-    })
+    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
+    assert(schoolIntegratedBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
     const schoolShopProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'commerce')
     const schoolWebsiteProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'website')
     const schoolEcommerceProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'ecommerce')
@@ -12448,8 +12760,11 @@ async function verifyCommerceRuntime() {
       items: cafeSampleItems,
       capturedAt: '2026-07-23T09:00:00.000Z',
     })
-    assert(cafeWorkingSample?.items.length === model.createSeedCommerce().items.length + 2
+    assert(cafeWorkingSample?.items.length === cafeSampleItems.length
       && cafeWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
+      && !cafeWorkingSample.items.some((item) => item.sku.startsWith('SM-'))
+      && cafeWorkingSample.orders.length === 0
+      && cafeWorkingSample.purchaseOrders.length === 0
       && model.commerceWorkingSampleCatalogId(cafeWorkingSample) === 'cafe',
     'commerce_working_sample_was_not_installed_or_identified')
     const replayedCafeWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {
@@ -20083,6 +20398,20 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // chip, and the settings panel). Raised to 3_050_000: covers the measured
 // number with ~18_824 bytes of headroom, the same order of headroom the
 // previous two ceilings gave.
+// Tenant-aware portal routing adds a small lazy entitlement boundary while the
+// initial-route budget remains independently enforced above. Keep total output
+// growth bounded to a narrow 10 KB allowance rather than weakening that gate.
+// RAISE 2026-08-20 (durable local writes and client error reporting, PR #505):
+// fresh native-loader dist measured 3_063_086 after storage durability,
+// crash-safe retry state, and the user-visible persistence error boundary.
+// The merged 2026-08-21 release, including tenant-aware portals and current
+// main's Shop close-anomaly projection, measures 3_076_280 bytes from a fresh
+// build. It remains 5_720 bytes below the existing 3_082_000 ceiling, so this
+// merge deliberately does not raise the artifact budget.
+// RE-MEASURED 2026-08-21 after integrating the day-one template reconciliation
+// fix with the Spa client journey: fresh dist/ is 3_080_236 bytes. The existing
+// ceiling remains unchanged; the separate initial-route and chunk limits below
+// continue to prevent hiding bundle growth inside this total.
 // RAISE 2026-08-20 (roadmap §2 item 5, anomaly flags on the close): fresh
 // `npm run app:build` measures 3_052_850 -- 2_850 bytes over -- after one real
 // product feature (the shop-close-anomaly-flags projection plus the
@@ -20401,6 +20730,9 @@ else {
   const routeAssets = bundlerRouteAssets(routeEntrySource, routeDependencyTable, /^assets\/core-app-[^/]+\.js$/)
   if (!routeAssets.length) fail('shop_route_operations_chunk_unreachable')
   const shopRouteClosure = [...new Set(['index.html', ...documentScripts, ...documentStyles, ...documentGraph, ...routeAssets])]
+  if (shopRouteClosure.some((path) => /^assets\/(?:website-model|website-leads)-[^/]+\.js$/.test(path))) {
+    fail('shop_route_eagerly_loads_website_compatibility')
+  }
   const missingClosureAssets = (await Promise.all(shopRouteClosure.map(async (path) => (
     await exists(resolve(dist, path)) ? null : path
   )))).filter(Boolean)
@@ -20527,7 +20859,10 @@ else {
   // Raised from 40_000 on 2026-08-19 (S3 PR1): the customer-points settings section
   // (LoyaltySettingsControls + honest device-local copy) measured 41,350 bytes.
   // Real product surface, same raise-on-value rule.
-  if (workspaceControlsBytes > 44_000
+  // Raised from 44_000 on 2026-08-21 after main added measured multi-product backup refusal
+  // diagnostics. The merged chunk is 44,215 bytes and now tells an owner why no backup file can
+  // be produced instead of leaving a disabled escape hatch. Keep less than 0.8 KB headroom.
+  if (workspaceControlsBytes > 45_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')

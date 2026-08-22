@@ -84,7 +84,8 @@ const booked = (base, startsAt = '2026-09-01T03:00:00.000Z', customerName = 'Daw
     serviceId: service.id,
     resourceId: resource.id,
     customerName,
-    contact: '09-000-000-000',
+    contact: `test-${customerName}`,
+    appointmentUpdates: 'declined',
     startsAt,
   }, { actor: 'Owner', reason: 'Booked at the counter.', happenedAt: '2026-08-18T02:00:00.000Z' })
 }

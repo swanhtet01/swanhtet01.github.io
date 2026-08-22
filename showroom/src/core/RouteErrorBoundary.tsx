@@ -28,7 +28,7 @@ function isChunkFailure(error: unknown) {
   if (!error) return false
   const name = (error as { name?: unknown }).name
   const message = (error as { message?: unknown }).message
-  return CHUNK_FAILURE.test(`${typeof name === 'string' ? name : ''} ${typeof message === 'string' ? message : ''}`)
+  return CHUNK_FAILURE.test(`${String(name ?? '')} ${String(message ?? '')}`)
 }
 
 type RouteErrorBoundaryProps = {
@@ -56,7 +56,8 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, Route
   state: RouteErrorBoundaryState = { error: null, stale: false, offline: false }
 
   static getDerivedStateFromError(error: Error): RouteErrorBoundaryState {
-    return { error, stale: isChunkFailure(error), offline: isChunkFailure(error) && isOffline() }
+    const stale = isChunkFailure(error)
+    return { error, stale, offline: stale && isOffline() }
   }
 
   componentDidUpdate(previous: RouteErrorBoundaryProps) {

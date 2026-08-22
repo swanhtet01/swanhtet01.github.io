@@ -1,6 +1,6 @@
 {
   "contract": "supermega.supabase-security-advisor-audit.v2",
-  "asOf": "2026-08-13T06:40:00.000Z",
+  "asOf": "2026-08-20T17:02:04.312+06:30",
   "projectRef": "zvtzwcimpvvtkowflhda",
   "targetClassification": "protected-production",
   "postgres": {
@@ -319,19 +319,25 @@
       "postgres",
       "supabase_admin"
     ],
-    "defaultBrowserTablePrivilegesPresent": false,
-    "defaultBrowserSequencePrivilegesPresent": false,
-    "defaultBrowserFunctionExecutePresent": false
+    "defaultBrowserTablePrivilegesPresent": true,
+    "defaultBrowserSequencePrivilegesPresent": true,
+    "defaultBrowserFunctionExecutePresent": true,
+    "applicationOwnerDefaultBrowserTablePrivilegesPresent": false,
+    "applicationOwnerDefaultBrowserSequencePrivilegesPresent": false,
+    "applicationOwnerDefaultBrowserFunctionExecutePresent": false,
+    "providerOwnerDefaultBrowserTablePrivilegesPresent": true,
+    "providerOwnerDefaultBrowserSequencePrivilegesPresent": true,
+    "providerOwnerDefaultBrowserFunctionExecutePresent": true
   },
   "managedBackend": {
     "queryContract": "supermega.supabase-managed-schema-metadata.v1",
     "schema": "app_private",
-    "liveSchemaVersion": 10,
-    "localTargetVersion": 10,
+    "liveSchemaVersion": 11,
+    "localTargetVersion": 11,
     "versionDrift": 0,
     "tableCount": 6,
     "rlsTableCount": 6,
-    "policyCount": 15,
+    "policyCount": 17,
     "performancePolicyFindingCount": 0,
     "metadataRlsEnabled": true,
     "browserRolesDenied": true,
@@ -354,15 +360,15 @@
     "currentRowExposureProven": false,
     "browserGrantHardeningRequired": false,
     "productionMutationAuthorized": false,
-    "nextAction": "Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal."
+    "nextAction": "Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs."
   },
   "controls": {
-    "connectorReadRequests": 6,
+    "connectorReadRequests": 11,
     "failedReadRequests": 1,
     "providerMutations": 0,
     "databaseWrites": 0,
     "businessRowsRead": 0,
     "credentialsRecorded": false
   },
-  "evidenceDigest": "sha256:3ca09771bdaa44221d2450ba66c96b6dcc402cc6667bb5ce4891bb141882ea1e"
+  "evidenceDigest": "sha256:0c10cb975773b353d61b255b9ded1d2d88639946143c6c987fbe4d0936569c43"
 }

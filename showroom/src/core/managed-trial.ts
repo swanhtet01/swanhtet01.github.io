@@ -1,5 +1,5 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
-import type { buildClientImportStagingPackage } from './client-onboarding'
+import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
 import type { PlantEquipmentImportPackage } from './plant-equipment-import.ts'
 import {
   validateProductionState,
@@ -16,6 +16,11 @@ import {
   type ShopServiceSchedule,
 } from './shop-service-scheduling.ts'
 import type { EcommerceOrderQueueReadinessPacket } from '../products/ecommerce/ecommerce-order-review-packet'
+import {
+  currentManagedWorkspace,
+  MANAGED_WORKSPACE_ID_PATTERN as WORKSPACE_ID,
+  MANAGED_WORKSPACE_STORAGE_KEY as WORKSPACE_STORAGE_KEY,
+} from './managed-workspace-selection.ts'
 import {
   managedContextProfileProjection,
   managedContextValidationProjection,
@@ -35,12 +40,9 @@ import {
 } from './operating-baseline.ts'
 
 
-const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
 const BUILD_ENV = import.meta.env ?? {}
 const SUPABASE_URL = String(BUILD_ENV.VITE_SUPABASE_URL ?? '').trim()
 const SUPABASE_PUBLISHABLE_KEY = String(BUILD_ENV.VITE_SUPABASE_PUBLISHABLE_KEY ?? BUILD_ENV.VITE_SUPABASE_ANON_KEY ?? '').trim()
-const DEFAULT_WORKSPACE_ID = String(BUILD_ENV.VITE_SUPERMEGA_TRIAL_WORKSPACE_ID ?? '').trim()
-const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
@@ -105,6 +107,7 @@ export type ManagedSelfServeWorkspace = {
   label: string
   access: 'owner'
   claimCode: string
+  product: ClientSolutionId
   /** False when the server replayed an activation this claim already completed. */
   created: boolean
 }
@@ -263,6 +266,7 @@ export type ManagedCommandEvidence = {
 export type ManagedServiceScheduleRecord = {
   version: number
   schedule: ShopServiceSchedule | null
+  privacyOwner?: boolean
 }
 
 export type ManagedBootstrap = {
@@ -271,7 +275,10 @@ export type ManagedBootstrap = {
     actor_id: string
     actor_kind: 'human' | 'service' | 'agent'
   }
-  readiness: Record<string, unknown>
+  readiness: Record<string, unknown> & {
+    capabilities?: string[]
+    productEntitlements?: ClientSolutionId[]
+  }
   states: Partial<Record<ManagedSurface, ManagedStateRecord>>
   approvals: ManagedApprovalRecord[]
 }
@@ -2415,6 +2422,57 @@ export function assertManagedBootstrapIdentity(
   return bootstrap as ManagedBootstrap
 }
 
+const MANAGED_CAPABILITY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
+
+export function managedBootstrapHasCapability(
+  bootstrap: unknown,
+  expectedIdentity: ManagedIdentity,
+  capability: 'commerce.write' | 'production.write' | 'website.write',
+): boolean {
+  const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
+  const capabilities = verified.readiness.capabilities
+  // Older or incomplete paired deployments remain readable but never gain
+  // optimistic browser write controls without an explicit server grant.
+  if (capabilities === undefined) return false
+  if (!Array.isArray(capabilities)
+    || capabilities.some((value) => typeof value !== 'string' || !MANAGED_CAPABILITY_PATTERN.test(value))
+    || new Set(capabilities).size !== capabilities.length
+    || JSON.stringify(capabilities) !== JSON.stringify([...capabilities].sort())) {
+    throw new ManagedTrialError('The company account returned invalid staff capabilities.', {
+      code: 'managed_bootstrap_invalid',
+    })
+  }
+  return capabilities.includes(capability)
+}
+
+export function managedProductsFromBootstrap(
+  bootstrap: unknown,
+  expectedIdentity: ManagedIdentity,
+): ClientSolutionId[] {
+  const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
+  const explicit = verified.readiness.productEntitlements
+  if (explicit !== undefined) {
+    const order: ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
+    if (!Array.isArray(explicit)
+      || explicit.some((product) => !order.includes(product))
+      || new Set(explicit).size !== explicit.length
+      || JSON.stringify(explicit) !== JSON.stringify(order.filter((product) => explicit.includes(product)))) {
+      throw new ManagedTrialError('The company account returned invalid product entitlements.', {
+        code: 'managed_bootstrap_invalid',
+      })
+    }
+    return explicit.filter((product) => {
+      if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)
+      if (product === 'production') return Boolean(verified.states.production)
+      return Boolean(verified.states.website)
+    })
+  }
+  // A state row proves that a surface exists, not that the signed-in company
+  // purchased its product. Managed portals therefore fail closed when an old
+  // bootstrap omits the immutable activation-derived entitlement list.
+  return []
+}
+
 export function requireManagedSurfaceState(
   bootstrap: ManagedBootstrap,
   surface: ManagedSurface,
@@ -2493,15 +2551,7 @@ function normalizeWorkspaceId(value: string) {
   return workspaceId
 }
 
-export function currentManagedWorkspace() {
-  try {
-    const stored = window.localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? ''
-    if (WORKSPACE_ID.test(stored)) return stored
-  } catch {
-    // The configured workspace remains available when storage is disabled.
-  }
-  return WORKSPACE_ID.test(DEFAULT_WORKSPACE_ID) ? DEFAULT_WORKSPACE_ID : ''
-}
+export { currentManagedWorkspace }
 
 function rememberWorkspace(value: string) {
   const workspaceId = normalizeWorkspaceId(value)
@@ -2858,7 +2908,7 @@ function normalizeSelfServeBusinessName(value: string) {
   return businessName
 }
 
-function parseSelfServeWorkspace(value: unknown, claimCode: string): ManagedSelfServeWorkspace {
+function parseSelfServeWorkspace(value: unknown, claimCode: string, product: ClientSolutionId): ManagedSelfServeWorkspace {
   if (!isRecord(value)
     || value.contract !== SELF_SERVE_WORKSPACE_CONTRACT
     || (value.status !== 'created' && value.status !== 'already_created')
@@ -2880,6 +2930,7 @@ function parseSelfServeWorkspace(value: unknown, claimCode: string): ManagedSelf
     || !workspace.label.trim()
     || workspace.label.length > 120
     || workspace.access !== 'owner'
+    || workspace.product !== product
     || value.claim.workspaceId !== workspace.workspace_id) {
     throw new ManagedTrialError('The workspace activation returned an invalid company.', {
       code: 'self_serve_workspace_invalid',
@@ -2890,6 +2941,7 @@ function parseSelfServeWorkspace(value: unknown, claimCode: string): ManagedSelf
     label: workspace.label.trim(),
     access: 'owner',
     claimCode,
+    product,
     created: value.status === 'created',
   }
 }
@@ -2905,6 +2957,7 @@ export async function requestSelfServeWorkspace(
   session: Session,
   claimCode: string,
   businessName: string,
+  product: ClientSolutionId = 'commerce',
 ): Promise<ManagedSelfServeWorkspace> {
   const claim = normalizeSelfServeClaimCode(claimCode)
   const name = normalizeSelfServeBusinessName(businessName)
@@ -2915,15 +2968,16 @@ export async function requestSelfServeWorkspace(
       authorization: `Bearer ${session.access_token}`,
       'content-type': 'application/json',
     })),
-    body: JSON.stringify({ claimCode: claim, businessName: name }),
+    body: JSON.stringify({ claimCode: claim, businessName: name, product }),
   })
   if (!response.ok) throw await parseError(response)
-  return parseSelfServeWorkspace(await response.json(), claim)
+  return parseSelfServeWorkspace(await response.json(), claim, product)
 }
 
 export async function createSelfServeWorkspace(
   claimCode: string,
   businessName: string,
+  product: ClientSolutionId = 'commerce',
 ): Promise<ManagedSelfServeWorkspace> {
   const supabase = await authClient()
   if (!supabase) {
@@ -2937,7 +2991,7 @@ export async function createSelfServeWorkspace(
       code: 'auth_required',
     })
   }
-  return requestSelfServeWorkspace(data.session, claimCode, businessName)
+  return requestSelfServeWorkspace(data.session, claimCode, businessName, product)
 }
 
 async function parseError(response: Response) {
@@ -3584,7 +3638,8 @@ export async function loadManagedServiceSchedule(
     || response.workspace_id !== identity.workspaceId
     || typeof response.version !== 'number'
     || !Number.isSafeInteger(response.version)
-    || response.version < 1) {
+    || response.version < 1
+    || typeof response.privacy_owner !== 'boolean') {
     throw new ManagedTrialError('The managed appointment response is invalid.', {
       code: 'managed_service_schedule_response_invalid',
     })
@@ -3592,6 +3647,7 @@ export async function loadManagedServiceSchedule(
   return {
     version: response.version,
     schedule: managedServiceSchedule(response.schedule),
+    privacyOwner: response.privacy_owner,
   }
 }
 

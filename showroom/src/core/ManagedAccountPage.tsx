@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
-import { managedAccountPath, managedAccountRequestUrl } from './account-routes'
+import { managedAccountPath, managedAccountRequestUrl, managedPortalEntryPath } from './account-routes'
 import {
   beginManagedAccountSetup,
   completeManagedAccountPassword,
@@ -26,6 +26,7 @@ export function ManagedAccountPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const productIntent = new URLSearchParams(location.search).get('product')
+  const portalEntryPath = managedPortalEntryPath(productIntent)
   const recoveryRequest = location.pathname === '/account/recovery' || location.pathname === '/account/recovery/'
   const managedReady = runtime.authReady && managedTrialAuthConfigured()
   const [email, setEmail] = useState('')
@@ -57,7 +58,7 @@ export function ManagedAccountPage() {
   async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string) {
     const identity = await completeManagedWorkspaceSignIn(signIn, selectedWorkspaceId)
     await loadManagedBootstrap(identity)
-    navigate('/settings/#controls')
+    navigate(portalEntryPath)
   }
 
   async function requestRecovery(event: FormEvent) {

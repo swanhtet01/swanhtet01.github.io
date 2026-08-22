@@ -24,7 +24,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export { shopIndustryPacks } from './shop-service-scheduling.ts'
-      export { clientImportTemplate, createClientImportPreview } from './client-onboarding.ts'
+      export { buildClientDemoBlueprint, clientDemoPresets, clientImportTemplate, createClientImportPreview } from './client-onboarding.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/shop-samples-test-entry.ts',
@@ -37,7 +37,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { shopIndustryPacks, clientImportTemplate, createClientImportPreview } = await import(
+const { buildClientDemoBlueprint, clientDemoPresets, shopIndustryPacks, clientImportTemplate, createClientImportPreview } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -111,6 +111,87 @@ check(
   new Set(commerceSamples).size === commerceSamples.length,
   `each pack's commerce sample is distinct, got ${new Set(commerceSamples).size} distinct of ${commerceSamples.length}`,
 )
+const spaPackSample = clientImportTemplate('commerce', undefined, { shopIndustryPackId: 'spa' })
+check(spaPackSample.includes('SPA-PACK-MASSAGE-5,Five session massage package'), 'the Spa starter can sell the native five-session massage package')
+check(spaPackSample.includes('SPA-PACK-FACIAL-3,Three session facial package'), 'the Spa starter can sell the native three-session facial package')
+
+// Internal client provisioning must use the same rich Spa trade the product picker installs.
+// A generic pack-only CSV has treatments, but not the retail products, sample-ready stock, and
+// explicit Beauty Spa identity needed for a believable client setup.
+const spaPreset = clientDemoPresets.find((preset) => preset.id === 'service-business')
+check(Boolean(spaPreset), 'the Beauty & spa client preset is available')
+const spaBlueprint = buildClientDemoBlueprint({
+  workspace: 'Private spa client',
+  owner: 'Implementation owner',
+  presetId: spaPreset.id,
+  selections: spaPreset.selections,
+})
+const spaShop = spaBlueprint.products.find((product) => product.product === 'commerce')
+const spaWebsite = spaBlueprint.products.find((product) => product.product === 'website')
+const spaStorefront = spaBlueprint.products.find((product) => product.product === 'ecommerce')
+check(spaBlueprint.client.shopIndustryPackId === 'spa', 'the Beauty & spa client kit binds the Spa industry pack')
+check(Boolean(spaShop), 'the Beauty & spa client kit includes Shop')
+check(spaShop.sampleCsv.includes('SPA-OIL-AROMA,"Aromatic massage oil 250ml"'), 'the Beauty & spa Shop starter includes retail treatment products')
+check(spaShop.sampleCsv.includes('SPA-SVC-MASSAGE,"Traditional Myanmar massage 60 min"'), 'the Beauty & spa Shop starter includes chargeable treatments')
+const spaPreview = await createClientImportPreview(spaShop.sampleCsv, 'commerce', undefined, 'beauty-spa-client.csv', spaShop.templateId)
+check(spaPreview.readyForStaging && spaPreview.rows.every((row) => row.status === 'ready'), 'the Beauty & spa client Shop starter passes the real import gate')
+check(Boolean(spaWebsite), 'the Beauty & spa client kit includes Website')
+check(spaWebsite.sampleCsv.includes('Beauty spa for clients booking treatments and buying spa products'), 'the Beauty & spa Website opens with customer-facing appointment copy')
+check(spaWebsite.sampleCsv.includes('Every treatment is held against a named therapist and time'), 'the Beauty & spa Website carries operational proof instead of implementation instructions')
+check(Boolean(spaStorefront), 'the Beauty & spa client kit includes Ecommerce')
+const spaShopSkus = new Set(spaShop.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+const spaStorefrontSkus = spaStorefront.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+check(spaStorefrontSkus.length >= 2 && spaStorefrontSkus.every((sku) => spaShopSkus.has(sku)), 'every Beauty & spa Ecommerce SKU is governed by the paired Shop catalog')
+check(spaStorefrontSkus.every((sku) => !sku.includes('-SVC-')), 'the Beauty & spa storefront offers home-care products without pretending to book treatment capacity')
+const spaStorefrontPreview = await createClientImportPreview(spaStorefront.sampleCsv, 'ecommerce', undefined, 'beauty-spa-ecommerce.csv', spaStorefront.templateId)
+check(spaStorefrontPreview.readyForStaging && spaStorefrontPreview.rows.every((row) => row.status === 'ready'), 'the Beauty & spa Ecommerce starter passes the real import gate')
+
+const bakeryPreset = clientDemoPresets.find((preset) => preset.id === 'bakery')
+check(Boolean(bakeryPreset), 'the Bakery & patisserie four-product preset is available')
+const bakeryBlueprint = buildClientDemoBlueprint({
+  workspace: 'Private bakery client',
+  owner: 'Implementation owner',
+  presetId: bakeryPreset.id,
+  selections: bakeryPreset.selections,
+})
+check(bakeryBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce', 'the Bakery kit provisions all four products in canonical order')
+const bakeryShop = bakeryBlueprint.products.find((product) => product.product === 'commerce')
+const bakeryPlant = bakeryBlueprint.products.find((product) => product.product === 'production')
+const bakeryStorefront = bakeryBlueprint.products.find((product) => product.product === 'ecommerce')
+check(bakeryShop.sampleCsv.includes('BREAD-WHITE,"White sandwich loaf"'), 'the Bakery Shop starter uses the real bakery catalog')
+check(bakeryPlant.sampleCsv.includes('JOB-BAKE-001,"White sandwich loaf"'), 'the Bakery Plant starter uses the real bakery production job')
+check(bakeryPlant.sampleCsv.includes('JOB-BAKE-002,"Birthday cake 1kg"'), 'the Bakery Plant starter includes its second production line')
+const bakeryShopSkus = new Set(bakeryShop.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+const bakeryStorefrontSkus = bakeryStorefront.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+check(bakeryStorefrontSkus.length >= 2 && bakeryStorefrontSkus.every((sku) => bakeryShopSkus.has(sku)), 'every Bakery Ecommerce SKU is governed by the paired Shop catalog')
+check(bakeryStorefrontSkus.every((sku) => !sku.includes('-SVC-')), 'the Bakery storefront does not merchandise service-capacity SKUs')
+for (const product of bakeryBlueprint.products) {
+  const preview = await createClientImportPreview(product.sampleCsv, product.product, undefined, `bakery-${product.product}.csv`, product.templateId)
+  check(preview.readyForStaging && preview.rows.every((row) => row.status === 'ready'), `the Bakery ${product.product} starter passes the real import gate`)
+}
+
+const fashionPreset = clientDemoPresets.find((preset) => preset.id === 'fashion')
+check(Boolean(fashionPreset), 'the Fashion & clothing four-product preset is available')
+const fashionBlueprint = buildClientDemoBlueprint({
+  workspace: 'Private fashion client',
+  owner: 'Implementation owner',
+  presetId: fashionPreset.id,
+  selections: fashionPreset.selections,
+})
+const fashionShop = fashionBlueprint.products.find((product) => product.product === 'commerce')
+const fashionPlant = fashionBlueprint.products.find((product) => product.product === 'production')
+const fashionWebsite = fashionBlueprint.products.find((product) => product.product === 'website')
+const fashionStorefront = fashionBlueprint.products.find((product) => product.product === 'ecommerce')
+check(fashionShop.sampleCsv.includes('TSHIRT-M-WHT,"Cotton T-shirt medium white"'), 'the Fashion Shop starter preserves size-level SKUs')
+check(fashionPlant.sampleCsv.includes('JOB-FASHION-001,"Cotton T-shirt medium white"'), 'the Fashion Plant starter uses its cut-and-sew job')
+check(fashionWebsite.sampleCsv.includes('Fashion & clothing for shoppers looking for clothing and accessories in their own size'), 'the Fashion Website uses its reviewed trade brief')
+const fashionShopSkus = new Set(fashionShop.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+const fashionStorefrontSkus = fashionStorefront.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+check(fashionStorefrontSkus.length >= 2 && fashionStorefrontSkus.every((sku) => fashionShopSkus.has(sku)), 'every Fashion Ecommerce SKU is governed by the paired Shop catalog')
+for (const product of fashionBlueprint.products) {
+  const preview = await createClientImportPreview(product.sampleCsv, product.product, undefined, `fashion-${product.product}.csv`, product.templateId)
+  check(preview.readyForStaging && preview.rows.every((row) => row.status === 'ready'), `the Fashion ${product.product} starter passes the real import gate`)
+}
 
 // --- the workflow-template fallback ------------------------------------------
 // Reached whenever onboarding runs without an industry pack. Production templates are

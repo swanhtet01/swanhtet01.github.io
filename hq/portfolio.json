@@ -1,6 +1,6 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v3",
-  "updatedAt": "2026-08-11",
+  "updatedAt": "2026-08-21",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
   "completedLocalAutomations": [
@@ -73,6 +73,11 @@
       "productId": "ecommerce",
       "workOrderId": "ecommerce-contact-correction-request",
       "checkpoint": "ENG-146"
+    },
+    {
+      "productId": "shop",
+      "workOrderId": "shop-spa-membership-native",
+      "checkpoint": "ENG-147"
     }
   ],
   "agentOperatingModel": {
@@ -164,19 +169,19 @@
       "path": "/shop/",
       "runtimeSurface": "commerce",
       "compatibilityPath": "/operations/commerce/",
-      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, versioned per-order tax calculation, daily close, and a balanced review-only accounting handoff with correction settlement and source-document traceability from one accountable shop record.",
+      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, versioned per-order tax calculation, daily close, native Spa prepaid-package sales and completed-treatment redemption, and a balanced review-only accounting handoff with correction settlement and source-document traceability from one accountable shop record.",
       "surfaces": ["Sell", "Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
       "localAutomation": {
         "contract": "supermega.product-work-authority.v2",
         "productId": "shop",
-        "workOrderId": "shop-managed-order-close-pilot",
-        "priority": 80,
+        "workOrderId": "shop-spa-owner-pilot",
+        "priority": 100,
         "status": "owner-gated",
-        "workOrder": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-        "reason": "Needs founder-selected operator and approved isolated tenant; automation cannot substitute founder decisions."
+        "workOrder": "Shop: carry one named Spa owner from reviewed import through package sale, completed treatment, one package redemption, daily close, and recovery on an isolated managed tenant.",
+        "reason": "The native candidate is locally verified. A named owner, reviewed client data, protected release, and approved isolated tenant are still required; sample evidence cannot close the pilot."
       },
-      "nextGate": "One authenticated order-to-close and return-exception pilot on isolated hosted tenant; named operator, baseline, and five-day evidence plan."
+      "nextGate": "One named Spa owner completes reviewed import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant; record setup time, correction effort, and five-day evidence without treating sample data as client proof."
     },
     {
       "id": "plant",
@@ -260,14 +265,14 @@
       "id": "company-system",
       "name": "SuperMega HQ",
       "path": "/",
-      "job": "Coordinate Product, Engineering, Growth, Finance, evidence, exceptions, and owner decisions for SuperMega itself.",
+      "job": "Coordinate company work, evidence, exceptions, and owner decisions.",
       "surfaces": ["Home", "Work", "Products", "Settings (utility)", "Agent teams (internal)"]
     },
     {
       "id": "rnd-system",
       "name": "R&D and resource intelligence",
       "path": "hq/",
-      "job": "Discover, verify, test, compare, and convert useful resources into reusable implementation guidance.",
+      "job": "Turn verified resources into implementation guidance.",
       "public": false
     }
   ],
@@ -275,14 +280,14 @@
     {
       "candidate": "durable-workflows",
       "decision": "adopt-with-managed-mode",
-      "gate": "Adopt Vercel Workflows for approval-wait patterns only after managed persistence is proven, callback authentication satisfies the RLS tenant boundary, exactly-once order creation is verified, and the single-assignment lease is checked before workflow start.",
+      "gate": "Require managed persistence, tenant-authenticated callbacks, exactly-once order creation, and the assignment lease.",
       "source": "https://vercel.com/docs/workflows",
       "researchDoc": "hq/research/durable-workflows-comparison-2026-08.md"
     },
     {
       "candidate": "order-intake-agent",
       "decision": "evaluate",
-      "gate": "Adopt only after the existing fixture corpus, server-only structured output, provenance, budget, human review, and zero-side-effect checks pass.",
+      "gate": "Require fixture evaluation, server-only structured output, provenance, budget, human review, and zero side effects.",
       "source": "https://platform.openai.com/docs/guides/structured-outputs",
       "researchDoc": "hq/research/order-intake-agent-evaluation-2026-08.md",
       "evaluationStatus": "design-complete"
@@ -290,7 +295,7 @@
     {
       "candidate": "opentelemetry",
       "decision": "adopt-with-managed-mode",
-      "gate": "Redact customer content and correlate request, workflow, model, tool, and database operations.",
+      "gate": "Redact customer content; correlate request, workflow, model, tool, and database operations.",
       "source": "https://vercel.com/docs/tracing/instrumentation",
       "researchDoc": "hq/research/opentelemetry-implementation-plan-2026-08.md",
       "evaluationStatus": "implementation-plan-ready"
@@ -298,7 +303,7 @@
     {
       "candidate": "analytics",
       "decision": "adopt",
-      "gate": "TypeScript compile passes with no PII in MetricEvent; PII review by founder; metrics page renders on fresh setup; founder approves aggregate schema; localStorage key clears on device reset.",
+      "gate": "Require typed PII-free events, founder schema review, fresh-setup rendering, and reset deletion.",
       "source": "https://vercel.com/docs/analytics",
       "researchDoc": "hq/research/analytics-design-2026-08.md",
       "evaluationStatus": "implementation-steps-ready"
@@ -306,7 +311,7 @@
     {
       "candidate": "enterprise-capabilities",
       "decision": "evaluate",
-      "gate": "Sequence: verified-statements after managed-storage-proof + shop-pilot; staff-roles after verified-statements + named operator; shared-workspace after staff-roles + OEE pilot. Each tier requires prior proven in production.",
+      "gate": "Sequence verified statements, staff roles, then shared workspace; each tier requires its named pilot and prior production proof.",
       "source": "https://supabase.com/docs/guides/auth/row-level-security",
       "researchDoc": "hq/research/enterprise-capabilities-design-2026-08.md",
       "evaluationStatus": "design-ready"
@@ -314,19 +319,19 @@
     {
       "candidate": "dense-data-grid",
       "decision": "defer",
-      "gate": "Adopt TanStack Table or virtualization only after measured row volume exceeds the native interface.",
+      "gate": "Adopt only after measured row volume exceeds the native interface.",
       "source": "https://tanstack.com/table/latest/docs/guide/virtualization"
     },
     {
       "candidate": "realtime-broadcast",
       "decision": "defer",
-      "gate": "Add only when simultaneous operators create a measured refresh problem.",
+      "gate": "Require a measured simultaneous-operator refresh problem.",
       "source": "https://supabase.com/docs/guides/realtime/authorization"
     },
     {
       "candidate": "second-queue-or-crm",
       "decision": "reject",
-      "gate": "Reconsider only if the existing relational system of record and worker runtime cannot meet a documented requirement.",
+      "gate": "Require a documented failure of the existing record and worker runtime.",
       "source": "https://supabase.com/docs/guides/queues"
     }
   ],

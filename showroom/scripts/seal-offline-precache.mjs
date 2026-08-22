@@ -74,6 +74,13 @@ const ONLINE_ONLY = [
   // Shop pulls this in only to review an order that arrived through the online storefront.
   'ecommerce-buying-lifecycle',
 ]
+// Vite records dependencies reached through the workspace's node_modules junction with an
+// installation-specific relative prefix. Match the stable package suffix instead of sealing one
+// machine's path into this contract. Supabase authentication cannot operate without the network
+// and its responses must never become install-time offline assets.
+const ONLINE_ONLY_SUFFIXES = [
+  '/@supabase/supabase-js/dist/index.mjs',
+]
 // The other three products' own surfaces, by location rather than by name, so a product added
 // later is excluded without anyone having to remember this file.
 const ONLINE_ONLY_PREFIX = 'src/products/'
@@ -125,7 +132,9 @@ for (const name of ONLINE_ONLY) {
   if (!key) fail(`online-only exclusion "${name}" matches nothing in the Vite manifest -- remove it or correct it`)
   excludedKeys.add(key)
 }
-const isOnlineOnly = (key) => excludedKeys.has(key) || key.startsWith(ONLINE_ONLY_PREFIX)
+const isOnlineOnly = (key) => excludedKeys.has(key)
+  || key.startsWith(ONLINE_ONLY_PREFIX)
+  || ONLINE_ONLY_SUFFIXES.some((suffix) => key.replaceAll('\\', '/').endsWith(suffix))
 
 const files = new Set()
 const visited = new Set()

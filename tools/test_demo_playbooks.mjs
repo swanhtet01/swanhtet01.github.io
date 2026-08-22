@@ -131,14 +131,15 @@ const kitCorpus = kitSourcePaths.map(read).join('\n')
 const kitDerived = new Set(kitSourcePaths)
 const kitTokenOk = (token) => kitDerived.has(token) || kitCorpus.includes(token) || tokenOk(token)
 
-// Pins for the contract facts the kit states in prose: the decision id, its
-// two inputs, the 24-hour preview-branch bound, the five-day duration, the
-// review-date closure rule, and the no-payment commercial draft.
+// Pins for the contract facts the kit states in prose: the production
+// activation decision, its four founder inputs, its non-expiring production
+// target, the five-day duration, the review-date closure rule, and the
+// no-payment commercial draft.
 const readinessKernel = read('kernel/managed-pilot-readiness.mjs')
-check(readinessKernel.includes("const NEXT_ACTION_DECISION_ID = 'bounded-managed-pilot-rehearsal'"), 'kit_kernel_decision_id_pin')
-check(readinessKernel.includes("const NEXT_ACTION_REQUIREMENTS = ['approve_preview_branch_target', 'approve_self_serve_activation_window']"), 'kit_kernel_decision_inputs_pin')
-check(readinessKernel.includes('maximumLifetimeHours: 24'), 'kit_kernel_lifetime_pin')
-check(readinessKernel.includes("environment: 'preview_branch'"), 'kit_kernel_environment_pin')
+check(readinessKernel.includes("const NEXT_ACTION_DECISION_ID = 'managed-production-activation'"), 'kit_kernel_decision_id_pin')
+check(readinessKernel.includes("const NEXT_ACTION_REQUIREMENTS = ['approve_runtime_role_provisioning', 'approve_first_named_owner_identity', 'approve_exact_production_release', 'approve_managed_activation_window']"), 'kit_kernel_decision_inputs_pin')
+check(readinessKernel.includes('maximumLifetimeHours: null'), 'kit_kernel_lifetime_pin')
+check(readinessKernel.includes("environment: 'production'"), 'kit_kernel_environment_pin')
 const handoffGenerator = read('tools/create_shop_pilot_handoff.mjs')
 check(handoffGenerator.includes('durationDays: 5'), 'kit_handoff_duration_pin')
 check(handoffGenerator.includes("throw new Error('review_date_must_close_five_day_plan')"), 'kit_handoff_review_date_pin')
@@ -156,18 +157,18 @@ for (const file of kitFiles) {
 }
 
 const kitReadme = read(`${kitDir}/README.md`)
-check(kitReadme.includes('bounded-managed-pilot-rehearsal'), 'pilot_kit_readme_names_decision_id')
+check(kitReadme.includes('managed-production-activation'), 'pilot_kit_readme_names_decision_id')
 for (const name of ['baseline-measurement.md', 'acceptance-checklist.md', 'pilot-agreement-outline.md']) {
   check(kitReadme.includes(name), `pilot_kit_readme_indexes:${name}`)
 }
 
 const kitBaseline = read(`${kitDir}/baseline-measurement.md`)
-for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day']) {
+for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day', 'client_import_row_count', 'weekly_package_sales', 'weekly_treatment_redemptions', 'median_minutes_per_redemption', 'weekly_package_correction_count']) {
   check(kitBaseline.includes(`\`${fieldName}\``), `pilot_kit_baseline_field:${fieldName}`)
 }
 
 const kitAcceptance = read(`${kitDir}/acceptance-checklist.md`)
-for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 'close_minutes_per_day', 'operator_corrections', 'reload_and_retry_result']) {
+for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 'close_minutes_per_day', 'operator_corrections', 'reload_and_retry_result', 'client_import_minutes', 'package_sale_minutes', 'treatment_redemption_minutes', 'package_balance_result']) {
   check(kitAcceptance.includes(`\`${measurement}\``), `pilot_kit_acceptance_measurement:${measurement}`)
 }
 for (const gateName of ['isolatedNonProductionTenantApproved', 'namedOperatorAuthorized', 'pilotDataHandlingApproved', 'ownerReviewedCommercialDraft']) {

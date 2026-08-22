@@ -25,6 +25,7 @@ import { requestStorageDurability } from './storage-durability'
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
+  managedBootstrapHasCapability,
   ManagedTrialError,
   requireManagedSurfaceState,
   saveManagedCommerceCommand,
@@ -499,13 +500,13 @@ type CommerceWorkspaceView = {
   writeReady: boolean
 }
 
-function managedCommerceView(record: ManagedStateRecord, workspaceId: string): CommerceWorkspaceView {
+function managedCommerceView(record: ManagedStateRecord, workspaceId: string, writeReady: boolean): CommerceWorkspaceView {
   if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Shop returned an invalid state envelope.')
   if (record.version === 0) {
     if (Object.keys(record.state).length) throw new Error('Managed Shop has state without a valid revision.')
-    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Shop catalog yet.', writeReady: false }
+    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Shop catalog yet.', writeReady }
   }
-  return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
+  return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady }
 }
 
 export type CommerceStuckRecovery = {
@@ -704,7 +705,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       .then((bootstrap) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const record = requireManagedSurfaceState(bootstrap, 'commerce', 'Shop')
-        const next = managedCommerceView(record, managedIdentity.workspaceId)
+        const next = managedCommerceView(record, managedIdentity.workspaceId, managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'))
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
@@ -806,7 +807,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     const workspaceId = managedIdentity.workspaceId
     const current = snapshotRef.current
     const initializing = eventType === 'commerce.workspace.initialized'
-    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
+    const modeReady = current.writeReady && (initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null)
     if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
       throw new Error(current.error || 'Managed Shop is not ready for writes.')
     }
@@ -829,13 +830,14 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         throw new Error('Managed Shop returned an invalid command result.')
       }
       const accepted = validateCommerceState(result.state)
-      let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
+      let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: current.writeReady }
       if (result.idempotent_replay) {
         const bootstrap = await loadManagedBootstrap(managedIdentity)
         if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the replay could be reconciled.')
         const refreshed = managedCommerceView(
           requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
           workspaceId,
+          managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'),
         )
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
           throw new Error('Managed Shop could not reconcile the committed command with current state.')
@@ -853,6 +855,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
           const refreshed = managedCommerceView(
             requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
             workspaceId,
+            managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'),
           )
           const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
@@ -877,7 +880,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
 
   const visible = managedIdentity ? managedSnapshot : localSnapshot
   const canWrite = managedIdentity
-    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
+    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady && syncStatus.status === 'ready'
   return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange] as const
 }
@@ -893,13 +896,13 @@ type ProductionWorkspaceView = {
   writeReady: boolean
 }
 
-function managedProductionView(record: ManagedStateRecord, workspaceId: string): ProductionWorkspaceView {
+function managedProductionView(record: ManagedStateRecord, workspaceId: string, writeReady: boolean): ProductionWorkspaceView {
   if (record.surface !== 'production' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Plant returned an invalid state envelope.')
   if (record.version === 0) {
     if (Object.keys(record.state).length) throw new Error('Managed Plant has state without a valid revision.')
-    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Plant plan yet.', writeReady: false }
+    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Plant plan yet.', writeReady }
   }
-  return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
+  return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady }
 }
 
 export function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) {
@@ -939,7 +942,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
       .then((bootstrap) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const record = requireManagedSurfaceState(bootstrap, 'production', 'Plant')
-        const next = managedProductionView(record, managedIdentity.workspaceId)
+        const next = managedProductionView(record, managedIdentity.workspaceId, managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write'))
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
@@ -1005,7 +1008,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
     const workspaceId = managedIdentity.workspaceId
     const current = snapshotRef.current
     const initializing = eventType === 'production.workspace.initialized'
-    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
+    const modeReady = current.writeReady && (initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null)
     if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
       throw new Error(current.error || 'Managed Plant is not ready for writes.')
     }
@@ -1028,13 +1031,14 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
         throw new Error('Managed Plant returned an invalid command result.')
       }
       const accepted = validateProductionState(result.state)
-      let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
+      let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: current.writeReady }
       if (result.idempotent_replay) {
         const bootstrap = await loadManagedBootstrap(managedIdentity)
         if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the replay could be reconciled.')
         const refreshed = managedProductionView(
           requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
           workspaceId,
+          managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write'),
         )
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
           throw new Error('Managed Plant could not reconcile the committed command with current state.')
@@ -1052,6 +1056,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
           const refreshed = managedProductionView(
             requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
             workspaceId,
+            managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write'),
           )
           const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
@@ -1076,7 +1081,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
 
   const visible = managedIdentity ? managedSnapshot : localSnapshot
   const canWrite = managedIdentity
-    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
+    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady
   return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite] as const
 }

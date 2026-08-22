@@ -66,6 +66,7 @@ from supermega_runtime.production_material_handoff import (
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
+    PRODUCT_ACCEPTANCE_SURFACES,
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,
     CommandResult,
@@ -152,6 +153,11 @@ _YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
 def _current_yangon_date() -> date:
     return datetime.now(_YANGON_TIME_ZONE).date()
 
+
+def _current_utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 _CLIENT_IDENTITY_FIELDS = frozenset(
     {
         "actor_id",
@@ -191,11 +197,20 @@ class TrialCommandRequest(_StrictRequest):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class TrialProductAcceptanceRequest(_StrictRequest):
+    probe_id: UUID
+    owner_approval_id: UUID
+    product: Literal["commerce", "production", "website", "ecommerce"]
+    release_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    confirmation: Literal["RECORD HOSTED PRODUCT ACCEPTANCE"]
+
+
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
-    """Spec step D request contract: { claimCode, businessName }, nothing else."""
+    """One named company and one explicit first-product entitlement."""
 
     claimCode: str = Field(min_length=1, max_length=40)
     businessName: str = Field(min_length=1, max_length=120)
+    product: Literal["commerce", "production", "website", "ecommerce"]
 
 
 class TrialClientImportApplyRequest(_StrictRequest):
@@ -443,6 +458,35 @@ def _require_write_ready(readiness: TrialReadiness, capability: str) -> None:
         raise _error(403, "trial_membership_required")
     if capability not in readiness.capabilities:
         raise _error(403, "trial_capability_required", required_capability=capability)
+
+
+_SPA_OWNER_SCHEDULE_EVENTS = frozenset(
+    {"client_retention_set", "client_exported", "client_anonymized"}
+)
+
+
+def _spa_owner_schedule_event(candidate: Mapping[str, Any]) -> str | None:
+    schedule = candidate.get("serviceSchedule")
+    events = schedule.get("events") if isinstance(schedule, Mapping) else None
+    latest = events[-1] if isinstance(events, list) and events else None
+    event_type = latest.get("type") if isinstance(latest, Mapping) else None
+    return str(event_type) if event_type in _SPA_OWNER_SCHEDULE_EVENTS else None
+
+
+def _require_spa_owner_schedule_action(
+    readiness: TrialReadiness,
+    candidate: Mapping[str, Any],
+) -> None:
+    event_type = _spa_owner_schedule_event(candidate)
+    if event_type is not None and not readiness.capabilities.intersection(
+        {"company.control.approve", "company.write"}
+    ):
+        raise _error(
+            403,
+            "spa_owner_action_required",
+            action=f"service_schedule:{event_type}",
+            required_capability="company.write",
+        )
 
 
 def _reject_client_identity(value: Any, *, path: str) -> None:
@@ -1074,6 +1118,7 @@ def create_trial_router(
                 actor_id=session.actor_id,
                 claim_code=claim_code,
                 business_name=business_name,
+                product=body.product,
                 session_id=session.session_id,
                 identity_provider=session.identity_provider,
             )
@@ -1102,6 +1147,7 @@ def create_trial_router(
                 "workspace_id": result.workspace_id,
                 "label": result.label,
                 "access": result.access,
+                "product": body.product,
             },
             "claim": {
                 "claimCode": result.claim_code,
@@ -1632,6 +1678,11 @@ def create_trial_router(
         return {
             "workspace_id": principal.workspace_id,
             "version": commerce.version,
+            "privacy_owner": bool(
+                readiness.capabilities.intersection(
+                    {"company.control.approve", "company.write"}
+                )
+            ),
             "schedule": deepcopy(state.get("serviceSchedule")),
         }
 
@@ -1681,7 +1732,46 @@ def create_trial_router(
         else:
             latest_event = dict(events[-1])
             latest_event["actor"] = principal.actor_id
+            if latest_event.get("type") in _SPA_OWNER_SCHEDULE_EVENTS:
+                latest_event["happenedAt"] = _current_utc_timestamp()
             events[-1] = latest_event
+            if latest_event.get("type") == "client_retention_set":
+                privacy_policy = schedule.get("privacyPolicy")
+                if isinstance(privacy_policy, Mapping):
+                    schedule["privacyPolicy"] = {
+                        **dict(privacy_policy),
+                        "updatedAt": latest_event["happenedAt"],
+                        "updatedBy": principal.actor_id,
+                    }
+            elif latest_event.get("type") == "client_anonymized":
+                subject_id = latest_event.get("subjectId")
+                clients = schedule.get("clients")
+                if isinstance(clients, list):
+                    schedule["clients"] = [
+                        {
+                            **dict(client),
+                            "updatedAt": latest_event["happenedAt"],
+                            "anonymizedAt": latest_event["happenedAt"],
+                            "anonymizedBy": principal.actor_id,
+                        }
+                        if isinstance(client, Mapping)
+                        and client.get("id") == subject_id
+                        and "anonymizedAt" in client
+                        else client
+                        for client in clients
+                    ]
+                bookings = schedule.get("bookings")
+                if isinstance(bookings, list):
+                    schedule["bookings"] = [
+                        {
+                            **dict(booking),
+                            "updatedAt": latest_event["happenedAt"],
+                        }
+                        if isinstance(booking, Mapping)
+                        and booking.get("clientId") == subject_id
+                        else booking
+                        for booking in bookings
+                    ]
             event_type = "commerce.service_schedule.saved"
             evidence = {
                 "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
@@ -1691,6 +1781,7 @@ def create_trial_router(
                 "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
             }
         next_state = {**current_state, "serviceSchedule": schedule}
+        _require_spa_owner_schedule_action(readiness, next_state)
         result = _invoke(
             lambda: store.apply_command(
                 principal,
@@ -2087,6 +2178,55 @@ def create_trial_router(
             **_command_response(result),
         }
 
+    @router.post("/product-acceptance")
+    def record_product_acceptance(
+        request: Request,
+        body: TrialProductAcceptanceRequest,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        readiness = _readiness(store, principal)
+        surface = PRODUCT_ACCEPTANCE_SURFACES[body.product]
+        _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[surface])
+        if (
+            readiness.product_entitlements is None
+            or body.product not in readiness.product_entitlements
+        ):
+            raise _error(
+                403,
+                "trial_product_entitlement_required",
+                required_product=body.product,
+            )
+        acceptance = _invoke(
+            lambda: store.record_product_acceptance(
+                principal,
+                probe_id=body.probe_id,
+                owner_approval_id=body.owner_approval_id,
+                product=body.product,
+                release_commit=body.release_commit,
+            )
+        )
+        return {
+            "acceptance": acceptance.to_dict(),
+            "product_state_mutated": False,
+            "external_writes_performed": not acceptance.idempotent_replay,
+            "secret_values_exposed": False,
+        }
+
+    @router.get("/product-acceptance/{probe_id}")
+    def read_product_acceptance(probe_id: UUID, request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        acceptance = _invoke(
+            lambda: store.get_product_acceptance(principal, probe_id=probe_id)
+        )
+        return {
+            "acceptance": acceptance.to_dict(),
+            "product_state_mutated": False,
+            "external_writes_performed": False,
+            "secret_values_exposed": False,
+        }
+
     @router.post("/commands")
     def trial_command(request: Request, body: TrialCommandRequest) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
@@ -2362,6 +2502,7 @@ __all__ = [
     "TrialApprovalDecisionRequest",
     "TrialApprovalRequest",
     "TrialCommandRequest",
+    "TrialProductAcceptanceRequest",
     "TrialSelfServeWorkspaceRequest",
     "TrialSignupSession",
     "create_trial_router",

@@ -64,7 +64,7 @@ const input = {
     postgres: { major: 17 },
     advisor: { status: 'blocked', findingCount: 27 },
     catalog: { sequenceCount: 2, nonTableRelationCount: 0, publicRoutineCount: 0, browserCallableRoutineCount: 0 },
-    managedBackend: { liveSchemaVersion: 7, localTargetVersion: 10, versionDrift: 3, browserRolesDenied: true, metadataRlsEnabled: false, storageBucketCount: 0 },
+    managedBackend: { liveSchemaVersion: 7, localTargetVersion: 11, versionDrift: 4, browserRolesDenied: true, metadataRlsEnabled: false, storageBucketCount: 0 },
     conclusion: { productionMutationAuthorized: false, indirectExposureAudited: true, nextAction: 'Rehearse hardening on an isolated target.' },
     controls: { databaseWrites: 0 },
   },
@@ -84,30 +84,30 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   )
   assert.equal(
     ledger.gates.find((gate) => gate.id === 'security')?.evidence,
-    '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.',
+    '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v11.',
   )
   assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
   assert.equal(ledger.products.length, 4)
   assert.equal(ledger.controls.modelCallsRequiredToBuild, 0)
   assert.equal(ledger.asOf, '2026-08-04T05:28:37.850Z')
-  assert.equal(ledger.founderDecision.target.environment, 'preview_branch')
-  assert.equal(ledger.founderDecision.target.maximumLifetimeHours, 24)
+  assert.equal(ledger.founderDecision.target.environment, 'production')
+  assert.equal(ledger.founderDecision.target.maximumLifetimeHours, null)
   assert.equal(ledger.founderDecision.target.startsWithProductionData, false)
   assert.equal(ledger.founderDecision.operator.productId, 'shop')
   assert.equal(ledger.founderDecision.authority, 'proposal_only')
   assert.equal(ledger.founderDecision.createsAuthority, false)
   assert.equal(ledger.founderDecision.approvalReceipt, null)
-  assert.ok(ledger.founderDecision.doesNotAuthorize.includes('production_database_change'))
+  assert.ok(ledger.founderDecision.doesNotAuthorize.includes('additional_tenant_activation'))
   assert.equal(ledger.securityAudit.findingCount, 27)
   assert.equal(ledger.securityAudit.productionMutationAuthorized, false)
   assert.equal(ledger.securityAudit.databaseWrites, 0)
   assert.deepEqual(ledger.overall.nextAction, {
     kind: 'founder_decision',
-    decisionId: 'bounded-managed-pilot-rehearsal',
-    requires: ['approve_preview_branch_target', 'approve_self_serve_activation_window'],
-    targetEnvironment: 'preview_branch',
+    decisionId: 'managed-production-activation',
+    requires: ['approve_runtime_role_provisioning', 'approve_first_named_owner_identity', 'approve_exact_production_release', 'approve_managed_activation_window'],
+    targetEnvironment: 'production',
     operatorProductId: 'shop',
-    maximumLifetimeHours: 24,
+    maximumLifetimeHours: null,
   })
   assert.equal(ledger.gates.at(-1)?.id, 'production_activation')
   assert.equal(ledger.gates.at(-1)?.status, 'blocked')
@@ -119,7 +119,7 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.equal(validateManagedPilotReadiness(ledger), ledger)
 })
 
-test('records the self-serve pilot proof but keeps the gate blocked on production activation', () => {
+test('records the self-serve pilot proof independently from production activation', () => {
   const withoutProof = buildManagedPilotReadiness(input)
   assert.equal(withoutProof.selfServePilot.proofComplete, false)
   const blockedGate = withoutProof.gates.find((gate) => gate.id === 'self_serve_pilot')
@@ -132,10 +132,10 @@ test('records the self-serve pilot proof but keeps the gate blocked on productio
   assert.equal(proven.selfServePilot.schemaVersionProven, 11)
   assert.equal(proven.selfServePilot.liveActivationBlockedOn, 'production_activation')
   const provenGate = proven.gates.find((gate) => gate.id === 'self_serve_pilot')
-  // The proof is banked, but the gate stays blocked: v11 is not on production yet.
+  // The fixture still models live v7, so the proof is banked while the hosted schema gate remains blocked.
   assert.equal(provenGate.status, 'blocked')
   assert.match(provenGate.evidence, /proven six-for-six/)
-  assert.match(provenGate.nextAction, /PRODUCTION-ACTIVATION-RUNBOOK\.md/)
+  assert.match(provenGate.nextAction, /runtime-login provisioning/)
   assert.equal(validateManagedPilotReadiness(proven), proven)
 })
 
@@ -214,13 +214,13 @@ test('rejects evidence or ledger state that could touch protected production', (
   assert.throws(() => validateManagedPilotReadiness(overwritten), /managed_pilot_readiness_security_audit_invalid/)
 })
 
-test('rejects a founder decision that can touch production or outlive the bounded rehearsal', () => {
+test('rejects a founder decision that changes the exact empty production target', () => {
   const ledger = buildManagedPilotReadiness(input)
-  ledger.founderDecision.target.production = true
+  ledger.founderDecision.target.production = false
   assert.throws(() => validateManagedPilotReadiness(ledger), /managed_pilot_readiness_founder_decision_invalid/)
 
   const longLived = buildManagedPilotReadiness(input)
-  longLived.founderDecision.target.maximumLifetimeHours = 168
+  longLived.founderDecision.target.maximumLifetimeHours = 24
   assert.throws(() => validateManagedPilotReadiness(longLived), /managed_pilot_readiness_founder_decision_invalid/)
 
   const seeded = buildManagedPilotReadiness(input)
@@ -230,7 +230,7 @@ test('rejects a founder decision that can touch production or outlive the bounde
 
 test('rejects broadened, incomplete, or contradictory proposal authority', () => {
   const broadened = buildManagedPilotReadiness(input)
-  broadened.founderDecision.proposedActions.push('production_deploy')
+  broadened.founderDecision.proposedActions.push('activate_additional_tenant')
   assert.throws(() => validateManagedPilotReadiness(broadened), /managed_pilot_readiness_founder_decision_invalid/)
 
   const incomplete = buildManagedPilotReadiness(input)
@@ -262,11 +262,11 @@ test('rejects an unvalidated or broadened founder ask in overall.nextAction', ()
   assert.throws(() => validateManagedPilotReadiness(renamed), /managed_pilot_readiness_next_action_invalid/)
 
   const broadenedAsk = buildManagedPilotReadiness(input)
-  broadenedAsk.overall.nextAction.requires = ['approve_preview_branch_target']
+  broadenedAsk.overall.nextAction.requires = ['approve_runtime_role_provisioning']
   assert.throws(() => validateManagedPilotReadiness(broadenedAsk), /managed_pilot_readiness_next_action_invalid/)
 
   const divergent = buildManagedPilotReadiness(input)
-  divergent.overall.nextAction.targetEnvironment = 'production'
+  divergent.overall.nextAction.targetEnvironment = 'preview_branch'
   assert.throws(() => validateManagedPilotReadiness(divergent), /managed_pilot_readiness_next_action_invalid/)
 
   const smuggled = buildManagedPilotReadiness(input)
@@ -274,7 +274,7 @@ test('rejects an unvalidated or broadened founder ask in overall.nextAction', ()
   assert.throws(() => validateManagedPilotReadiness(smuggled), /managed_pilot_readiness_next_action_invalid/)
 
   const extended = buildManagedPilotReadiness(input)
-  extended.overall.nextAction.maximumLifetimeHours = 168
+  extended.overall.nextAction.maximumLifetimeHours = 24
   assert.throws(() => validateManagedPilotReadiness(extended), /managed_pilot_readiness_next_action_invalid/)
 })
 

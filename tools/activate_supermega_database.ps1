@@ -107,6 +107,14 @@ if ([string]$activationPlan.contract -ne 'supermega.managed_workspace_activation
 if ([string]$activationPlan.target.projectRef -ne $ExpectedProjectRef) {
   throw 'Activation plan and ExpectedProjectRef do not match.'
 }
+$activationSchemaVersion = [string]$activationPlan.target.schemaVersion
+$activationReleaseCommit = ([string]$activationPlan.target.releaseCommit).Trim().ToLowerInvariant()
+if ($activationSchemaVersion -ne '11') {
+  throw 'Activation plan must target the reviewed managed schema version 11.'
+}
+if ($activationReleaseCommit -notmatch '^[0-9a-f]{40}$') {
+  throw 'Activation plan must bind the exact reviewed 40-character release commit.'
+}
 if (-not $ValidateOnly -and [string]$activationPlan.approval.approvalId -ne $ApprovalId) {
   throw 'Activation plan and ApprovalId do not match.'
 }
@@ -166,6 +174,7 @@ function Remove-StagedEnvironmentValues {
 $previous = $env:SUPERMEGA_DATABASE_URL
 $previousStorageAudit = $env:SUPERMEGA_STORAGE_AUDIT_DATABASE_URL
 $previousExpectedRef = $env:SUPERMEGA_ACTIVATION_PROJECT_REF
+$previousReleaseCommit = $env:SUPERMEGA_RELEASE_COMMIT
 $previousVercelProjectId = $env:VERCEL_PROJECT_ID
 $previousVercelOrgId = $env:VERCEL_ORG_ID
 try {
@@ -174,6 +183,10 @@ try {
   $env:SUPERMEGA_DATABASE_URL = $resolved
   $env:SUPERMEGA_STORAGE_AUDIT_DATABASE_URL = $resolvedStorageAudit
   $env:SUPERMEGA_ACTIVATION_PROJECT_REF = $ExpectedProjectRef
+  # This value is process-scoped for preflight verification only. Vercel's
+  # immutable VERCEL_GIT_COMMIT_SHA remains authoritative after deployment;
+  # persisting SUPERMEGA_RELEASE_COMMIT would become stale on the next release.
+  $env:SUPERMEGA_RELEASE_COMMIT = $activationReleaseCommit
   $env:VERCEL_PROJECT_ID = $AppVercelProjectId
   $env:VERCEL_ORG_ID = $VercelOrgId
   Write-Output '==> validate exact-project managed Postgres, private Storage, and SuperMega schema'
@@ -248,6 +261,8 @@ try {
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_DATABASE_URL' -Value $resolved -Sensitive
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_URL' -Value $supabaseUrl
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_PUBLISHABLE_KEY' -Value $resolvedPublishableKey
+    Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION' -Value $activationSchemaVersion
+    Add-ManagedEnvironmentValue -Key 'SUPERMEGA_SUPABASE_PROJECT_REF' -Value $ExpectedProjectRef
     & npx.cmd --yes $VercelCli env run --environment=production --cwd $RepoRoot --scope $Scope -- node $EnvironmentValueVerifier staged
     if ($LASTEXITCODE -ne 0) { throw 'Staged Vercel values failed value-aware verification.' }
 
@@ -344,6 +359,8 @@ finally {
   else { $env:SUPERMEGA_STORAGE_AUDIT_DATABASE_URL = $previousStorageAudit }
   if ($null -eq $previousExpectedRef) { Remove-Item Env:SUPERMEGA_ACTIVATION_PROJECT_REF -ErrorAction SilentlyContinue }
   else { $env:SUPERMEGA_ACTIVATION_PROJECT_REF = $previousExpectedRef }
+  if ($null -eq $previousReleaseCommit) { Remove-Item Env:SUPERMEGA_RELEASE_COMMIT -ErrorAction SilentlyContinue }
+  else { $env:SUPERMEGA_RELEASE_COMMIT = $previousReleaseCommit }
   if ($null -eq $previousVercelProjectId) { Remove-Item Env:VERCEL_PROJECT_ID -ErrorAction SilentlyContinue }
   else { $env:VERCEL_PROJECT_ID = $previousVercelProjectId }
   if ($null -eq $previousVercelOrgId) { Remove-Item Env:VERCEL_ORG_ID -ErrorAction SilentlyContinue }
@@ -352,5 +369,7 @@ finally {
   $resolvedStorageAudit = $null
   $resolvedPublishableKey = $null
   $supabaseUrl = $null
+  $activationSchemaVersion = $null
+  $activationReleaseCommit = $null
   $addedEnvironmentKeys = $null
 }

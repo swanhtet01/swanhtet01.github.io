@@ -51,6 +51,22 @@ def _env_schema_version(default: int = 10) -> int:
 # v11 branch) only AFTER the matching migration has been applied to that target.
 TRIAL_SCHEMA_VERSION = _env_schema_version()
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
+ACTIVATION_PRODUCT_ORDER = ("shop", "plant", "website", "ecommerce")
+ACTIVATION_PRODUCT_ENTITLEMENTS = {
+    "shop": "commerce",
+    "plant": "production",
+    "website": "website",
+    "ecommerce": "ecommerce",
+}
+PRODUCT_ENTITLEMENT_ORDER = tuple(ACTIVATION_PRODUCT_ENTITLEMENTS.values())
+PRODUCT_ACCEPTANCE_SURFACES = {
+    "commerce": "commerce",
+    "production": "production",
+    "website": "website",
+    "ecommerce": "commerce",
+}
+PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"
+PRODUCT_ACCEPTANCE_EVENT_TYPE = "client.product_acceptance.recorded"
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
 # authoritative client->server (or client->Supavisor-pooler) guarantee -- a
@@ -161,33 +177,129 @@ SELF_SERVE_MAX_BUSINESS_NAME = 120
 SELF_SERVE_RATE_LIMIT_MAX = 5
 SELF_SERVE_WORKSPACE_EVENT_TYPE = "company.workspace.created"
 SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT = "self_serve_claim_v1"
-# The user names themselves and owns the tenant they created: every read,
-# write, baseline, control, and approval capability on their own workspace.
-SELF_SERVE_OWNER_CAPABILITIES = frozenset(
+# The user names themselves and owns the tenant they created. Company/setup
+# controls are shared, while product capabilities are limited to the one
+# product selected by the device trial. Ecommerce intentionally shares the
+# commerce data surface without granting a Shop portal entitlement.
+_SELF_SERVE_BASE_OWNER_CAPABILITIES = frozenset(
     {
         "approvals.decide",
         "approvals.read",
         "approvals.request",
-        "commerce.read",
-        "commerce.write",
         "company.baseline.approve",
         "company.control.approve",
         "company.read",
         "company.write",
-        "production.read",
-        "production.write",
         "setup.read",
         "setup.write",
-        "website.read",
-        "website.write",
     }
 )
+SELF_SERVE_PRODUCT_CAPABILITIES = {
+    "commerce": frozenset({"commerce.read", "commerce.write"}),
+    "production": frozenset({"production.read", "production.write"}),
+    "website": frozenset({"website.read", "website.write"}),
+    "ecommerce": frozenset({"commerce.read", "commerce.write"}),
+}
+SELF_SERVE_PRODUCT_ACTIVATION_IDS = {
+    "commerce": "shop",
+    "production": "plant",
+    "website": "website",
+    "ecommerce": "ecommerce",
+}
+
+
+def validate_self_serve_product(value: object) -> str:
+    product = str(value or "").strip().lower()
+    if product not in SELF_SERVE_PRODUCT_CAPABILITIES:
+        raise TrialValidationError("self-serve product is invalid.")
+    return product
+
+
+def self_serve_owner_capabilities(product: object) -> frozenset[str]:
+    normalized = validate_self_serve_product(product)
+    return _SELF_SERVE_BASE_OWNER_CAPABILITIES | SELF_SERVE_PRODUCT_CAPABILITIES[normalized]
+
+
+# Compatibility name: the original self-serve contract defaulted to Shop.
+SELF_SERVE_OWNER_CAPABILITIES = self_serve_owner_capabilities("commerce")
 _SELF_SERVE_PROJECT_REF_PATTERN = re.compile(r"^[a-z0-9]{20}$")
 _SELF_SERVE_RELEASE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 JsonObject = dict[str, Any]
 StateReducer = Callable[[str, str, Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any]]
 StatePrecondition = Callable[[Mapping[str, Any], Mapping[str, Mapping[str, Any]]], None]
+
+
+def activation_product_entitlements(payload_value: object) -> tuple[str, ...]:
+    """Return only the canonical products proven by an activation event."""
+
+    payload = payload_value
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            return ()
+    if not isinstance(payload, Mapping):
+        return ()
+    products_value = payload.get("products")
+    if products_value is None:
+        products_value = [payload.get("product")]
+    if not isinstance(products_value, list) or not products_value:
+        return ()
+    if any(not isinstance(product, str) for product in products_value):
+        return ()
+    products = tuple(products_value)
+    canonical = tuple(product for product in ACTIVATION_PRODUCT_ORDER if product in products)
+    if products != canonical or len(set(products)) != len(products):
+        return ()
+    try:
+        return tuple(ACTIVATION_PRODUCT_ENTITLEMENTS[product] for product in products)
+    except KeyError:
+        return ()
+
+
+def capabilities_for_product_entitlements(
+    capabilities: Sequence[str],
+    product_entitlements: Sequence[str] | None,
+) -> frozenset[str]:
+    """Intersect product capabilities with immutable activation proof.
+
+    ``None`` is reserved for stores that do not provide authoritative product
+    entitlements. An explicit empty or malformed grant keeps company, setup,
+    and approval controls available while denying every product data surface.
+    Ecommerce intentionally authorizes the shared commerce surface without
+    becoming a Shop portal entitlement.
+    """
+
+    granted = frozenset(str(capability).strip() for capability in capabilities)
+    if product_entitlements is None:
+        return granted
+    products = tuple(product_entitlements)
+    if (
+        any(not isinstance(product, str) for product in products)
+        or products != tuple(product for product in PRODUCT_ENTITLEMENT_ORDER if product in products)
+        or len(set(products)) != len(products)
+    ):
+        products = ()
+    allowed_surfaces = {
+        "commerce" if product in {"commerce", "ecommerce"} else product
+        for product in products
+    }
+    product_capabilities = {
+        capability
+        for surface in ("commerce", "production", "website")
+        for capability in (f"{surface}.read", f"{surface}.write")
+    }
+    allowed_capabilities = {
+        capability
+        for surface in allowed_surfaces
+        for capability in (f"{surface}.read", f"{surface}.write")
+    }
+    return frozenset(
+        capability
+        for capability in granted
+        if capability not in product_capabilities or capability in allowed_capabilities
+    )
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
     ("workspace_access_controls", "workspace_access_control_guard"): {
@@ -559,6 +671,10 @@ class TrialReadiness:
     # server-side billing_entitlements projection, never stored on the device,
     # and fail-closed to False everywhere the entitlement cannot be proven.
     premium_unlocked: bool = False
+    # Present only when an immutable managed activation event proves the
+    # products assigned to this tenant. None preserves compatibility for
+    # non-managed stores; an empty tuple is an explicit fail-closed grant.
+    product_entitlements: tuple[str, ...] | None = None
 
     @property
     def read_ready(self) -> bool:
@@ -590,7 +706,7 @@ class TrialReadiness:
         return tuple(name for name, ready in checks if not ready)
 
     def to_dict(self) -> JsonObject:
-        return {
+        payload: JsonObject = {
             "status": "ready" if self.write_ready else "blocked",
             "backend": self.backend,
             "read_ready": self.read_ready,
@@ -605,8 +721,15 @@ class TrialReadiness:
                 "write_enabled": self.write_enabled,
             },
             "blockers": list(self.blockers),
+            # The browser needs the actor's effective, entitlement-filtered
+            # capabilities to render staff portals honestly. This is authority
+            # metadata, not a secret; every write is still re-authorized here.
+            "capabilities": sorted(self.capabilities),
             "premiumUnlocked": self.premium_unlocked,
         }
+        if self.product_entitlements is not None:
+            payload["productEntitlements"] = list(self.product_entitlements)
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -644,6 +767,33 @@ class CommandResult:
             "event_type": self.event_type,
             "version": self.version,
             "state": deepcopy(self.state),
+            "idempotent_replay": self.idempotent_replay,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ProductAcceptanceRecord:
+    probe_id: str
+    owner_approval_id: str
+    product: str
+    surface: str
+    release_commit: str
+    state_version: int
+    state_digest: str
+    recorded_at: str
+    idempotent_replay: bool = False
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "contract": PRODUCT_ACCEPTANCE_CONTRACT,
+            "probe_id": self.probe_id,
+            "owner_approval_id": self.owner_approval_id,
+            "product": self.product,
+            "surface": self.surface,
+            "release_commit": self.release_commit,
+            "state_version": self.state_version,
+            "state_digest": self.state_digest,
+            "recorded_at": self.recorded_at,
             "idempotent_replay": self.idempotent_replay,
         }
 
@@ -702,6 +852,7 @@ class TrialStore(Protocol):
         actor_id: str,
         claim_code: str,
         business_name: str,
+        product: str = "commerce",
         session_id: str = "",
         identity_provider: str = "supabase",
     ) -> SelfServeWorkspaceResult: ...
@@ -709,6 +860,23 @@ class TrialStore(Protocol):
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState: ...
 
     def list_approvals(self, principal: TrialPrincipal, *, limit: int = 50) -> list[ApprovalRecord]: ...
+
+    def record_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+        owner_approval_id: str | UUID,
+        product: str,
+        release_commit: str,
+    ) -> ProductAcceptanceRecord: ...
+
+    def get_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+    ) -> ProductAcceptanceRecord: ...
 
     def apply_command(
         self,
@@ -2961,6 +3129,65 @@ def _canonical_fingerprint(kind: str, payload: Mapping[str, Any]) -> str:
     return sha256(encoded).hexdigest()
 
 
+def _normalize_acceptance_product(product: object) -> tuple[str, str]:
+    normalized = str(product or "").strip().lower()
+    surface = PRODUCT_ACCEPTANCE_SURFACES.get(normalized)
+    if surface is None:
+        raise TrialValidationError("Unsupported product acceptance target.")
+    return normalized, surface
+
+
+def _normalize_release_commit(value: object) -> str:
+    commit = str(value or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise TrialValidationError("release_commit must be an immutable Git SHA.")
+    return commit
+
+
+def _product_acceptance_record(
+    value: Mapping[str, Any],
+    *,
+    idempotent_replay: bool = False,
+) -> ProductAcceptanceRecord:
+    product, surface = _normalize_acceptance_product(value.get("product"))
+    probe_id = _normalize_uuid(value.get("probe_id", ""), field_name="probe_id")
+    owner_approval_id = _normalize_uuid(
+        value.get("owner_approval_id", ""),
+        field_name="owner_approval_id",
+    )
+    release_commit = _normalize_release_commit(value.get("release_commit"))
+    state_version = value.get("state_version")
+    state_digest = str(value.get("state_digest") or "")
+    recorded_at = str(value.get("recorded_at") or "")
+    if (
+        value.get("contract") != PRODUCT_ACCEPTANCE_CONTRACT
+        or value.get("surface") != surface
+        or not isinstance(state_version, int)
+        or isinstance(state_version, bool)
+        or state_version < 0
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", state_digest)
+        or not recorded_at
+    ):
+        raise TrialStoreError("Product acceptance evidence is invalid.")
+    try:
+        parsed_recorded_at = datetime.fromisoformat(recorded_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise TrialStoreError("Product acceptance evidence is invalid.") from exc
+    if parsed_recorded_at.tzinfo is None:
+        raise TrialStoreError("Product acceptance evidence is invalid.")
+    return ProductAcceptanceRecord(
+        probe_id=probe_id,
+        owner_approval_id=owner_approval_id,
+        product=product,
+        surface=surface,
+        release_commit=release_commit,
+        state_version=state_version,
+        state_digest=state_digest,
+        recorded_at=recorded_at,
+        idempotent_replay=idempotent_replay,
+    )
+
+
 def validate_self_serve_claim_code(value: object) -> str:
     claim_code = str(value or "").strip()
     if not SELF_SERVE_CLAIM_CODE_PATTERN.fullmatch(claim_code):
@@ -2995,7 +3222,12 @@ def self_serve_workspace_id(claim_code: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"supermega:self-serve-workspace:{claim}"))
 
 
-def _self_serve_command_identity(claim_code: str, business_name: str) -> tuple[str, str, str]:
+def _self_serve_command_identity(
+    claim_code: str,
+    business_name: str,
+    product: str = "commerce",
+) -> tuple[str, str, str]:
+    normalized_product = validate_self_serve_product(product)
     workspace_id = self_serve_workspace_id(claim_code)
     command_id = str(uuid5(UUID(workspace_id), f"self-serve-create:{claim_code}"))
     fingerprint = _canonical_fingerprint(
@@ -3004,6 +3236,7 @@ def _self_serve_command_identity(claim_code: str, business_name: str) -> tuple[s
             "workspace_id": workspace_id,
             "claim_code": claim_code,
             "business_name": business_name,
+            "product": normalized_product,
             "event_type": SELF_SERVE_WORKSPACE_EVENT_TYPE,
         },
     )
@@ -3600,6 +3833,7 @@ class PostgresTrialStore:
         actor_id: str,
         claim_code: str,
         business_name: str,
+        product: str = "commerce",
         session_id: str = "",
         identity_provider: str = "supabase",
     ) -> SelfServeWorkspaceResult:
@@ -3614,7 +3848,11 @@ class PostgresTrialStore:
 
         claim = validate_self_serve_claim_code(claim_code)
         label = validate_self_serve_business_name(business_name)
-        workspace_id, command_id, fingerprint = _self_serve_command_identity(claim, label)
+        normalized_product = validate_self_serve_product(product)
+        owner_capabilities = self_serve_owner_capabilities(normalized_product)
+        workspace_id, command_id, fingerprint = _self_serve_command_identity(
+            claim, label, normalized_product
+        )
         principal = TrialPrincipal(
             workspace_id=workspace_id,
             actor_id=actor_id,
@@ -3700,6 +3938,9 @@ class PostgresTrialStore:
                             owner_membership_active = any(
                                 str(row.get("actor_id", "")) == principal.actor_id
                                 and str(row.get("status", "")) == "active"
+                                and frozenset(
+                                    str(item) for item in (row.get("capabilities") or [])
+                                ) == owner_capabilities
                                 for row in membership_rows
                             )
                             if not owner_membership_active:
@@ -3813,7 +4054,7 @@ class PostgresTrialStore:
                             (
                                 workspace_id,
                                 principal.actor_id,
-                                sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                                sorted(owner_capabilities),
                             ),
                         )
                         result = {
@@ -3824,6 +4065,7 @@ class PostgresTrialStore:
                                 "claim_code": claim,
                                 "owner_actor_id": principal.actor_id,
                                 "event_id": command_id,
+                                "product": normalized_product,
                             }
                         }
                         payload = {
@@ -3833,7 +4075,8 @@ class PostgresTrialStore:
                                 "linkedBy": principal.actor_id,
                             },
                             "businessName": label,
-                            "ownerCapabilities": sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                            "products": [SELF_SERVE_PRODUCT_ACTIVATION_IDS[normalized_product]],
+                            "ownerCapabilities": sorted(owner_capabilities),
                         }
                         cursor.execute(
                             """
@@ -3888,7 +4131,7 @@ class PostgresTrialStore:
                             or frozenset(
                                 str(item) for item in (read_back.get("capabilities") or [])
                             )
-                            != SELF_SERVE_OWNER_CAPABILITIES
+                            != owner_capabilities
                             or str(read_back.get("command_fingerprint", "")) != fingerprint
                         ):
                             raise TrialStoreError(
@@ -3950,6 +4193,12 @@ class PostgresTrialStore:
                         self._set_context(cursor, normalized)
                         self._assert_active_identity_session(cursor, normalized)
                         capabilities = self._load_membership(cursor, normalized)
+                        product_entitlements = self._product_entitlements(
+                            cursor, normalized.workspace_id
+                        )
+                        capabilities = capabilities_for_product_entitlements(
+                            capabilities, product_entitlements
+                        )
                         if write:
                             self._assert_audit(cursor)
                     except TrialStoreError:
@@ -3959,6 +4208,32 @@ class PostgresTrialStore:
                     if capability and capability not in capabilities:
                         raise TrialPermissionDenied(capability)
                     yield cursor, capabilities
+
+    @staticmethod
+    def _product_entitlements(cursor: Any, workspace_id: str) -> tuple[str, ...]:
+        """Read the immutable activation event; malformed or absent proof grants nothing."""
+
+        cursor.execute(
+            """
+            select payload_json
+            from app_private.workspace_events
+            where workspace_id = %s
+              and surface = 'company'
+              and event_type in ('company.workspace.activated', 'company.workspace.created')
+            order by case when event_type = 'company.workspace.activated' then 0 else 1 end,
+                     created_at desc
+            limit 1
+            """,
+            (workspace_id,),
+        )
+        row = cursor.fetchone()
+        if isinstance(row, Mapping):
+            payload = row.get("payload_json")
+        elif isinstance(row, Sequence) and not isinstance(row, (str, bytes)) and row:
+            payload = row[0]
+        else:
+            payload = None
+        return activation_product_entitlements(payload)
 
     @staticmethod
     def _premium_unlocked(cursor: Any, workspace_id: str) -> bool:
@@ -4006,6 +4281,7 @@ class PostgresTrialStore:
         membership_ready = False
         audit_ready = False
         premium_unlocked = False
+        product_entitlements: tuple[str, ...] | None = None
         capabilities: frozenset[str] = frozenset()
         if not self.database_url:
             return TrialReadiness(
@@ -4035,6 +4311,12 @@ class PostgresTrialStore:
                             self._set_context(cursor, normalized)
                             capabilities = self._load_membership(cursor, normalized)
                             membership_ready = True
+                            product_entitlements = self._product_entitlements(
+                                cursor, normalized.workspace_id
+                            )
+                            capabilities = capabilities_for_product_entitlements(
+                                capabilities, product_entitlements
+                            )
                             if TRIAL_SCHEMA_VERSION >= 12:
                                 premium_unlocked = self._premium_unlocked(
                                     cursor, normalized.workspace_id
@@ -4067,6 +4349,7 @@ class PostgresTrialStore:
             write_enabled=self.write_enabled,
             capabilities=capabilities,
             premium_unlocked=premium_unlocked,
+            product_entitlements=product_entitlements,
         )
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
@@ -4380,6 +4663,158 @@ class PostgresTrialStore:
             state=next_state,
         )
 
+    def record_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+        owner_approval_id: str | UUID,
+        product: str,
+        release_commit: str,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        owner_approval_id_value = _normalize_uuid(
+            owner_approval_id,
+            field_name="owner_approval_id",
+        )
+        product_value, surface = _normalize_acceptance_product(product)
+        release_commit_value = _normalize_release_commit(release_commit)
+        normalized = principal.normalized()
+        payload: JsonObject = {
+            "contract": PRODUCT_ACCEPTANCE_CONTRACT,
+            "probe_id": probe_id_value,
+            "owner_approval_id": owner_approval_id_value,
+            "product": product_value,
+            "surface": surface,
+            "release_commit": release_commit_value,
+        }
+        fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
+        with self._guarded_cursor(
+            normalized,
+            write=True,
+            capability=_required_surface_capability(surface),
+        ) as (cursor, _capabilities):
+            if product_value not in self._product_entitlements(
+                cursor,
+                normalized.workspace_id,
+            ):
+                raise TrialPermissionDenied(f"product.{product_value}")
+            self._lock(cursor, f"{normalized.workspace_id}:acceptance:{probe_id_value}")
+            replay = self._load_event_replay(
+                cursor,
+                workspace_id=normalized.workspace_id,
+                command_id=probe_id_value,
+                fingerprint=fingerprint,
+            )
+            if replay is not None:
+                return _product_acceptance_record(replay, idempotent_replay=True)
+            cursor.execute(
+                """
+                select version, state_json
+                from app_private.workspace_state
+                where workspace_id = %s and surface = %s
+                """,
+                (normalized.workspace_id, surface),
+            )
+            state_row = cursor.fetchone() or {}
+            state_version = int(state_row.get("version", 0) or 0)
+            state = state_row.get("state_json", {}) or {}
+            if isinstance(state, str):
+                state = json.loads(state)
+            state_value = _json_object(state, field_name="acceptance state")
+            state_digest = f"sha256:{_canonical_fingerprint('product_state', state_value)}"
+            recorded_at = _utc_now()
+            result = ProductAcceptanceRecord(
+                probe_id=probe_id_value,
+                owner_approval_id=owner_approval_id_value,
+                product=product_value,
+                surface=surface,
+                release_commit=release_commit_value,
+                state_version=state_version,
+                state_digest=state_digest,
+                recorded_at=recorded_at,
+            ).to_dict()
+            cursor.execute(
+                """
+                insert into app_private.workspace_events
+                  (event_id, workspace_id, command_id, command_fingerprint, surface,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json, created_at)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s::jsonb, %s::jsonb, %s::timestamptz)
+                """,
+                (
+                    str(uuid4()),
+                    normalized.workspace_id,
+                    probe_id_value,
+                    fingerprint,
+                    surface,
+                    PRODUCT_ACCEPTANCE_EVENT_TYPE,
+                    normalized.actor_id,
+                    normalized.actor_kind,
+                    state_version,
+                    state_version,
+                    json.dumps(payload, ensure_ascii=False),
+                    json.dumps(result, ensure_ascii=False),
+                    recorded_at,
+                ),
+            )
+            cursor.execute(
+                """
+                select result_json
+                from app_private.workspace_events
+                where workspace_id = %s and command_id = %s
+                  and event_type = %s
+                """,
+                (
+                    normalized.workspace_id,
+                    probe_id_value,
+                    PRODUCT_ACCEPTANCE_EVENT_TYPE,
+                ),
+            )
+            readback_row = cursor.fetchone()
+            if not isinstance(readback_row, Mapping):
+                raise TrialStoreError("Product acceptance evidence could not be read back.")
+            readback = readback_row.get("result_json") or {}
+            if isinstance(readback, str):
+                readback = json.loads(readback)
+            record = _product_acceptance_record(readback)
+            if record.to_dict() != result:
+                raise TrialStoreError("Product acceptance evidence could not be read back.")
+            return record
+
+    def get_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        normalized = principal.normalized()
+        with self._guarded_cursor(normalized, write=False) as (cursor, capabilities):
+            cursor.execute(
+                """
+                select surface, result_json
+                from app_private.workspace_events
+                where workspace_id = %s and command_id = %s
+                  and event_type = %s
+                """,
+                (
+                    normalized.workspace_id,
+                    probe_id_value,
+                    PRODUCT_ACCEPTANCE_EVENT_TYPE,
+                ),
+            )
+            row = cursor.fetchone()
+            if not isinstance(row, Mapping):
+                raise TrialNotFound()
+            surface = _normalize_surface(str(row.get("surface") or ""))
+            _require_surface_read_capability(capabilities, surface)
+            result = row.get("result_json") or {}
+            if isinstance(result, str):
+                result = json.loads(result)
+            return _product_acceptance_record(result)
+
     def create_approval(
         self,
         principal: TrialPrincipal,
@@ -4619,6 +5054,7 @@ class InMemoryTrialStore:
         self._self_serve_links: dict[str, JsonObject] = {}
         self._self_serve_attempts: dict[str, int] = {}
         self._workspace_labels: dict[str, str] = {}
+        self._workspace_product_entitlements: dict[str, tuple[str, ...]] = {}
         self._lock = RLock()
 
     def provision_membership(
@@ -4643,12 +5079,33 @@ class InMemoryTrialStore:
             frozenset(str(item).strip() for item in capabilities if str(item).strip()),
         )
 
+    def provision_product_entitlements(
+        self,
+        *,
+        workspace_id: str,
+        products: Sequence[str],
+    ) -> None:
+        """Install authoritative activation proof in the parity test double."""
+
+        normalized = tuple(str(product).strip().lower() for product in products)
+        if (
+            normalized
+            != tuple(product for product in PRODUCT_ENTITLEMENT_ORDER if product in normalized)
+            or len(set(normalized)) != len(normalized)
+        ):
+            raise TrialValidationError("Product entitlements are invalid.")
+        workspace = str(workspace_id).strip()
+        if not workspace:
+            raise TrialValidationError("Workspace ID is required.")
+        self._workspace_product_entitlements[workspace] = normalized
+
     def create_self_serve_workspace(
         self,
         *,
         actor_id: str,
         claim_code: str,
         business_name: str,
+        product: str = "commerce",
         session_id: str = "",
         identity_provider: str = "supabase",
     ) -> SelfServeWorkspaceResult:
@@ -4660,7 +5117,11 @@ class InMemoryTrialStore:
         actor = str(actor_id or "").strip()
         if not actor:
             raise TrialNotReadyError(("auth_ready",))
-        workspace_id, command_id, fingerprint = _self_serve_command_identity(claim, label)
+        normalized_product = validate_self_serve_product(product)
+        owner_capabilities = self_serve_owner_capabilities(normalized_product)
+        workspace_id, command_id, fingerprint = _self_serve_command_identity(
+            claim, label, normalized_product
+        )
         with self._lock:
             infrastructure_blockers = tuple(
                 name
@@ -4682,7 +5143,12 @@ class InMemoryTrialStore:
                     raise TrialClaimConflict(claim)
                 replay = self._replay(workspace_id, actor, HUMAN_ACTOR_KIND, command_id, fingerprint)
                 membership = self._memberships.get((workspace_id, actor))
-                if replay is None or membership is None or membership[0] != "active":
+                if (
+                    replay is None
+                    or membership is None
+                    or membership[0] != "active"
+                    or membership[2] != owner_capabilities
+                ):
                     raise TrialInvalidTransition(
                         "Self-serve claim history exists without an active owner membership."
                     )
@@ -4711,17 +5177,19 @@ class InMemoryTrialStore:
                 workspace_id=workspace_id,
                 actor_id=actor,
                 actor_kind=HUMAN_ACTOR_KIND,
-                capabilities=sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                capabilities=sorted(owner_capabilities),
             )
             link_record: JsonObject = {
                 "claim_code": claim,
                 "workspace_id": workspace_id,
                 "owner_actor_id": actor,
                 "business_name": label,
+                "product": normalized_product,
                 "linked_at": now,
             }
             self._self_serve_links[claim] = deepcopy(link_record)
             self._workspace_labels[workspace_id] = label
+            self._workspace_product_entitlements[workspace_id] = (normalized_product,)
             result = SelfServeWorkspaceResult(
                 workspace_id=workspace_id,
                 label=label,
@@ -4745,7 +5213,7 @@ class InMemoryTrialStore:
                 stored_membership is None
                 or stored_membership[0] != "active"
                 or stored_membership[1] != HUMAN_ACTOR_KIND
-                or stored_membership[2] != SELF_SERVE_OWNER_CAPABILITIES
+                or stored_membership[2] != owner_capabilities
                 or stored_event is None
                 or stored_event[0] != fingerprint
                 or self._self_serve_links.get(claim) != link_record
@@ -4768,6 +5236,14 @@ class InMemoryTrialStore:
             membership_ready = status == "active" and member_actor_kind == normalized.actor_kind
             if not membership_ready:
                 capabilities = frozenset()
+        product_entitlements = (
+            self._workspace_product_entitlements.get(normalized.workspace_id)
+            if membership_ready and principal is not None
+            else None
+        )
+        capabilities = capabilities_for_product_entitlements(
+            capabilities, product_entitlements
+        )
         return TrialReadiness(
             backend="memory_test_double",
             database_ready=self.database_ready,
@@ -4778,6 +5254,7 @@ class InMemoryTrialStore:
             audit_ready=self.audit_ready,
             write_enabled=self.write_enabled,
             capabilities=capabilities,
+            product_entitlements=product_entitlements,
         )
 
     def _guard(
@@ -5020,6 +5497,91 @@ class InMemoryTrialStore:
                     (normalized.workspace_id, commerce_action_id)
                 ] = command_id_value
             return result
+
+    def record_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+        owner_approval_id: str | UUID,
+        product: str,
+        release_commit: str,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        owner_approval_id_value = _normalize_uuid(
+            owner_approval_id,
+            field_name="owner_approval_id",
+        )
+        product_value, surface = _normalize_acceptance_product(product)
+        release_commit_value = _normalize_release_commit(release_commit)
+        payload: JsonObject = {
+            "contract": PRODUCT_ACCEPTANCE_CONTRACT,
+            "probe_id": probe_id_value,
+            "owner_approval_id": owner_approval_id_value,
+            "product": product_value,
+            "surface": surface,
+            "release_commit": release_commit_value,
+        }
+        fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
+        with self._lock:
+            normalized, _readiness = self._guard(
+                principal,
+                write=True,
+                capability=_required_surface_capability(surface),
+            )
+            if (
+                _readiness.product_entitlements is None
+                or product_value not in _readiness.product_entitlements
+            ):
+                raise TrialPermissionDenied(f"product.{product_value}")
+            replay = self._replay(
+                normalized.workspace_id,
+                normalized.actor_id,
+                normalized.actor_kind,
+                probe_id_value,
+                fingerprint,
+            )
+            if replay is not None:
+                return _product_acceptance_record(replay, idempotent_replay=True)
+            state = self._states.get(
+                (normalized.workspace_id, surface),
+                TrialState(normalized.workspace_id, surface, 0, {}),
+            )
+            record = ProductAcceptanceRecord(
+                probe_id=probe_id_value,
+                owner_approval_id=owner_approval_id_value,
+                product=product_value,
+                surface=surface,
+                release_commit=release_commit_value,
+                state_version=state.version,
+                state_digest=f"sha256:{_canonical_fingerprint('product_state', state.state)}",
+                recorded_at=_utc_now(),
+            )
+            self._events[(normalized.workspace_id, probe_id_value)] = (
+                fingerprint,
+                normalized.actor_id,
+                normalized.actor_kind,
+                record.to_dict(),
+            )
+            return _product_acceptance_record(
+                self._events[(normalized.workspace_id, probe_id_value)][3]
+            )
+
+    def get_product_acceptance(
+        self,
+        principal: TrialPrincipal,
+        *,
+        probe_id: str | UUID,
+    ) -> ProductAcceptanceRecord:
+        probe_id_value = _normalize_uuid(probe_id, field_name="probe_id")
+        with self._lock:
+            normalized, readiness = self._guard(principal, write=False)
+            row = self._events.get((normalized.workspace_id, probe_id_value))
+            if row is None:
+                raise TrialNotFound()
+            record = _product_acceptance_record(row[3])
+            _require_surface_read_capability(readiness.capabilities, record.surface)
+            return record
 
     def create_approval(
         self,

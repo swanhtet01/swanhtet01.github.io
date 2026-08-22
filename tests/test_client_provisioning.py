@@ -10,23 +10,25 @@ from supermega_runtime.client_provisioning import (
     CLIENT_PROVISIONING_RECIPE_CONTRACT,
     ClientProvisioningError,
     build_client_provisioning_plan,
+    derive_client_provisioning_recipe,
     validate_client_provisioning_recipe,
 )
 
 
-def _manifest_recipe() -> dict[str, object]:
-    manifest = json.loads(
-        (Path(__file__).resolve().parents[1] / "site-manifest.json").read_text(
+def _recipe_registry() -> dict[str, object]:
+    return json.loads(
+        (Path(__file__).resolve().parents[1] / "client-provisioning-recipes.json").read_text(
             encoding="utf-8"
         )
     )
-    shop = next(
-        product for product in manifest["customerProducts"] if product["id"] == "shop"
-    )
-    template = next(
-        item for item in shop["templates"] if item["id"] == "social-commerce"
-    )
-    return deepcopy(template["provisioningRecipe"])
+
+
+def _manifest_recipe() -> dict[str, object]:
+    return deepcopy(_recipe_registry()["recipes"][0])
+
+
+def _manifest_recipes() -> list[dict[str, object]]:
+    return deepcopy(_recipe_registry()["recipes"])
 
 
 def _reverse_object_keys(value: object) -> object:
@@ -59,6 +61,99 @@ class ClientProvisioningRecipeTests(unittest.TestCase):
             ["owner", "order-operator", "stock-keeper"],
         )
         self.assertEqual(len(validated["dashboard"]["panels"]), 3)
+
+    def test_four_product_recipes_build_deterministic_tenant_bound_plans(self) -> None:
+        recipes = _manifest_recipes()
+        self.assertEqual(
+            [(item["productId"], item["runtimeProductId"], item["templateId"]) for item in recipes],
+            [
+                ("shop", "commerce", "social-commerce"),
+                ("plant", "production", "production-control"),
+                ("website", "website", "lead-generation"),
+                ("ecommerce", "ecommerce", "social-storefront"),
+            ],
+        )
+        plans = [
+            build_client_provisioning_plan(
+                recipe,
+                workspace="Beauty Spa Client Portal",
+                owner="Named Client Owner",
+            )
+            for recipe in recipes
+        ]
+        self.assertEqual(len({plan["planId"] for plan in plans}), 4)
+        self.assertEqual(len({plan["planDigest"] for plan in plans}), 4)
+        self.assertTrue(all(plan["status"] == "planned_not_applied" for plan in plans))
+        self.assertTrue(all(plan["mode"] == "fresh" for plan in plans))
+        self.assertTrue(all(plan["workspace"] == "Beauty Spa Client Portal" for plan in plans))
+        self.assertTrue(all(plan["owner"] == "Named Client Owner" for plan in plans))
+        self.assertTrue(all(plan["authority"] == {
+            "humanApprovalRequired": True,
+            "tenantWritesPerformed": False,
+            "providerCallsPerformed": False,
+            "externalMessagesSent": False,
+            "deploymentPerformed": False,
+        } for plan in plans))
+        self.assertEqual(
+            [plan["product"]["runtimeId"] for plan in plans],
+            ["commerce", "production", "website", "ecommerce"],
+        )
+
+    def test_recipe_events_cannot_cross_product_runtime_boundaries(self) -> None:
+        for recipe in _manifest_recipes():
+            with self.subTest(recipe=recipe["recipeId"]):
+                crossed = deepcopy(recipe)
+                event_surface = (
+                    "commerce"
+                    if recipe["runtimeProductId"] in {"commerce", "ecommerce"}
+                    else recipe["runtimeProductId"]
+                )
+                crossed["stateMachines"][0]["transitions"][0]["event"] = (
+                    "commerce.order.advanced"
+                    if event_surface != "commerce"
+                    else "website.release.advanced"
+                )
+                self.assert_invalid(crossed)
+
+    def test_ecommerce_recipe_uses_the_real_shared_commerce_engine(self) -> None:
+        recipe = next(item for item in _manifest_recipes() if item["productId"] == "ecommerce")
+        validated = validate_client_provisioning_recipe(recipe)
+        owner = next(role for role in validated["roles"] if role["id"] == "owner")
+        self.assertIn("commerce.read", owner["capabilities"])
+        self.assertIn("commerce.write", owner["capabilities"])
+        self.assertNotIn("ecommerce.read", owner["capabilities"])
+        self.assertNotIn("ecommerce.write", owner["capabilities"])
+        self.assertTrue(all(item["surface"] == "commerce" for item in validated["objects"]))
+        self.assertTrue(all(
+            transition["event"].startswith("commerce.")
+            for machine in validated["stateMachines"]
+            for transition in machine["transitions"]
+        ))
+
+    def test_reviewed_product_recipes_cover_all_twelve_client_templates(self) -> None:
+        manifest = json.loads(
+            (Path(__file__).resolve().parents[1] / "site-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        bases = {recipe["productId"]: recipe for recipe in _manifest_recipes()}
+        derived = []
+        for product in manifest["customerProducts"]:
+            for template in product["templates"]:
+                recipe = derive_client_provisioning_recipe(
+                    bases[product["id"]],
+                    template_id=template["id"],
+                )
+                self.assertEqual(recipe["recipeId"], f"{product['id']}.{template['id']}")
+                self.assertEqual(recipe["runtimeProductId"], product["runtimeId"])
+                self.assertEqual(recipe["importMappings"][0]["workflowTemplateId"], template["id"])
+                derived.append(recipe)
+        self.assertEqual(len(derived), 12)
+        self.assertEqual(len({item["recipeId"] for item in derived}), 12)
+
+        rejected = deepcopy(bases["website"])
+        with self.assertRaises(ClientProvisioningError):
+            derive_client_provisioning_recipe(rejected, template_id="unknown-template")
 
     def test_fresh_plan_is_deterministic_detached_and_performs_no_writes(self) -> None:
         recipe = _manifest_recipe()

@@ -58,16 +58,21 @@ function resultCountsMatch(result, rowCount, replay) {
     && result.alreadyPresent === (replay ? rowCount : 0)
 }
 
-async function initializeLocalProductBaselines(storage) {
+async function initializeLocalProductBaselines(storage, products) {
   const nonce = Date.now()
-  const [commerce, production, website] = await Promise.all([
-    import(`../showroom/src/core/commerce-workspace.ts?local-install-baseline=${nonce}`),
-    import(`../showroom/src/core/production-workspace.ts?local-install-baseline=${nonce}`),
-    import(`../showroom/src/products/website/website-model.ts?local-install-baseline=${nonce}`),
-  ])
-  storage.setItem(commerce.COMMERCE_KEY, JSON.stringify(commerce.createEmptyCommerce()))
-  storage.setItem(production.PRODUCTION_KEY, JSON.stringify(production.createEmptyProduction()))
-  storage.setItem(website.WEBSITE_STORAGE_KEY, JSON.stringify(website.createInitialWorkspace()))
+  const selected = new Set(products)
+  if (selected.has('commerce')) {
+    const commerce = await import(`../showroom/src/core/commerce-workspace.ts?local-install-baseline=${nonce}`)
+    storage.setItem(commerce.COMMERCE_KEY, JSON.stringify(commerce.createEmptyCommerce()))
+  }
+  if (selected.has('production')) {
+    const production = await import(`../showroom/src/core/production-workspace.ts?local-install-baseline=${nonce}`)
+    storage.setItem(production.PRODUCTION_KEY, JSON.stringify(production.createEmptyProduction()))
+  }
+  if (selected.has('website')) {
+    const website = await import(`../showroom/src/products/website/website-model.ts?local-install-baseline=${nonce}`)
+    storage.setItem(website.WEBSITE_STORAGE_KEY, JSON.stringify(website.createInitialWorkspace()))
+  }
 }
 
 export async function rehearseLocalClientInstall(preparation, founderConfirmation) {
@@ -87,7 +92,7 @@ export async function rehearseLocalClientInstall(preparation, founderConfirmatio
   let replayResults = []
   let installedStorageKeys = []
   try {
-    await initializeLocalProductBaselines(storage)
+    await initializeLocalProductBaselines(storage, preparation.products.map((product) => product.product))
     const installer = await import(`../showroom/src/core/local-client-import.ts?local-install-rehearsal=${Date.now()}`)
     const order = await installer.preparedLocalClientDemoInstallOrder(preparation)
     invariant(

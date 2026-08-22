@@ -8440,9 +8440,38 @@ class CommerceRuntimeTests(unittest.TestCase):
             apply_event({}, "commerce.snapshot.saved", catalog_state())
 
     def test_service_schedule_is_versioned_inside_commerce_and_fails_closed(self) -> None:
-        current = catalog_state()
+        current = completed_state("ORD-SPA-PACKAGE")
+        current["items"][0].update(  # type: ignore[index]
+            {
+                "sku": "SPA-PACK-MASSAGE-5",
+                "name": "Myanmar massage package 5 sessions",
+                "onHand": 9,
+                "price": 200000,
+            }
+        )
+        current["orders"][0].update(  # type: ignore[index]
+            {
+                "customer": "Mya Thandar",
+                "item": "Myanmar massage package 5 sessions",
+                "itemSku": "SPA-PACK-MASSAGE-5",
+                "quantity": 1,
+                "total": 200000,
+                "lines": [
+                    {
+                        "sku": "SPA-PACK-MASSAGE-5",
+                        "name": "Myanmar massage package 5 sessions",
+                        "quantity": 1,
+                        "unitPriceMmk": 200000,
+                    }
+                ],
+            }
+        )
+        current["movements"][0].update(  # type: ignore[index]
+            {"sku": "SPA-PACK-MASSAGE-5", "quantityDelta": -1}
+        )
+        validate_commerce_state(current)
         schedule = {
-            "schema": "supermega.shop.service_schedule.v2",
+            "schema": "supermega.shop.service_schedule.v4",
             "industryPackId": "spa",
             "revision": 1,
             "services": [
@@ -8462,11 +8491,24 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "active": True,
                 }
             ],
+            "privacyPolicy": {"clientRetentionDays": None},
+            "clients": [
+                {
+                    "id": "client-0001",
+                    "name": "Mya Thandar",
+                    "contact": "09-111-111",
+                    "appointmentUpdates": "declined",
+                    "createdAt": "2026-07-29T04:00:00.000Z",
+                    "updatedAt": "2026-07-29T04:00:00.000Z",
+                }
+            ],
             "bookings": [
                 {
                     "id": "booking-0001",
-                    "customerName": "Client A",
+                    "clientId": "client-0001",
+                    "customerName": "Mya Thandar",
                     "contact": "09-111-111",
+                    "appointmentUpdates": "declined",
                     "serviceId": "service-session",
                     "resourceId": "resource-room-1",
                     "startsAt": "2026-07-29T04:30:00.000Z",
@@ -8490,6 +8532,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         }
         clean_schedule = deepcopy(schedule)
         clean_schedule["revision"] = 0
+        clean_schedule["clients"] = []
         clean_schedule["bookings"] = []
         clean_schedule["events"] = []
         initialized = apply_event(
@@ -8534,6 +8577,144 @@ class CommerceRuntimeTests(unittest.TestCase):
             first_evidence,
         )
         self.assertEqual(accepted["serviceSchedule"], schedule)
+
+        privacy_schedule = deepcopy(schedule)
+        privacy_schedule["revision"] = 2
+        privacy_schedule["bookings"][0]["status"] = "cancelled"
+        privacy_schedule["bookings"][0]["updatedAt"] = "2026-07-29T04:10:00.000Z"
+        privacy_schedule["events"].append({
+            "revision": 2,
+            "type": "booking_cancelled",
+            "subjectId": "booking-0001",
+            "actor": "operator-1",
+            "reason": "Cancelled by the responsible Shop operator.",
+            "happenedAt": "2026-07-29T04:10:00.000Z",
+        })
+        privacy_state = apply_event(
+            accepted,
+            "commerce.service_schedule.saved",
+            {**accepted, "serviceSchedule": privacy_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R2",
+                "capturedAt": "2026-07-29T04:10:00.000Z",
+                "actor": "operator-1",
+                "reason": "Cancelled by the responsible Shop operator.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R2",
+            },
+        )
+        retained_schedule = deepcopy(privacy_schedule)
+        retained_schedule["revision"] = 3
+        retained_schedule["privacyPolicy"] = {
+            "clientRetentionDays": 30,
+            "updatedAt": "2026-07-29T04:11:00.000Z",
+            "updatedBy": "owner-1",
+        }
+        retained_schedule["events"].append({
+            "revision": 3,
+            "type": "client_retention_set",
+            "subjectId": "retention-30-days",
+            "actor": "owner-1",
+            "reason": "Owner approved a 30-day client retention period.",
+            "happenedAt": "2026-07-29T04:11:00.000Z",
+        })
+        retained_state = apply_event(
+            privacy_state,
+            "commerce.service_schedule.saved",
+            {**privacy_state, "serviceSchedule": retained_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R3",
+                "capturedAt": "2026-07-29T04:11:00.000Z",
+                "actor": "owner-1",
+                "reason": "Owner approved a 30-day client retention period.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R3",
+            },
+        )
+        client_csv = (
+            '"Name","Contact","Appointment updates","Consent recorded","Appointments","Completed visits"\r\n'
+            '"Mya Thandar","09-111-111","declined","","0","0"'
+        )
+        export_digest = f"sha256:{sha256(client_csv.encode('utf-8')).hexdigest()}"
+        exported_schedule = deepcopy(retained_schedule)
+        exported_schedule["revision"] = 4
+        exported_schedule["events"].append({
+            "revision": 4,
+            "type": "client_exported",
+            "subjectId": export_digest,
+            "actor": "owner-1",
+            "reason": "Exported 1 privacy-minimal client record.",
+            "happenedAt": "2026-07-29T04:12:00.000Z",
+        })
+        exported_state = apply_event(
+            retained_state,
+            "commerce.service_schedule.saved",
+            {**retained_state, "serviceSchedule": exported_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R4",
+                "capturedAt": "2026-07-29T04:12:00.000Z",
+                "actor": "owner-1",
+                "reason": "Exported 1 privacy-minimal client record.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R4",
+            },
+        )
+        forged_export = deepcopy(exported_schedule)
+        forged_export["events"][-1]["subjectId"] = f"sha256:{'0' * 64}"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                retained_state,
+                "commerce.service_schedule.saved",
+                {**retained_state, "serviceSchedule": forged_export},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R4",
+                    "capturedAt": "2026-07-29T04:12:00.000Z",
+                    "actor": "owner-1",
+                    "reason": "Exported 1 privacy-minimal client record.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R4",
+                },
+            )
+        anonymized_schedule = deepcopy(exported_schedule)
+        anonymized_schedule["revision"] = 5
+        anonymized_at = "2026-09-01T00:00:00.000Z"
+        anonymized_schedule["clients"][0] = {
+            "id": "client-0001",
+            "name": "Former client client-0001",
+            "contact": "anonymized:client-0001",
+            "appointmentUpdates": "not_recorded",
+            "createdAt": "2026-07-29T04:00:00.000Z",
+            "updatedAt": anonymized_at,
+            "anonymizedAt": anonymized_at,
+            "anonymizedBy": "owner-1",
+        }
+        anonymized_schedule["bookings"][0].update({
+            "customerName": "Former client client-0001",
+            "contact": "anonymized:client-0001",
+            "appointmentUpdates": "not_recorded",
+            "note": "",
+            "updatedAt": anonymized_at,
+        })
+        anonymized_schedule["events"].append({
+            "revision": 5,
+            "type": "client_anonymized",
+            "subjectId": "client-0001",
+            "actor": "owner-1",
+            "reason": "Owner reviewed and confirmed client anonymization after retention and financial closure.",
+            "happenedAt": anonymized_at,
+        })
+        anonymized_state = apply_event(
+            exported_state,
+            "commerce.service_schedule.saved",
+            {**exported_state, "serviceSchedule": anonymized_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R5",
+                "capturedAt": anonymized_at,
+                "actor": "owner-1",
+                "reason": "Owner reviewed and confirmed client anonymization after retention and financial closure.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+            },
+        )
+        self.assertEqual(
+            anonymized_state["serviceSchedule"]["clients"][0]["contact"],
+            "anonymized:client-0001",
+        )
 
         confirmed_schedule = deepcopy(schedule)
         confirmed_schedule["revision"] = 2
@@ -8594,6 +8775,112 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         with self.assertRaises(TrialValidationError):
             validate_commerce_state({**current, "serviceSchedule": overlap})
+
+        managed_schedule_state = confirmed
+        for revision, status, captured_at in (
+            (3, "checked_in", "2026-07-29T04:10:00.000Z"),
+            (4, "completed", "2026-07-29T05:30:00.000Z"),
+        ):
+            advanced_schedule = deepcopy(managed_schedule_state["serviceSchedule"])
+            advanced_schedule["revision"] = revision
+            advanced_schedule["bookings"][0]["status"] = status
+            advanced_schedule["bookings"][0]["updatedAt"] = captured_at
+            advanced_schedule["events"].append(
+                {
+                    "revision": revision,
+                    "type": "booking_advanced",
+                    "subjectId": "booking-0001",
+                    "actor": "operator-1",
+                    "reason": "Advanced by the responsible Shop operator.",
+                    "happenedAt": captured_at,
+                }
+            )
+            managed_schedule_state = apply_event(
+                managed_schedule_state,
+                "commerce.service_schedule.saved",
+                {**managed_schedule_state, "serviceSchedule": advanced_schedule},
+                {
+                    "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
+                    "capturedAt": captured_at,
+                    "actor": "operator-1",
+                    "reason": "Advanced by the responsible Shop operator.",
+                    "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
+                },
+            )
+
+        package_schedule = deepcopy(managed_schedule_state["serviceSchedule"])
+        package_schedule["revision"] = 5
+        package_schedule["events"].append(
+            {
+                "revision": 5,
+                "type": "package_redeemed",
+                "subjectId": "booking-0001",
+                "actor": "operator-1",
+                "reason": "Used after the completed treatment was checked.",
+                "happenedAt": "2026-07-29T05:31:00.000Z",
+            }
+        )
+        package_saved = apply_event(
+            managed_schedule_state,
+            "commerce.service_schedule.saved",
+            {**managed_schedule_state, "serviceSchedule": package_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R5",
+                "capturedAt": "2026-07-29T05:31:00.000Z",
+                "actor": "operator-1",
+                "reason": "Used after the completed treatment was checked.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+            },
+        )
+        self.assertEqual(package_saved["serviceSchedule"]["events"][-1]["type"], "package_redeemed")
+        self.assertEqual(package_saved["serviceSchedule"]["bookings"], managed_schedule_state["serviceSchedule"]["bookings"])
+
+        no_paid_balance = deepcopy(managed_schedule_state)
+        no_paid_balance["orders"][0]["customer"] = "Another Client"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                no_paid_balance,
+                "commerce.service_schedule.saved",
+                {**no_paid_balance, "serviceSchedule": package_schedule},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R5",
+                    "capturedAt": "2026-07-29T05:31:00.000Z",
+                    "actor": "operator-1",
+                    "reason": "Used after the completed treatment was checked.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+                },
+            )
+
+        package_rewrite = deepcopy(package_schedule)
+        package_rewrite["bookings"][0]["customerName"] = "Rewritten during redemption"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                managed_schedule_state,
+                "commerce.service_schedule.saved",
+                {**managed_schedule_state, "serviceSchedule": package_rewrite},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R5",
+                    "capturedAt": "2026-07-29T05:31:00.000Z",
+                    "actor": "operator-1",
+                    "reason": "Used after the completed treatment was checked.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+                },
+            )
+
+        unfinished_package = deepcopy(confirmed_schedule)
+        unfinished_package["revision"] = 3
+        unfinished_package["events"].append(
+            {
+                "revision": 3,
+                "type": "package_redeemed",
+                "subjectId": "booking-0001",
+                "actor": "operator-1",
+                "reason": "Invalid early package use.",
+                "happenedAt": "2026-07-29T04:06:00.000Z",
+            }
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state({**current, "serviceSchedule": unfinished_package})
 
         wrong_duration = deepcopy(schedule)
         wrong_duration["bookings"][0]["endsAt"] = "2026-07-29T05:00:00.000Z"

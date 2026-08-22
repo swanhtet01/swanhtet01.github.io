@@ -94,11 +94,14 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 "20260802161500_private_trial_backend_v8_rls_initplan.sql",
                 "20260803063822_private_trial_backend_v9_metadata_rls.sql",
                 "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+                "20260816120000_private_trial_backend_v11_self_serve_grants.sql",
             ),
         )
         source = REHEARSAL.read_text(encoding="utf-8")
         self.assertIn("if position == 1:", source)
         self.assertIn("_seed_v1_upgrade_data(admin_database_url)", source)
+        self.assertIn("company.workspace.activated", source)
+        self.assertIn("rehearsal-entitlement-event:", source)
         self.assertIn("'legacy-workspace', 'shop'", source)
         self.assertIn("membership[0] != \"legacy\"", source)
         self.assertIn("list(membership[1]) != [\"commerce.write\"]", source)
