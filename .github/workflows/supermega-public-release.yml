@@ -183,8 +183,12 @@ jobs:
           VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
-            npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
+          test -s .vercel/.env.production.local
+          install -m 600 .vercel/.env.production.local showroom/.env.production.local
+          trap 'rm -f showroom/.env.production.local' EXIT
+          npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
+          rm -f showroom/.env.production.local
+          trap - EXIT
 
       - name: Verify immutable app asset contract
         run: node tools/verify_app_release_live.mjs --artifact-self-test

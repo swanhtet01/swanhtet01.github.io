@@ -40,9 +40,8 @@ import {
 } from './operating-baseline.ts'
 
 
-const BUILD_ENV = import.meta.env ?? {}
-const SUPABASE_URL = String(BUILD_ENV.VITE_SUPABASE_URL ?? '').trim()
-const SUPABASE_PUBLISHABLE_KEY = String(BUILD_ENV.VITE_SUPABASE_PUBLISHABLE_KEY ?? BUILD_ENV.VITE_SUPABASE_ANON_KEY ?? '').trim()
+const SUPABASE_URL = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim()
+const SUPABASE_PUBLISHABLE_KEY = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
 const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
@@ -78,7 +77,7 @@ function buildTraceparent(): { traceId: string; header: string } {
 function withTraceHeaders(headers: Headers): Headers {
   const { traceId, header } = buildTraceparent()
   headers.set('traceparent', header)
-  if (BUILD_ENV.DEV) {
+  if (import.meta.env.DEV) {
     console.debug(`[supermega] trace ${traceId}`)
   }
   return headers
