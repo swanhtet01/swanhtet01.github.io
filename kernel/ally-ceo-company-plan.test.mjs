@@ -88,7 +88,7 @@ function managedReadiness() {
       postgres: { major: 17 },
       advisor: { status: 'blocked', findingCount: 27 },
       catalog: { sequenceCount: 2, nonTableRelationCount: 0, publicRoutineCount: 0, browserCallableRoutineCount: 0 },
-      managedBackend: { liveSchemaVersion: 7, localTargetVersion: 10, versionDrift: 3, browserRolesDenied: true, metadataRlsEnabled: false, storageBucketCount: 0 },
+      managedBackend: { liveSchemaVersion: 7, localTargetVersion: 11, versionDrift: 4, browserRolesDenied: true, metadataRlsEnabled: false, storageBucketCount: 0 },
       conclusion: { productionMutationAuthorized: false, indirectExposureAudited: true, nextAction: 'Rehearse hardening on an isolated target.' },
       controls: { databaseWrites: 0 },
     },
