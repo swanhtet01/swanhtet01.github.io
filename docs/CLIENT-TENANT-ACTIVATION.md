@@ -13,6 +13,39 @@ RLS surface.
 
 ## One client launch board first (no provider writes)
 
+For any reviewed combination of Shop, Plant, Website, and Ecommerce, create one
+private operator workspace instead of manually assembling separate provisioning,
+launch-board, and dashboard commands:
+
+```powershell
+npm.cmd run client:portal:workspace -- prepare `
+  --preparation C:\reviewed\client-preparation.json `
+  --workspace C:\private\named-client-portal
+```
+
+Repeat `--managed-request-file C:\reviewed\product-request.json` once for each
+reviewed product outcome that already exists. The command verifies the client
+preparation, compiles the exact selected products and entitlement-valid
+connections, and atomically publishes a private folder containing:
+
+- `START-HERE.html` — mobile-friendly, identity-free operator dashboard;
+- `client-preparation.private.json` — the reviewed private source;
+- `client-portal-provisioning.private.json` — tenant and role design;
+- `client-launch-board.private.json` — evidence gates and next actions; and
+- `client-workspace-manifest.json` — digest-bound artifact inventory.
+
+The terminal receipt contains only status, counts, digests, and false external
+action controls. Existing output directories are never replaced. Verify the
+whole folder at any time with the same managed request files:
+
+```powershell
+npm.cmd run client:portal:workspace -- verify `
+  --workspace C:\private\named-client-portal
+```
+
+This is a local preparation workspace, not a tenant activation. It performs no
+provider call, tenant write, deployment, message, or production action.
+
 For the Spa pilot, the reviewed private intake can first create its isolated,
 Spa-configured Shop portal workspace without copying requester identity or
 performing a hosted write:
