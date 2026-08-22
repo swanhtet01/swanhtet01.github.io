@@ -37,6 +37,7 @@ const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'),
 const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const appShell = await readFile(resolve(root, 'showroom/index.html'), 'utf8')
+const managedTrial = await readFile(resolve(root, 'showroom/src/core/managed-trial.ts'), 'utf8')
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
 const schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority)
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
@@ -376,7 +377,8 @@ requireContract('retired POS alias blocks release before and after promotion', (
   && retiredAliasVerifier.includes("contract: 'supermega_retired_vercel_alias_state'"))
 requireContract('all control URLs use explicit project identities', workflow.includes('api "/v9/projects/$APP_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID') && !workflow.includes('/v9/projects/megaos') && !workflow.includes('/v9/projects/supermega-public'))
 requireContract('managed mode is selected only after metadata and effective-value verification', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("runtime_mode=%s") && workflow.includes("['isolated_demo','managed_trial_candidate']") && workflow.includes('verify_managed_runtime_environment_values.mjs managed_trial') && workflow.includes('verify_managed_runtime_environment_values.mjs staged') && workflow.includes('verify_managed_runtime_environment_values.mjs isolated_demo'))
-requireContract('immutable app build inherits the exact audited production environment', workflow.includes('Build the immutable app artifact') && workflow.includes('vercel@56.1.0 env run --environment=production') && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes'))
+requireContract('immutable app build loads and removes the exact audited Vite production environment', workflow.includes('Build the immutable app artifact') && workflow.includes('test -s .vercel/.env.production.local') && workflow.includes('install -m 600 .vercel/.env.production.local showroom/.env.production.local') && workflow.includes("trap 'rm -f showroom/.env.production.local' EXIT") && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes') && workflow.includes('trap - EXIT'))
+requireContract('managed browser auth uses statically replaceable Vite environment references', managedTrial.includes('import.meta.env.VITE_SUPABASE_URL') && managedTrial.includes('import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY') && !managedTrial.includes('const BUILD_ENV = import.meta.env'))
 requireContract('managed database audit uses the exact app runtime environment before candidate creation',
   workflow.includes('Enforce exact app runtime database and RLS gate')
   && workflow.includes('VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}')
