@@ -1,11 +1,24 @@
 import { clientCapabilityIdsForProducts, type ClientCapabilityDomain } from './client-capability-plan.ts'
 import type { ClientDemoBlueprint, ClientSolutionId } from './client-onboarding.ts'
+import {
+  MANAGED_CONTEXT_ALLOWED_USES,
+  MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
+  type ManagedContextProfile,
+} from './managed-context.ts'
 
 export const CLIENT_EXTENSION_MANIFEST_SCHEMA = 'supermega.client_extension_manifest.v1' as const
 export const CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA = 'supermega.client_extension_activation_plan.v1' as const
 export const CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA = 'supermega.client_extension_portal_binding.v1' as const
 export const CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA = 'supermega.client_extension_runtime_authorization.v1' as const
 export const CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA = 'supermega.client_extension_activation_receipt.v1' as const
+export const CLIENT_EXTENSION_AGENT_CONTEXT_SCHEMA = 'supermega.client_extension_agent_context.v1' as const
+
+export const CLIENT_EXTENSION_AGENT_FORBIDDEN_ACTIONS = [
+  ...MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
+  'extension_configuration_write',
+  'customer_record_write',
+  'external_tool_call',
+] as const
 
 export type ClientExtensionMode = 'read-only' | 'draft-only' | 'reviewed-write'
 export type ClientExtensionRequestedAction = 'read' | 'draft' | 'propose-write'
@@ -301,6 +314,43 @@ export type ClientExtensionActivationReceipt = {
     externalMessagesSent: false
     crossTenantWritesPerformed: false
     crossProductWritesPerformed: false
+  }
+  digest: string
+}
+
+export type ClientExtensionAgentContext = {
+  schema: typeof CLIENT_EXTENSION_AGENT_CONTEXT_SCHEMA
+  activationReceiptDigest: string
+  managedContextProfileDigest: string
+  approvedContextDigest: string
+  tenant: {
+    workspaceId: string
+    ownerActorId: string
+  }
+  module: {
+    id: string
+    baseProduct: ClientSolutionId
+    domain: ClientCapabilityDomain
+    mode: ClientExtensionMode
+    implementationVersion: number
+    implementationDigest: string
+  }
+  agentPolicy: {
+    status: 'context-ready-advisory'
+    allowedUses: [...typeof MANAGED_CONTEXT_ALLOWED_USES]
+    requestedActions: ClientExtensionRequestedAction[]
+    forbiddenActions: [...typeof CLIENT_EXTENSION_AGENT_FORBIDDEN_ACTIONS]
+    extensionActive: true
+    writeExecutionAllowed: false
+    externalToolCallsAllowed: false
+    humanReviewRequired: true
+  }
+  privacyBoundary: {
+    rawProductRecordsIncluded: false
+    rawBehaviorEntriesIncluded: false
+    rawDecisionRecordsIncluded: false
+    customerRecordsIncluded: false
+    modelTrainingAllowed: false
   }
   digest: string
 }
@@ -916,5 +966,105 @@ export async function verifyClientExtensionActivationReceipt(
     }
   } catch {
     throw new Error('The client extension activation receipt is invalid, unauthorized, cross-tenant, stale, or changed after execution.')
+  }
+}
+
+function sameOrderedStrings(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+export async function buildClientExtensionAgentContext(
+  receipt: ClientExtensionActivationReceipt,
+  authorization: ClientExtensionRuntimeAuthorization,
+  binding: ClientExtensionPortalBinding,
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+  profile: ManagedContextProfile,
+): Promise<ClientExtensionAgentContext> {
+  const receiptVerification = await verifyClientExtensionActivationReceipt(
+    receipt, authorization, binding, manifest, activationPlan, blueprint, portal,
+  )
+  if (profile.contract !== 'supermega.managed_context_profile.v2'
+    || profile.version !== 2
+    || profile.workspaceId !== receipt.tenant.workspaceId
+    || profile.retainedBy !== receipt.tenant.ownerActorId
+    || !SHA256.test(profile.profileDigest)
+    || !SHA256.test(profile.approvedContextDigest)
+    || !sameOrderedStrings(profile.allowedUses, MANAGED_CONTEXT_ALLOWED_USES)
+    || !sameOrderedStrings(profile.forbiddenActions, MANAGED_CONTEXT_FORBIDDEN_ACTIONS)
+    || profile.rawProductRecordsIncluded !== false
+    || profile.rawBehaviorEntriesIncluded !== false
+    || profile.rawDecisionRecordsIncluded !== false
+    || profile.modelTrainingAllowed !== false) {
+    throw new Error('The managed context profile is invalid, cross-tenant, cross-owner, or exceeds the extension agent privacy boundary.')
+  }
+
+  const payload: Omit<ClientExtensionAgentContext, 'digest'> = {
+    schema: CLIENT_EXTENSION_AGENT_CONTEXT_SCHEMA,
+    activationReceiptDigest: receiptVerification.digest,
+    managedContextProfileDigest: profile.profileDigest,
+    approvedContextDigest: profile.approvedContextDigest,
+    tenant: {
+      workspaceId: receipt.tenant.workspaceId,
+      ownerActorId: receipt.tenant.ownerActorId,
+    },
+    module: {
+      id: receipt.module.id,
+      baseProduct: receipt.module.baseProduct,
+      domain: receipt.module.domain,
+      mode: receipt.module.mode,
+      implementationVersion: receipt.module.implementationVersion,
+      implementationDigest: receipt.module.implementationDigest,
+    },
+    agentPolicy: {
+      status: 'context-ready-advisory',
+      allowedUses: [...MANAGED_CONTEXT_ALLOWED_USES],
+      requestedActions: [...manifest.authority.requestedActions],
+      forbiddenActions: [...CLIENT_EXTENSION_AGENT_FORBIDDEN_ACTIONS],
+      extensionActive: true,
+      writeExecutionAllowed: false,
+      externalToolCallsAllowed: false,
+      humanReviewRequired: true,
+    },
+    privacyBoundary: {
+      rawProductRecordsIncluded: false,
+      rawBehaviorEntriesIncluded: false,
+      rawDecisionRecordsIncluded: false,
+      customerRecordsIncluded: false,
+      modelTrainingAllowed: false,
+    },
+  }
+  return { ...payload, digest: await sha256(payload) }
+}
+
+export async function verifyClientExtensionAgentContext(
+  value: unknown,
+  receipt: ClientExtensionActivationReceipt,
+  authorization: ClientExtensionRuntimeAuthorization,
+  binding: ClientExtensionPortalBinding,
+  manifest: ClientExtensionManifest,
+  activationPlan: ClientExtensionActivationPlan,
+  blueprint: ClientDemoBlueprint,
+  portal: ClientExtensionPortalContext,
+  profile: ManagedContextProfile,
+) {
+  try {
+    const rebuilt = await buildClientExtensionAgentContext(
+      receipt, authorization, binding, manifest, activationPlan, blueprint, portal, profile,
+    )
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    return {
+      ok: true as const,
+      contract: CLIENT_EXTENSION_AGENT_CONTEXT_SCHEMA,
+      digest: rebuilt.digest,
+      activationReceiptDigest: rebuilt.activationReceiptDigest,
+      managedContextProfileDigest: rebuilt.managedContextProfileDigest,
+      workspaceId: rebuilt.tenant.workspaceId,
+      status: rebuilt.agentPolicy.status,
+    }
+  } catch {
+    throw new Error('The client extension agent context is invalid, unactivated, cross-tenant, cross-owner, stale, or changed after review.')
   }
 }

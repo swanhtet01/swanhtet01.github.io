@@ -9,7 +9,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export { buildClientDemoBlueprint, clientDemoPresets } from './client-onboarding.ts'
-      export { buildClientExtensionManifest, verifyClientExtensionManifest, buildClientExtensionActivationPlan, verifyClientExtensionActivationPlan, buildClientExtensionPortalBinding, verifyClientExtensionPortalBinding, buildClientExtensionRuntimeAuthorization, verifyClientExtensionRuntimeAuthorization, buildClientExtensionActivationReceipt, verifyClientExtensionActivationReceipt } from './client-extension-manifest.ts'
+      export { buildClientExtensionManifest, verifyClientExtensionManifest, buildClientExtensionActivationPlan, verifyClientExtensionActivationPlan, buildClientExtensionPortalBinding, verifyClientExtensionPortalBinding, buildClientExtensionRuntimeAuthorization, verifyClientExtensionRuntimeAuthorization, buildClientExtensionActivationReceipt, verifyClientExtensionActivationReceipt, buildClientExtensionAgentContext, verifyClientExtensionAgentContext } from './client-extension-manifest.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/client-extension-test-entry.ts',
@@ -243,4 +243,50 @@ const tamperedReceipt = structuredClone(activationReceipt)
 tamperedReceipt.tenant.workspaceId = '33333333-3333-4333-8333-333333333333'
 await assert.rejects(model.verifyClientExtensionActivationReceipt(tamperedReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest), /invalid|cross-tenant|changed/)
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 56, digest: manifest.digest, activationPlanDigest: activationPlan.digest, portalBindingDigest: portalBinding.digest, runtimeAuthorizationDigest: runtimeAuthorization.digest, activationReceiptDigest: activationReceipt.digest, blueprintDigest: manifest.blueprintDigest }))
+const managedContextProfile = {
+  contract: 'supermega.managed_context_profile.v2',
+  version: 2,
+  workspaceId: portalBinding.tenant.workspaceId,
+  retainedBy: portalBinding.tenant.ownerActorId,
+  approvedContextDigest: digest('9'),
+  product: 'shop',
+  templateId: 'social-commerce',
+  sourceCounts: { selectedProductRecords: 3, behaviorSignals: 2, reviewedDecisions: 1 },
+  behaviorPreference: { product: 'commerce', chosenCount: 1 },
+  outcome: { status: 'improved', digest: digest('a'), accepted: true },
+  approvedBy: portalBinding.tenant.ownerLabel,
+  approvedAt: '2026-08-21T03:20:00.000Z',
+  allowedUses: ['rank_next_actions', 'draft_internal_recommendations', 'prepare_import_mapping', 'summarize_workspace_evidence'],
+  forbiddenActions: ['customer_message_send', 'payment_capture', 'stock_move', 'production_write', 'domain_publish', 'crm_write', 'model_training'],
+  profileDigest: digest('b'),
+  rawProductRecordsIncluded: false,
+  rawBehaviorEntriesIncluded: false,
+  rawDecisionRecordsIncluded: false,
+  modelTrainingAllowed: false,
+}
+const agentContext = await model.buildClientExtensionAgentContext(
+  activationReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, managedContextProfile,
+)
+assert.equal(agentContext.schema, 'supermega.client_extension_agent_context.v1')
+assert.equal(agentContext.activationReceiptDigest, activationReceipt.digest)
+assert.equal(agentContext.managedContextProfileDigest, managedContextProfile.profileDigest)
+assert.equal(agentContext.agentPolicy.status, 'context-ready-advisory')
+assert.equal(agentContext.agentPolicy.writeExecutionAllowed, false)
+assert.equal(agentContext.agentPolicy.externalToolCallsAllowed, false)
+assert.equal(agentContext.privacyBoundary.customerRecordsIncluded, false)
+assert.deepEqual(await model.verifyClientExtensionAgentContext(agentContext, activationReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, managedContextProfile), {
+  ok: true,
+  contract: 'supermega.client_extension_agent_context.v1',
+  digest: agentContext.digest,
+  activationReceiptDigest: activationReceipt.digest,
+  managedContextProfileDigest: managedContextProfile.profileDigest,
+  workspaceId: portalBinding.tenant.workspaceId,
+  status: 'context-ready-advisory',
+})
+await assert.rejects(model.buildClientExtensionAgentContext(activationReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, { ...managedContextProfile, workspaceId: '33333333-3333-4333-8333-333333333333' }), /cross-tenant|invalid/)
+await assert.rejects(model.buildClientExtensionAgentContext(activationReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, { ...managedContextProfile, modelTrainingAllowed: true }), /privacy boundary|invalid/)
+const tamperedAgentContext = structuredClone(agentContext)
+tamperedAgentContext.agentPolicy.writeExecutionAllowed = true
+await assert.rejects(model.verifyClientExtensionAgentContext(tamperedAgentContext, activationReceipt, runtimeAuthorization, portalBinding, manifest, activationPlan, blueprint, portalManifest, managedContextProfile), /invalid|changed/)
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega.client-extension-manifest.v1', checks: 65, digest: manifest.digest, activationPlanDigest: activationPlan.digest, portalBindingDigest: portalBinding.digest, runtimeAuthorizationDigest: runtimeAuthorization.digest, activationReceiptDigest: activationReceipt.digest, agentContextDigest: agentContext.digest, blueprintDigest: manifest.blueprintDigest }))

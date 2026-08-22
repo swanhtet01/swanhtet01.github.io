@@ -413,3 +413,30 @@ instead of silently replacing reviewed evidence. Successful CLI receipts
 expose only a SHA-256 workspace digest, never the raw workspace UUID or client
 records; the reviewed artifacts retain the tenant binding needed by later
 verification.
+
+After the extension has a verified activation receipt and the same named owner
+has a retained managed-context profile, bind the custom module into an advisory
+agent-context artifact:
+
+```powershell
+node tools/manage_client_extension.mjs bind-agent-context `
+  --preparation C:\reviewed\private-review.json `
+  --manifest C:\reviewed\extension-manifest.json `
+  --plan C:\reviewed\extension-activation-plan.json `
+  --portal C:\reviewed\portal-activation.json `
+  --binding C:\reviewed\extension-portal-binding.json `
+  --authorization C:\reviewed\extension-runtime-authorization.json `
+  --receipt C:\reviewed\extension-activation-receipt.json `
+  --context-profile C:\reviewed\managed-context-profile.json `
+  --output C:\reviewed\extension-agent-context.json
+```
+
+`supermega.client_extension_agent_context.v1` binds the exact activation
+receipt, context profile, approved context digest, workspace, owner, product,
+implementation, and requested advisory actions. It contains no product,
+behavior, decision, or customer rows; model training remains forbidden. The
+agent may rank, summarize, draft, and propose according to the retained context,
+but cannot execute extension configuration writes, customer writes, messages,
+payments, stock moves, production writes, publishing, CRM writes, or external
+tool calls. Those actions still require a separate reviewed runtime path and
+receipt.

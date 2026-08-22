@@ -80,6 +80,8 @@ async function loadModel() {
           verifyClientExtensionRuntimeAuthorization,
           buildClientExtensionActivationReceipt,
           verifyClientExtensionActivationReceipt,
+          buildClientExtensionAgentContext,
+          verifyClientExtensionAgentContext,
         } from './client-extension-manifest.ts'
       `,
       resolveDir: resolve(root, 'showroom', 'src', 'core'),
@@ -126,7 +128,7 @@ async function verifiedBlueprint(path, model) {
 
 async function main(argv) {
   const { command, values } = argumentsFrom(argv)
-  if (!['request', 'verify-request', 'plan', 'verify-plan', 'bind-portal', 'verify-portal-binding', 'authorize-activation', 'verify-activation-authorization', 'record-activation', 'verify-activation-receipt'].includes(command)) {
+  if (!['request', 'verify-request', 'plan', 'verify-plan', 'bind-portal', 'verify-portal-binding', 'authorize-activation', 'verify-activation-authorization', 'record-activation', 'verify-activation-receipt', 'bind-agent-context', 'verify-agent-context'].includes(command)) {
     throw new Error('Choose a supported client extension lifecycle command.')
   }
   const allowedArguments = {
@@ -140,6 +142,8 @@ async function main(argv) {
     'verify-activation-authorization': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--at'],
     'record-activation': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--receipt-evidence', '--output'],
     'verify-activation-receipt': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--receipt'],
+    'bind-agent-context': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--receipt', '--context-profile', '--output'],
+    'verify-agent-context': ['--preparation', '--manifest', '--plan', '--portal', '--binding', '--authorization', '--receipt', '--context-profile', '--agent-context'],
   }[command]
   if ([...values.keys()].some((key) => !allowedArguments.includes(key))) {
     throw new Error(`Command ${command} received an unsupported argument.`)
@@ -253,7 +257,32 @@ async function main(argv) {
   }
 
   const receipt = await readJson(required(values, '--receipt'), 'Extension activation receipt')
-  const verified = await model.verifyClientExtensionActivationReceipt(receipt, authorization, binding, manifest, plan, blueprint, portal)
+  if (command === 'verify-activation-receipt') {
+    const verified = await model.verifyClientExtensionActivationReceipt(receipt, authorization, binding, manifest, plan, blueprint, portal)
+    return { ...verified, externalWritesPerformed: false }
+  }
+
+  const profile = await readJson(required(values, '--context-profile'), 'Managed context profile')
+  if (command === 'bind-agent-context') {
+    const agentContext = await model.buildClientExtensionAgentContext(receipt, authorization, binding, manifest, plan, blueprint, portal, profile)
+    const output = await writeExclusive(required(values, '--output'), agentContext)
+    return {
+      ok: true,
+      contract: agentContext.schema,
+      output,
+      digest: agentContext.digest,
+      activationReceiptDigest: agentContext.activationReceiptDigest,
+      managedContextProfileDigest: agentContext.managedContextProfileDigest,
+      workspaceId: agentContext.tenant.workspaceId,
+      status: agentContext.agentPolicy.status,
+      externalWritesPerformed: false,
+    }
+  }
+
+  const agentContext = await readJson(required(values, '--agent-context'), 'Client extension agent context')
+  const verified = await model.verifyClientExtensionAgentContext(
+    agentContext, receipt, authorization, binding, manifest, plan, blueprint, portal, profile,
+  )
   return { ...verified, externalWritesPerformed: false }
 }
 

@@ -187,6 +187,43 @@ test('internal extension tool creates and verifies a tenant-bound no-write exten
   assert.equal(verifiedReceipt.status, 0, verifiedReceipt.stderr)
   assert.equal(output(verifiedReceipt).status, 'active')
   assertMetadataOnlyReceipt(output(verifiedReceipt), portalPayload.tenant.workspaceId)
+
+  const contextProfilePath = resolve(directory, 'managed-context-profile.json')
+  await writeFile(contextProfilePath, `${JSON.stringify({
+    contract: 'supermega.managed_context_profile.v2',
+    version: 2,
+    workspaceId: portalPayload.tenant.workspaceId,
+    retainedBy: portalPayload.tenant.ownerActorId,
+    approvedContextDigest: digest('9'),
+    product: 'shop',
+    templateId: 'social-commerce',
+    sourceCounts: { selectedProductRecords: 3, behaviorSignals: 2, reviewedDecisions: 1 },
+    behaviorPreference: { product: 'commerce', chosenCount: 1 },
+    outcome: { status: 'improved', digest: digest('a'), accepted: true },
+    approvedBy: portalPayload.tenant.ownerLabel,
+    approvedAt: '2026-08-21T03:20:00.000Z',
+    allowedUses: ['rank_next_actions', 'draft_internal_recommendations', 'prepare_import_mapping', 'summarize_workspace_evidence'],
+    forbiddenActions: ['customer_message_send', 'payment_capture', 'stock_move', 'production_write', 'domain_publish', 'crm_write', 'model_training'],
+    profileDigest: digest('b'),
+    rawProductRecordsIncluded: false,
+    rawBehaviorEntriesIncluded: false,
+    rawDecisionRecordsIncluded: false,
+    modelTrainingAllowed: false,
+  }, null, 2)}\n`)
+  const agentContextPath = resolve(directory, 'extension-agent-context.json')
+  const boundAgentContext = run(tool, 'bind-agent-context', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--receipt', receiptPath, '--context-profile', contextProfilePath, '--output', agentContextPath)
+  assert.equal(boundAgentContext.status, 0, boundAgentContext.stderr)
+  assert.equal(output(boundAgentContext).status, 'context-ready-advisory')
+  assertMetadataOnlyReceipt(output(boundAgentContext), portalPayload.tenant.workspaceId)
+  const agentContextArtifact = JSON.parse(await readFile(agentContextPath, 'utf8'))
+  assert.equal(agentContextArtifact.agentPolicy.writeExecutionAllowed, false)
+  assert.equal(agentContextArtifact.agentPolicy.externalToolCallsAllowed, false)
+  assert.equal(agentContextArtifact.privacyBoundary.customerRecordsIncluded, false)
+  const verifiedAgentContext = run(tool, 'verify-agent-context', '--preparation', preparation, '--manifest', manifestPath, '--plan', planPath, '--portal', portalPath, '--binding', bindingPath, '--authorization', authorizationPath, '--receipt', receiptPath, '--context-profile', contextProfilePath, '--agent-context', agentContextPath)
+  assert.equal(verifiedAgentContext.status, 0, verifiedAgentContext.stderr)
+  assert.equal(output(verifiedAgentContext).status, 'context-ready-advisory')
+  assertMetadataOnlyReceipt(output(verifiedAgentContext), portalPayload.tenant.workspaceId)
+
   const tamperedReceipt = JSON.parse(await readFile(receiptPath, 'utf8'))
   tamperedReceipt.execution.tenantConfigRevision = 2
   await writeFile(receiptPath, `${JSON.stringify(tamperedReceipt, null, 2)}\n`)
