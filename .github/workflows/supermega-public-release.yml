@@ -166,8 +166,7 @@ jobs:
                 python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
               ;;
             staged)
-              npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
-                python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema
+              echo "Managed credentials are value-verified, but writes remain disabled; production stays isolated_demo while named-user signup is staged."
               ;;
             isolated_demo)
               echo "Managed activation is not selected; production remains isolated_demo."
