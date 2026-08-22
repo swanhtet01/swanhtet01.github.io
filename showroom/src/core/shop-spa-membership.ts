@@ -12,6 +12,7 @@ export const spaMembershipPackages = [
 type SpaMembershipPackage = typeof spaMembershipPackages[number]
 
 export type SpaMembershipOrderView = {
+  sourceRecordId?: string
   customer: string
   status: string
   paymentStatus: string

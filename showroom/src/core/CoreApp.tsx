@@ -6708,7 +6708,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <Suspense fallback={null}><ShopServiceSchedule
       actor={managedIdentity?.email ?? 'Local Shop operator'}
       commerce={commerce}
-      settledSourceRecordIds={new Set(commerce.orders.flatMap((order) => order.sourceRecordId && order.status === 'completed' && order.paymentStatus === 'reconciled' && order.refundStatus !== 'due' ? [order.sourceRecordId] : []))}
       disabled={shopScheduleControlsDisabled}
       initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}
       onScheduleChange={setShopSchedule}

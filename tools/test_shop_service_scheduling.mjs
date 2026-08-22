@@ -206,7 +206,7 @@ rejects(() => book(schedule, 'not a date'), 'a booking with an unparseable start
 rejects(() => book(schedule, START, resource.id, ''), 'a booking with no customer name is refused')
 rejects(
   () => scheduleShopServiceBooking(schedule, {
-    customerName: 'May', contact: '09-777-000111', serviceId: service.id, resourceId: resource.id, startsAt: START,
+    customerName: 'May', contact: '09-777-000111', appointmentUpdates: 'declined', serviceId: service.id, resourceId: resource.id, startsAt: START,
   }, { actor: '', reason: 'r', happenedAt: '2026-07-24T08:00:00.000Z' }),
   'a booking with no named actor is refused',
 )
@@ -252,7 +252,7 @@ const tillProof = () => ({
   happenedAt: new Date(Date.parse(`${TILL_DAY}T00:00:00.000Z`) + (tillClock += 1) * 60_000).toISOString(),
 })
 function completeTreatment(state, serviceId, resourceId, startsAt, customerName, advances = 3) {
-  let next = scheduleShopServiceBooking(state, { customerName, contact: '09-450-000-111', serviceId, resourceId, startsAt }, tillProof())
+  let next = scheduleShopServiceBooking(state, { customerName, contact: `test-${customerName}`, appointmentUpdates: 'declined', serviceId, resourceId, startsAt }, tillProof())
   const bookingId = next.bookings[next.bookings.length - 1].id
   for (let step = 0; step < advances; step += 1) next = advanceShopServiceBooking(next, bookingId, tillProof())
   return { state: next, bookingId }

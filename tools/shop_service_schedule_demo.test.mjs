@@ -69,6 +69,7 @@ test('real appointment evidence is distinguishable from the guided sample', () =
   const withHumanBooking = scheduleShopServiceBooking(demo, {
     customerName: 'Walk-in customer',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: demo.services[0].id,
     resourceId: demo.resources[1].id,
     startsAt: `${PLANNING_DAY}T10:30:00.000Z`,
@@ -98,6 +99,7 @@ test('an empty schedule can switch industry pack, but any evidence blocks the sw
   const withBooking = scheduleShopServiceBooking(createShopServiceSchedule('retail'), {
     customerName: 'Walk-in',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: empty.services[0].id,
     resourceId: empty.resources[0].id,
     startsAt: `${PLANNING_DAY}T05:00:00.000Z`,
@@ -115,6 +117,7 @@ test('a booking advances through the full lifecycle and terminal states block fu
   const afterBook = scheduleShopServiceBooking(base, {
     customerName: 'Naw Su',
     contact: '09 444 555 666',
+    appointmentUpdates: 'declined',
     serviceId: base.services[0].id,
     resourceId: base.resources[0].id,
     startsAt: `${PLANNING_DAY}T04:00:00.000Z`,
@@ -142,6 +145,7 @@ test('a booking can be cancelled from any non-terminal state and cannot be cance
   const afterBook = scheduleShopServiceBooking(base, {
     customerName: 'Ma Hnin',
     contact: '09 777 888 999',
+    appointmentUpdates: 'declined',
     serviceId: base.services[0].id,
     resourceId: base.resources[0].id,
     startsAt: `${PLANNING_DAY}T06:00:00.000Z`,
@@ -161,6 +165,7 @@ test('a booking can be cancelled from any non-terminal state and cannot be cance
   const afterBook2 = scheduleShopServiceBooking(base, {
     customerName: 'Ko Zaw',
     contact: '09 321 654 987',
+    appointmentUpdates: 'declined',
     serviceId: base.services[0].id,
     resourceId: base.resources[0].id,
     startsAt: `${PLANNING_DAY}T07:00:00.000Z`,
@@ -292,6 +297,7 @@ test('booking the same resource during an overlapping window throws', () => {
   const withFirst = scheduleShopServiceBooking(base, {
     customerName: 'Ma Aye',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: startA,
@@ -305,6 +311,7 @@ test('booking the same resource during an overlapping window throws', () => {
     () => scheduleShopServiceBooking(withFirst, {
       customerName: 'Ma Su',
       contact: '09 444 555 666',
+      appointmentUpdates: 'declined',
       serviceId: service.id,
       resourceId: resource.id,
       startsAt: overlapStart,
@@ -322,6 +329,7 @@ test('back-to-back bookings on the same resource succeed when windows do not ove
   const withFirst = scheduleShopServiceBooking(base, {
     customerName: 'Ma Aye',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: startA,
@@ -333,6 +341,7 @@ test('back-to-back bookings on the same resource succeed when windows do not ove
   const withSecond = scheduleShopServiceBooking(withFirst, {
     customerName: 'Ko Zaw',
     contact: '09 777 888 999',
+    appointmentUpdates: 'declined',
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: adjacentStart,

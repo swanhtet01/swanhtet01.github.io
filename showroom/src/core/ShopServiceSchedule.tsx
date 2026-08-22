@@ -73,10 +73,9 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = emptyMembershipCommerce, settledSourceRecordIds = new Set<string>(), disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: {
+export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = emptyMembershipCommerce, disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: {
   actor?: string
   commerce?: SpaMembershipCommerceView
-  settledSourceRecordIds?: ReadonlySet<string>
   disabled?: boolean
   initiallyOpen?: boolean
   onScheduleChange?: (schedule: ShopServiceSchedule) => void
@@ -107,6 +106,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   const schedulePanelRef = useRef<HTMLDetailsElement>(null)
   const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
   const membershipBalances = useMemo(() => schedule ? spaMembershipBalances(commerce, schedule) : [], [commerce, schedule])
+  const settledSourceRecordIds = useMemo(() => new Set(commerce.orders.flatMap((order) => order.sourceRecordId && order.status === 'completed' && order.paymentStatus === 'reconciled' && order.refundStatus !== 'due' ? [order.sourceRecordId] : [])), [commerce])
   const membershipByBookingId = useMemo(() => {
     if (!schedule || !membershipBalances.length) return new Map<string, (typeof membershipBalances)[number]>()
     const balancesByCustomerService = new Map(membershipBalances.map((balance) => [`${balance.customer}\u0000${balance.serviceId}`, balance]))
@@ -235,19 +235,18 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   async function commitPrivacy(next: ShopServiceSchedule, message: string) {
     const identity = managedIdentityRef.current
     if (!identity) {
-      try {
-        persistLocal(next)
-        setSchedule(next)
-        setNotice(message)
-        return true
-      } catch {
-        setNotice('Local storage is unavailable. Nothing changed; free device storage or use a company account, then try again.')
+      const result = await mutateShopServiceSchedule(planShopServiceScheduleWrite(schedule?.revision ?? null, next))
+      if (!result.ok) {
+        setNotice(result.error)
         return false
       }
+      setSchedule(result.schedule)
+      setNotice(message)
+      return true
     }
     const expectedVersion = managedVersionRef.current
     if (expectedVersion === null || managedSaveBusyRef.current) {
-      setNotice('Wait for the current company appointment change to finish.')
+      setNotice(`Wait for the current company ${vocabulary.singular} change to finish.`)
       return false
     }
     managedSaveBusyRef.current = true
@@ -278,7 +277,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
             setRetentionDraft(current.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
             try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
           }
-          setNotice('Another user changed appointments first. The current shared schedule was reloaded; review and try again.')
+          setNotice(`Another user changed ${vocabulary.plural.toLowerCase()} first. The current shared schedule was reloaded; review and try again.`)
           return false
         } catch {
           // Fall through to a fail-closed warning.
@@ -339,7 +338,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         Array.from(settledSourceRecordIds),
         proof('Owner reviewed and confirmed client anonymization after retention and financial closure.'),
       )
-      if (await commitPrivacy(next, `${client.name} anonymized in appointments.`)) setAnonymizeReviewClientId('')
+      if (await commitPrivacy(next, `${client.name} anonymized in ${vocabulary.plural.toLowerCase()}.`)) setAnonymizeReviewClientId('')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client was not anonymized.')
     }
@@ -457,7 +456,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         <div><span className="core-eyebrow">New {vocabulary.singular}</span><h3>{vocabulary.holdAction}</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>
         <label>Contact<input disabled={disabled} list="spa-client-contacts" maxLength={160} onChange={(event) => { const contact = event.target.value; const client = schedule.clients.find((candidate) => !candidate.anonymizedAt && candidate.contact === contact); setBookingDraft((current) => ({ ...current, contact, customerName: client?.name ?? current.customerName, appointmentUpdates: client?.appointmentUpdates === 'allowed' ? 'allowed' : 'declined' })) }} placeholder="Phone or reference" required value={bookingDraft.contact} /><datalist id="spa-client-contacts">{schedule.clients.filter((client) => !client.anonymizedAt).map((client) => <option key={client.id} value={client.contact}>{client.name}</option>)}</datalist></label>
-        <label>Appointment updates<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, appointmentUpdates: event.target.value as 'allowed' | 'declined' }))} value={bookingDraft.appointmentUpdates}><option value="declined">No messages</option><option value="allowed">Customer allowed updates</option></select></label>
+        <label>Customer updates<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, appointmentUpdates: event.target.value as 'allowed' | 'declined' }))} value={bookingDraft.appointmentUpdates}><option value="declined">No messages</option><option value="allowed">Customer allowed updates</option></select></label>
         <label>Service<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, serviceId: event.target.value }))} required value={bookingDraft.serviceId}>{schedule.services.filter((service) => service.active).map((service) => <option key={service.id} value={service.id}>{service.nameMy ? `${service.name} · ${service.nameMy}` : service.name} · {service.durationMinutes} min · {formatMmk(service.priceMmk)}</option>)}</select></label>
         <label>Staff, room, or equipment<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, resourceId: event.target.value }))} required value={bookingDraft.resourceId}>{schedule.resources.filter((resource) => resource.active).map((resource) => <option key={resource.id} value={resource.id}>{resource.nameMy ? `${resource.name} · ${resource.nameMy}` : resource.name} · {resource.kind}</option>)}</select></label>
         <label>Starts<input disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, startsAt: event.target.value }))} required type="datetime-local" value={bookingDraft.startsAt} /></label>
@@ -481,7 +480,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       {schedule.clients.length ? <details className="compact-disclosure service-client-privacy">
         <summary><span>Clients and privacy</span><small>{schedule.clients.length} minimal records</small></summary>
         <div>
-          <p>Name, contact, appointment-update choice, and visit counts only. Notes and financial records are excluded from export.</p>
+          <p>Name, contact, customer-update choice, and visit counts only. Notes and financial records are excluded from export.</p>
           {canManageClientPrivacy ? <>
             <form className="service-privacy-policy" onSubmit={saveClientRetention}>
               <label>Keep identifiable records after the last activity<select disabled={disabled} onChange={(event) => setRetentionDraft(event.target.value)} required value={retentionDraft}><option value="">Choose an owner-approved period</option><option value="365">1 year</option><option value="730">2 years</option><option value="1095">3 years</option><option value="1825">5 years</option></select></label>
@@ -489,7 +488,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
             </form>
             <div className="service-privacy-actions"><button className="core-button compact" disabled={disabled} onClick={() => void downloadClientList()} type="button">Download client list</button><small>The export receipt is saved before the file is created.</small></div>
             <div className="service-client-list">{clientPrivacyRows.map(({ client, readiness }) => <article key={client.id}><div><strong>{client.name}</strong><small>{client.anonymizedAt ? `Anonymized ${new Date(client.anonymizedAt).toLocaleDateString()}` : `${client.contact} · ${client.appointmentUpdates === 'allowed' ? 'Updates allowed' : 'No messages'}`}</small></div><div><small>{readiness.reason}</small>{!client.anonymizedAt ? <button className="text-link" disabled={disabled || !readiness.allowed} onClick={() => setAnonymizeReviewClientId(client.id)} type="button">Review anonymization</button> : null}</div></article>)}</div>
-            {anonymizeReviewClient ? <div className="service-privacy-review" role="alert"><strong>Review permanent anonymization</strong><p>Remove {anonymizeReviewClient.name}'s contact, update choice, and appointment notes. Closed financial orders remain unchanged.</p><div><button className="core-button compact danger" disabled={disabled} onClick={() => void confirmClientAnonymization()} type="button">Confirm anonymization</button><button className="text-link" disabled={disabled} onClick={() => setAnonymizeReviewClientId('')} type="button">Cancel</button></div></div> : null}
+            {anonymizeReviewClient ? <div className="service-privacy-review" role="alert"><strong>Review permanent anonymization</strong><p>Remove {anonymizeReviewClient.name}'s contact, update choice, and visit notes. Closed financial orders remain unchanged.</p><div><button className="core-button compact danger" disabled={disabled} onClick={() => void confirmClientAnonymization()} type="button">Confirm anonymization</button><button className="text-link" disabled={disabled} onClick={() => setAnonymizeReviewClientId('')} type="button">Cancel</button></div></div> : null}
           </> : <p className="panel-note">Only a company owner can set retention, export clients, or approve anonymization.</p>}
         </div>
       </details> : null}

@@ -56,6 +56,7 @@ function completeBooking(state, customer, serviceId, hour, resourceId = 'resourc
   let next = scheduleShopServiceBooking(state, {
     customerName: customer,
     contact: '09-450-000-111',
+    appointmentUpdates: 'declined',
     serviceId,
     resourceId,
     startsAt,
@@ -112,7 +113,7 @@ let wrongService = completeBooking(createShopServiceSchedule('spa'), 'Daw Aye Ay
 rejects(() => redeemSpaMembershipSession(wrongService.state, commerce, wrongService.bookingId, proof('2026-08-21T04:01:00.000Z')), 'a massage package cannot fund a facial')
 
 const held = scheduleShopServiceBooking(createShopServiceSchedule('spa'), {
-  customerName: 'Daw Aye Aye', contact: '09-450-000-111', serviceId: 'service-session', resourceId: 'resource-staff-1', startsAt: '2026-08-22T03:00:00.000Z',
+  customerName: 'Daw Aye Aye', contact: '09-450-000-111', appointmentUpdates: 'declined', serviceId: 'service-session', resourceId: 'resource-staff-1', startsAt: '2026-08-22T03:00:00.000Z',
 }, proof('2026-08-22T02:00:00.000Z'))
 rejects(() => redeemSpaMembershipSession(held, commerce, held.bookings[0].id, proof('2026-08-22T03:01:00.000Z')), 'an unfinished appointment cannot consume a package')
 

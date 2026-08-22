@@ -8451,7 +8451,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         current["orders"][0].update(  # type: ignore[index]
             {
-                "customer": "Client A",
+                "customer": "Mya Thandar",
                 "item": "Myanmar massage package 5 sessions",
                 "itemSku": "SPA-PACK-MASSAGE-5",
                 "quantity": 1,

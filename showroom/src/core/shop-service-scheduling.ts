@@ -1046,6 +1046,7 @@ export function createShopServiceScheduleDemo(industryPackId: ShopIndustryPackId
     state = scheduleShopServiceBooking(state, {
       customerName: slot.plan.customerName,
       contact: slot.plan.contact,
+      appointmentUpdates: 'declined',
       serviceId: state.services[slot.serviceIndex].id,
       resourceId: state.resources[slot.resourceIndex].id,
       startsAt: slot.startsAt,
