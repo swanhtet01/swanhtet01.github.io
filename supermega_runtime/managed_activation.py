@@ -1934,6 +1934,12 @@ def _reviewed_ca_digest(path_value: str) -> str:
     return f"sha256:{sha256(Path(certificate_path).read_bytes()).hexdigest()}"
 
 
+def reviewed_activation_ca_digest(path_value: str) -> str:
+    """Return the digest of one validated administrative TLS CA certificate."""
+
+    return _reviewed_ca_digest(path_value)
+
+
 def _validate_admin_target(database_url: str, project_ref: str, expected_ca_sha256: str) -> None:
     parsed = urlsplit(database_url)
     query = parse_qs(parsed.query)

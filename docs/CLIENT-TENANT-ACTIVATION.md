@@ -112,6 +112,30 @@ digests of the email and active session. It creates no workspace membership and
 makes no provider write. Authorization remains in the tenant membership and
 capability tables; editable `user_metadata` is never an authorization source.
 
+Prepare the activation directly from that proof instead of copying its owner
+UUID, project reference, or release commit into a command. Repeat
+`--request-file` in canonical Shop, Plant, Website, Ecommerce order. The
+invitation approval and this separate tenant-activation approval are never
+treated as interchangeable authority:
+
+```powershell
+npm run client:owner-identity -- prepare-activation `
+  --owner-plan C:\reviewed\owner-identity-plan.json `
+  --owner-proof C:\reviewed\owner-identity-proof.json `
+  --request-file C:\reviewed\shop-managed-request.json `
+  --workspace-id named-client-workspace `
+  --activation-approval-id TENANT-ACTIVATION-APPROVAL-UUID `
+  --activation-approved-at 2026-08-22T00:30:00.000Z `
+  --admin-ca-file C:\private\prod-ca.pem `
+  --output C:\reviewed\proof-bound-activation-plan.json
+```
+
+This compiler rejects expired identity approval, changed client labels,
+unconfirmed or mismatched email proof, noncanonical product order, and target
+drift. It produces the same standard single- or multi-product activation plan
+accepted by the database authorization and apply commands, with no provider or
+tenant write.
+
 ## Add staff only after tenant activation
 
 SuperMega does not create an Auth user or send an invitation email as a side

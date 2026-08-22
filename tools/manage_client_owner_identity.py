@@ -21,6 +21,13 @@ from supermega_runtime.supabase_auth import (
     is_supabase_publishable_key,
     verify_supabase_user_identity,
 )
+from supermega_runtime.managed_activation import (
+    ManagedActivationError,
+    compile_activation_plan,
+    compile_multi_product_activation_plan,
+    reviewed_activation_ca_digest,
+    validate_managed_trial_request,
+)
 
 
 PLAN_CONTRACT = "supermega.client_owner_identity_plan.v1"
@@ -358,6 +365,62 @@ def validate_owner_identity_proof(value: Mapping[str, Any], plan: Mapping[str, A
     return proof
 
 
+def compile_proof_bound_activation(
+    owner_plan: Mapping[str, Any],
+    owner_proof: Mapping[str, Any],
+    managed_requests: Sequence[Mapping[str, Any]],
+    *,
+    workspace_id: str,
+    activation_approval_id: str,
+    activation_approved_at: str,
+    admin_ca_sha256: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Compile one activation without accepting a manually copied Auth UUID.
+
+    The identity invitation approval and the tenant activation approval remain
+    separate. The proof supplies identity and target only; product requests
+    supply the exact workspace and named-owner labels.
+    """
+
+    current = now or datetime.now(timezone.utc)
+    verified_owner_plan = require_active_owner_identity_plan(owner_plan, now=current)
+    verified_owner_proof = validate_owner_identity_proof(owner_proof, verified_owner_plan)
+    if not managed_requests:
+        raise ClientOwnerIdentityError("At least one managed product request is required.")
+    redacted_requests = [validate_managed_trial_request(request) for request in managed_requests]
+    workspace_labels = {str(request["workspaceLabel"]) for request in redacted_requests}
+    owner_labels = {str(request["ownerLabel"]) for request in redacted_requests}
+    if len(workspace_labels) != 1 or len(owner_labels) != 1:
+        raise ClientOwnerIdentityError("Product requests changed the approved client identity.")
+    workspace_label = next(iter(workspace_labels))
+    owner_label = next(iter(owner_labels))
+    if (
+        _canonical_digest({"workspaceLabel": workspace_label})
+        != verified_owner_plan["client"]["workspaceLabelDigest"]
+        or _canonical_digest({"ownerLabel": owner_label})
+        != verified_owner_plan["client"]["ownerLabelDigest"]
+    ):
+        raise ClientOwnerIdentityError("Product requests do not match the approved owner identity plan.")
+
+    compile_arguments = {
+        "workspace_id": workspace_id,
+        "owner_actor_id": verified_owner_proof["identity"]["ownerActorId"],
+        "approval_id": activation_approval_id,
+        "approved_by": owner_label,
+        "approved_at": activation_approved_at,
+        "project_ref": verified_owner_plan["target"]["projectRef"],
+        "release_commit": verified_owner_plan["target"]["releaseCommit"],
+        "admin_ca_sha256": admin_ca_sha256,
+        "now": current,
+    }
+    return (
+        compile_activation_plan(managed_requests[0], **compile_arguments)
+        if len(managed_requests) == 1
+        else compile_multi_product_activation_plan(managed_requests, **compile_arguments)
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prepare or verify a named client owner identity.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -381,6 +444,15 @@ def _parser() -> argparse.ArgumentParser:
     verify_proof = subparsers.add_parser("verify-proof")
     verify_proof.add_argument("--plan", required=True)
     verify_proof.add_argument("--proof", required=True)
+    prepare_activation = subparsers.add_parser("prepare-activation")
+    prepare_activation.add_argument("--owner-plan", required=True)
+    prepare_activation.add_argument("--owner-proof", required=True)
+    prepare_activation.add_argument("--request-file", action="append", required=True)
+    prepare_activation.add_argument("--workspace-id", required=True)
+    prepare_activation.add_argument("--activation-approval-id", required=True)
+    prepare_activation.add_argument("--activation-approved-at", required=True)
+    prepare_activation.add_argument("--admin-ca-file", required=True)
+    prepare_activation.add_argument("--output", required=True)
     return parser
 
 
@@ -423,14 +495,40 @@ def main(argv: Sequence[str] | None = None) -> int:
             proof = build_owner_identity_proof(plan, identity)
             path = _write_json(arguments.output, proof)
             print(json.dumps({"status": proof["status"], "proofDigest": proof["proofDigest"], "bytes": path.stat().st_size, "externalWritesPerformed": False}))
-        else:
+        elif arguments.command == "verify-proof":
             plan = _read_json(arguments.plan, "Owner identity plan")
             proof = validate_owner_identity_proof(
                 _read_json(arguments.proof, "Owner identity proof"), plan
             )
             print(json.dumps({"status": "verified", "proofDigest": proof["proofDigest"], "externalWritesPerformed": False}))
+        else:
+            owner_plan = _read_json(arguments.owner_plan, "Owner identity plan")
+            owner_proof = _read_json(arguments.owner_proof, "Owner identity proof")
+            managed_requests = [
+                _read_json(path, f"Managed product request {index}")
+                for index, path in enumerate(arguments.request_file, start=1)
+            ]
+            activation = compile_proof_bound_activation(
+                owner_plan,
+                owner_proof,
+                managed_requests,
+                workspace_id=arguments.workspace_id,
+                activation_approval_id=arguments.activation_approval_id,
+                activation_approved_at=arguments.activation_approved_at,
+                admin_ca_sha256=reviewed_activation_ca_digest(arguments.admin_ca_file),
+            )
+            path = _write_json(arguments.output, activation)
+            print(json.dumps({
+                "status": "prepared_proof_bound_activation",
+                "contract": activation["contract"],
+                "activationId": activation["activationId"],
+                "planDigest": activation["planDigest"],
+                "productCount": len(activation.get("products", [activation.get("product")])),
+                "bytes": path.stat().st_size,
+                "externalWritesPerformed": False,
+            }))
         return 0
-    except (ClientOwnerIdentityError, SupabaseAuthUnavailable, OSError) as exc:
+    except (ClientOwnerIdentityError, ManagedActivationError, SupabaseAuthUnavailable, OSError) as exc:
         print(f"client_owner_identity_error: {exc}", file=sys.stderr)
         return 1
 
