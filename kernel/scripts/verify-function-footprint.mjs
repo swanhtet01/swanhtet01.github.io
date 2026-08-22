@@ -72,7 +72,10 @@ async function closure(entry, includeDynamic = false) {
     }
   }
   const files = [...seen].sort()
-  const sizes = await Promise.all(files.map(async (file) => (await stat(file)).size))
+  const sizes = await Promise.all(files.map(async (file) => Buffer.byteLength(
+    (await readFile(file, 'utf8')).replace(/\r\n/g, '\n'),
+    'utf8',
+  )))
   return {
     files,
     bytes: sizes.reduce((total, size) => total + size, 0),

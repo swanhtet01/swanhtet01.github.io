@@ -110,7 +110,7 @@
     "scheduledFunctionMaxEagerFiles": 30,
     "scheduledFunctionMaxEagerBytes": 409600,
     "scheduledFunctionCurrentEagerFiles": 14,
-    "scheduledFunctionCurrentEagerBytes": 330862,
+    "scheduledFunctionCurrentEagerBytes": 324497,
     "companyOperationsDeferredForStartup": true,
     "optionalToolConnectorsDeferredForStartup": true,
     "fullPlatformStatusTeams": ["engineering", "finance-risk"],
