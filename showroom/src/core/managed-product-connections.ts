@@ -1,7 +1,7 @@
 import type { ClientSolutionId } from './client-onboarding'
 
 export type ManagedProductConnection = {
-  id: 'online-orders' | 'demand-to-production' | 'website-intake'
+  id: 'online-orders' | 'demand-to-production' | 'website-intake' | 'website-storefront'
   products: readonly [ClientSolutionId, ClientSolutionId]
   label: string
   detail: string
@@ -25,6 +25,12 @@ const PRODUCT_CONNECTIONS: readonly ManagedProductConnection[] = [
     products: ['commerce', 'website'],
     label: 'Website intake to Shop',
     detail: 'Website enquiries and reviewed catalog intake can enter the Shop workspace.',
+  },
+  {
+    id: 'website-storefront',
+    products: ['website', 'ecommerce'],
+    label: 'Website to Ecommerce',
+    detail: 'Approved Website content and catalog presentation stay aligned with the online storefront.',
   },
 ]
 

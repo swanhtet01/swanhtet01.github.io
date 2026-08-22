@@ -67,7 +67,7 @@ test('the product switcher appears only when there is somewhere authorized to sw
 test('shows only connection flows backed by the tenant product assignments', () => {
   assert.deepEqual(
     managedProductConnections(['commerce', 'production', 'website', 'ecommerce']).map(({ id }) => id),
-    ['online-orders', 'demand-to-production', 'website-intake'],
+    ['online-orders', 'demand-to-production', 'website-intake', 'website-storefront'],
   )
   assert.deepEqual(
     managedProductConnections(['commerce', 'ecommerce']).map(({ id }) => id),
@@ -75,6 +75,10 @@ test('shows only connection flows backed by the tenant product assignments', () 
   )
   assert.deepEqual(managedProductConnections(['ecommerce']), [])
   assert.deepEqual(managedProductConnections(['production', 'website']), [])
+  assert.deepEqual(
+    managedProductConnections(['website', 'ecommerce']).map(({ id }) => id),
+    ['website-storefront'],
+  )
 })
 
 test('connection decisions do not mutate or reveal unassigned products', () => {
