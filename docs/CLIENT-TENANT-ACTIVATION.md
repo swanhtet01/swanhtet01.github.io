@@ -204,14 +204,43 @@ cross-tenant denial smoke gates.
 
 ## 5. Verify the client portal
 
-1. Sign in as the named owner and request `/api/trial/v1/bootstrap`.
-2. Confirm `identity.workspace_id` is the activated tenant.
-3. Confirm `readiness.productEntitlements` exactly matches the approved runtime
-   products (`commerce`, `production`, `website`, `ecommerce`).
-4. Confirm the app navigation shows only those products.
-5. Create and read back one bounded record in each purchased product, then
-   confirm another tenant cannot read it.
-6. Preserve the database-derived activation receipt and smoke-test evidence.
+After the reviewed candidate is deployed, run the read-only hosted portal smoke
+against that exact immutable release. Store each value in a separate local file;
+never put access tokens or client identifiers on the command line.
+
+```powershell
+$env:EXPECTED_RELEASE_COMMIT = 'DEPLOYED-40-CHARACTER-GIT-SHA'
+$env:SUPERMEGA_EXPECTED_PRODUCTS = 'shop,website'
+$env:SUPERMEGA_EXPECTED_WORKSPACE_ID_FILE = 'C:\secrets\workspace-id.txt'
+$env:SUPERMEGA_EXPECTED_OWNER_ID_FILE = 'C:\secrets\owner-user-id.txt'
+$env:SUPERMEGA_OWNER_ACCESS_TOKEN_FILE = 'C:\secrets\owner-access-token.txt'
+$env:SUPERMEGA_DENIED_ACCESS_TOKEN_FILE = 'C:\secrets\unrelated-user-access-token.txt'
+$env:SUPERMEGA_HOSTED_PORTAL_EVIDENCE_FILE = 'C:\reviewed\beauty-spa-hosted-portal-smoke.json'
+npm run client:portal:hosted-smoke
+```
+
+The unrelated user must be a valid named Supabase user, but must not belong to
+the activated workspace. The verifier performs only six HTTPS GET requests. It
+requires all of the following before creating its evidence file:
+
+1. `/__release.json` matches the exact reviewed Git commit and canonical app
+   domain.
+2. `/api/health` proves managed PostgreSQL, Supabase user authentication,
+   private runtime role, audit, and writes are ready.
+3. The named owner sees exactly one matching owner directory entry.
+4. The owner's bootstrap identity, write readiness, purchased product
+   entitlements, capabilities, and required state surfaces agree.
+5. A separately authenticated user cannot discover the owner workspace and
+   receives `403 trial_membership_required` when requesting its bootstrap.
+6. Every private response is non-cacheable and protected by `nosniff`.
+
+The create-only evidence contains SHA-256 digests instead of workspace or owner
+identifiers and never persists either token. It proves portal read access and
+HTTP-level tenant denial; it does not deploy, mutate tenant data, prove a
+bounded write/read-back, activate billing, send messages, or enable scheduled
+automations. Complete the separate bounded record write/read-back and database
+row-isolation smoke for every purchased product before calling a client portal
+fully accepted.
 
 Deployment, domain publication, billing activation, customer messages, and
 scheduled automations remain separate owner-approved operations.
