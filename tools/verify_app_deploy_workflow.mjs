@@ -375,11 +375,12 @@ requireContract('retired POS alias blocks release before and after promotion', (
   && retiredAliasVerifier.includes("failures = liveRetiredAliases.length ? ['retired_alias_still_live'] : []")
   && retiredAliasVerifier.includes("contract: 'supermega_retired_vercel_alias_state'"))
 requireContract('all control URLs use explicit project identities', workflow.includes('api "/v9/projects/$APP_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID') && !workflow.includes('/v9/projects/megaos') && !workflow.includes('/v9/projects/supermega-public'))
-requireContract('managed mode is selected only after metadata and effective-value verification', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("['isolated_demo','managed_trial_candidate']") && workflow.includes('verify_managed_runtime_environment_values.mjs managed_trial') && workflow.includes('verify_managed_runtime_environment_values.mjs isolated_demo'))
+requireContract('managed mode is selected only after metadata and effective-value verification', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("runtime_mode=%s") && workflow.includes("['isolated_demo','managed_trial_candidate']") && workflow.includes('verify_managed_runtime_environment_values.mjs managed_trial') && workflow.includes('verify_managed_runtime_environment_values.mjs staged') && workflow.includes('verify_managed_runtime_environment_values.mjs isolated_demo'))
 requireContract('managed database audit uses the exact app runtime environment before candidate creation',
   workflow.includes('Enforce exact app runtime database and RLS gate')
   && workflow.includes('VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}')
   && workflow.includes('vercel@56.1.0 env run --environment=production')
+  && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema')
   && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready')
   && workflow.includes('EXPECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}')
   && appVerifier.includes('selected_operating_mode_runtime_mismatch')
