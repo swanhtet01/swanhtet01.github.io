@@ -400,6 +400,7 @@ export async function provisionLocalShopWorkingSample(industryPackId: ShopIndust
     return next
   })
   if (!result.ok) throw new Error(result.error)
+  clearInstalledSampleCounterDraft(disposition)
   return disposition
 }
 
@@ -458,7 +459,18 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
     return withActivity
   })
   if (!result.ok) throw new Error(result.error)
+  clearInstalledSampleCounterDraft(disposition)
   return disposition
+}
+
+const SHOP_COUNTER_DRAFT_STORAGE_KEY = 'supermega.shop.counter_draft.v1'
+
+function clearInstalledSampleCounterDraft(disposition: 'installed' | 'current' | 'preserved') {
+  // A newly installed catalog is a new till context. Keeping the previous draft can mix an
+  // unrelated trade's items into the first sale (for example, grocery goods in a Spa setup).
+  // Existing and preserved workspaces keep their in-progress sale; only a successful replacement
+  // clears the stale browser-local draft.
+  if (disposition === 'installed') window.localStorage.removeItem(SHOP_COUNTER_DRAFT_STORAGE_KEY)
 }
 
 /**

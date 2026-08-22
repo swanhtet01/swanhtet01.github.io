@@ -421,12 +421,15 @@ test('the browser-local lane still installs every trade catalog through the real
     assert.equal(model.shopBusinessTemplates.length, 10, 'all ten shipped trade templates are present')
 
     for (const template of model.shopBusinessTemplates) {
-      const store = localStorageStub()
+      const store = localStorageStub({
+        'supermega.shop.counter_draft.v1': JSON.stringify({ cart: { 'OLD-SKU': 1 }, customer: 'Previous sale', payment: 'Cash' }),
+      })
       globalThis.window = { localStorage: store }
       globalThis.localStorage = store
 
       const disposition = await onboardingRuntime.provisionLocalShopBusinessTemplateSample(template.id)
       assert.equal(disposition, 'installed', `${template.id}: a signed-out install still reports 'installed'`)
+      assert.equal(store.map.has('supermega.shop.counter_draft.v1'), false, `${template.id}: installing a new catalog clears the previous till draft`)
 
       const written = store.map.get(commerceKey)
       assert.ok(typeof written === 'string' && written.length > 0, `${template.id}: the browser-local Shop workspace was written`)
