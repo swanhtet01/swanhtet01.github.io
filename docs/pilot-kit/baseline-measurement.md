@@ -83,7 +83,7 @@ Golden Lotus Spa is an entirely fictional example. Every person and number below
 - Process in one sentence: a client buys a massage package, Ma Thiri records payment and remaining uses in a notebook, then manually reduces the balance after each completed treatment.
 - Observed runs: package-balance updates took 4, 3, and 2 minutes. One run initially used the wrong client row and required correction before the balance changed.
 - Derived baseline: weekly orders 120 (counted from last week's day book), median minutes per order 8 (middle of 7, 8, 9), weekly exception count 12, daily close minutes 45.
-- Spa baseline: 40 reviewed client rows, 12 weekly package sales, 24 weekly treatment redemptions, median 3 minutes per redemption, and 2 weekly package corrections.
+- Spa services vertical pack baseline: 40 reviewed client rows, 12 weekly package sales, 24 weekly treatment redemptions, median 3 minutes per redemption, and 2 weekly package corrections.
 - Errors and cost: 1 of 3 observed balance updates needed correction; no invented financial saving is claimed.
 - Sign-off: owner confirmed; operator agreed; start Monday 2026-08-17, review Friday 2026-08-21 (start plus four days).
 
