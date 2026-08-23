@@ -190,9 +190,9 @@ function exactText(value, field, max = 180) {
 
 function normalizeOwnerInputDraft(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('shop_owner_input_required')
-  if (exactText(value.product, 'product', 40) !== SHOP_PILOT_PRODUCT) throw new Error('product_invalid')
-  if (exactText(value.pilotMode, 'pilot_mode', 40) !== SHOP_PILOT_MODE) throw new Error('pilot_mode_invalid')
-  if (exactText(value.verticalPack, 'vertical_pack', 80) !== SHOP_PILOT_VERTICAL_PACK) throw new Error('vertical_pack_unsupported')
+  if ((value.product === undefined ? SHOP_PILOT_PRODUCT : exactText(value.product, 'product', 40)) !== SHOP_PILOT_PRODUCT) throw new Error('product_invalid')
+  if ((value.pilotMode === undefined ? SHOP_PILOT_MODE : exactText(value.pilotMode, 'pilot_mode', 40)) !== SHOP_PILOT_MODE) throw new Error('pilot_mode_invalid')
+  if ((value.verticalPack === undefined ? SHOP_PILOT_VERTICAL_PACK : exactText(value.verticalPack, 'vertical_pack', 80)) !== SHOP_PILOT_VERTICAL_PACK) throw new Error('vertical_pack_unsupported')
   const tenantLabel = exactText(value.tenantLabel, 'tenant_label', 80)
   if (!/^[A-Za-z0-9][A-Za-z0-9-]{2,79}$/.test(tenantLabel)) throw new Error('tenant_label_invalid')
   const date = (input, field) => {

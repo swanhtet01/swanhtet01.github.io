@@ -230,7 +230,7 @@ export function shopPilotInputFromContactEvent(event, ownerInput) {
     }
     if (JSON.stringify(legacyBaseline) !== JSON.stringify(qualification.baseline)) throw new Error('shop_contact_baseline_mismatch')
   }
-  const metadata = normalizeShopPilotMetadata(ownerInput)
+  const metadata = normalizeShopPilotMetadata(ownerInput, { defaultMissing: true })
   const { operatorRole: _legacyOperatorRole, baseline: _legacyBaseline, spaBaseline: _spaBaseline, verticalBaseline: _verticalBaseline, product: _product, pilotMode: _pilotMode, verticalPack: _verticalPack, ...reviewedOwnerInput } = ownerInput
 
   return {
