@@ -7,8 +7,11 @@ import { fileURLToPath } from 'node:url'
 
 import {
   SHOP_PILOT_HANDOFF_CONTRACT,
+  SHOP_PILOT_MODE,
   SHOP_PILOT_OWNER_DECISION_CONTRACT,
+  SHOP_PILOT_PRODUCT,
   SHOP_PILOT_REPLY_DRAFT_CONTRACT,
+  SHOP_PILOT_VERTICAL_PACK,
   renderShopPilotHandoff,
   renderShopPilotOwnerDecision,
   renderShopPilotReplyDraft,
@@ -143,6 +146,9 @@ function paths(workspace) {
 
 function ownerTemplate() {
   return {
+    product: SHOP_PILOT_PRODUCT,
+    pilotMode: SHOP_PILOT_MODE,
+    verticalPack: SHOP_PILOT_VERTICAL_PACK,
     tenantLabel: '',
     startDate: '',
     reviewDate: '',
@@ -184,6 +190,9 @@ function exactText(value, field, max = 180) {
 
 function normalizeOwnerInputDraft(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('shop_owner_input_required')
+  if ((value.product === undefined ? SHOP_PILOT_PRODUCT : exactText(value.product, 'product', 40)) !== SHOP_PILOT_PRODUCT) throw new Error('product_invalid')
+  if ((value.pilotMode === undefined ? SHOP_PILOT_MODE : exactText(value.pilotMode, 'pilot_mode', 40)) !== SHOP_PILOT_MODE) throw new Error('pilot_mode_invalid')
+  if ((value.verticalPack === undefined ? SHOP_PILOT_VERTICAL_PACK : exactText(value.verticalPack, 'vertical_pack', 80)) !== SHOP_PILOT_VERTICAL_PACK) throw new Error('vertical_pack_unsupported')
   const tenantLabel = exactText(value.tenantLabel, 'tenant_label', 80)
   if (!/^[A-Za-z0-9][A-Za-z0-9-]{2,79}$/.test(tenantLabel)) throw new Error('tenant_label_invalid')
   const date = (input, field) => {
@@ -195,6 +204,9 @@ function normalizeOwnerInputDraft(value) {
     return normalized
   }
   return {
+    product: SHOP_PILOT_PRODUCT,
+    pilotMode: SHOP_PILOT_MODE,
+    verticalPack: SHOP_PILOT_VERTICAL_PACK,
     tenantLabel,
     startDate: date(value.startDate, 'start_date'),
     reviewDate: date(value.reviewDate, 'review_date'),
@@ -228,6 +240,9 @@ function normalizeIntakeBundle(bundle) {
 function starterManifest() {
   return {
     contract: SHOP_PILOT_INTAKE_STARTER_CONTRACT,
+    product: SHOP_PILOT_PRODUCT,
+    pilotMode: SHOP_PILOT_MODE,
+    verticalPack: SHOP_PILOT_VERTICAL_PACK,
     stage: 'private-owner-intake-required',
     outputContract: SHOP_PILOT_INTAKE_BUNDLE_CONTRACT,
     authority: {
@@ -247,12 +262,12 @@ function starterManifest() {
 }
 
 function starterGuide() {
-  return `# PRIVATE - Start the first SuperMega Spa client
+  return `# PRIVATE - Start the first SuperMega Shop pilot
 
 This folder contains no client data yet. Keep the completed download private and never commit or publish it.
 
 1. Open \`START-HERE.html\` in a browser.
-2. Complete it privately with the Spa owner. Every approval starts unchecked.
+2. Complete it privately with the Shop owner. Every approval starts unchecked.
 3. Select **Download private intake bundle**. The page works offline and sends nothing.
 4. Move \`shop-pilot-intake.json\` from Downloads into this folder.
 5. From the SuperMega repository, initialize the protected pilot workspace:
@@ -270,7 +285,7 @@ export function renderShopPilotStarterForm() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
-  <title>Start a SuperMega Spa pilot</title>
+  <title>Start a SuperMega Shop pilot</title>
   <style>
     :root { color-scheme: light; font: 16px/1.45 system-ui, sans-serif; color: #17211d; background: #edf2ee; }
     * { box-sizing: border-box; }
@@ -299,22 +314,24 @@ export function renderShopPilotStarterForm() {
 </head>
 <body>
 <main>
-  <header><div class="step">Private setup · about 8 minutes</div><h1>Start your Spa workspace</h1><p>Complete this with the Spa owner. Nothing is uploaded or sent. One private file is downloaded to this computer.</p></header>
+  <header><div class="step">Private setup · about 8 minutes</div><h1>Start your Shop pilot</h1><p>Complete this with the Shop owner or daily operator. Nothing is uploaded or sent. One private file is downloaded to this computer.</p></header>
   <section><div class="step">1 · Business</div><h2>Who will use it?</h2><div class="grid">
-    <label>Spa business name<input id="company" required maxlength="180" autocomplete="organization"></label>
+    <label>Shop business name<input id="company" required maxlength="180" autocomplete="organization"></label>
     <label>Daily operator name<input id="operatorName" required maxlength="180" autocomplete="name"></label>
     <label>Operator email<input id="email" required type="email" maxlength="180" autocomplete="email"></label>
-    <label>Operator role<input id="operatorRole" required maxlength="180" placeholder="Spa manager"></label>
-  </div><label>What should SuperMega improve first?<textarea id="goal" required maxlength="500" placeholder="Package sales, treatment redemption, booking, stock or daily close"></textarea></label></section>
+    <label>Daily operator role<input id="operatorRole" required maxlength="180" placeholder="Shop manager"></label>
+  </div><label>What should SuperMega improve first?<textarea id="goal" required maxlength="500" placeholder="Orders, exceptions, reload/retry, or daily close"></textarea></label></section>
   <section><div class="step">2 · Current workflow</div><h2>Measure today’s process</h2><div class="grid">
-    <label>Weekly orders or bookings<input id="weeklyOrders" type="number" min="1" max="100000" step="1" required></label>
+    <label>Weekly orders<input id="weeklyOrders" type="number" min="1" max="100000" step="1" required></label>
     <label>Median minutes per order<input id="medianMinutesPerOrder" type="number" min="0.1" max="1440" step="0.1" required></label>
-    <label>Weekly exceptions or corrections<input id="weeklyExceptionCount" type="number" min="0" max="100000" step="1" required></label>
+    <label>Weekly exception count<input id="weeklyExceptionCount" type="number" min="0" max="100000" step="1" required></label>
     <label>Minutes for daily close<input id="closeMinutesPerDay" type="number" min="0" max="1440" step="0.1" required></label>
-    <label>Client rows to import<input id="clientImportRowCount" type="number" min="1" max="100000" step="1" required></label>
+  </div></section>
+  <section><div class="step">Spa services vertical pack</div><h2>Package sale, treatment redemption, and client import</h2><div class="grid">
+    <label>Client import rows<input id="clientImportRowCount" type="number" min="1" max="100000" step="1" required></label>
     <label>Weekly package sales<input id="weeklyPackageSales" type="number" min="1" max="100000" step="1" required></label>
     <label>Weekly treatment redemptions<input id="weeklyTreatmentRedemptions" type="number" min="1" max="100000" step="1" required></label>
-    <label>Minutes per redemption<input id="medianMinutesPerRedemption" type="number" min="0.1" max="1440" step="0.1" required></label>
+    <label>Minutes per treatment redemption<input id="medianMinutesPerRedemption" type="number" min="0.1" max="1440" step="0.1" required></label>
     <label>Weekly package corrections<input id="weeklyPackageCorrectionCount" type="number" min="0" max="100000" step="1" required></label>
   </div></section>
   <section><div class="step">3 · Five-day pilot</div><h2>Choose the local rehearsal</h2><div class="grid">
@@ -347,7 +364,7 @@ export function renderShopPilotStarterForm() {
   field('download').addEventListener('click', () => {
     const required = [...document.querySelectorAll('input[required], textarea[required]')];
     if (!required.every((input) => input.reportValidity())) { field('status').textContent = 'Complete every required field before downloading.'; return; }
-    const leadId = 'SPA-' + new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14) + '-' + crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, '0');
+    const leadId = 'SHOP-' + new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14) + '-' + crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, '0');
     const payload = {
       contract: '${SHOP_PILOT_INTAKE_BUNDLE_CONTRACT}',
       contactEvent: { event: 'supermega.contact.created', record: {
@@ -355,6 +372,7 @@ export function renderShopPilotStarterForm() {
         raw: { shop: { operator_role: field('operatorRole').value.trim(), weekly_orders: integer('weeklyOrders'), median_minutes_per_order: number('medianMinutesPerOrder'), weekly_exception_count: integer('weeklyExceptionCount'), close_minutes_per_day: number('closeMinutesPerDay'), contact_is_operator: field('contactIsOperator').checked } }
       } },
       ownerInput: {
+        product: '${SHOP_PILOT_PRODUCT}', pilotMode: '${SHOP_PILOT_MODE}', verticalPack: '${SHOP_PILOT_VERTICAL_PACK}',
         tenantLabel: field('tenantLabel').value.trim(), startDate: field('startDate').value, reviewDate: field('reviewDate').value, fixedPilotFeeUsd: integer('fixedPilotFeeUsd'),
         contactIsNamedOperator: field('contactIsNamedOperator').checked, contactBaselineReviewed: field('contactBaselineReviewed').checked,
         spaBaseline: { clientImportRowCount: integer('clientImportRowCount'), weeklyPackageSales: integer('weeklyPackageSales'), weeklyTreatmentRedemptions: integer('weeklyTreatmentRedemptions'), medianMinutesPerRedemption: number('medianMinutesPerRedemption'), weeklyPackageCorrectionCount: integer('weeklyPackageCorrectionCount') },
@@ -402,7 +420,7 @@ export function renderShopPilotOwnerInputForm() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">
-  <title>SuperMega Spa owner intake</title>
+  <title>SuperMega Shop owner intake</title>
   <style>
     :root { color-scheme: light; font: 16px/1.45 system-ui, sans-serif; color: #17211d; background: #f3f5f1; }
     * { box-sizing: border-box; }
@@ -430,8 +448,8 @@ export function renderShopPilotOwnerInputForm() {
 <body>
 <main>
   <header>
-    <h1>Spa pilot owner intake</h1>
-    <p>Complete this privately with the Spa owner. Nothing is uploaded or sent. The button downloads one local <strong>owner-input.json</strong> file.</p>
+    <h1>Shop pilot owner intake</h1>
+    <p>Complete this privately with the Shop owner. Nothing is uploaded or sent. The button downloads one local <strong>owner-input.json</strong> file.</p>
   </header>
   <section>
     <h2>1. Pilot setup</h2>
@@ -443,7 +461,8 @@ export function renderShopPilotOwnerInputForm() {
     </div>
   </section>
   <section>
-    <h2>2. Measure the current Spa workflow</h2>
+    <h2>2. Spa services vertical pack</h2>
+    <p>These fields are only for the Spa services vertical pack: client import, package sale, and treatment redemption.</p>
     <div class="grid">
       <label>Reviewed client rows <input id="clientImportRowCount" type="number" min="1" max="100000" step="1" required></label>
       <label>Weekly package sales <input id="weeklyPackageSales" type="number" min="1" max="100000" step="1" required></label>
@@ -457,7 +476,7 @@ export function renderShopPilotOwnerInputForm() {
     <p class="boundary">Every gate starts off. Check only what the owner has actually reviewed and approved.</p>
     <div class="checks">
       <label class="check"><input id="contactIsNamedOperator" type="checkbox"><span>The contact is the named daily operator.</span></label>
-      <label class="check"><input id="contactBaselineReviewed" type="checkbox"><span>The owner reviewed the captured Shop baseline and Spa measurements.</span></label>
+      <label class="check"><input id="contactBaselineReviewed" type="checkbox"><span>The owner reviewed the captured Shop baseline and Spa services vertical pack measurements.</span></label>
       <label class="check"><input id="isolatedNonProductionTenantApproved" type="checkbox"><span>The owner approved this isolated non-production workspace label.</span></label>
       <label class="check"><input id="namedOperatorAuthorized" type="checkbox"><span>The named operator is authorized for the five-day rehearsal.</span></label>
       <label class="check"><input id="pilotDataHandlingApproved" type="checkbox"><span>The owner reviewed private data handling and backup boundaries.</span></label>
@@ -489,6 +508,9 @@ export function renderShopPilotOwnerInputForm() {
       return;
     }
     const payload = {
+      product: '${SHOP_PILOT_PRODUCT}',
+      pilotMode: '${SHOP_PILOT_MODE}',
+      verticalPack: '${SHOP_PILOT_VERTICAL_PACK}',
       tenantLabel: field('tenantLabel').value.trim(),
       startDate: field('startDate').value,
       reviewDate: field('reviewDate').value,
@@ -529,7 +551,7 @@ Do not commit, publish, sync publicly, or send this folder. It contains one cust
 
 ## 1. Review the intake
 
-Open \`owner-input-form.html\` in a browser and complete it privately with the Spa owner. It works offline, sends nothing, and downloads \`owner-input.json\`. Move that downloaded file into this folder, replacing only the blank template. Every authority flag starts false.
+Open \`owner-input-form.html\` in a browser and complete it privately with the Shop owner. It works offline, sends nothing, and downloads \`owner-input.json\`. Move that downloaded file into this folder, replacing only the blank template. Every authority flag starts false.
 
 ## 2. Prepare the private handoff and reply
 
@@ -541,11 +563,11 @@ This creates \`private-handoff.md\`, \`private-reply.txt\`, and a digest-bound \
 
 ## 2b. Create the protected Shop portal workspace
 
-After preparation succeeds, create the client's isolated Spa-configured Shop workspace with one command:
+After preparation succeeds, create the client's isolated Shop workspace with the Spa services vertical pack using one command:
 
 \`npm.cmd run client:pilot:workspace -- --create-client-workspace --workspace "<this-folder>" --client-workspace "<new-private-client-portal-folder>" --implementation-owner "<responsible SuperMega operator>"\`
 
-This retains only reviewed workspace context and source digests, creates the Spa CSV starter locally, and performs no hosted write or activation.
+This retains only reviewed workspace context and source digests, creates the Spa services CSV starter locally, and performs no hosted write or activation.
 
 ## 3. Record the owner decision
 
@@ -564,6 +586,9 @@ Approval permits only the owner to manually send the exact reviewed reply after 
 function manifest(contactText) {
   return {
     contract: SHOP_PILOT_SALES_WORKSPACE_CONTRACT,
+    product: SHOP_PILOT_PRODUCT,
+    pilotMode: SHOP_PILOT_MODE,
+    verticalPack: SHOP_PILOT_VERTICAL_PACK,
     source: {
       contactEventSha256: sha256(contactText),
       sanitized: true,
@@ -629,6 +654,9 @@ async function readWorkspaceFoundation(workspace) {
     storedOwnerForm !== renderShopPilotOwnerInputForm()
     ||
     storedManifest.contract !== SHOP_PILOT_SALES_WORKSPACE_CONTRACT
+    || storedManifest.product !== SHOP_PILOT_PRODUCT
+    || storedManifest.pilotMode !== SHOP_PILOT_MODE
+    || storedManifest.verticalPack !== SHOP_PILOT_VERTICAL_PACK
     || storedManifest.source?.sanitized !== true
     || storedManifest.source?.contactEventSha256 !== sha256(storedContactText)
     || storedManifest.authority?.automaticSendAllowed !== false
