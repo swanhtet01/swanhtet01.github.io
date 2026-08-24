@@ -73,6 +73,7 @@
     "website:content:verify": "node tools/test_website_content_summary.mjs",
     "website:publish:readiness:verify": "node tools/test_website_publish_readiness_summary.mjs",
     "website:evidence:verify": "node tools/test_website_evidence_summary.mjs",
+    "website:managed:brief:acceptance:verify": "node tools/test_website_managed_brief_acceptance.mjs",
     "website:trade-brief:verify": "node tools/test_website_trade_brief.mjs",
     "website:trade-detect:verify": "node tools/test_website_trade_detection.mjs",
     "ecommerce:returns:verify": "node tools/test_ecommerce_return_intent.mjs",
