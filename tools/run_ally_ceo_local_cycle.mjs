@@ -963,6 +963,17 @@ function parseQueueResult(text, queueId) {
   return { queueId: match[1], jobId: match[2], qualityPassed: match[3] === 'passed', reportPath: match[4].trim() }
 }
 
+function activeExecutionOrderWorkboard(workboard) {
+  const marker = '## Execution order'
+  const source = String(workboard || '').replace(/\r\n?/g, '\n')
+  const start = source.indexOf(marker)
+  if (start < 0 || (start > 0 && source[start - 1] !== '\n')) fail('ally_ceo_local_cycle_workboard_execution_order_missing')
+  const next = source.indexOf('\n## ', start + marker.length)
+  const section = source.slice(start, next < 0 ? source.length : next).trim()
+  if (!section) fail('ally_ceo_local_cycle_workboard_execution_order_missing')
+  return `# SuperMega work board\n\n${section}\n`
+}
+
 async function currentPlan(now, completedOutcomeIds = []) {
   const [hqNow, workboard, portfolioText, completedAutomationArchiveText, managedReadinessText] = await Promise.all([
     readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
@@ -971,7 +982,15 @@ async function currentPlan(now, completedOutcomeIds = []) {
     readFile(resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-225.json'), 'utf8'),
     readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'),
   ])
-  return buildAllyCeoCompanyPlan({ now, hqNow, workboard, portfolioText, completedAutomationArchiveText, managedReadinessText, completedOutcomeIds })
+  return buildAllyCeoCompanyPlan({
+    now,
+    hqNow,
+    workboard: activeExecutionOrderWorkboard(workboard),
+    portfolioText,
+    completedAutomationArchiveText,
+    managedReadinessText,
+    completedOutcomeIds,
+  })
 }
 
 function limitedEnvironment(localCompanyRoot) {

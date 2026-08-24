@@ -1,8 +1,8 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
   "pilotMode": "owner_named",
-  "asOf": "2026-08-12T15:57:27.130Z",
-  "sourceDigest": "sha256:13642aabe124bc6d4635143d914dfd77b2e8337a062b1008b28409b8121ef18e",
+  "asOf": "2026-08-14T20:28:07.071Z",
+  "sourceDigest": "sha256:a1d76e5be88434c591c376877494fcce2a84c299e5347a300ae145c1da5ebf8e",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -150,9 +150,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "shop-managed-order-close-pilot",
-      "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-      "blockingReason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it.",
-      "requiredProof": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+      "proposedWork": "Shop: prove one named order-to-close and return on an approved tenant.",
+      "blockingReason": "Needs a named operator and approved tenant.",
+      "requiredProof": "Prove one named five-day order-to-close and return on an isolated tenant."
     },
     {
       "productId": "plant",
@@ -160,9 +160,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "plant-managed-oee-pilot",
-      "proposedWork": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
-      "blockingReason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input.",
-      "requiredProof": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
+      "proposedWork": "Plant: prove one named OEE pilot on an approved tenant.",
+      "blockingReason": "Needs named timing evidence and approved tenant.",
+      "requiredProof": "Prove one isolated order-bound OEE window with named operators, exact downtime, and correction effort."
     },
     {
       "productId": "website",
@@ -170,9 +170,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "website-managed-brief-acceptance",
-      "proposedWork": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
-      "blockingReason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate.",
-      "requiredProof": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
+      "proposedWork": "Website: retain one accepted named brief.",
+      "blockingReason": "Needs named brief and approval.",
+      "requiredProof": "Accept one named brief, retain it, and keep publishing owner-gated."
     },
     {
       "productId": "ecommerce",
@@ -180,9 +180,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "ecommerce-managed-order-exception-pilot",
-      "proposedWork": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
-      "blockingReason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence.",
-      "requiredProof": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+      "proposedWork": "Ecommerce: run one named checkout-to-exception pilot on an approved isolated tenant.",
+      "blockingReason": "Needs a named operator and approved tenant.",
+      "requiredProof": "Prove isolated managed checkout-to-Shop: approval, duplicate-safe recovery, and tax/shipping/payment adapters gated."
     }
   ],
   "controls": {
@@ -208,11 +208,11 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:35bd90de0ad6c7aacf6f1d6f94e6da0bfd94fdadb02723f7f070eda32db21d3d"
+      "digest": "sha256:070d2330ad101ca1d2e812fa05cb341cd5d07f2c4f1fd9f023027a0e1579e52a"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:dd11b7ed21e28971aea8a01d1a9ad9065c7a6b96658bc6a68fc0208e5c6fc620"
+      "digest": "sha256:e1816ca60b58705e45c1beeeaf58b66c44d8a896fd6f100b3c9d290f9967adee"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -224,15 +224,15 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:80c66b7f1ace7bb6a1b1c7d30acdaac15b891febf7bbfc50203d4f3750526d35"
+      "digest": "sha256:b652470696ed7a06d376e2d27b8c64f7b923e40692ee22388e7c6e4df810de26"
     },
     {
       "path": "package.json",
-      "digest": "sha256:66ad4eff87ccc830408e0978af92e353307c09a08d1e8f883ad2eabcac27dc08"
+      "digest": "sha256:65029029a675af0b83cc8e819dbe27a74c46db575b26c63362f0bf2bd2b63323"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:3fa2fdeed9d0b9ccdac817e8c34c21c6879fb55cb03a345b1efaf56b67164075"
+      "digest": "sha256:7f011c92aace462363d2e9247c6eaf126fce4def2291e7e613588443d76bb41e"
     }
   ]
 }

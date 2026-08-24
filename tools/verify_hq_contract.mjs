@@ -25,9 +25,15 @@ import {
   COMPANY_DAILY_BUDGET_HARD_MAX_UNITS,
 } from '../kernel/gateway.mjs'
 import {
-  buildManagedPilotDecisionPreview,
+  MANAGED_PILOT_READINESS_SOURCE_PATHS,
+  readinessDigest,
   validateManagedPilotReadiness,
 } from '../kernel/managed-pilot-readiness.mjs'
+import {
+  TECHNICAL_ESTATE_SOURCE_PATHS,
+  estateDigest,
+  validateTechnicalEstate,
+} from '../kernel/technical-estate.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoTaskText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
@@ -73,8 +79,30 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 const completedAutomationArchiveText = await readFile(resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-225.json'), 'utf8')
 const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
-const managedPilotDecisionPreview = buildManagedPilotDecisionPreview(managedPilotReadiness)
 const supabaseSecurityAudit = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json'), 'utf8'))
+const technicalEstate = validateTechnicalEstate(JSON.parse(await readFile(resolve(root, 'hq', 'technical-estate.json'), 'utf8')))
+const [managedPilotSourceTexts, technicalEstateSourceTexts] = await Promise.all([
+  Promise.all(MANAGED_PILOT_READINESS_SOURCE_PATHS.map(async (path) => [path, await readFile(resolve(root, path), 'utf8')])),
+  Promise.all(TECHNICAL_ESTATE_SOURCE_PATHS.map(async (path) => [path, await readFile(resolve(root, path), 'utf8')])),
+])
+const managedPilotSourceReceiptByPath = new Map(managedPilotSourceTexts)
+const technicalEstateSourceReceiptByPath = new Map(technicalEstateSourceTexts)
+const expectedManagedPilotSourceReceipts = MANAGED_PILOT_READINESS_SOURCE_PATHS.map((path) => ({
+  path,
+  digest: readinessDigest(managedPilotSourceReceiptByPath.get(path)),
+}))
+const expectedTechnicalEstateSourceReceipts = TECHNICAL_ESTATE_SOURCE_PATHS.map((path) => ({
+  path,
+  digest: estateDigest(technicalEstateSourceReceiptByPath.get(path)),
+}))
+
+const sourceReceiptMatches = (actual, expectedReceipts) => {
+  if (!Array.isArray(actual) || actual.length !== expectedReceipts.length) return false
+  return actual.every((entry, index) =>
+    entry?.path === expectedReceipts[index]?.path
+    && entry?.digest === expectedReceipts[index]?.digest
+  )
+}
 
 const manifest = JSON.parse(manifestText)
 const canonicalTextLength = (value) => value.replaceAll('\r\n', '\n').length
@@ -1607,14 +1635,17 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.vercelMutated === false)
 
 requireContract('managed pilot readiness is derived and fail closed',
-  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v3'
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v5'
+  && managedPilotReadiness.pilotMode === 'owner_named'
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
+  && managedPilotReadiness.overall?.productionSourceParityReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
-  && managedPilotReadiness.overall?.blockingGateCount === 7
-  && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
-  && managedPilotReadiness.overall?.nextAction?.decisionId === 'bounded-managed-pilot-rehearsal'
-  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_preview_branch_target,name_shop_pilot_operator'
+  && managedPilotReadiness.overall?.blockingGateCount === 6
+  && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((gate) => gate.status === 'blocked').length
+  && managedPilotReadiness.overall?.nextAction?.kind === 'owner_decision'
+  && managedPilotReadiness.overall?.nextAction?.decisionId === 'replace-failed-preview-and-prepare-owner-named-shop-pilot'
+  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_failed_preview_branch_deletion,confirm_preview_branch_cost,approve_preview_branch_target,name_shop_pilot_business,name_shop_pilot_operator'
   && managedPilotReadiness.overall?.nextAction?.targetEnvironment === 'preview_branch'
   && managedPilotReadiness.overall?.nextAction?.operatorProductId === 'shop'
   && managedPilotReadiness.overall?.nextAction?.maximumLifetimeHours === 24
@@ -1630,52 +1661,73 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.founderDecision?.target?.maximumLifetimeHours === 24
   && managedPilotReadiness.founderDecision?.target?.deleteAfterEvidence === true
   && managedPilotReadiness.founderDecision?.operator?.productId === 'shop'
+  && managedPilotReadiness.founderDecision?.operator?.pilotMode === 'owner_named'
+  && managedPilotReadiness.founderDecision?.operator?.namedBusinessRequired === true
+  && managedPilotReadiness.founderDecision?.operator?.namedOperatorRequired === true
+  && managedPilotReadiness.founderDecision?.operator?.requiredConsecutiveAcceptedRuns === 20
+  && managedPilotReadiness.founderDecision?.failedBranch?.observedStatus === 'MIGRATIONS_FAILED'
+  && managedPilotReadiness.founderDecision?.failedBranch?.deletionApproved === false
   && managedPilotReadiness.founderDecision?.proposedActions?.includes('delete_preview_branch_after_evidence')
   && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('production_database_change')
   && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('hosted_scheduler_activation')
   && managedPilotReadiness.controls?.externalWritesPerformed === false
-  && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
+  && managedPilotReadiness.controls?.connectorRequestsPerformedToBuild === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
   && managedPilotReadiness.sourceReceipts?.length === 7
-  && managedPilotDecisionPreview.contract === 'supermega.managed-pilot-decision-preview.v1'
-  && managedPilotDecisionPreview.options?.map((option) => option.productId).join(',') === 'shop,plant,website,ecommerce'
-  && managedPilotDecisionPreview.decision?.status === 'not_selected'
-  && managedPilotDecisionPreview.decision?.decisionRecorded === false
-  && managedPilotDecisionPreview.controls?.localWritesPerformed === false
-  && managedPilotDecisionPreview.controls?.externalWritesPerformed === false
-  && managedPilotDecisionPreview.controls?.activationPerformed === false
-  && JSON.parse(packageText).scripts?.['readiness:managed:decision'] === 'node tools/manage_managed_pilot_readiness.mjs --decision-preview'
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
-  && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v1'
+  && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
   && managedPilotReadiness.securityAudit?.findingCount === supabaseSecurityAudit.advisor?.findingCount
   && managedPilotReadiness.securityAudit?.liveSchemaVersion === supabaseSecurityAudit.managedBackend?.liveSchemaVersion
   && managedPilotReadiness.securityAudit?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
+  && managedPilotReadiness.securityAudit?.versionDrift === 0
+  && managedPilotReadiness.securityAudit?.publicBrowserObjectAccessDenied === true
+  && managedPilotReadiness.securityAudit?.futureProviderOwnedDefaultGrantRisk === true
+  && managedPilotReadiness.securityAudit?.managedWritesEnabled === false
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
-  && (
-    (managedPilotReadiness.securityAudit?.previewRehearsal?.status === 'not_proven'
-      && managedPilotReadiness.securityAudit?.previewRehearsal?.publicTableCount === null
-      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`
-      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction)
-    || (managedPilotReadiness.securityAudit?.previewRehearsal?.status === 'migration_failed'
-      && Number.isInteger(managedPilotReadiness.securityAudit?.previewRehearsal?.publicTableCount)
-      && managedPilotReadiness.gates?.find((gate) => gate.id === 'hosted_postgres17')?.evidence.includes('MIGRATIONS_FAILED')
-      && managedPilotReadiness.gates?.find((gate) => gate.id === 'hosted_postgres17')?.nextAction.includes('direct-admin rehearsal')
-      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence.includes(`${managedPilotReadiness.securityAudit.previewRehearsal.publicTableCount} public tables without RLS`)
-      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction.includes('direct-admin preview connection'))
-  )
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'production_source_parity')?.status === 'ready-metadata'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'preview_rehearsal')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'managed_persistence')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'hosted_storage_privacy')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'managed_security')?.evidence === `Current production objects fail closed with ${supabaseSecurityAudit.advisor?.findingCount} INFO-only RLS-without-policy findings, but provider-owned future-object defaults remain and no accepted isolated tenant, Auth, session-revocation, Storage, backup, or restore proof exists.`
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'managed_security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction
+  && sourceReceiptMatches(managedPilotReadiness.sourceReceipts, expectedManagedPilotSourceReceipts)
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'owner_named_pilot')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'production_activation')?.status === 'blocked'
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef
   && supabaseSecurityAudit.targetClassification === 'protected-production'
-  && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 7
+  && supabaseSecurityAudit.contract === 'supermega.supabase-security-advisor-audit.v2'
+  && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 10
   && supabaseSecurityAudit.managedBackend?.localTargetVersion === 10
+  && supabaseSecurityAudit.managedBackend?.versionDrift === 0
   && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
-  && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === false
+  && supabaseSecurityAudit.catalog?.browserPrivilegedTableCount === 0
+  && supabaseSecurityAudit.catalog?.browserPrivilegedSequenceCount === 0
+  && supabaseSecurityAudit.catalog?.publicViewCount === 0
+  && supabaseSecurityAudit.catalog?.publicRoutineCount === 0
+  && supabaseSecurityAudit.catalog?.browserCallableRoutineCount === 0
   && supabaseSecurityAudit.conclusion?.productionMutationAuthorized === false
   && supabaseSecurityAudit.controls?.databaseWrites === 0
   && packageText.includes('"readiness:supabase-security:verify": "node tools/verify_supabase_security_advisor_audit.mjs"')
-  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_managed_pilot_readiness.mjs --verify && npm run company:ally:autonomy:self-test && node tools/verify_hq_contract.mjs'))
+  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_managed_pilot_readiness.mjs --verify && npm run technical:estate:verify && npm run company:ally:autonomy:self-test && node tools/verify_hq_contract.mjs'))
+
+requireContract('technical estate is generated and owner gated',
+  technicalEstate.contract === 'supermega.technical-estate.v1'
+  && technicalEstate.products?.map((product) => product.productId).join(',') === 'shop,plant,website,ecommerce'
+  && technicalEstate.sharedCapabilities?.map((capability) => capability.id).join(',') === 'ai-assistance'
+  && technicalEstate.infrastructure?.github?.autoMergeEnabled === false
+  && technicalEstate.infrastructure?.vercel?.canonicalProjects?.map((project) => project.name).join(',') === 'supermega-public,megaos'
+  && technicalEstate.infrastructure?.vercel?.observedProjects?.length === 13
+  && technicalEstate.infrastructure?.supabase?.liveManagedSchemaVersion === 10
+  && technicalEstate.infrastructure?.supabase?.managedWritesEnabled === false
+  && technicalEstate.satellites?.some((entry) => entry.name === 'supermega-workspace' && entry.classification === 'satellite')
+  && technicalEstate.legacyObservation?.minimumDays === 30
+  && technicalEstate.controls?.externalWritesPerformed === false
+  && technicalEstate.controls?.ownerApprovalRequired === true
+  && sourceReceiptMatches(technicalEstate.sourceReceipts, expectedTechnicalEstateSourceReceipts)
+  && packageText.includes('"technical:estate:verify": "node tools/manage_technical_estate.mjs --verify"'))
 
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')

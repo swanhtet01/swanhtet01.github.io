@@ -1,0 +1,312 @@
+{
+  "contract": "supermega.technical-estate.v1",
+  "generatedFromAsOf": "2026-08-12T15:24:56.127Z",
+  "sourceDigest": "sha256:877cdd3dbb0140a6e36a18172b7dc23e767b52217ef95633a688f1f0b3d91da7",
+  "status": "frozen_pending_owner_gates",
+  "releaseFreeze": {
+    "status": "active",
+    "reason": "source_recovery_parity_and_public_credential_incident",
+    "blocks": [
+      "merge",
+      "release",
+      "production_database_write",
+      "managed_activation"
+    ]
+  },
+  "authority": {
+    "localPath": "C:\\Users\\thesw\\Projects\\supermega-platform",
+    "repository": "swanhtet01/swanhtet01.github.io",
+    "defaultBranch": "main",
+    "observedCommit": "4ce500c29b1cca9617eeba83528293bc1af6c83e"
+  },
+  "products": [
+    {
+      "productId": "shop",
+      "name": "Shop",
+      "kind": "operating-product",
+      "lifecycleState": "owner-named-pilot-preparation",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "canonicalSourcePath": "showroom/src/core",
+      "appPath": "/shop/",
+      "appRoute": "https://app.supermega.dev/shop/",
+      "releaseProjects": [
+        "supermega-public",
+        "megaos"
+      ],
+      "managedSchema": "app_private",
+      "migrationAuthority": "supabase/migrations",
+      "ownerGated": true
+    },
+    {
+      "productId": "plant",
+      "name": "Plant",
+      "kind": "operating-product",
+      "lifecycleState": "maintenance-only-until-shop-decision",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "canonicalSourcePath": "showroom/src/core",
+      "appPath": "/plant/",
+      "appRoute": "https://app.supermega.dev/plant/",
+      "releaseProjects": [
+        "supermega-public",
+        "megaos"
+      ],
+      "managedSchema": "app_private",
+      "migrationAuthority": "supabase/migrations",
+      "ownerGated": true
+    },
+    {
+      "productId": "website",
+      "name": "Website",
+      "kind": "maker-product",
+      "lifecycleState": "maintenance-only-until-shop-decision",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "canonicalSourcePath": "showroom/src/products/website",
+      "appPath": "/website/",
+      "appRoute": "https://app.supermega.dev/website/",
+      "releaseProjects": [
+        "supermega-public",
+        "megaos"
+      ],
+      "managedSchema": "app_private",
+      "migrationAuthority": "supabase/migrations",
+      "ownerGated": true
+    },
+    {
+      "productId": "ecommerce",
+      "name": "Ecommerce",
+      "kind": "maker-product",
+      "lifecycleState": "maintenance-only-until-shop-decision",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "canonicalSourcePath": "showroom/src/products/ecommerce",
+      "appPath": "/ecommerce/",
+      "appRoute": "https://app.supermega.dev/ecommerce/",
+      "releaseProjects": [
+        "supermega-public",
+        "megaos"
+      ],
+      "managedSchema": "app_private",
+      "migrationAuthority": "supabase/migrations",
+      "ownerGated": true
+    }
+  ],
+  "sharedCapabilities": [
+    {
+      "id": "ai-assistance",
+      "name": "AI assistance",
+      "classification": "shared-capability-not-product",
+      "status": "gated-r-and-d"
+    }
+  ],
+  "infrastructure": {
+    "github": {
+      "repository": "swanhtet01/swanhtet01.github.io",
+      "defaultBranch": "main",
+      "releaseWorkflow": ".github/workflows/supermega-public-release.yml",
+      "autoMergeEnabled": false,
+      "mainRuleset": {
+        "observedState": "missing",
+        "observedAt": "2026-08-12T15:24:56.127Z",
+        "blocksForcePush": false,
+        "blocksDeletion": false,
+        "requiresPullRequest": false,
+        "requiresResolvedConversations": false,
+        "requiredChecks": []
+      },
+      "requiredBeforeR1Merge": {
+        "blocksForcePush": true,
+        "blocksDeletion": true,
+        "requiresPullRequest": true,
+        "requiresResolvedConversations": true,
+        "requiredChecks": [
+          "SuperMega App CI",
+          "Dependency Security Audit",
+          "Kernel Console - Verify & Owner-Gated Release"
+        ]
+      }
+    },
+    "vercel": {
+      "teamId": "team_wI4l7ZgSxcEztQPSlCCYVeJ5",
+      "canonicalProjects": [
+        {
+          "name": "supermega-public",
+          "projectId": "prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR",
+          "domains": [
+            "supermega.dev",
+            "www.supermega.dev"
+          ],
+          "role": "public"
+        },
+        {
+          "name": "megaos",
+          "projectId": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
+          "domains": [
+            "app.supermega.dev"
+          ],
+          "role": "app"
+        }
+      ],
+      "observedProjects": [
+        {
+          "name": "factory-os",
+          "projectId": "prj_qWggbQffZC19uFPQqAqs7VYq25ko",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "kernel",
+          "projectId": "prj_dhufUTxN3cPg9G2K2JlMWbTsVq37",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "megaos",
+          "projectId": "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG",
+          "classification": "canonical"
+        },
+        {
+          "name": "payslip-maker",
+          "projectId": "prj_zgbWmrtGU0kFMxxEUVNhqKcMCweD",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "spa-desk-pilot",
+          "projectId": "prj_ydSqFTuIcVBwVr61BGfxMUxrxueG",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "supermega-demo",
+          "projectId": "prj_OIMMOqLyHDb5J0okIwhn8BS1Ea1h",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "supermega-machine",
+          "projectId": "prj_emRWl41fC3dtK4VmUbXLGMmIcqhX",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "supermega-platform",
+          "projectId": "prj_XtqLLba4RX03FsS9LwwVQaXvNsVc",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "supermega-public",
+          "projectId": "prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR",
+          "classification": "canonical"
+        },
+        {
+          "name": "swanhtet01.github.io",
+          "projectId": "prj_jCl9c6cRPbt5uZO5xsseVE0drVyH",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "us-somehow-swan-vivian",
+          "projectId": "prj_vGUwoVOTpgmBwRWFoQWe1i7hHDhh",
+          "classification": "legacy-observe"
+        },
+        {
+          "name": "ytf-app",
+          "projectId": "prj_5pqyUriVVgvYHalxamEz5geLcL17",
+          "classification": "satellite-observe"
+        },
+        {
+          "name": "ytf-insights-preview",
+          "projectId": "prj_RDUbvZ4w0mT8Xfom19wU2Nb8u56D",
+          "classification": "satellite-observe"
+        }
+      ]
+    },
+    "supabase": {
+      "projectName": "supermegabase",
+      "projectRef": "zvtzwcimpvvtkowflhda",
+      "region": "us-east-1",
+      "postgresVersion": "17.6.1.110",
+      "migrationAuthority": "supabase/migrations",
+      "managedSchema": "app_private",
+      "liveManagedSchemaVersion": 10,
+      "publicBrowserQuarantineVersion": "20260812141352",
+      "publicBrowserObjectAccessDenied": true,
+      "managedWritesEnabled": false,
+      "failedRehearsalBranch": {
+        "name": "security-rehearsal-24h-20260812",
+        "projectRef": "usmpllbckvrucbjptiuq",
+        "status": "MIGRATIONS_FAILED",
+        "deletionApproved": false
+      }
+    }
+  },
+  "satellites": [
+    {
+      "name": "supermega-workspace",
+      "repository": "swanhtet01/supermega-workspace",
+      "localPath": "C:\\Users\\thesw\\Projects\\supermega-workspace",
+      "classification": "satellite"
+    },
+    {
+      "name": "local-agent-company",
+      "localPath": "C:\\Users\\thesw\\Projects\\local-agent-company",
+      "classification": "local-operations"
+    },
+    {
+      "name": "ally-agent-host",
+      "localPath": "C:\\Users\\thesw\\Projects\\ally-agent-host",
+      "classification": "local-operations"
+    },
+    {
+      "name": "supermega-vision",
+      "localPath": "C:\\Users\\thesw\\Projects\\supermega-vision",
+      "classification": "r-and-d"
+    }
+  ],
+  "legacyObservation": {
+    "minimumDays": 30,
+    "retirementRequires": [
+      "no_repository_dns_webhook_workflow_or_customer_dependency",
+      "no_observed_traffic_where_telemetry_exists",
+      "retained_rollback_or_redirect_plan",
+      "separate_owner_approval_per_target"
+    ],
+    "preserveWhenTrafficTelemetryUnavailable": true,
+    "runtimeLogsAloneProveUnused": false
+  },
+  "ownerGates": [
+    "production_release",
+    "migration",
+    "external_write",
+    "credential_change",
+    "github_setting_change",
+    "supabase_branch_create_or_delete",
+    "pilot_contact",
+    "payment",
+    "publishing",
+    "domain_change",
+    "managed_activation"
+  ],
+  "cadence": {
+    "daily": "read_only_drift_and_provider_health",
+    "weekly": "one_prioritized_work_order_and_one_bounded_r_and_d_decision",
+    "monthly": "dependency_restore_access_advisor_and_legacy_review"
+  },
+  "controls": {
+    "generatedDeterministically": true,
+    "externalWritesPerformed": false,
+    "productionWritesEnabled": false,
+    "autoMergeEnabled": false,
+    "ownerApprovalRequired": true
+  },
+  "sourceReceipts": [
+    {
+      "path": "hq/technical-estate-source.json",
+      "digest": "sha256:dbc8bbb10d6cc0029ad4f8568da789f45c2cce39f36e1bcfd9ba4f72ae1e819f"
+    },
+    {
+      "path": "hq/portfolio.json",
+      "digest": "sha256:070d2330ad101ca1d2e812fa05cb341cd5d07f2c4f1fd9f023027a0e1579e52a"
+    },
+    {
+      "path": "site-manifest.json",
+      "digest": "sha256:ba1c53e2418b477b3a5605fef3fb8a466f93e6b63dc13773963cdef59cedbdfc"
+    },
+    {
+      "path": ".github/workflows/supermega-public-release.yml",
+      "digest": "sha256:87661433d290a1c9e489d77b67987f5b3b90d252d2cfef7c6246f675eb22a04e"
+    }
+  ]
+}

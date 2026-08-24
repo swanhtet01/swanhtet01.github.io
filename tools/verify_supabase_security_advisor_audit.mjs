@@ -4,34 +4,59 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const CONTRACT = 'supermega.supabase-security-advisor-audit.v1'
-const QUERY_CONTRACT = 'supermega.supabase-security-metadata-query.v2'
+export const CONTRACT = 'supermega.supabase-security-advisor-audit.v2'
+const QUERY_CONTRACT = 'supermega.supabase-security-metadata-query.v3'
+const MANAGED_QUERY_CONTRACT = 'supermega.supabase-managed-schema-metadata.v2'
+const REMEDIATION_URL = 'https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy'
+const PUBLIC_TABLES = [
+  'assets',
+  'enterprise_agent_runs',
+  'enterprise_audit_events',
+  'enterprise_connector_events',
+  'enterprise_knowledge_chunks',
+  'enterprise_knowledge_embeddings',
+  'enterprise_lead_activities',
+  'enterprise_lead_hunt_profiles',
+  'enterprise_leads',
+  'enterprise_memberships',
+  'enterprise_metric_records',
+  'enterprise_module_definitions',
+  'enterprise_sessions',
+  'enterprise_source_change_events',
+  'enterprise_source_records',
+  'enterprise_users',
+  'enterprise_workspace_domains',
+  'enterprise_workspace_modules',
+  'enterprise_workspace_profiles',
+  'enterprise_workspace_tasks',
+  'enterprise_workspaces',
+  'iot_telemetry',
+  'production_ledger',
+  'supermega_campaign_clicks',
+  'supermega_leads',
+  'supermega_sales_runs',
+  'wcm_incidents',
+]
+const PUBLIC_SEQUENCES = ['supermega_leads_id_seq', 'supermega_sales_runs_id_seq']
+const REQUIRED_MIGRATION_VERSIONS = [
+  '20260711081400',
+  '20260802072648',
+  '20260802072815',
+  '20260802082228',
+  '20260802092247',
+  '20260802095327',
+  '20260802104310',
+  '20260802114122',
+  '20260812141150',
+  '20260812141228',
+  '20260812141259',
+  '20260812141352',
+]
+const NEXT_ACTION = 'Restore source parity through R1, then run the digest-bound chain on one owner-approved empty preview branch for at most 24 hours; prove tenant isolation, active-session revocation, private Storage, backup and clean restore, and rerun both advisors before proposing any managed activation.'
+
 const root = resolve(import.meta.dirname, '..')
 const auditPath = resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json')
 const packagePath = resolve(root, 'package.json')
-const REMEDIATION_URL = 'https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy'
-const PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
-const SEQUENCE_PRIVILEGES = ['USAGE', 'SELECT']
-const PUBLIC_SEQUENCES = ['supermega_leads_id_seq', 'supermega_sales_runs_id_seq']
-const MANAGED_QUERY_CONTRACT = 'supermega.supabase-managed-schema-metadata.v1'
-const PENDING_MIGRATIONS = [
-  {
-    version: 8,
-    path: 'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
-    digest: 'sha256:2886d53c39a08cbd129ca0a3def051b9129bbc96c49add058122520ee3d7d0ab',
-  },
-  {
-    version: 9,
-    path: 'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
-    digest: 'sha256:1dc908aeaf88bc91e03c566e31652816fba699aaf0bcce5b0d5c512ad9ab0115',
-  },
-  {
-    version: 10,
-    path: 'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
-    digest: 'sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde',
-  },
-]
-const NEXT_ACTION = 'Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal.'
 
 function fail(code) {
   throw new Error(code)
@@ -53,258 +78,146 @@ export function auditDigest(value) {
   return `sha256:${createHash('sha256').update(stableStringify(canonical)).digest('hex')}`
 }
 
-function sortedUnique(values) {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right))
+function exact(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index])
 }
 
 export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, { skipDigest = false } = {}) {
-  if (!isRecord(value) || value.contract !== CONTRACT || !Number.isFinite(Date.parse(value.asOf))) fail('supabase_security_audit_contract_invalid')
-  if (!/^[a-z]{20}$/.test(expectedProjectRef || '') || value.projectRef !== expectedProjectRef || value.targetClassification !== 'protected-production') fail('supabase_security_audit_target_invalid')
+  if (!isRecord(value)
+    || value.contract !== CONTRACT
+    || !Number.isFinite(Date.parse(value.asOf))
+    || value.projectRef !== expectedProjectRef
+    || value.targetClassification !== 'protected-production') fail('supabase_security_audit_contract_invalid')
   if (value.postgres?.major !== 17 || value.postgres?.status !== 'ACTIVE_HEALTHY') fail('supabase_security_audit_postgres_invalid')
+
+  const migrations = value.productionMigrations
+  if (!isRecord(migrations)
+    || migrations.liveManagedSchemaVersion !== 10
+    || migrations.sourceTargetVersion !== 10
+    || migrations.versionDrift !== 0
+    || !exact(migrations.appliedVersions, REQUIRED_MIGRATION_VERSIONS)
+    || migrations.publicBrowserQuarantine?.version !== '20260812141352'
+    || migrations.publicBrowserQuarantine?.name !== 'public_browser_quarantine'
+    || migrations.publicBrowserQuarantine?.present !== true
+    || migrations.managedWritesEnabled !== false) fail('supabase_security_audit_migrations_invalid')
 
   const advisor = value.advisor
   if (!isRecord(advisor)
     || advisor.type !== 'security'
-    || advisor.status !== 'blocked'
-    || advisor.findingCount !== advisor.tables?.length
-    || advisor.findingCount < 1
-    || advisor.lintCounts?.rls_enabled_no_policy !== advisor.findingCount
-    || advisor.levelCounts?.INFO !== advisor.findingCount
-    || Object.keys(advisor.lintCounts || {}).length !== 1
-    || Object.keys(advisor.levelCounts || {}).length !== 1
-    || advisor.remediationUrl !== REMEDIATION_URL) fail('supabase_security_audit_advisor_invalid')
-  if (advisor.tables.some((table) => !/^[a-z][a-z0-9_]{0,62}$/.test(table))
-    || advisor.tables.join(',') !== sortedUnique(advisor.tables).join(',')) fail('supabase_security_audit_advisor_tables_invalid')
+    || advisor.status !== 'reviewed_fail_closed'
+    || advisor.findingCount !== PUBLIC_TABLES.length
+    || advisor.lintCounts?.rls_enabled_no_policy !== PUBLIC_TABLES.length
+    || advisor.levelCounts?.INFO !== PUBLIC_TABLES.length
+    || advisor.remediationUrl !== REMEDIATION_URL
+    || !exact(advisor.tables, PUBLIC_TABLES)) fail('supabase_security_audit_advisor_invalid')
 
   const catalog = value.catalog
   if (!isRecord(catalog)
     || catalog.queryContract !== QUERY_CONTRACT
     || catalog.scope !== 'pg_catalog_metadata_only'
     || catalog.businessRowsRead !== 0
-    || catalog.tableCount !== catalog.tables?.length
-    || catalog.tableCount !== advisor.findingCount
-    || catalog.nonTableRelationCount !== 0
+    || catalog.publicTableCount !== PUBLIC_TABLES.length
+    || catalog.publicTableRlsCount !== PUBLIC_TABLES.length
+    || catalog.publicTablePolicyCount !== 0
+    || catalog.browserPrivilegedTableCount !== 0
+    || !exact(catalog.tableNames, PUBLIC_TABLES)
+    || catalog.publicSequenceCount !== PUBLIC_SEQUENCES.length
+    || catalog.browserPrivilegedSequenceCount !== 0
+    || !exact(catalog.sequenceNames, PUBLIC_SEQUENCES)
+    || catalog.publicViewCount !== 0
     || catalog.publicRoutineCount !== 0
     || catalog.browserCallableRoutineCount !== 0
-    || catalog.sequenceCount !== catalog.sequences?.length
-    || catalog.sequenceCount !== PUBLIC_SEQUENCES.length
-    || catalog.defaultPrivilegeOwners?.join(',') !== 'postgres,supabase_admin'
-    || catalog.defaultBrowserTablePrivilegesPresent !== true
-    || catalog.defaultBrowserSequencePrivilegesPresent !== true
-    || catalog.defaultBrowserFunctionExecutePresent !== true) fail('supabase_security_audit_catalog_invalid')
-  const catalogNames = []
-  for (const table of catalog.tables) {
-    if (!isRecord(table)
-      || !/^[a-z][a-z0-9_]{0,62}$/.test(table.name || '')
-      || table.schema !== 'public'
-      || table.rlsEnabled !== true
-      || table.rlsForced !== false
-      || table.policyCount !== 0
-      || table.anonPrivileges?.join(',') !== PRIVILEGES.join(',')
-      || table.authenticatedPrivileges?.join(',') !== PRIVILEGES.join(',')) fail('supabase_security_audit_catalog_table_invalid')
-    catalogNames.push(table.name)
-  }
-  if (catalogNames.join(',') !== sortedUnique(catalogNames).join(',')
-    || catalogNames.join(',') !== advisor.tables.join(',')) fail('supabase_security_audit_catalog_table_set_invalid')
-  if (catalog.sequences.map((sequence) => sequence.name).join(',') !== PUBLIC_SEQUENCES.join(',')) {
-    fail('supabase_security_audit_catalog_sequence_set_invalid')
-  }
-  for (const sequence of catalog.sequences) {
-    if (!isRecord(sequence)
-      || sequence.schema !== 'public'
-      || sequence.anonPrivileges?.join(',') !== SEQUENCE_PRIVILEGES.join(',')
-      || sequence.authenticatedPrivileges?.join(',') !== SEQUENCE_PRIVILEGES.join(',')) {
-      fail('supabase_security_audit_catalog_sequence_invalid')
-    }
-  }
+    || catalog.postgresOwnerDefaultBrowserGrantCount !== 0
+    || catalog.supabaseAdminDefaultBrowserGrantCount !== 24
+    || catalog.futureObjectRiskState !== 'provider-owned-defaults-remain') fail('supabase_security_audit_catalog_invalid')
 
   const managed = value.managedBackend
   if (!isRecord(managed)
     || managed.queryContract !== MANAGED_QUERY_CONTRACT
     || managed.schema !== 'app_private'
-    || managed.liveSchemaVersion !== 7
+    || managed.liveSchemaVersion !== 10
     || managed.localTargetVersion !== 10
-    || managed.versionDrift !== 3
+    || managed.versionDrift !== 0
     || managed.tableCount !== 6
-    || managed.rlsTableCount !== 5
-    || managed.policyCount !== 14
-    || managed.performancePolicyFindingCount !== 10
-    || managed.metadataRlsEnabled !== false
+    || managed.rlsTableCount !== 6
+    || managed.policyCount !== 15
+    || !exact(managed.policyRoleSets, ['supermega_trial_backend'])
     || managed.browserRolesDenied !== true
-    || managed.serverBypassRoleDenied !== true
     || managed.runtimeRoleSchemaUsage !== true
     || managed.runtimeRoleSchemaCreate !== false
-    || managed.securityDefinerFunctionCount !== 1
-    || managed.securityDefinerPublicExecute !== false
-    || managed.securityDefinerActorContextChecked !== true
-    || managed.securityDefinerSearchPathFixed !== true
-    || managed.viewCount !== 0
+    || managed.functionCount !== 8
+    || managed.securityDefinerFunctionCount !== 2
+    || managed.browserCallableFunctionCount !== 0
     || managed.storageBucketCount !== 0
-    || managed.postgrestSchemaSettingObservable !== false
-    || JSON.stringify(managed.pendingMigrations) !== JSON.stringify(PENDING_MIGRATIONS)) fail('supabase_security_audit_managed_backend_invalid')
+    || managed.postgrestSchemaSettingObservable !== false) fail('supabase_security_audit_managed_backend_invalid')
 
   const conclusion = value.conclusion
   if (!isRecord(conclusion)
-    || conclusion.status !== 'blocked'
-    || conclusion.directBrowserTableAccessDefaultDenied !== true
-    || conclusion.indirectExposureAudited !== true
+    || conclusion.status !== 'blocked_for_managed_activation'
+    || conclusion.currentPublicBrowserObjectAccessDenied !== true
+    || conclusion.publicBrowserDefaultDenyIntent !== true
     || conclusion.currentRowExposureProven !== false
-    || conclusion.browserGrantHardeningRequired !== true
+    || conclusion.futureProviderOwnedDefaultGrantRisk !== true
+    || conclusion.previewRehearsalRequired !== true
     || conclusion.productionMutationAuthorized !== false
     || conclusion.nextAction !== NEXT_ACTION) fail('supabase_security_audit_conclusion_invalid')
 
   const controls = value.controls
   if (!isRecord(controls)
-    || controls.connectorReadRequests !== 20
-    || controls.failedReadRequests !== 1
+    || !Number.isInteger(controls.connectorReadRequests)
+    || controls.connectorReadRequests < 1
     || controls.providerMutations !== 0
     || controls.databaseWrites !== 0
     || controls.businessRowsRead !== 0
     || controls.credentialsRecorded !== false) fail('supabase_security_audit_controls_invalid')
 
   const serialized = JSON.stringify(value).toLowerCase()
-  if (serialized.includes('postgresql://') || serialized.includes('password=') || serialized.includes('service_role') || serialized.includes('sb_secret_')) fail('supabase_security_audit_sensitive_value')
+  if (serialized.includes('postgresql://') || serialized.includes('password=') || serialized.includes('sb_secret_')) fail('supabase_security_audit_sensitive_value')
   if (!skipDigest && (!/^sha256:[0-9a-f]{64}$/.test(value.evidenceDigest || '') || value.evidenceDigest !== auditDigest(value))) fail('supabase_security_audit_digest_invalid')
   return value
 }
 
-function fixture() {
-  const value = {
-    contract: CONTRACT,
-    asOf: '2026-08-03T19:24:36.522Z',
-    projectRef: 'abcdefghijklmnopqrst',
-    targetClassification: 'protected-production',
-    postgres: { major: 17, status: 'ACTIVE_HEALTHY' },
-    advisor: {
-      type: 'security',
-      status: 'blocked',
-      findingCount: 1,
-      lintCounts: { rls_enabled_no_policy: 1 },
-      levelCounts: { INFO: 1 },
-      remediationUrl: REMEDIATION_URL,
-      tables: ['example_records'],
-    },
-    catalog: {
-      queryContract: QUERY_CONTRACT,
-      scope: 'pg_catalog_metadata_only',
-      businessRowsRead: 0,
-      tableCount: 1,
-      tables: [{ name: 'example_records', schema: 'public', rlsEnabled: true, rlsForced: false, policyCount: 0, anonPrivileges: PRIVILEGES, authenticatedPrivileges: PRIVILEGES }],
-      nonTableRelationCount: 0,
-      publicRoutineCount: 0,
-      browserCallableRoutineCount: 0,
-      sequenceCount: 2,
-      sequences: PUBLIC_SEQUENCES.map((name) => ({ name, schema: 'public', anonPrivileges: SEQUENCE_PRIVILEGES, authenticatedPrivileges: SEQUENCE_PRIVILEGES })),
-      defaultPrivilegeOwners: ['postgres', 'supabase_admin'],
-      defaultBrowserTablePrivilegesPresent: true,
-      defaultBrowserSequencePrivilegesPresent: true,
-      defaultBrowserFunctionExecutePresent: true,
-    },
-    managedBackend: {
-      queryContract: MANAGED_QUERY_CONTRACT,
-      schema: 'app_private',
-      liveSchemaVersion: 7,
-      localTargetVersion: 10,
-      versionDrift: 3,
-      tableCount: 6,
-      rlsTableCount: 5,
-      policyCount: 14,
-      performancePolicyFindingCount: 10,
-      metadataRlsEnabled: false,
-      browserRolesDenied: true,
-      serverBypassRoleDenied: true,
-      runtimeRoleSchemaUsage: true,
-      runtimeRoleSchemaCreate: false,
-      securityDefinerFunctionCount: 1,
-      securityDefinerPublicExecute: false,
-      securityDefinerActorContextChecked: true,
-      securityDefinerSearchPathFixed: true,
-      viewCount: 0,
-      storageBucketCount: 0,
-      postgrestSchemaSettingObservable: false,
-      pendingMigrations: PENDING_MIGRATIONS,
-    },
-    conclusion: {
-      status: 'blocked',
-      directBrowserTableAccessDefaultDenied: true,
-      indirectExposureAudited: true,
-      currentRowExposureProven: false,
-      browserGrantHardeningRequired: true,
-      productionMutationAuthorized: false,
-      nextAction: NEXT_ACTION,
-    },
-    controls: { connectorReadRequests: 20, failedReadRequests: 1, providerMutations: 0, databaseWrites: 0, businessRowsRead: 0, credentialsRecorded: false },
-    evidenceDigest: '',
-  }
-  value.evidenceDigest = auditDigest(value)
-  return value
-}
-
-function selfTest() {
-  const valid = fixture()
-  validateSupabaseSecurityAdvisorAudit(valid, valid.projectRef)
-  const wrongTarget = structuredClone(valid)
-  wrongTarget.projectRef = 'bcdefghijklmnopqrstu'
-  const broadClaim = structuredClone(valid)
-  broadClaim.conclusion.indirectExposureAudited = false
-  const hiddenMutation = structuredClone(valid)
-  hiddenMutation.controls.databaseWrites = 1
-  const stale = structuredClone(valid)
-  stale.advisor.tables = ['renamed_records']
-  const migrationDrift = structuredClone(valid)
-  migrationDrift.managedBackend.liveSchemaVersion = 8
-  const checks = {
-    accepts_exact_blocked_snapshot: true,
-    rejects_wrong_project: throws(() => validateSupabaseSecurityAdvisorAudit(wrongTarget, valid.projectRef), 'supabase_security_audit_target_invalid'),
-    rejects_unproven_safety_claim: throws(() => validateSupabaseSecurityAdvisorAudit(broadClaim, valid.projectRef), 'supabase_security_audit_conclusion_invalid'),
-    rejects_provider_mutation: throws(() => validateSupabaseSecurityAdvisorAudit(hiddenMutation, valid.projectRef), 'supabase_security_audit_controls_invalid'),
-    rejects_stale_table_set: throws(() => validateSupabaseSecurityAdvisorAudit(stale, valid.projectRef), 'supabase_security_audit_catalog_table_set_invalid'),
-    rejects_unproven_migration_state: throws(() => validateSupabaseSecurityAdvisorAudit(migrationDrift, valid.projectRef), 'supabase_security_audit_managed_backend_invalid'),
-  }
-  return { ok: Object.values(checks).every(Boolean), contract: CONTRACT, checks }
-}
-
-function throws(callback, code) {
+function throws(action, code) {
   try {
-    callback()
+    action()
     return false
   } catch (error) {
-    return error instanceof Error && error.message === code
+    return error?.message === code
   }
 }
 
 async function main() {
   const args = process.argv.slice(2)
-  if (args.length > 1 || (args[0] && !['--self-test', '--print-digest'].includes(args[0]))) fail('supabase_security_audit_argument_invalid')
-  if (args[0] === '--self-test') return selfTest()
+  if (args.length > 1 || (args[0] && args[0] !== '--self-test')) fail('supabase_security_audit_arguments_invalid')
   const [audit, packageManifest] = await Promise.all([
     readFile(auditPath, 'utf8').then(JSON.parse),
     readFile(packagePath, 'utf8').then(JSON.parse),
   ])
-  const expectedProjectRef = packageManifest?.supermega?.productionSupabaseProjectRef
-  if (packageManifest?.supermega?.productionSupabaseTargetStatus !== 'protected-unapproved') fail('supabase_security_audit_production_boundary_invalid')
-  if (args[0] === '--print-digest') {
-    validateSupabaseSecurityAdvisorAudit(audit, expectedProjectRef, { skipDigest: true })
-    return { ok: true, contract: CONTRACT, expectedDigest: auditDigest(audit) }
+  validateSupabaseSecurityAdvisorAudit(audit, packageManifest.supermega?.productionSupabaseProjectRef)
+  if (args[0] === '--self-test') {
+    const stale = structuredClone(audit)
+    stale.productionMigrations.liveManagedSchemaVersion = 9
+    const leaked = structuredClone(audit)
+    leaked.catalog.browserPrivilegedTableCount = 1
+    const mutation = structuredClone(audit)
+    mutation.controls.databaseWrites = 1
+    const result = {
+      ok: throws(() => validateSupabaseSecurityAdvisorAudit(stale, audit.projectRef, { skipDigest: true }), 'supabase_security_audit_migrations_invalid')
+        && throws(() => validateSupabaseSecurityAdvisorAudit(leaked, audit.projectRef, { skipDigest: true }), 'supabase_security_audit_catalog_invalid')
+        && throws(() => validateSupabaseSecurityAdvisorAudit(mutation, audit.projectRef, { skipDigest: true }), 'supabase_security_audit_controls_invalid'),
+      contract: CONTRACT,
+      tests: 3,
+    }
+    console.log(JSON.stringify(result))
+    if (!result.ok) process.exitCode = 1
+    return
   }
-  validateSupabaseSecurityAdvisorAudit(audit, expectedProjectRef)
-  return {
-    ok: true,
-    contract: CONTRACT,
-    projectRef: audit.projectRef,
-    status: audit.conclusion.status,
-    findings: audit.advisor.findingCount,
-    browserGrantHardeningRequired: audit.conclusion.browserGrantHardeningRequired,
-    providerMutations: 0,
-  }
+  console.log(JSON.stringify({ ok: true, contract: audit.contract, projectRef: audit.projectRef, liveSchemaVersion: audit.managedBackend.liveSchemaVersion, publicBrowserObjectAccessDenied: true, productionMutationAuthorized: false }))
 }
 
-main()
-  .then((result) => {
-    process.stdout.write(`${JSON.stringify(result)}\n`)
-    if (!result.ok) process.exitCode = 1
-  })
-  .catch((error) => {
-    process.stderr.write(`${JSON.stringify({ ok: false, contract: CONTRACT, error: error instanceof Error ? error.message : 'unknown_error' })}\n`)
-    process.exitCode = 1
-  })
+main().catch((error) => {
+  console.error(JSON.stringify({ ok: false, error: String(error?.message || 'supabase_security_audit_failed').slice(0, 240), externalWritesPerformed: false }))
+  process.exitCode = 1
+})

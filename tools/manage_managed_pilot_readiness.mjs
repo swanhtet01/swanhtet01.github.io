@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 
 import {
-  buildManagedPilotDecisionPreview,
+  MANAGED_PILOT_READINESS_SOURCE_PATHS,
   buildManagedPilotReadiness,
   readinessDigest,
   validateManagedPilotReadiness,
@@ -11,15 +11,9 @@ import {
 
 const root = resolve(import.meta.dirname, '..')
 const output = resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json')
-const sources = [
-  'hq/portfolio.json',
-  'hq/research/postgres17-rehearsal.json',
-  'hq/pilots/private-storage-privacy-audit.md',
-  'hq/readiness/supabase-security-advisor-audit.json',
-  'hq/NOW.md',
-  'package.json',
-  'kernel/managed-pilot-readiness.mjs',
-]
+const sources = MANAGED_PILOT_READINESS_SOURCE_PATHS
+const DECISION_PREVIEW_CONTRACT = 'supermega.managed-pilot-decision-preview.v1'
+const DECISION_PREVIEW_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
 
 async function currentLedger() {
   const texts = new Map()
@@ -36,26 +30,95 @@ async function currentLedger() {
   })
 }
 
+function buildDecisionPreview(readiness, selectedProduct = null) {
+  const selected = selectedProduct ? readiness.products.find((entry) => entry.productId === selectedProduct) : null
+  return {
+    contract: DECISION_PREVIEW_CONTRACT,
+    asOf: readiness.asOf,
+    pilotMode: readiness.pilotMode,
+    sourceDigest: readiness.sourceDigest,
+    ownerApprovalRequired: true,
+    createsAuthority: false,
+    createsAuthorityIn: false,
+    approvalReceiptRequired: false,
+    previewMode: true,
+    selectedProduct: selectedProduct || 'none',
+    selectedProposal: selected
+      ? {
+          productId: selected.productId,
+          localStatus: selected.localStatus,
+          managedPilotStatus: selected.managedPilotStatus,
+          automationStatus: selected.automationStatus,
+          workOrderId: selected.workOrderId,
+          proposedWork: selected.proposedWork,
+          blockingReason: selected.blockingReason,
+          requiredProof: selected.requiredProof,
+        }
+      : null,
+    operator: {
+      productId: readiness.founderDecision.operator.productId,
+      pilotMode: readiness.founderDecision.operator.pilotMode,
+      namedBusinessRequired: readiness.founderDecision.operator.namedBusinessRequired,
+      namedOperatorRequired: readiness.founderDecision.operator.namedOperatorRequired,
+      measuredBaselineRequired: readiness.founderDecision.operator.measuredBaselineRequired,
+      acceptanceEvidenceRequired: readiness.founderDecision.operator.acceptanceEvidenceRequired,
+      requiredConsecutiveAcceptedRuns: readiness.founderDecision.operator.requiredConsecutiveAcceptedRuns,
+    },
+    decisions: readiness.products.map((product) => ({
+      productId: product.productId,
+      managedPilotStatus: product.managedPilotStatus,
+      automationStatus: product.automationStatus,
+      blocked: true,
+      nextAction: 'proposal_only',
+      prohibitedActions: [...readiness.founderDecision.doesNotAuthorize],
+      requiredProof: product.requiredProof,
+    })),
+    controls: {
+      externalWritesPerformed: false,
+      connectorRequestsPerformedToBuild: readiness.controls.connectorRequestsPerformedToBuild,
+      modelCallsRequiredToBuild: readiness.controls.modelCallsRequiredToBuild,
+      productionWritesEnabled: readiness.controls.productionWritesEnabled,
+      ownerApprovalRequired: true,
+      safeAutomatedActions: ['rebuild_local_evidence', 'verify_current_ledger', 'rehearse_local_client_package'],
+      forbiddenUntilReady: readiness.controls.forbiddenUntilReady,
+      doesNotAuthorize: [...readiness.founderDecision.doesNotAuthorize],
+      proposes: [...readiness.founderDecision.proposedActions],
+    },
+    evidence: {
+      nextAction: readiness.overall.nextAction,
+      sourceDigest: readiness.sourceDigest,
+      status: readiness.overall.status,
+      blockingGateCount: readiness.overall.blockingGateCount,
+      localDatabaseProofReady: readiness.overall.localDatabaseProofReady,
+      productionSourceParityReady: readiness.overall.productionSourceParityReady,
+      hostedActivationReady: readiness.overall.hostedActivationReady,
+    },
+    sourceReceipts: readiness.sourceReceipts.map((entry) => ({ ...entry })),
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const previewMode = args[0] === '--decision-preview'
-  if ((previewMode && args.length > 2)
-    || (!previewMode && (args.length > 1 || (args[0] && args[0] !== '--verify')))) {
+  if (args[0] && !previewMode && args[0] !== '--verify') {
     throw new Error('managed_pilot_readiness_arguments_invalid')
   }
-  const expected = currentLedger()
-  if (previewMode) {
-    const actual = validateManagedPilotReadiness(JSON.parse(await readFile(output, 'utf8')))
-    const current = await expected
-    if (JSON.stringify(actual) !== JSON.stringify(current)) throw new Error('managed_pilot_readiness_evidence_stale')
-    const preview = buildManagedPilotDecisionPreview(actual, args[1] || null)
-    console.log(JSON.stringify(preview))
-    return
+  if (previewMode && args.length > 2) throw new Error('managed_pilot_readiness_arguments_invalid')
+  if (previewMode && args[1] && !DECISION_PREVIEW_PRODUCTS.includes(args[1])) {
+    throw new Error('managed_pilot_readiness_decision_preview_product_invalid')
   }
+  const expected = currentLedger()
   if (args[0] === '--verify') {
     const actual = validateManagedPilotReadiness(JSON.parse(await readFile(output, 'utf8')))
     if (JSON.stringify(actual) !== JSON.stringify(await expected)) throw new Error('managed_pilot_readiness_evidence_stale')
     console.log(JSON.stringify({ ok: true, contract: actual.contract, products: actual.products.length, blockingGates: actual.overall.blockingGateCount, hostedActivationReady: false }))
+    return
+  }
+  if (previewMode) {
+    const readiness = await expected
+    const product = args[1] || null
+    const preview = buildDecisionPreview(readiness, product)
+    console.log(JSON.stringify(preview))
     return
   }
   const ledger = await expected

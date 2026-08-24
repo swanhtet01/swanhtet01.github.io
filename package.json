@@ -121,7 +121,10 @@
     "lane:prereview:check": "node tools/run_local_prereview.mjs --check",
     "lane:prereview:self-test": "node --test tools/run_local_prereview.test.mjs",
     "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs",
-    "hq:verify": "node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_managed_pilot_readiness.mjs --verify && npm run company:ally:autonomy:self-test && node tools/verify_hq_contract.mjs",
+    "hq:verify": "node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_managed_pilot_readiness.mjs --verify && npm run technical:estate:verify && npm run company:ally:autonomy:self-test && node tools/verify_hq_contract.mjs",
+    "technical:estate:write": "node tools/manage_technical_estate.mjs",
+    "technical:estate:verify": "node tools/manage_technical_estate.mjs --verify",
+    "technical:estate:self-test": "node --test kernel/technical-estate.test.mjs",
     "hq:verify:live": "node tools/verify_hq_live_state.mjs",
     "hq:verify:live:self-test": "node tools/verify_hq_live_state.mjs --self-test"
   },

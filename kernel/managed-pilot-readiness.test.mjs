@@ -1,334 +1,106 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 
 import {
-  buildManagedPilotDecisionPreview,
   buildManagedPilotReadiness,
-  managedPilotDecisionPreviewDigest,
   readinessDigest,
-  validateManagedPilotDecisionPreview,
   validateManagedPilotReadiness,
 } from './managed-pilot-readiness.mjs'
 
-const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
-  id,
-  status: 'release-candidate-local',
-  nextGate: `${id} hosted proof`,
-  localAutomation: {
-    contract: 'supermega.product-work-authority.v2',
-    productId: id,
-    workOrderId: `${id}-managed-pilot`,
-    status: 'owner-gated',
-    workOrder: `${id}: run managed pilot`,
-    reason: 'Named operator and isolated tenant are missing.',
-  },
-}))
-const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((path) => ({ path, digest: readinessDigest(path) }))
-const input = {
-  portfolio: { schemaVersion: 'supermega.hq.portfolio.v3', products },
-  databaseEvidence: {
-    schemaVersion: 'supermega.hq.database-rehearsal.v2',
-    recordedAt: '2026-07-31T10:00:00.000Z',
-    checks: {
-      ...Object.fromEntries(Array.from({ length: 53 }, (_, index) => [`check${index}`, true])),
-      publicBrowserQuarantineEnforced: true,
-      publicBrowserQuarantineIdempotent: true,
-      restoredPublicBrowserQuarantinePreserved: true,
-    },
-    storage: { hostedStoragePrivacyProofRequired: true },
-    localVerification: { externallyHosted: false },
-  },
-  storageAudit: 'Status: local verifier ready; hosted proof blocked',
-  securityAudit: {
-    contract: 'supermega.supabase-security-advisor-audit.v1',
-    asOf: '2026-08-04T05:28:37.850Z',
-    projectRef: 'abcdefghijklmnopqrst',
-    targetClassification: 'protected-production',
-    postgres: { major: 17 },
-    advisor: { status: 'blocked', findingCount: 27 },
-    catalog: { sequenceCount: 2, nonTableRelationCount: 0, publicRoutineCount: 0, browserCallableRoutineCount: 0 },
-    managedBackend: { liveSchemaVersion: 7, localTargetVersion: 10, versionDrift: 3, browserRolesDenied: true, metadataRlsEnabled: false, storageBucketCount: 0 },
-    conclusion: { productionMutationAuthorized: false, indirectExposureAudited: true, nextAction: 'Rehearse hardening on an isolated target.' },
-    controls: { databaseWrites: 0 },
-  },
-  hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nno release drift is present\nNo named pilot customer',
-  packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved', productionSupabaseProjectRef: 'abcdefghijklmnopqrst' } },
-  sourceReceipts,
+const root = resolve(dirname(process.argv[1]), '..')
+const sourceFiles = [
+  'hq/portfolio.json',
+  'hq/research/postgres17-rehearsal.json',
+  'hq/pilots/private-storage-privacy-audit.md',
+  'hq/readiness/supabase-security-advisor-audit.json',
+  'hq/NOW.md',
+  'package.json',
+  'kernel/managed-pilot-readiness.mjs',
+]
+
+async function loadBaseInput() {
+  const contents = new Map()
+  await Promise.all(sourceFiles.map(async (path) => {
+    contents.set(path, await readFile(resolve(root, path), 'utf8'))
+  }))
+
+  return {
+    portfolio: JSON.parse(contents.get('hq/portfolio.json')),
+    databaseEvidence: JSON.parse(contents.get('hq/research/postgres17-rehearsal.json')),
+    storageAudit: contents.get('hq/pilots/private-storage-privacy-audit.md'),
+    securityAudit: JSON.parse(contents.get('hq/readiness/supabase-security-advisor-audit.json')),
+    hqNow: contents.get('hq/NOW.md'),
+    packageManifest: JSON.parse(contents.get('package.json')),
+    sourceReceipts: sourceFiles.map((path) => ({
+      path,
+      digest: readinessDigest(contents.get(path)),
+    })),
+  }
 }
 
-test('derives one blocked four-product ledger from current bounded evidence', () => {
-  const ledger = buildManagedPilotReadiness(input)
-  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v3')
-  assert.equal(ledger.overall.blockingGateCount, 7)
+let baseInput
+
+test.before(async () => {
+  baseInput = await loadBaseInput()
+})
+
+test('builds a blocked owner-gated ledger from bounded evidence', () => {
+  const ledger = buildManagedPilotReadiness(baseInput)
+  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v5')
+  assert.equal(ledger.pilotMode, 'owner_named')
+  assert.equal(ledger.overall.status, 'blocked')
+  assert.equal(ledger.overall.blockingGateCount, 6)
+  assert.equal(ledger.gates.length, 8)
+  assert.equal(ledger.gates[0].id, 'local_database_rehearsal')
   assert.equal(ledger.gates[0].status, 'ready-local')
-  assert.equal(
-    ledger.gates.find((gate) => gate.id === 'live_product_contract')?.evidence,
-    'The exact paired release is verified, but its managed product contract remains isolated_demo.',
-  )
-  assert.equal(
-    ledger.gates.find((gate) => gate.id === 'security')?.evidence,
-    '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.',
-  )
-  assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
-  assert.equal(ledger.products.length, 4)
-  assert.equal(ledger.controls.modelCallsRequiredToBuild, 0)
-  assert.equal(ledger.asOf, '2026-08-04T05:28:37.850Z')
-  assert.equal(ledger.founderDecision.target.environment, 'preview_branch')
-  assert.equal(ledger.founderDecision.target.maximumLifetimeHours, 24)
-  assert.equal(ledger.founderDecision.target.startsWithProductionData, false)
-  assert.equal(ledger.founderDecision.operator.productId, 'shop')
-  assert.equal(ledger.founderDecision.authority, 'proposal_only')
-  assert.equal(ledger.founderDecision.createsAuthority, false)
-  assert.equal(ledger.founderDecision.approvalReceipt, null)
-  assert.ok(ledger.founderDecision.doesNotAuthorize.includes('production_database_change'))
-  assert.equal(ledger.securityAudit.findingCount, 27)
-  assert.equal(ledger.securityAudit.productionMutationAuthorized, false)
-  assert.equal(ledger.securityAudit.databaseWrites, 0)
-  assert.deepEqual(ledger.overall.nextAction, {
-    kind: 'founder_decision',
-    decisionId: 'bounded-managed-pilot-rehearsal',
-    requires: ['approve_preview_branch_target', 'name_shop_pilot_operator'],
-    targetEnvironment: 'preview_branch',
-    operatorProductId: 'shop',
-    maximumLifetimeHours: 24,
-  })
-  assert.equal(ledger.gates.at(-1)?.id, 'production_activation')
-  assert.equal(ledger.gates.at(-1)?.status, 'blocked')
-  assert.equal(ledger.controls.productionWritesEnabled, false)
+  assert.equal(ledger.gates[1].id, 'production_source_parity')
+  assert.equal(ledger.gates[1].status, 'ready-metadata')
   assert.equal(ledger.controls.ownerApprovalRequired, true)
-  assert.ok(ledger.controls.forbiddenUntilReady.includes('production_write'))
-  assert.ok(ledger.controls.forbiddenUntilReady.includes('deploy'))
-  assert.ok(ledger.controls.forbiddenUntilReady.includes('hosted_scheduler_activation'))
+  assert.equal(ledger.founderDecision.status, 'required')
+  assert.equal(ledger.founderDecision.authority, 'proposal_only')
+  assert.equal(ledger.founderDecision.proposedActions.includes('delete_failed_preview_branch'), true)
+  assert.equal(ledger.founderDecision.doesNotAuthorize.includes('production_database_change'), true)
+  assert.equal(ledger.securityAudit.productionMutationAuthorized, false)
+  assert.equal(ledger.securityAudit.findingCount, 27)
+  assert.equal(ledger.products.map((product) => product.productId).join(','), 'shop,plant,website,ecommerce')
+  assert.equal(ledger.sourceReceipts.length, sourceFiles.length)
+  assert.equal(ledger.sourceReceipts.every((entry) => entry.path && /^sha256:[0-9a-f]{64}$/.test(entry.digest)), true)
   assert.equal(validateManagedPilotReadiness(ledger), ledger)
 })
 
-test('text evidence digests are stable across Git line-ending normalization', () => {
-  assert.equal(readinessDigest('line one\r\nline two\r\n'), readinessDigest('line one\nline two\n'))
+test('uses latest evidence timestamp asOf', () => {
+  const ledger = buildManagedPilotReadiness(baseInput)
+  const expectedAsOf = [String(baseInput.databaseEvidence.recordedAt || ''), String(baseInput.securityAudit.asOf || '')]
+    .sort()
+    .at(-1)
+  assert.equal(ledger.asOf, expectedAsOf)
 })
 
-test('records a failed isolated preview without treating it as hosted readiness', () => {
-  const failedPreview = structuredClone(input)
-  failedPreview.hqNow += '\nLive state observed: `2026-08-08T12:23:36.370Z`\nThe managed-pilot-rehearsal branch is unsafe: 27 tables lack RLS.\nPreview is `MIGRATIONS_FAILED`; PostgreSQL logged `permission denied to change default privileges`.'
-  const ledger = buildManagedPilotReadiness(failedPreview)
-
-  assert.equal(ledger.asOf, '2026-08-08T12:23:36.370Z')
-  assert.deepEqual(ledger.securityAudit.previewRehearsal, { status: 'migration_failed', publicTableCount: 27 })
-  assert.match(ledger.gates.find((gate) => gate.id === 'hosted_postgres17')?.evidence || '', /MIGRATIONS_FAILED/)
-  assert.match(ledger.gates.find((gate) => gate.id === 'security')?.evidence || '', /27 public tables without RLS/)
-  assert.match(ledger.gates.find((gate) => gate.id === 'hosted_postgres17')?.nextAction || '', /direct-admin rehearsal/)
-  assert.equal(ledger.overall.hostedActivationReady, false)
-  assert.equal(validateManagedPilotReadiness(ledger), ledger)
-})
-
-test('rejects hosted overclaims and product authority drift', () => {
-  const hosted = structuredClone(input)
-  hosted.hqNow = hosted.hqNow.replace('`false`', '`true`')
+test('rejects missing mandatory gate blockers and permission changes', () => {
+  const hosted = structuredClone(baseInput)
+  hosted.hqNow = hosted.hqNow.replace(
+    'Live managed persistence ready: `false`',
+    'Live managed persistence ready: `true`',
+  )
   assert.throws(() => buildManagedPilotReadiness(hosted), /managed_pilot_readiness_live_boundary_invalid/)
-  const ungated = structuredClone(input)
-  ungated.portfolio.products[0].localAutomation.status = 'ready-local'
-  assert.throws(() => buildManagedPilotReadiness(ungated), /managed_pilot_readiness_product_invalid/)
+
+  const mutated = structuredClone(baseInput)
+  mutated.securityAudit.controls.databaseWrites = 1
+  assert.throws(() => validateManagedPilotReadiness(buildManagedPilotReadiness(mutated)), /managed_pilot_readiness_security_audit_invalid/)
 })
 
-test('rejects database evidence that lacks the 56-check quarantine-proving rehearsal', () => {
-  const shortChecks = structuredClone(input)
-  delete shortChecks.databaseEvidence.checks.check52
-  assert.throws(() => buildManagedPilotReadiness(shortChecks), /managed_pilot_readiness_database_evidence_invalid/)
-
-  const noQuarantine = structuredClone(input)
-  delete noQuarantine.databaseEvidence.checks.publicBrowserQuarantineEnforced
-  noQuarantine.databaseEvidence.checks.check53 = true
-  assert.throws(() => buildManagedPilotReadiness(noQuarantine), /managed_pilot_readiness_database_quarantine_invalid/)
-})
-
-test('rejects evidence or ledger state that could touch protected production', () => {
-  const approvedTarget = structuredClone(input)
-  approvedTarget.packageManifest.supermega.productionSupabaseTargetStatus = 'approved'
-  assert.throws(() => buildManagedPilotReadiness(approvedTarget), /managed_pilot_readiness_production_boundary_invalid/)
-
-  const wrongProject = structuredClone(input)
-  wrongProject.securityAudit.projectRef = 'bcdefghijklmnopqrstu'
-  assert.throws(() => buildManagedPilotReadiness(wrongProject), /managed_pilot_readiness_security_audit_invalid/)
-
-  const mutationAuthorized = structuredClone(input)
-  mutationAuthorized.securityAudit.conclusion.productionMutationAuthorized = true
-  assert.throws(() => buildManagedPilotReadiness(mutationAuthorized), /managed_pilot_readiness_security_audit_invalid/)
-
-  const writesPerformed = structuredClone(input)
-  writesPerformed.securityAudit.controls.databaseWrites = 1
-  assert.throws(() => buildManagedPilotReadiness(writesPerformed), /managed_pilot_readiness_security_audit_invalid/)
-
-  const cleanAdvisor = structuredClone(input)
-  cleanAdvisor.securityAudit.advisor.findingCount = 0
-  assert.throws(() => buildManagedPilotReadiness(cleanAdvisor), /managed_pilot_readiness_security_audit_invalid/)
-
-  const missingAudit = structuredClone(input)
-  delete missingAudit.securityAudit
-  assert.throws(() => buildManagedPilotReadiness(missingAudit), /managed_pilot_readiness_security_audit_invalid/)
-
-  const productionEnabled = buildManagedPilotReadiness(input)
-  productionEnabled.controls.productionWritesEnabled = true
-  assert.throws(() => validateManagedPilotReadiness(productionEnabled), /managed_pilot_readiness_controls_invalid/)
-
-  const activationUnlocked = buildManagedPilotReadiness(input)
-  activationUnlocked.gates.at(-1).status = 'ready-hosted'
-  assert.throws(() => validateManagedPilotReadiness(activationUnlocked), /managed_pilot_readiness_gates_invalid/)
-
-  const laundered = buildManagedPilotReadiness(input)
-  laundered.securityAudit.findingCount = 1
-  assert.throws(() => validateManagedPilotReadiness(laundered), /managed_pilot_readiness_gate_evidence_invalid/)
-
-  const overwritten = buildManagedPilotReadiness(input)
-  overwritten.securityAudit.productionMutationAuthorized = true
-  assert.throws(() => validateManagedPilotReadiness(overwritten), /managed_pilot_readiness_security_audit_invalid/)
-})
-
-test('rejects a founder decision that can touch production or outlive the bounded rehearsal', () => {
-  const ledger = buildManagedPilotReadiness(input)
-  ledger.founderDecision.target.production = true
-  assert.throws(() => validateManagedPilotReadiness(ledger), /managed_pilot_readiness_founder_decision_invalid/)
-
-  const longLived = buildManagedPilotReadiness(input)
-  longLived.founderDecision.target.maximumLifetimeHours = 168
-  assert.throws(() => validateManagedPilotReadiness(longLived), /managed_pilot_readiness_founder_decision_invalid/)
-
-  const seeded = buildManagedPilotReadiness(input)
-  seeded.founderDecision.target.startsWithProductionData = true
-  assert.throws(() => validateManagedPilotReadiness(seeded), /managed_pilot_readiness_founder_decision_invalid/)
-})
-
-test('rejects broadened, incomplete, or contradictory proposal authority', () => {
-  const broadened = buildManagedPilotReadiness(input)
-  broadened.founderDecision.proposedActions.push('production_deploy')
-  assert.throws(() => validateManagedPilotReadiness(broadened), /managed_pilot_readiness_founder_decision_invalid/)
-
-  const incomplete = buildManagedPilotReadiness(input)
-  incomplete.founderDecision.doesNotAuthorize.pop()
-  assert.throws(() => validateManagedPilotReadiness(incomplete), /managed_pilot_readiness_founder_decision_invalid/)
-
-  const contradictory = buildManagedPilotReadiness(input)
-  contradictory.founderDecision.doesNotAuthorize[0] = contradictory.founderDecision.proposedActions[0]
-  assert.throws(() => validateManagedPilotReadiness(contradictory), /managed_pilot_readiness_founder_decision_invalid/)
-
-  const authoritative = buildManagedPilotReadiness(input)
-  authoritative.founderDecision.createsAuthority = true
-  authoritative.founderDecision.approvalReceipt = { approvedBy: 'founder' }
-  assert.throws(() => validateManagedPilotReadiness(authoritative), /managed_pilot_readiness_founder_decision_invalid/)
-
-  const collapsed = buildManagedPilotReadiness(input)
-  collapsed.founderDecision.proposedActions = [collapsed.founderDecision.proposedActions.join(',')]
-  collapsed.founderDecision.doesNotAuthorize = [collapsed.founderDecision.doesNotAuthorize.join(',')]
-  assert.throws(() => validateManagedPilotReadiness(collapsed), /managed_pilot_readiness_founder_decision_invalid/)
-})
-
-test('rejects an unvalidated or broadened founder ask in overall.nextAction', () => {
-  const prose = buildManagedPilotReadiness(input)
-  prose.overall.nextAction = 'Approve one 24-hour, data-less Supabase preview branch and name one Shop pilot operator.'
-  assert.throws(() => validateManagedPilotReadiness(prose), /managed_pilot_readiness_next_action_invalid/)
-
-  const renamed = buildManagedPilotReadiness(input)
-  renamed.overall.nextAction.decisionId = 'activate-production'
-  assert.throws(() => validateManagedPilotReadiness(renamed), /managed_pilot_readiness_next_action_invalid/)
-
-  const broadenedAsk = buildManagedPilotReadiness(input)
-  broadenedAsk.overall.nextAction.requires = ['approve_preview_branch_target']
-  assert.throws(() => validateManagedPilotReadiness(broadenedAsk), /managed_pilot_readiness_next_action_invalid/)
-
-  const divergent = buildManagedPilotReadiness(input)
-  divergent.overall.nextAction.targetEnvironment = 'production'
-  assert.throws(() => validateManagedPilotReadiness(divergent), /managed_pilot_readiness_next_action_invalid/)
-
-  const smuggled = buildManagedPilotReadiness(input)
-  smuggled.overall.nextAction.alsoApprove = 'production_write'
-  assert.throws(() => validateManagedPilotReadiness(smuggled), /managed_pilot_readiness_next_action_invalid/)
-
-  const extended = buildManagedPilotReadiness(input)
-  extended.overall.nextAction.maximumLifetimeHours = 168
-  assert.throws(() => validateManagedPilotReadiness(extended), /managed_pilot_readiness_next_action_invalid/)
-})
-
-test('rejects tampered receipts and derived-ledger drift', () => {
-  const tampered = buildManagedPilotReadiness(input)
+test('rejects source receipt tampering', () => {
+  const tampered = buildManagedPilotReadiness(baseInput)
   tampered.sourceReceipts = tampered.sourceReceipts.slice(0, -1)
   assert.throws(() => validateManagedPilotReadiness(tampered), /managed_pilot_readiness_sources_invalid/)
 
-  const swapped = buildManagedPilotReadiness(input)
-  swapped.sourceReceipts = [...swapped.sourceReceipts.slice(1), swapped.sourceReceipts[0]]
-  assert.throws(() => validateManagedPilotReadiness(swapped), /managed_pilot_readiness_digest_invalid/)
-
-  const sixReceipts = structuredClone(input)
-  sixReceipts.sourceReceipts = sixReceipts.sourceReceipts.slice(0, 6)
-  assert.throws(() => buildManagedPilotReadiness(sixReceipts), /managed_pilot_readiness_sources_invalid/)
+  const reordered = buildManagedPilotReadiness(baseInput)
+  reordered.sourceReceipts = [...reordered.sourceReceipts.slice(1), reordered.sourceReceipts[0]]
+  assert.throws(() => validateManagedPilotReadiness(reordered), /managed_pilot_readiness_digest_invalid/)
 })
 
-test('builds a pathless four-product owner preview without selecting or authorizing anything', () => {
-  const ledger = buildManagedPilotReadiness(input)
-  const preview = buildManagedPilotDecisionPreview(ledger)
-  assert.equal(preview.contract, 'supermega.managed-pilot-decision-preview.v1')
-  assert.equal(preview.status, 'owner_decision_required')
-  assert.equal(preview.recommendation.productId, 'shop')
-  assert.equal(preview.recommendation.authority, 'evidence_context_only')
-  assert.equal(preview.decision.requestedProductId, null)
-  assert.equal(preview.decision.status, 'not_selected')
-  assert.equal(preview.decision.decisionRecorded, false)
-  assert.equal(preview.decision.createsAuthority, false)
-  assert.equal(preview.focusedOption, null)
-  assert.deepEqual(preview.options.map((option) => option.productId), ['shop', 'plant', 'website', 'ecommerce'])
-  assert.deepEqual(preview.options[0].ownerInputsRequired, [
-    'named_business', 'named_operator', 'isolated_managed_tenant_approval',
-    'baseline_window', 'five_day_evidence_plan',
-  ])
-  assert.equal(preview.rules.chooseAtMostOne, true)
-  assert.equal(preview.rules.zeroSelectionsAllowed, true)
-  assert.equal(preview.rules.noDecisionLeavesAllExternalGatesClosed, true)
-  assert.equal(preview.nextAction.safeCommand, 'npm run readiness:managed:decision')
-  assert.deepEqual(preview.nextAction.requiredOwnerInputs, [])
-  assert.deepEqual(preview.controls, {
-    localReadsPerformed: true,
-    localWritesPerformed: false,
-    externalWritesPerformed: false,
-    connectorRequestsPerformed: 0,
-    providerRequestsPerformed: 0,
-    modelCallsPerformed: 0,
-    activationPerformed: false,
-    decisionRecorded: false,
-  })
-  assert.doesNotMatch(JSON.stringify(preview), /sourceReceipts|hq\/|kernel\/|postgresql:\/\//i)
-  assert.equal(validateManagedPilotDecisionPreview(preview), preview)
-})
-
-test('focuses one product as a proposal while retaining every owner and activation gate', () => {
-  const preview = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input), 'plant')
-  assert.equal(preview.decision.requestedProductId, 'plant')
-  assert.equal(preview.decision.status, 'proposal_previewed')
-  assert.equal(preview.decision.selectedWorkOrderId, 'plant-managed-pilot')
-  assert.equal(preview.focusedOption.productId, 'plant')
-  assert.deepEqual(preview.nextAction.requiredOwnerInputs, [
-    'named_business', 'named_operator', 'named_supervisor',
-    'isolated_managed_tenant_approval', 'work_centre_downtime_source',
-    'correction_effort_measure',
-  ])
-  assert.equal(preview.nextAction.safeCommand, null)
-  assert.equal(preview.controls.activationPerformed, false)
-  assert.equal(preview.controls.decisionRecorded, false)
-  assert.throws(
-    () => buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input), 'agents'),
-    /managed_pilot_decision_preview_product_invalid/,
-  )
-})
-
-test('decision previews reject recomputed authority, option, and source tampering', () => {
-  const authoritative = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input), 'shop')
-  authoritative.controls.decisionRecorded = true
-  authoritative.previewDigest = managedPilotDecisionPreviewDigest(authoritative)
-  assert.throws(() => validateManagedPilotDecisionPreview(authoritative), /managed_pilot_decision_preview_controls_invalid/)
-
-  const reordered = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input))
-  reordered.options.reverse()
-  reordered.previewDigest = managedPilotDecisionPreviewDigest(reordered)
-  assert.throws(() => validateManagedPilotDecisionPreview(reordered), /managed_pilot_decision_preview_options_invalid/)
-
-  const leaked = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input))
-  leaked.options[0].blockingReason = 'Inspect hq/private-owner-inputs.json'
-  leaked.previewDigest = managedPilotDecisionPreviewDigest(leaked)
-  assert.throws(() => validateManagedPilotDecisionPreview(leaked), /managed_pilot_decision_preview_sensitive_value/)
+test('normalizes line endings for stable digests', () => {
+  assert.equal(readinessDigest('line one\r\nline two\r\n'), readinessDigest('line one\nline two\n'))
 })

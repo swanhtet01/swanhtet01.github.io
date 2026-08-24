@@ -65,12 +65,12 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 - Codex is sole integrator. `d8573429` passes 237 modules, 35 channel checks, 524 Python tests, 110 security checks, and full app/HQ gates. Browser and hosting acceptance remain pending.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
-- Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
+- Real leads remain blocked. Production schema is v10 with managed writes off. Preview is not yet repaired; keep it disconnected from Vercel/Auth until direct-admin rehearsal and every managed gate passes.
 
 ## Blockers
 
-- Read-only audit: production is healthy on PostgreSQL 17.6 at schema v7 with zero managed rows, legacy public RLS on, and managed writes off. Preview is `MIGRATIONS_FAILED`; its 27 copied public tables still have RLS disabled, `app_private` is absent, PostgreSQL logged `permission denied to change default privileges`, and v8-v10 are absent. Treat it as unsafe until the direct-admin rehearsal passes.
-- Live HQ and both domains agree on `4ce500c2`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Read-only audit: production is healthy at PostgreSQL 17.6 schema v10 with managed writes off. Preview is `MIGRATIONS_FAILED`; it still has 27 copied public tables and no `app_private` until direct-admin repair completes. Treat it as unsafe until the rehearsal passes.
+- Live HQ and both domains agree on `4ce500c2`; no release drift is present. Six hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
 - The retired standalone POS host, legacy demo launcher, and internal Console still return 200 from separate projects. Canonical customer routing is public site to app; retire or redirect the two legacy customer hosts and rebaseline Console only through an owner-approved domain release.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 

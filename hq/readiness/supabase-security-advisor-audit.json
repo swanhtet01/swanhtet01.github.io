@@ -1,330 +1,130 @@
 {
   "contract": "supermega.supabase-security-advisor-audit.v2",
-  "asOf": "2026-08-13T06:40:00.000Z",
+  "asOf": "2026-08-12T15:24:56.127Z",
   "projectRef": "zvtzwcimpvvtkowflhda",
   "targetClassification": "protected-production",
   "postgres": {
     "major": 17,
     "status": "ACTIVE_HEALTHY"
   },
+  "productionMigrations": {
+    "liveManagedSchemaVersion": 10,
+    "sourceTargetVersion": 10,
+    "versionDrift": 0,
+    "appliedVersions": [
+      "20260711081400",
+      "20260802072648",
+      "20260802072815",
+      "20260802082228",
+      "20260802092247",
+      "20260802095327",
+      "20260802104310",
+      "20260802114122",
+      "20260812141150",
+      "20260812141228",
+      "20260812141259",
+      "20260812141352"
+    ],
+    "publicBrowserQuarantine": {
+      "version": "20260812141352",
+      "name": "public_browser_quarantine",
+      "present": true
+    },
+    "managedWritesEnabled": false
+  },
   "advisor": {
     "type": "security",
-    "status": "clear",
-    "findingCount": 0,
-    "acceptedInfo": {
-      "lint": "rls_enabled_no_policy",
-      "level": "INFO",
-      "count": 27,
-      "tables": [
-        "assets",
-        "enterprise_agent_runs",
-        "enterprise_audit_events",
-        "enterprise_connector_events",
-        "enterprise_knowledge_chunks",
-        "enterprise_knowledge_embeddings",
-        "enterprise_lead_activities",
-        "enterprise_lead_hunt_profiles",
-        "enterprise_leads",
-        "enterprise_memberships",
-        "enterprise_metric_records",
-        "enterprise_module_definitions",
-        "enterprise_sessions",
-        "enterprise_source_change_events",
-        "enterprise_source_records",
-        "enterprise_users",
-        "enterprise_workspace_domains",
-        "enterprise_workspace_modules",
-        "enterprise_workspace_profiles",
-        "enterprise_workspace_tasks",
-        "enterprise_workspaces",
-        "iot_telemetry",
-        "production_ledger",
-        "supermega_campaign_clicks",
-        "supermega_leads",
-        "supermega_sales_runs",
-        "wcm_incidents"
-      ]
+    "status": "reviewed_fail_closed",
+    "findingCount": 27,
+    "lintCounts": {
+      "rls_enabled_no_policy": 27
     },
-    "remediationUrl": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy"
+    "levelCounts": {
+      "INFO": 27
+    },
+    "remediationUrl": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+    "tables": [
+      "assets",
+      "enterprise_agent_runs",
+      "enterprise_audit_events",
+      "enterprise_connector_events",
+      "enterprise_knowledge_chunks",
+      "enterprise_knowledge_embeddings",
+      "enterprise_lead_activities",
+      "enterprise_lead_hunt_profiles",
+      "enterprise_leads",
+      "enterprise_memberships",
+      "enterprise_metric_records",
+      "enterprise_module_definitions",
+      "enterprise_sessions",
+      "enterprise_source_change_events",
+      "enterprise_source_records",
+      "enterprise_users",
+      "enterprise_workspace_domains",
+      "enterprise_workspace_modules",
+      "enterprise_workspace_profiles",
+      "enterprise_workspace_tasks",
+      "enterprise_workspaces",
+      "iot_telemetry",
+      "production_ledger",
+      "supermega_campaign_clicks",
+      "supermega_leads",
+      "supermega_sales_runs",
+      "wcm_incidents"
+    ]
   },
   "catalog": {
-    "queryContract": "supermega.supabase-security-metadata-query.v2",
+    "queryContract": "supermega.supabase-security-metadata-query.v3",
     "scope": "pg_catalog_metadata_only",
     "businessRowsRead": 0,
-    "tableCount": 27,
-    "tables": [
-      {
-        "name": "assets",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_agent_runs",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_audit_events",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_connector_events",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_knowledge_chunks",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_knowledge_embeddings",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_lead_activities",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_lead_hunt_profiles",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_leads",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_memberships",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_metric_records",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_module_definitions",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_sessions",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_source_change_events",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_source_records",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_users",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_workspace_domains",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_workspace_modules",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_workspace_profiles",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_workspace_tasks",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "enterprise_workspaces",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "iot_telemetry",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "production_ledger",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "supermega_campaign_clicks",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "supermega_leads",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "supermega_sales_runs",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "wcm_incidents",
-        "schema": "public",
-        "rlsEnabled": true,
-        "rlsForced": false,
-        "policyCount": 0,
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      }
+    "publicTableCount": 27,
+    "publicTableRlsCount": 27,
+    "publicTablePolicyCount": 0,
+    "browserPrivilegedTableCount": 0,
+    "tableNames": [
+      "assets",
+      "enterprise_agent_runs",
+      "enterprise_audit_events",
+      "enterprise_connector_events",
+      "enterprise_knowledge_chunks",
+      "enterprise_knowledge_embeddings",
+      "enterprise_lead_activities",
+      "enterprise_lead_hunt_profiles",
+      "enterprise_leads",
+      "enterprise_memberships",
+      "enterprise_metric_records",
+      "enterprise_module_definitions",
+      "enterprise_sessions",
+      "enterprise_source_change_events",
+      "enterprise_source_records",
+      "enterprise_users",
+      "enterprise_workspace_domains",
+      "enterprise_workspace_modules",
+      "enterprise_workspace_profiles",
+      "enterprise_workspace_tasks",
+      "enterprise_workspaces",
+      "iot_telemetry",
+      "production_ledger",
+      "supermega_campaign_clicks",
+      "supermega_leads",
+      "supermega_sales_runs",
+      "wcm_incidents"
     ],
-    "nonTableRelationCount": 0,
+    "publicSequenceCount": 2,
+    "browserPrivilegedSequenceCount": 0,
+    "sequenceNames": [
+      "supermega_leads_id_seq",
+      "supermega_sales_runs_id_seq"
+    ],
+    "publicViewCount": 0,
     "publicRoutineCount": 0,
     "browserCallableRoutineCount": 0,
-    "sequenceCount": 2,
-    "sequences": [
-      {
-        "name": "supermega_leads_id_seq",
-        "schema": "public",
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      },
-      {
-        "name": "supermega_sales_runs_id_seq",
-        "schema": "public",
-        "anonPrivileges": [],
-        "authenticatedPrivileges": []
-      }
-    ],
-    "defaultPrivilegeOwners": [
-      "postgres",
-      "supabase_admin"
-    ],
-    "defaultBrowserTablePrivilegesPresent": false,
-    "defaultBrowserSequencePrivilegesPresent": false,
-    "defaultBrowserFunctionExecutePresent": false
+    "postgresOwnerDefaultBrowserGrantCount": 0,
+    "supabaseAdminDefaultBrowserGrantCount": 24,
+    "futureObjectRiskState": "provider-owned-defaults-remain"
   },
   "managedBackend": {
-    "queryContract": "supermega.supabase-managed-schema-metadata.v1",
+    "queryContract": "supermega.supabase-managed-schema-metadata.v2",
     "schema": "app_private",
     "liveSchemaVersion": 10,
     "localTargetVersion": 10,
@@ -332,46 +132,34 @@
     "tableCount": 6,
     "rlsTableCount": 6,
     "policyCount": 15,
-    "performancePolicyFindingCount": 0,
-    "metadataRlsEnabled": true,
+    "policyRoleSets": [
+      "supermega_trial_backend"
+    ],
     "browserRolesDenied": true,
-    "serverBypassRoleDenied": true,
     "runtimeRoleSchemaUsage": true,
     "runtimeRoleSchemaCreate": false,
+    "functionCount": 8,
     "securityDefinerFunctionCount": 2,
-    "securityDefinerPublicExecute": false,
-    "securityDefinerActorContextChecked": true,
-    "securityDefinerSearchPathFixed": true,
-    "viewCount": 0,
+    "browserCallableFunctionCount": 0,
     "storageBucketCount": 0,
-    "postgrestSchemaSettingObservable": false,
-    "pendingMigrations": []
+    "postgrestSchemaSettingObservable": false
   },
   "conclusion": {
-    "status": "clear",
-    "directBrowserTableAccessDefaultDenied": true,
-    "indirectExposureAudited": true,
+    "status": "blocked_for_managed_activation",
+    "currentPublicBrowserObjectAccessDenied": true,
+    "publicBrowserDefaultDenyIntent": true,
     "currentRowExposureProven": false,
-    "browserGrantHardeningRequired": false,
+    "futureProviderOwnedDefaultGrantRisk": true,
+    "previewRehearsalRequired": true,
     "productionMutationAuthorized": false,
-    "nextAction": "Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal."
+    "nextAction": "Restore source parity through R1, then run the digest-bound chain on one owner-approved empty preview branch for at most 24 hours; prove tenant isolation, active-session revocation, private Storage, backup and clean restore, and rerun both advisors before proposing any managed activation."
   },
   "controls": {
-    "connectorReadRequests": 6,
-    "failedReadRequests": 1,
+    "connectorReadRequests": 7,
     "providerMutations": 0,
     "databaseWrites": 0,
     "businessRowsRead": 0,
     "credentialsRecorded": false
   },
-  "evidenceDigest": "sha256:3ca09771bdaa44221d2450ba66c96b6dcc402cc6667bb5ce4891bb141882ea1e",
-  "productionMigrations": {
-    "liveManagedSchemaVersion": 10,
-    "sourceTargetVersion": 10,
-    "versionDrift": 0,
-    "publicBrowserQuarantine": {
-      "present": true
-    },
-    "managedWritesEnabled": false
-  }
+  "evidenceDigest": "sha256:79043b7fdf4201c93f83a8848fdb1362d2849bff7d377420c0d298069ea30509"
 }

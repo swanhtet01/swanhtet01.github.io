@@ -161,16 +161,16 @@ export const APP_SHELL_REQUIREMENTS = [
     id: 'upstream-onboarding-consequence-boundary', authority: 'upstream', file: 'showroom/src/core/ProductOnboardingPage.tsx', tokens: [
       'Stays on this device. Nothing is sent or published.',
       'This setup affects {onboardingProduct.name} only. Your other products stay separate.',
-      'Creates local sample records, then opens the first task.',
+      'SuperMega prepares a working copy and opens one useful first task.',
       'Ask SuperMega to set up {onboardingProduct.name}',
       'managedTrialRequestUrl(product, onboardingTemplate.id)',
     ],
   },
   {
     id: 'candidate-task-first-four-product-shell', authority: 'candidate', file: 'showroom/src/core/CoreShell.tsx', tokens: [
-      'const ProductSystemNavigator = lazy(',
+      "type RuntimeStatus = 'checking' | 'enterprise' | 'demo'",
       'function productFromPathname(pathname: string): ClientSolutionId | null',
-      "routeProduct ? ' has-system-navigator' : ''",
+      'const customerProducts = [',
       'export function ProductHomeEntry',
       'export function ProductHomePage',
       '<nav aria-label="Choose a SuperMega product" className="product-track-grid">',
@@ -178,12 +178,8 @@ export const APP_SHELL_REQUIREMENTS = [
   },
   {
     id: 'candidate-responsive-system-navigation', authority: 'candidate', file: 'showroom/src/core/core-app.css', tokens: [
-      '.core-main.has-system-navigator { display: flex; flex-direction: column; }',
-      '.product-system-navigator > summary { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 14px; cursor: pointer; list-style: none; }',
-      '.product-system-workflows { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }',
+      '.shop-product-shell .core-main { padding-bottom: calc(154px + env(safe-area-inset-bottom)); }',
       '.product-track-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }',
-      '.product-system-navigator > summary { min-height: 46px; padding-inline: 12px; }',
-      '.product-system-workflows { grid-template-columns: 1fr; }',
       '.product-track-grid { grid-template-columns: 1fr; gap: 8px; }',
     ],
   },
@@ -338,7 +334,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
     id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
       'Each product opens as its own working sample. Setup is optional when you are ready to use your business data.',
       'supermega.last-product.v1', 'Your product workspaces stay separate. Opening a sample does not change another product.',
-      "'Choose what you want to run.'",
+      'Switch product',
       'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.',
     ],
   },
