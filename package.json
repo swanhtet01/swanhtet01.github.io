@@ -631,6 +631,8 @@
     "css:contracts:verify": "node tools/check_css_contracts.mjs",
     "app:verify:live": "node tools/verify_app_release_live.mjs",
     "app:verify:live:current": "node tools/verify_app_release_live.mjs --current-head",
+    "observability:floor:verify": "node tools/verify_observability_floor.mjs",
+    "observability:floor:self-test": "node --test tools/verify_observability_floor.test.mjs && node tools/verify_observability_floor.mjs --self-test",
     "dev": "node tools/run_local_app.mjs",
     "bundle:preview": "python3 tools/package_preview_bundle.py",
     "deploy:preview": "bash tools/deploy_preview.sh",
