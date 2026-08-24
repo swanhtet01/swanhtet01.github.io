@@ -1072,11 +1072,14 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.vercelMutated === false)
 
 requireContract('managed pilot readiness is derived and fail closed',
-  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v4'
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v5'
+  && managedPilotReadiness.pilotMode === 'owner_named'
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
   && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
+  && managedPilotReadiness.overall?.blockingGateIds?.join(',') === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').map((entry) => entry.id).join(',')
+  && managedPilotReadiness.overall?.blockingGateIds?.join(',') === 'preview_rehearsal,pilot_evidence,production_activation'
   && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
   && managedPilotReadiness.overall?.nextAction?.decisionId === 'managed-production-activation'
   && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_runtime_role_provisioning,approve_first_named_owner_identity,approve_exact_production_release,approve_managed_activation_window'
@@ -1103,6 +1106,25 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
+  && managedPilotReadiness.liveProduction?.operatingMode === 'isolated_demo'
+  && managedPilotReadiness.liveProduction?.schemaVersion === supabaseSecurityAudit.managedBackend?.liveSchemaVersion
+  && managedPilotReadiness.liveProduction?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
+  && managedPilotReadiness.liveProduction?.versionDrift === supabaseSecurityAudit.managedBackend?.versionDrift
+  && managedPilotReadiness.liveProduction?.browserRolesDenied === true
+  && managedPilotReadiness.liveProduction?.publicBrowserQuarantine === true
+  && managedPilotReadiness.liveProduction?.managedWritesEnabled === false
+  && managedPilotReadiness.previewRehearsal?.proofComplete === false
+  && managedPilotReadiness.previewRehearsal?.exactCandidateRequired === true
+  && managedPilotReadiness.previewRehearsal?.productionRefsRejected === true
+  && managedPilotReadiness.previewRehearsal?.productionDataRejected === true
+  && managedPilotReadiness.previewRehearsal?.privilegedRuntimeCredentialsRejected === true
+  && managedPilotReadiness.pilotEvidence?.pilotMode === 'owner_named'
+  && managedPilotReadiness.pilotEvidence?.productId === 'shop'
+  && managedPilotReadiness.pilotEvidence?.proofComplete === false
+  && managedPilotReadiness.pilotEvidence?.requiredAcceptedConsecutiveRuns === 20
+  && managedPilotReadiness.pilotEvidence?.acceptedConsecutiveRuns === 0
+  && managedPilotReadiness.pilotEvidence?.syntheticEvidenceAccepted === false
+  && managedPilotReadiness.pilotEvidence?.publicIdentityAllowed === false
   && managedPilotReadiness.sourceReceipts?.length === 10
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/hosted-storage-privacy-proof.json')
@@ -1111,7 +1133,13 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.selfServePilot?.proofComplete === true
   && managedPilotReadiness.selfServePilot?.contract === 'supermega.self-serve-pilot-proof.v1'
   && managedPilotReadiness.selfServePilot?.schemaVersionProven === 11
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'self_serve_pilot')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.map((gate) => gate.id).join(',') === 'preview_rehearsal,managed_persistence,storage_privacy,security,pilot_evidence,production_activation'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'preview_rehearsal')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'managed_persistence')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'storage_privacy')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'pilot_evidence')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'production_activation')?.status === 'blocked'
   && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
   && managedPilotReadiness.securityAudit?.findingCount === supabaseSecurityAudit.advisor?.findingCount
@@ -1120,7 +1148,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === (supabaseSecurityAudit.conclusion?.status === 'clear'
-    ? `Advisor is clear on protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} with metadata RLS enabled and zero drift from local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`
+    ? `Protected production is at managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion}, zero drift from local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}, browser roles denied, public-browser quarantine recorded, and Security Advisor clear.`
     : `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`)
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef

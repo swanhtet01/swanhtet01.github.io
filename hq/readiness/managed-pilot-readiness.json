@@ -1,12 +1,18 @@
 {
-  "contract": "supermega.managed-pilot-readiness.v4",
+  "contract": "supermega.managed-pilot-readiness.v5",
   "asOf": "2026-08-22T07:44:43.854Z",
-  "sourceDigest": "sha256:affc2d3180b63550ca3ed8d823cfd80d0ab74bb58937b33b02d601ac43cb6e58",
+  "pilotMode": "owner_named",
+  "sourceDigest": "sha256:6e813f2f16b1ef009ce8491bc19767c2f4aaf65288e64551dcd3bcbe1bd73d86",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 1,
+    "blockingGateCount": 3,
+    "blockingGateIds": [
+      "preview_rehearsal",
+      "pilot_evidence",
+      "production_activation"
+    ],
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "managed-production-activation",
@@ -84,6 +90,23 @@
     "productionMutationAuthorized": false,
     "databaseWrites": 0
   },
+  "liveProduction": {
+    "operatingMode": "isolated_demo",
+    "schemaVersion": 11,
+    "localTargetVersion": 11,
+    "versionDrift": 0,
+    "browserRolesDenied": true,
+    "publicBrowserQuarantine": true,
+    "managedWritesEnabled": false,
+    "productionMutationAuthorized": false
+  },
+  "previewRehearsal": {
+    "proofComplete": false,
+    "exactCandidateRequired": true,
+    "productionRefsRejected": true,
+    "productionDataRejected": true,
+    "privilegedRuntimeCredentialsRejected": true
+  },
   "storagePrivacy": {
     "proofComplete": true,
     "contract": "supermega.hosted-storage-privacy-proof.v1",
@@ -107,30 +130,22 @@
     "schemaVersionProven": 11,
     "liveActivationBlockedOn": "production_activation"
   },
+  "pilotEvidence": {
+    "pilotMode": "owner_named",
+    "productId": "shop",
+    "proofComplete": false,
+    "requiredAcceptedConsecutiveRuns": 20,
+    "acceptedConsecutiveRuns": 0,
+    "syntheticEvidenceAccepted": false,
+    "publicIdentityAllowed": false,
+    "privateWorkspaceRequired": true
+  },
   "gates": [
     {
-      "id": "local_postgres17",
-      "status": "ready-local",
-      "evidence": "56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.",
-      "nextAction": "Keep the digest-bound rehearsal current."
-    },
-    {
-      "id": "hosted_postgres17",
-      "status": "ready-hosted",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v11 with zero drift from local target v11.",
-      "nextAction": "Keep the hosted schema at the local target and the audit current."
-    },
-    {
-      "id": "hosted_storage_privacy",
-      "status": "ready-hosted",
-      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
-      "nextAction": "Keep the storage-privacy evidence and instrument current."
-    },
-    {
-      "id": "live_product_contract",
-      "status": "ready-hosted",
-      "evidence": "Managed persistence and security are proven on isolated targets; the live product contract remains isolated_demo by design until the activation window and production gates open.",
-      "nextAction": "Keep the paired release and proof evidence current; the next steps are founder decisions."
+      "id": "preview_rehearsal",
+      "status": "blocked",
+      "evidence": "No exact-candidate protected preview rehearsal receipt is present for this local branch; release handoff still requires a current HEAD and fresh preview proof.",
+      "nextAction": "Run a protected preview rehearsal for the exact candidate after owner-approved PR/review setup."
     },
     {
       "id": "managed_persistence",
@@ -139,16 +154,22 @@
       "nextAction": "Keep the persistence evidence and instrument current."
     },
     {
+      "id": "storage_privacy",
+      "status": "ready-hosted",
+      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
+      "nextAction": "Keep the storage-privacy evidence and instrument current."
+    },
+    {
       "id": "security",
       "status": "ready-hosted",
-      "evidence": "Advisor is clear on protected managed schema v11 with metadata RLS enabled and zero drift from local target v11.",
+      "evidence": "Protected production is at managed schema v11, zero drift from local target v11, browser roles denied, public-browser quarantine recorded, and Security Advisor clear.",
       "nextAction": "Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs."
     },
     {
-      "id": "self_serve_pilot",
-      "status": "ready-hosted",
-      "evidence": "Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS, and protected production now carries the reviewed v11 grants. Runtime-login provisioning, the first named owner, deployment, and the activation window remain under the separate production_activation decision.",
-      "nextAction": "Keep the six-proof evidence current; execute runtime-login provisioning and the first named-owner activation only through the exact founder-approved production handoff."
+      "id": "pilot_evidence",
+      "status": "blocked",
+      "evidence": "Owner-named Shop pilot proof is absent. Required proof remains: One named Spa owner completes reviewed import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant; record setup time, correction effort, and five-day evidence without treating sample data as client proof.",
+      "nextAction": "Complete the private owner-named Shop pilot sequence and retain identity only in the private workspace."
     },
     {
       "id": "production_activation",
@@ -258,7 +279,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:9d4874bd708ef350c811101d503720d54993f599caeb47f5cda1331fb5f9c7ba"
+      "digest": "sha256:58355a484aed021f1eba901ac5eeb256d015e60cedad4dab2875b23ac8cf69e5"
     }
   ]
 }

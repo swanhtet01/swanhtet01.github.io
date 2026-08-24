@@ -4,10 +4,10 @@
     "portfolioUpdatedAt": "2026-08-21",
     "siteContextVersion": "2026-07-31.3",
     "catalogVersion": "2026-07-31.3",
-    "readinessContract": "supermega.managed-pilot-readiness.v4",
+    "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:0623675a7f5f6a7a48d0efb32d6f5a5dd9b64579a761b3288e4eda3d9dccc678",
+  "sourceDigest": "sha256:261bbe32f6a7718b0bdd3b81fee2d878ed4f261fcd6ab165538206ebbca72725",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -52,7 +52,7 @@
       "privateSchema": "app_private",
       "publicLegacySchema": "public",
       "migrationAuthority": "source-controlled supabase migrations and rehearsal packets",
-      "readinessContract": "supermega.managed-pilot-readiness.v4",
+      "readinessContract": "supermega.managed-pilot-readiness.v5",
       "liveSchemaVersion": 11,
       "localTargetVersion": 11,
       "versionDrift": 0,
@@ -243,7 +243,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:b30ca511eb10208c00468da98e16636ca7a4205f5e7278bca5e96fd0299cec21"
+      "digest": "sha256:7fb3b12e40fac2b466309e653b67a7a347e7abbe021b7877726d651c827797b7"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
