@@ -100,6 +100,33 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
   },
 }
 
+const onboardingFirstRunSteps: Record<SetupProductId, readonly { title: string; detail: string }[]> = {
+  commerce: [
+    { title: 'Pick your business type', detail: 'Use Beauty spa for the first spa pilot, or choose another Shop starter.' },
+    { title: 'Load starter data or import your services/products', detail: 'SuperMega prepares catalog, stock, appointments, and starter sales locally.' },
+    { title: 'Take one sale', detail: 'Use Cash, KBZPay, WavePay, AYA Pay, or MMQR at the counter.' },
+    { title: 'Reconcile payment and close day', detail: 'Orders, payment status, stock movement, and daily close stay tied together.' },
+  ],
+  production: [
+    { title: 'Pick your plant type', detail: 'Choose the closest production starter before creating anything.' },
+    { title: 'Load jobs, materials, quality, and equipment', detail: 'SuperMega prepares one realistic production day.' },
+    { title: 'Record one production event', detail: 'Capture output, scrap, issue notes, and owner evidence.' },
+    { title: 'Review risk and next action', detail: 'Use the issue, maintenance, and close views to decide what needs attention.' },
+  ],
+  website: [
+    { title: 'Name the business website', detail: 'Start with one clear homepage instead of a blank builder.' },
+    { title: 'Preview desktop and mobile', detail: 'Check what a customer sees before editing copy.' },
+    { title: 'Adjust sections and lead capture', detail: 'Keep only the useful pages, offers, proof, and contact path.' },
+    { title: 'Approve before publishing', detail: 'Publishing stays gated until the owner reviews evidence.' },
+  ],
+  ecommerce: [
+    { title: 'Name the storefront', detail: 'Start from a small product list that can be governed by Shop.' },
+    { title: 'Review products and fulfilment', detail: 'Check SKUs, pickup/delivery promise, and payment instructions.' },
+    { title: 'Create one customer request', detail: 'Turn storefront demand into a reviewed order path.' },
+    { title: 'Send approved orders into Shop', detail: 'Inventory, payment, and support decisions stay connected.' },
+  ],
+}
+
 export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const runtime = useOutletContext<RuntimeHealth>()
   const navigate = useNavigate()
@@ -213,6 +240,13 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         : managedEcommerce
           ? MANAGED_ECOMMERCE_ONBOARDING_HINT
           : null
+  const businessNamePlaceholder = product === 'commerce'
+    ? 'Example: Yangon Wellness Spa'
+    : product === 'production'
+      ? 'Example: Bago Food Production'
+      : product === 'website'
+        ? 'Example: Mandalay Clinic'
+        : 'Example: Yangon Home Store'
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
@@ -460,14 +494,37 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
           <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>{accountCheckPending ? 'Checking whether this is a company workspace before preparing anything.' : managedIntro}</p></div>
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
-          <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
+          <ol aria-label={`${onboardingProduct.name} first-run path`} className="product-onboarding-path">
+            {onboardingFirstRunSteps[product].map((step, index) => (
+              <li key={step.title}>
+                <span aria-hidden="true">{index + 1}</span>
+                <p><strong>{step.title}</strong>{step.detail}</p>
+              </li>
+            ))}
+          </ol>
+          {product === 'commerce' ? (
+            <section aria-label="Shop pilot proof rule" className="product-onboarding-proof">
+              <div>
+                <span className="core-eyebrow">Pilot proof</span>
+                <h3>Run one day before adding modules</h3>
+                <p>Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check.</p>
+              </div>
+              <ul>
+                <li><strong>20</strong><span>accepted order-to-close runs</span></li>
+                <li><strong>5</strong><span>daily closes observed</span></li>
+                <li><strong>0</strong><span>unexplained payment or stock changes</span></li>
+              </ul>
+              <p>Paid pilot only after the owner can name faster close, fewer package mistakes, or clearer payment reconciliation.</p>
+            </section>
+          ) : null}
+          <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={businessNamePlaceholder} required value={setup.workspace} /></label>
           {product === 'commerce' ? (
             <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
               {/* Named after the pack actually selected. This said "Standard retail sample" for
                   every pack, so a spa or school owner -- the ones with no trade template to pick,
                   who are the whole reason this fallback exists -- was told their starter data was
-                  retail. Lowercasing keeps the retail wording identical to before. */}
-              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `Standard ${selectedShopIndustryPack.name.toLowerCase()} sample`}</small></summary>
+                  retail. */}
+              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `${selectedShopIndustryPack.name} starter sample`}</small></summary>
               {/* The signup page's grouped picker, ported so both doors speak one vocabulary.
                   Trades cover shops that sell goods; a spa, gym or school has no trade template,
                   so the service packs are listed directly -- without them, that owner's only
@@ -475,7 +532,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   client never opens, and they onboarded onto a retail catalog. */}
               <label className="demo-pack-select">What kind of business?
                 <select onChange={(event) => changeBusinessChoice(event.target.value)} value={businessChoiceId}>
-                  <option value="">Standard sample (current industry pack)</option>
+                  <option value="">Use the current starter sample</option>
                   <optgroup label="Shops and trades">
                     {shopBusinessTemplates.map((template) => <option key={template.id} value={`trade:${template.id}`}>{template.name.en} · {template.name.my}</option>)}
                   </optgroup>

@@ -47,6 +47,13 @@ const publicProducts = manifest.customerProducts
 
 const brand = manifest.brand
 
+function productFirstOperatingLoop(product) {
+  assert(Array.isArray(product.firstOperatingLoop), `first_operating_loop_missing:${product.id}`)
+  assert(product.firstOperatingLoop.length === 4, `first_operating_loop_length:${product.id}`)
+  assert(product.firstOperatingLoop.every((item) => typeof item === 'string' && item.length >= 24 && item.length <= 96), `first_operating_loop_copy_invalid:${product.id}`)
+  return product.firstOperatingLoop
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -291,8 +298,14 @@ const sharedStyle = `
   .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(25,54,42,.045); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 13px; }
+  .compact-first { display: grid; gap: 4px; margin-top: 14px; border-left: 2px solid var(--green); padding-left: 10px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+  .compact-first span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; font-weight: 760; text-transform: uppercase; }
   .compact-solution > .card-link { margin-top: auto; }
   .compact-solution > .card-link + .card-link { margin-top: 2px; }
+  .first-loop { scroll-margin-top: 92px; }
+  .first-loop-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .first-loop-list li { min-height: 58px; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--panel-solid); color: var(--muted); font-size: 14px; line-height: 1.45; }
+  .first-loop-list i { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-style: normal; font-weight: 800; }
   .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
@@ -333,7 +346,7 @@ const sharedStyle = `
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
-  @media (max-width: 420px) { .compact-solution { padding: 18px; } }
+  @media (max-width: 420px) { .compact-solution { padding: 18px; } .first-loop-list li { grid-template-columns: 28px minmax(0,1fr); padding: 10px 11px; font-size: 13px; } }
   @media (max-width: 520px) { .compact-solutions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .compact-solution { min-height: 250px; padding: 16px; } .compact-solution h3 { margin-top: 12px; font-size: 22px; } .compact-solution > p { font-size: 11px; line-height: 1.45; } .compact-solution .card-index { min-height: 28px; font-size: 8px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 12px; } }
   @media (max-width: 760px) { .offer-model-grid { grid-template-columns: 1fr; } .offer-model-lane { padding: 24px 0; } .offer-model-lane + .offer-model-lane { border-top: 1px solid var(--line-strong); border-left: 0; padding-left: 0; } .offer-model-action { align-items: stretch; flex-direction: column; } .offer-model-action .button { width: 100%; } }
 `
@@ -401,11 +414,13 @@ function documentHtml({ route, title, description, content, schema = null, robot
 
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
+  const firstLoop = productFirstOperatingLoop(product)
   const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
+    <div class="compact-first"><span>First loop</span>${escapeHtml(firstLoop[0])}</div>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
     <a class="card-link" href="/${escapeHtml(product.id)}/">${escapeHtml(product.name)} overview</a>
     <a class="card-link" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a>
@@ -449,6 +464,7 @@ function productLandingHtml(product, page) {
   const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
   const description = page.description || product.description
   const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
+  const firstLoop = productFirstOperatingLoop(product)
   const launchModuleLimit = manifest.templatePackPolicy.maxEnabledModulesAtLaunch
   assert(Number.isSafeInteger(launchModuleLimit) && launchModuleLimit >= 1 && launchModuleLimit <= 8, 'launch_module_limit_invalid')
   const launchModules = moduleItems.slice(0, launchModuleLimit)
@@ -460,6 +476,7 @@ function productLandingHtml(product, page) {
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
     <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">First operating loop</span><h2>Start with one ${escapeHtml(product.name)} job.</h2><p>This is the path a new owner should understand before looking at advanced modules.</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
     <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Use the core workflow before adding complexity.</h2><p>The guided workspace runs on the owner’s device. Managed service is only for shared records, approved AI context, and infrastructure the business asks SuperMega to operate.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Local</span><h3>Start one real job</h3><ul class="offer-model-list"><li>The ${escapeHtml(launchModules.length)} core workflows above</li><li>Backup and restore</li><li>Review before consequential actions</li></ul></div><div class="tier-lane"><span class="eyebrow">AI assisted</span><h3>Prepare, then review</h3><ul class="offer-model-list"><li>Source-backed drafts from approved records</li><li>Ranked next actions</li><li>No automatic send or payment</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>One company workspace</h3><ul class="offer-model-list"><li>Separate client portal</li><li>Staff sign-ins and limits</li><li>Shared records with recovery controls</li></ul></div></div></section>

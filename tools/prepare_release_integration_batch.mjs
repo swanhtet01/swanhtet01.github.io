@@ -173,7 +173,7 @@ export const APP_SHELL_REQUIREMENTS = [
       "routeProduct ? ' has-system-navigator' : ''",
       'export function ProductHomeEntry',
       'export function ProductHomePage',
-      '<nav aria-label="Choose a SuperMega product" className="product-track-grid">',
+      '<nav aria-label="Choose product" className="product-track-grid">',
     ],
   },
   {
@@ -336,8 +336,8 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Each product opens as its own working sample. Setup is optional when you are ready to use your business data.',
-      'supermega.last-product.v1', 'Your product workspaces stay separate. Opening a sample does not change another product.',
+      'Working samples. Add data when ready.',
+      'supermega.last-product.v1', 'Samples stay separate.',
       "'Choose what you want to run.'",
       'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.',
     ],

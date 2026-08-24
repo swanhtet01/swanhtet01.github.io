@@ -1273,12 +1273,24 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
       ? `${industryPack.firstWorkflow} ${industryPack.name} sample items are loaded.`
       : `Your existing items were kept. The ${industryPack.name} appointment schedule is separate.`
     : ''
+  const spaPilotActive = industryPack?.id === 'spa'
 
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">{counterContextLabel}</span><h2>{bi('Tap an item to add it')}</h2>{industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <div>
+            <span className="core-eyebrow">{counterContextLabel}</span>
+            <h2>{bi('Tap an item to add it')}</h2>
+            {industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
+            <nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav>
+            {spaPilotActive ? <div aria-label="Spa pilot first sale path" className="shop-spa-pilot-strip">
+              <span><strong>Sell package</strong><small>Cash, KBZPay, WavePay, AYA Pay, or MMQR</small></span>
+              <span><strong>Book treatment</strong><small>Use the schedule before the guest arrives</small></span>
+              <span><strong>Reject bad redemption</strong><small>Refuse duplicate or invalid package use</small></span>
+              <span><strong>Close day + reload</strong><small>Count cash, payments, open orders, and stock</small></span>
+            </div> : null}
+          </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
         {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
@@ -1349,7 +1361,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
               never opted in sees nothing here. Balance is the pure projection in
               shop-loyalty.ts; showing it changes no record. */}
           {loyaltyPoints?.has(customer.trim()) && customer.trim() !== 'Guest' ? <p className="shop-loyalty-chip">{customer.trim()} · {shopLoyaltyDisplayPoints(loyaltyPoints.get(customer.trim()) ?? 0).toLocaleString()} pts</p> : null}
-          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
+          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
           {/* S2 merchant payment QR: display-only (see payment-qr-store.ts). At a Myanmar
               counter the customer pays a non-cash sale by scanning the owner's static
               merchant QR and typing the amount, so the affordance lives exactly here —
@@ -6811,7 +6823,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
               <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
-              <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+              <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>AYA Pay</option><option>MMQR</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}
         </form>

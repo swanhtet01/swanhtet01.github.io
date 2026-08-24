@@ -73,7 +73,7 @@ const PUBLISH_CSS = 'showroom/src/products/website/publish-workspace.css'
 // token, a color-mix() of tokens, a var() fallback for hex, or rem for a px length)
 // instead of widening the budget.
 const CEILINGS = new Map([
-  ['showroom/src/core/core-app.css', { hex: 98, px: 2268 }],
+  ['showroom/src/core/core-app.css', { hex: 98, px: 2233 }],
   ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 111, px: 349 }],
   ['showroom/src/products/website/website-product.css', { hex: 60, px: 658 }],
   ['showroom/src/products/website/publish-workspace.css', { hex: 1, px: 195 }],

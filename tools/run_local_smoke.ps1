@@ -1,9 +1,19 @@
 param(
     [string]$BindHost = "127.0.0.1",
-    [int]$Port = 0
+    [int]$Port = 0,
+    [switch]$AllowLegacyLocalSmoke,
+    [string]$OwnerConfirmation = ""
 )
 
 $ErrorActionPreference = "Stop"
+$ExpectedOwnerConfirmation = "I UNDERSTAND LEGACY SMOKE IS NOT READINESS PROOF"
+
+function Assert-LegacySmokeApproval {
+    if (-not $AllowLegacyLocalSmoke -or $OwnerConfirmation -cne $ExpectedOwnerConfirmation) {
+        throw "Quarantined legacy serve_solution.py smoke path. This is not SuperMega readiness proof. Re-run only with -AllowLegacyLocalSmoke and -OwnerConfirmation `"$ExpectedOwnerConfirmation`" for local legacy observation."
+    }
+    Write-Warning "Running legacy serve_solution.py / mark1_pilot local smoke only. This is not SuperMega readiness proof, release proof, commercial proof, or Shop pilot evidence."
+}
 
 function Get-PreferredPythonExecutable {
     param([string]$RepoRoot)
@@ -70,6 +80,7 @@ function Wait-ForLocalUrl {
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
+$null = Assert-LegacySmokeApproval
 $pythonExe = Get-PreferredPythonExecutable -RepoRoot $repoRoot
 $serveScript = Join-Path $repoRoot "tools\serve_solution.py"
 $smokeScript = Join-Path $repoRoot "tools\smoke_test_supermega_app.py"

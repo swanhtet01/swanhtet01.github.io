@@ -42,6 +42,7 @@ for (const page of landingPages) {
   const html = readStatic(page.file)
   const canonical = new URL(page.route, `${manifest.release.productionDomain}/`).href
   const description = page.description || product.description
+  check(Array.isArray(product.firstOperatingLoop) && product.firstOperatingLoop.length === 4, `landing_first_loop_manifest:${page.route}`)
   check(typeof description === 'string' && description.length >= 40, `landing_description_present:${page.route}`)
   descriptions.push(description)
   check(html.includes(`<title>${page.title}</title>`), `landing_title:${page.route}`)
@@ -61,6 +62,12 @@ for (const page of landingPages) {
   check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check(html.includes(`<h1>${product.headline}</h1>`), `landing_headline:${page.route}`)
+  check(html.includes('id="first-loop"'), `landing_first_loop_section:${page.route}`)
+  check(html.includes('First operating loop'), `landing_first_loop_label:${page.route}`)
+  check(html.includes(`<ol class="first-loop-list" aria-label="${product.name} first operating loop">`), `landing_first_loop_accessible:${page.route}`)
+  for (const item of product.firstOperatingLoop) {
+    check(html.includes(item), `landing_first_loop_item:${page.route}:${item}`)
+  }
   check(html.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `landing_primary_cta:${page.route}`)
   check(html.includes(`href="/contact/?product=${product.id}"`), `landing_secondary_cta:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
@@ -77,6 +84,7 @@ for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   check(home.includes(`href="${page.route}">${product.name} overview</a>`), `home_links_landing:${page.route}`)
   check(home.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `home_keeps_guided_cta:${product.id}`)
+  check(home.includes(product.firstOperatingLoop[0]), `home_shows_first_loop:${product.id}`)
 }
 
 // Homepage carries exactly one Organization JSON-LD block sourced from the manifest.

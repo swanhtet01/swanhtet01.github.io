@@ -250,8 +250,10 @@ swSource = swSource
 await writeFile(swPath, swSource, 'utf8')
 
 // The manifest was a build input, not a deliverable: it would ship a full map of the chunk graph
-// and count against the artifact byte budget for nothing.
-await rm(viteDir, { recursive: true, force: true })
+// and count against the artifact byte budget for nothing. On Windows, Vite's manifest directory
+// can stay briefly locked after the build process exits, so keep the removal deterministic but
+// tolerate transient handle release latency.
+await rm(viteDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 
 const bytes = (await Promise.all(precache.map(async (url) => (await stat(resolve(distDir, url.slice(1)))).size)))
   .reduce((total, size) => total + size, 0)

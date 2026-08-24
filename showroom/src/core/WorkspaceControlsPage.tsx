@@ -769,7 +769,7 @@ export function WorkspaceControlsPage() {
               The image is stored in this device's IndexedDB only: it is never uploaded, and it
               is not part of workspace backups by construction (the backup snapshots registered
               localStorage keys; this store is invisible to it, like product photos). */}
-          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (Wave MMQR, MyanMyanPay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
+          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (MMQR, AYA Pay, WavePay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
           <PaymentQrSettingsControls scope={paymentQrScope} />
         </section>
 
