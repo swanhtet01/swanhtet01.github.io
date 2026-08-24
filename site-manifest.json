@@ -56,6 +56,12 @@
       "eyebrow": "Shop operations",
       "headline": "Sell, track stock, and close the day.",
       "description": "Use the working Shop sample for counter sales, orders, stock, purchases, receipts, returns, and daily close. Real payments, messages, delivery, and stock writes stay behind review.",
+      "firstOperatingLoop": [
+        "Choose Beauty spa or another Shop template.",
+        "Load starter catalog, stock, bookings, and sample orders.",
+        "Take one sale with Cash, KBZPay, WavePay, AYA Pay, or MMQR.",
+        "Reconcile payment proof and close the day."
+      ],
       "primaryCta": {
         "label": "Open Shop"
       },
@@ -527,6 +533,12 @@
       "eyebrow": "Plant operations",
       "headline": "Plan jobs, record output, and close shifts.",
       "description": "Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.",
+      "firstOperatingLoop": [
+        "Choose the closest plant type.",
+        "Load jobs, materials, equipment, and quality checks.",
+        "Record output, scrap, downtime, or an issue.",
+        "Review the priority queue before the next shift."
+      ],
       "primaryCta": {
         "label": "Open Plant"
       },
@@ -796,6 +808,12 @@
         "No payment action"
       ],
       "description": "Draft a simple, mobile-first company website from what your shop already knows, approve it, and download the whole site to keep.",
+      "firstOperatingLoop": [
+        "Answer one business brief.",
+        "Review finite pages and mobile preview.",
+        "Approve content, evidence, and lead capture.",
+        "Download the retained site artifact."
+      ],
       "modules": [
         "Site drafted from your trade — copy written from facts your shop can actually support",
         "Page and menu editor — bounded, schema-checked, with device previews",
@@ -916,6 +934,12 @@
         "No external write"
       ],
       "description": "Build a Shop-backed catalog and reviewed order requests. Publishing stays separate; Shop remains the stock and price record.",
+      "firstOperatingLoop": [
+        "Choose products governed by Shop catalog.",
+        "Build a customer cart and quote.",
+        "Save a request receipt with pickup or delivery intent.",
+        "Send the reviewed request into Shop."
+      ],
       "modules": [
         "Storefront from real stock — the catalog is sealed to Shop, so it cannot show what you do not have",
         "Checkout quote — price, delivery and tax decided from Shop policies, valid for 15 minutes",
