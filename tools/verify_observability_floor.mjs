@@ -67,9 +67,13 @@ function normalizePath(value) {
 
 function safeOutput(value) {
   return String(value || '')
-    .replace(/([?&](?:token|secret|key)=)[^&\s]+/gi, '$1[redacted]')
+    .replace(/\b((?:DATABASE_URL|POSTGRES_URL|SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN|GITHUB_TOKEN|OPENAI_API_KEY)\s*=\s*)[^\s"'`]+/gi, '$1[redacted]')
+    .replace(/\bpostgres(?:ql)?:\/\/[^\s"'<>]+/gi, 'postgres://[redacted]')
+    .replace(/([?&](?:access_token|api_key|apikey|jwt|key|password|secret|token)=)[^&\s]+/gi, '$1[redacted]')
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]')
     .replace(/\b(sk-[A-Za-z0-9._-]{12,})\b/g, '[redacted-key]')
+    .replace(/\b(?:ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '[redacted-github-token]')
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '[redacted-jwt]')
     .slice(0, 4_000)
 }
 

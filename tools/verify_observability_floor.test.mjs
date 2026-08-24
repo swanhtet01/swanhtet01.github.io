@@ -82,6 +82,19 @@ test('keeps unsafe command failures as hard failures', () => {
   assert.equal(result.status, 'fail')
 })
 
+test('redacts credential-shaped command failure snippets', () => {
+  const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJvcGVyYXRvciJ9.ZmFrZXNpZ25hdHVyZXRlc3Rpbmc'
+  const result = classifyCommandResult('app_security_contract', {
+    status: 1,
+    stdout: '',
+    stderr: `Error: leaked DATABASE_URL=postgresql://user:pass@example.test/db ghp_1234567890abcdefghijklmnopqrstuv Bearer abc.def.ghi ${jwt} sk-proj-1234567890abcdefghijklmnop`,
+  }, { required: true })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'fail')
+  assert.doesNotMatch(result.reason, /postgresql:\/\/user|ghp_|Bearer abc|eyJhbGci|sk-proj-1234|user:pass/)
+  assert.match(result.reason, /\[redacted/)
+})
+
 test('classifies HQ live drift as advisory when explicitly allowed', () => {
   const result = classifyCommandResult('hq_live_state', {
     status: 1,
