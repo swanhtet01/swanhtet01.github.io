@@ -21,14 +21,18 @@ Shop trade links may include a reviewed `template` query parameter, such as ?pro
 
 ## 3. Demo script
 
-1. Start on the `Sell` tab (`/shop/?tab=counter`). Read the heading: `Tap an item to add it`. Point out the sample catalog tiles with prices and stock counts.
-2. Tap two or three items. The `Current sale` panel fills; on a phone the cart is the bottom bar. Optionally show `Search or scan SKU`.
-3. In the sale panel, leave Customer as `Guest` or type a name, then pick a payment method: `Cash`, `KBZPay`, or `WavePay`.
-4. Tap `Review order`. The accountable gate opens (`Review counter order`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
-5. Tap `Create order`. The order is created and sample stock is reserved. The footer already told the client: `Confirm to create the order. Finish payment and handoff in Orders.`
-6. Open the `Orders` tab (`/shop/?tab=orders`). Advance the new order through its owned steps: `Start preparing`, then `Mark ready`, then `Reconcile payment` when payment review becomes the primary action, then `Complete`.
-7. Open the `Stock` tab (`/shop/?tab=inventory`). Show that the sale moved stock and where low-stock items surface; imports live at `/shop/?tab=inventory#shop-catalog-import`.
-8. Finish on the `Today` tab: the next job with `Open next step` and `New sale`, the metrics `Open orders`, `Today's sales`, `Stock alerts`, `Outstanding`, and the disclosures `More Shop tools` and `Shop safeguards`. For an owner-focused client, show `Save daily close` under finance controls at `/shop/?tab=orders#shop-close-controls`.
+1. Start on the `Sell` tab (`/shop/?tab=counter`). On a phone, point to the bottom task bar — `Today`, `Sell`, `Orders`, and `Stock` are the working modes, not setup pages. Read the heading: `Tap an item to add it`.
+2. Show the item-finding paths before touching the cart: tap a tile, type into `Search or scan SKU`, and on Android Chrome tap `Scan a barcode with the camera` if the button appears. If the button is absent, say the app fell back to the keyboard-wedge/search path rather than pretending every browser has camera scanning.
+3. Open `Stock` (`/shop/?tab=inventory`) and point at the product-photo control on a catalog row. If you have a non-private test image, attach it and return to `Sell` to show the same SKU as a photo tile; otherwise say product photos are device-local and skip the upload.
+4. Add two or three items. The `Current sale` panel fills; on a phone the cart sits at the bottom so the cashier never leaves the counter flow.
+5. In the sale panel, use a named customer if you are demonstrating points; otherwise leave Customer as `Guest`. If loyalty is enabled and the customer has a projected balance, point at the points chip only as a reviewed balance — do not call it a campaign, membership, or automated promotion.
+6. Pick `Cash`, `KBZPay`, or `WavePay`. If a non-sensitive test merchant QR is already saved on this device, open the amount-due QR affordance and read `Scan to pay`; otherwise state the boundary: the QR feature is display-only and the owner must add their own provider-issued image.
+7. Tap `Review order`. The accountable gate opens (`Review counter order`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
+8. Tap `Create order`. The order is created and sample stock is reserved. The footer already told the client: `Confirm to create the order. Finish payment and handoff in Orders.`
+9. Open `Orders` (`/shop/?tab=orders`). Use the current primary path: `Start preparing`, `Mark ready`, then `Paid & handed over` when it is offered. If payment review is still separate for that order, use the visible payment-review action before completion; never say the QR captured money.
+10. Finish on `Today`: show `Open next step`, `New sale`, `Open orders`, `Today's sales`, `Stock alerts`, `Outstanding`, `More Shop tools`, and `Shop safeguards`. For an owner-focused client, open `/shop/?tab=orders#shop-close-controls`, show the settlement count, and use `Review and save close` or `Save daily close` only after the day's numbers have been checked.
+
+Android phone smoke pass, before using this with a real owner: first load the sample while online, then turn off connectivity and repeat steps 1, 2, 4, 7, 8, 9, and 10. Record whether the camera prompt appears, whether the bottom bar remains usable with one thumb, whether the QR dialog opens or shows the no-saved-QR fallback, and whether reload keeps the order/close path. This is still rehearsal evidence only; it is not hosted pilot proof.
 
 ## 4. Objection handling: the boundary
 
