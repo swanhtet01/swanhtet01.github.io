@@ -384,6 +384,7 @@
     "plant:state:verify": "node tools/test_production_state_validator.mjs",
     "plant:quality:verify": "node tools/test_production_quality_hold.mjs && node tools/test_plant_quality_capa.mjs",
     "plant:oee:verify": "node tools/test_plant_oee_summary.mjs",
+    "plant:oee:window:verify": "node tools/test_plant_managed_oee_window.mjs",
     "plant:product-mix:verify": "node tools/test_plant_product_mix_summary.mjs",
     "plant:output:velocity:verify": "node tools/test_plant_output_velocity.mjs",
     "plant:shift:performance:verify": "node tools/test_plant_shift_performance_summary.mjs",
