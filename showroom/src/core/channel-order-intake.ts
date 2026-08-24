@@ -121,7 +121,26 @@ const managedPayments: Record<string, ChannelOrderPayment> = {
   card: 'Card',
 }
 
-type ManagedOrderField = 'customer_reference' | 'channel' | 'sku' | 'quantity' | 'payment' | 'fulfilment'
+/**
+ * Every field the managed extractor is allowed to populate, in the server's own snake_case names
+ * and the server's own order -- this list mirrors `OrderIntakeField` / `_FIELD_ORDER` in
+ * supermega_runtime/order_intake.py and must be kept in step with it.
+ *
+ * Deliberately NOT the same list as channelOrderFields. channelOrderFields is the set of details a
+ * human maps to exact words in the message; this is the wider set the model proposes, and it is
+ * what section 9 of hq/research/order-intake-agent-evaluation-2026-08.md means by "every field the
+ * model populated with a non-null value".
+ */
+export const managedOrderFields = [
+  'customer_reference',
+  'channel',
+  'sku',
+  'quantity',
+  'payment',
+  'fulfilment',
+] as const
+
+export type ManagedOrderField = (typeof managedOrderFields)[number]
 
 export async function buildManagedChannelOrderDraft(input: {
   catalogSkus: string[]
@@ -153,7 +172,7 @@ export async function buildManagedChannelOrderDraft(input: {
   }
 
   const provenance = new Map<ManagedOrderField, { quote: string; start: number; end: number }>()
-  const managedFieldNames = new Set<ManagedOrderField>(['customer_reference', 'channel', 'sku', 'quantity', 'payment', 'fulfilment'])
+  const managedFieldNames = new Set<ManagedOrderField>(managedOrderFields)
   for (const entry of managed.provenance) {
     if (!record(entry) || !managedFieldNames.has(entry.field as ManagedOrderField) || provenance.has(entry.field as ManagedOrderField) || !Array.isArray(entry.source_spans) || entry.source_spans.length < 1) {
       throw new Error('The managed AI source evidence is invalid.')

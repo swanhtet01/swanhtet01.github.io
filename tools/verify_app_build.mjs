@@ -4388,7 +4388,19 @@ if (!metricsCollectorSource.includes('writeStoredMetrics(SESSION_EVENTS)')
   || !metricsCollectorSource.includes('if (SESSION_EVENTS.length === 0) SESSION_EVENTS.push(...readStoredMetrics())')) fail('local_metrics_persistence_wiring_missing')
 if (!channelOrderUiSource.includes('const [aiProposedDraft, setAiProposedDraft] = useState<ChannelOrderDraft | null>(null)')
   || !channelOrderUiSource.includes('proposed: aiProposedDraft,')
-  || !channelOrderUiSource.includes('captureOrderIntakeCorrection(window.localStorage, {')) fail('order_intake_correction_capture_wiring_missing')
+  || !channelOrderUiSource.includes('captureOrderIntakeCorrection(window.localStorage, {')
+  // The named operator is what makes the section 9 correction-effort metric an observation rather
+  // than an anonymous count; buildOrderIntakeEvidenceRecord writes nothing without one, so
+  // dropping this one line would silently stop every evidence record while every other check here
+  // kept passing. Mutation-tested by deleting the line.
+  || !channelOrderUiSource.includes("actor: identity?.userId ?? ''")
+  // The DECLINE path. A message that is not an order is the one case the operator's correct action
+  // creates nothing, so nothing else in the app would notice this call site disappearing -- and
+  // without it the section 9 corpus's two `not_an_order` fixtures produce no observation at all,
+  // which is what made a correct model refusal indistinguishable from an unreviewed draft.
+  // Mutation-tested by deleting the button and by deleting the capture call.
+  || !channelOrderUiSource.includes('onClick={declineReviewedDraft}')
+  || !channelOrderUiSource.includes('accepted: null,')) fail('order_intake_correction_capture_wiring_missing')
 if (!coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })")
   || !coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })")) fail('pilot_business_metric_emission_missing')
 if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
