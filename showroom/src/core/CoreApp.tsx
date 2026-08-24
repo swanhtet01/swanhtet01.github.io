@@ -1286,7 +1286,25 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
             previous `aria-label={`Add ${item.name} to this sale`}` announced the
             action and the English name and then nothing else: not the price, not
             the stock level, not the quantity already in the sale, and never
-            item.nameMy -- the Burmese product name the owner typed in themselves.
+            item.nameMy -- the item's Burmese name, when it has one.
+
+            On that last point, correcting this comment's own first version
+            (verified 2026-08-24): it said "the Burmese product name the owner
+            typed in themselves". No owner can type it. The catalog draft has
+            no Burmese field (sku/name/price/onHand/reorderAt only), the CSV
+            importer does not carry one and product-onboarding-runtime.ts:377
+            says it must not grow one, and business-templates.ts -- the ten
+            trade templates a shop actually picks -- contains no nameMy at all.
+            CommerceItem.nameMy is validated (commerce-workspace.ts:2534,
+            :6433) and rendered here and on the cart line, but on a Shop
+            CATALOG it has no in-app producer; it can only arrive in a restored
+            workspace payload. The bilingual nameMy that does ship belongs to
+            service/pack/ledger rows, which is a different type.
+
+            So this reference is correct and worth keeping -- it is what makes
+            the name bilingual the moment a producer exists -- but do not read
+            it as evidence that Myanmar catalogs are bilingual today. They are
+            not. See hq/strategy/MYANMAR-READINESS-AUDIT.md.
             The quantity badge's own aria-label sat inside that override and was
             announced nowhere.
 
