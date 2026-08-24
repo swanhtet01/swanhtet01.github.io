@@ -4,7 +4,7 @@
 
 ## Why this kit exists
 
-The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v4`, stored at `hq/readiness/managed-pilot-readiness.json`) blocks every managed claim behind the founder decision `managed-production-activation`. It requires four explicit inputs: `approve_runtime_role_provisioning`, `approve_first_named_owner_identity`, `approve_exact_production_release`, and `approve_managed_activation_window`. Its operator block requires a measured baseline (`measuredBaselineRequired`) and acceptance evidence (`acceptanceEvidenceRequired`) alongside verified email, terms acceptance, and tenant-isolation proof. Separately, `shop-spa-owner-pilot` stays `owner-gated`; this local rehearsal cannot substitute for the named client's hosted run.
+The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v5`, stored at `hq/readiness/managed-pilot-readiness.json`) blocks every managed claim behind the founder decision `managed-production-activation`. It requires four explicit inputs: `approve_runtime_role_provisioning`, `approve_first_named_owner_identity`, `approve_exact_production_release`, and `approve_managed_activation_window`. Its operator block requires a measured baseline (`measuredBaselineRequired`) and acceptance evidence (`acceptanceEvidenceRequired`) alongside verified email, terms acceptance, and tenant-isolation proof. Separately, `shop-spa-owner-pilot` stays `owner-gated`; this local rehearsal cannot substitute for the named client's hosted run.
 
 This kit is the paperwork for that preparation. It authorizes nothing: the founder decision remains `required` with `proposal_only` authority, and nothing in this kit touches a hosted service, spends a credential, or performs any network mutation.
 

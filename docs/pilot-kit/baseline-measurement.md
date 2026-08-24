@@ -2,7 +2,7 @@
 
 Fill this in WITH the Spa owner, in person, before day 1 of the five-day pilot. Keep it in the founder's private workspace.
 
-Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v4`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `managed-production-activation` can produce accepted Shop-pilot evidence. The Shop work order `shop-spa-owner-pilot` requires a named Spa owner, reviewed client import, package sale, matching treatment redemption, daily close, recovery, and five-day evidence (`hq/portfolio.json`). Section 4 contains both the Shop operating baseline and the Spa-specific fields required by tools/create_shop_pilot_handoff.mjs and npm script `client:pilot:handoff`.
+Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v5`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `managed-production-activation` can produce accepted Shop-pilot evidence. The Shop work order `shop-spa-owner-pilot` requires a named Spa owner, reviewed client import, package sale, matching treatment redemption, daily close, recovery, and five-day evidence (`hq/portfolio.json`). Section 4 contains both the Shop operating baseline and the Spa-specific fields required by tools/create_shop_pilot_handoff.mjs and npm script `client:pilot:handoff`.
 
 ## Rules of measurement
 
