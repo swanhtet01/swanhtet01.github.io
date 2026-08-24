@@ -502,6 +502,21 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
               </li>
             ))}
           </ol>
+          {product === 'commerce' ? (
+            <section aria-label="Shop pilot proof rule" className="product-onboarding-proof">
+              <div>
+                <span className="core-eyebrow">Pilot proof</span>
+                <h3>Run one day before adding modules</h3>
+                <p>Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check.</p>
+              </div>
+              <ul>
+                <li><strong>20</strong><span>accepted order-to-close runs</span></li>
+                <li><strong>5</strong><span>daily closes observed</span></li>
+                <li><strong>0</strong><span>unexplained payment or stock changes</span></li>
+              </ul>
+              <p>Paid pilot only after the owner can name faster close, fewer package mistakes, or clearer payment reconciliation.</p>
+            </section>
+          ) : null}
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={businessNamePlaceholder} required value={setup.workspace} /></label>
           {product === 'commerce' ? (
             <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
