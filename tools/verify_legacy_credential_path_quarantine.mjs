@@ -10,8 +10,8 @@ const targets = [
 
 const requiredSnippets = {
   'package.json': [
-    '"preapp:verify": "npm run security:legacy-credential-paths:verify"',
-    '"preapp:verify:local": "npm run security:legacy-credential-paths:verify"',
+    '"preapp:verify": "npm run security:legacy-credential-paths:verify && npm run security:legacy-smoke-paths:verify"',
+    '"preapp:verify:local": "npm run security:legacy-credential-paths:verify && npm run security:legacy-smoke-paths:verify"',
     '"security:legacy-credential-paths:verify": "node tools/verify_legacy_credential_path_quarantine.mjs"',
   ],
   'tools/bootstrap_supermega_ops.ps1': [
