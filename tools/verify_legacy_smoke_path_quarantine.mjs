@@ -14,8 +14,8 @@ const ownerConfirmation = 'I UNDERSTAND LEGACY SMOKE IS NOT READINESS PROOF'
 
 const requiredSnippets = {
   'package.json': [
-    '"preapp:verify": "npm run security:legacy-credential-paths:verify && npm run security:legacy-smoke-paths:verify"',
-    '"preapp:verify:local": "npm run security:legacy-credential-paths:verify && npm run security:legacy-smoke-paths:verify"',
+    '"preapp:verify": "npm run security:legacy-credential-paths:verify && npm run security:legacy-smoke-paths:verify && npm run shop:run001:claims:verify"',
+    '"preapp:verify:local": "npm run security:legacy-credential-paths:verify && npm run security:legacy-smoke-paths:verify && npm run shop:run001:claims:verify"',
     '"security:legacy-smoke-paths:verify": "node tools/verify_legacy_smoke_path_quarantine.mjs"',
   ],
   'tools/run_local_smoke.ps1': [
