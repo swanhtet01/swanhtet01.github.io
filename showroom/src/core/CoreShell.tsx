@@ -705,7 +705,7 @@ export function ProductHomePage() {
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
       ) : null}
-      <nav aria-label="Choose a SuperMega product" className="product-track-grid">
+      <nav aria-label="Choose product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
           if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null

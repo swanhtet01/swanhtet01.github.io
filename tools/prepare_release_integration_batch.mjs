@@ -173,7 +173,7 @@ export const APP_SHELL_REQUIREMENTS = [
       "routeProduct ? ' has-system-navigator' : ''",
       'export function ProductHomeEntry',
       'export function ProductHomePage',
-      '<nav aria-label="Choose a SuperMega product" className="product-track-grid">',
+      '<nav aria-label="Choose product" className="product-track-grid">',
     ],
   },
   {
