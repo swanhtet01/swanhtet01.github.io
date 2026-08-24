@@ -716,6 +716,8 @@
     "client:pilot:handoff:self-test": "node --test tools/create_shop_pilot_handoff.test.mjs",
     "client:pilot:workspace": "node tools/manage_shop_pilot_workspace.mjs",
     "client:pilot:workspace:self-test": "node tools/test_shop_pilot_workspace.mjs",
+    "client:pilot:public-boundary:verify": "node tools/verify_shop_pilot_public_boundary.mjs",
+    "client:pilot:public-boundary:self-test": "node --test tools/verify_shop_pilot_public_boundary.test.mjs",
     "client:pilot:observed-evidence": "node tools/record_shop_pilot_observed_run.mjs",
     "client:pilot:observed-evidence:self-test": "node --test tools/record_shop_pilot_observed_run.test.mjs",
     "shop:spa-owner-packet": "node tools/create_shop_spa_owner_onboarding_packet.mjs",
