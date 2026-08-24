@@ -9,7 +9,6 @@ import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
 import {
   managedProductIsVisible,
-  managedProductPath,
   productSwitcherVisible,
   resolveManagedProductHome,
   resolveManagedProductRoute,
@@ -106,8 +105,6 @@ const checkingRuntime: RuntimeHealth = {
 }
 
 const LAST_PRODUCT_KEY = 'supermega.last-product.v1'
-const DEFAULT_ENTRY_PRODUCT: ClientSolutionId = 'commerce'
-
 function isClientSolutionId(value: unknown): value is ClientSolutionId {
   return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
 }
@@ -621,10 +618,10 @@ const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
 ]
 
 const customerProducts = [
-  ['Shop', 'Sell + stock', 'Sales, orders, stock, close.', '/shop/'],
-  ['Plant', 'Produce', 'Jobs, materials, quality.', '/plant/'],
-  ['Website', 'Build site', 'Pages, leads, preview.', '/website/'],
-  ['Ecommerce', 'Order page', 'Storefront to Shop handoff.', '/ecommerce/'],
+  ['Shop', 'Sales, orders, stock, close.', 'Complete a sample sale', '/shop/'],
+  ['Plant', 'Jobs, materials, quality.', 'Run a sample production job', '/plant/'],
+  ['Website', 'Pages, leads, preview.', 'Preview a business website', '/website/'],
+  ['Ecommerce', 'Storefront to Shop handoff.', 'Send a sample order to Shop', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
@@ -656,11 +653,7 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
       ? <ProductHomePage />
       : <Navigate replace to={decision.path} />
   }
-  return route
-    ? <Navigate replace to={route} />
-    : choosingProduct
-      ? <ProductHomePage />
-      : <Navigate replace to={managedProductPath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
+  return route ? <Navigate replace to={route} /> : <ProductHomePage />
 }
 
 export function ProductHomePage() {
@@ -706,7 +699,7 @@ export function ProductHomePage() {
         <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
       ) : null}
       <nav aria-label="Choose product" className="product-track-grid">
-        {customerProducts.map(([name, job, outcome, path], index) => {
+        {customerProducts.map(([name, outcome, firstAction, path], index) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
           if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
           const setup = productSetups?.[setupKey]
@@ -714,12 +707,12 @@ export function ProductHomePage() {
           return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
-                <small>{job}</small>
+                <small>First action</small>
                 <h2>{name}</h2>
                 <p>{outcome}</p>
-                {workspaceName ? <span className="product-track-workspace">{workspaceName}</span> : null}
+                {workspaceName ? <span className="product-track-workspace">Continue saved workspace: {workspaceName}</span> : null}
               </span>
-              <strong className="product-track-open">Open {name} <span aria-hidden="true">→</span></strong>
+              <strong className="product-track-open">{firstAction} <span aria-hidden="true">→</span></strong>
             </Link>
         })}
       </nav>
