@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -100,6 +100,21 @@ test('verifies JSON files and fails closed for public text leaks', () => {
   assert.equal(verified.fileDigests.length, 1)
 
   assert.throws(() => verifyShopPilotPublicBoundaryFiles([bad]), /private_artifact_reference_present/)
+})
+
+test('rejects symlinked public artifact files when the platform supports creating them', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'supermega-w5-public-boundary-link-'))
+  const target = join(root, 'target.json')
+  const link = join(root, 'link.json')
+  writeFileSync(target, JSON.stringify(validSummary(), null, 2))
+  try {
+    symlinkSync(target, link, 'file')
+  } catch {
+    t.skip('file symlink creation is not available in this environment')
+    return
+  }
+
+  assert.throws(() => verifyShopPilotPublicBoundaryFiles([link]), /public_boundary_file_invalid/)
 })
 
 test('CLI returns only safe status fields', () => {

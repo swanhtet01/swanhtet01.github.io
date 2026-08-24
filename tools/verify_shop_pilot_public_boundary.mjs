@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFileSync, statSync } from 'node:fs'
+import { lstatSync, readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -97,8 +97,10 @@ function isRecord(value) {
 
 function readBoundedFile(path) {
   const resolved = resolve(path)
+  const linkMetadata = lstatSync(resolved)
+  if (linkMetadata.isSymbolicLink()) throw new Error('public_boundary_file_invalid')
   const metadata = statSync(resolved)
-  if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error('public_boundary_file_invalid')
+  if (!metadata.isFile()) throw new Error('public_boundary_file_invalid')
   if (metadata.size <= 0 || metadata.size > MAX_PUBLIC_ARTIFACT_BYTES) throw new Error('public_boundary_file_size_invalid')
   const raw = readFileSync(resolved, 'utf8')
   if (Buffer.byteLength(raw, 'utf8') !== metadata.size) throw new Error('public_boundary_file_changed')
