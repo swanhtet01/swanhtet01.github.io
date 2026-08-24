@@ -1349,7 +1349,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
               never opted in sees nothing here. Balance is the pure projection in
               shop-loyalty.ts; showing it changes no record. */}
           {loyaltyPoints?.has(customer.trim()) && customer.trim() !== 'Guest' ? <p className="shop-loyalty-chip">{customer.trim()} · {shopLoyaltyDisplayPoints(loyaltyPoints.get(customer.trim()) ?? 0).toLocaleString()} pts</p> : null}
-          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
+          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
           {/* S2 merchant payment QR: display-only (see payment-qr-store.ts). At a Myanmar
               counter the customer pays a non-cash sale by scanning the owner's static
               merchant QR and typing the amount, so the affordance lives exactly here —
@@ -6811,7 +6811,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
               <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
-              <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+              <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>AYA Pay</option><option>MMQR</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}
         </form>

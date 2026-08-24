@@ -2,7 +2,7 @@
 //
 // WHAT THIS IS (roadmap item S2, hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md). Myanmar
 // counters take digital payment through ONE static merchant QR the provider issued to
-// the owner (Wave MMQR, MyanMyanPay, a KBZPay merchant code). The customer scans it in
+// the owner (MMQR, AYA Pay, WavePay, or a KBZPay merchant code). The customer scans it in
 // their own banking app, types the amount themselves, pays, and shows the cashier the
 // confirmation screen. The owner uploads a photo or screenshot of that provider-issued
 // QR here, keyed by the payment method label the counter already uses; the counter and
@@ -72,11 +72,11 @@ const MAX_SOURCE_BYTES = 64 * 1024 * 1024
 
 /**
  * The payment-method labels a QR can be stored for: the counter's pinned method
- * list (`['Cash', 'KBZPay', 'WavePay']` in CoreApp.tsx) minus Cash — cash needs no
+ * list (`['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR']` in CoreApp.tsx) minus Cash — cash needs no
  * QR. Records are keyed by the exact display label so the counter and the receipt
  * can look a method up with the string they already hold.
  */
-export const PAYMENT_QR_METHODS: readonly string[] = ['KBZPay', 'WavePay']
+export const PAYMENT_QR_METHODS: readonly string[] = ['KBZPay', 'WavePay', 'AYA Pay', 'MMQR']
 
 /** The storage scope for a workspace: its managed id, or the device-local workspace. */
 export function paymentQrScopeForWorkspace(workspaceId?: string | null): string {
