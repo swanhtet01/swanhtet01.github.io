@@ -1,0 +1,1280 @@
+# Founder decision packet — every open founder-only decision, in one ordered list
+
+Date: 2026-08-24
+Status: **decision packet for the founder.** This document authorizes nothing:
+no deploy, no production write, no migration, no release dispatch, no billing or
+entitlement transition, no customer contact, and no gate change. It quotes no
+price, because none is approved. It proposes no change to any `CLAUDE.md` hard
+limit.
+
+Grounded on `origin/main` at **`6647a2b2`** (PR #551, 2026-08-23) — the same
+commit that release run **346** shipped live on 2026-08-23. Every entry below
+was re-checked against that commit, not against a summary. Entries that turned
+out to be **already decided or already shipped** are listed in section 6 rather
+than asked again; that section is a result, not an omission.
+
+**Why this document exists.** `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md` §6
+concludes that every path to a first paying client runs through founder gates.
+Those gates are currently spread across a dozen documents, six open pull
+requests and one machine-readable ledger. Nobody can act on a dozen documents.
+This is the one list.
+
+**How to read an entry.** Every entry is a yes/no or a pick-one. Each carries
+what is blocked on it, the real consequence of each option, a recommendation you
+can simply accept, and what it costs to change your mind later. Where a
+decision is referenced somewhere but was never actually specified, the entry
+says so instead of reconstructing it.
+
+---
+
+## 0. The minimum subset
+
+**Three decisions, plus one accept-the-default, make a first paying Myanmar
+client possible. Everything else in this packet changes what happens after that
+client, not whether they arrive.**
+
+- **P1** — may the first payment be taken before the billing rail can record it?
+- **P2** — which pricing shape (D1)?
+- **P3** — which payment channels appear on the invoice (D2)?
+- **P4** — accept the three written recommendations for D3 (currency), D4 (tax)
+  and D5 (entitlement lapse)? One "yes" closes all three.
+
+That is the whole minimum. It is small on purpose, and the smallness is the
+most useful fact in this document: **no engineering work stands between the
+company and its first kyat.** `CLIENT-READINESS-BRIEF.md` §2 ("The honest
+shortest path, with its cost named") establishes that the pilot-fee and
+design-partner shapes charge for the founder's five days of setup and attention
+— a service the company can deliver today, on a local device, with no hosted
+infrastructure — and that such a fee needs only D1 and can be collected by bank
+or wallet transfer outside the product.
+
+The cost of that path is equally plain and is P1's whole subject: the first
+commercial transaction would then have no accountable record inside a system
+whose entire differentiator is that every transaction has one.
+
+**What the minimum subset does NOT include, and why.** Production activation,
+the migration set, tenant #1, the hosted acceptance run, the Burmese counter
+slice and every item in sections 3-5 are all real and all founder-gated — but
+none of them is required for a first paying client under P1's fast path. They
+are required for a first *managed* client, for an in-rail invoice, and for
+scale. Section 2 sequences them honestly rather than implying they are on the
+critical path.
+
+---
+
+## 1. The minimum subset, in full
+
+### P1 — May the first payment be taken before the billing rail can record it?
+
+**Answer with:** yes (charge now, reconcile later) or no (wait for the rail).
+
+**Blocked on this:** the sequencing of everything else in this packet. A "yes"
+makes P2+P3+P4 the entire critical path. A "no" makes section 2 the critical
+path and pushes first revenue behind production activation, tenant #1, and a
+five-day acceptance run.
+
+**Options and their real cost.**
+
+- **Charge now, outside the product.** Revenue can begin as soon as a price
+  exists and a design partner agrees. The cost is exact and non-trivial: the
+  first commercial transaction has no `billing.invoice.issued` /
+  `billing.payment.confirmed` record, so the company's first act of taking money
+  is the one act it cannot show evidence for. `CLIENT-READINESS-BRIEF.md` §2
+  names this cost in those terms and says to take it deliberately if at all.
+- **Wait for the rail.** Every kyat is recorded from the first one, with the
+  digest-sealed evidence spine `BILLING-RAIL-DESIGN.md` §4.2 defines. The cost
+  is the whole of section 2 first: production writes are still unauthorized
+  (`hq/readiness/managed-pilot-readiness.json` → `securityAudit.productionMutationAuthorized: false`),
+  production is at managed schema **v11** while `billing_rail.py`'s
+  `BILLING_SCHEMA_VERSION` defaults to **12**, and every `BillingLedger` method
+  is workspace-scoped so it needs a tenant that does not yet exist.
+
+**Recommendation: yes — charge now, and reconcile into the ledger after
+activation.** Reasoning: the thing being sold at client one is the founder's
+five days on the shop floor (`docs/pilot-kit/`), which is deliverable today and
+is not improved by waiting. Take the mitigation that costs nothing: write the
+invoice packet with `tools/prepare_managed_invoice.mjs` anyway (it is
+zero-network, deterministic and takes every monetary value from a founder-supplied
+config file), keep the digest, and replay it as `issue-invoice` /
+`confirm-payment` once the rail reaches production. The record is then late,
+not absent.
+
+**Reversibility:** high. The invoice can be recorded after the fact against the
+same digest. What cannot be undone is the fact that the first transaction's
+record was created retrospectively — so if that specific fact matters to you as
+a matter of principle, answer no.
+
+**Source:** `hq/strategy/CLIENT-READINESS-BRIEF.md` §2 (critical path table,
+rows 1 and 10, plus "The honest shortest path, with its cost named");
+`hq/strategy/BILLING-RAIL-DESIGN.md` §3, §6; `hq/readiness/managed-pilot-readiness.json`.
+
+---
+
+### P2 — Which pricing shape (D1)?
+
+**Answer with:** A, B, or C.
+
+**Blocked on this:** everything downstream of money. `prepare_managed_invoice.mjs`
+takes every monetary value from a founder-supplied config that does not exist
+until D1 does. `FOUNDER-BOTTLENECK-STUDY.md` §4 A3 states the prerequisite
+literally: "there is nothing to generate before a price exists". Critical-path
+step 10 (`CLIENT-READINESS-BRIEF.md` §2) cannot begin. This is the single most
+blocking item in the entire repository.
+
+**The three shapes, with their real consequences** (restated from
+`BILLING-RAIL-DESIGN.md` §7; all three produce identical records, so this
+decision changes only what the line items say — it blocks the first invoice, not
+the build):
+
+- **A — Fixed 30-day pilot fee.** One invoice, one payment, one grant, a day-30
+  go/no-go. Consequence: no recurring-revenue signal at all, a re-quote
+  negotiation at conversion, and a real risk that the pilot figure anchors as
+  the product figure.
+- **B — Setup fee plus monthly subscription.** Consequence: you commit to the
+  verify-and-grant cycle per customer per month from customer one (fine at tens;
+  `FOUNDER-BOTTLENECK-STUDY.md` §2 puts the ceiling in the hundreds of clients),
+  and a subscription framing invites uptime and term expectations the claims
+  boundary in `MARKETING-POSITIONING.md` §(e) does not yet permit you to meet.
+- **C — Design-partner arrangement.** Discounted or deferred fee in exchange for
+  scheduled operator access and structured feedback. Consequence: best fit for
+  the named Spa pilot the ledger actually points at
+  (`hq/portfolio.json` shop `localAutomation.workOrderId: "shop-spa-owner-pilot"`),
+  buys the operator access the eval gates need, low anchoring risk — but a
+  deferred fee can mean the rail's first real payment confirmation happens very
+  late, and the feedback obligations need written bounds of their own.
+
+**No amount appears anywhere in this document, in `BILLING-RAIL-DESIGN.md`, or
+in any code. That is by guard-enforced decision (`capability-tiers.ts` asserts
+no amount ever appears in it) and this packet does not weaken it.** Before you
+set a figure, `BILLING-RAIL-DESIGN.md` §7's own input list applies: delivery
+hours, support load, hosting and recovery cost, the customer's baseline value,
+currency, taxes, payment method, cancellation terms, and your minimum margin.
+
+**Recommendation: C for client one, with a nominal non-zero fee, then B from
+client two onward.** Reasoning: C matches the only pilot the ledger is shaped
+for, and §7's own counsel — "consider a nominal non-zero invoice so the full
+record path is exercised with real money once, early" — converts C's single
+weakness into its strength: you exercise the whole invoice→transfer→confirm→grant
+path with real money at low stakes, which is exactly the rehearsal you want
+before a full-price customer. B afterwards, because the rail was built for a
+monthly cadence and that is the only shape that produces an honest recurring
+signal.
+
+**Reversibility:** the shape is cheap to change — invoice packets are immutable,
+so renegotiation is "void the draft, prepare a new `invoiceId`"
+(`BILLING-RAIL-DESIGN.md` §3), a per-invoice act. The expensive and
+hard-to-reverse half is the **anchor**: the first figure a customer sees, and
+especially any figure that reaches a public page (see **P22**), is very hard to
+raise later.
+
+**Source:** `hq/strategy/BILLING-RAIL-DESIGN.md` D1 and §7;
+`hq/strategy/FOUNDER-BOTTLENECK-STUDY.md` §4 A3; `hq/strategy/CLIENT-READINESS-BRIEF.md` §2 row 1.
+
+---
+
+### P3 — Which payment channels appear on the invoice, with what labels and references (D2)?
+
+**Answer with:** a named list — which KBZPay/WavePay wallets, which bank
+accounts, in what order, under what labels.
+
+**Blocked on this:** any invoice at all. `paymentChannels[]` is limited to
+`bank_transfer | mobile_money | cash` with **founder-supplied labels**, config-supplied
+per invoice and never hardcoded (`BILLING-RAIL-DESIGN.md` §4.1). There is no
+default and no fallback: an invoice without a channel cannot tell the customer
+where to send money, and `confirm-payment` verifies against "the named channel
+reference".
+
+**Options and their real cost.** This is not really a menu; it is a completeness
+question. One channel is simplest and fails whenever that customer cannot use
+it. Two or three channels cost you nothing structurally (the contract already
+takes an array) but each one you list is one more account whose transfers you
+must personally check before running `confirm-payment` — that check is
+`CLAUDE.md`'s permanent founder-only boundary and does not amortize.
+
+**Recommendation: name exactly two — one mobile wallet and one bank account —
+and add cash only if you intend to accept it in person.** Reasoning: two covers
+the realistic failure case (a customer who cannot use one rail) at the cost of
+one extra account to watch, and it keeps the "did the money arrive" check to a
+number of places you can hold in your head at the end of a day.
+
+**Hard constraint on where the answer lives:** the labels, account numbers and
+references go in your local invoice config, in `.secrets/`-class storage, and
+**never** in this public repository — `CLAUDE.md` forbids the founder's payment
+details anywhere in it. This packet therefore records that you must decide them,
+not what they are.
+
+**Reversibility:** total. Channels are per-invoice config; the next invoice can
+carry a different set with no migration and no code change.
+
+**Source:** `hq/strategy/BILLING-RAIL-DESIGN.md` D2, §3, §4.1;
+`hq/strategy/CLIENT-READINESS-BRIEF.md` §2 row 1.
+
+---
+
+### P4 — Accept the three written recommendations for D3, D4 and D5?
+
+**Answer with:** yes (accept all three), or name the one you want changed.
+
+**Blocked on this:** the first invoice's shape (D3, D4) and the steady-state
+per-client founder cadence (D5). None of the three is genuinely open in the
+sense D1 and D2 are — each already carries a written recommendation in
+`BILLING-RAIL-DESIGN.md`'s decision table, and this packet's job is to let you
+close them with one word.
+
+**What you are accepting.**
+
+- **D3 currency — MMK, integer amounts, exponent 0.** Cost of accepting: a
+  USD-denominated design-partner deal would need a per-invoice override (the
+  contract stays parameterized, so this is possible, not blocked). Cost of not
+  deciding: the first invoice cannot be prepared.
+- **D4 tax — `tax.decided: false` on every v1 invoice, and no tax-invoice claim
+  of any kind.** Cost of accepting: you cannot present these as tax invoices,
+  which some buyers will ask for. Cost of the alternative: a compliance claim
+  the claims boundary does not permit and no code enforces.
+- **D5 entitlement lapse — no automatic expiry; you review monthly and revoke
+  manually.** This one has a measurable consequence and is worth a sentence:
+  `FOUNDER-BOTTLENECK-STUDY.md` §2 shows that under this reading step 11
+  (`grant-entitlement`) runs **once per client at onboarding and never again** —
+  the code refuses an already-granted entitlement (`billing_rail.py:1091-1092`)
+  — so the recurring per-client load is step 10's two commands per cycle. Under
+  the alternative (re-establish the entitlement each cycle) you add
+  `revoke-entitlement` + `grant-entitlement` per client per cycle, **roughly
+  doubling** the steady-state founder billing load. Auto-expiry is not on the
+  menu at all: it would be an automated entitlement change and breaches
+  `CLAUDE.md`.
+- **A consequence of D5 worth knowing:** under the recommended reading the
+  entitlement row stays bound to the first paid invoice and is never revisited,
+  so `premiumUnlocked` answers "was this workspace ever granted", **not** "is
+  this client current on payments". Whether a paying client has stopped paying
+  is visible only in invoice and payment history — which is what **P13**'s
+  overdue projection exists to surface.
+
+**Recommendation: yes to all three, exactly as written.** Reasoning: each was
+written with its alternative examined, none forecloses anything (currency stays
+parameterized, tax stays a per-invoice field, entitlement stays manually
+reversible), and leaving them open leaves the steady-state cadence genuinely
+undefined — which `FOUNDER-BOTTLENECK-STUDY.md` §6 flags as the one caveat no
+amount of code reading resolves.
+
+**Reversibility:** total for all three. D3 and D4 are per-invoice fields; D5 is
+a habit, and the rail supports both readings without code change.
+
+**Source:** `hq/strategy/BILLING-RAIL-DESIGN.md` D3, D4, D5;
+`hq/strategy/FOUNDER-BOTTLENECK-STUDY.md` §2 ("Why step 11 does not recur") and §6.
+
+---
+
+## 2. Decisions that unblock the first *managed* tenant
+
+Everything in this section is required for an in-rail invoice, for premium
+entitlement, and for the hosted acceptance evidence. **None of it is required
+for a first paying client under P1's fast path.** It is ordered so that P5 comes
+first because it gates the rest.
+
+### P5 — Grant the production-activation approval? (four named sub-approvals)
+
+**Answer with:** four yes/nos, or one yes for all four.
+
+The four are already named machine-readably in
+`hq/readiness/managed-pilot-readiness.json` → `overall.nextAction.requires`, and
+pinned by `tools/verify_hq_contract.mjs:1082`:
+
+1. `approve_runtime_role_provisioning`
+2. `approve_first_named_owner_identity`
+3. `approve_exact_production_release`
+4. `approve_managed_activation_window`
+
+**Blocked on this:** every hosted gate except this one is already
+`ready-hosted`. `production_activation` is the **single** blocking gate
+(`overall.blockingGateCount: 1`). Downstream of it: tenant #1, the hosted
+acceptance run that closes the Shop `nextGate`, any in-rail invoice, premium
+entitlement, and the enterprise ladder's first rung.
+
+**What has already been cleared, so you are not deciding it again.** Production
+is PostgreSQL 17 at managed schema **v11**, zero drift from the local target,
+advisor **clear**, browser roles denied (`securityAudit`, recorded
+2026-08-20). Migration v11 is **already live** — the current runbook §0 says
+"Do not apply it again as an activation step". Release run **346** shipped
+`6647a2b2` — the current head of `main` — live on 2026-08-23, so the "exact
+candidate merged to trunk and released as a paired, live-verified commit"
+precondition is satisfiable by pointing at that run rather than by dispatching
+anything new. **The approval receipt is the one thing genuinely missing**
+(`founderDecision.approvalReceipt: null`).
+
+**Options and their real cost.**
+
+- **Approve all four now.** You get an activatable production target. Cost:
+  runbook step D remains what it calls itself — "the one genuinely
+  consequential, hardest-to-reverse step: once real customer tenants exist, they
+  exist." Steps A-C stay reversible (env flags flip back; v11 is additive).
+- **Approve a subset.** Legitimate and cheap: approving 1 and 3 (runtime login,
+  exact release) lets the runtime login be provisioned and validated without
+  opening anything to a customer, because 4 (the activation window) is the
+  customer-facing switch and is separate.
+- **Approve none yet.** Nothing changes; the fast path in section 1 is
+  unaffected.
+
+**Recommendation: approve 1 and 3 now, and hold 2 and 4 until you have a named
+client.** Reasoning: provisioning and validating the dedicated runtime login is
+the step most likely to surface a surprise, it is reversible (the login can be
+rotated), and it involves no customer. Naming the first owner (2) and opening
+the window (4) should be answered with a real person in front of you, and P6
+below determines *which* door that person walks through.
+
+**A real cost you should know before you plan the timing.** Recording the
+approval is not a five-minute edit. It requires flipping
+`package.json`'s `supermega.productionSupabaseTargetStatus` from
+`protected-unapproved` to `activation-approved` — and `package.json` is
+digest-bound, so the change requires the rehearsal cascade
+(`database:postgres17:record` → `readiness:managed:write`) that `CLAUDE.md`
+documents. That cascade needs a **local loopback PostgreSQL 17 from the EDB
+Windows x86-64 binaries**. I ran the preflight from this Linux sandbox on
+`6647a2b2` and it reports `{"error":"postgres17_tooling_missing","ready":false}`
+— so **this is work on your Windows machine, not agent work**, and three
+verifiers (`verify_hq_contract.mjs:1091` and `:1142`,
+`verify_supabase_security_advisor_audit.mjs:339`) currently assert the
+un-approved state and must be updated in the same commit.
+
+**Reversibility:** sub-approvals 1-3 and runbook steps A-C are reversible. Step
+D (`SUPERMEGA_TRIAL_WRITES_ENABLED=true`) is the one-way door, and only once a
+real tenant has been created through it.
+
+**Source:** `hq/readiness/managed-pilot-readiness.json` (`founderDecision`,
+`overall.nextAction`, `securityAudit`, `gates`);
+`hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md` §0-§4;
+`tools/verify_hq_contract.mjs:1082,1091,1142`;
+`tools/provision_supermega_runtime_role.py:73,126`; release run 346.
+
+---
+
+### P6 — For client one: open the public self-serve window, or activate one named tenant with the window shut?
+
+**Answer with:** self-serve, or named-tenant.
+
+**Blocked on this:** which runbook you follow after P5, and what your exposure
+is on day one. This decision did not exist when `CLIENT-READINESS-BRIEF.md` was
+written; a second, fully documented path landed on `main` between 2026-08-21 and
+2026-08-23 (`docs/CLIENT-TENANT-ACTIVATION.md`, 475 lines, plus the
+`client:portal:workspace` and `client:pilot:workspace` commands).
+
+**The two doors, and they are genuinely different.**
+
+- **Self-serve window** (`PRODUCTION-ACTIVATION-RUNBOOK.md` step C:
+  `SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW=open`). Any stranger with a verified
+  email and a claim code can create a tenant, with no human in the loop and a
+  per-actor rate limit of 5 (`trial_store.py`). Cost: your first day of
+  production writes is also your first day of open public signup, and the
+  identity half of that path is **not finished** — `signup-account.ts` is
+  deliberately dead code, unimported, with the panel and the Supabase `signUp`
+  call still unbuilt (see **P24**).
+- **Named-tenant activation** (`docs/CLIENT-TENANT-ACTIVATION.md` §1-§5:
+  `managed_activation prepare → validate → authorize → apply`, then
+  `client:activation:requery`). One atomic transaction inserts one access
+  control, one owner membership and one immutable activation event for one named
+  business with an explicitly listed product set. The self-serve window stays
+  shut — verified: `self_serve_activation_window_open()`
+  (`trial_runtime.py:138-148`) gates *only* the self-serve tenant-creation
+  endpoint, nothing else. Cost: more founder steps per tenant (a private owner
+  invitation through the Supabase Auth administrator, an approval UUID, a
+  reviewed plan), and it does not exercise the self-serve path you eventually
+  want.
+
+**Recommendation: named-tenant for client one.** Reasoning: it lets you take a
+real client onto production without simultaneously opening a public signup door
+whose identity leg is admittedly unbuilt, it produces exactly the reviewed,
+digest-bound evidence the Spa pilot gate asks for, and it keeps
+`additional_tenant_activation` in `founderDecision.doesNotAuthorize` meaningful
+— one tenant, deliberately. Open the self-serve window later as its own decision,
+after P24.
+
+**Reversibility:** high in both directions. The window unsets to a 503; a named
+tenant, once created, exists (the same one-way property as step D).
+
+**Source:** `docs/CLIENT-TENANT-ACTIVATION.md`;
+`supermega_runtime/trial_runtime.py:138-148`;
+`hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md` §1-§2;
+`hq/readiness/managed-pilot-readiness.json` `founderDecision.doesNotAuthorize`.
+
+---
+
+### P7 — Which migration set goes into the activation window?
+
+**Answer with:** stay at v11, add v12, or add v12+v13.
+
+**Blocked on this:** whether the billing rail can run against production at all,
+and whether `premiumUnlocked` ever resolves true.
+
+**Correction to the sources first, because two of them are stale on this point.**
+`CLIENT-READINESS-BRIEF.md` §2 row 6 and PR **#495**'s fork table both present
+the choice as "v11 only / v11→v12 / v11→v12→v13". **v11 is already live on
+production** (`securityAudit.liveSchemaVersion: 11`, drift 0; the current runbook
+§0 says do not apply it again). The live fork is therefore v12 and v13 only, and
+both documents need that correction — it is folded into **P8**.
+
+**The three options, with their real cost.**
+
+- **Stay at v11.** No billing at all: the three billing tables ship in v12, so
+  `billing_rail.py` cannot operate against a v11 database whatever the env says
+  (`_assert_schema` requires PostgreSQL 17 **and** an exact schema-version match,
+  `billing_rail.py:693`). No new migration proof needed. You keep the fast path
+  in section 1 and reconcile later.
+- **Add v12.** Billing becomes operable: issue, confirm, void, record refund.
+  Cost: a disposable-branch proof of v12 first — **v12 has never had one**; and
+  `_premium_unlocked` stays `false` in-product, so **nothing the customer sees
+  changes when they pay.**
+- **Add v12 and v13.** Billing operable *and* the premium flag actually
+  resolves. v13 is proven on a disposable hosted PostgreSQL 17 branch already
+  (`hq/readiness/billing-entitlement-read-proof.json`). Cost: a v12 proof still
+  needed, plus two live hazards PR #495 documents — the policy-predicate
+  fingerprint (`BILLING_ENTITLEMENT_READ_POLICY_DIGEST`) is a hash over
+  PostgreSQL's *deparsed* rendering, so a server that deparses a correct policy
+  differently takes billing down on an otherwise-correct database; and the
+  env-scope trap below.
+
+**The env-scope trap, which applies to every option except "stay at v11".** Two
+runtimes fail closed on an **exact** schema-version match read from an
+environment variable, not from the database: `trial_store.py`'s
+`TRIAL_SCHEMA_VERSION` (env `SUPERMEGA_TRIAL_SCHEMA_VERSION`, default 10) and
+`billing_rail.py`'s `BILLING_SCHEMA_VERSION` (env
+`SUPERMEGA_BILLING_SCHEMA_VERSION`, default 12). They live in **different
+processes** — the billing CLI reads its value in your shell, not in Vercel — and
+`trial_store.py:320`'s `if TRIAL_SCHEMA_VERSION >= 12:` also changes the trigger
+inventory the store demands. So database and env must move together, in both
+directions, or every managed read and write fail-closes on a live tenant.
+
+**Recommendation: v12 and v13 together, in one window, before any tenant exists
+— conditional on a disposable-branch proof of v12 first.** Reasoning: the
+unavoidable window in which database and env disagree costs **nothing** while
+there are zero tenants and zero customers, and it is expensive and
+customer-visible later (a planned outage on a live partner). Do not take v12
+alone: a customer who pays and sees nothing change is the worst of the three.
+
+**Reversibility:** migrations are additive; reversing needs a new migration. Env
+flags flip back freely. The genuinely irreversible thing here is doing it *after*
+a live tenant exists, which is what the recommendation avoids.
+
+**Source:** `hq/strategy/BILLING-RAIL-DESIGN.md` D6 and §6;
+`hq/strategy/CLIENT-READINESS-BRIEF.md` §2 "The schema-version trap";
+PR [#495](https://github.com/swanhtet01/swanhtet01.github.io/pull/495);
+`hq/readiness/billing-entitlement-read-proof.json`;
+`hq/readiness/managed-pilot-readiness.json` `securityAudit.liveSchemaVersion`.
+
+---
+
+### P8 — Adopt PR #495's runbook amendment?
+
+**Answer with:** merge, merge-with-edits, or reject.
+
+**Blocked on this:** PR #495 itself, which is a draft by design because it
+amends a founder-owned procedure. Nothing else.
+
+**Options and their real cost.**
+
+- **Merge.** The runbook gains a section 2a and three "what you should NOT do"
+  entries covering the env-scope trap in P7. Cost: near zero — one prose file,
+  no verifier pins it, sections 0-1 and steps A-D are byte-identical.
+- **Reject.** The runbook stays as-is: it sequences only v11, never mentions
+  `SUPERMEGA_BILLING_SCHEMA_VERSION`, and its "do not" list carries no warning
+  about schema/env divergence. Cost: the document you follow literally during an
+  activation stays silent about the one failure mode that produces a dead tenant
+  mid-activation.
+
+**Recommendation: merge, with one correction applied first** — the PR's fork
+table still offers "v11 only" as a live option, which P7 shows is stale now that
+v11 is live on production. Ask for the table to be re-cut as v12 / v12+v13
+before it lands, so the amended runbook is not itself out of date on the day you
+follow it.
+
+**Reversibility:** total. It is a documentation change with no verifier pin.
+
+**Source:** PR [#495](https://github.com/swanhtet01/swanhtet01.github.io/pull/495);
+`hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md` §2, §4.
+
+---
+
+### P9 — Approve the six GTM outreach gates, or skip outreach for client one?
+
+**Answer with:** six yes/nos, or "skip — I have a prospect".
+
+The six, from `GTM-AI-OPERATIONS.md` §(f), all currently unticked: approve the
+target lead list; approve the outreach copy; connect a real sending identity and
+consent to send under it; connect a social account; decide cadence and volume
+limits; decide how replies are tracked and who answers them.
+
+**Blocked on this:** any contact with any real business. Lead research and draft
+personalization can run at zero external effect without it
+(`CLIENT-READINESS-BRIEF.md` §2 row 3 is the only agent-executable row on the
+whole client path), but nothing may be sent. `(f)` calls itself "a hard gate,
+the same way `production_activation` is a hard gate."
+
+**Options and their real cost.**
+
+- **Approve all six.** Outreach can begin at your approved cadence. Cost: your
+  time reviewing each batch — permanent and non-delegable, though the contract
+  already permits **batch** granularity rather than per-message, so its per-client
+  cost is a policy choice you already hold rather than an engineering gap
+  (`FOUNDER-BOTTLENECK-STUDY.md` §3).
+- **Approve a subset.** The cheapest useful subset is list + copy + sending
+  identity + replies-to-your-inbox. The social account is separable and buys
+  nothing for a first client.
+- **Skip entirely.** Legitimate: the pilot the ledger is shaped for
+  (`shop-spa-owner-pilot`) is one named business. If you already know that
+  person, this whole entry is not on your path.
+
+**Recommendation: skip for client one; approve list + copy + sending identity +
+replies-to-your-inbox when you want client two.** Reasoning: a design partner
+you already know converts faster than any cold batch, and every approval here is
+a standing consent you would rather grant once you know what the first
+engagement actually taught you. Leave the social account unconnected — it is a
+second public surface to police for no first-client benefit.
+
+**Note on what the repo does and does not tell me:** `hq/portfolio.json` and the
+readiness ledger describe the pilot as "one named Spa owner", and
+`docs/CLIENT-TENANT-ACTIVATION.md` works a `beauty-spa` example through the whole
+activation. **No document in this repository names an actual prospect** — the
+private intake it refers to is not in the repo, correctly. So I cannot tell you
+whether you have one; you can.
+
+**Reversibility:** total up to the moment a message is sent. A sent message is
+not reversible.
+
+**Source:** `hq/strategy/GTM-AI-OPERATIONS.md` §(f);
+`hq/strategy/CLIENT-READINESS-BRIEF.md` §2 rows 2-3;
+`hq/portfolio.json` shop `localAutomation`; `kernel/managed-pilot-readiness.mjs`
+(`customer_message` in `forbiddenUntilReady`).
+
+---
+
+## 3. Decisions on work that is built and waiting on one word
+
+Each of these is a finished branch or a finished document that cannot move
+because it needs a founder sentence. They are cheap to answer and every "yes"
+converts completed work into shipped work.
+
+### P10 — PR #501: approve the twelve plain-language lead lines?
+
+**Answer with:** yes, yes-with-edits, or no.
+
+**Blocked on this:** PR #501 (draft), and `DESIGN-PROGRAM.md` P3.8 batches 2-3
+which sequence behind it. The PR reproduces all twelve sentences verbatim in its
+body, so approval is one read.
+
+**Options and their real cost.** Approving ships a plain sentence above each
+compliance litany, so an owner reading a screen top-down meets what the screen is
+*for* before a boundary assertion. Not approving leaves the litany-first reading
+order that P3.8 exists to fix. There is no third option worth naming: no pinned
+string is edited, so nothing is at risk either way.
+
+**Recommendation: yes.** Reasoning: every line was checked against all sixteen
+do-not-say rules in `MARKETING-POSITIONING.md` §(e), and — the part that earns
+the approval — each was re-checked against its **empty state** after review
+caught one lead asserting that customers had gone quiet on a panel that read "No
+managed queue". Four leads are now conditional and three were verified to hold
+in both states. The copy is more careful than the litanies it sits above.
+
+**Reversibility:** total. Copy edits ship in an ordinary PR.
+
+**Source:** PR [#501](https://github.com/swanhtet01/swanhtet01.github.io/pull/501);
+`hq/strategy/P3-8-LEAD-LINE-PROPOSAL.md`; `hq/strategy/DESIGN-PROGRAM.md` §P3.8.
+
+---
+
+### P11 — PR #537: approve the device backup-headroom warning copy?
+
+**Answer with:** yes, yes-with-edits, or no.
+
+**Blocked on this:** PR #537, held open by its author for exactly this reason
+("Not merging. This puts new words in front of a customer.").
+
+**Options and their real cost.** Approving means an owner sees "Backup room
+filling up" in Settings roughly 644 Plant jobs before the wall, and "Backup room
+almost gone" roughly 214 jobs before it — both measured, with a test that fails
+if the warning band ever narrows below 500 jobs. Declining leaves the current
+behaviour: the wall is explained only on arrival, when the device can no longer
+be backed up at all and "Reset this device" has no restore point.
+
+**Recommendation: yes.** Reasoning: the failure this prevents is the one where a
+shop's records are already unrecoverable, and the copy is unusually disciplined —
+it never promises room can be reclaimed (a test fails on the words *compact*,
+*reclaim*, *clean up*, *delete old*), and it refuses to blame a product unless
+that product holds a strict majority of the file.
+
+**One thing to check before merging:** the PR is currently `mergeable_state:
+dirty` and needs a rebase onto `6647a2b2`. That is engineering work, not your
+decision.
+
+**Reversibility:** total.
+
+**Source:** PR [#537](https://github.com/swanhtet01/swanhtet01.github.io/pull/537).
+
+---
+
+### P12 — PR #509: approve a stored-record shape change and a new customer-facing control?
+
+**Answer with:** yes or no.
+
+**Blocked on this:** PR #509 (draft), and with it the ability to ever compute the
+order-intake §9 correction-effort metric from real operator behaviour.
+
+**Options and their real cost.** Approving changes an on-device record's schema
+and storage key to v2 (v1 records are deliberately **not** migrated — inventing
+an operator name would fabricate the very thing §9 requires be real) and adds a
+"Not an order" button so an operator's correct refusal is recorded as a named
+judgement rather than as silence. Declining leaves the metric uncomputable, which
+means the AI-assistance gate can never be measured against real usage even after
+**P14** unblocks the eval.
+
+**Recommendation: yes.** Reasoning: every defect this PR fixes erred in the same
+direction — *understating* correction effort, making the `<= 0.20` gate easier to
+pass. A metric that fails wrongly gets investigated; one that passes wrongly
+ships. Approving is choosing the harder scorer over the flattering one.
+
+**Reversibility:** high for the control; medium for the record shape — v1 records
+are left intact rather than migrated, so nothing is destroyed, but a third shape
+later means a third key.
+
+**Source:** PR [#509](https://github.com/swanhtet01/swanhtet01.github.io/pull/509);
+`hq/research/order-intake-agent-evaluation-2026-08.md` §9.
+
+---
+
+### P13 — PR #506: provision the bounded billing READ role, or hold the PR?
+
+**Answer with:** provision, or hold.
+
+**Blocked on this:** PR #506 (draft), and the top-ranked item of
+`FOUNDER-BOTTLENECK-STUDY.md` §5 — making "who owes me money" answerable without
+the credential that can also move money.
+
+**Options and their real cost.**
+
+- **Provision the role and merge.** You create one PostgreSQL role — `login
+  nosuperuser bypassrls`, `SELECT` only on the three billing tables plus
+  `trial_schema_meta`, and **none** of the other seven table privileges — and put
+  its URL in a service secret. Overdue detection and dunning *preparation* stop
+  being your tasks; you still perform every transition. Cost: one more credential
+  to manage, and the role must be exactly right — though that is now enforced in
+  code rather than by care (the probe refuses all 21 non-`SELECT` cells across
+  the three tables and names the offenders).
+- **Hold the PR.** Status quo: every overdue query runs from your shell under the
+  superuser-class write credential.
+- **What you must not do: merge #506 without provisioning the role.** The PR
+  states the breaking change plainly — after it merges, the write credential can
+  no longer run `billing_rail.py status`, because that credential holds 21/21
+  non-`SELECT` privileges by construction. Merging alone removes your ability to
+  ask who owes you money.
+
+**Recommendation: provision — but only when you have a paying client, and do it
+in the same sitting as the merge.** Reasoning: the defect is real and verified on
+a live PostgreSQL 17.10 server (a `SELECT`+`TRUNCATE` role emptied all three
+billing tables while `DELETE` was denied; a `SELECT`+`TRIGGER` role silently
+voided the founder's insert), but the saving it buys — minutes per client per
+cycle, plus prevented silent revenue leakage — is worth nothing while there are
+zero invoices. It is post-first-revenue work, sequenced deliberately.
+
+**Two conditions this packet does not propose relaxing:** the read role's URL
+never enters this public repo, and the **write** URL never enters any service
+context — possession of that file is the actual security boundary on billing.
+
+**Reversibility:** high. Drop the role; revert the PR. No migration, no data
+change.
+
+**Source:** PR [#506](https://github.com/swanhtet01/swanhtet01.github.io/pull/506);
+`hq/strategy/FOUNDER-BOTTLENECK-STUDY.md` §4 A2 and §5.
+
+---
+
+### P14 — Will you run the order-intake evaluation from a shell that can reach the provider?
+
+**Answer with:** yes (your machine), yes (a CI job with the secret), or no.
+
+**Blocked on this:** the `ai-assistance` gate, and therefore premium's first
+workflow (order intake from chat) — the single highest-value AI feature for the
+Myanmar channel-commerce reality, per `PRODUCT-SUPREMACY-ROADMAP.md` §2.
+
+**What is actually blocking, verified 2026-08-20.** Two independent blockers,
+neither of which an agent can clear: no provider credential is readable from an
+agent environment (the harness fails closed correctly and makes **zero** network
+calls), **and** the agent proxy denies CONNECT to the OpenAI endpoint every prior
+run used — so a key alone would not unblock it. It needs a founder or CI shell
+with egress to that endpoint and `OPENAI_API_KEY` exported.
+
+**Options and their real cost.**
+
+- **Run it from your machine.** One 20-fixture run produces run 6 and a real gate
+  reading. Cost: your time, plus provider spend for 20 fixtures.
+- **Give CI the secret and the egress.** Repeatable, and future runs cost you
+  nothing. Cost: a provider key in CI, which is a standing exposure to weigh.
+- **Do neither.** The gate stays unmeasured indefinitely.
+
+**Recommendation: run it once from your machine first, then decide about CI.**
+Reasoning: you want to know the number before you decide whether it is worth
+standing infrastructure. **Do not substitute the reachable Anthropic path** — it
+pins a different model class, so a run against it would be run 1 of a second
+baseline, not run 6, and scoring it against thresholds calibrated on the OpenAI
+path is exactly the goalpost-moving the scorer-tolerance decision already
+refused.
+
+**Reversibility:** n/a — it is a measurement, and measurements are only ever
+additive.
+
+**Source:** `hq/research/order-intake-eval-run6-attempt-2026-08-20.md`;
+`hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §2 item 1 and §3 item 4;
+`hq/portfolio.json` researchGate `order-intake-agent`.
+
+---
+
+### P15 — PR #510: approve the destructive half of Shop workspace compaction?
+
+**Answer with:** non-destructive batches only, or full approval, or neither.
+
+**Blocked on this:** implementing compaction. The document's own header requires
+founder approval before the destructive half, which is why the PR is not
+self-merging.
+
+**The problem it addresses, measured not estimated:** a shop with no hosted
+account keeps its whole commerce workspace in one browser-local JSON document
+that grows monotonically and is never pruned — 1,502 bytes per completed sale,
+exactly linear, hitting the ceiling at **1,390 sales** (or **731** for a
+location-inventory shop). Crossing it turns the till read-only mid-trading, and
+today's only remedy destroys every record.
+
+**Options and their real cost.**
+
+- **Non-destructive batches only** (headroom meter, archive export). Deliberately
+  separated so they can ship without approval. Cost: the ceiling still arrives,
+  the owner just sees it coming.
+- **Full approval.** The fold reclaims ~99% of the bytes and lets the shop keep
+  trading. Cost: it permanently drops settled-order detail, and the PR's most
+  important finding is a trap — an obvious-looking fold that passes every
+  validation check, writes successfully, and **permanently ends that workspace's
+  ability to close a trading day**, silently, because one close missing
+  `orderIds` makes every future close expectation return `null`. Any
+  implementation must preserve `close.orderIds` and `close.businessDate`.
+
+**Recommendation: approve the non-destructive batches now; hold the destructive
+fold until a real shop is measurably approaching the ceiling.** Reasoning: no
+workspace anywhere is near 1,390 sales, because there are no clients. Approving a
+destructive operation for a problem nobody has yet spends your irreversibility
+budget on a hypothetical.
+
+**Reversibility:** the meter and export are fully reversible. The fold, by
+definition, is not — for the records it drops. That asymmetry is the whole reason
+it is gated.
+
+**Source:** PR [#510](https://github.com/swanhtet01/swanhtet01.github.io/pull/510).
+
+---
+
+## 4. The Burmese counter slice (G1)
+
+`ERP-COMPETITIVE-ROADMAP.md` §6.6 is blunt: the binding constraint is
+distribution, "with one product precondition", and the precondition is G1 —
+"an English-only till cannot be distributed to Burmese-speaking cashiers no
+matter how good the ledger underneath it is."
+
+**Honest placement: this is not on the minimum path to a first paying client if
+you are personally on the shop floor for five days** — you are the operator's
+support. It is on the path to the *second* client, to any client whose cashier
+you do not train personally, and to every distribution effort converting at all.
+It is placed here rather than in section 1 for that reason, and it is the highest
+item that is not revenue-blocking today.
+
+**Measured state on `6647a2b2`** (counted in
+`showroom/src/core/i18n-actions.ts`, not quoted from a document): **93 entries —
+33 `confirmed`, 60 `pending_native_review`.** The G1 document records 92/33/59;
+one entry has been added since. Nothing pending ever renders: `bi()` falls back
+to English for anything not confirmed, so a partial pass cannot surface an
+unreviewed guess.
+
+### P16 — Will you commission the native-speaker review of the 60 pending entries, and who does it?
+
+**Answer with:** a name, or "not yet".
+
+**Blocked on this:** the till reading Burmese at all. This is the expensive half
+of G1 and it is review time, not build time — the mechanisms for both remaining
+string classes are decided and ship ahead of sign-off.
+
+**Options and their real cost.** Commissioning it converts 60 drafted lines into
+a bilingual counter, one status flip per line, no call site moving. Not
+commissioning leaves the counter English, and every engineering hour spent on G1
+buys nothing until a reviewer exists. There is no agent substitute: safety rule 1
+of the table is that unverified Burmese never surfaces to an operator, and it is
+load-bearing.
+
+**Recommendation: commission it as one batch, and set expectations honestly —
+this does not finish G1.** Reasoning: after full sign-off of every drafted line,
+the counter is bilingual and the back office, Settings, onboarding, Plant,
+Website and Ecommerce are still English (432 of the app's 446 attribute sites and
+the great majority of its sentences). That is the L scope G1 always described.
+The printed acknowledgement stays English deliberately — it is an evidence
+document carrying action ids and digests, not a shop's customer slip.
+
+**Reversibility:** total, and unusually cheap: every line is a one-word status
+flip in either direction.
+
+**Source:** `showroom/src/core/i18n-actions.ts` (measured);
+`hq/strategy/ERP-COMPETITIVE-ROADMAP.md` §6.4 G1 and §6.6;
+`hq/strategy/G1-STRING-MECHANISM-DECISION.md` §8.
+
+---
+
+### P17 — G1 question 5: may a screen reader ever read a control's name in two languages? Plus: which word order?
+
+**Answer with:** yes/no, and verb-first or verb-final.
+
+**Blocked on this:** every further `confirmed` flip of any string that becomes an
+accessible name — which, after the mechanism decision, is most of them.
+
+**Why this one is overdue rather than upcoming.** It is not a question about
+leftover sites. Every mechanism examined — nodes, a joined `aria-label`, even
+`lang` on the element — produces the same flat mixed-language string, so the
+question reaches *any* string that becomes an accessible name. And **seven such
+names are already live on merged `main`** (five distinct strings, four on the
+cashier path), shipped by #536. So the AT check validates behaviour already in
+front of users.
+
+**Options and their real cost.** Answering "yes" ratifies shipped behaviour and
+unblocks the rest. Answering "no" means a one-line status flip back to pending
+for each affected entry — cheap by construction, but visible to users, hence your
+call on a marginal result. The ordering half is the reviewer's: English wants the
+verb first, Burmese is verb-final, and one flat name can carry only one order.
+
+**Recommendation: run the real-device screen-reader check before answering, and
+treat that check as the single most overdue item in the G1 lane.** Reasoning: this
+is the one G1 question where an opinion is worth less than five minutes with a
+device — and it is the only one where the answer could change the mechanism for
+every string at once. This sandbox has no assistive technology; you or the
+reviewer do.
+
+**Reversibility:** high — a one-line status flip per entry, in either direction.
+
+**Source:** `hq/strategy/G1-STRING-MECHANISM-DECISION.md` §7 question 5, §3.1,
+§3.1a.
+
+---
+
+### P18 — G1 question 4: Burmese or Arabic numerals for numbers the app computes?
+
+**Answer with:** Burmese, or Arabic.
+
+**Blocked on this:** confirming the first count template — i.e. every
+parameterised string ("{n} in stock", "{n} open orders", "{price} each"), which
+is roughly half the counter's remaining English words.
+
+**Options and their real cost.** The repo is currently inconsistent with itself:
+the data layer already uses Burmese numerals
+(`shop-service-scheduling.ts`), while the counter's own numbers are Arabic.
+Whichever you choose, the answer reaches money formatting, the receipt and the
+printed acknowledgement — so it is not a per-string call and cannot be deferred
+into the review batch.
+
+**Recommendation: Arabic — but ask the reviewer before you commit to it.**
+Reasoning: the numbers a cashier reconciles against a wallet screen, a bank slip
+and a printed acknowledgement are Arabic in every one of those places, and a
+till that renders them differently from the receipt it prints creates a
+reconciliation error rather than a comprehension aid. **This is the weakest
+recommendation in this packet** and the document says why: the question needs
+native input, and I am reasoning from consistency rather than from how a Yangon
+cashier actually reads a shelf label.
+
+**Reversibility:** medium. It is a formatting rule, so changing it later is a
+code change rather than a status flip, and it would change the appearance of
+printed documents already given to customers.
+
+**Source:** `hq/strategy/G1-STRING-MECHANISM-DECISION.md` §7 question 4, §4.5.
+
+---
+
+### P19 — G1 questions 1-3: the drafted phrasings themselves
+
+**Answer with:** these go to the native reviewer, not to you alone.
+
+Three separate calls are queued for the reviewer: the 14 batch-2 phrase
+translations; the Option-A question (on a composed English label, is a Burmese
+verb-only gloss *helpful* — "this is a save-type action" — or *misleading* —
+"saves, but saves WHAT?"); and the batch-3 per-entry calls, of which
+`Create order` (it reserves stock and does not take money), `Stock` (goods, not
+shares) and `Print receipt` (two loanwords in one label) are flagged as most
+likely to come back wrong.
+
+**What is blocked:** the Option-A answer determines whether a whole family of
+ops-console and parameterised labels can be covered for free, or stays English
+until someone phrases each one.
+
+**Recommendation: bundle all three into P16's review brief.** They are the same
+reviewer, the same sitting, and asking them separately wastes the scarce
+resource.
+
+**Reversibility:** total.
+
+**Source:** `hq/strategy/DESIGN-PROGRAM.md` "BLOCKED on native-speaker sign-off —
+two questions" and "Batch 3 — the counter slice";
+`hq/strategy/G1-STRING-MECHANISM-DECISION.md` §7.
+
+---
+
+## 5. Decisions that block nothing today
+
+These are real founder decisions with real consequences, and none of them stands
+between the company and revenue. They are here so the list is complete and so
+nobody re-opens them by accident.
+
+### P20 — E1: does the published website carry a product catalog at all? And if yes, which corner of the trilemma?
+
+**Answer with:** no catalog (recommended), or yes + which corner.
+
+**Blocked on this:** the E1 photo lane, and nothing else. The prerequisite is
+narrower and more answerable than "photos": **there is no product in the
+published site to attach a photo to.** `WebsiteArtifact` is
+schema/siteName/fingerprint/contentDigest/source/pages; a page is navigation +
+hero + sections + seo; a section is id/eyebrow/title/body. All text. No SKU, no
+price, no catalog row reaches the published file. Publishing a catalog is a new
+customer-facing surface and a scope call against the "finite reviewable site"
+wedge.
+
+**If you say yes, this is a genuine trilemma. Pick any two:** (a) photo bytes
+appear in the published file; (b) the published file is determined by the sealed,
+approved artifact, so it reproduces identically on any device; (c) photo bytes
+stay out of `localStorage`.
+
+- **Seal the bytes into the artifact → (a)+(b), gives up (c).** The seal is
+  reachable only through the workspace, which is re-serialized whole into
+  `localStorage` on every write, and every snapshot prepends another publish
+  record carrying its own full artifact copy. So photo bytes land in
+  `localStorage`, N copies over — the one place `product-image-store.ts` explicitly
+  forbids them. The ceiling is hard and measurable, not soft: the workspace key is
+  a portable backup key, and restore throws above a **4 MB** per-record bound
+  (12 MB whole-snapshot cap on create), on top of the ~5 MB origin quota shared
+  with every other product. At 137-411 KB per photo, a 4-page site with six photos
+  is 0.8-2.5 MB per retained artifact — **the second retained publish can alone
+  break company backup.**
+- **Resolve from IndexedDB in the async download handler → (a)+(c), gives up
+  (b).** Nothing enters `localStorage` and both export pins survive. But the
+  emitted bytes are no longer determined by the sealed artifact: photos are
+  per-origin IndexedDB and deliberately excluded from company backup, so a second
+  device signed into the same managed company finds an empty database and exports
+  a text-only file. **The owner re-uploads and the live site silently loses every
+  picture.**
+- **Ship nothing → (b)+(c).** Today's state.
+- **Fund hosted image storage.** The only option that buys all three, and it is
+  its own founder decision about hosted infrastructure and cost.
+
+**The size fact that should inform the answer:** a full 3-page starter export is
+**11,123 bytes** today. One photo at the ingest bound is 137-411 KB as a data URI
+— **12× to 37× the entire current file for a single picture** — and a ten-item
+catalog lands at 1.4-4.1 MB in one uncacheable HTML file the owner hand-uploads
+over a Myanmar mobile connection. The published CSP (`default-src 'none'`, no
+`img-src`) also blocks `data:` images today and would have to be widened.
+
+**Recommendation: no catalog for now, plus one cheap honest interim** — say on
+the publish screen that the downloaded site file is text-only, so an owner who has
+uploaded photos learns it *before* uploading rather than after. Reasoning: every
+"yes" corner has a failure mode that shows up on a real client's device rather
+than in a test — a broken company backup, or a site that silently loses its
+pictures. The interim sentence costs one line and removes the surprise. That
+sentence is customer-facing copy and needs your sign-off, same rule as P10.
+
+**Reversibility:** high while nothing ships. The expensive direction is the seal
+route, because retained artifacts accumulate and a workspace that has crossed the
+backup bound cannot be un-crossed by a later code change.
+
+**Source:** `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §3 item 3 (which also
+records two over-claims it withdrew — the migration objection and the
+determinism objection are both defeated, and this entry does not resurrect them).
+
+---
+
+### P21 — pos.supermega.dev: ratify the published price, or remove the offers block?
+
+**Answer with:** ratify, or remove.
+
+**Blocked on this:** nothing in this repository. It is here because it is the
+only place in the whole estate where a price is already public, and it directly
+contradicts P2.
+
+**The situation, stated without quoting the figure.** The page at
+`pos.supermega.dev` publishes a specific setup figure four times — in
+`<meta name="description">`, `og:description`, `twitter:description`, and in a
+`schema.org` `offers` block with `priceCurrency: MMK` and
+`availability: InStock`. It does **not** appear in the visible on-page copy.
+Project memory records the current position as custom quote per customer with no
+public prices. **These cannot both be current.**
+
+**Two things make this more urgent than an ordinary copy inconsistency**, and
+they are the audit's reasoning, not mine: because the figure lives in meta and
+structured data rather than visible copy, it is invisible to a human reading the
+page but fully legible to machines; and `schema.org` `offers` markup with a
+concrete price and `InStock` availability is precisely the format search engines
+and AI assistants ingest, cache and repeat. It is the form most likely to be
+quoted back at you by a prospect who never visited the page.
+
+**Options and their real cost.** Ratifying makes it your price and settles part
+of P2 by default — but that page sells **Shop Counter / DeskPOS, a different
+codebase in a different repository** (`swanhtet01/supermega-workspace`,
+`spa-desk-pilot/`), and its nine claims audit to 4 delivered / 5 partial, so
+ratifying the price without the copy fixes ratifies the partials too. Removing
+means going quote-per-customer everywhere — and the audit is specific that the
+`offers` block should be **deleted rather than merely hidden**, because caches
+persist.
+
+**Recommendation: answer P2 first, then make that page match it — and if the
+answer is quote-per-customer, delete the `offers` block rather than hiding the
+figure.** Reasoning: a published price you did not decide is worse than either
+choice made deliberately, and it will be repeated back to you by third parties
+regardless of what this repo's documents say.
+
+**Reversibility:** low, and that is the point. Page text is instantly editable;
+a cached `Offer` in a search index or an AI assistant's memory is not.
+
+**Source:** `hq/strategy/POS-PAGE-CLAIM-AUDIT.md` "Flagged, not resolved: the
+published price", "First, a correction: this page does not sell the software in
+this repo", and recommended fix 7.
+
+---
+
+### P22 — W1: widen the website template library, or confirm the finite-reviewable-site wedge?
+
+**Answer with:** widen, or confirm.
+
+**Blocked on this:** nothing. It is tagged FD-check precisely so nobody widens
+speculatively.
+
+**Options and their real cost.** Today there are exactly three layouts:
+`business-presence`, `lead-generation`, `catalog-showcase`. Widening buys visual
+variety against Wix/Shopify libraries; it costs the wedge — "a finite reviewable
+site" is the stated differentiator, and a library is the thing that makes a site
+un-reviewable. Confirming costs nothing and closes the question.
+
+**Recommendation: confirm the wedge.** Reasoning: template count is not why a
+Myanmar shop chooses or rejects this product — `ERP-COMPETITIVE-ROADMAP.md` §6.6
+puts the binding constraint on distribution and names G1 as the one product
+precondition, and W1 is not on that list. Competing on library size is competing
+where you are structurally weakest.
+
+**Reversibility:** total in the "confirm" direction. Widening is harder to undo
+— a template a client's live site uses cannot be withdrawn.
+
+**Source:** `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §1 W1;
+`showroom/src/products/website/website-starter.ts`; `hq/portfolio.json` (the
+finite-reviewable-site wedge).
+
+---
+
+### P23 — Will you run the three device tests?
+
+**Answer with:** yes/no per test.
+
+Three shipped features carry an open founder device check, all in the same class
+— an agent cannot run any of them:
+
+1. **Camera barcode scanning** on any Android phone (Shop counter, both catalog
+   SKU fields, and both Plant shop-floor fields).
+2. **A thermal printer** — the print path has never been exercised on a real roll
+   printer. `ERP-COMPETITIVE-ROADMAP.md` §6.4 G2 is explicit that the fix is a
+   print-media rule (S) rather than the Web Bluetooth ESC/POS build (large), and
+   that the founder gate is not on the CSS but on the **claim**: nobody has ever
+   printed a SuperMega receipt on a thermal printer, so it may not appear in sales
+   copy before the test.
+3. **The 390 px keyboard and touch pass** on the Shop bottom-nav work modes.
+
+**Recommendation: yes to all three, in one sitting, once the G2 print rule
+lands.** Reasoning: each is minutes of your time and each converts a shipped
+feature from "believed to work" into "known to work"; the printer one additionally
+unlocks or forbids a sales sentence, which is the only one with commercial
+consequence. **Do not claim thermal printing until test 2 passes.** Note the roll
+width is unverified — treat 58 mm/80 mm as an owner setting or something to
+measure, not a constant to hardcode.
+
+**Reversibility:** n/a. They are tests.
+
+**Source:** `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §1 rows S1, S4, P2, F1;
+`hq/strategy/ERP-COMPETITIVE-ROADMAP.md` §6.4 G2.
+
+---
+
+### P24 — Self-serve identity: eight open design questions
+
+**Answer with:** one "accept the recommendations" for six of them, plus two that
+genuinely need you.
+
+**Blocked on this:** PR-2 of `SELF-SERVE-IDENTITY-DESIGN.md` — the create-account
+panel and the Supabase `signUp` call. PR-1 has shipped and is **deliberately dead
+code**: `showroom/src/core/signup-account.ts` exists, imports nothing, is imported
+by nothing, makes no network call, and a test fails if anything in `showroom/src`
+references it. Even after PR-2, the surface stays dark until you set
+`SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW` to exactly `open` **and** turn the
+provider-side toggle on.
+
+**The six with defaults you can accept in one word:** CAPTCHA (none until abuse
+is observed), allowed email domains (accept any address — the claim code, window
+flag and rate limits already bound the blast radius), claim-code-optional signup,
+the proposed rate-limit numbers, the password-plus-confirmation flow in place of
+the spec's OTP, and sequencing behind production activation.
+
+**The two that genuinely need you, because neither has a default:**
+
+- **Email provider and volume.** Supabase built-in SMTP is a few mails an hour —
+  fine for a two-or-three-shop pilot, dead on arrival for real traffic. Moving to
+  a transactional provider on the verified domain has a free-tier ceiling; the
+  question is whether that ceiling is acceptable for the quarter or you budget a
+  paid tier.
+- **Terms of service.** The panel records literal-`true` acceptance — **of what
+  document, hosted where, versioned how?** There is no canonical terms artifact
+  anywhere. This is the one item in this packet with legal rather than
+  engineering weight, and it has no recommendation because writing your terms is
+  not an engineering act.
+
+**Recommendation: accept the six, answer the email-provider question when you
+decide P6's timing, and treat the terms artifact as a standalone task that must
+exist before any stranger can create an account.** Reasoning: an account-creation
+flow that records acceptance of a document that does not exist is the kind of
+defect that is cheap now and expensive after the hundredth signup.
+
+**Reversibility:** the six are config. The terms artifact is versioned by nature,
+so it is amendable — but acceptances already recorded were recorded against
+whatever existed at the time, which is exactly why it should exist first.
+
+**Source:** `hq/strategy/SELF-SERVE-IDENTITY-DESIGN.md` §8;
+`showroom/src/core/signup-account.ts` (module header);
+`tools/test_signup_account.mjs`.
+
+---
+
+### P25 — Four items to leave parked: confirm?
+
+**Answer with:** yes (leave parked), or name the one you want built.
+
+Four roadmap items are founder-gated and, on current evidence, should stay
+exactly where they are. This entry exists so parking them is a decision rather
+than a drift.
+
+- **S5 — multi-register / staff sessions.** Already built (10 roles) and
+  deliberately behind the staff-roles researchGate sequence, which requires
+  `verified-statements` on a managed tenant first — i.e. it is behind P5 anyway.
+  Cost of building further now: work that cannot be sequenced.
+- **S3 PR3 — promote loyalty into `CommerceState`.** Blocked by construction: the
+  deployed backend's exact-field contracts reject any new state key on every
+  managed sync, and the backend moves only by the founder-only release dispatch.
+  Loyalty already works locally and its redemption already syncs. Cost of building
+  now: a release dispatch and a backend contract change for a feature that already
+  functions.
+- **E3 — abandoned-cart / follow-up messaging.** Needs hosted messaging
+  infrastructure, a credential, and your consent to contact customers. Cost:
+  a whole new outbound surface, for a problem no client has yet reported.
+- **P3.8 batches 2-3 — the Operations regrouping.** `DESIGN-PROGRAM.md` requires
+  the same founder-probe-first treatment P3.7's strip got. Cost of building now:
+  there is nobody to probe.
+
+**Recommendation: yes, leave all four parked, and revisit each only when a real
+client asks.** Reasoning: each is gated on something that does not exist yet (a
+managed tenant, a release, a messaging rail, a user to probe), so building any of
+them now converts founder attention into inventory.
+
+**Reversibility:** total. Nothing is being deleted.
+
+**Source:** `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §1 rows S3, S5, E3 and §3
+item 5; `hq/strategy/DESIGN-PROGRAM.md` §P3.8.
+
+---
+
+## 6. What I looked for and did not find — and what turned out already closed
+
+This section is a result, not a gap. Every item here was expected to be an open
+decision and is not, or is referenced somewhere without ever having been
+specified. Each is listed with what closed it, so nobody re-asks.
+
+**Already decided or already shipped — do not put these in front of the founder:**
+
+1. **The order-intake "scorer-tolerance decision."**
+   `CLIENT-READINESS-BRIEF.md` §5 lists it as an open founder decision and
+   `PRODUCT-CATALOG-AND-PRICING.md` §7 calls it "the last product judgement
+   blocking the order-intake evaluation gate". **It was made on 2026-08-17:**
+   "DO NOT loosen the scorer"
+   (`hq/research/order-intake-agent-evaluation-2026-08.md:610`). The real blocker
+   is credential plus egress — **P14**. Both citing documents are stale on this.
+2. **The `ecommerce-storefront` capability copy over-reach.**
+   `MARKETING-POSITIONING.md` §(e) item 8 flags "Show a catalog online" as a copy
+   fix awaiting the founder. It is already fixed on `main`:
+   `capability-tiers.ts:112-124` now reads "Show your catalog on this device and
+   take order requests into Shop for review", with the old string preserved only
+   in a comment explaining why it was wrong.
+3. **Runbook migration v11.** `CLIENT-READINESS-BRIEF.md` §2 rows 6-7 and PR #495
+   both still offer "apply v11" as a live fork. Production is already at v11 with
+   zero drift and the current runbook §0 says not to apply it again. Folded into
+   **P7** and **P8**.
+4. **The runbook's §0 release precondition.** The version of the runbook current
+   until 2026-08-20 named "the remediation branch merged and released" as the one
+   open precondition. It is satisfiable now: release run **346** shipped
+   `6647a2b2` — the current head of `main` — live on 2026-08-23. What remains open
+   is the approval receipt, which is **P5**.
+5. **"The founder does not run releases."** Three production releases were
+   dispatched successfully on 2026-08-22 and 2026-08-23 (runs 344, 345, 346).
+   Release dispatch is routine, not a bottleneck, and no entry in this packet
+   treats it as one.
+
+**Referenced but never specified — I could not find where these were decided,
+and I have not reconstructed them:**
+
+6. **Which product is being sold to a first paying Myanmar client.** This repo's
+   documents assume the showroom Shop / managed tier and record that no price has
+   ever been approved. Meanwhile `pos.supermega.dev` sells **Shop Counter**, built
+   from a different repository, with a published price and `InStock` structured
+   data. `POS-PAGE-CLAIM-AUDIT.md` flags the *pricing* contradiction explicitly
+   (**P21**), but **no document anywhere states which product the first paying
+   client is buying.** That is a genuine gap, not an oversight in this packet, and
+   it may be the most consequential unwritten decision in the estate.
+7. **Whether a real prospect exists.** `hq/portfolio.json`, the readiness ledger
+   and `docs/CLIENT-TENANT-ACTIVATION.md` all describe the pilot as one named Spa
+   owner and work a `beauty-spa` example through activation. The private intake
+   they refer to is correctly not in this repository, so the repo describes the
+   *shape* of client one and never says whether that person exists. See **P9**.
+8. **Who runs the billing shift when step 10 binds.**
+   `FOUNDER-BOTTLENECK-STUDY.md` §2 concludes the correct answer is a second
+   trusted human rather than automation, and that the ceiling binds "somewhere in
+   the hundreds" of clients. No document names that person or a hiring trigger.
+   Not urgent, and not invented here.
+9. **A contradiction I did not resolve.** `hq/portfolio.json` previously required
+   a founder-selected pilot operator, while `hq/WORKBOARD.md` OPS-744 records a
+   founder decision that made pilots self-serve with users naming themselves. On
+   `6647a2b2` the portfolio's shop work order reads "A named owner, reviewed client
+   data, protected release, and approved isolated tenant are still required", which
+   reads as a return to a named operator. I found no document that retires either
+   position, so I am flagging the tension rather than picking a side.
+
+**Deliberately excluded from this packet:**
+
+10. **Amounts, of any kind, in any currency.** None is approved and none appears
+    here. **P2** and **P21** are the places where a number will eventually live,
+    and both say only that you must set it.
+11. **The `infra-http.mjs` DNS-rebinding TOCTOU gap** (`CLAUDE.md` queue item 4).
+    It is verified, unfixed, and blocked on tooling — not on a founder decision.
+    It is engineering work waiting on a Node-24-verified approach or on the PG17
+    cascade, so it does not belong in a decision packet.
+12. **Readiness ledger v5.** A recording gap blocked on the same PG17 rehearsal
+    cascade **P5** describes; zero founder minutes per client; not a decision.
+
+---
+
+## 7. If you answer nothing else
+
+Answer **P1, P2, P3** and say **yes to P4**. That is the whole minimum, and on
+current evidence nothing else in this document stands between the company and its
+first paying client.
+
+Then, in order: **P5** (the four sub-approvals), **P6** (which door client one
+walks through), **P7** (the migration set), and **P16** (commission the Burmese
+review) — because that is the shortest sequence from "a client is paying" to "a
+client is paying, on record, on hosted infrastructure, using a till their cashier
+can read."
+
+---
+
+## What this document does not do
+
+It authorizes no deploy, no production write, no migration, no release dispatch,
+no billing or entitlement transition, no customer contact, and no gate change. It
+quotes no price. It proposes no change to any `CLAUDE.md` hard limit. Where its
+sources disagree with each other it says so and cites both, rather than smoothing
+it into a single confident sentence — sections 5 and 6 exist for exactly that
+reason.
