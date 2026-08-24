@@ -598,6 +598,7 @@
     "shop:shipping:policy:verify": "node tools/test_shop_shipping_policy_summary.mjs",
     "shop:payment:policy:verify": "node tools/test_shop_payment_policy_summary.mjs",
     "shop:myanmar:payments:verify": "node tools/test_shop_myanmar_mobile_payment_readiness.mjs",
+    "shop:onboarding:first-run:verify": "node tools/test_shop_onboarding_first_run_path.mjs",
     "shop:catalog:baseline:verify": "node tools/test_shop_catalog_baseline_summary.mjs",
     "shop:storefront:request:verify": "node tools/test_shop_storefront_request_summary.mjs",
     "shop:storefront:customer:profile:verify": "node tools/test_shop_storefront_customer_profile_brief.mjs",

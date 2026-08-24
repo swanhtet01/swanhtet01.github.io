@@ -8248,7 +8248,11 @@ async function verifyShopBusinessTemplateRuntime() {
     || !shopBusinessTemplatesSource.includes('export function shopIndustryPackSetupPath(')
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
-    || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
+    || !productOnboardingPageSource.includes('Use the current starter sample')
+    || !productOnboardingPageSource.includes('Beauty spa for the first spa pilot')
+    || !productOnboardingPageSource.includes('Cash, KBZPay, WavePay, AYA Pay, or MMQR')
+    || !productOnboardingPageSource.includes('className="product-onboarding-path"')
+    || !coreCssSource.includes('.product-onboarding-path')
     // Was pinned to `provisionLocalShopWorkingSample(shopIndustryPackId, ...)` -- the pack the owner
     // ASKED for. provisionLocalShopIndustryPack returns the pack actually in force, because an
     // existing appointment keeps its own, so the sample has to follow the returned schedule or it
