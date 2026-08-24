@@ -111,6 +111,22 @@ for (const file of files) {
   check(steps.length >= 5 && steps.length <= 10, `${file}:demo_step_count:${steps.length}`)
 }
 
+const shopPlaybook = read(`${playbookDir}/shop.md`)
+for (const required of [
+  'bottom task bar',
+  'camera scanning',
+  'keyboard-wedge/search path',
+  'product photos are device-local',
+  'points chip',
+  'display-only',
+  'Paid & handed over',
+  'Android phone smoke pass',
+  'rehearsal evidence only',
+  'not hosted pilot proof',
+]) {
+  check(shopPlaybook.includes(required), `shop_playbook_w2_coverage:${required}`)
+}
+
 const readme = read(`${playbookDir}/README.md`)
 for (const name of ['shop.md', 'plant.md', 'website.md', 'ecommerce.md']) {
   check(readme.includes(name), `readme_indexes:${name}`)
