@@ -123,6 +123,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   if (scripts['release:pull-request:create:self-test'] !== 'node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_pull_request_create_self_test_missing')
   }
+  if (scripts['release:owner-approval:packet'] !== 'node tools/prepare_release_owner_approval_packet.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_owner_approval_packet_script_missing')
+  }
+  if (scripts['release:owner-approval:packet:self-test'] !== 'node --test tools/prepare_release_owner_approval_packet.test.mjs && node tools/prepare_release_owner_approval_packet.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_owner_approval_packet_self_test_missing')
+  }
   if (scripts['github:main-protection:snapshot'] !== 'node tools/collect_github_main_protection_snapshot.mjs') {
     addFailure(failures, 'release_stack_owner_gate_github_snapshot_script_missing')
   }
@@ -465,6 +471,8 @@ function sampleInput(overrides = {}) {
       'release:branch-push:apply:self-test': 'node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test',
       'release:pull-request:create': 'node tools/apply_release_pull_request.mjs',
       'release:pull-request:create:self-test': 'node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test',
+      'release:owner-approval:packet': 'node tools/prepare_release_owner_approval_packet.mjs',
+      'release:owner-approval:packet:self-test': 'node --test tools/prepare_release_owner_approval_packet.test.mjs && node tools/prepare_release_owner_approval_packet.mjs --self-test',
       'github:main-protection:snapshot': 'node tools/collect_github_main_protection_snapshot.mjs',
       'github:main-protection:snapshot:self-test': 'node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test',
       'operator:board': 'node tools/prepare_current_operator_board.mjs',
