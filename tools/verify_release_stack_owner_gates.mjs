@@ -123,6 +123,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   if (scripts['release:pull-request:create:self-test'] !== 'node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_pull_request_create_self_test_missing')
   }
+  if (scripts['operator:board'] !== 'node tools/prepare_current_operator_board.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_operator_board_script_missing')
+  }
+  if (scripts['operator:board:self-test'] !== 'node --test tools/prepare_current_operator_board.test.mjs && node tools/prepare_current_operator_board.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_operator_board_self_test_missing')
+  }
   if (scripts['shop:pilot:launch-gate:verify'] !== 'node tools/verify_shop_pilot_launch_gate.mjs --verify') {
     addFailure(failures, 'release_stack_owner_gate_shop_launch_gate_script_missing')
   }
@@ -453,6 +459,8 @@ function sampleInput(overrides = {}) {
       'release:branch-push:apply:self-test': 'node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test',
       'release:pull-request:create': 'node tools/apply_release_pull_request.mjs',
       'release:pull-request:create:self-test': 'node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test',
+      'operator:board': 'node tools/prepare_current_operator_board.mjs',
+      'operator:board:self-test': 'node --test tools/prepare_current_operator_board.test.mjs && node tools/prepare_current_operator_board.mjs --self-test',
       'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
       'shop:pilot:launch-gate:self-test': 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test',
       'hq:verify': EXPECTED_HQ_VERIFY_CHAIN,
