@@ -85,6 +85,32 @@ test('reports missing Day-0 prerequisites without allowing external effects', ()
   assert.equal(packet.nextOwnerPrivateStep.id, 'capture-baseline-then-intake')
   assert.equal(packet.nextOwnerPrivateStep.safeBeforeReleaseGate, true)
   assert.equal(packet.nextOwnerPrivateStep.externalEffectsAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.contract, 'supermega.shop-run001-private-observation-bridge.v1')
+  assert.equal(packet.ownerPrivateObservationBridge.workspaceLabel, 'private-shop-pilots/run-001-private')
+  assert.equal(packet.ownerPrivateObservationBridge.state, 'private_observation_incomplete')
+  assert.equal(packet.ownerPrivateObservationBridge.allowedNow, 'owner_private_local_observation_only')
+  assert.equal(packet.ownerPrivateObservationBridge.relativeOrchestratorCommand, '.\\complete-run-001-after-observation.ps1')
+  assert.equal(packet.ownerPrivateObservationBridge.expectedCurrentGate, 'private_observation_incomplete')
+  assert.equal(packet.ownerPrivateObservationBridge.readyForObservationExpected, true)
+  assert.equal(packet.ownerPrivateObservationBridge.readyToRecordInitialState, false)
+  assert.equal(packet.ownerPrivateObservationBridge.promotionEvidenceAccepted, false)
+  assert.deepEqual(packet.ownerPrivateObservationBridge.requiredPrivateArtifacts, [
+    'evidence.private.md',
+    'anchor.private.md',
+    'run-001.commands.private.ps1',
+    'observed-summary.private.json',
+  ])
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.customerContactAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.paymentAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.stockMovementAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.hostedWritesAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.serverWritesAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.githubWritesAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.vercelDeployAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.supabaseWritesAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.managedActivationAllowed, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.privateIdentityIncluded, false)
+  assert.equal(packet.ownerPrivateObservationBridge.authorizations.credentialValuesIncluded, false)
   assert.ok(packet.privateCommands.some((command) => command.includes('--worksheet-output "<private-baseline-worksheet.md>"')))
   assert.equal(validateShopPilotDay0ReadinessPacket(packet), packet)
 })
@@ -99,6 +125,8 @@ test('accepts intake-only state while requiring owner-observed baseline', () => 
   assert.equal(packet.day0Readiness.baselinePacketAccepted, false)
   assert.equal(packet.nextOwnerPrivateStep.id, 'capture-owner-observed-baseline')
   assert.equal(packet.nextOwnerPrivateStep.completionSignal, 'public_safe_baseline_packet_digest')
+  assert.equal(packet.ownerPrivateObservationBridge.expectedCurrentGate, 'private_observation_incomplete')
+  assert.equal(packet.ownerPrivateObservationBridge.completionSignal, 'public_safe_baseline_packet_digest')
   assert.ok(packet.blockers.includes('owner_observed_baseline_packet_missing'))
   assert.equal(validateShopPilotDay0ReadinessPacket(packet), packet)
 })
@@ -146,6 +174,9 @@ test('accepts baseline plus intake as owner-private handoff only', () => {
   assert.equal(packet.day0Readiness.readyForManagedActivation, false)
   assert.equal(packet.sourceDigests.baselinePacketDigest, baselinePacket.digest)
   assert.equal(packet.sourceDigests.intakePacketDigest, intakePacket.digest)
+  assert.equal(packet.ownerPrivateObservationBridge.state, 'day0_private_handoff_ready')
+  assert.equal(packet.ownerPrivateObservationBridge.allowedNow, 'owner_private_handoff_preparation_only')
+  assert.equal(packet.ownerPrivateObservationBridge.expectedCurrentGate, null)
   assert.equal(validateShopPilotDay0ReadinessPacket(packet), packet)
 })
 
@@ -158,6 +189,8 @@ test('carries launch-gate failures as blocked Day-0 state', () => {
   assert.equal(packet.status, 'blocked_launch_gate_failed')
   assert.equal(packet.nextOwnerPrivateStep.id, 'fix-launch-gate-evidence')
   assert.equal(packet.nextOwnerPrivateStep.safeBeforeReleaseGate, false)
+  assert.equal(packet.ownerPrivateObservationBridge.state, 'blocked_until_launch_gate_clean')
+  assert.equal(packet.ownerPrivateObservationBridge.allowedNow, 'none_until_launch_gate_clean')
   assert.ok(packet.blockers.includes('shop_pilot_launch_gate_worktree_dirty'))
   assert.equal(packet.controls.externalEffectsAllowed, false)
   assert.equal(validateShopPilotDay0ReadinessPacket(packet), packet)
@@ -188,6 +221,17 @@ test('rejects private identity and tampered packets', () => {
         localPath: 'C:\\Users\\owner\\private-baseline-input.json',
       },
     })),
+    /shop_pilot_day0_private_or_secret_shape/,
+  )
+
+  assert.throws(
+    () => validateShopPilotDay0ReadinessPacket({
+      ...packet,
+      ownerPrivateObservationBridge: {
+        ...packet.ownerPrivateObservationBridge,
+        workspaceLabel: 'C:\\Users\\owner\\private-shop-pilots\\run-001-private',
+      },
+    }),
     /shop_pilot_day0_private_or_secret_shape/,
   )
 
@@ -226,9 +270,12 @@ test('renders Markdown and verifies CLI packet without private values', async ()
     const markdown = await readFile(markdownPath, 'utf8')
     assert.match(markdown, /Next owner-private step/)
     assert.match(markdown, /Owner-private prep artifacts/)
+    assert.match(markdown, /Private Run001 observation bridge/)
     assert.match(markdown, /capture-baseline-then-intake/)
+    assert.match(markdown, /complete-run-001-after-observation\.ps1/)
+    assert.match(markdown, /private_observation_incomplete/)
     assert.match(markdown, /--worksheet-output "<private-baseline-worksheet\.md>"/)
-    assert.doesNotMatch(markdown, /Private Day Zero Spa|Private Day Zero Operator|owner@example|ready for managed activation/i)
+    assert.doesNotMatch(markdown, /Private Day Zero Spa|Private Day Zero Operator|owner@example|ready for managed activation|[A-Za-z]:\\/i)
   } finally {
     await rm(parent, { recursive: true, force: true })
   }

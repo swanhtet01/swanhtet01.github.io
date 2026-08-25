@@ -26,6 +26,7 @@ import {
 
 export const SHOP_PILOT_DAY0_READINESS_CONTRACT = 'supermega.shop-pilot-day0-readiness.v1'
 
+const SHOP_RUN001_PRIVATE_OBSERVATION_BRIDGE_CONTRACT = 'supermega.shop-run001-private-observation-bridge.v1'
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const STATUSES = [
   'blocked_launch_gate_failed',
@@ -60,6 +61,25 @@ const REQUIRED_FALSE_CONTROLS = [
   'productionReleaseAllowed',
   'managedActivationAllowed',
   'externalEffectsAllowed',
+  'privateIdentityIncluded',
+  'credentialValuesIncluded',
+]
+const RUN001_REQUIRED_PRIVATE_ARTIFACTS = [
+  'evidence.private.md',
+  'anchor.private.md',
+  'run-001.commands.private.ps1',
+  'observed-summary.private.json',
+]
+const RUN001_BRIDGE_AUTHORIZATION_KEYS = [
+  'customerContactAllowed',
+  'paymentAllowed',
+  'stockMovementAllowed',
+  'hostedWritesAllowed',
+  'serverWritesAllowed',
+  'githubWritesAllowed',
+  'vercelDeployAllowed',
+  'supabaseWritesAllowed',
+  'managedActivationAllowed',
   'privateIdentityIncluded',
   'credentialValuesIncluded',
 ]
@@ -261,6 +281,56 @@ function ownerPrivatePreparationFor(status, sourceDigests, input = {}) {
   }
 }
 
+function ownerPrivateObservationBridgeFor(status) {
+  const baselineMissing = status === 'blocked_owner_baseline_and_intake_required'
+    || status === 'blocked_owner_observed_baseline_required'
+  const state = status === 'blocked_launch_gate_failed'
+    ? 'blocked_until_launch_gate_clean'
+    : baselineMissing
+      ? 'private_observation_incomplete'
+      : status === 'blocked_owner_private_intake_required'
+        ? 'baseline_public_packet_accepted'
+        : 'day0_private_handoff_ready'
+  const allowedNow = status === 'blocked_launch_gate_failed'
+    ? 'none_until_launch_gate_clean'
+    : baselineMissing
+      ? 'owner_private_local_observation_only'
+      : status === 'blocked_owner_private_intake_required'
+        ? 'owner_private_intake_only'
+        : 'owner_private_handoff_preparation_only'
+  const nextLocalAction = status === 'blocked_launch_gate_failed'
+    ? 'fix_launch_gate_evidence_before_private_observation_bridge'
+    : baselineMissing
+      ? 'perform_real_observation_and_fill_private_evidence_anchor'
+      : status === 'blocked_owner_private_intake_required'
+        ? 'generate_owner_private_intake_packet_without_contacting_participant'
+        : 'prepare_owner_private_day_one_handoff_from_accepted_digests'
+  const completionSignal = status === 'blocked_launch_gate_failed'
+    ? 'launch_gate_ok_digest'
+    : baselineMissing
+      ? 'public_safe_baseline_packet_digest'
+      : status === 'blocked_owner_private_intake_required'
+        ? 'public_safe_intake_packet_digest'
+        : 'owner_private_handoff_digest'
+  return {
+    contract: SHOP_RUN001_PRIVATE_OBSERVATION_BRIDGE_CONTRACT,
+    workspaceLabel: 'private-shop-pilots/run-001-private',
+    privateWorkspaceRequired: true,
+    publicSafe: true,
+    state,
+    allowedNow,
+    relativeOrchestratorCommand: '.\\complete-run-001-after-observation.ps1',
+    expectedCurrentGate: baselineMissing ? 'private_observation_incomplete' : null,
+    nextLocalAction,
+    requiredPrivateArtifacts: [...RUN001_REQUIRED_PRIVATE_ARTIFACTS],
+    readyForObservationExpected: baselineMissing,
+    readyToRecordInitialState: false,
+    promotionEvidenceAccepted: false,
+    completionSignal,
+    authorizations: Object.fromEntries(RUN001_BRIDGE_AUTHORIZATION_KEYS.map((key) => [key, false])),
+  }
+}
+
 function sampleBaselineInput() {
   return {
     contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
@@ -363,6 +433,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
     ownerAction: ownerActionFor(status),
     nextOwnerPrivateStep: nextOwnerPrivateStepFor(status),
     ownerPrivatePreparation: ownerPrivatePreparationFor(status, sourceDigests, input.ownerPrivatePreparation),
+    ownerPrivateObservationBridge: ownerPrivateObservationBridgeFor(status),
     blockers: blockersFor(status, launchGateReport),
     privateCommands: [
       'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
@@ -477,6 +548,31 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || packet.ownerPrivatePreparation.outputPolicy?.externalEffectsAllowed !== false) {
     fail('shop_pilot_day0_owner_private_preparation_invalid')
   }
+  const bridge = packet.ownerPrivateObservationBridge
+  const expectedBridge = ownerPrivateObservationBridgeFor(packet.status)
+  const baselineMissing = packet.status === 'blocked_owner_baseline_and_intake_required'
+    || packet.status === 'blocked_owner_observed_baseline_required'
+  if (!isRecord(bridge)
+    || bridge.contract !== SHOP_RUN001_PRIVATE_OBSERVATION_BRIDGE_CONTRACT
+    || bridge.workspaceLabel !== 'private-shop-pilots/run-001-private'
+    || bridge.privateWorkspaceRequired !== true
+    || bridge.publicSafe !== true
+    || bridge.state !== expectedBridge.state
+    || bridge.allowedNow !== expectedBridge.allowedNow
+    || bridge.relativeOrchestratorCommand !== '.\\complete-run-001-after-observation.ps1'
+    || bridge.expectedCurrentGate !== (baselineMissing ? 'private_observation_incomplete' : null)
+    || bridge.nextLocalAction !== expectedBridge.nextLocalAction
+    || bridge.completionSignal !== expectedBridge.completionSignal
+    || bridge.readyForObservationExpected !== baselineMissing
+    || bridge.readyToRecordInitialState !== false
+    || bridge.promotionEvidenceAccepted !== false
+    || !Array.isArray(bridge.requiredPrivateArtifacts)
+    || bridge.requiredPrivateArtifacts.length !== RUN001_REQUIRED_PRIVATE_ARTIFACTS.length
+    || !RUN001_REQUIRED_PRIVATE_ARTIFACTS.every((artifact) => bridge.requiredPrivateArtifacts.includes(artifact))
+    || !isRecord(bridge.authorizations)
+    || RUN001_BRIDGE_AUTHORIZATION_KEYS.some((key) => bridge.authorizations[key] !== false)) {
+    fail('shop_pilot_day0_owner_private_observation_bridge_invalid')
+  }
   if (packet.status === 'blocked_launch_gate_failed' && packet.nextOwnerPrivateStep.safeBeforeReleaseGate !== false) fail('shop_pilot_day0_next_step_gate_invalid')
   if (packet.status !== 'blocked_launch_gate_failed' && packet.nextOwnerPrivateStep.safeBeforeReleaseGate !== true) fail('shop_pilot_day0_next_step_gate_invalid')
   if (packet.status === 'blocked_owner_private_intake_required' && packet.nextOwnerPrivateStep.id !== 'prepare-owner-private-intake') fail('shop_pilot_day0_next_step_status_mismatch')
@@ -500,6 +596,8 @@ export function renderShopPilotDay0ReadinessMarkdown(packet) {
   const baselineWorksheetDigest = prep.baselineWorksheet.digest || 'not provided'
   const acceptedIntakeDigest = prep.acceptedIntakePacketDigest || 'not accepted yet'
   const nextDigest = prep.nextRequiredDigest
+  const bridge = packet.ownerPrivateObservationBridge
+  const bridgeArtifacts = bridge.requiredPrivateArtifacts.map((artifact) => `- ${artifact}`).join('\n')
   return `# Shop Pilot Day-0 Readiness
 
 Contract: \`${packet.contract}\`
@@ -532,6 +630,22 @@ Candidate: \`${packet.candidate.branch || 'unknown'} @ ${packet.candidate.head |
 - Accepted intake packet digest: ${acceptedIntakeDigest}
 - Local paths included: false
 - Raw identity stays private: true
+
+## Private Run001 observation bridge
+
+- Workspace label: ${bridge.workspaceLabel}
+- State: ${bridge.state}
+- Allowed now: ${bridge.allowedNow}
+- Relative orchestrator command: ${bridge.relativeOrchestratorCommand}
+- Expected current gate: ${bridge.expectedCurrentGate || 'not required for current Day-0 state'}
+- Next local action: ${bridge.nextLocalAction}
+- Completion signal: ${bridge.completionSignal}
+- Ready to record initial state: false
+- External effects allowed: false
+
+Required private artifacts:
+
+${bridgeArtifacts}
 
 ## Public-safe baseline metrics
 
@@ -587,6 +701,9 @@ function runSelfTest() {
     missing_prerequisites_stay_owner_private: empty.ok === true
       && empty.status === 'blocked_owner_baseline_and_intake_required'
       && empty.day0Readiness.readyForCustomerContact === false
+      && empty.ownerPrivateObservationBridge.expectedCurrentGate === 'private_observation_incomplete'
+      && empty.ownerPrivateObservationBridge.relativeOrchestratorCommand === '.\\complete-run-001-after-observation.ps1'
+      && empty.ownerPrivateObservationBridge.authorizations.githubWritesAllowed === false
       && validateShopPilotDay0ReadinessPacket(empty) === empty,
     intake_only_requires_baseline: withIntake.ok === true
       && withIntake.status === 'blocked_owner_observed_baseline_required'
