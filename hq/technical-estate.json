@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:e82e0cf64395f0b44d83aad952621a402250370af8f42e9cab0052fa63c1c5bc",
+  "sourceDigest": "sha256:4da47fa6751a2a1fb672f453ebe42f22d1878508e3edcdab33870e805434d707",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -239,11 +239,11 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:0f33c6b5cb68f51ec5503bad7ee868776de56916578e60b8ac163cf13a90a6e8"
+      "digest": "sha256:44757693efda8ddc1f55752a4cd05a7541ff7b2fe68a4ae29c2e5124a161190f"
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:aec5b5cdb3d125c5551bcb87fc1b7059c1fda2d5e7dd1e26e714dc9606812a44"
+      "digest": "sha256:5838d725aab8104ea9d804415b9415f26416f5e1f982a4db3aa33d460e1b76ad"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
