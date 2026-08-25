@@ -2,6 +2,7 @@ import { sha256Hex } from './managed-trial-proof.ts'
 import type { ProductionEvent, ProductionJob, ProductionState } from './production-workspace.ts'
 
 export const PLANT_MANAGED_OEE_WINDOW_CONTRACT = 'supermega.plant-managed-oee-window.v1' as const
+export const PLANT_MANAGED_OEE_SOURCE_MAP_CONTRACT = 'supermega.plant-managed-oee-source-map.v1' as const
 
 export type PlantManagedOeeWindowInput = {
   windowId: string
@@ -22,6 +23,7 @@ export type PlantManagedOeeWindowGateId =
   | 'shift_close_present'
   | 'shift_close_inside_window'
   | 'job_shift_linked'
+  | 'source_quantity_mapping_unambiguous'
   | 'ideal_rate_present'
   | 'downtime_pairs_closed'
   | 'machine_not_stopped'
@@ -59,8 +61,19 @@ export type PlantManagedOeeWindowEvidence = {
   endedAt: string
   sourceRevision: number
   shiftSourceDigest: string | null
+  sourceMapDigest: string
   operatorReviewDigest: string | null
   supervisorReviewDigest: string | null
+}
+
+export type PlantManagedOeeSourceTrust = {
+  contract: typeof PLANT_MANAGED_OEE_SOURCE_MAP_CONTRACT
+  sourceMapDigest: string
+  passed: boolean
+  canonicalQuantityFields: string[]
+  supportingCountFields: string[]
+  rejectedQuantityLikeFields: string[]
+  reason: string
 }
 
 export type PlantManagedOeeWindow = {
@@ -70,10 +83,20 @@ export type PlantManagedOeeWindow = {
   gates: PlantManagedOeeWindowGate[]
   metrics: PlantManagedOeeWindowMetrics
   evidence: PlantManagedOeeWindowEvidence
+  sourceTrust: PlantManagedOeeSourceTrust
   windowDigest: string
 }
 
 const digestPattern = /^sha256:[0-9a-f]{64}$/i
+const sourceQuantityFieldPattern = /(?:quantity|qty|units?|output|scrap|good|count|reject|waste)/i
+const plantManagedOeeSourceMap = {
+  contract: PLANT_MANAGED_OEE_SOURCE_MAP_CONTRACT,
+  sourceEventKind: 'shift_closed',
+  canonicalQuantityFields: ['goodUnits', 'scrapUnits'],
+  supportingCountFields: ['outputEntryCount', 'materialEntryCount'],
+  rejectedQuantityLikeFieldPolicy: 'any non-canonical quantity-like field on the shift_closed event blocks managed OEE readiness',
+}
+const plantManagedOeeSourceMapDigest = `sha256:${sha256Hex(JSON.stringify(plantManagedOeeSourceMap))}`
 
 function safeTimestamp(value: string) {
   const time = Date.parse(value)
@@ -142,6 +165,52 @@ function reviewDigest(value: string | undefined) {
   return value && digestPattern.test(value) ? value.toLowerCase() : null
 }
 
+function sourceTrustForShiftClose(shiftClose: ProductionEvent | undefined): PlantManagedOeeSourceTrust {
+  const canonicalQuantityFields = [...plantManagedOeeSourceMap.canonicalQuantityFields]
+  const supportingCountFields = [...plantManagedOeeSourceMap.supportingCountFields]
+  const allowed = new Set([...canonicalQuantityFields, ...supportingCountFields])
+  if (!shiftClose) {
+    return {
+      contract: PLANT_MANAGED_OEE_SOURCE_MAP_CONTRACT,
+      sourceMapDigest: plantManagedOeeSourceMapDigest,
+      passed: false,
+      canonicalQuantityFields,
+      supportingCountFields,
+      rejectedQuantityLikeFields: [],
+      reason: 'Shift close source is missing, so unit mapping is not trusted.',
+    }
+  }
+
+  const source = shiftClose as unknown as Record<string, unknown>
+  const rejectedQuantityLikeFields = Object.keys(source)
+    .filter((field) => sourceQuantityFieldPattern.test(field) && !allowed.has(field))
+    .sort()
+  const hasCanonicalUnits = canonicalQuantityFields.every((field) => (
+    typeof source[field] === 'number'
+    && Number.isFinite(source[field])
+    && (source[field] as number) >= 0
+  ))
+  const hasSupportingCounts = supportingCountFields.every((field) => (
+    typeof source[field] === 'number'
+    && Number.isFinite(source[field])
+    && (source[field] as number) >= 0
+  ))
+  const passed = hasCanonicalUnits && hasSupportingCounts && rejectedQuantityLikeFields.length === 0
+  return {
+    contract: PLANT_MANAGED_OEE_SOURCE_MAP_CONTRACT,
+    sourceMapDigest: plantManagedOeeSourceMapDigest,
+    passed,
+    canonicalQuantityFields,
+    supportingCountFields,
+    rejectedQuantityLikeFields,
+    reason: passed
+      ? 'Shift close unit mapping uses only digest-bound canonical fields.'
+      : rejectedQuantityLikeFields.length > 0
+        ? `Shift close has unreviewed quantity-like fields: ${rejectedQuantityLikeFields.join(', ')}.`
+        : 'Shift close is missing canonical unit or supporting count fields.',
+  }
+}
+
 export function projectPlantManagedOeeWindow(
   production: ProductionState,
   input: PlantManagedOeeWindowInput,
@@ -158,10 +227,11 @@ export function projectPlantManagedOeeWindow(
   const downtime = windowTimeValid
     ? pairedDowntimeMinutes(production.events, input.machineId, startedAt as number, endedAt as number)
     : { activeDowntimeCount: 0, completedIntervals: 0, totalDowntimeMinutes: 0 }
+  const sourceTrust = sourceTrustForShiftClose(shiftClose)
 
   const runtimeMinutes = Math.max(0, plannedMinutes - downtime.totalDowntimeMinutes)
-  const goodUnits = typeof shiftClose?.goodUnits === 'number' ? shiftClose.goodUnits : 0
-  const scrapUnits = typeof shiftClose?.scrapUnits === 'number' ? shiftClose.scrapUnits : 0
+  const goodUnits = sourceTrust.passed && typeof shiftClose?.goodUnits === 'number' ? shiftClose.goodUnits : 0
+  const scrapUnits = sourceTrust.passed && typeof shiftClose?.scrapUnits === 'number' ? shiftClose.scrapUnits : 0
   const totalUnits = goodUnits + scrapUnits
   const expectedUnitsAtRuntime = input.idealUnitsPerHour > 0
     ? Math.round((input.idealUnitsPerHour * runtimeMinutes) / 60)
@@ -201,6 +271,11 @@ export function projectPlantManagedOeeWindow(
       reason: linkedToShift
         ? 'Job is linked to the reviewed shift.'
         : 'Job is not linked to the reviewed shift by closure or output event.',
+    },
+    {
+      id: 'source_quantity_mapping_unambiguous',
+      passed: sourceTrust.passed,
+      reason: sourceTrust.reason,
     },
     {
       id: 'ideal_rate_present',
@@ -261,6 +336,7 @@ export function projectPlantManagedOeeWindow(
     endedAt: input.endedAt,
     sourceRevision: production.revision,
     shiftSourceDigest: typeof shiftClose?.sourceDigest === 'string' ? shiftClose.sourceDigest : null,
+    sourceMapDigest: sourceTrust.sourceMapDigest,
     operatorReviewDigest,
     supervisorReviewDigest,
   }
@@ -279,6 +355,7 @@ export function projectPlantManagedOeeWindow(
     gates,
     metrics,
     evidence,
+    sourceTrust,
     windowDigest: `sha256:${sha256Hex(JSON.stringify(projection))}`,
   }
 }

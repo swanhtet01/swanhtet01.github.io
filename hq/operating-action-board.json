@@ -22,12 +22,12 @@
   },
   "weeklyReport": {
     "totalActions": 4,
-    "openActionCount": 4,
-    "closedActionCount": 0,
+    "openActionCount": 3,
+    "closedActionCount": 1,
     "ownerGatedCount": 2,
     "criticalOpenCount": 1,
-    "measuredResultCount": 0,
-    "closedCycleTimeDaysMedian": null
+    "measuredResultCount": 1,
+    "closedCycleTimeDaysMedian": 0.448
   },
   "actions": [
     {
@@ -174,24 +174,24 @@
         "plant"
       ],
       "sourceFinding": {
-        "sourceType": "audit_document",
-        "label": "Plant source variability can distort OEE and quality interpretation",
-        "evidenceRef": "supermega.audit-to-product-workorder.v1.generated-20260825.md",
-        "evidenceDigest": "sha256:4751b9fc4b1d0a309086f9cce98255f886273b9d93250325c381182210f52b89"
+        "sourceType": "regression_test",
+        "label": "Plant OEE source mapping rejects ambiguous quantity evidence",
+        "evidenceRef": "showroom/src/core/plant-managed-oee-window.ts plus tools/test_plant_managed_oee_window.mjs",
+        "evidenceDigest": "sha256:33711ef254e1d99f1f6891586b5f95d84048f88a48bffe26ede2ecb271d6db8c"
       },
       "recommendation": "Lock source mapping rules before treating Plant recommendations as operating evidence.",
       "severity": "high",
       "businessImpact": {
         "kind": "quality",
         "estimateLabel": "Improves confidence in OEE and quality action selection.",
-        "measured": false
+        "measured": true
       },
       "owner": {
         "role": "Engineering plus Product",
         "namedPrivate": false
       },
       "dueDate": "2026-08-30",
-      "status": "proposed",
+      "status": "closed",
       "authority": {
         "ownerApprovalRequired": false,
         "externalWriteAllowed": false
@@ -206,9 +206,9 @@
         ]
       },
       "closure": {
-        "closedAt": null,
-        "closureNote": null,
-        "measuredResult": null
+        "closedAt": "2026-08-25T10:45:00.000Z",
+        "closureNote": "Added digest-bound Plant OEE source map and ambiguous quantity fail-closed gate.",
+        "measuredResult": "plant:oee:window:verify 42 checks; plant:oee and plant:quality verify passed."
       }
     }
   ]

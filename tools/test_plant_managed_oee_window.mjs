@@ -180,6 +180,9 @@ function happyState() {
   check(r.metrics.qualityRate === 95, 'quality rounded')
   check(r.metrics.oeeRate === 79, 'OEE is availability * performance * quality')
   check(/^sha256:[0-9a-f]{64}$/.test(r.windowDigest), 'window digest is sha256')
+  check(r.gates.find((gate) => gate.id === 'source_quantity_mapping_unambiguous')?.passed === true, 'source quantity mapping is unambiguous')
+  check(/^sha256:[0-9a-f]{64}$/.test(r.evidence.sourceMapDigest), 'source map digest is sha256')
+  check(r.sourceTrust.passed === true && r.sourceTrust.rejectedQuantityLikeFields.length === 0, 'source trust accepts canonical shift close only')
   check(r.evidence.operatorReviewDigest === OPERATOR_DIGEST, 'operator digest retained')
   check(r.evidence.supervisorReviewDigest === SUPERVISOR_DIGEST, 'supervisor digest retained')
 }
@@ -261,7 +264,24 @@ function happyState() {
   check(r.gates.find((gate) => gate.id === 'job_shift_linked')?.passed === false, 'job-shift gate fails')
 }
 
-// 10. Performance is capped at 100.
+// 10. Ambiguous quantity-like source fields block managed readiness and zero trusted unit metrics.
+{
+  const r = projectPlantManagedOeeWindow(
+    state({
+      jobs: [job()],
+      machines: [machine()],
+      events: [downtimeStart(), downtimeEnd(), shiftClose({ totalUnits: 200, actualQuantity: 201 })],
+    }),
+    input(),
+  )
+  check(r.readyForManagedRehearsal === false, 'ambiguous quantity fields block managed OEE')
+  check(r.gates.find((gate) => gate.id === 'source_quantity_mapping_unambiguous')?.passed === false, 'source mapping gate fails on duplicate quantities')
+  check(r.sourceTrust.rejectedQuantityLikeFields.join(',') === 'actualQuantity,totalUnits', 'ambiguous quantity fields are reported in stable order')
+  check(r.metrics.goodUnits === 0 && r.metrics.scrapUnits === 0 && r.metrics.totalUnits === 0, 'untrusted source units are zeroed')
+  check(r.metrics.performanceRate === 0 && r.metrics.qualityRate === 0 && r.metrics.oeeRate === 0, 'untrusted source rates are zeroed')
+}
+
+// 11. Performance is capped at 100.
 {
   const r = projectPlantManagedOeeWindow(
     state({
@@ -274,7 +294,7 @@ function happyState() {
   check(r.metrics.performanceRate === 100, 'performance cap prevents impossible score')
 }
 
-// 11. Shift close outside the reviewed window blocks readiness.
+// 12. Shift close outside the reviewed window blocks readiness.
 {
   const r = projectPlantManagedOeeWindow(
     state({
