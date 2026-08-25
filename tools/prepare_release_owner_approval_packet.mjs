@@ -218,9 +218,18 @@ function validatedSnapshotReference(snapshotPath = null, snapshot = null) {
   return resolvedPath
 }
 
+function validatedGitHubProposalReference(proposalPath = GITHUB_PROPOSAL_PATH, proposal = null) {
+  const packet = validateGitHubMainProtectionPacket(proposal)
+  if (packet.repository !== REPOSITORY) fail('release_owner_approval_github_proposal_repository_invalid')
+  const resolvedPath = resolve(proposalPath || GITHUB_PROPOSAL_PATH)
+  if (hasSecretShape(resolvedPath)) fail('release_owner_approval_github_proposal_path_secret_shape_detected')
+  return resolvedPath
+}
+
 export function buildReleaseOwnerApprovalMarkdown({
   handoff,
   githubProposal,
+  githubProposalPath = GITHUB_PROPOSAL_PATH,
   supabaseProposal,
   githubProtectionSnapshot = null,
   githubProtectionSnapshotPath = null,
@@ -230,6 +239,7 @@ export function buildReleaseOwnerApprovalMarkdown({
   const handoffPacket = validateReleaseHandoffForApproval(handoff)
   const githubPacket = validateGitHubMainProtectionPacket(githubProposal)
   const supabasePacket = validateSupabasePreviewProposalForApproval(supabaseProposal)
+  const githubProposalReference = validatedGitHubProposalReference(githubProposalPath, githubPacket)
   const snapshotReference = validatedSnapshotReference(githubProtectionSnapshotPath, githubProtectionSnapshot)
   const normalizedVersion = packetVersion(version)
   const commitLabel = inferHandoffVersion({ handoff: handoffPacket, handoffVersion })
@@ -257,13 +267,13 @@ export function buildReleaseOwnerApprovalMarkdown({
     'Review command, no-write:',
     '',
     '```powershell',
-    'npm.cmd run github:main-protection:apply:plan',
+    `npm.cmd run github:main-protection:apply:plan -- --proposal "${githubProposalReference}"`,
     '```',
     '',
     'Execute command, only after approval and token are available:',
     '',
     '```powershell',
-    'node tools/apply_github_main_protection.mjs --execute',
+    `node tools/apply_github_main_protection.mjs --execute --proposal "${githubProposalReference}"`,
     '```',
     '',
     '## 2. Initial review-branch push',
