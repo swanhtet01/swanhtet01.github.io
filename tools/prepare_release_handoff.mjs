@@ -538,7 +538,9 @@ async function prepareReleaseHandoff(output) {
   validateReleaseCandidateAncestry(relations)
 
   const verificationCommand = appVerifyCommand()
-  const verified = await runStreaming(verificationCommand.file, verificationCommand.args)
+  const verified = process.env.SUPERMEGA_RELEASE_HANDOFF_STREAM === '1'
+    ? await runStreaming(verificationCommand.file, verificationCommand.args)
+    : run(verificationCommand.file, verificationCommand.args, { inherit: true, allowFailure: true })
   if (verified.errorCode) fail(`release_handoff_app_verify_spawn_error:${verified.errorCode}`)
   if (verified.signal) fail(`release_handoff_app_verify_signal:${verified.signal}`)
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
