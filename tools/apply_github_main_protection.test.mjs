@@ -6,6 +6,7 @@ import {
   applyGitHubMainProtectionWithClient,
   buildApplyPlan,
   selectRulesetAction,
+  validateApplyReport,
   validateOwnerApproval,
 } from './apply_github_main_protection.mjs'
 import {
@@ -82,13 +83,32 @@ function fakeRequest({ beforeRulesets = [], afterRulesets = null, writeStatus = 
 test('builds a plan-only applicator report without token or write execution', () => {
   const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {} })
   assert.equal(plan.contract, GITHUB_MAIN_PROTECTION_APPLY_CONTRACT)
+  assert.equal(plan.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(plan.mode, 'plan_only_no_github_write')
+  assert.match(plan.digest, /^sha256:[0-9a-f]{64}$/)
+  assert.equal(validateApplyReport(plan, { expectedMode: 'plan_only_no_github_write' }), plan)
   assert.equal(plan.controls.githubWritesPerformed, false)
   assert.equal(plan.controls.repositorySettingsMutated, false)
   assert.equal(plan.token.present, false)
   assert.equal(plan.possibleWrite.headers.Authorization, 'Bearer <redacted>')
   assert.equal(plan.possibleWrite.headers['Content-Type'], 'application/json')
   assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+[A-Za-z0-9._-]{8,}/)
+})
+
+test('rejects tampered plan reports before owner execution', () => {
+  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {} })
+  assert.throws(
+    () => validateApplyReport({ ...plan, mode: 'executed_owner_approved_github_settings_write' }, { expectedMode: 'plan_only_no_github_write' }),
+    /github_main_protection_apply_report_digest_invalid/,
+  )
+  assert.throws(
+    () => validateApplyReport({ ...plan, digest: `sha256:${'f'.repeat(64)}` }, { expectedMode: 'plan_only_no_github_write' }),
+    /github_main_protection_apply_report_digest_invalid/,
+  )
+  assert.throws(
+    () => validateApplyReport({ ...plan, possibleWrite: { ...plan.possibleWrite, headers: { ...plan.possibleWrite.headers, Authorization: 'Bearer ghp_shouldnotappear_12345678901234567890' } }, digest: plan.digest }, { expectedMode: 'plan_only_no_github_write' }),
+    /github_main_protection_apply_report_digest_invalid/,
+  )
 })
 
 test('requires exact owner approval before execution', () => {
@@ -130,6 +150,8 @@ test('executes create path only with approval, token, and post-write verificatio
   assert.equal(result.ok, true)
   assert.equal(result.action.kind, 'create')
   assert.equal(result.controls.githubWritesPerformed, true)
+  assert.match(result.digest, /^sha256:[0-9a-f]{64}$/)
+  assert.equal(validateApplyReport(result, { expectedMode: 'executed_owner_approved_github_settings_write' }), result)
   assert.equal(result.controls.branchMutated, false)
   assert.equal(result.controls.credentialValueExposed, false)
   assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [
