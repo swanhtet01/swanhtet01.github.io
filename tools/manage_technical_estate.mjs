@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const TECHNICAL_ESTATE_CONTRACT = 'supermega.technical-estate.v1'
 
@@ -276,7 +277,9 @@ async function main() {
   console.log(JSON.stringify({ ok: true, contract: TECHNICAL_ESTATE_CONTRACT, output: relative(root, output).split(sep).join('/'), products: expected.products.length, vercelProjects: expected.vercel.projects.length }))
 }
 
-main().catch((error) => {
-  console.error(JSON.stringify({ ok: false, contract: TECHNICAL_ESTATE_CONTRACT, error: String(error?.message || 'technical_estate_failed').slice(0, 240), externalWritesPerformed: false }))
-  process.exitCode = 1
-})
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(JSON.stringify({ ok: false, contract: TECHNICAL_ESTATE_CONTRACT, error: String(error?.message || 'technical_estate_failed').slice(0, 240), externalWritesPerformed: false }))
+    process.exitCode = 1
+  })
+}

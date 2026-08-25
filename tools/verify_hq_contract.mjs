@@ -1165,7 +1165,8 @@ requireContract('managed pilot readiness is derived and fail closed',
   && packageText.includes('"estate:technical:verify": "node tools/manage_technical_estate.mjs --verify"')
   && packageText.includes('"supabase:preview-rehearsal:proposal:verify": "node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify"')
   && packageText.includes('"github:main-protection:proposal:verify": "node tools/prepare_github_main_protection_packet.mjs --verify"')
-  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_hq_contract.mjs'))
+  && packageText.includes('"release:owner-gates:verify": "node tools/verify_release_stack_owner_gates.mjs --verify"')
+  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && node tools/verify_hq_contract.mjs'))
 
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')

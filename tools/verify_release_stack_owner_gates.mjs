@@ -1,0 +1,620 @@
+#!/usr/bin/env node
+
+import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
+import { validateGitHubMainProtectionPacket } from './prepare_github_main_protection_packet.mjs'
+import { validateSupabasePreviewRehearsalProposal } from './prepare_supabase_preview_rehearsal_proposal.mjs'
+import { validateTechnicalEstate } from './manage_technical_estate.mjs'
+
+export const RELEASE_STACK_OWNER_GATE_CONTRACT = 'supermega.release-stack-owner-gate.v1'
+
+const root = resolve(import.meta.dirname, '..')
+const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
+const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
+const REQUIRED_MAIN_CHECKS = [
+  'SuperMega App CI',
+  'Dependency Security Audit',
+  'Kernel Console - Verify & Owner-Gated Release',
+]
+const REQUIRED_OWNER_APPROVALS = [
+  'github_push',
+  'pull_request_creation',
+  'merge',
+  'production_release',
+  'vercel_deploy_or_promotion',
+  'supabase_schema_or_data_write',
+  'credential_change',
+  'customer_contact',
+  'payment_or_refund',
+  'stock_movement',
+  'domain_or_publish_change',
+  'managed_activation',
+]
+const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
+const REQUIRED_SAFE_AUTOMATED_ACTIONS = ['rebuild_local_evidence', 'verify_current_ledger', 'rehearse_local_client_package']
+const REQUIRED_FORBIDDEN_ACTIONS = [
+  'deploy',
+  'publish',
+  'production_write',
+  'customer_message',
+  'payment',
+  'hosted_scheduler_activation',
+]
+const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && node tools/verify_hq_contract.mjs'
+const SECRET_PATTERNS = [
+  /sk-[A-Za-z0-9_-]{20,}/,
+  /sk-proj-[A-Za-z0-9_-]{20,}/,
+  /ghp_[A-Za-z0-9]{20,}/,
+  /github_pat_[A-Za-z0-9_]{20,}/,
+  /sb_secret_[A-Za-z0-9_-]{20,}/,
+  /postgres(?:ql)?:\/\/[^"\s]+/i,
+  /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PRIVATE )?PRIVATE KEY-----/,
+]
+
+function digest(value) {
+  return `sha256:${createHash('sha256').update(String(value || '').replace(/\r\n?/g, '\n')).digest('hex')}`
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function sameArray(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((value, index) => value === expected[index])
+}
+
+function includesAll(actual, expected) {
+  return Array.isArray(actual) && expected.every((value) => actual.includes(value))
+}
+
+function addFailure(failures, code) {
+  if (!failures.includes(code)) failures.push(code)
+}
+
+function hasSecretShape(value) {
+  const text = JSON.stringify(value || {})
+  return SECRET_PATTERNS.some((pattern) => pattern.test(text))
+}
+
+function falseOnly(record, keys) {
+  return isRecord(record) && keys.every((key) => record[key] === false)
+}
+
+function gate(id, label, status, blocks, requiredApproval, evidence) {
+  return { id, label, status, blocks, requiredApproval, evidence }
+}
+
+export function assessReleaseStackOwnerGates(input = {}) {
+  const failures = []
+  const packageManifest = input.packageManifest || {}
+  const scripts = packageManifest.scripts || {}
+  const technicalEstate = input.technicalEstate || {}
+  const readiness = input.readiness || {}
+  const githubProposal = input.githubProposal || {}
+  const supabaseProposal = input.supabaseProposal || {}
+  const gitState = input.gitState || {}
+
+  if (input.repository !== REPOSITORY) addFailure(failures, 'release_stack_owner_gate_repository_invalid')
+  if (packageManifest.supermega?.productionSupabaseTargetStatus !== 'protected-unapproved') {
+    addFailure(failures, 'release_stack_owner_gate_supabase_target_status_invalid')
+  }
+  if (scripts['release:owner-gates:verify'] !== 'node tools/verify_release_stack_owner_gates.mjs --verify') {
+    addFailure(failures, 'release_stack_owner_gate_package_script_missing')
+  }
+  if (scripts['release:owner-gates:self-test'] !== 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_self_test_script_missing')
+  }
+  if (scripts['hq:verify'] !== EXPECTED_HQ_VERIFY_CHAIN) addFailure(failures, 'release_stack_owner_gate_hq_chain_missing')
+
+  if (technicalEstate.schemaVersion !== 'supermega.technical-estate.v1') addFailure(failures, 'release_stack_owner_gate_estate_contract_invalid')
+  if (technicalEstate.canonicalSource?.repository !== REPOSITORY) addFailure(failures, 'release_stack_owner_gate_estate_repository_invalid')
+  if (technicalEstate.canonicalSource?.directProductionDeploymentAllowed !== false) addFailure(failures, 'release_stack_owner_gate_direct_production_allowed')
+  if (!sameArray((technicalEstate.products || []).map((product) => product.productId), REQUIRED_PRODUCTS)) {
+    addFailure(failures, 'release_stack_owner_gate_product_set_invalid')
+  }
+  if ((technicalEstate.sharedCapabilities || []).length !== 1
+    || technicalEstate.sharedCapabilities?.[0]?.id !== 'ai-assistance'
+    || technicalEstate.sharedCapabilities?.[0]?.classification !== 'shared-capability-not-product') {
+    addFailure(failures, 'release_stack_owner_gate_ai_product_boundary_invalid')
+  }
+  if (technicalEstate.lifecycle?.currentPriority !== 'shop-first-managed-pilot-readiness'
+    || !sameArray(technicalEstate.lifecycle?.nextProductSequence, REQUIRED_PRODUCTS)) {
+    addFailure(failures, 'release_stack_owner_gate_lifecycle_order_invalid')
+  }
+  if (!includesAll(technicalEstate.ownerGates?.requiredApprovalFor, REQUIRED_OWNER_APPROVALS)
+    || technicalEstate.ownerGates?.productionWritesAllowed !== false
+    || technicalEstate.ownerGates?.externalEffectsAllowed !== false
+    || technicalEstate.ownerGates?.autoMergeAllowed !== false
+    || technicalEstate.ownerGates?.localSubagentsAllowedByDefault !== false) {
+    addFailure(failures, 'release_stack_owner_gate_estate_owner_gates_invalid')
+  }
+
+  if (readiness.contract !== 'supermega.managed-pilot-readiness.v5') addFailure(failures, 'release_stack_owner_gate_readiness_contract_invalid')
+  if (readiness.pilotMode !== 'owner_named') addFailure(failures, 'release_stack_owner_gate_pilot_mode_invalid')
+  if (readiness.overall?.status !== 'blocked'
+    || readiness.overall?.hostedActivationReady !== false
+    || readiness.overall?.blockingGateCount !== REQUIRED_BLOCKING_GATES.length
+    || !sameArray(readiness.overall?.blockingGateIds, REQUIRED_BLOCKING_GATES)) {
+    addFailure(failures, 'release_stack_owner_gate_readiness_overall_invalid')
+  }
+  if (readiness.liveProduction?.operatingMode !== 'isolated_demo'
+    || readiness.liveProduction?.managedWritesEnabled !== false
+    || readiness.liveProduction?.productionMutationAuthorized !== false) {
+    addFailure(failures, 'release_stack_owner_gate_live_production_boundary_invalid')
+  }
+  if (readiness.previewRehearsal?.proofComplete !== false
+    || readiness.previewRehearsal?.productionRefsRejected !== true
+    || readiness.previewRehearsal?.productionDataRejected !== true
+    || readiness.previewRehearsal?.privilegedRuntimeCredentialsRejected !== true) {
+    addFailure(failures, 'release_stack_owner_gate_preview_gate_invalid')
+  }
+  if (readiness.pilotEvidence?.productId !== 'shop'
+    || readiness.pilotEvidence?.proofComplete !== false
+    || readiness.pilotEvidence?.requiredAcceptedConsecutiveRuns !== 20
+    || readiness.pilotEvidence?.acceptedConsecutiveRuns !== 0
+    || readiness.pilotEvidence?.syntheticEvidenceAccepted !== false
+    || readiness.pilotEvidence?.publicIdentityAllowed !== false
+    || readiness.pilotEvidence?.privateWorkspaceRequired !== true) {
+    addFailure(failures, 'release_stack_owner_gate_pilot_evidence_invalid')
+  }
+  if (readiness.controls?.externalWritesPerformed !== false
+    || readiness.controls?.productionWritesEnabled !== false
+    || readiness.controls?.ownerApprovalRequired !== true
+    || !sameArray(readiness.controls?.safeAutomatedActions, REQUIRED_SAFE_AUTOMATED_ACTIONS)
+    || !sameArray(readiness.controls?.forbiddenUntilReady, REQUIRED_FORBIDDEN_ACTIONS)) {
+    addFailure(failures, 'release_stack_owner_gate_readiness_controls_invalid')
+  }
+
+  if (githubProposal.contract !== 'supermega.github-main-protection-proposal.v1'
+    || githubProposal.repository !== REPOSITORY
+    || githubProposal.mode !== 'owner_approval_required'
+    || !sameArray(githubProposal.verifierCompatibility?.requiredChecks, REQUIRED_MAIN_CHECKS)
+    || githubProposal.verifierCompatibility?.simulatedOk !== true
+    || !falseOnly(githubProposal.controls, [
+      'githubWritesApproved',
+      'githubWritesPerformed',
+      'repositorySettingsMutated',
+      'branchMutated',
+      'pullRequestCreated',
+      'mergePerformed',
+      'deploymentPerformed',
+      'supabaseMutated',
+      'credentialValuesRequired',
+    ])) {
+    addFailure(failures, 'release_stack_owner_gate_github_proposal_invalid')
+  }
+
+  if (supabaseProposal.contract !== 'supermega.supabase-preview-rehearsal-proposal.v1'
+    || supabaseProposal.repository !== REPOSITORY
+    || supabaseProposal.mode !== 'owner_approval_required'
+    || supabaseProposal.state !== 'prepared-not-executed'
+    || supabaseProposal.previewBranch?.kind !== 'clean_empty_ephemeral_preview'
+    || supabaseProposal.previewBranch?.maximumLifetimeHours !== 24
+    || supabaseProposal.previewBranch?.startsWithProductionData !== false
+    || supabaseProposal.previewBranch?.seedProductionDataAllowed !== false
+    || supabaseProposal.previewBranch?.productionRefsAllowed !== false
+    || supabaseProposal.previewBranch?.privilegedRuntimeCredentialsAllowed !== false
+    || supabaseProposal.previewBranch?.deleteAfterEvidence !== true
+    || supabaseProposal.previewBranch?.failedBranchReuseAllowed !== false
+    || supabaseProposal.migrationPlan?.schemaVersion !== 13
+    || !/^sha256:[0-9a-f]{64}$/.test(String(supabaseProposal.migrationPlan?.chainDigest || ''))
+    || supabaseProposal.migrationPlan?.productionApplyAllowed !== false
+    || !includesAll(supabaseProposal.requiredEvidence, [
+      'metadata-only-schema-fingerprint-comparison',
+      'public-table-rls-and-anon-authenticated-denial',
+      'private-schema-backend-role-policy-and-no-browser-grants',
+      'private-storage-six-request-privacy-proof',
+      'branch-deleted-after-evidence',
+      'no-production-retry-on-failure',
+    ])
+    || !falseOnly(supabaseProposal.controls, [
+      'supabaseBranchCreationApproved',
+      'supabaseBranchCreated',
+      'supabaseBranchDeleted',
+      'providerMutationsPerformed',
+      'productionProjectMutated',
+      'productionDataCopied',
+      'productionRowsRead',
+      'privilegedRuntimeCredentialsIncluded',
+      'managedActivationAllowed',
+      'vercelDeploymentAllowed',
+      'githubWritesAllowed',
+      'customerContactAllowed',
+      'paymentOrStockActionAllowed',
+    ])) {
+    addFailure(failures, 'release_stack_owner_gate_supabase_proposal_invalid')
+  }
+
+  if (gitState.clean !== true) addFailure(failures, 'release_stack_owner_gate_worktree_dirty')
+  if (!/^[0-9a-f]{40}$/.test(String(gitState.head || ''))) addFailure(failures, 'release_stack_owner_gate_head_invalid')
+  if (!gitState.branch || typeof gitState.branch !== 'string') addFailure(failures, 'release_stack_owner_gate_branch_invalid')
+  if (Number.isInteger(gitState.aheadOfOriginMain) && gitState.aheadOfOriginMain < 1) {
+    addFailure(failures, 'release_stack_owner_gate_no_review_delta')
+  }
+
+  if (hasSecretShape({
+    technicalEstate,
+    readiness,
+    githubProposal,
+    supabaseProposal,
+  })) {
+    addFailure(failures, 'release_stack_owner_gate_secret_shape_detected')
+  }
+
+  const body = {
+    contract: RELEASE_STACK_OWNER_GATE_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
+    generatedAt: input.generatedAt || new Date().toISOString(),
+    repository: REPOSITORY,
+    status: failures.length ? 'failed' : 'owner_gates_pending',
+    ok: failures.length === 0,
+    candidate: {
+      branch: gitState.branch || null,
+      head: gitState.head || null,
+      clean: gitState.clean === true,
+      originMain: gitState.originMain || null,
+      aheadOfOriginMain: Number.isInteger(gitState.aheadOfOriginMain) ? gitState.aheadOfOriginMain : null,
+      diffShortstat: gitState.diffShortstat || null,
+    },
+    products: {
+      customerProducts: REQUIRED_PRODUCTS,
+      firstPilotProduct: 'shop',
+      aiIsSharedCapability: true,
+    },
+    readiness: {
+      contract: readiness.contract || null,
+      pilotMode: readiness.pilotMode || null,
+      hostedActivationReady: readiness.overall?.hostedActivationReady === true,
+      blockingGateIds: Array.isArray(readiness.overall?.blockingGateIds) ? [...readiness.overall.blockingGateIds] : [],
+      liveOperatingMode: readiness.liveProduction?.operatingMode || null,
+      managedWritesEnabled: readiness.liveProduction?.managedWritesEnabled === true,
+    },
+    requiredOwnerGates: [
+      gate('github_main_protection', 'GitHub main protection settings write', 'owner_approval_required', true, true, 'Source proposal prepared; read-only evidence still must verify protection after owner-approved settings write.'),
+      gate('push_and_pr', 'Push and pull request creation', 'owner_approval_required', true, true, 'Local branch is reviewable only after explicit push and PR approval.'),
+      gate('supabase_preview_rehearsal', 'Clean Supabase preview rehearsal', 'owner_approval_required', true, true, 'Source proposal prepared; no branch may be created without separate approval.'),
+      gate('paired_vercel_preview_release', 'Paired Vercel preview and production promotion', 'owner_approval_required', true, true, 'Exact reviewed SHA must be previewed and owner-promoted as a pair.'),
+      gate('shop_pilot_evidence', 'Owner-named Shop pilot evidence', 'owner_approval_required', true, true, '20 consecutive accepted operator-reviewed runs are required for promotion evidence.'),
+      gate('managed_activation', 'Managed production activation', 'owner_approval_required', true, true, 'Production remains isolated-demo until every hosted proof passes and owner approves exact activation.'),
+    ],
+    proposals: {
+      githubMainProtection: {
+        contract: githubProposal.contract || null,
+        mode: githubProposal.mode || null,
+        requiredChecks: Array.isArray(githubProposal.verifierCompatibility?.requiredChecks) ? [...githubProposal.verifierCompatibility.requiredChecks] : [],
+        writesApproved: githubProposal.controls?.githubWritesApproved === true,
+        writesPerformed: githubProposal.controls?.githubWritesPerformed === true,
+      },
+      supabasePreviewRehearsal: {
+        contract: supabaseProposal.contract || null,
+        mode: supabaseProposal.mode || null,
+        state: supabaseProposal.state || null,
+        previewKind: supabaseProposal.previewBranch?.kind || null,
+        maximumLifetimeHours: supabaseProposal.previewBranch?.maximumLifetimeHours ?? null,
+        chainDigest: supabaseProposal.migrationPlan?.chainDigest || null,
+        branchCreated: supabaseProposal.controls?.supabaseBranchCreated === true,
+        productionProjectMutated: supabaseProposal.controls?.productionProjectMutated === true,
+      },
+    },
+    controls: {
+      githubWritesAllowed: false,
+      supabaseWritesAllowed: false,
+      vercelDeployAllowed: false,
+      productionReleaseAllowed: false,
+      customerContactAllowed: false,
+      paymentOrStockActionAllowed: false,
+      managedActivationAllowed: false,
+      localSubagentsAllowedByDefault: false,
+      externalEffectsAllowed: false,
+      noWriteVerification: true,
+    },
+    nextOwnerGateIds: [
+      'github_main_protection',
+      'push_and_pr',
+      'supabase_preview_rehearsal',
+      'paired_vercel_preview_release',
+      'shop_pilot_evidence',
+      'managed_activation',
+    ],
+    failures,
+  }
+  return { ...body, digest: digest(JSON.stringify(body)) }
+}
+
+export function validateReleaseStackOwnerGate(report) {
+  if (!isRecord(report) || report.contract !== RELEASE_STACK_OWNER_GATE_CONTRACT) {
+    throw new Error('release_stack_owner_gate_contract_invalid')
+  }
+  const { digest: actualDigest, ...body } = report
+  if (actualDigest !== digest(JSON.stringify(body))) throw new Error('release_stack_owner_gate_digest_invalid')
+  if (report.ok !== true || report.status !== 'owner_gates_pending' || report.failures?.length !== 0) {
+    throw new Error('release_stack_owner_gate_not_passing')
+  }
+  if (report.controls?.noWriteVerification !== true
+    || report.controls?.githubWritesAllowed !== false
+    || report.controls?.supabaseWritesAllowed !== false
+    || report.controls?.vercelDeployAllowed !== false
+    || report.controls?.managedActivationAllowed !== false) {
+    throw new Error('release_stack_owner_gate_controls_invalid')
+  }
+  return report
+}
+
+function git(args, { optional = false } = {}) {
+  const result = spawnSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 1_000_000,
+    windowsHide: true,
+  })
+  const output = String(result.stdout || '').trim()
+  if (!optional && result.status !== 0) {
+    throw new Error(`release_stack_owner_gate_git_failed:${args.join(' ')}`)
+  }
+  return result.status === 0 ? output : null
+}
+
+function currentGitState() {
+  const statusText = git(['status', '--porcelain'])
+  const originMain = git(['rev-parse', '--verify', 'origin/main'], { optional: true })
+  const aheadText = originMain ? git(['rev-list', '--count', 'origin/main..HEAD'], { optional: true }) : null
+  const aheadOfOriginMain = aheadText == null || aheadText === '' ? null : Number.parseInt(aheadText, 10)
+  return {
+    branch: git(['rev-parse', '--abbrev-ref', 'HEAD']),
+    head: git(['rev-parse', 'HEAD']),
+    clean: statusText.length === 0,
+    originMain,
+    aheadOfOriginMain: Number.isSafeInteger(aheadOfOriginMain) ? aheadOfOriginMain : null,
+    diffShortstat: originMain ? git(['diff', '--shortstat', 'origin/main..HEAD'], { optional: true }) : null,
+  }
+}
+
+async function readJson(path) {
+  return JSON.parse(await readFile(resolve(root, path), 'utf8'))
+}
+
+function runNoWriteVerifier(args) {
+  const result = spawnSync(process.execPath, args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 2_000_000,
+    windowsHide: true,
+  })
+  if (result.status !== 0) {
+    const error = String(result.stderr || result.stdout || 'failed').replace(/\s+/g, ' ').slice(0, 220)
+    throw new Error(`release_stack_owner_gate_dependency_failed:${args.join(' ')}:${error}`)
+  }
+}
+
+async function currentReport() {
+  runNoWriteVerifier(['tools/manage_technical_estate.mjs', '--verify'])
+  runNoWriteVerifier(['tools/manage_managed_pilot_readiness.mjs', '--verify'])
+  runNoWriteVerifier(['tools/prepare_supabase_preview_rehearsal_proposal.mjs', '--verify'])
+  runNoWriteVerifier(['tools/prepare_github_main_protection_packet.mjs', '--verify'])
+
+  const packageManifest = await readJson('package.json')
+  const technicalEstate = validateTechnicalEstate(await readJson('hq/technical-estate.json'))
+  const readiness = validateManagedPilotReadiness(await readJson('hq/readiness/managed-pilot-readiness.json'))
+  const githubProposal = validateGitHubMainProtectionPacket(await readJson('hq/readiness/github-main-protection-proposal.json'))
+  const supabaseProposal = await validateSupabasePreviewRehearsalProposal(await readJson('hq/readiness/supabase-preview-rehearsal-proposal.json'))
+
+  return assessReleaseStackOwnerGates({
+    generatedAt: new Date().toISOString(),
+    repository: REPOSITORY,
+    packageManifest,
+    technicalEstate,
+    readiness,
+    githubProposal,
+    supabaseProposal,
+    gitState: currentGitState(),
+  })
+}
+
+function sampleInput(overrides = {}) {
+  const gitState = {
+    branch: 'codex/release-stack-integration-rehearsal',
+    head: 'a'.repeat(40),
+    clean: true,
+    originMain: 'b'.repeat(40),
+    aheadOfOriginMain: 3,
+    diffShortstat: ' 8 files changed, 120 insertions(+), 3 deletions(-)',
+  }
+  const packageManifest = {
+    supermega: { productionSupabaseTargetStatus: 'protected-unapproved' },
+    scripts: {
+      'release:owner-gates:verify': 'node tools/verify_release_stack_owner_gates.mjs --verify',
+      'release:owner-gates:self-test': 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test',
+      'hq:verify': EXPECTED_HQ_VERIFY_CHAIN,
+    },
+  }
+  const technicalEstate = {
+    schemaVersion: 'supermega.technical-estate.v1',
+    canonicalSource: { repository: REPOSITORY, directProductionDeploymentAllowed: false },
+    products: REQUIRED_PRODUCTS.map((productId) => ({ productId })),
+    sharedCapabilities: [{ id: 'ai-assistance', classification: 'shared-capability-not-product' }],
+    lifecycle: { currentPriority: 'shop-first-managed-pilot-readiness', nextProductSequence: [...REQUIRED_PRODUCTS] },
+    ownerGates: {
+      requiredApprovalFor: [...REQUIRED_OWNER_APPROVALS],
+      productionWritesAllowed: false,
+      externalEffectsAllowed: false,
+      autoMergeAllowed: false,
+      localSubagentsAllowedByDefault: false,
+    },
+  }
+  const readiness = {
+    contract: 'supermega.managed-pilot-readiness.v5',
+    pilotMode: 'owner_named',
+    overall: {
+      status: 'blocked',
+      hostedActivationReady: false,
+      blockingGateCount: REQUIRED_BLOCKING_GATES.length,
+      blockingGateIds: [...REQUIRED_BLOCKING_GATES],
+    },
+    liveProduction: { operatingMode: 'isolated_demo', managedWritesEnabled: false, productionMutationAuthorized: false },
+    previewRehearsal: {
+      proofComplete: false,
+      productionRefsRejected: true,
+      productionDataRejected: true,
+      privilegedRuntimeCredentialsRejected: true,
+    },
+    pilotEvidence: {
+      productId: 'shop',
+      proofComplete: false,
+      requiredAcceptedConsecutiveRuns: 20,
+      acceptedConsecutiveRuns: 0,
+      syntheticEvidenceAccepted: false,
+      publicIdentityAllowed: false,
+      privateWorkspaceRequired: true,
+    },
+    controls: {
+      externalWritesPerformed: false,
+      productionWritesEnabled: false,
+      ownerApprovalRequired: true,
+      safeAutomatedActions: [...REQUIRED_SAFE_AUTOMATED_ACTIONS],
+      forbiddenUntilReady: [...REQUIRED_FORBIDDEN_ACTIONS],
+    },
+  }
+  const githubProposal = {
+    contract: 'supermega.github-main-protection-proposal.v1',
+    repository: REPOSITORY,
+    mode: 'owner_approval_required',
+    verifierCompatibility: { requiredChecks: [...REQUIRED_MAIN_CHECKS], simulatedOk: true },
+    controls: {
+      githubWritesApproved: false,
+      githubWritesPerformed: false,
+      repositorySettingsMutated: false,
+      branchMutated: false,
+      pullRequestCreated: false,
+      mergePerformed: false,
+      deploymentPerformed: false,
+      supabaseMutated: false,
+      credentialValuesRequired: false,
+    },
+  }
+  const supabaseProposal = {
+    contract: 'supermega.supabase-preview-rehearsal-proposal.v1',
+    repository: REPOSITORY,
+    mode: 'owner_approval_required',
+    state: 'prepared-not-executed',
+    previewBranch: {
+      kind: 'clean_empty_ephemeral_preview',
+      maximumLifetimeHours: 24,
+      startsWithProductionData: false,
+      seedProductionDataAllowed: false,
+      productionRefsAllowed: false,
+      privilegedRuntimeCredentialsAllowed: false,
+      deleteAfterEvidence: true,
+      failedBranchReuseAllowed: false,
+    },
+    migrationPlan: {
+      schemaVersion: 13,
+      chainDigest: `sha256:${'c'.repeat(64)}`,
+      productionApplyAllowed: false,
+    },
+    requiredEvidence: [
+      'metadata-only-schema-fingerprint-comparison',
+      'public-table-rls-and-anon-authenticated-denial',
+      'private-schema-backend-role-policy-and-no-browser-grants',
+      'private-storage-six-request-privacy-proof',
+      'branch-deleted-after-evidence',
+      'no-production-retry-on-failure',
+    ],
+    controls: {
+      supabaseBranchCreationApproved: false,
+      supabaseBranchCreated: false,
+      supabaseBranchDeleted: false,
+      providerMutationsPerformed: false,
+      productionProjectMutated: false,
+      productionDataCopied: false,
+      productionRowsRead: false,
+      privilegedRuntimeCredentialsIncluded: false,
+      managedActivationAllowed: false,
+      vercelDeploymentAllowed: false,
+      githubWritesAllowed: false,
+      customerContactAllowed: false,
+      paymentOrStockActionAllowed: false,
+    },
+  }
+  return {
+    repository: REPOSITORY,
+    packageManifest,
+    technicalEstate,
+    readiness,
+    githubProposal,
+    supabaseProposal,
+    gitState,
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function runSelfTest() {
+  const report = assessReleaseStackOwnerGates(sampleInput())
+  const dirty = assessReleaseStackOwnerGates(sampleInput({ gitState: { ...sampleInput().gitState, clean: false } }))
+  const unsafeSupabase = assessReleaseStackOwnerGates(sampleInput({
+    supabaseProposal: {
+      ...sampleInput().supabaseProposal,
+      previewBranch: { ...sampleInput().supabaseProposal.previewBranch, startsWithProductionData: true },
+    },
+  }))
+  const checks = {
+    valid_stack_passes: report.ok === true && validateReleaseStackOwnerGate(report) === report,
+    owner_gates_remain_pending: report.status === 'owner_gates_pending' && report.nextOwnerGateIds[0] === 'github_main_protection',
+    dirty_worktree_fails_closed: dirty.ok === false && dirty.failures.includes('release_stack_owner_gate_worktree_dirty'),
+    supabase_production_data_fails_closed: unsafeSupabase.ok === false && unsafeSupabase.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'),
+    no_external_effects_allowed: Object.entries(report.controls)
+      .filter(([key]) => key !== 'noWriteVerification')
+      .every(([, value]) => value === false),
+  }
+  const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name)
+  return {
+    ok: failedChecks.length === 0,
+    contract: `${RELEASE_STACK_OWNER_GATE_CONTRACT}.self-test`,
+    checks,
+    failedChecks,
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2)
+  if (args.length > 1 || (args[0] && !['--verify', '--self-test'].includes(args[0]))) {
+    throw new Error('release_stack_owner_gate_usage_invalid')
+  }
+  if (args[0] === '--self-test') {
+    const result = runSelfTest()
+    console.log(JSON.stringify(result, null, 2))
+    if (!result.ok) process.exitCode = 1
+    return
+  }
+  const report = await currentReport()
+  console.log(JSON.stringify({
+    ok: report.ok,
+    contract: report.contract,
+    status: report.status,
+    head: report.candidate.head,
+    clean: report.candidate.clean,
+    nextOwnerGateIds: report.nextOwnerGateIds,
+    failures: report.failures,
+  }, null, 2))
+  if (!report.ok) process.exitCode = 1
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(JSON.stringify({
+      ok: false,
+      contract: RELEASE_STACK_OWNER_GATE_CONTRACT,
+      error: String(error?.message || 'release_stack_owner_gate_failed').slice(0, 260),
+      externalEffectsAllowed: false,
+    }))
+    process.exitCode = 1
+  })
+}
+
