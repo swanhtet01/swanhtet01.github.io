@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const SHOP_PILOT_BASELINE_INPUT_CONTRACT = 'supermega.shop.pilot_baseline_input.v1'
+export const SHOP_PILOT_BASELINE_INPUT_PREFLIGHT_CONTRACT = 'supermega.shop.pilot_baseline_input_preflight.v1'
 export const SHOP_PILOT_BASELINE_PACKET_CONTRACT = 'supermega.shop.pilot_baseline_packet.v1'
 export const SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT = 'supermega.shop.pilot_baseline_worksheet.v1'
 
@@ -92,6 +93,12 @@ function text(value, field, max = 240) {
 function optionalText(value, field, max = 160) {
   if (value === null || value === undefined || value === '') return null
   return text(value, field, max)
+}
+
+function safeFailureCode(error, fallback = 'shop_pilot_baseline_input_invalid') {
+  const raw = String(error?.message || fallback)
+  const normalized = raw.replace(/[^A-Za-z0-9:_-]/g, '_').slice(0, 160)
+  return normalized || fallback
 }
 
 function bool(value, field) {
@@ -298,6 +305,84 @@ export function buildShopPilotBaselinePacket(input, { generatedAt = new Date().t
   }
 }
 
+export function preflightShopPilotBaselineInput(input, { generatedAt = new Date().toISOString() } = {}) {
+  const base = {
+    contract: SHOP_PILOT_BASELINE_INPUT_PREFLIGHT_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
+    generatedAt: iso(generatedAt, 'shop_pilot_baseline_preflight_generated_at'),
+    product: PRODUCT,
+    pilotMode: PILOT_MODE,
+    verticalPack: VERTICAL_PACK,
+    privateInputRetainedByTool: false,
+    publicIdentityIncluded: false,
+    controls: Object.fromEntries(FALSE_CONTROL_FIELDS.map((field) => [field, false])),
+  }
+  try {
+    const packet = buildShopPilotBaselinePacket(input, { generatedAt })
+    const ready = packet.ok === true && packet.status === 'baseline_ready_for_private_pilot_handoff'
+    const body = {
+      ...base,
+      ok: ready,
+      status: ready ? 'baseline_input_ready' : 'baseline_input_blocked',
+      safeToGeneratePublicBaselinePacket: ready,
+      failures: [...packet.failures],
+      privateInputDigest: packet.privateInputDigest,
+      metrics: { ...packet.metrics },
+      pilotWindow: { ...packet.pilotWindow },
+      nextAction: ready
+        ? 'Generate the public-safe baseline packet and then run the Shop Day-0 readiness gate with the intake packet.'
+        : 'Fix the private owner-observed baseline input locally; do not generate or edit a public packet yet.',
+    }
+    assertPublicSafe(body, 'shop_pilot_baseline_preflight_public_private_value')
+    return {
+      ...body,
+      digest: digest(canonicalJson(body)),
+    }
+  } catch (error) {
+    const body = {
+      ...base,
+      ok: false,
+      status: 'baseline_input_invalid',
+      safeToGeneratePublicBaselinePacket: false,
+      failures: [safeFailureCode(error)],
+      privateInputDigest: null,
+      metrics: null,
+      pilotWindow: null,
+      nextAction: 'Fix the private owner-observed baseline input locally; do not generate or edit a public packet yet.',
+    }
+    assertPublicSafe(body, 'shop_pilot_baseline_preflight_public_private_value')
+    return {
+      ...body,
+      digest: digest(canonicalJson(body)),
+    }
+  }
+}
+
+export function validateShopPilotBaselineInputPreflight(packet) {
+  assertPublicSafe(packet)
+  if (!isRecord(packet)) fail('shop_pilot_baseline_preflight_required')
+  if (packet.contract !== SHOP_PILOT_BASELINE_INPUT_PREFLIGHT_CONTRACT) fail('shop_pilot_baseline_preflight_contract_invalid')
+  if (packet.digestScope !== 'utf8_compact_json_without_digest') fail('shop_pilot_baseline_preflight_digest_scope_invalid')
+  iso(packet.generatedAt, 'shop_pilot_baseline_preflight_generated_at')
+  if (packet.product !== PRODUCT || packet.pilotMode !== PILOT_MODE || packet.verticalPack !== VERTICAL_PACK) fail('shop_pilot_baseline_preflight_scope_invalid')
+  if (!['baseline_input_ready', 'baseline_input_blocked', 'baseline_input_invalid'].includes(packet.status)) fail('shop_pilot_baseline_preflight_status_invalid')
+  if ((packet.status === 'baseline_input_ready') !== (packet.ok === true)) fail('shop_pilot_baseline_preflight_ok_invalid')
+  if (packet.safeToGeneratePublicBaselinePacket !== (packet.status === 'baseline_input_ready')) fail('shop_pilot_baseline_preflight_safe_invalid')
+  if (!Array.isArray(packet.failures) || (packet.ok === true && packet.failures.length !== 0)) fail('shop_pilot_baseline_preflight_failures_invalid')
+  if (packet.privateInputRetainedByTool !== false || packet.publicIdentityIncluded !== false) fail('shop_pilot_baseline_preflight_privacy_invalid')
+  if (packet.status === 'baseline_input_invalid') {
+    if (packet.privateInputDigest !== null || packet.metrics !== null || packet.pilotWindow !== null) fail('shop_pilot_baseline_preflight_invalid_payload')
+  } else if (!DIGEST_PATTERN.test(packet.privateInputDigest || '') || !isRecord(packet.metrics) || !isRecord(packet.pilotWindow)) {
+    fail('shop_pilot_baseline_preflight_ready_payload_invalid')
+  }
+  if (!isRecord(packet.controls) || FALSE_CONTROL_FIELDS.some((field) => packet.controls[field] !== false)) fail('shop_pilot_baseline_preflight_controls_invalid')
+  if (!DIGEST_PATTERN.test(packet.digest || '')) fail('shop_pilot_baseline_preflight_digest_invalid')
+  const copy = { ...packet }
+  delete copy.digest
+  if (packet.digest !== digest(canonicalJson(copy))) fail('shop_pilot_baseline_preflight_digest_mismatch')
+  return packet
+}
+
 export function validateShopPilotBaselinePacket(packet) {
   assertPublicSafe(packet)
   if (!isRecord(packet)) fail('shop_pilot_baseline_packet_required')
@@ -478,6 +563,7 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '',
     '```powershell',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --template "<private-baseline-input.json>"',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --lint-input "<private-baseline-input.json>"',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --verify "<public-baseline-packet.json>"',
     '```',
@@ -527,7 +613,17 @@ export function renderShopPilotBaselinePacketMarkdown(packet) {
 }
 
 async function readJson(path) {
-  return JSON.parse(await readFile(resolve(path || ''), 'utf8'))
+  let textContent = null
+  try {
+    textContent = await readFile(resolve(path || ''), 'utf8')
+  } catch {
+    fail('shop_pilot_baseline_json_read_failed')
+  }
+  try {
+    return JSON.parse(textContent)
+  } catch {
+    fail('shop_pilot_baseline_json_invalid')
+  }
 }
 
 async function writeOutput(path, content) {
@@ -596,6 +692,7 @@ function sampleInput(overrides = {}) {
 function runSelfTest() {
   const packet = buildShopPilotBaselinePacket(sampleInput(), { generatedAt: '2026-08-25T00:00:00.000Z' })
   validateShopPilotBaselinePacket(packet)
+  const preflight = validateShopPilotBaselineInputPreflight(preflightShopPilotBaselineInput(sampleInput(), { generatedAt: '2026-08-25T00:00:00.000Z' }))
   const markdown = renderShopPilotBaselinePacketMarkdown(packet)
   if (JSON.stringify(packet).includes('Private Spa Sample') || markdown.includes('Private Operator')) {
     fail('shop_pilot_baseline_self_test_private_output')
@@ -606,10 +703,17 @@ function runSelfTest() {
   if (blocked.ok !== false || !blocked.failures.includes('claimed_order_median_mismatch')) {
     fail('shop_pilot_baseline_self_test_blocked_invalid')
   }
+  const invalid = validateShopPilotBaselineInputPreflight(preflightShopPilotBaselineInput({
+    ...sampleInput(),
+    businessName: 'owner@example.invalid',
+  }, { generatedAt: '2026-08-25T00:00:00.000Z' }))
+  if (preflight.status !== 'baseline_input_ready' || invalid.status !== 'baseline_input_invalid' || invalid.privateInputDigest !== null) {
+    fail('shop_pilot_baseline_self_test_preflight_invalid')
+  }
   return {
     ok: true,
     contract: SHOP_PILOT_BASELINE_PACKET_CONTRACT,
-    cases: 2,
+    cases: 3,
     externalWritesPerformed: false,
   }
 }
@@ -620,6 +724,7 @@ function parseArgs(argv) {
     output: null,
     markdownOutput: null,
     verify: null,
+    lintInput: null,
     template: null,
     worksheetOutput: null,
     selfTest: false,
@@ -630,6 +735,7 @@ function parseArgs(argv) {
     else if (arg === '--output') args.output = argv[++index]
     else if (arg === '--markdown-output') args.markdownOutput = argv[++index]
     else if (arg === '--verify') args.verify = argv[++index] || null
+    else if (arg === '--lint-input') args.lintInput = argv[++index] || null
     else if (arg === '--template') args.template = argv[++index] || null
     else if (arg === '--worksheet-output') args.worksheetOutput = argv[++index] || null
     else if (arg === '--self-test') args.selfTest = true
@@ -681,6 +787,21 @@ async function main() {
       privateIdentityIncluded: packet.publicIdentityIncluded,
       externalWritesPerformed: false,
     }))
+    return
+  }
+  if (args.lintInput) {
+    const packet = validateShopPilotBaselineInputPreflight(preflightShopPilotBaselineInput(await readJson(args.lintInput)))
+    console.log(JSON.stringify({
+      ok: packet.ok,
+      contract: packet.contract,
+      status: packet.status,
+      safeToGeneratePublicBaselinePacket: packet.safeToGeneratePublicBaselinePacket,
+      failures: packet.failures,
+      privateInputDigest: packet.privateInputDigest,
+      digest: packet.digest,
+      externalWritesPerformed: false,
+    }))
+    if (!packet.ok) process.exitCode = 1
     return
   }
   if (!args.input) fail('shop_pilot_baseline_input_required')

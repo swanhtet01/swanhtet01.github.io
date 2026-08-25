@@ -7,12 +7,15 @@ import test from 'node:test'
 
 import {
   SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+  SHOP_PILOT_BASELINE_INPUT_PREFLIGHT_CONTRACT,
   SHOP_PILOT_BASELINE_PACKET_CONTRACT,
   SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT,
   baselineInputTemplate,
   buildShopPilotBaselinePacket,
+  preflightShopPilotBaselineInput,
   renderShopPilotBaselinePacketMarkdown,
   renderShopPilotBaselineWorksheetMarkdown,
+  validateShopPilotBaselineInputPreflight,
   validateShopPilotBaselinePacket,
 } from './prepare_shop_pilot_baseline_packet.mjs'
 
@@ -99,6 +102,33 @@ test('blocks mismatched medians, interrupted evidence, and wrong review window w
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
 })
 
+test('preflights private baseline input with safe actionability codes only', () => {
+  const ready = preflightShopPilotBaselineInput(input(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(ready.contract, SHOP_PILOT_BASELINE_INPUT_PREFLIGHT_CONTRACT)
+  assert.equal(ready.status, 'baseline_input_ready')
+  assert.equal(ready.ok, true)
+  assert.equal(ready.safeToGeneratePublicBaselinePacket, true)
+  assert.deepEqual(ready.failures, [])
+  assert.equal(ready.metrics.medianMinutesPerOrder, 8)
+  assert.equal(validateShopPilotBaselineInputPreflight(ready), ready)
+
+  const blocked = preflightShopPilotBaselineInput(input({ claimedMedianMinutesPerOrder: 7 }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(blocked.status, 'baseline_input_blocked')
+  assert.equal(blocked.ok, false)
+  assert.equal(blocked.safeToGeneratePublicBaselinePacket, false)
+  assert.ok(blocked.failures.includes('claimed_order_median_mismatch'))
+  assert.ok(blocked.privateInputDigest)
+  assert.equal(validateShopPilotBaselineInputPreflight(blocked), blocked)
+
+  const invalid = preflightShopPilotBaselineInput(input({ businessName: 'owner@example.invalid' }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(invalid.status, 'baseline_input_invalid')
+  assert.equal(invalid.privateInputDigest, null)
+  assert.equal(invalid.metrics, null)
+  assert.match(invalid.failures[0], /contact_detail_rejected/)
+  assert.doesNotMatch(JSON.stringify(invalid), /owner@example|Private Spa Sample|Private Operator/)
+  assert.equal(validateShopPilotBaselineInputPreflight(invalid), invalid)
+})
+
 test('rejects credential/contact shapes in private input before packet generation', () => {
   assert.throws(() => buildShopPilotBaselinePacket(input({ businessName: 'owner@example.invalid' })), /contact_detail_rejected/)
   assert.throws(() => buildShopPilotBaselinePacket(input({ namedOperator: '+959123456789' })), /contact_detail_rejected/)
@@ -141,6 +171,7 @@ test('template is blank and CLI generates metadata-only packet output', async ()
     assert.equal(templateJson.businessName, '')
     const worksheet = await readFile(worksheetPath, 'utf8')
     assert.match(worksheet, /Manual order runs/)
+    assert.match(worksheet, /--lint-input/)
     assert.doesNotMatch(worksheet, /Private Spa Sample|Private Operator|owner@example|sk-proj-|ghp_/i)
 
     const templateOverwrite = spawnSync(process.execPath, [tool, '--template', templatePath], { encoding: 'utf8' })
@@ -148,6 +179,18 @@ test('template is blank and CLI generates metadata-only packet output', async ()
     assert.match(templateOverwrite.stderr, /shop_pilot_baseline_output_exists/)
 
     await writeFile(inputPath, `${JSON.stringify(input(), null, 2)}\n`)
+    const linted = spawnSync(process.execPath, [tool, '--lint-input', inputPath], { encoding: 'utf8' })
+    assert.equal(linted.status, 0, linted.stderr)
+    assert.equal(JSON.parse(linted.stdout).status, 'baseline_input_ready')
+    assert.doesNotMatch(linted.stdout, /Private Spa Sample|Private Operator/)
+
+    const invalidInputPath = join(parent, 'invalid-baseline.private.json')
+    await writeFile(invalidInputPath, `${JSON.stringify(input({ businessName: 'owner@example.invalid' }), null, 2)}\n`)
+    const invalidLint = spawnSync(process.execPath, [tool, '--lint-input', invalidInputPath], { encoding: 'utf8' })
+    assert.notEqual(invalidLint.status, 0)
+    assert.equal(JSON.parse(invalidLint.stdout).status, 'baseline_input_invalid')
+    assert.doesNotMatch(`${invalidLint.stdout}${invalidLint.stderr}`, /owner@example|Private Spa Sample|Private Operator|[A-Za-z]:\\/)
+
     const generated = spawnSync(process.execPath, [tool, '--input', inputPath, '--output', packetPath, '--markdown-output', markdownPath], { encoding: 'utf8' })
     assert.equal(generated.status, 0, generated.stderr)
     assert.equal(JSON.parse(generated.stdout).status, 'baseline_ready_for_private_pilot_handoff')
