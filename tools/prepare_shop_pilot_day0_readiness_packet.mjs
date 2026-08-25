@@ -27,6 +27,7 @@ import {
 export const SHOP_PILOT_DAY0_READINESS_CONTRACT = 'supermega.shop-pilot-day0-readiness.v1'
 
 const SHOP_RUN001_PRIVATE_OBSERVATION_BRIDGE_CONTRACT = 'supermega.shop-run001-private-observation-bridge.v1'
+const SHOP_PILOT_BASELINE_CAPTURE_CHECKLIST_CONTRACT = 'supermega.shop-pilot-owner-private-baseline-checklist.v1'
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const STATUSES = [
   'blocked_launch_gate_failed',
@@ -82,6 +83,28 @@ const RUN001_BRIDGE_AUTHORIZATION_KEYS = [
   'managedActivationAllowed',
   'privateIdentityIncluded',
   'credentialValuesIncluded',
+]
+const BASELINE_CAPTURE_REQUIRED_METRICS = [
+  'weekly_orders',
+  'median_minutes_per_order',
+  'weekly_exception_count',
+  'daily_close_minutes',
+  'median_minutes_per_redemption',
+]
+const BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS = [
+  'operator_review_every_run',
+  'owner_confirmed_baseline',
+  'no_supermega_demo_measured',
+  'no_external_effects',
+]
+const BASELINE_CAPTURE_STOP_CONDITIONS = [
+  'fewer_than_three_uninterrupted_manual_order_runs',
+  'fewer_than_three_uninterrupted_package_redemption_runs',
+  'synthetic_or_supermega_demo_run_used_as_baseline',
+  'raw_identity_or_private_note_would_enter_public_packet',
+  'customer_message_payment_stock_or_hosted_write_needed',
+  'operator_declines_review_every_run',
+  'owner_cannot_confirm_baseline',
 ]
 
 function isRecord(value) {
@@ -331,6 +354,69 @@ function ownerPrivateObservationBridgeFor(status) {
   }
 }
 
+function ownerPrivateBaselineChecklistFor(status, launchGateReport) {
+  const baselineAccepted = launchGateReport.launchReadiness?.baselinePacketAccepted === true
+  const metrics = launchGateReport.baselineEvidence?.metrics || {}
+  const requiredOrderRuns = 3
+  const requiredRedemptionRuns = 3
+  const uninterruptedOrderRunCount = metrics.uninterruptedOrderRunCount ?? 0
+  const uninterruptedRedemptionRunCount = metrics.uninterruptedRedemptionRunCount ?? 0
+  const readyToGeneratePublicBaselinePacket = baselineAccepted
+    || (uninterruptedOrderRunCount >= requiredOrderRuns && uninterruptedRedemptionRunCount >= requiredRedemptionRuns)
+  return {
+    contract: SHOP_PILOT_BASELINE_CAPTURE_CHECKLIST_CONTRACT,
+    state: baselineAccepted
+      ? 'baseline_public_packet_accepted'
+      : status === 'blocked_launch_gate_failed'
+        ? 'blocked_until_launch_gate_clean'
+        : 'owner_private_baseline_capture_required',
+    privateWorkspaceRequired: true,
+    publicSafe: true,
+    evidenceKind: 'owner_observed_manual_operations_only',
+    readyToGeneratePublicBaselinePacket,
+    completionSignal: baselineAccepted ? 'accepted_baseline_packet_digest' : 'public_safe_baseline_packet_digest',
+    requiredFlows: [
+      {
+        id: 'manual_order',
+        label: 'Manual order entry',
+        requiredUninterruptedRuns: requiredOrderRuns,
+        observedRuns: metrics.observedOrderRunCount ?? 0,
+        uninterruptedRuns: uninterruptedOrderRunCount,
+        accepted: uninterruptedOrderRunCount >= requiredOrderRuns,
+      },
+      {
+        id: 'package_redemption',
+        label: 'Package redemption',
+        requiredUninterruptedRuns: requiredRedemptionRuns,
+        observedRuns: metrics.observedRedemptionRunCount ?? 0,
+        uninterruptedRuns: uninterruptedRedemptionRunCount,
+        accepted: uninterruptedRedemptionRunCount >= requiredRedemptionRuns,
+      },
+    ],
+    requiredMetrics: [...BASELINE_CAPTURE_REQUIRED_METRICS],
+    requiredConfirmations: [...BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS],
+    stopConditions: [...BASELINE_CAPTURE_STOP_CONDITIONS],
+    publicOutputAllowed: {
+      counts: true,
+      timings: true,
+      booleans: true,
+      digests: true,
+      rawIdentity: false,
+      rawNotes: false,
+      localPaths: false,
+      credentials: false,
+    },
+    forbiddenActions: {
+      customerContactAllowed: false,
+      automaticMessageAllowed: false,
+      paymentAllowed: false,
+      stockMovementAllowed: false,
+      hostedWriteAllowed: false,
+      managedActivationAllowed: false,
+    },
+  }
+}
+
 function sampleBaselineInput() {
   return {
     contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
@@ -434,6 +520,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
     nextOwnerPrivateStep: nextOwnerPrivateStepFor(status),
     ownerPrivatePreparation: ownerPrivatePreparationFor(status, sourceDigests, input.ownerPrivatePreparation),
     ownerPrivateObservationBridge: ownerPrivateObservationBridgeFor(status),
+    ownerPrivateBaselineChecklist: ownerPrivateBaselineChecklistFor(status, launchGateReport),
     blockers: blockersFor(status, launchGateReport),
     privateCommands: [
       'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
@@ -573,6 +660,47 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || RUN001_BRIDGE_AUTHORIZATION_KEYS.some((key) => bridge.authorizations[key] !== false)) {
     fail('shop_pilot_day0_owner_private_observation_bridge_invalid')
   }
+  const checklist = packet.ownerPrivateBaselineChecklist
+  const expectedChecklist = ownerPrivateBaselineChecklistFor(packet.status, {
+    launchReadiness: {
+      baselinePacketAccepted: packet.day0Readiness.baselinePacketAccepted,
+    },
+    baselineEvidence: {
+      metrics: {
+        observedOrderRunCount: packet.day0Readiness.observedOrderRunCount,
+        uninterruptedOrderRunCount: packet.day0Readiness.uninterruptedOrderRunCount,
+        observedRedemptionRunCount: packet.day0Readiness.observedRedemptionRunCount,
+        uninterruptedRedemptionRunCount: packet.day0Readiness.uninterruptedRedemptionRunCount,
+      },
+    },
+  })
+  if (!isRecord(checklist)
+    || checklist.contract !== SHOP_PILOT_BASELINE_CAPTURE_CHECKLIST_CONTRACT
+    || checklist.privateWorkspaceRequired !== true
+    || checklist.publicSafe !== true
+    || checklist.evidenceKind !== 'owner_observed_manual_operations_only'
+    || checklist.state !== expectedChecklist.state
+    || checklist.readyToGeneratePublicBaselinePacket !== expectedChecklist.readyToGeneratePublicBaselinePacket
+    || checklist.completionSignal !== expectedChecklist.completionSignal
+    || !Array.isArray(checklist.requiredFlows)
+    || checklist.requiredFlows.length !== 2
+    || checklist.requiredFlows.some((flow, index) => JSON.stringify(flow) !== JSON.stringify(expectedChecklist.requiredFlows[index]))
+    || !Array.isArray(checklist.requiredMetrics)
+    || checklist.requiredMetrics.length !== BASELINE_CAPTURE_REQUIRED_METRICS.length
+    || !BASELINE_CAPTURE_REQUIRED_METRICS.every((metric) => checklist.requiredMetrics.includes(metric))
+    || !Array.isArray(checklist.requiredConfirmations)
+    || checklist.requiredConfirmations.length !== BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS.length
+    || !BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS.every((confirmation) => checklist.requiredConfirmations.includes(confirmation))
+    || !Array.isArray(checklist.stopConditions)
+    || checklist.stopConditions.length !== BASELINE_CAPTURE_STOP_CONDITIONS.length
+    || !BASELINE_CAPTURE_STOP_CONDITIONS.every((condition) => checklist.stopConditions.includes(condition))
+    || checklist.publicOutputAllowed?.rawIdentity !== false
+    || checklist.publicOutputAllowed?.rawNotes !== false
+    || checklist.publicOutputAllowed?.localPaths !== false
+    || checklist.publicOutputAllowed?.credentials !== false
+    || Object.values(checklist.forbiddenActions || {}).some((value) => value !== false)) {
+    fail('shop_pilot_day0_owner_private_baseline_checklist_invalid')
+  }
   if (packet.status === 'blocked_launch_gate_failed' && packet.nextOwnerPrivateStep.safeBeforeReleaseGate !== false) fail('shop_pilot_day0_next_step_gate_invalid')
   if (packet.status !== 'blocked_launch_gate_failed' && packet.nextOwnerPrivateStep.safeBeforeReleaseGate !== true) fail('shop_pilot_day0_next_step_gate_invalid')
   if (packet.status === 'blocked_owner_private_intake_required' && packet.nextOwnerPrivateStep.id !== 'prepare-owner-private-intake') fail('shop_pilot_day0_next_step_status_mismatch')
@@ -598,6 +726,11 @@ export function renderShopPilotDay0ReadinessMarkdown(packet) {
   const nextDigest = prep.nextRequiredDigest
   const bridge = packet.ownerPrivateObservationBridge
   const bridgeArtifacts = bridge.requiredPrivateArtifacts.map((artifact) => `- ${artifact}`).join('\n')
+  const checklist = packet.ownerPrivateBaselineChecklist
+  const checklistFlows = checklist.requiredFlows.map((flow) => `- ${flow.label}: ${flow.uninterruptedRuns}/${flow.observedRuns} uninterrupted/observed; required uninterrupted ${flow.requiredUninterruptedRuns}; accepted ${flow.accepted}`).join('\n')
+  const checklistMetrics = checklist.requiredMetrics.map((metric) => `- ${metric}`).join('\n')
+  const checklistConfirmations = checklist.requiredConfirmations.map((confirmation) => `- ${confirmation}`).join('\n')
+  const checklistStopConditions = checklist.stopConditions.map((condition) => `- ${condition}`).join('\n')
   return `# Shop Pilot Day-0 Readiness
 
 Contract: \`${packet.contract}\`
@@ -646,6 +779,34 @@ Candidate: \`${packet.candidate.branch || 'unknown'} @ ${packet.candidate.head |
 Required private artifacts:
 
 ${bridgeArtifacts}
+
+## Owner-private baseline capture checklist
+
+- Contract: \`${checklist.contract}\`
+- State: ${checklist.state}
+- Evidence kind: ${checklist.evidenceKind}
+- Completion signal: ${checklist.completionSignal}
+- Ready to generate public baseline packet: ${checklist.readyToGeneratePublicBaselinePacket}
+- Public output allows raw identity: false
+- Public output allows raw notes: false
+- Public output allows local paths: false
+- External effects allowed: false
+
+Required observed flows:
+
+${checklistFlows}
+
+Required metrics:
+
+${checklistMetrics}
+
+Required confirmations:
+
+${checklistConfirmations}
+
+Stop and do not generate the public baseline packet if any condition occurs:
+
+${checklistStopConditions}
 
 ## Public-safe baseline metrics
 
@@ -704,6 +865,9 @@ function runSelfTest() {
       && empty.ownerPrivateObservationBridge.expectedCurrentGate === 'private_observation_incomplete'
       && empty.ownerPrivateObservationBridge.relativeOrchestratorCommand === '.\\complete-run-001-after-observation.ps1'
       && empty.ownerPrivateObservationBridge.authorizations.githubWritesAllowed === false
+      && empty.ownerPrivateBaselineChecklist.state === 'owner_private_baseline_capture_required'
+      && empty.ownerPrivateBaselineChecklist.readyToGeneratePublicBaselinePacket === false
+      && empty.ownerPrivateBaselineChecklist.stopConditions.includes('synthetic_or_supermega_demo_run_used_as_baseline')
       && validateShopPilotDay0ReadinessPacket(empty) === empty,
     intake_only_requires_baseline: withIntake.ok === true
       && withIntake.status === 'blocked_owner_observed_baseline_required'
@@ -715,6 +879,8 @@ function runSelfTest() {
       && withBoth.day0ReadyForOwnerPrivateHandoff === true
       && withBoth.nextOwnerPrivateStep.id === 'prepare-day-one-private-handoff'
       && withBoth.day0Readiness.readyForManagedActivation === false
+      && withBoth.ownerPrivateBaselineChecklist.state === 'baseline_public_packet_accepted'
+      && withBoth.ownerPrivateBaselineChecklist.requiredFlows.every((flow) => flow.accepted === true)
       && validateShopPilotDay0ReadinessPacket(withBoth) === withBoth,
     launch_gate_failure_blocks_day0: dirty.ok === false
       && dirty.status === 'blocked_launch_gate_failed'
