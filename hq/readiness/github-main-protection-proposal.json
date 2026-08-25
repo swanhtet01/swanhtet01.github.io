@@ -117,7 +117,7 @@
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:c58c4c9e67a7c682b973ebc7748e326bec1d43e25a9f4a84f1ce2badcef27fd6"
+      "digest": "sha256:af0ba4d6f70793828506ee3e6bfd871e824d8e110c497686a3265d0516666133"
     },
     {
       "path": "tools/verify_github_main_protection.mjs",
@@ -132,5 +132,5 @@
       "digest": "sha256:39066afba4310b24d4b6434dc53fbaa0e40b1e5fbcf344fa07e1d154d4897d60"
     }
   ],
-  "digest": "sha256:87d3aa18737a7eb2af466838870a873293a6e154610b934a7835edd2e2ff7b29"
+  "digest": "sha256:cec8b9e07eba00226774df995b081960c4e8609751429a676790730ee68abfef"
 }
