@@ -6,6 +6,7 @@ import {
   applyReviewBranchPushWithGit,
   buildReviewBranchPushPlan,
   validateOwnerApproval,
+  validateReviewBranchPushReport,
   validateReviewBranchPushHandoff,
 } from './apply_review_branch_push.mjs'
 
@@ -113,6 +114,9 @@ test('plan is no-write, exact-commit-bound, and approval-aware', () => {
     env: {},
   })
   assert.equal(plan.contract, REVIEW_BRANCH_PUSH_APPLY_CONTRACT)
+  assert.equal(validateReviewBranchPushReport(plan, { expectedMode: 'plan_only_no_git_remote_write' }), plan)
+  assert.match(plan.digest, /^sha256:[0-9a-f]{64}$/)
+  assert.equal(plan.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(plan.mode, 'plan_only_no_git_remote_write')
   assert.equal(plan.candidate.head, commit)
   assert.equal(plan.candidate.branch, branch)
@@ -125,6 +129,22 @@ test('plan is no-write, exact-commit-bound, and approval-aware', () => {
   assert.equal(plan.possibleWrite.forcePushAllowed, false)
   assert.equal(plan.possibleWrite.deleteAllowed, false)
   assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+\w+/)
+})
+
+test('report validator rejects stale plan digests and wrong modes', () => {
+  const plan = buildReviewBranchPushPlan({
+    handoffReceipt: receipt(),
+    gitState: gitState(),
+    env: {},
+  })
+  assert.throws(
+    () => validateReviewBranchPushReport({ ...plan, mode: 'executed_owner_approved_git_remote_write' }, { expectedMode: 'plan_only_no_git_remote_write' }),
+    /review_branch_push_report_digest_invalid/,
+  )
+  assert.throws(
+    () => validateReviewBranchPushReport({ ...plan, digest: `sha256:${'0'.repeat(64)}` }, { expectedMode: 'plan_only_no_git_remote_write' }),
+    /review_branch_push_report_digest_invalid/,
+  )
 })
 
 test('execution requires exact owner approval and matching local state', () => {

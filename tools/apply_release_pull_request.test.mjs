@@ -7,6 +7,7 @@ import {
   buildPullRequestPlan,
   validateOwnerApproval,
   validatePullRequestHandoff,
+  validatePullRequestReport,
 } from './apply_release_pull_request.mjs'
 
 const repository = 'swanhtet01/swanhtet01.github.io'
@@ -111,6 +112,9 @@ test('plan is no-write and blocks execution until the remote branch is exact', (
     env: {},
   })
   assert.equal(plan.contract, RELEASE_PULL_REQUEST_APPLY_CONTRACT)
+  assert.equal(validatePullRequestReport(plan, { expectedMode: 'plan_only_no_github_write' }), plan)
+  assert.match(plan.digest, /^sha256:[0-9a-f]{64}$/)
+  assert.equal(plan.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(plan.mode, 'plan_only_no_github_write')
   assert.equal(plan.controls.githubWritesPerformed, false)
   assert.equal(plan.controls.pullRequestCreated, false)
@@ -125,6 +129,22 @@ test('plan is no-write and blocks execution until the remote branch is exact', (
   assert.equal(plan.possibleWrite.payloadPreview.head, branch)
   assert.equal(plan.possibleWrite.payloadPreview.base, 'main')
   assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+\w+/)
+})
+
+test('report validator rejects stale plan digests and wrong modes', () => {
+  const plan = buildPullRequestPlan({
+    handoffReceipt: receipt(),
+    gitState: gitState(),
+    env: {},
+  })
+  assert.throws(
+    () => validatePullRequestReport({ ...plan, mode: 'executed_owner_approved_github_pr_write' }, { expectedMode: 'plan_only_no_github_write' }),
+    /release_pull_request_report_digest_invalid/,
+  )
+  assert.throws(
+    () => validatePullRequestReport({ ...plan, digest: `sha256:${'0'.repeat(64)}` }, { expectedMode: 'plan_only_no_github_write' }),
+    /release_pull_request_report_digest_invalid/,
+  )
 })
 
 test('plan becomes executable only with exact branch, clean tree, approval, and token presence', () => {

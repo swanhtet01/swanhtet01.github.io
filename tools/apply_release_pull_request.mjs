@@ -2,8 +2,8 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
@@ -37,6 +37,10 @@ function isRecord(value) {
 
 function digest(value) {
   return `sha256:${createHash('sha256').update(String(value || '').replace(/\r\n?/g, '\n')).digest('hex')}`
+}
+
+function signed(body) {
+  return { ...body, digest: digest(JSON.stringify(body)) }
 }
 
 function exactSha(value, code) {
@@ -245,6 +249,7 @@ export function buildPullRequestPlan({
   const body = {
     ok: true,
     contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
     mode: 'plan_only_no_github_write',
     repository: REPOSITORY,
     releaseHandoff: {
@@ -316,7 +321,96 @@ export function buildPullRequestPlan({
     },
   }
   assertNoSecretEcho(body)
-  return body
+  return signed(body)
+}
+
+export function validatePullRequestReport(packet, { expectedMode = null } = {}) {
+  if (!isRecord(packet)) fail('release_pull_request_report_invalid')
+  const { digest: actualDigest, ...body } = packet
+  if (actualDigest !== digest(JSON.stringify(body))) fail('release_pull_request_report_digest_invalid')
+  if (packet.contract !== RELEASE_PULL_REQUEST_APPLY_CONTRACT) fail('release_pull_request_report_contract_invalid')
+  if (packet.repository !== REPOSITORY) fail('release_pull_request_report_repository_invalid')
+  if (packet.digestScope !== 'utf8_compact_json_without_digest') fail('release_pull_request_report_digest_scope_invalid')
+  if (expectedMode && packet.mode !== expectedMode) fail('release_pull_request_report_mode_invalid')
+  if (!isRecord(packet.releaseHandoff)
+    || !/^sha256:[0-9a-f]{64}$/.test(String(packet.releaseHandoff.digest || ''))
+    || !/^sha256:[0-9a-f]{64}$/.test(String(packet.releaseHandoff.packetDigest || ''))) {
+    fail('release_pull_request_report_handoff_invalid')
+  }
+  if (!isRecord(packet.candidate)
+    || !BRANCH_PATTERN.test(String(packet.candidate.branch || ''))
+    || !SHA_PATTERN.test(String(packet.candidate.head || ''))
+    || typeof packet.candidate.clean !== 'boolean') {
+    fail('release_pull_request_report_candidate_invalid')
+  }
+  if (!isRecord(packet.approval)
+    || packet.approval.env !== APPROVAL_ENV
+    || typeof packet.approval.approved !== 'boolean'
+    || !/^sha256:[0-9a-f]{64}$/.test(String(packet.approval.expectedDigest || ''))) {
+    fail('release_pull_request_report_approval_invalid')
+  }
+  if (!isRecord(packet.token) || packet.token.valueExposed !== false) {
+    fail('release_pull_request_report_token_invalid')
+  }
+  if (packet.mode === 'plan_only_no_github_write') {
+    if (packet.ok !== true
+      || packet.controls?.githubWritesPerformed !== false
+      || packet.controls?.pullRequestCreated !== false
+      || packet.controls?.repositorySettingsMutated !== false
+      || packet.controls?.branchMutated !== false
+      || packet.controls?.forcePushPerformed !== false
+      || packet.controls?.branchDeletionPerformed !== false
+      || packet.controls?.mergePerformed !== false
+      || packet.controls?.workflowDispatchPerformed !== false
+      || packet.controls?.deploymentPerformed !== false
+      || packet.controls?.supabaseMutated !== false
+      || packet.controls?.credentialValueExposed !== false) {
+      fail('release_pull_request_plan_controls_invalid')
+    }
+    if (!isRecord(packet.readiness)
+      || typeof packet.readiness.executeReady !== 'boolean'
+      || !Array.isArray(packet.readiness.blockers)) {
+      fail('release_pull_request_plan_readiness_invalid')
+    }
+    if (!Array.isArray(packet.plannedNetworkReadsBeforeExecute)
+      || !packet.plannedNetworkReadsBeforeExecute.includes('verify release handoff current state')
+      || !packet.plannedNetworkReadsBeforeExecute.includes(`git ls-remote --heads origin ${packet.candidate.branch}`)
+      || !packet.plannedNetworkReadsBeforeExecute.includes(`GET /repos/${REPOSITORY}/pulls?state=open&head=${OWNER}:${packet.candidate.branch}&base=${BASE_BRANCH}`)) {
+      fail('release_pull_request_plan_reads_invalid')
+    }
+    if (packet.possibleWrite?.method !== 'POST'
+      || packet.possibleWrite?.path !== `/repos/${REPOSITORY}/pulls`
+      || !/^sha256:[0-9a-f]{64}$/.test(String(packet.possibleWrite?.payloadDigest || ''))
+      || packet.possibleWrite?.payloadPreview?.head !== packet.candidate.branch
+      || packet.possibleWrite?.payloadPreview?.base !== BASE_BRANCH
+      || packet.possibleWrite?.payloadPreview?.draft !== false) {
+      fail('release_pull_request_plan_write_invalid')
+    }
+    if (!Array.isArray(packet.executionRequirements)
+      || !packet.executionRequirements.includes('--execute flag')
+      || !packet.executionRequirements.includes('remote review branch equals the exact approved commit')) {
+      fail('release_pull_request_plan_requirements_invalid')
+    }
+  } else if (packet.mode === 'executed_owner_approved_existing_pr_no_write'
+    || packet.mode === 'executed_owner_approved_github_pr_write') {
+    if (packet.controls?.githubWritesApproved !== true
+      || packet.controls?.repositorySettingsMutated !== false
+      || packet.controls?.branchMutated !== false
+      || packet.controls?.forcePushPerformed !== false
+      || packet.controls?.branchDeletionPerformed !== false
+      || packet.controls?.mergePerformed !== false
+      || packet.controls?.workflowDispatchPerformed !== false
+      || packet.controls?.deploymentPerformed !== false
+      || packet.controls?.supabaseMutated !== false
+      || packet.controls?.credentialValueExposed !== false
+      || !isRecord(packet.pullRequest)) {
+      fail('release_pull_request_execute_controls_invalid')
+    }
+  } else {
+    fail('release_pull_request_report_mode_invalid')
+  }
+  assertNoSecretEcho(packet)
+  return packet
 }
 
 async function githubRequest({ path, method = 'GET', token, body, request = fetch }) {
@@ -401,6 +495,7 @@ export async function applyReleasePullRequestWithClient({
     const body = {
       ok: true,
       contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
+      digestScope: 'utf8_compact_json_without_digest',
       mode: 'executed_owner_approved_existing_pr_no_write',
       repository: REPOSITORY,
       candidate: { branch: gate.branch, head: gate.commit, clean: true },
@@ -429,7 +524,7 @@ export async function applyReleasePullRequestWithClient({
       },
     }
     assertNoSecretEcho(body)
-    return body
+    return signed(body)
   }
 
   const payload = buildCreatePullRequestPayload({ gate, handoffReceipt })
@@ -452,6 +547,7 @@ export async function applyReleasePullRequestWithClient({
   const body = {
     ok: true,
     contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
     mode: 'executed_owner_approved_github_pr_write',
     repository: REPOSITORY,
     candidate: { branch: gate.branch, head: gate.commit, clean: true },
@@ -485,12 +581,12 @@ export async function applyReleasePullRequestWithClient({
     },
   }
   assertNoSecretEcho(body)
-  return body
+  return signed(body)
 }
 
 function parseArgs(argv) {
   const args = [...argv]
-  const options = { mode: 'plan', handoff: null }
+  const options = { mode: 'plan', handoff: null, output: null, verify: null }
   while (args.length) {
     const arg = args.shift()
     if (arg === '--plan') {
@@ -501,12 +597,25 @@ function parseArgs(argv) {
       options.mode = 'self-test'
     } else if (arg === '--handoff' && args[0]) {
       options.handoff = args.shift()
+    } else if (arg === '--output' && args[0]) {
+      options.output = args.shift()
+    } else if (arg === '--verify' && args[0]) {
+      options.mode = 'verify'
+      options.verify = args.shift()
     } else {
       fail('release_pull_request_usage_invalid')
     }
   }
-  if (options.mode !== 'self-test' && !options.handoff) fail('release_pull_request_handoff_required')
+  if (options.output && options.mode !== 'plan') fail('release_pull_request_output_plan_only')
+  if (options.mode !== 'self-test' && options.mode !== 'verify' && !options.handoff) fail('release_pull_request_handoff_required')
   return options
+}
+
+async function writeExclusive(path, content) {
+  const absolute = resolve(path)
+  await mkdir(dirname(absolute), { recursive: true })
+  await writeFile(absolute, content, { encoding: 'utf8', flag: 'wx' })
+  return absolute
 }
 
 async function runSelfTest() {
@@ -571,6 +680,7 @@ async function runSelfTest() {
     payload_is_public_review_only: plan.possibleWrite.payloadPreview.base === BASE_BRANCH
       && plan.possibleWrite.payloadPreview.head === branch
       && plan.possibleWrite.payloadPreview.draft === false,
+    plan_digest_verifies: validatePullRequestReport(plan, { expectedMode: 'plan_only_no_github_write' }) === plan,
     no_secret_echo: plan.token.valueExposed === false,
   }
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([key]) => key)
@@ -591,10 +701,39 @@ async function main() {
     if (!result.ok) process.exitCode = 1
     return
   }
+  if (options.mode === 'verify') {
+    const report = validatePullRequestReport(JSON.parse(await readFile(resolve(options.verify), 'utf8')), {
+      expectedMode: 'plan_only_no_github_write',
+    })
+    console.log(JSON.stringify({
+      ok: true,
+      contract: report.contract,
+      mode: report.mode,
+      path: resolve(options.verify),
+      digest: report.digest,
+      repository: report.repository,
+      githubWritesPerformed: false,
+      pullRequestCreated: false,
+    }, null, 2))
+    return
+  }
   const handoffReceipt = await readReleaseHandoffReceipt(options.handoff)
   const result = options.mode === 'execute'
     ? await applyReleasePullRequestWithClient({ handoffReceipt })
     : buildPullRequestPlan({ handoffReceipt })
+  if (options.output) {
+    const output = await writeExclusive(options.output, `${JSON.stringify(validatePullRequestReport(result, { expectedMode: 'plan_only_no_github_write' }), null, 2)}\n`)
+    console.log(JSON.stringify({
+      ok: true,
+      contract: result.contract,
+      mode: result.mode,
+      output,
+      digest: result.digest,
+      githubWritesPerformed: false,
+      pullRequestCreated: false,
+    }, null, 2))
+    return
+  }
   console.log(JSON.stringify(result, null, 2))
 }
 
@@ -621,4 +760,3 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exitCode = 1
   })
 }
-
