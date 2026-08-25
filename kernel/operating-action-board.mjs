@@ -213,6 +213,49 @@ function validateClosure(closure, status, openedAt, measured) {
   return { closedAt: null, closureNote: null, measuredResult: null, cycleTimeDays: null }
 }
 
+export function buildOperatingActionFromFinding(input) {
+  assertExactFields(input, [
+    'id',
+    'openedAt',
+    'productIds',
+    'sourceFinding',
+    'recommendation',
+    'severity',
+    'businessImpact',
+    'ownerRole',
+    'dueDate',
+    'ownerApprovalRequired',
+    'acceptance',
+  ], 'operating_action_finding_input_invalid')
+  if (typeof input.ownerApprovalRequired !== 'boolean') fail('operating_action_finding_owner_approval_invalid')
+
+  return validateOperatingAction({
+    id: input.id,
+    openedAt: input.openedAt,
+    productIds: input.productIds,
+    sourceFinding: input.sourceFinding,
+    recommendation: input.recommendation,
+    severity: input.severity,
+    businessImpact: input.businessImpact,
+    owner: {
+      role: input.ownerRole,
+      namedPrivate: false,
+    },
+    dueDate: input.dueDate,
+    status: input.ownerApprovalRequired ? 'owner-gated' : 'open',
+    authority: {
+      ownerApprovalRequired: input.ownerApprovalRequired,
+      externalWriteAllowed: false,
+    },
+    acceptance: input.acceptance,
+    closure: {
+      closedAt: null,
+      closureNote: null,
+      measuredResult: null,
+    },
+  })
+}
+
 export function validateOperatingAction(action) {
   assertExactFields(action, ACTION_FIELDS, 'operating_action_fields_invalid')
   const id = assertLine(action.id, 80, 'operating_action_id_invalid')

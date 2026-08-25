@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   OPERATING_ACTION_BOARD_CONTRACT,
   OPERATING_ACTION_BOARD_MODE,
+  buildOperatingActionFromFinding,
   buildOperatingActionBoardSummary,
   validateOperatingActionBoard,
 } from './operating-action-board.mjs'
@@ -129,6 +130,63 @@ test('validates the shared operating action loop for Shop and Plant readiness', 
   assert.equal(validated.weeklyReport.ownerGatedCount, 2)
   assert.equal(validated.weeklyReport.criticalOpenCount, 1)
   assert.match(validated.digest, /^sha256:[a-f0-9]{64}$/)
+})
+
+test('builds one owned operating action from an audit finding', () => {
+  const ownedInput = {
+    id: 'shop-plant-owned-action-loop',
+    openedAt: '2026-08-25T00:00:00.000Z',
+    productIds: ['shop', 'plant'],
+    sourceFinding: {
+      sourceType: 'audit_document',
+      label: 'Audits show analytics value but weak execution discipline',
+      evidenceRef: 'supermega.audit-to-product-workorder.v1.generated-20260825.md',
+      evidenceDigest: digest('d'),
+    },
+    recommendation: 'Make recommendations become owned actions with due dates, acceptance evidence, and measured results.',
+    severity: 'high',
+    businessImpact: {
+      kind: 'trust',
+      estimateLabel: 'Converts dashboards into accountable operating behavior.',
+      measured: false,
+    },
+    ownerRole: 'Engineering plus Product',
+    dueDate: '2026-08-27',
+    ownerApprovalRequired: false,
+    acceptance: {
+      evidenceRequired: ['Action model validates source finding, owner, due date, acceptance, and closure result'],
+      tests: ['npm run operating:action-board:self-test'],
+    },
+  }
+  const owned = buildOperatingActionFromFinding(ownedInput)
+
+  assert.equal(owned.id, 'shop-plant-owned-action-loop')
+  assert.deepEqual(owned.productIds, ['shop', 'plant'])
+  assert.equal(owned.status, 'open')
+  assert.equal(owned.owner.role, 'Engineering plus Product')
+  assert.equal(owned.owner.namedPrivate, false)
+  assert.equal(owned.authority.externalWriteAllowed, false)
+  assert.equal(owned.closure.closedAt, null)
+
+  const gated = buildOperatingActionFromFinding({
+    ...ownedInput,
+    ownerApprovalRequired: true,
+  })
+  assert.equal(gated.status, 'owner-gated')
+  assert.equal(gated.authority.ownerApprovalRequired, true)
+
+  assert.throws(() => buildOperatingActionFromFinding({
+    ...ownedInput,
+    ownerRole: '',
+  }), /operating_action_owner_role_invalid/)
+  assert.throws(() => buildOperatingActionFromFinding({
+    ...ownedInput,
+    sourceFinding: { ...ownedInput.sourceFinding, evidenceRef: '' },
+  }), /operating_action_source_ref_invalid/)
+  assert.throws(() => buildOperatingActionFromFinding({
+    ...ownedInput,
+    authority: { externalWriteAllowed: true },
+  }), /operating_action_finding_input_invalid/)
 })
 
 test('fails closed when an action lacks source evidence, owner, due date, or exact weekly summary', () => {

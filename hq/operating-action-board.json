@@ -22,12 +22,12 @@
   },
   "weeklyReport": {
     "totalActions": 4,
-    "openActionCount": 3,
-    "closedActionCount": 1,
+    "openActionCount": 2,
+    "closedActionCount": 2,
     "ownerGatedCount": 2,
     "criticalOpenCount": 1,
-    "measuredResultCount": 1,
-    "closedCycleTimeDaysMedian": 0.448
+    "measuredResultCount": 2,
+    "closedCycleTimeDaysMedian": 0.452
   },
   "actions": [
     {
@@ -130,24 +130,24 @@
         "plant"
       ],
       "sourceFinding": {
-        "sourceType": "audit_document",
-        "label": "Audits show analytics value but weak execution discipline",
-        "evidenceRef": "supermega.audit-to-product-workorder.v1.generated-20260825.md",
-        "evidenceDigest": "sha256:4751b9fc4b1d0a309086f9cce98255f886273b9d93250325c381182210f52b89"
+        "sourceType": "regression_test",
+        "label": "Audit recommendations convert into owned operating actions",
+        "evidenceRef": "kernel/operating-action-board.mjs plus kernel/operating-action-board.test.mjs",
+        "evidenceDigest": "sha256:08d75e95255a21b83634467778eb3ff9a0608e6904b65af74f8768eef0d53c75"
       },
       "recommendation": "Make recommendations become owned actions with due dates, acceptance evidence, and measured results.",
       "severity": "high",
       "businessImpact": {
         "kind": "trust",
         "estimateLabel": "Converts dashboards into accountable operating behavior.",
-        "measured": false
+        "measured": true
       },
       "owner": {
         "role": "Engineering plus Product",
         "namedPrivate": false
       },
       "dueDate": "2026-08-27",
-      "status": "open",
+      "status": "closed",
       "authority": {
         "ownerApprovalRequired": false,
         "externalWriteAllowed": false
@@ -162,9 +162,9 @@
         ]
       },
       "closure": {
-        "closedAt": null,
-        "closureNote": null,
-        "measuredResult": null
+        "closedAt": "2026-08-25T10:55:00.000Z",
+        "closureNote": "Added reusable audit-finding to operating-action builder with fail-closed owner and evidence validation.",
+        "measuredResult": "operating:action-board:self-test passed 5 model tests plus verifier self-test."
       }
     },
     {
