@@ -14,7 +14,10 @@ import {
 } from './verify_shop_pilot_launch_gate.mjs'
 import {
   SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+  SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT,
+  baselineInputTemplate,
   buildShopPilotBaselinePacket,
+  renderShopPilotBaselineWorksheetMarkdown,
 } from './prepare_shop_pilot_baseline_packet.mjs'
 import {
   buildShopPilotPrivateIntakePacket,
@@ -39,6 +42,8 @@ const SECRET_OR_PRIVATE_PATTERNS = [
   /sb_secret_[A-Za-z0-9_-]{20,}/,
   /postgres(?:ql)?:\/\/[^"\s]+/i,
   /https?:\/\/[^/\s:@]+:[^/\s@]+@/i,
+  /[A-Za-z]:\\+[^"\n]+/,
+  /(?:^|["\s])\/(?:Users|home)\/[^\s"]+/,
   /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu,
   /(?<![A-Za-z0-9])(?:\+?95|09)[\s().-]*\d(?:[\s().-]*\d){6,12}(?![A-Za-z0-9])/u,
   /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PRIVATE )?PRIVATE KEY-----/,
@@ -133,6 +138,129 @@ function ownerActionFor(status) {
   return 'Fix the failing launch-gate evidence before day-zero pilot readiness can be assessed.'
 }
 
+function nextOwnerPrivateStepFor(status) {
+  const base = {
+    ownerRole: 'Founder plus Product',
+    privateWorkspaceRequired: true,
+    publicSafe: true,
+    safeBeforeReleaseGate: true,
+    releaseGateStillRequiredBeforePilotActivation: true,
+    allowedNow: 'owner_private_local_preparation_only',
+    externalEffectsAllowed: false,
+    customerContactAllowed: false,
+    paymentAllowed: false,
+    stockMovementAllowed: false,
+    hostedWritesAllowed: false,
+    managedActivationAllowed: false,
+  }
+  if (status === 'blocked_owner_observed_baseline_required') {
+    return {
+      ...base,
+      id: 'capture-owner-observed-baseline',
+      label: 'Capture owner-observed baseline runs',
+      commandId: 'shop:pilot:baseline-packet',
+      requiredPrivateInputs: ['manual_order_runs', 'package_redemption_runs', 'daily_close_minutes', 'exception_count'],
+      completionSignal: 'public_safe_baseline_packet_digest',
+    }
+  }
+  if (status === 'blocked_owner_private_intake_required') {
+    return {
+      ...base,
+      id: 'prepare-owner-private-intake',
+      label: 'Prepare owner-private pilot intake packet',
+      commandId: 'shop:pilot:intake-packet',
+      requiredPrivateInputs: ['participant_stage', 'pilot_window', 'review_roles', 'no_external_effects_confirmation'],
+      completionSignal: 'public_safe_intake_packet_digest',
+    }
+  }
+  if (status === 'blocked_owner_baseline_and_intake_required') {
+    return {
+      ...base,
+      id: 'capture-baseline-then-intake',
+      label: 'Capture baseline first, then prepare intake',
+      commandId: 'shop:pilot:baseline-packet',
+      requiredPrivateInputs: ['manual_order_runs', 'package_redemption_runs', 'daily_close_minutes', 'exception_count'],
+      completionSignal: 'baseline_packet_digest_then_intake_packet_digest',
+    }
+  }
+  if (status === 'day0_owner_private_handoff_ready') {
+    return {
+      ...base,
+      id: 'prepare-day-one-private-handoff',
+      label: 'Prepare day-one private handoff without contact or hosted writes',
+      commandId: 'shop:pilot:day0-readiness',
+      requiredPrivateInputs: ['accepted_baseline_digest', 'accepted_intake_digest', 'owner_review_schedule'],
+      completionSignal: 'owner_private_handoff_ready_digest',
+    }
+  }
+  return {
+    ...base,
+    safeBeforeReleaseGate: false,
+    id: 'fix-launch-gate-evidence',
+    label: 'Fix launch-gate evidence before any Day-0 handoff',
+    commandId: 'shop:pilot:launch-gate:verify',
+    requiredPrivateInputs: ['clean_worktree', 'accepted_public_boundary', 'release_gate_evidence'],
+    completionSignal: 'launch_gate_ok_digest',
+  }
+}
+
+function boolValue(value, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function digestValue(value) {
+  if (value === null || value === undefined || value === '') return null
+  const normalized = String(value)
+  if (!DIGEST_PATTERN.test(normalized)) fail('shop_pilot_day0_owner_prep_digest_invalid')
+  return normalized
+}
+
+function ownerPrivatePreparationFor(status, sourceDigests, input = {}) {
+  const baselineInputTemplateDigest = digestValue(input.baselineInputTemplateDigest)
+  const baselineWorksheetDigest = digestValue(input.baselineWorksheetDigest)
+  const acceptedBaselinePacketDigest = sourceDigests.baselinePacketDigest || null
+  const acceptedIntakePacketDigest = sourceDigests.intakePacketDigest || null
+  return {
+    artifactPolicy: 'digests_only_no_paths',
+    workspacePolicy: 'owner_private_local_workspace_only',
+    nextRequiredDigest: status === 'blocked_owner_private_intake_required'
+      ? 'intake_packet_digest'
+      : status === 'day0_owner_private_handoff_ready'
+        ? 'owner_private_handoff_digest'
+        : 'baseline_packet_digest',
+    baselineInputTemplate: {
+      provided: Boolean(baselineInputTemplateDigest),
+      contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+      digest: baselineInputTemplateDigest,
+      blankTemplate: baselineInputTemplateDigest ? boolValue(input.baselineInputTemplateBlank, false) : null,
+    },
+    baselineWorksheet: {
+      provided: Boolean(baselineWorksheetDigest),
+      contract: SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT,
+      digest: baselineWorksheetDigest,
+      blankWorksheet: baselineWorksheetDigest ? boolValue(input.baselineWorksheetBlank, false) : null,
+    },
+    acceptedBaselinePacketDigest,
+    acceptedIntakePacketDigest,
+    minimumEvidence: {
+      uninterruptedManualOrderRuns: 3,
+      uninterruptedPackageRedemptionRuns: 3,
+      weeklyOrdersRequired: true,
+      weeklyExceptionsRequired: true,
+      dailyCloseMinutesRequired: true,
+      operatorReviewEveryRunRequired: true,
+      noSuperMegaDemoMeasuredRequired: true,
+      noExternalEffectsRequired: true,
+    },
+    outputPolicy: {
+      generatedBaselinePacketPublicSafe: true,
+      rawIdentityStaysPrivate: true,
+      localPathsIncluded: false,
+      externalEffectsAllowed: false,
+    },
+  }
+}
+
 function sampleBaselineInput() {
   return {
     contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
@@ -182,11 +310,19 @@ function sampleBaselineInput() {
 
 export function buildShopPilotDay0ReadinessPacket(input = {}) {
   assertNoPrivateOrSecretShape(input.launchGateReport)
+  assertNoPrivateOrSecretShape(input.ownerPrivatePreparation)
   const launchGateReport = validateLaunchGateDigest(input.launchGateReport)
   const status = day0Status(launchGateReport)
   const baselineAccepted = launchGateReport.launchReadiness?.baselinePacketAccepted === true
   const intakeAccepted = launchGateReport.launchReadiness?.intakePacketAccepted === true
   const ownerPrivateHandoffReady = status === 'day0_owner_private_handoff_ready'
+  const sourceDigests = {
+    launchGateDigest: launchGateReport.digest,
+    baselinePacketDigest: launchGateReport.launchReadiness?.baselinePacketDigest || null,
+    baselinePrivateInputDigest: launchGateReport.launchReadiness?.baselinePrivateInputDigest || null,
+    intakePacketDigest: launchGateReport.launchReadiness?.intakePacketDigest || null,
+    publicBoundaryDigest: launchGateReport.publicBoundary?.fileDigest || null,
+  }
   const body = {
     contract: SHOP_PILOT_DAY0_READINESS_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -203,13 +339,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       clean: launchGateReport.candidate?.clean === true,
       aheadOfOriginMain: launchGateReport.candidate?.aheadOfOriginMain ?? null,
     },
-    sourceDigests: {
-      launchGateDigest: launchGateReport.digest,
-      baselinePacketDigest: launchGateReport.launchReadiness?.baselinePacketDigest || null,
-      baselinePrivateInputDigest: launchGateReport.launchReadiness?.baselinePrivateInputDigest || null,
-      intakePacketDigest: launchGateReport.launchReadiness?.intakePacketDigest || null,
-      publicBoundaryDigest: launchGateReport.publicBoundary?.fileDigest || null,
-    },
+    sourceDigests,
     day0Readiness: {
       baselinePacketAccepted: baselineAccepted,
       intakePacketAccepted: intakeAccepted,
@@ -231,6 +361,8 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
     },
     pilotWindow: launchGateReport.baselineEvidence?.pilotWindow || null,
     ownerAction: ownerActionFor(status),
+    nextOwnerPrivateStep: nextOwnerPrivateStepFor(status),
+    ownerPrivatePreparation: ownerPrivatePreparationFor(status, sourceDigests, input.ownerPrivatePreparation),
     blockers: blockersFor(status, launchGateReport),
     privateCommands: [
       'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
@@ -301,6 +433,56 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     fail('shop_pilot_day0_source_digests_invalid')
   }
   if (!Array.isArray(packet.blockers) || packet.blockers.length < 3) fail('shop_pilot_day0_blockers_invalid')
+  if (!isRecord(packet.nextOwnerPrivateStep)
+    || typeof packet.nextOwnerPrivateStep.id !== 'string'
+    || typeof packet.nextOwnerPrivateStep.label !== 'string'
+    || typeof packet.nextOwnerPrivateStep.commandId !== 'string'
+    || packet.nextOwnerPrivateStep.ownerRole !== 'Founder plus Product'
+    || packet.nextOwnerPrivateStep.privateWorkspaceRequired !== true
+    || packet.nextOwnerPrivateStep.publicSafe !== true
+    || packet.nextOwnerPrivateStep.allowedNow !== 'owner_private_local_preparation_only'
+    || packet.nextOwnerPrivateStep.releaseGateStillRequiredBeforePilotActivation !== true
+    || packet.nextOwnerPrivateStep.externalEffectsAllowed !== false
+    || packet.nextOwnerPrivateStep.customerContactAllowed !== false
+    || packet.nextOwnerPrivateStep.paymentAllowed !== false
+    || packet.nextOwnerPrivateStep.stockMovementAllowed !== false
+    || packet.nextOwnerPrivateStep.hostedWritesAllowed !== false
+    || packet.nextOwnerPrivateStep.managedActivationAllowed !== false
+    || !Array.isArray(packet.nextOwnerPrivateStep.requiredPrivateInputs)
+    || packet.nextOwnerPrivateStep.requiredPrivateInputs.length < 1
+    || typeof packet.nextOwnerPrivateStep.completionSignal !== 'string') {
+    fail('shop_pilot_day0_next_owner_private_step_invalid')
+  }
+  if (!isRecord(packet.ownerPrivatePreparation)
+    || packet.ownerPrivatePreparation.artifactPolicy !== 'digests_only_no_paths'
+    || packet.ownerPrivatePreparation.workspacePolicy !== 'owner_private_local_workspace_only'
+    || !['baseline_packet_digest', 'intake_packet_digest', 'owner_private_handoff_digest'].includes(packet.ownerPrivatePreparation.nextRequiredDigest)
+    || !isRecord(packet.ownerPrivatePreparation.baselineInputTemplate)
+    || packet.ownerPrivatePreparation.baselineInputTemplate.contract !== SHOP_PILOT_BASELINE_INPUT_CONTRACT
+    || typeof packet.ownerPrivatePreparation.baselineInputTemplate.provided !== 'boolean'
+    || (packet.ownerPrivatePreparation.baselineInputTemplate.provided && !DIGEST_PATTERN.test(packet.ownerPrivatePreparation.baselineInputTemplate.digest || ''))
+    || (packet.ownerPrivatePreparation.baselineInputTemplate.provided && packet.ownerPrivatePreparation.baselineInputTemplate.blankTemplate !== true)
+    || (!packet.ownerPrivatePreparation.baselineInputTemplate.provided && packet.ownerPrivatePreparation.baselineInputTemplate.digest !== null)
+    || (!packet.ownerPrivatePreparation.baselineInputTemplate.provided && packet.ownerPrivatePreparation.baselineInputTemplate.blankTemplate !== null)
+    || !isRecord(packet.ownerPrivatePreparation.baselineWorksheet)
+    || packet.ownerPrivatePreparation.baselineWorksheet.contract !== SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT
+    || typeof packet.ownerPrivatePreparation.baselineWorksheet.provided !== 'boolean'
+    || (packet.ownerPrivatePreparation.baselineWorksheet.provided && !DIGEST_PATTERN.test(packet.ownerPrivatePreparation.baselineWorksheet.digest || ''))
+    || (packet.ownerPrivatePreparation.baselineWorksheet.provided && packet.ownerPrivatePreparation.baselineWorksheet.blankWorksheet !== true)
+    || (!packet.ownerPrivatePreparation.baselineWorksheet.provided && packet.ownerPrivatePreparation.baselineWorksheet.digest !== null)
+    || (!packet.ownerPrivatePreparation.baselineWorksheet.provided && packet.ownerPrivatePreparation.baselineWorksheet.blankWorksheet !== null)
+    || (packet.ownerPrivatePreparation.acceptedBaselinePacketDigest !== null && !DIGEST_PATTERN.test(packet.ownerPrivatePreparation.acceptedBaselinePacketDigest))
+    || (packet.ownerPrivatePreparation.acceptedIntakePacketDigest !== null && !DIGEST_PATTERN.test(packet.ownerPrivatePreparation.acceptedIntakePacketDigest))
+    || packet.ownerPrivatePreparation.outputPolicy?.localPathsIncluded !== false
+    || packet.ownerPrivatePreparation.outputPolicy?.externalEffectsAllowed !== false) {
+    fail('shop_pilot_day0_owner_private_preparation_invalid')
+  }
+  if (packet.status === 'blocked_launch_gate_failed' && packet.nextOwnerPrivateStep.safeBeforeReleaseGate !== false) fail('shop_pilot_day0_next_step_gate_invalid')
+  if (packet.status !== 'blocked_launch_gate_failed' && packet.nextOwnerPrivateStep.safeBeforeReleaseGate !== true) fail('shop_pilot_day0_next_step_gate_invalid')
+  if (packet.status === 'blocked_owner_private_intake_required' && packet.nextOwnerPrivateStep.id !== 'prepare-owner-private-intake') fail('shop_pilot_day0_next_step_status_mismatch')
+  if (packet.status === 'blocked_owner_observed_baseline_required' && packet.nextOwnerPrivateStep.id !== 'capture-owner-observed-baseline') fail('shop_pilot_day0_next_step_status_mismatch')
+  if (packet.status === 'blocked_owner_baseline_and_intake_required' && packet.nextOwnerPrivateStep.id !== 'capture-baseline-then-intake') fail('shop_pilot_day0_next_step_status_mismatch')
+  if (packet.status === 'day0_owner_private_handoff_ready' && packet.nextOwnerPrivateStep.id !== 'prepare-day-one-private-handoff') fail('shop_pilot_day0_next_step_status_mismatch')
   if (!Array.isArray(packet.privateCommands) || packet.privateCommands.length < 5) fail('shop_pilot_day0_private_commands_invalid')
   if (!Array.isArray(packet.forbiddenActions) || !packet.forbiddenActions.includes('managed_activation')) fail('shop_pilot_day0_forbidden_actions_invalid')
   if (!isRecord(packet.controls) || REQUIRED_FALSE_CONTROLS.some((key) => packet.controls[key] !== (key === 'noWritePacket'))) {
@@ -313,6 +495,11 @@ export function renderShopPilotDay0ReadinessMarkdown(packet) {
   validateShopPilotDay0ReadinessPacket(packet)
   const blockers = packet.blockers.length ? packet.blockers.map((blocker) => `- ${blocker}`).join('\n') : '- none'
   const commands = packet.privateCommands.map((command) => `- ${command}`).join('\n')
+  const prep = packet.ownerPrivatePreparation
+  const baselineTemplateDigest = prep.baselineInputTemplate.digest || 'not provided'
+  const baselineWorksheetDigest = prep.baselineWorksheet.digest || 'not provided'
+  const acceptedIntakeDigest = prep.acceptedIntakePacketDigest || 'not accepted yet'
+  const nextDigest = prep.nextRequiredDigest
   return `# Shop Pilot Day-0 Readiness
 
 Contract: \`${packet.contract}\`
@@ -327,6 +514,24 @@ Candidate: \`${packet.candidate.branch || 'unknown'} @ ${packet.candidate.head |
 - Owner-private handoff ready: ${packet.day0Readiness.ownerPrivateHandoffReady}
 - Ready for customer contact: false
 - Ready for deployment or managed activation: false
+
+## Next owner-private step
+
+- Step: ${packet.nextOwnerPrivateStep.label} (${packet.nextOwnerPrivateStep.id})
+- Command: ${packet.nextOwnerPrivateStep.commandId}
+- Safe before release gate: ${packet.nextOwnerPrivateStep.safeBeforeReleaseGate}
+- Release gate still required before pilot activation: true
+- External effects allowed: false
+- Next required digest: ${nextDigest}
+
+## Owner-private prep artifacts
+
+- Artifact policy: ${prep.artifactPolicy}
+- Baseline input template digest: ${baselineTemplateDigest}
+- Baseline worksheet digest: ${baselineWorksheetDigest}
+- Accepted intake packet digest: ${acceptedIntakeDigest}
+- Local paths included: false
+- Raw identity stays private: true
 
 ## Public-safe baseline metrics
 
@@ -391,6 +596,7 @@ function runSelfTest() {
     both_packets_ready_still_no_external_effects: withBoth.ok === true
       && withBoth.status === 'day0_owner_private_handoff_ready'
       && withBoth.day0ReadyForOwnerPrivateHandoff === true
+      && withBoth.nextOwnerPrivateStep.id === 'prepare-day-one-private-handoff'
       && withBoth.day0Readiness.readyForManagedActivation === false
       && validateShopPilotDay0ReadinessPacket(withBoth) === withBoth,
     launch_gate_failure_blocks_day0: dirty.ok === false
@@ -426,6 +632,8 @@ function parseArgs(argv) {
     verify: null,
     baselinePacketPath: null,
     intakePacketPath: null,
+    baselineTemplatePath: null,
+    baselineWorksheetPath: null,
     output: null,
     markdownOutput: null,
   }
@@ -435,11 +643,45 @@ function parseArgs(argv) {
     else if (arg === '--verify') options.verify = argv[++index] || null
     else if (arg === '--baseline-packet') options.baselinePacketPath = argv[++index] || null
     else if (arg === '--intake-packet') options.intakePacketPath = argv[++index] || null
+    else if (arg === '--baseline-template') options.baselineTemplatePath = argv[++index] || null
+    else if (arg === '--baseline-worksheet') options.baselineWorksheetPath = argv[++index] || null
     else if (arg === '--output') options.output = argv[++index] || null
     else if (arg === '--markdown-output') options.markdownOutput = argv[++index] || null
     else fail(`shop_pilot_day0_usage_invalid:${arg}`)
   }
   return options
+}
+
+async function ownerPrivatePreparationFromFiles(options) {
+  const ownerPrivatePreparation = {}
+  if (options.baselineTemplatePath) {
+    const content = await readFile(resolve(options.baselineTemplatePath), 'utf8')
+    assertNoPrivateOrSecretShape(content)
+    let parsed = null
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      fail('shop_pilot_day0_baseline_template_json_invalid')
+    }
+    if (JSON.stringify(parsed) !== JSON.stringify(baselineInputTemplate())) {
+      fail('shop_pilot_day0_baseline_template_not_blank')
+    }
+    ownerPrivatePreparation.baselineInputTemplateDigest = digest(content)
+    ownerPrivatePreparation.baselineInputTemplateBlank = true
+  }
+  if (options.baselineWorksheetPath) {
+    const content = await readFile(resolve(options.baselineWorksheetPath), 'utf8')
+    assertNoPrivateOrSecretShape(content)
+    if (!content.includes(SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT)) {
+      fail('shop_pilot_day0_baseline_worksheet_contract_invalid')
+    }
+    if (content.replace(/\r\n?/g, '\n').trimEnd() !== renderShopPilotBaselineWorksheetMarkdown().trimEnd()) {
+      fail('shop_pilot_day0_baseline_worksheet_not_blank')
+    }
+    ownerPrivatePreparation.baselineWorksheetDigest = digest(content)
+    ownerPrivatePreparation.baselineWorksheetBlank = true
+  }
+  return ownerPrivatePreparation
 }
 
 async function main() {
@@ -466,6 +708,7 @@ async function main() {
       baselinePacketPath: options.baselinePacketPath,
       intakePacketPath: options.intakePacketPath,
     }),
+    ownerPrivatePreparation: await ownerPrivatePreparationFromFiles(options),
   }))
   if (options.output) await writeOutput(options.output, `${JSON.stringify(packet, null, 2)}\n`)
   if (options.markdownOutput) await writeOutput(options.markdownOutput, `${renderShopPilotDay0ReadinessMarkdown(packet)}\n`)
