@@ -11,6 +11,23 @@ Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness
 - The observer watches and times; the observer does not help. If a run is interrupted, discard it and observe another.
 - Privacy: this sheet names a real business and a real person. Keep it private. Per `docs/supermega-shop-sales-agent.md`, reporting outside the private workspace carries stage and hashes only — never the contact name, email, or company.
 
+## Deterministic packet step
+
+After this private form is complete, copy the same facts into a private JSON baseline input. Start from a blank template:
+
+```powershell
+npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>"
+```
+
+Generate a public-safe packet for Git/HQ review. The packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation.
+
+```powershell
+npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"
+npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<public-baseline-packet.json>"
+```
+
+If the launch gate reports `owner_private_baseline_ready`, the baseline digest is ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.
+
 ## 1. Business and operator (who)
 
 | Field | Value |

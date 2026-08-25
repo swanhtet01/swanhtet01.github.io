@@ -2,11 +2,63 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+  buildShopPilotBaselinePacket,
+} from './prepare_shop_pilot_baseline_packet.mjs'
+import {
   SHOP_PILOT_LAUNCH_GATE_CONTRACT,
   assessShopPilotLaunchGate,
   sampleShopPilotLaunchGateInput,
   validateShopPilotLaunchGate,
 } from './verify_shop_pilot_launch_gate.mjs'
+
+function baselineInput(overrides = {}) {
+  return {
+    contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+    product: 'shop',
+    pilotMode: 'owner_named',
+    verticalPack: 'spa-services',
+    observedAt: '2026-08-25T08:00:00.000Z',
+    businessName: 'Private Spa Sample',
+    namedOperator: 'Private Operator',
+    operatorRole: 'Shop manager',
+    founderObserver: 'Founder',
+    observationPlace: 'Private shop floor',
+    processSummary: 'Owner records package sale and redemption in a notebook, then closes the day manually.',
+    processStartsAt: 'Client asks for a prepaid package',
+    processEndsAt: 'Payment reconciled, treatment completed, balance updated, and book closed',
+    correctionPath: 'Owner crosses out the wrong entry and writes a correction beside the original record',
+    recordSystem: 'Notebook and phone gallery',
+    observedOrderRuns: [
+      { runId: 'order-run-001', observedAt: '2026-08-25T08:01:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 7, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'order-run-002', observedAt: '2026-08-25T08:20:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 8, interrupted: false, errorOccurred: true, errorCostLabel: 'one correction before final balance' },
+      { runId: 'order-run-003', observedAt: '2026-08-25T08:40:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 9, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    observedRedemptionRuns: [
+      { runId: 'redemption-run-001', observedAt: '2026-08-25T09:01:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 2, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-002', observedAt: '2026-08-25T09:20:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 3, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    weeklyOrders: 120,
+    claimedMedianMinutesPerOrder: 8,
+    weeklyExceptionCount: 12,
+    closeMinutesPerDay: 45,
+    clientImportRowCount: 40,
+    weeklyPackageSales: 12,
+    weeklyTreatmentRedemptions: 24,
+    claimedMedianMinutesPerRedemption: 3,
+    weeklyPackageCorrectionCount: 2,
+    observedErrorRunCount: 1,
+    totalObservedErrorCostLabel: 'one manual correction, no monetary claim',
+    ownerConfirmedBaseline: true,
+    operatorAgreesReviewEveryRun: true,
+    proposedPilotStartDate: '2026-08-31',
+    reviewDate: '2026-09-04',
+    noSuperMegaDemoMeasured: true,
+    noExternalEffects: true,
+    ...overrides,
+  }
+}
 
 test('passes only as owner-private-intake readiness, not contact or activation readiness', () => {
   const report = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput())
@@ -14,6 +66,7 @@ test('passes only as owner-private-intake readiness, not contact or activation r
   assert.equal(report.ok, true)
   assert.equal(report.status, 'owner_private_intake_required')
   assert.equal(report.launchReadiness.authority, 'owner_private_intake_only')
+  assert.equal(report.launchReadiness.baselinePacketAccepted, false)
   assert.equal(report.launchReadiness.privateWorkspaceMayBePreparedAfterOwnerInput, true)
   assert.equal(report.launchReadiness.readyForCustomerContact, false)
   assert.equal(report.launchReadiness.readyForPayment, false)
@@ -25,6 +78,39 @@ test('passes only as owner-private-intake readiness, not contact or activation r
   assert.deepEqual(report.products.customerProducts, ['shop', 'plant', 'website', 'ecommerce'])
   assert.equal(report.publicBoundary.participantIdentityPresent, false)
   assert.equal(validateShopPilotLaunchGate(report), report)
+})
+
+test('accepts a public-safe baseline packet only as private handoff evidence', () => {
+  const baselinePacket = buildShopPilotBaselinePacket(baselineInput(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  const report = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ baselinePacket }))
+  assert.equal(report.ok, true)
+  assert.equal(report.status, 'owner_private_baseline_ready')
+  assert.equal(report.launchReadiness.authority, 'owner_private_intake_and_baseline_ready')
+  assert.equal(report.launchReadiness.baselinePacketAccepted, true)
+  assert.equal(report.launchReadiness.readyForCustomerContact, false)
+  assert.equal(report.launchReadiness.readyForDeployment, false)
+  assert.equal(report.baselineEvidence.accepted, true)
+  assert.equal(report.baselineEvidence.digest, baselinePacket.digest)
+  assert.equal(report.baselineEvidence.metrics.medianMinutesPerOrder, 8)
+  assert.equal(JSON.stringify(report).includes('Private Spa Sample'), false)
+  assert.equal(JSON.stringify(report).includes('Private Operator'), false)
+  assert.equal(validateShopPilotLaunchGate(report), report)
+})
+
+test('fails closed for blocked or tampered baseline packets', () => {
+  const blockedPacket = buildShopPilotBaselinePacket(baselineInput({
+    claimedMedianMinutesPerOrder: 11,
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  const blocked = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ baselinePacket: blockedPacket }))
+  assert.equal(blocked.ok, false)
+  assert.ok(blocked.failures.includes('shop_pilot_launch_gate_baseline_packet_not_ready'))
+
+  const validPacket = buildShopPilotBaselinePacket(baselineInput(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  const tampered = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
+    baselinePacket: { ...validPacket, publicIdentityIncluded: true },
+  }))
+  assert.equal(tampered.ok, false)
+  assert.ok(tampered.failures.some((failure) => failure.startsWith('shop_pilot_launch_gate_baseline_packet_invalid')))
 })
 
 test('fails closed for dirty worktree and missing launch scripts', () => {
