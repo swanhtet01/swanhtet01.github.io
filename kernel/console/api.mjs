@@ -6,6 +6,7 @@ import store from '../store.mjs'
 import { generateDeal, normalizeDealPacket } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
 import connectors from '../connectors/index.mjs'
+import { captureError } from '../alert.mjs'
 import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '../gateway.mjs'
 import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
 import crypto from 'node:crypto'
@@ -86,7 +87,20 @@ function operatorAiBudgetStatus(usage, window, capUnits) {
 
 const ok = (json) => ({ status: 200, json })
 const bad = (status, reason) => ({ status, json: { ok: false, reason } })
-const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref }).catch(() => {})
+const safeMetaValue = (value, limit = 120) => {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  return String(value).slice(0, limit)
+}
+const safePath = (value) => String(value || '').split('?')[0].slice(0, 120)
+const recordConsoleError = (context, detail, meta = {}) => captureError(context, detail, Object.fromEntries(
+  Object.entries(meta)
+    .map(([key, value]) => [key, safeMetaValue(value)])
+    .filter(([, value]) => value !== null),
+)).catch(() => {})
+const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref })
+  .then((entry) => entry || recordConsoleError('console.activity_log_failed', 'activity_log_not_recorded', { kind, ref }))
+  .catch((error) => recordConsoleError('console.activity_log_failed', error, { kind, ref }))
 
 // Packet fields are generated text seeded from public contact-form input and can contain
 // characters that are markup in HTML. Interpolating them raw does not just risk injection
@@ -238,9 +252,16 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (!lead) return bad(404, 'lead_not_found')
         const client = await store.createClient({ name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] })
         const project = await store.createProject({ client_id: client.id, lead_id: lead.id, offer: lead.package || body.offer || 'build', status: 'scoping' })
-        await store.updateLead(seg[1], { stage: 'won' }).catch(() => {})
+        const wonLead = await store.updateLead(seg[1], { stage: 'won' }).catch(async (error) => {
+          await recordConsoleError('console.lead_convert_won_stage_failed', error, { leadId: lead.id, clientId: client.id, projectId: project.id })
+          return null
+        })
+        if (!wonLead) {
+          await recordConsoleError('console.lead_convert_partial_project', 'lead_won_stage_not_recorded', { leadId: lead.id, clientId: client.id, projectId: project.id })
+          return bad(500, 'lead_won_stage_update_failed')
+        }
         log('won', `Won ${lead.company || lead.name} → ${project.offer} project`, project.id)
-        return ok({ ok: true, client, project })
+        return ok({ ok: true, client, project, lead: wonLead })
       }
     }
 
@@ -267,7 +288,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
               if (!modules?.length && project.lead_id) { const byLead = await store.listDeals({ lead_id: project.lead_id }); modules = byLead?.[0]?.packet?.modules }
               if (modules?.length) await onProjectShipped(project.id, modules, project.id)
             })
-            .catch(() => {})
+            .catch((error) => recordConsoleError('console.project_shipped_graduation_failed', error, { projectId: project.id }))
         }
         return ok({ ok: true, project })
       }
@@ -295,7 +316,8 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         const deal = await store.saveDeal({ lead_id: body.lead_id || null, project_id: body.project_id || null, packet: normalized.packet, status: 'draft' })
         log('deal', `Deal saved: ${String(normalized.packet.headline || '').slice(0, 60)}`, deal.id)
         // Auto-graduation flywheel: each module signature in the packet bumps its repeat counter (best-effort).
-        onDealSaved(normalized.packet, deal.id).catch(() => {})
+        onDealSaved(normalized.packet, deal.id)
+          .catch((error) => recordConsoleError('console.deal_graduation_failed', error, { dealId: deal.id }))
         return ok({ ok: true, deal })
       }
       if (method === 'PATCH' && seg[1] && !seg[2]) {
@@ -419,6 +441,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
 
     return bad(404, 'not_found')
   } catch (err) {
+    await recordConsoleError('console.api_unhandled_error', err, { method, path: safePath(path) })
     return bad(500, String(err.message || 'server_error').slice(0, 160))
   }
 }
