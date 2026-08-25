@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const repoRoot = process.cwd()
 const targets = [
@@ -61,6 +62,7 @@ const forbiddenSnippets = [
 
 const errors = []
 const files = []
+const behaviorChecks = []
 
 for (const rel of targets) {
   const abs = path.join(repoRoot, rel)
@@ -84,11 +86,14 @@ for (const rel of targets) {
   }
 }
 
+runGitHubSecretSyncBehaviorChecks()
+
 const result = {
   ok: errors.length === 0,
   contract: 'supermega.legacy-credential-path-quarantine.v1',
   checkedAt: new Date().toISOString(),
   files,
+  behaviorChecks,
   providerWritesBlockedByDefault: errors.length === 0,
   localSecretMaterializationBlockedByDefault: errors.length === 0,
   localOnlyAiDefault: errors.length === 0,
@@ -103,4 +108,119 @@ if (errors.length > 0) {
 async function digest(text) {
   const { createHash } = await import('node:crypto')
   return createHash('sha256').update(text).digest('hex')
+}
+
+function runGitHubSecretSyncBehaviorChecks() {
+  const script = path.join(repoRoot, 'tools', 'github_secret_sync.py')
+  if (!fs.existsSync(script)) {
+    errors.push('github_secret_sync_behavior_missing_script')
+    return
+  }
+
+  const cases = [
+    {
+      name: 'plan_no_write',
+      args: [
+        script,
+        '--repo', 'swanhtet01/swanhtet01.github.io',
+        '--name', 'UNIT_TEST_SECRET',
+        '--value-env', 'UNIT_TEST_SECRET_VALUE',
+        '--token-env', 'GITHUB_TOKEN',
+        '--plan',
+      ],
+      expectedStatus: 0,
+      expectedJson: { status: 'planned', external_write_attempted: false, external_writes_performed: false },
+    },
+    {
+      name: 'approval_required_before_secret_read',
+      args: [
+        script,
+        '--repo', 'swanhtet01/swanhtet01.github.io',
+        '--name', 'UNIT_TEST_SECRET',
+        '--value-env', 'UNIT_TEST_SECRET_VALUE',
+        '--token-env', 'GITHUB_TOKEN',
+      ],
+      expectedStatus: 1,
+      expectedErrorIncludes: 'Quarantined legacy GitHub secret sync',
+      forbiddenErrorIncludes: 'Environment variable is empty',
+      expectedJson: { external_write_attempted: false, external_writes_performed: false },
+    },
+    {
+      name: 'command_line_token_rejected_even_in_plan_mode',
+      args: [
+        script,
+        '--repo', 'swanhtet01/swanhtet01.github.io',
+        '--name', 'UNIT_TEST_SECRET',
+        '--value-env', 'UNIT_TEST_SECRET_VALUE',
+        '--token', 'placeholder-token',
+        '--plan',
+      ],
+      expectedStatus: 1,
+      expectedErrorIncludes: 'Refusing --token',
+      expectedJson: { external_write_attempted: false, external_writes_performed: false },
+    },
+    {
+      name: 'token_required_before_secret_read_after_approval',
+      args: [
+        script,
+        '--repo', 'swanhtet01/swanhtet01.github.io',
+        '--name', 'UNIT_TEST_SECRET',
+        '--value-env', 'UNIT_TEST_SECRET_VALUE',
+        '--token-env', 'GITHUB_TOKEN',
+        '--allow-external-write',
+        '--owner-confirmation', 'I APPROVE SUPERMEGA GITHUB SECRET WRITE',
+      ],
+      expectedStatus: 1,
+      expectedErrorIncludes: 'Token environment variable is empty: GITHUB_TOKEN',
+      forbiddenErrorIncludes: 'UNIT_TEST_SECRET_VALUE',
+      expectedJson: { external_write_attempted: false, external_writes_performed: false },
+    },
+  ]
+
+  for (const testCase of cases) {
+    const child = runPython(testCase.args)
+    const output = String(child.stdout || '').trim()
+    let packet = null
+    try {
+      packet = JSON.parse(output)
+    } catch {
+      errors.push(`github_secret_sync_behavior_json_invalid:${testCase.name}`)
+    }
+
+    const errorText = String(packet?.error || '')
+    const statusOk = child.status === testCase.expectedStatus
+    const contractOk = packet?.contract === 'supermega.github-secret-sync.quarantine.v1'
+    const secretSafe = packet?.secret_values_exposed === false
+    const expectedFieldsOk = Object.entries(testCase.expectedJson || {})
+      .every(([key, value]) => packet?.[key] === value)
+    const expectedErrorOk = !testCase.expectedErrorIncludes || errorText.includes(testCase.expectedErrorIncludes)
+    const forbiddenErrorOk = !testCase.forbiddenErrorIncludes || !errorText.includes(testCase.forbiddenErrorIncludes)
+    const stderrSafe = !/ghp_|github_pat_|sk-[A-Za-z0-9]|sb_secret_|Bearer\s+[A-Za-z0-9._-]+/i.test(String(child.stderr || ''))
+    const ok = statusOk && contractOk && secretSafe && expectedFieldsOk && expectedErrorOk && forbiddenErrorOk && stderrSafe
+
+    behaviorChecks.push({
+      name: testCase.name,
+      ok,
+      status: child.status,
+      externalWritesPerformed: packet?.external_writes_performed === true,
+      secretValuesExposed: packet?.secret_values_exposed === true,
+    })
+    if (!ok) errors.push(`github_secret_sync_behavior_failed:${testCase.name}`)
+  }
+}
+
+function runPython(args) {
+  const python = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
+  return spawnSync(python, args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GITHUB_TOKEN: '',
+      GH_TOKEN: '',
+      UNIT_TEST_SECRET_VALUE: '',
+    },
+    timeout: 10_000,
+    windowsHide: true,
+  })
 }
