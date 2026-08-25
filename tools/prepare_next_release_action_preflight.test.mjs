@@ -244,6 +244,11 @@ test('builds current preflight with GitHub main protection as the first gate', (
   assert.equal(packet.currentAction.gateId, 'github_main_protection')
   assert.equal(packet.currentAction.executeReady, false)
   assert.ok(packet.currentAction.blockers.includes('main_unprotected'))
+  const reviewBranchGate = packet.gates.find((gate) => gate.id === 'review_branch_push')
+  assert.equal(
+    reviewBranchGate.blockers.filter((blocker) => blocker === 'github_main_protection_unverified').length,
+    1,
+  )
   assert.equal(packet.allowedNow.externalActions.length, 0)
   assert.equal(Object.values(packet.controls).every((value) => value === false), true)
 })

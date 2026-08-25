@@ -216,6 +216,8 @@ test('builds a founder-readable status brief from current operator and operating
   assert.equal(brief.operatingActions.openActionCount, 2)
   assert.equal(brief.operatingActions.currentOperatingAction.id, 'release-main-protection')
   assert.equal(brief.nextWork[0].id, 'gate-github_main_protection')
+  assert.ok(!brief.nextWork.some((item) => item.id === 'action-release-main-protection'))
+  assert.ok(brief.nextWork.some((item) => item.id === 'action-shop-owner-pilot-baseline'))
   assert.equal(brief.controls.githubWritesPerformed, false)
   assert.equal(validateSuperMegaStatusBrief(brief), brief)
 })

@@ -108,12 +108,13 @@ function sameArray(actual, expected) {
 
 function strings(value, field, max = 50) {
   if (!Array.isArray(value) || value.length > max) fail(`${field}_invalid`)
-  return value.map((item) => {
+  const normalized = value.map((item) => {
     const normalized = String(item || '').trim().replace(/\s+/g, ' ')
     if (!normalized || normalized.length > 220) fail(`${field}_invalid`)
     assertPublicSafe(normalized, `${field}_private_or_secret_shape`)
     return normalized
   })
+  return [...new Set(normalized)]
 }
 
 function text(value, field, max = 240) {

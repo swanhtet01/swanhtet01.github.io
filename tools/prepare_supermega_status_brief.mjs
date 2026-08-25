@@ -149,7 +149,9 @@ function buildNextWork({ operatorBoard, actionBoard, currentOperatingAction }) {
       externalWriteAllowed: false,
     })
   }
-  if (currentOperatingAction) {
+  const currentOperatingActionAlreadyRepresentedByReleaseGate = operatorBoard.currentAction?.gateId === 'github_main_protection'
+    && currentOperatingAction?.id === 'release-main-protection'
+  if (currentOperatingAction && !currentOperatingActionAlreadyRepresentedByReleaseGate) {
     next.push({
       id: `action-${currentOperatingAction.id}`,
       kind: 'operating_action',
