@@ -45,7 +45,7 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   'payment',
   'hosted_scheduler_activation',
 ]
-const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run release:owner-approval:packet:self-test && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
+const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 const SECRET_PATTERNS = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /sk-proj-[A-Za-z0-9_-]{20,}/,
@@ -146,6 +146,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   }
   if (scripts['shop:pilot:launch-gate:self-test'] !== 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_shop_launch_gate_self_test_script_missing')
+  }
+  if (scripts['shop:pilot:intake-packet'] !== 'node tools/prepare_shop_pilot_private_intake_packet.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_shop_intake_packet_script_missing')
+  }
+  if (scripts['shop:pilot:intake-packet:self-test'] !== 'node --test tools/prepare_shop_pilot_private_intake_packet.test.mjs && node tools/prepare_shop_pilot_private_intake_packet.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_shop_intake_packet_self_test_script_missing')
   }
   if (scripts['hq:verify'] !== EXPECTED_HQ_VERIFY_CHAIN) addFailure(failures, 'release_stack_owner_gate_hq_chain_missing')
 
@@ -477,6 +483,8 @@ function sampleInput(overrides = {}) {
       'github:main-protection:snapshot:self-test': 'node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test',
       'operator:board': 'node tools/prepare_current_operator_board.mjs',
       'operator:board:self-test': 'node --test tools/prepare_current_operator_board.test.mjs && node tools/prepare_current_operator_board.mjs --self-test',
+      'shop:pilot:intake-packet': 'node tools/prepare_shop_pilot_private_intake_packet.mjs',
+      'shop:pilot:intake-packet:self-test': 'node --test tools/prepare_shop_pilot_private_intake_packet.test.mjs && node tools/prepare_shop_pilot_private_intake_packet.mjs --self-test',
       'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
       'shop:pilot:launch-gate:self-test': 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test',
       'hq:verify': EXPECTED_HQ_VERIFY_CHAIN,
