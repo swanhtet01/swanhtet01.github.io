@@ -126,11 +126,19 @@ test('template is blank and CLI generates metadata-only packet output', async ()
     assert.deepEqual(templateJson, baselineInputTemplate())
     assert.equal(templateJson.businessName, '')
 
+    const templateOverwrite = spawnSync(process.execPath, [tool, '--template', templatePath], { encoding: 'utf8' })
+    assert.notEqual(templateOverwrite.status, 0)
+    assert.match(templateOverwrite.stderr, /shop_pilot_baseline_output_exists/)
+
     await writeFile(inputPath, `${JSON.stringify(input(), null, 2)}\n`)
     const generated = spawnSync(process.execPath, [tool, '--input', inputPath, '--output', packetPath, '--markdown-output', markdownPath], { encoding: 'utf8' })
     assert.equal(generated.status, 0, generated.stderr)
     assert.equal(JSON.parse(generated.stdout).status, 'baseline_ready_for_private_pilot_handoff')
     assert.doesNotMatch(generated.stdout, /Private Spa Sample|Private Operator/)
+
+    const packetOverwrite = spawnSync(process.execPath, [tool, '--input', inputPath, '--output', packetPath, '--markdown-output', join(parent, 'new-baseline-packet.md')], { encoding: 'utf8' })
+    assert.notEqual(packetOverwrite.status, 0)
+    assert.match(packetOverwrite.stderr, /shop_pilot_baseline_output_exists/)
 
     const verified = spawnSync(process.execPath, [tool, '--verify', packetPath], { encoding: 'utf8' })
     assert.equal(verified.status, 0, verified.stderr)

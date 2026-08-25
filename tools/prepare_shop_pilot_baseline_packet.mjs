@@ -450,7 +450,12 @@ async function readJson(path) {
 async function writeOutput(path, content) {
   const absolute = resolve(path)
   await mkdir(dirname(absolute), { recursive: true })
-  await writeFile(absolute, content, { encoding: 'utf8' })
+  try {
+    await writeFile(absolute, content, { encoding: 'utf8', flag: 'wx' })
+  } catch (error) {
+    if (error?.code === 'EEXIST') fail('shop_pilot_baseline_output_exists')
+    throw error
+  }
   return absolute
 }
 
