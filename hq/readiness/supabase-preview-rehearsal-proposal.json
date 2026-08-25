@@ -210,7 +210,7 @@
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:636157d6ab952ea9db9938b46370a4c89d7512ec44ba4f909791374bed816629"
+      "digest": "sha256:549c9fefe47035e9aece782d0742b1e185a924ad49d9582d4403e849da1fc025"
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
@@ -245,5 +245,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:2442458ae97d2243eb47758d6f1fdafb1d217ff8451b3dbeb0b19a59db3a3464"
+  "digest": "sha256:adb24afc4ff13ce48077a4e6a65ce048a7ed6a9f62ca2b32caf71d55337d467c"
 }
