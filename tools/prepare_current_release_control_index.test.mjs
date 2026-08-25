@@ -45,6 +45,28 @@ test('records a stale owner packet without making it authoritative', () => {
   assert.equal(validateCurrentReleaseControlIndex(packet), packet)
 })
 
+test('accepts current preflight candidate schema without weakening mismatch guard', () => {
+  const base = sampleCurrentReleaseControlIndexInput()
+  const packet = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+    nextReleaseActionPreflight: {
+      ...base.nextReleaseActionPreflight,
+      candidateCommit: undefined,
+      candidate: { commit: base.handoff.candidate.commit },
+    },
+  }))
+  assert.equal(packet.candidate.commit, base.handoff.candidate.commit)
+  assert.throws(
+    () => buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+      nextReleaseActionPreflight: {
+        ...base.nextReleaseActionPreflight,
+        candidateCommit: undefined,
+        candidate: { commit: 'd'.repeat(40) },
+      },
+    })),
+    /current_release_control_index_preflight_candidate_mismatch/,
+  )
+})
+
 test('rejects mismatched candidate authority and unsafe owner action drift', () => {
   assert.throws(
     () => buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({

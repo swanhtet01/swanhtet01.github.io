@@ -99,6 +99,10 @@ function assertCandidateMatch(label, actualCommit, expectedCommit) {
   if (actualCommit !== expectedCommit) fail(`current_release_control_index_${label}_candidate_mismatch`)
 }
 
+function preflightCandidateCommit(preflight) {
+  return preflight?.candidateCommit || preflight?.candidate?.commit || null
+}
+
 function ownerApprovalPacketVersionFromPath(path) {
   const match = /release-owner-approval-packet\.(v[0-9]{1,3})\./i.exec(basename(path || ''))
   return match ? match[1].toLowerCase() : 'v1'
@@ -114,7 +118,7 @@ export function buildCurrentReleaseControlIndex(input = {}) {
   assertCandidateMatch('branch_push_plan', input.reviewBranchPushPlan?.candidate?.head, candidateCommit)
   assertCandidateMatch('pull_request_plan', input.pullRequestCreatePlan?.candidate?.head, candidateCommit)
   assertCandidateMatch('operator_board', input.operatorBoard?.candidate?.commit, candidateCommit)
-  assertCandidateMatch('preflight', input.nextReleaseActionPreflight?.candidateCommit, candidateCommit)
+  assertCandidateMatch('preflight', preflightCandidateCommit(input.nextReleaseActionPreflight), candidateCommit)
   assertCandidateMatch('owner_approval', input.releaseOwnerApproval?.candidate?.commit, candidateCommit)
   if (input.shopPilotDay0Readiness?.candidate?.head) {
     assertCandidateMatch('shop_day0', input.shopPilotDay0Readiness.candidate.head, candidateCommit)
