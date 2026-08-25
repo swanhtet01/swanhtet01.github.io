@@ -45,7 +45,7 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   'payment',
   'hosted_scheduler_activation',
 ]
-const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
+const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 const SECRET_PATTERNS = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /sk-proj-[A-Za-z0-9_-]{20,}/,
@@ -128,6 +128,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   }
   if (scripts['release:owner-approval:packet:self-test'] !== 'node --test tools/prepare_release_owner_approval_packet.test.mjs && node tools/prepare_release_owner_approval_packet.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_owner_approval_packet_self_test_missing')
+  }
+  if (scripts['github:main-protection:apply:plan'] !== 'node tools/apply_github_main_protection.mjs --plan') {
+    addFailure(failures, 'release_stack_owner_gate_github_apply_plan_script_missing')
+  }
+  if (scripts['github:main-protection:apply:self-test'] !== 'node --test tools/apply_github_main_protection.test.mjs && node tools/apply_github_main_protection.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_github_apply_self_test_missing')
   }
   if (scripts['github:main-protection:snapshot'] !== 'node tools/collect_github_main_protection_snapshot.mjs') {
     addFailure(failures, 'release_stack_owner_gate_github_snapshot_script_missing')
@@ -485,6 +491,8 @@ function sampleInput(overrides = {}) {
       'release:pull-request:create:self-test': 'node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test',
       'release:owner-approval:packet': 'node tools/prepare_release_owner_approval_packet.mjs',
       'release:owner-approval:packet:self-test': 'node --test tools/prepare_release_owner_approval_packet.test.mjs && node tools/prepare_release_owner_approval_packet.mjs --self-test',
+      'github:main-protection:apply:plan': 'node tools/apply_github_main_protection.mjs --plan',
+      'github:main-protection:apply:self-test': 'node --test tools/apply_github_main_protection.test.mjs && node tools/apply_github_main_protection.mjs --self-test',
       'github:main-protection:snapshot': 'node tools/collect_github_main_protection_snapshot.mjs',
       'github:main-protection:snapshot:self-test': 'node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test',
       'operator:board': 'node tools/prepare_current_operator_board.mjs',
