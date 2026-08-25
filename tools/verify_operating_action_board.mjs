@@ -38,7 +38,7 @@ function sampleAction(overrides = {}) {
     sourceFinding: {
       sourceType: 'release_gate',
       label: 'GitHub main protection not verified',
-      evidenceRef: 'supermega.github-main-protection-snapshot.v62.generated-20260825.json',
+      evidenceRef: 'tools/collect_github_main_protection_snapshot.mjs plus hq/readiness/github-main-protection-proposal.json',
       evidenceDigest: digest('a'),
     },
     recommendation: 'Protect GitHub main before branch push, pull request, release, or pilot activation.',
@@ -59,7 +59,7 @@ function sampleAction(overrides = {}) {
       externalWriteAllowed: false,
     },
     acceptance: {
-      evidenceRequired: ['Verified main protection snapshot with required checks present'],
+      evidenceRequired: ['Fresh verified main protection snapshot with required checks present'],
       tests: ['npm run hq:verify'],
     },
     closure: {

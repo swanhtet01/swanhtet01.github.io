@@ -42,8 +42,8 @@
       "sourceFinding": {
         "sourceType": "release_gate",
         "label": "GitHub main protection is not verified",
-        "evidenceRef": "supermega.github-main-protection-snapshot.v63.generated-20260825.json",
-        "evidenceDigest": "sha256:5faa8327950daceb8e8d1db54c7076b15bb324c369949d9e2fd453a096492bbd"
+        "evidenceRef": "tools/collect_github_main_protection_snapshot.mjs plus hq/readiness/github-main-protection-proposal.json",
+        "evidenceDigest": "sha256:072bf239af3a8dc2e71d06d243772c8eb343ecccede74d31712dffcb9d2b30be"
       },
       "recommendation": "Protect GitHub main before branch push, pull request, release, or pilot activation.",
       "severity": "critical",
@@ -64,7 +64,7 @@
       },
       "acceptance": {
         "evidenceRequired": [
-          "Verified main protection snapshot with required checks present"
+          "Fresh verified main protection snapshot with required checks present"
         ],
         "tests": [
           "npm run hq:verify"
