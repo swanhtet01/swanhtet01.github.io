@@ -67,6 +67,28 @@ test('accepts current preflight candidate schema without weakening mismatch guar
   )
 })
 
+test('accepts current preflight gate schema from validated packet shape', () => {
+  const base = sampleCurrentReleaseControlIndexInput()
+  const packet = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+    nextReleaseActionPreflight: {
+      ...base.nextReleaseActionPreflight,
+      currentGateId: undefined,
+      currentAction: { gateId: 'github_main_protection' },
+    },
+  }))
+  assert.equal(packet.currentOwnerAction.gateId, 'github_main_protection')
+  assert.throws(
+    () => buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+      nextReleaseActionPreflight: {
+        ...base.nextReleaseActionPreflight,
+        currentGateId: undefined,
+        currentAction: { gateId: 'preview_rehearsal' },
+      },
+    })),
+    /current_release_control_index_gate_invalid/,
+  )
+})
+
 test('rejects mismatched candidate authority and unsafe owner action drift', () => {
   assert.throws(
     () => buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({

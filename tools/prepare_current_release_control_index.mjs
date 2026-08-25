@@ -103,6 +103,10 @@ function preflightCandidateCommit(preflight) {
   return preflight?.candidateCommit || preflight?.candidate?.commit || null
 }
 
+function preflightCurrentGateId(preflight) {
+  return preflight?.currentGateId || preflight?.currentAction?.gateId || preflight?.release?.currentGateId || null
+}
+
 function ownerApprovalPacketVersionFromPath(path) {
   const match = /release-owner-approval-packet\.(v[0-9]{1,3})\./i.exec(basename(path || ''))
   return match ? match[1].toLowerCase() : 'v1'
@@ -124,7 +128,7 @@ export function buildCurrentReleaseControlIndex(input = {}) {
     assertCandidateMatch('shop_day0', input.shopPilotDay0Readiness.candidate.head, candidateCommit)
   }
 
-  const currentGateId = input.nextReleaseActionPreflight?.currentGateId
+  const currentGateId = preflightCurrentGateId(input.nextReleaseActionPreflight)
   if (currentGateId !== 'github_main_protection') fail('current_release_control_index_gate_invalid')
   if (input.operatorBoard?.currentAction?.gateId !== currentGateId) fail('current_release_control_index_operator_gate_mismatch')
   if (input.productReadinessMatrix?.release?.currentGateId !== currentGateId) fail('current_release_control_index_matrix_gate_mismatch')
