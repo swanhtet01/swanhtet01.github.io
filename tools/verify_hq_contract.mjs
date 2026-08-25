@@ -27,7 +27,7 @@ import {
 import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText, competitiveExecutionCutText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText, supabaseCompatibilityVerifierText, competitiveExecutionCutText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -65,6 +65,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'README.md'), 'utf8'),
   readFile(resolve(root, 'agent_os', 'agent_os_architecture.md'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
+  readFile(resolve(root, 'tools', 'verify_supabase_compatibility.mjs'), 'utf8'),
   readFile(resolve(root, 'hq', 'strategy', 'COMPETITIVE-EXECUTION-CUT.md'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
@@ -1215,6 +1216,10 @@ requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')
   && packageText.includes('npm run database:supabase:compatibility && npm run database:migrations:verify')
   && packageText.includes('"productionSupabaseTargetStatus": "protected-unapproved"')
+  && supabaseCompatibilityVerifierText.includes("const PUBLIC_TABLE_AUTO_EXPOSURE_CHANGE = '2026-10-30'")
+  && supabaseCompatibilityVerifierText.includes('public_table_exposure_posture_missing')
+  && supabaseCompatibilityVerifierText.includes('explicit_table_grant_or_revoke_for_public_anon_authenticated_or_service_role')
+  && supabaseCompatibilityVerifierText.includes('allow_cross_file_public_table_quarantine')
   && workboard.includes('| OPS-084 | CEO + Supabase Compatibility Codex | done-local |')
   && workboard.includes('| OPS-085 | CEO + Supabase Target Authority Codex | done-local |'))
 
