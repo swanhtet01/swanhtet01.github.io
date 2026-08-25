@@ -3,7 +3,7 @@
 
 import { usableOpsKey } from '../ops-key.mjs'
 import store from '../store.mjs'
-import { generateDeal } from './deal.mjs'
+import { generateDeal, normalizeDealPacket } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
 import connectors from '../connectors/index.mjs'
 import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '../gateway.mjs'
@@ -290,10 +290,12 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       }
       if (method === 'POST' && !seg[1]) {
         if (!body.packet) return bad(400, 'no_packet')
-        const deal = await store.saveDeal({ lead_id: body.lead_id || null, project_id: body.project_id || null, packet: body.packet, status: 'draft' })
-        log('deal', `Deal saved: ${String(body.packet.headline || '').slice(0, 60)}`, deal.id)
+        const normalized = normalizeDealPacket(body.packet)
+        if (!normalized.ok) return bad(400, normalized.reason)
+        const deal = await store.saveDeal({ lead_id: body.lead_id || null, project_id: body.project_id || null, packet: normalized.packet, status: 'draft' })
+        log('deal', `Deal saved: ${String(normalized.packet.headline || '').slice(0, 60)}`, deal.id)
         // Auto-graduation flywheel: each module signature in the packet bumps its repeat counter (best-effort).
-        onDealSaved(body.packet, deal.id).catch(() => {})
+        onDealSaved(normalized.packet, deal.id).catch(() => {})
         return ok({ ok: true, deal })
       }
       if (method === 'PATCH' && seg[1] && !seg[2]) {
