@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 export const SHOP_PILOT_BASELINE_INPUT_CONTRACT = 'supermega.shop.pilot_baseline_input.v1'
 export const SHOP_PILOT_BASELINE_PACKET_CONTRACT = 'supermega.shop.pilot_baseline_packet.v1'
+export const SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT = 'supermega.shop.pilot_baseline_worksheet.v1'
 
 const PRODUCT = 'shop'
 const PILOT_MODE = 'owner_named'
@@ -405,6 +406,88 @@ export function baselineInputTemplate() {
   }
 }
 
+export function renderShopPilotBaselineWorksheetMarkdown() {
+  const template = baselineInputTemplate()
+  const orderRows = template.observedOrderRuns
+    .map((run) => `| ${run.runId} |  |  |  |  | false | false |  |`)
+    .join('\n')
+  const redemptionRows = template.observedRedemptionRuns
+    .map((run) => `| ${run.runId} |  |  |  |  | false | false |  |`)
+    .join('\n')
+  const body = [
+    '# Shop Pilot Owner-Observed Baseline Worksheet',
+    '',
+    `Contract: \`${SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT}\``,
+    `JSON input contract: \`${SHOP_PILOT_BASELINE_INPUT_CONTRACT}\``,
+    '',
+    'Purpose: capture the private manual-process baseline before Shop pilot Day 1. This worksheet is for local owner use only; the generated public packet must contain counts, booleans, labels, dates, and digests only.',
+    '',
+    '## Safety boundary',
+    '',
+    '- Keep the business name, operator name, observation place, and raw notes only in the private JSON input.',
+    '- Do not include customer contact details, message bodies, credential values, payment details, stock records, screenshots, or raw private evidence in public packets.',
+    '- This worksheet does not authorize customer contact, payment, stock movement, server write, hosted write, deployment, production release, or managed activation.',
+    '',
+    '## Minimum evidence for a ready baseline packet',
+    '',
+    '- At least 3 uninterrupted manual order runs.',
+    '- At least 3 uninterrupted manual package-redemption runs.',
+    '- Claimed medians must match the durations recorded below.',
+    '- Observed order error count must match the recorded order runs.',
+    '- Review date must be exactly 4 calendar days after the proposed Day-1 pilot start date.',
+    '- Owner confirmations must be true: baseline confirmed, operator reviews every run, no SuperMega demo measured, and no external effects.',
+    '',
+    '## Private baseline fields to fill in JSON',
+    '',
+    '| Field | Required value | Notes |',
+    '| --- | --- | --- |',
+    '| observedAt | ISO UTC timestamp | When the owner observation happened. |',
+    '| businessName | private text | Keep only in the private input. |',
+    '| namedOperator | private text | Keep only in the private input. |',
+    '| operatorRole | role label | Example: shop manager. |',
+    '| founderObserver | private text | The observer name stays private. |',
+    '| observationPlace | private text | Keep only in the private input. |',
+    '| processSummary | private process text | No raw customer identity. |',
+    '| processStartsAt | process boundary | Start of the manual flow. |',
+    '| processEndsAt | process boundary | End of the manual flow. |',
+    '| correctionPath | process text | How manual errors are corrected today. |',
+    '| recordSystem | process text | Current books, sheets, or tools. |',
+    '| weeklyOrders | integer | Current weekly order volume. |',
+    '| weeklyExceptionCount | integer | Current weekly exceptions. |',
+    '| closeMinutesPerDay | number | Current daily close minutes. |',
+    '| clientImportRowCount | integer | Count only; no names or contacts. |',
+    '| weeklyPackageSales | integer | Current package-sale count. |',
+    '| weeklyTreatmentRedemptions | integer | Current redemption count. |',
+    '| weeklyPackageCorrectionCount | integer | Current package-correction count. |',
+    '| proposedPilotStartDate | YYYY-MM-DD | Day 1 of the five-day pilot. |',
+    '| reviewDate | YYYY-MM-DD | Must equal Day 1 plus 4 days. |',
+    '',
+    '## Manual order runs',
+    '',
+    '| runId | observedAt | startedWhen | endedWhen | durationMinutes | interrupted | errorOccurred | errorCostLabel |',
+    '| --- | --- | --- | --- | ---: | --- | --- | --- |',
+    orderRows,
+    '',
+    '## Package-redemption runs',
+    '',
+    '| runId | observedAt | startedWhen | endedWhen | durationMinutes | interrupted | errorOccurred | errorCostLabel |',
+    '| --- | --- | --- | --- | ---: | --- | --- | --- |',
+    redemptionRows,
+    '',
+    '## Local commands after observation',
+    '',
+    '```powershell',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --template "<private-baseline-input.json>"',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --verify "<public-baseline-packet.json>"',
+    '```',
+    '',
+    'If the packet is blocked, fix the private observation data locally and regenerate the public packet. Do not edit a public packet by hand.',
+  ].join('\n')
+  assertPublicSafe(body, 'shop_pilot_baseline_worksheet_private_value')
+  return body
+}
+
 export function renderShopPilotBaselinePacketMarkdown(packet) {
   validateShopPilotBaselinePacket(packet)
   const failures = packet.failures.length ? packet.failures.map((failure) => `- ${failure}`).join('\n') : '- none'
@@ -538,6 +621,7 @@ function parseArgs(argv) {
     markdownOutput: null,
     verify: null,
     template: null,
+    worksheetOutput: null,
     selfTest: false,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -547,6 +631,7 @@ function parseArgs(argv) {
     else if (arg === '--markdown-output') args.markdownOutput = argv[++index]
     else if (arg === '--verify') args.verify = argv[++index] || null
     else if (arg === '--template') args.template = argv[++index] || null
+    else if (arg === '--worksheet-output') args.worksheetOutput = argv[++index] || null
     else if (arg === '--self-test') args.selfTest = true
     else fail(`shop_pilot_baseline_unknown_arg:${arg}`)
   }
@@ -559,14 +644,29 @@ async function main() {
     console.log(JSON.stringify(runSelfTest()))
     return
   }
-  if (args.template) {
-    const content = `${JSON.stringify(baselineInputTemplate(), null, 2)}\n`
-    await writeOutput(args.template, content)
+  if (args.template || args.worksheetOutput) {
+    let output = null
+    let outputDigest = null
+    let worksheetOutput = null
+    let worksheetDigest = null
+    if (args.template) {
+      const content = `${JSON.stringify(baselineInputTemplate(), null, 2)}\n`
+      output = await writeOutput(args.template, content)
+      outputDigest = digest(content)
+    }
+    if (args.worksheetOutput) {
+      const worksheet = `${renderShopPilotBaselineWorksheetMarkdown()}\n`
+      worksheetOutput = await writeOutput(args.worksheetOutput, worksheet)
+      worksheetDigest = digest(worksheet)
+    }
     console.log(JSON.stringify({
       ok: true,
       contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
-      output: resolve(args.template),
-      digest: digest(content),
+      output,
+      digest: outputDigest,
+      worksheetContract: SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT,
+      worksheetOutput,
+      worksheetDigest,
       externalWritesPerformed: false,
     }))
     return

@@ -8,9 +8,11 @@ import test from 'node:test'
 import {
   SHOP_PILOT_BASELINE_INPUT_CONTRACT,
   SHOP_PILOT_BASELINE_PACKET_CONTRACT,
+  SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT,
   baselineInputTemplate,
   buildShopPilotBaselinePacket,
   renderShopPilotBaselinePacketMarkdown,
+  renderShopPilotBaselineWorksheetMarkdown,
   validateShopPilotBaselinePacket,
 } from './prepare_shop_pilot_baseline_packet.mjs'
 
@@ -111,20 +113,35 @@ test('renders Markdown without private values or promotion claims', () => {
   assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation/i)
 })
 
+test('renders a local owner worksheet without private values or promotion claims', () => {
+  const markdown = renderShopPilotBaselineWorksheetMarkdown()
+  assert.match(markdown, /Shop Pilot Owner-Observed Baseline Worksheet/)
+  assert.match(markdown, new RegExp(SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT))
+  assert.match(markdown, /At least 3 uninterrupted manual order runs/)
+  assert.match(markdown, /node tools\/prepare_shop_pilot_baseline_packet\.mjs --input/)
+  assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation|sk-proj-|ghp_/i)
+})
+
 test('template is blank and CLI generates metadata-only packet output', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-baseline-'))
   try {
     const templatePath = join(parent, 'baseline-input.private.json')
+    const worksheetPath = join(parent, 'baseline-worksheet.private.md')
     const inputPath = join(parent, 'filled-baseline.private.json')
     const packetPath = join(parent, 'baseline-packet.json')
     const markdownPath = join(parent, 'baseline-packet.md')
     const tool = resolve('tools/prepare_shop_pilot_baseline_packet.mjs')
 
-    const template = spawnSync(process.execPath, [tool, '--template', templatePath], { encoding: 'utf8' })
+    const template = spawnSync(process.execPath, [tool, '--template', templatePath, '--worksheet-output', worksheetPath], { encoding: 'utf8' })
     assert.equal(template.status, 0, template.stderr)
+    const templateResult = JSON.parse(template.stdout)
+    assert.equal(templateResult.worksheetContract, SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT)
     const templateJson = JSON.parse(await readFile(templatePath, 'utf8'))
     assert.deepEqual(templateJson, baselineInputTemplate())
     assert.equal(templateJson.businessName, '')
+    const worksheet = await readFile(worksheetPath, 'utf8')
+    assert.match(worksheet, /Manual order runs/)
+    assert.doesNotMatch(worksheet, /Private Spa Sample|Private Operator|owner@example|sk-proj-|ghp_/i)
 
     const templateOverwrite = spawnSync(process.execPath, [tool, '--template', templatePath], { encoding: 'utf8' })
     assert.notEqual(templateOverwrite.status, 0)
