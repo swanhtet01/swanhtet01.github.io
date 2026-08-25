@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import test from 'node:test'
+
+import {
+  SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+  SHOP_PILOT_BASELINE_PACKET_CONTRACT,
+  baselineInputTemplate,
+  buildShopPilotBaselinePacket,
+  renderShopPilotBaselinePacketMarkdown,
+  validateShopPilotBaselinePacket,
+} from './prepare_shop_pilot_baseline_packet.mjs'
+
+function input(overrides = {}) {
+  return {
+    contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+    product: 'shop',
+    pilotMode: 'owner_named',
+    verticalPack: 'spa-services',
+    observedAt: '2026-08-25T08:00:00.000Z',
+    businessName: 'Private Spa Sample',
+    namedOperator: 'Private Operator',
+    operatorRole: 'Shop manager',
+    founderObserver: 'Founder',
+    observationPlace: 'Private shop floor',
+    processSummary: 'Owner records package sale and redemption in a notebook, then closes the day manually.',
+    processStartsAt: 'Client asks for a prepaid package',
+    processEndsAt: 'Payment reconciled, treatment completed, balance updated, and book closed',
+    correctionPath: 'Owner crosses out the wrong entry and writes a correction beside the original record',
+    recordSystem: 'Notebook and phone gallery',
+    observedOrderRuns: [
+      { runId: 'order-run-001', observedAt: '2026-08-25T08:01:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 7, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'order-run-002', observedAt: '2026-08-25T08:20:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 8, interrupted: false, errorOccurred: true, errorCostLabel: 'one correction before final balance' },
+      { runId: 'order-run-003', observedAt: '2026-08-25T08:40:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 9, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    observedRedemptionRuns: [
+      { runId: 'redemption-run-001', observedAt: '2026-08-25T09:01:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 2, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-002', observedAt: '2026-08-25T09:20:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 3, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    weeklyOrders: 120,
+    claimedMedianMinutesPerOrder: 8,
+    weeklyExceptionCount: 12,
+    closeMinutesPerDay: 45,
+    clientImportRowCount: 40,
+    weeklyPackageSales: 12,
+    weeklyTreatmentRedemptions: 24,
+    claimedMedianMinutesPerRedemption: 3,
+    weeklyPackageCorrectionCount: 2,
+    observedErrorRunCount: 1,
+    totalObservedErrorCostLabel: 'one manual correction, no monetary claim',
+    ownerConfirmedBaseline: true,
+    operatorAgreesReviewEveryRun: true,
+    proposedPilotStartDate: '2026-08-31',
+    reviewDate: '2026-09-04',
+    noSuperMegaDemoMeasured: true,
+    noExternalEffects: true,
+    ...overrides,
+  }
+}
+
+test('builds a public-safe baseline packet from private owner-observed input', () => {
+  const packet = buildShopPilotBaselinePacket(input(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(packet.contract, SHOP_PILOT_BASELINE_PACKET_CONTRACT)
+  assert.equal(packet.status, 'baseline_ready_for_private_pilot_handoff')
+  assert.equal(packet.ok, true)
+  assert.equal(packet.metrics.observedOrderRunCount, 3)
+  assert.equal(packet.metrics.uninterruptedOrderRunCount, 3)
+  assert.equal(packet.metrics.medianMinutesPerOrder, 8)
+  assert.equal(packet.metrics.observedOrderErrorRunCount, 1)
+  assert.equal(packet.metrics.medianMinutesPerRedemption, 3)
+  assert.equal(packet.publicIdentityIncluded, false)
+  assert.equal(packet.controls.externalWritesPerformed, false)
+  assert.equal(validateShopPilotBaselinePacket(packet), packet)
+  assert.doesNotMatch(JSON.stringify(packet), /Private Spa Sample|Private Operator|client request began|Notebook/i)
+})
+
+test('blocks mismatched medians, interrupted evidence, and wrong review window without leaking identity', () => {
+  const interruptedRuns = input({
+    claimedMedianMinutesPerOrder: 7,
+    reviewDate: '2026-09-05',
+    observedOrderRuns: [
+      ...input().observedOrderRuns.slice(0, 2),
+      { ...input().observedOrderRuns[2], interrupted: true },
+    ],
+  })
+  const packet = buildShopPilotBaselinePacket(interruptedRuns, { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(packet.ok, false)
+  assert.equal(packet.status, 'blocked_collect_more_private_baseline')
+  assert.ok(packet.failures.includes('order_observed_runs_below_three'))
+  assert.ok(packet.failures.includes('claimed_order_median_mismatch'))
+  assert.ok(packet.failures.includes('review_date_must_close_five_day_plan'))
+  assert.doesNotMatch(JSON.stringify(packet), /Private Spa Sample|Private Operator/)
+  assert.equal(validateShopPilotBaselinePacket(packet), packet)
+})
+
+test('rejects credential/contact shapes in private input before packet generation', () => {
+  assert.throws(() => buildShopPilotBaselinePacket(input({ businessName: 'owner@example.invalid' })), /contact_detail_rejected/)
+  assert.throws(() => buildShopPilotBaselinePacket(input({ namedOperator: '+959123456789' })), /contact_detail_rejected/)
+  assert.throws(() => buildShopPilotBaselinePacket(input({ recordSystem: 'postgres://user:pass@example.invalid/db' })), /credential_shape/)
+})
+
+test('renders Markdown without private values or promotion claims', () => {
+  const markdown = renderShopPilotBaselinePacketMarkdown(buildShopPilotBaselinePacket(input(), { generatedAt: '2026-08-25T00:00:00.000Z' }))
+  assert.match(markdown, /Shop Pilot Baseline Packet/)
+  assert.match(markdown, /Median minutes per order: 8/)
+  assert.match(markdown, /No business name, operator name/)
+  assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation/i)
+})
+
+test('template is blank and CLI generates metadata-only packet output', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-baseline-'))
+  try {
+    const templatePath = join(parent, 'baseline-input.private.json')
+    const inputPath = join(parent, 'filled-baseline.private.json')
+    const packetPath = join(parent, 'baseline-packet.json')
+    const markdownPath = join(parent, 'baseline-packet.md')
+    const tool = resolve('tools/prepare_shop_pilot_baseline_packet.mjs')
+
+    const template = spawnSync(process.execPath, [tool, '--template', templatePath], { encoding: 'utf8' })
+    assert.equal(template.status, 0, template.stderr)
+    const templateJson = JSON.parse(await readFile(templatePath, 'utf8'))
+    assert.deepEqual(templateJson, baselineInputTemplate())
+    assert.equal(templateJson.businessName, '')
+
+    await writeFile(inputPath, `${JSON.stringify(input(), null, 2)}\n`)
+    const generated = spawnSync(process.execPath, [tool, '--input', inputPath, '--output', packetPath, '--markdown-output', markdownPath], { encoding: 'utf8' })
+    assert.equal(generated.status, 0, generated.stderr)
+    assert.equal(JSON.parse(generated.stdout).status, 'baseline_ready_for_private_pilot_handoff')
+    assert.doesNotMatch(generated.stdout, /Private Spa Sample|Private Operator/)
+
+    const verified = spawnSync(process.execPath, [tool, '--verify', packetPath], { encoding: 'utf8' })
+    assert.equal(verified.status, 0, verified.stderr)
+    assert.equal(JSON.parse(verified.stdout).status, 'baseline_ready_for_private_pilot_handoff')
+    assert.doesNotMatch(await readFile(markdownPath, 'utf8'), /Private Spa Sample|Private Operator/)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})

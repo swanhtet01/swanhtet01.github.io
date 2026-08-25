@@ -112,7 +112,8 @@
         ],
         "tests": [
           "npm run client:pilot:handoff:self-test",
-          "npm run client:pilot:workspace:self-test"
+          "npm run client:pilot:workspace:self-test",
+          "npm run shop:pilot:baseline-packet:self-test"
         ]
       },
       "closure": {

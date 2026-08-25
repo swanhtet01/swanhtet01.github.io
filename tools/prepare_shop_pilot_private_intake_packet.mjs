@@ -49,6 +49,8 @@ const REQUIRED_SCRIPTS = {
   'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
   'shop:pilot:intake-packet': 'node tools/prepare_shop_pilot_private_intake_packet.mjs',
   'shop:pilot:intake-packet:self-test': 'node --test tools/prepare_shop_pilot_private_intake_packet.test.mjs && node tools/prepare_shop_pilot_private_intake_packet.mjs --self-test',
+  'shop:pilot:baseline-packet': 'node tools/prepare_shop_pilot_baseline_packet.mjs',
+  'shop:pilot:baseline-packet:self-test': 'node --test tools/prepare_shop_pilot_baseline_packet.test.mjs && node tools/prepare_shop_pilot_baseline_packet.mjs --self-test',
 }
 const SAFE_CHECK_COMMANDS = [
   'npm.cmd run client:pilot:workspace:self-test',

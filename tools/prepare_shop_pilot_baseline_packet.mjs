@@ -1,0 +1,609 @@
+#!/usr/bin/env node
+
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+export const SHOP_PILOT_BASELINE_INPUT_CONTRACT = 'supermega.shop.pilot_baseline_input.v1'
+export const SHOP_PILOT_BASELINE_PACKET_CONTRACT = 'supermega.shop.pilot_baseline_packet.v1'
+
+const PRODUCT = 'shop'
+const PILOT_MODE = 'owner_named'
+const VERTICAL_PACK = 'spa-services'
+const MIN_OBSERVED_RUNS = 3
+const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
+const ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const SECRET_PATTERNS = [
+  /sk-[A-Za-z0-9_-]{20,}/,
+  /sk-proj-[A-Za-z0-9_-]{20,}/,
+  /ghp_[A-Za-z0-9]{20,}/,
+  /github_pat_[A-Za-z0-9_]{20,}/,
+  /sb_secret_[A-Za-z0-9_-]{20,}/,
+  /postgres(?:ql)?:\/\/[^"\s]+/i,
+  /https?:\/\/[^/\s:@]+:[^/\s@]+@/i,
+  /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PRIVATE )?PRIVATE KEY-----/,
+]
+const PUBLIC_PRIVATE_VALUE_PATTERNS = [
+  /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu,
+  /(?<![A-Za-z0-9])(?:\+?95|09)[\s().-]*\d(?:[\s().-]*\d){6,12}(?![A-Za-z0-9])/u,
+]
+const FALSE_CONTROL_FIELDS = [
+  'externalWritesPerformed',
+  'customerContactPerformed',
+  'paymentAccepted',
+  'stockMovementPerformed',
+  'serverWritePerformed',
+  'hostedWritePerformed',
+  'deploymentPerformed',
+  'managedActivationPerformed',
+  'privateIdentityExposed',
+]
+
+function fail(code) {
+  throw new Error(code)
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function canonicalJson(value) {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value)
+  if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (isRecord(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`
+  fail('shop_pilot_baseline_value_invalid')
+}
+
+function sha256(value) {
+  return createHash('sha256').update(String(value || '').replace(/\r\n?/g, '\n')).digest('hex')
+}
+
+function digest(value) {
+  return `sha256:${sha256(value)}`
+}
+
+function canonicalDigest(value) {
+  return digest(canonicalJson(value))
+}
+
+function assertNoCredentialShape(value, code = 'shop_pilot_baseline_credential_shape') {
+  const text = typeof value === 'string' ? value : JSON.stringify(value || {})
+  if (SECRET_PATTERNS.some((pattern) => pattern.test(text))) fail(code)
+}
+
+function assertPublicSafe(value, code = 'shop_pilot_baseline_public_private_value') {
+  const text = typeof value === 'string' ? value : JSON.stringify(value || {})
+  assertNoCredentialShape(text, code)
+  if (PUBLIC_PRIVATE_VALUE_PATTERNS.some((pattern) => pattern.test(text))) fail(code)
+}
+
+function text(value, field, max = 240) {
+  const normalized = String(value || '').trim().replace(/\s+/g, ' ')
+  if (!normalized || normalized.length > max || /[\u0000-\u001f\u007f]/.test(normalized)) fail(`${field}_invalid`)
+  assertNoCredentialShape(normalized, `${field}_credential_shape`)
+  if (PUBLIC_PRIVATE_VALUE_PATTERNS.some((pattern) => pattern.test(normalized))) fail(`${field}_contact_detail_rejected`)
+  return normalized
+}
+
+function optionalText(value, field, max = 160) {
+  if (value === null || value === undefined || value === '') return null
+  return text(value, field, max)
+}
+
+function bool(value, field) {
+  if (typeof value !== 'boolean') fail(`${field}_invalid`)
+  return value
+}
+
+function exactTrue(value, field) {
+  if (value !== true) fail(`${field}_required`)
+  return true
+}
+
+function numberValue(value, field, { min = 0, max = Number.MAX_SAFE_INTEGER, integer = false } = {}) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+    fail(`${field}_invalid`)
+  }
+  return Math.round(value * 1000) / 1000
+}
+
+function iso(value, field) {
+  const normalized = text(value, field, 40)
+  if (!ISO_PATTERN.test(normalized) || new Date(Date.parse(normalized)).toISOString() !== normalized) fail(`${field}_invalid`)
+  return normalized
+}
+
+function dateOnly(value, field) {
+  const normalized = text(value, field, 10)
+  const instant = Date.parse(`${normalized}T00:00:00.000Z`)
+  if (!DATE_PATTERN.test(normalized) || !Number.isFinite(instant) || new Date(instant).toISOString().slice(0, 10) !== normalized) {
+    fail(`${field}_invalid`)
+  }
+  return normalized
+}
+
+function plusDays(date, days) {
+  const instant = Date.parse(`${date}T00:00:00.000Z`) + (days * 86_400_000)
+  return new Date(instant).toISOString().slice(0, 10)
+}
+
+function median(values) {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const raw = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  return Math.round(raw * 1000) / 1000
+}
+
+function sameNumber(actual, expected) {
+  return Math.abs(Number(actual) - Number(expected)) < 0.001
+}
+
+function normalizeObservedRun(run, field) {
+  if (!isRecord(run)) fail(`${field}_run_invalid`)
+  return {
+    runId: text(run.runId, `${field}_run_id`, 80),
+    observedAt: iso(run.observedAt, `${field}_observed_at`),
+    startedWhen: text(run.startedWhen, `${field}_started_when`, 120),
+    endedWhen: text(run.endedWhen, `${field}_ended_when`, 120),
+    durationMinutes: numberValue(run.durationMinutes, `${field}_duration_minutes`, { min: 0.1, max: 1_440 }),
+    interrupted: bool(run.interrupted, `${field}_interrupted`),
+    errorOccurred: bool(run.errorOccurred, `${field}_error_occurred`),
+    errorCostLabel: optionalText(run.errorCostLabel, `${field}_error_cost_label`, 160),
+  }
+}
+
+function normalizeRunSet(value, field) {
+  if (!Array.isArray(value) || value.length < MIN_OBSERVED_RUNS || value.length > 100) fail(`${field}_runs_invalid`)
+  const runs = value.map((run) => normalizeObservedRun(run, field))
+  const ids = new Set()
+  for (const run of runs) {
+    if (ids.has(run.runId)) fail(`${field}_run_duplicate`)
+    ids.add(run.runId)
+  }
+  return runs
+}
+
+function normalizeBaselineInput(input) {
+  assertNoCredentialShape(input)
+  if (!isRecord(input)) fail('shop_pilot_baseline_input_required')
+  if (input.contract !== SHOP_PILOT_BASELINE_INPUT_CONTRACT) fail('shop_pilot_baseline_contract_invalid')
+  if (input.product !== PRODUCT) fail('shop_pilot_baseline_product_invalid')
+  if (input.pilotMode !== PILOT_MODE) fail('shop_pilot_baseline_pilot_mode_invalid')
+  if (input.verticalPack !== VERTICAL_PACK) fail('shop_pilot_baseline_vertical_pack_invalid')
+  const proposedPilotStartDate = dateOnly(input.proposedPilotStartDate, 'shop_pilot_baseline_start_date')
+  const reviewDate = dateOnly(input.reviewDate, 'shop_pilot_baseline_review_date')
+  const observedOrderRuns = normalizeRunSet(input.observedOrderRuns, 'shop_pilot_baseline_order')
+  const observedRedemptionRuns = normalizeRunSet(input.observedRedemptionRuns, 'shop_pilot_baseline_redemption')
+  const normalized = {
+    contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+    product: PRODUCT,
+    pilotMode: PILOT_MODE,
+    verticalPack: VERTICAL_PACK,
+    observedAt: iso(input.observedAt, 'shop_pilot_baseline_observed_at'),
+    businessName: text(input.businessName, 'shop_pilot_baseline_business_name', 160),
+    namedOperator: text(input.namedOperator, 'shop_pilot_baseline_named_operator', 160),
+    operatorRole: text(input.operatorRole, 'shop_pilot_baseline_operator_role', 120),
+    founderObserver: text(input.founderObserver, 'shop_pilot_baseline_founder_observer', 120),
+    observationPlace: text(input.observationPlace, 'shop_pilot_baseline_observation_place', 160),
+    processSummary: text(input.processSummary, 'shop_pilot_baseline_process_summary', 360),
+    processStartsAt: text(input.processStartsAt, 'shop_pilot_baseline_process_starts_at', 180),
+    processEndsAt: text(input.processEndsAt, 'shop_pilot_baseline_process_ends_at', 180),
+    correctionPath: text(input.correctionPath, 'shop_pilot_baseline_correction_path', 240),
+    recordSystem: text(input.recordSystem, 'shop_pilot_baseline_record_system', 160),
+    observedOrderRuns,
+    observedRedemptionRuns,
+    weeklyOrders: numberValue(input.weeklyOrders, 'shop_pilot_baseline_weekly_orders', { min: 1, max: 100_000, integer: true }),
+    claimedMedianMinutesPerOrder: numberValue(input.claimedMedianMinutesPerOrder, 'shop_pilot_baseline_claimed_order_median', { min: 0.1, max: 1_440 }),
+    weeklyExceptionCount: numberValue(input.weeklyExceptionCount, 'shop_pilot_baseline_weekly_exception_count', { min: 0, max: 100_000, integer: true }),
+    closeMinutesPerDay: numberValue(input.closeMinutesPerDay, 'shop_pilot_baseline_close_minutes_per_day', { min: 0, max: 1_440 }),
+    clientImportRowCount: numberValue(input.clientImportRowCount, 'shop_pilot_baseline_client_import_row_count', { min: 1, max: 100_000, integer: true }),
+    weeklyPackageSales: numberValue(input.weeklyPackageSales, 'shop_pilot_baseline_weekly_package_sales', { min: 1, max: 100_000, integer: true }),
+    weeklyTreatmentRedemptions: numberValue(input.weeklyTreatmentRedemptions, 'shop_pilot_baseline_weekly_treatment_redemptions', { min: 1, max: 100_000, integer: true }),
+    claimedMedianMinutesPerRedemption: numberValue(input.claimedMedianMinutesPerRedemption, 'shop_pilot_baseline_claimed_redemption_median', { min: 0.1, max: 1_440 }),
+    weeklyPackageCorrectionCount: numberValue(input.weeklyPackageCorrectionCount, 'shop_pilot_baseline_weekly_package_correction_count', { min: 0, max: 100_000, integer: true }),
+    observedErrorRunCount: numberValue(input.observedErrorRunCount, 'shop_pilot_baseline_observed_error_run_count', { min: 0, max: 100, integer: true }),
+    totalObservedErrorCostLabel: optionalText(input.totalObservedErrorCostLabel, 'shop_pilot_baseline_error_cost_label', 180),
+    ownerConfirmedBaseline: exactTrue(input.ownerConfirmedBaseline, 'shop_pilot_baseline_owner_confirmed'),
+    operatorAgreesReviewEveryRun: exactTrue(input.operatorAgreesReviewEveryRun, 'shop_pilot_baseline_operator_review'),
+    proposedPilotStartDate,
+    reviewDate,
+    noSuperMegaDemoMeasured: exactTrue(input.noSuperMegaDemoMeasured, 'shop_pilot_baseline_no_demo_measured'),
+    noExternalEffects: exactTrue(input.noExternalEffects, 'shop_pilot_baseline_no_external_effects'),
+  }
+  return normalized
+}
+
+function assessBaseline(normalized) {
+  const failures = []
+  const orderRuns = normalized.observedOrderRuns.filter((run) => run.interrupted === false)
+  const redemptionRuns = normalized.observedRedemptionRuns.filter((run) => run.interrupted === false)
+  const orderMedian = median(orderRuns.map((run) => run.durationMinutes))
+  const redemptionMedian = median(redemptionRuns.map((run) => run.durationMinutes))
+  const observedErrorRunCount = normalized.observedOrderRuns.filter((run) => run.errorOccurred).length
+  if (orderRuns.length < MIN_OBSERVED_RUNS) failures.push('order_observed_runs_below_three')
+  if (redemptionRuns.length < MIN_OBSERVED_RUNS) failures.push('redemption_observed_runs_below_three')
+  if (!sameNumber(normalized.claimedMedianMinutesPerOrder, orderMedian)) failures.push('claimed_order_median_mismatch')
+  if (!sameNumber(normalized.claimedMedianMinutesPerRedemption, redemptionMedian)) failures.push('claimed_redemption_median_mismatch')
+  if (normalized.observedErrorRunCount !== observedErrorRunCount) failures.push('observed_error_count_mismatch')
+  if (normalized.reviewDate !== plusDays(normalized.proposedPilotStartDate, 4)) failures.push('review_date_must_close_five_day_plan')
+  return {
+    failures,
+    orderRuns,
+    redemptionRuns,
+    orderMedian,
+    redemptionMedian,
+    observedErrorRunCount,
+  }
+}
+
+export function buildShopPilotBaselinePacket(input, { generatedAt = new Date().toISOString() } = {}) {
+  const normalized = normalizeBaselineInput(input)
+  const assessment = assessBaseline(normalized)
+  const ready = assessment.failures.length === 0
+  const privateInputDigest = canonicalDigest(normalized)
+  const packetWithoutDigest = {
+    contract: SHOP_PILOT_BASELINE_PACKET_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
+    generatedAt: iso(generatedAt, 'shop_pilot_baseline_generated_at'),
+    product: PRODUCT,
+    pilotMode: PILOT_MODE,
+    verticalPack: VERTICAL_PACK,
+    status: ready ? 'baseline_ready_for_private_pilot_handoff' : 'blocked_collect_more_private_baseline',
+    ok: ready,
+    failures: assessment.failures,
+    privateInputDigest,
+    privateInputRetainedByTool: false,
+    publicIdentityIncluded: false,
+    metrics: {
+      observedOrderRunCount: normalized.observedOrderRuns.length,
+      uninterruptedOrderRunCount: assessment.orderRuns.length,
+      medianMinutesPerOrder: assessment.orderMedian,
+      weeklyOrders: normalized.weeklyOrders,
+      weeklyExceptionCount: normalized.weeklyExceptionCount,
+      closeMinutesPerDay: normalized.closeMinutesPerDay,
+      observedOrderErrorRunCount: assessment.observedErrorRunCount,
+      clientImportRowCount: normalized.clientImportRowCount,
+      weeklyPackageSales: normalized.weeklyPackageSales,
+      weeklyTreatmentRedemptions: normalized.weeklyTreatmentRedemptions,
+      observedRedemptionRunCount: normalized.observedRedemptionRuns.length,
+      uninterruptedRedemptionRunCount: assessment.redemptionRuns.length,
+      medianMinutesPerRedemption: assessment.redemptionMedian,
+      weeklyPackageCorrectionCount: normalized.weeklyPackageCorrectionCount,
+    },
+    ownerConfirmations: {
+      ownerConfirmedBaseline: true,
+      operatorAgreesReviewEveryRun: true,
+      noSuperMegaDemoMeasured: true,
+      noExternalEffects: true,
+    },
+    pilotWindow: {
+      proposedPilotStartDate: normalized.proposedPilotStartDate,
+      reviewDate: normalized.reviewDate,
+      durationDays: 5,
+    },
+    nextAction: ready
+      ? 'Use this private baseline digest in the Shop pilot handoff, then keep raw identity only in the private workspace.'
+      : 'Collect more owner-observed manual baseline evidence before Shop pilot day one.',
+    controls: Object.fromEntries(FALSE_CONTROL_FIELDS.map((field) => [field, false])),
+  }
+  assertPublicSafe(packetWithoutDigest)
+  return {
+    ...packetWithoutDigest,
+    digest: digest(canonicalJson(packetWithoutDigest)),
+  }
+}
+
+export function validateShopPilotBaselinePacket(packet) {
+  assertPublicSafe(packet)
+  if (!isRecord(packet)) fail('shop_pilot_baseline_packet_required')
+  if (packet.contract !== SHOP_PILOT_BASELINE_PACKET_CONTRACT) fail('shop_pilot_baseline_packet_contract_invalid')
+  if (packet.digestScope !== 'utf8_compact_json_without_digest') fail('shop_pilot_baseline_packet_digest_scope_invalid')
+  iso(packet.generatedAt, 'shop_pilot_baseline_packet_generated_at')
+  if (packet.product !== PRODUCT || packet.pilotMode !== PILOT_MODE || packet.verticalPack !== VERTICAL_PACK) {
+    fail('shop_pilot_baseline_packet_scope_invalid')
+  }
+  if (!['baseline_ready_for_private_pilot_handoff', 'blocked_collect_more_private_baseline'].includes(packet.status)) {
+    fail('shop_pilot_baseline_packet_status_invalid')
+  }
+  if ((packet.status === 'baseline_ready_for_private_pilot_handoff') !== (packet.ok === true)) {
+    fail('shop_pilot_baseline_packet_ok_invalid')
+  }
+  if (!Array.isArray(packet.failures) || (packet.ok === true && packet.failures.length !== 0)) {
+    fail('shop_pilot_baseline_packet_failures_invalid')
+  }
+  if (!DIGEST_PATTERN.test(packet.privateInputDigest || '') || packet.privateInputRetainedByTool !== false || packet.publicIdentityIncluded !== false) {
+    fail('shop_pilot_baseline_packet_privacy_invalid')
+  }
+  const metrics = packet.metrics
+  if (!isRecord(metrics)
+    || metrics.observedOrderRunCount < MIN_OBSERVED_RUNS
+    || metrics.observedRedemptionRunCount < MIN_OBSERVED_RUNS
+    || metrics.uninterruptedOrderRunCount > metrics.observedOrderRunCount
+    || metrics.uninterruptedRedemptionRunCount > metrics.observedRedemptionRunCount
+    || metrics.weeklyOrders < 1
+    || metrics.clientImportRowCount < 1
+    || metrics.weeklyPackageSales < 1
+    || metrics.weeklyTreatmentRedemptions < 1) {
+    fail('shop_pilot_baseline_packet_metrics_invalid')
+  }
+  if (packet.ok === true && (metrics.uninterruptedOrderRunCount < MIN_OBSERVED_RUNS || metrics.uninterruptedRedemptionRunCount < MIN_OBSERVED_RUNS)) {
+    fail('shop_pilot_baseline_packet_ready_metrics_invalid')
+  }
+  const confirmations = packet.ownerConfirmations
+  if (!isRecord(confirmations)
+    || confirmations.ownerConfirmedBaseline !== true
+    || confirmations.operatorAgreesReviewEveryRun !== true
+    || confirmations.noSuperMegaDemoMeasured !== true
+    || confirmations.noExternalEffects !== true) {
+    fail('shop_pilot_baseline_packet_confirmations_invalid')
+  }
+  const reviewWindowValid = isRecord(packet.pilotWindow)
+    && packet.pilotWindow.durationDays === 5
+    && packet.pilotWindow.reviewDate === plusDays(packet.pilotWindow.proposedPilotStartDate, 4)
+  if (!reviewWindowValid
+    && (packet.ok === true || !packet.failures.includes('review_date_must_close_five_day_plan'))) {
+    fail('shop_pilot_baseline_packet_window_invalid')
+  }
+  if (!isRecord(packet.controls) || FALSE_CONTROL_FIELDS.some((field) => packet.controls[field] !== false)) {
+    fail('shop_pilot_baseline_packet_controls_invalid')
+  }
+  if (!DIGEST_PATTERN.test(packet.digest || '')) fail('shop_pilot_baseline_packet_digest_invalid')
+  const copy = { ...packet }
+  delete copy.digest
+  if (packet.digest !== digest(canonicalJson(copy))) fail('shop_pilot_baseline_packet_digest_mismatch')
+  return packet
+}
+
+export function baselineInputTemplate() {
+  return {
+    contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+    product: PRODUCT,
+    pilotMode: PILOT_MODE,
+    verticalPack: VERTICAL_PACK,
+    observedAt: '',
+    businessName: '',
+    namedOperator: '',
+    operatorRole: '',
+    founderObserver: '',
+    observationPlace: '',
+    processSummary: '',
+    processStartsAt: '',
+    processEndsAt: '',
+    correctionPath: '',
+    recordSystem: '',
+    observedOrderRuns: [
+      { runId: 'order-run-001', observedAt: '', startedWhen: '', endedWhen: '', durationMinutes: null, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'order-run-002', observedAt: '', startedWhen: '', endedWhen: '', durationMinutes: null, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'order-run-003', observedAt: '', startedWhen: '', endedWhen: '', durationMinutes: null, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    observedRedemptionRuns: [
+      { runId: 'redemption-run-001', observedAt: '', startedWhen: '', endedWhen: '', durationMinutes: null, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-002', observedAt: '', startedWhen: '', endedWhen: '', durationMinutes: null, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-003', observedAt: '', startedWhen: '', endedWhen: '', durationMinutes: null, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    weeklyOrders: null,
+    claimedMedianMinutesPerOrder: null,
+    weeklyExceptionCount: null,
+    closeMinutesPerDay: null,
+    clientImportRowCount: null,
+    weeklyPackageSales: null,
+    weeklyTreatmentRedemptions: null,
+    claimedMedianMinutesPerRedemption: null,
+    weeklyPackageCorrectionCount: null,
+    observedErrorRunCount: null,
+    totalObservedErrorCostLabel: null,
+    ownerConfirmedBaseline: false,
+    operatorAgreesReviewEveryRun: false,
+    proposedPilotStartDate: '',
+    reviewDate: '',
+    noSuperMegaDemoMeasured: false,
+    noExternalEffects: false,
+  }
+}
+
+export function renderShopPilotBaselinePacketMarkdown(packet) {
+  validateShopPilotBaselinePacket(packet)
+  const failures = packet.failures.length ? packet.failures.map((failure) => `- ${failure}`).join('\n') : '- none'
+  return [
+    '# Shop Pilot Baseline Packet',
+    '',
+    `Contract: \`${packet.contract}\``,
+    `Digest: \`${packet.digest}\``,
+    `Status: \`${packet.status}\``,
+    `Private input digest: \`${packet.privateInputDigest}\``,
+    '',
+    '## Public-safe metrics',
+    '',
+    `Observed order runs: ${packet.metrics.uninterruptedOrderRunCount}/${packet.metrics.observedOrderRunCount}`,
+    `Median minutes per order: ${packet.metrics.medianMinutesPerOrder}`,
+    `Weekly orders: ${packet.metrics.weeklyOrders}`,
+    `Weekly exceptions: ${packet.metrics.weeklyExceptionCount}`,
+    `Daily close minutes: ${packet.metrics.closeMinutesPerDay}`,
+    `Client import rows: ${packet.metrics.clientImportRowCount}`,
+    `Weekly package sales: ${packet.metrics.weeklyPackageSales}`,
+    `Weekly treatment redemptions: ${packet.metrics.weeklyTreatmentRedemptions}`,
+    `Median minutes per redemption: ${packet.metrics.medianMinutesPerRedemption}`,
+    `Weekly package corrections: ${packet.metrics.weeklyPackageCorrectionCount}`,
+    '',
+    '## Failures',
+    '',
+    failures,
+    '',
+    '## Next action',
+    '',
+    packet.nextAction,
+    '',
+    '## Privacy and authority',
+    '',
+    'No business name, operator name, raw notes, email, phone number, credential, payment, stock movement, hosted write, or managed activation is included in this packet.',
+  ].join('\n')
+}
+
+async function readJson(path) {
+  return JSON.parse(await readFile(resolve(path || ''), 'utf8'))
+}
+
+async function writeOutput(path, content) {
+  const absolute = resolve(path)
+  await mkdir(dirname(absolute), { recursive: true })
+  await writeFile(absolute, content, { encoding: 'utf8' })
+  return absolute
+}
+
+function sampleInput(overrides = {}) {
+  const base = {
+    contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+    product: PRODUCT,
+    pilotMode: PILOT_MODE,
+    verticalPack: VERTICAL_PACK,
+    observedAt: '2026-08-25T08:00:00.000Z',
+    businessName: 'Private Spa Sample',
+    namedOperator: 'Private Operator',
+    operatorRole: 'Shop manager',
+    founderObserver: 'Founder',
+    observationPlace: 'Private shop floor',
+    processSummary: 'Owner records package sale and redemption in a notebook, then closes the day manually.',
+    processStartsAt: 'Client asks for a prepaid package',
+    processEndsAt: 'Payment reconciled, treatment completed, balance updated, and book closed',
+    correctionPath: 'Owner crosses out the wrong entry and writes a correction beside the original record',
+    recordSystem: 'Notebook and phone gallery',
+    observedOrderRuns: [
+      { runId: 'order-run-001', observedAt: '2026-08-25T08:01:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 7, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'order-run-002', observedAt: '2026-08-25T08:20:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 8, interrupted: false, errorOccurred: true, errorCostLabel: 'one correction before final balance' },
+      { runId: 'order-run-003', observedAt: '2026-08-25T08:40:00.000Z', startedWhen: 'client request began', endedWhen: 'manual book entry completed', durationMinutes: 9, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    observedRedemptionRuns: [
+      { runId: 'redemption-run-001', observedAt: '2026-08-25T09:01:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 2, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-002', observedAt: '2026-08-25T09:20:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 3, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    weeklyOrders: 120,
+    claimedMedianMinutesPerOrder: 8,
+    weeklyExceptionCount: 12,
+    closeMinutesPerDay: 45,
+    clientImportRowCount: 40,
+    weeklyPackageSales: 12,
+    weeklyTreatmentRedemptions: 24,
+    claimedMedianMinutesPerRedemption: 3,
+    weeklyPackageCorrectionCount: 2,
+    observedErrorRunCount: 1,
+    totalObservedErrorCostLabel: 'one manual correction, no monetary claim',
+    ownerConfirmedBaseline: true,
+    operatorAgreesReviewEveryRun: true,
+    proposedPilotStartDate: '2026-08-31',
+    reviewDate: '2026-09-04',
+    noSuperMegaDemoMeasured: true,
+    noExternalEffects: true,
+  }
+  return {
+    ...base,
+    ...overrides,
+  }
+}
+
+function runSelfTest() {
+  const packet = buildShopPilotBaselinePacket(sampleInput(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  validateShopPilotBaselinePacket(packet)
+  const markdown = renderShopPilotBaselinePacketMarkdown(packet)
+  if (JSON.stringify(packet).includes('Private Spa Sample') || markdown.includes('Private Operator')) {
+    fail('shop_pilot_baseline_self_test_private_output')
+  }
+  const blocked = buildShopPilotBaselinePacket(sampleInput({
+    claimedMedianMinutesPerOrder: 7,
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  if (blocked.ok !== false || !blocked.failures.includes('claimed_order_median_mismatch')) {
+    fail('shop_pilot_baseline_self_test_blocked_invalid')
+  }
+  return {
+    ok: true,
+    contract: SHOP_PILOT_BASELINE_PACKET_CONTRACT,
+    cases: 2,
+    externalWritesPerformed: false,
+  }
+}
+
+function parseArgs(argv) {
+  const args = {
+    input: null,
+    output: null,
+    markdownOutput: null,
+    verify: null,
+    template: null,
+    selfTest: false,
+  }
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === '--input') args.input = argv[++index]
+    else if (arg === '--output') args.output = argv[++index]
+    else if (arg === '--markdown-output') args.markdownOutput = argv[++index]
+    else if (arg === '--verify') args.verify = argv[++index] || null
+    else if (arg === '--template') args.template = argv[++index] || null
+    else if (arg === '--self-test') args.selfTest = true
+    else fail(`shop_pilot_baseline_unknown_arg:${arg}`)
+  }
+  return args
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2))
+  if (args.selfTest) {
+    console.log(JSON.stringify(runSelfTest()))
+    return
+  }
+  if (args.template) {
+    const content = `${JSON.stringify(baselineInputTemplate(), null, 2)}\n`
+    await writeOutput(args.template, content)
+    console.log(JSON.stringify({
+      ok: true,
+      contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+      output: resolve(args.template),
+      digest: digest(content),
+      externalWritesPerformed: false,
+    }))
+    return
+  }
+  if (args.verify) {
+    const packet = validateShopPilotBaselinePacket(await readJson(args.verify))
+    console.log(JSON.stringify({
+      ok: true,
+      contract: packet.contract,
+      status: packet.status,
+      digest: packet.digest,
+      privateIdentityIncluded: packet.publicIdentityIncluded,
+      externalWritesPerformed: false,
+    }))
+    return
+  }
+  if (!args.input) fail('shop_pilot_baseline_input_required')
+  const packet = validateShopPilotBaselinePacket(buildShopPilotBaselinePacket(await readJson(args.input)))
+  if (args.output) await writeOutput(args.output, `${JSON.stringify(packet, null, 2)}\n`)
+  if (args.markdownOutput) await writeOutput(args.markdownOutput, `${renderShopPilotBaselinePacketMarkdown(packet)}\n`)
+  if (!args.output && !args.markdownOutput) console.log(JSON.stringify(packet, null, 2))
+  else {
+    console.log(JSON.stringify({
+      ok: true,
+      contract: packet.contract,
+      status: packet.status,
+      output: args.output ? resolve(args.output) : null,
+      markdownOutput: args.markdownOutput ? resolve(args.markdownOutput) : null,
+      digest: packet.digest,
+      externalWritesPerformed: false,
+    }))
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(JSON.stringify({
+      ok: false,
+      contract: SHOP_PILOT_BASELINE_PACKET_CONTRACT,
+      error: String(error?.message || 'shop_pilot_baseline_failed').slice(0, 240),
+      externalWritesPerformed: false,
+    }))
+    process.exitCode = 1
+  })
+}
