@@ -171,6 +171,25 @@ test('requires reload retry pass before owner decision readiness', async () => {
   })
 })
 
+test('rejects phone numbers and private paths at the observed summary boundary', async () => {
+  await withWorkspace(async (workspace) => {
+    let summary = null
+    for (let index = 1; index <= 20; index += 1) {
+      summary = await recordObservedShopPilotRun({ workspace, runInput: runInput(index) })
+    }
+    for (const leakedValue of ['09 123 456 789', String.raw`C:\Users\thesw\OneDrive - BDA\private-shop-pilot`]) {
+      assert.throws(() => buildShopPilotDecisionPacket({
+        baselinePacket: baselinePacket(),
+        observedSummary: {
+          ...summary,
+          leakedValue,
+        },
+        generatedAt: '2026-08-25T00:00:00.000Z',
+      }), /shop_pilot_decision_packet_private_or_secret_shape_detected/)
+    }
+  })
+})
+
 test('renders markdown without private identity and rejects tampering', async () => {
   await withWorkspace(async (workspace) => {
     let summary = null

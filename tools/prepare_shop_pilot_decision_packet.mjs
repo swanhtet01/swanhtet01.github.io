@@ -27,6 +27,8 @@ const REQUIRED_ACCEPTED_CONSECUTIVE_RUNS = 20
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
 const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|vercel_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
+const PHONE_PATTERN = /(?<![A-Za-z0-9])(?:\+?95|09)[\s().-]*\d(?:[\s().-]*\d){6,12}(?![A-Za-z0-9])/u
+const PRIVATE_PATH_PATTERN = /(?:[A-Z]:\\\\Users\\\\|\/Users\/|\/home\/|OneDrive - )/iu
 const FALSE_CONTROL_FIELDS = Object.freeze([
   'externalWritesPerformed',
   'gitRemoteWritesPerformed',
@@ -87,7 +89,10 @@ function isRecord(value) {
 
 function assertPublicSafe(value) {
   const text = JSON.stringify(value)
-  if (SECRET_PATTERN.test(text) || EMAIL_PATTERN.test(text)) fail('shop_pilot_decision_packet_private_or_secret_shape_detected')
+  if (SECRET_PATTERN.test(text)
+    || EMAIL_PATTERN.test(text)
+    || PHONE_PATTERN.test(text)
+    || PRIVATE_PATH_PATTERN.test(text)) fail('shop_pilot_decision_packet_private_or_secret_shape_detected')
 }
 
 function finiteNumber(value, field, { min = 0, integer = false, nullable = false } = {}) {
