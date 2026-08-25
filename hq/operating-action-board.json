@@ -1,0 +1,214 @@
+{
+  "contract": "supermega.operating-action-board.v1",
+  "generatedAt": "2026-08-25T00:00:00.000Z",
+  "mode": "local_no_external_effects",
+  "products": [
+    "shop",
+    "plant",
+    "website",
+    "ecommerce"
+  ],
+  "controls": {
+    "externalWritesPerformed": false,
+    "gitRemoteWritesPerformed": false,
+    "githubWritesPerformed": false,
+    "vercelDeploymentsPerformed": false,
+    "supabaseMutationsPerformed": false,
+    "credentialValuesInspected": false,
+    "customerContactPerformed": false,
+    "paymentOrStockActionPerformed": false,
+    "managedActivationPerformed": false,
+    "privateIdentityExposed": false
+  },
+  "weeklyReport": {
+    "totalActions": 4,
+    "openActionCount": 4,
+    "closedActionCount": 0,
+    "ownerGatedCount": 2,
+    "criticalOpenCount": 1,
+    "measuredResultCount": 0,
+    "closedCycleTimeDaysMedian": null
+  },
+  "actions": [
+    {
+      "id": "release-main-protection",
+      "openedAt": "2026-08-25T00:00:00.000Z",
+      "productIds": [
+        "shop",
+        "plant",
+        "website",
+        "ecommerce"
+      ],
+      "sourceFinding": {
+        "sourceType": "release_gate",
+        "label": "GitHub main protection is not verified",
+        "evidenceRef": "supermega.github-main-protection-snapshot.v62.generated-20260825.json",
+        "evidenceDigest": "sha256:a9bcc7f2616d83685485c77edbf6d3ddeb30995a11d51b5c203833d5c8e50d7f"
+      },
+      "recommendation": "Protect GitHub main before branch push, pull request, release, or pilot activation.",
+      "severity": "critical",
+      "businessImpact": {
+        "kind": "release_risk",
+        "estimateLabel": "Unprotected main can invalidate owner-gated release authority.",
+        "measured": false
+      },
+      "owner": {
+        "role": "Founder plus Engineering",
+        "namedPrivate": false
+      },
+      "dueDate": "2026-08-25",
+      "status": "owner-gated",
+      "authority": {
+        "ownerApprovalRequired": true,
+        "externalWriteAllowed": false
+      },
+      "acceptance": {
+        "evidenceRequired": [
+          "Verified main protection snapshot with required checks present"
+        ],
+        "tests": [
+          "npm run hq:verify"
+        ]
+      },
+      "closure": {
+        "closedAt": null,
+        "closureNote": null,
+        "measuredResult": null
+      }
+    },
+    {
+      "id": "shop-owner-pilot-baseline",
+      "openedAt": "2026-08-25T00:00:00.000Z",
+      "productIds": [
+        "shop"
+      ],
+      "sourceFinding": {
+        "sourceType": "pilot_observation",
+        "label": "Shop pilot requires observed baseline before acceptance evidence",
+        "evidenceRef": "docs/pilot-kit/baseline-measurement.md",
+        "evidenceDigest": "sha256:0c73dc578fa0d85e581be53b128da2d1d9a57c215df9f42fe5456de96589b0f6"
+      },
+      "recommendation": "Capture owner-observed Shop baseline runs before day one of the five-day pilot.",
+      "severity": "high",
+      "businessImpact": {
+        "kind": "pilot_readiness",
+        "estimateLabel": "Prevents sample data from being mistaken for commercial proof.",
+        "measured": false
+      },
+      "owner": {
+        "role": "Founder plus Product",
+        "namedPrivate": false
+      },
+      "dueDate": "2026-08-26",
+      "status": "owner-gated",
+      "authority": {
+        "ownerApprovalRequired": true,
+        "externalWriteAllowed": false
+      },
+      "acceptance": {
+        "evidenceRequired": [
+          "Private baseline form with at least three observed manual runs",
+          "No identity outside private workspace"
+        ],
+        "tests": [
+          "npm run client:pilot:handoff:self-test",
+          "npm run client:pilot:workspace:self-test"
+        ]
+      },
+      "closure": {
+        "closedAt": null,
+        "closureNote": null,
+        "measuredResult": null
+      }
+    },
+    {
+      "id": "shop-plant-owned-action-loop",
+      "openedAt": "2026-08-25T00:00:00.000Z",
+      "productIds": [
+        "shop",
+        "plant"
+      ],
+      "sourceFinding": {
+        "sourceType": "audit_document",
+        "label": "Audits show analytics value but weak execution discipline",
+        "evidenceRef": "supermega.audit-to-product-workorder.v1.generated-20260825.md",
+        "evidenceDigest": "sha256:4751b9fc4b1d0a309086f9cce98255f886273b9d93250325c381182210f52b89"
+      },
+      "recommendation": "Make recommendations become owned actions with due dates, acceptance evidence, and measured results.",
+      "severity": "high",
+      "businessImpact": {
+        "kind": "trust",
+        "estimateLabel": "Converts dashboards into accountable operating behavior.",
+        "measured": false
+      },
+      "owner": {
+        "role": "Engineering plus Product",
+        "namedPrivate": false
+      },
+      "dueDate": "2026-08-27",
+      "status": "open",
+      "authority": {
+        "ownerApprovalRequired": false,
+        "externalWriteAllowed": false
+      },
+      "acceptance": {
+        "evidenceRequired": [
+          "Action model validates source finding, owner, due date, acceptance, and closure result"
+        ],
+        "tests": [
+          "npm run operating:action-board:self-test",
+          "npm run hq:verify"
+        ]
+      },
+      "closure": {
+        "closedAt": null,
+        "closureNote": null,
+        "measuredResult": null
+      }
+    },
+    {
+      "id": "plant-data-trust-source-map",
+      "openedAt": "2026-08-25T00:00:00.000Z",
+      "productIds": [
+        "plant"
+      ],
+      "sourceFinding": {
+        "sourceType": "audit_document",
+        "label": "Plant source variability can distort OEE and quality interpretation",
+        "evidenceRef": "supermega.audit-to-product-workorder.v1.generated-20260825.md",
+        "evidenceDigest": "sha256:4751b9fc4b1d0a309086f9cce98255f886273b9d93250325c381182210f52b89"
+      },
+      "recommendation": "Lock source mapping rules before treating Plant recommendations as operating evidence.",
+      "severity": "high",
+      "businessImpact": {
+        "kind": "quality",
+        "estimateLabel": "Improves confidence in OEE and quality action selection.",
+        "measured": false
+      },
+      "owner": {
+        "role": "Engineering plus Product",
+        "namedPrivate": false
+      },
+      "dueDate": "2026-08-30",
+      "status": "proposed",
+      "authority": {
+        "ownerApprovalRequired": false,
+        "externalWriteAllowed": false
+      },
+      "acceptance": {
+        "evidenceRequired": [
+          "Source mapping rules are digest-bound and duplicate quantity-like columns fail closed"
+        ],
+        "tests": [
+          "npm run plant:oee:verify",
+          "npm run plant:quality:verify"
+        ]
+      },
+      "closure": {
+        "closedAt": null,
+        "closureNote": null,
+        "measuredResult": null
+      }
+    }
+  ]
+}

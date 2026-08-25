@@ -28,7 +28,7 @@ const requiredApprovals = [
   'domain_or_publish_change',
   'managed_activation',
 ]
-const hqChain = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
+const hqChain = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operating:action-board:verify && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 
 function input(overrides = {}) {
   const packageManifest = {
@@ -48,6 +48,8 @@ function input(overrides = {}) {
       'github:main-protection:snapshot:self-test': 'node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test',
       'operator:board': 'node tools/prepare_current_operator_board.mjs',
       'operator:board:self-test': 'node --test tools/prepare_current_operator_board.test.mjs && node tools/prepare_current_operator_board.mjs --self-test',
+      'operating:action-board:verify': 'node tools/verify_operating_action_board.mjs',
+      'operating:action-board:self-test': 'node --test kernel/operating-action-board.test.mjs && node tools/verify_operating_action_board.mjs --self-test',
       'shop:pilot:intake-packet': 'node tools/prepare_shop_pilot_private_intake_packet.mjs',
       'shop:pilot:intake-packet:self-test': 'node --test tools/prepare_shop_pilot_private_intake_packet.test.mjs && node tools/prepare_shop_pilot_private_intake_packet.mjs --self-test',
       'shop:receipt:print-geometry:verify': 'node tools/verify_shop_receipt_print_geometry.mjs',
