@@ -384,10 +384,22 @@ function run(file, args, { inherit = false, allowFailure = false } = {}) {
     // complete green run is possible without permitting an unbounded process.
     timeout: 35 * 60 * 1_000,
     windowsHide: true,
-    stdio: inherit ? 'inherit' : undefined,
+    stdio: inherit ? ['ignore', 'pipe', 'pipe'] : undefined,
   })
+  const stdout = String(result.stdout || '')
+  const stderr = String(result.stderr || '')
+  if (inherit) {
+    if (stdout) process.stdout.write(stdout)
+    if (stderr) process.stderr.write(stderr)
+  }
   if (!allowFailure && (result.error || result.signal || result.status !== 0)) fail('release_handoff_command_failed')
-  return { status: result.status, stdout: String(result.stdout || '').trim() }
+  return {
+    status: result.status,
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+    signal: result.signal || null,
+    errorCode: result.error?.code || null,
+  }
 }
 
 function git(...args) {
@@ -489,6 +501,8 @@ async function prepareReleaseHandoff(output) {
 
   const verificationCommand = appVerifyCommand()
   const verified = run(verificationCommand.file, verificationCommand.args, { inherit: true, allowFailure: true })
+  if (verified.errorCode) fail(`release_handoff_app_verify_spawn_error:${verified.errorCode}`)
+  if (verified.signal) fail(`release_handoff_app_verify_signal:${verified.signal}`)
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
   if (git('rev-parse', 'HEAD') !== candidateCommit || git('status', '--porcelain=v1')) fail('release_handoff_candidate_changed_during_verify')
 
