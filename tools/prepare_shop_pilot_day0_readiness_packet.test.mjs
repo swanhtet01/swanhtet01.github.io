@@ -81,6 +81,7 @@ test('reports missing Day-0 prerequisites without allowing external effects', ()
   assert.equal(packet.day0Readiness.readyForCustomerContact, false)
   assert.equal(packet.controls.githubWritesAllowed, false)
   assert.equal(packet.controls.supabaseWritesAllowed, false)
+  assert.ok(packet.privateCommands.some((command) => command.includes('--worksheet-output "<private-baseline-worksheet.md>"')))
   assert.equal(validateShopPilotDay0ReadinessPacket(packet), packet)
 })
 
@@ -155,7 +156,9 @@ test('renders Markdown and verifies CLI packet without private values', async ()
     const verified = spawnSync(process.execPath, [resolve('tools/prepare_shop_pilot_day0_readiness_packet.mjs'), '--verify', packetPath], { encoding: 'utf8' })
     assert.equal(verified.status, 0, verified.stderr)
     assert.equal(JSON.parse(verified.stdout).status, 'blocked_owner_baseline_and_intake_required')
-    assert.doesNotMatch(await readFile(markdownPath, 'utf8'), /Private Day Zero Spa|Private Day Zero Operator|owner@example|ready for managed activation/i)
+    const markdown = await readFile(markdownPath, 'utf8')
+    assert.match(markdown, /--worksheet-output "<private-baseline-worksheet\.md>"/)
+    assert.doesNotMatch(markdown, /Private Day Zero Spa|Private Day Zero Operator|owner@example|ready for managed activation/i)
   } finally {
     await rm(parent, { recursive: true, force: true })
   }

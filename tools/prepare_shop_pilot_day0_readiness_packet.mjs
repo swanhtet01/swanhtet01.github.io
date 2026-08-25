@@ -233,7 +233,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
     ownerAction: ownerActionFor(status),
     blockers: blockersFor(status, launchGateReport),
     privateCommands: [
-      'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>"',
+      'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
       'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"',
       'npm.cmd run shop:pilot:intake-packet -- --output "<public-intake-packet.json>"',
       'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>"',
