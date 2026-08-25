@@ -42,6 +42,15 @@ export type OperationalSource = {
   updatedAt: string | null
 }
 
+export type OperationalActionability = {
+  workOrderRequired: boolean
+  ownerReviewRequired: boolean
+  ownerDueRequiredBeforeClosure: boolean
+  evidenceRequiredBeforeClosure: boolean
+  externalEffectAllowed: false
+  managedWriteAllowed: false
+}
+
 export type OperationalReportEntry = {
   id: string
   product: OperationalProduct
@@ -50,6 +59,7 @@ export type OperationalReportEntry = {
   detail: string
   count: number
   route: string
+  actionability: OperationalActionability
   sourceSurface: OperationalSurface
   sourceRevision: number | null
 }
@@ -217,6 +227,18 @@ function validateSources(value: readonly OperationalSource[], allowedProducts: r
   return value.filter((source) => required.has(source.surface)).map((source) => ({ ...source }))
 }
 
+function actionabilityFor(severity: OperationalSeverity): OperationalActionability {
+  const workOrderRequired = severity !== 'ready'
+  return {
+    workOrderRequired,
+    ownerReviewRequired: workOrderRequired,
+    ownerDueRequiredBeforeClosure: workOrderRequired,
+    evidenceRequiredBeforeClosure: workOrderRequired,
+    externalEffectAllowed: false,
+    managedWriteAllowed: false,
+  }
+}
+
 function task(
   source: OperationalSource,
   product: OperationalProduct,
@@ -228,7 +250,7 @@ function task(
   route: string,
 ): OperationalReportEntry {
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Operational report count is invalid.')
-  return { id, product, severity, label, detail, count, route, sourceSurface: source.surface, sourceRevision: source.revision }
+  return { id, product, severity, label, detail, count, route, actionability: actionabilityFor(severity), sourceSurface: source.surface, sourceRevision: source.revision }
 }
 
 function masterDimension(
@@ -816,7 +838,8 @@ export async function validateOperationalReportExport(value: unknown) {
   const sources = validateSources(artifact.sources, artifact.allowedProducts)
   const bySurface = new Map(sources.map((source) => [source.surface, source]))
   for (const entry of artifact.entries) {
-    if (!exactKeys(entry, ['id', 'product', 'severity', 'label', 'detail', 'count', 'route', 'sourceSurface', 'sourceRevision'])
+    const workOrderRequired = entry.severity !== 'ready'
+    if (!exactKeys(entry, ['id', 'product', 'severity', 'label', 'detail', 'count', 'route', 'actionability', 'sourceSurface', 'sourceRevision'])
       || !artifact.allowedProducts.includes(entry.product) || entry.sourceSurface !== productSurface[entry.product]
       || entry.sourceRevision !== bySurface.get(entry.sourceSurface)?.revision
       || typeof entry.id !== 'string' || !/^[a-z]+[.][a-z_]+$/.test(entry.id)
@@ -824,7 +847,14 @@ export async function validateOperationalReportExport(value: unknown) {
       || typeof entry.label !== 'string' || !entry.label || entry.label.length > 160
       || typeof entry.detail !== 'string' || !entry.detail || entry.detail.length > 240
       || !Number.isSafeInteger(entry.count) || entry.count < 0
-      || typeof entry.route !== 'string' || !entry.route.startsWith('/') || entry.route.startsWith('//')) {
+      || typeof entry.route !== 'string' || !entry.route.startsWith('/') || entry.route.startsWith('//')
+      || !exactKeys(entry.actionability, ['workOrderRequired', 'ownerReviewRequired', 'ownerDueRequiredBeforeClosure', 'evidenceRequiredBeforeClosure', 'externalEffectAllowed', 'managedWriteAllowed'])
+      || entry.actionability.workOrderRequired !== workOrderRequired
+      || entry.actionability.ownerReviewRequired !== workOrderRequired
+      || entry.actionability.ownerDueRequiredBeforeClosure !== workOrderRequired
+      || entry.actionability.evidenceRequiredBeforeClosure !== workOrderRequired
+      || entry.actionability.externalEffectAllowed !== false
+      || entry.actionability.managedWriteAllowed !== false) {
       throw new Error('Operational report export entry is invalid.')
     }
   }

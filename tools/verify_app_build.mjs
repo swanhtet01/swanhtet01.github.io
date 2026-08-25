@@ -1545,11 +1545,14 @@ if (productHomePageContract.includes('<details')
 if (!workspaceStatusPanelSource.includes('export function WorkspaceStatusPanel()')
   || !workspaceStatusPanelSource.includes('buildOperationalReport')
   || !workspaceStatusPanelSource.includes("entry.severity !== 'ready'")
+  || !workspaceStatusPanelSource.includes('entry.actionability.ownerReviewRequired')
+  || !workspaceStatusPanelSource.includes('Owner review · evidence and due time required · no external action')
   || !workspaceStatusPanelSource.includes('className="wsp-panel"')
   || !coreShellSource.includes("lazy(() => import('./WorkspaceStatusPanel')")
   || !productHomePageContract.includes('<WorkspaceStatusPanel />')
   || !coreCssSource.includes('.wsp-panel {')
   || !coreCssSource.includes('.wsp-item {')
+  || !coreCssSource.includes('.wsp-meta {')
   || !coreCssSource.includes('.wsp-critical {')
   || !coreCssSource.includes('.wsp-warning {')
   || !coreCssSource.includes('.wsp-action {')) fail('workspace_status_panel_wiring_missing')
@@ -20012,6 +20015,10 @@ async function verifyOperationalReportRuntime() {
     })
     assert(report.contract === model.OPERATIONAL_REPORT_CONTRACT && report.controls.permissionFiltered && report.controls.readOnly, 'operational_report_contract_invalid')
     assert(new Set(report.entries.map((entry) => entry.product)).size === 4 && report.allowedProducts.length === 4, 'operational_report_product_coverage_incomplete')
+    assert(report.entries.every((entry) => entry.actionability.externalEffectAllowed === false && entry.actionability.managedWriteAllowed === false), 'operational_report_actionability_external_authority_present')
+    assert(report.entries.every((entry) => entry.severity === 'ready'
+      ? entry.actionability.workOrderRequired === false && entry.actionability.ownerReviewRequired === false && entry.actionability.ownerDueRequiredBeforeClosure === false && entry.actionability.evidenceRequiredBeforeClosure === false
+      : entry.actionability.workOrderRequired === true && entry.actionability.ownerReviewRequired === true && entry.actionability.ownerDueRequiredBeforeClosure === true && entry.actionability.evidenceRequiredBeforeClosure === true), 'operational_report_actionability_gate_wrong')
     assert(report.masterData.registryContract === masterData.SHARED_MASTER_DATA_CONTRACT && report.masterData.dimensions.length === 12 && report.masterData.duplicateCandidates === 0 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
     const registry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: commerceState, production: productionState, website: websiteState })
     assert(registry.contract === masterData.SHARED_MASTER_DATA_CONTRACT && registry.records.length === registry.summary.totalRecords && registry.controls.readOnly, 'shared_master_data_registry_contract_invalid')
@@ -20138,6 +20145,11 @@ async function verifyOperationalReportRuntime() {
     assert(exported.contract === model.OPERATIONAL_REPORT_EXPORT_CONTRACT && /^sha256:[0-9a-f]{64}$/.test(exported.digest), 'operational_report_export_not_digest_bound')
     assert(exported.entries.every((entry) => entry.product === 'website') && exported.controls.externalWritesPerformed === false, 'operational_report_export_broadened_scope')
     assert((await model.validateOperationalReportExport(exported)).digest === exported.digest && exported.masterData.dimensions.length === 1, 'operational_report_export_not_revalidated')
+    const authorityTamperedExport = structuredClone(exported)
+    authorityTamperedExport.entries[0].actionability.externalEffectAllowed = true
+    let authorityTamperedExportRejected = false
+    try { await model.validateOperationalReportExport(authorityTamperedExport) } catch { authorityTamperedExportRejected = true }
+    assert(authorityTamperedExportRejected, 'operational_report_actionability_authority_tamper_accepted')
     const tamperedExport = structuredClone(exported)
     tamperedExport.masterData.dimensions[0].recordCount += 1
     let tamperedExportRejected = false
