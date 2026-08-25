@@ -245,4 +245,3 @@ test('rejects tampered reports', () => {
     /release_stack_owner_gate_digest_invalid/,
   )
 })
-
