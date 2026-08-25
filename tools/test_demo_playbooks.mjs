@@ -6,9 +6,9 @@
 // parameterised links the generator or app builds at runtime). Pilot-kit
 // documents additionally ground against the managed-pilot readiness kernel and
 // ledger, the portfolio work order, the sales-agent guide, and the pilot
-// handoff generator. If a route, query parameter, button label, copy string,
-// or contract field drifts, this test fails and the document must be
-// re-grounded.
+// handoff generator plus the deterministic baseline/launch gate packet tools.
+// If a route, query parameter, button label, copy string, or contract field
+// drifts, this test fails and the document must be re-grounded.
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -147,6 +147,8 @@ const kitSourcePaths = [
   'hq/portfolio.json',
   'docs/supermega-shop-sales-agent.md',
   'tools/create_shop_pilot_handoff.mjs',
+  'tools/prepare_shop_pilot_baseline_packet.mjs',
+  'tools/verify_shop_pilot_launch_gate.mjs',
 ]
 const kitCorpus = kitSourcePaths.map(read).join('\n')
 const kitDerived = new Set(kitSourcePaths)
