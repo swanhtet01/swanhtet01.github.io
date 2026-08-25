@@ -210,7 +210,7 @@
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:7ea1929bb88c66f47793a545938d0b9598ba2b981307b5c1fb9ce37fd6f3af7a"
+      "digest": "sha256:7c87eb2f6a5b8ce89a21c50b46c2ad2aeb2529ed2b73c14340d76027fd15b7b7"
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
@@ -234,16 +234,16 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:7d1ec5a56f27af86d482981d550583ab388b6323c9943009b9029b0560c9f0e4"
+      "digest": "sha256:7dbc69b6f9a7e183a6e9b629348bbc1be57b16b49df3382e0ad2e4c96d225112"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
-      "digest": "sha256:b763f1cc22c139b0b757d5830dba1160492c4c5297a82ca282d94d58a774a170"
+      "digest": "sha256:aa42203b99f0c9bbc5cc4ef61fbb7fb3fe93d143492dbf6b549b13c82d0fc616"
     },
     {
       "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:a7f9cb7fc9807ef55458075a33163fe34a956129365466fb16d52e05691c4073"
+  "digest": "sha256:c9bc029d3dbb504c3cbad3aada518a120e645a15ae0539bf8a62fdfe20ab7e35"
 }
