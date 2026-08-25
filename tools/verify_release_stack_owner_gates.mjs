@@ -45,7 +45,7 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   'payment',
   'hosted_scheduler_activation',
 ]
-const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
+const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 const SECRET_PATTERNS = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /sk-proj-[A-Za-z0-9_-]{20,}/,
@@ -176,6 +176,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   }
   if (scripts['shop:pilot:baseline-packet:self-test'] !== 'node --test tools/prepare_shop_pilot_baseline_packet.test.mjs && node tools/prepare_shop_pilot_baseline_packet.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_shop_baseline_packet_self_test_script_missing')
+  }
+  if (scripts['shop:pilot:day0-readiness'] !== 'node tools/prepare_shop_pilot_day0_readiness_packet.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_shop_day0_readiness_script_missing')
+  }
+  if (scripts['shop:pilot:day0-readiness:self-test'] !== 'node --test tools/prepare_shop_pilot_day0_readiness_packet.test.mjs && node tools/prepare_shop_pilot_day0_readiness_packet.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_shop_day0_readiness_self_test_script_missing')
   }
   if (scripts['shop:receipt:print-geometry:verify'] !== 'node tools/verify_shop_receipt_print_geometry.mjs') {
     addFailure(failures, 'release_stack_owner_gate_shop_receipt_print_geometry_script_missing')
@@ -523,6 +529,8 @@ function sampleInput(overrides = {}) {
       'shop:pilot:intake-packet:self-test': 'node --test tools/prepare_shop_pilot_private_intake_packet.test.mjs && node tools/prepare_shop_pilot_private_intake_packet.mjs --self-test',
       'shop:pilot:baseline-packet': 'node tools/prepare_shop_pilot_baseline_packet.mjs',
       'shop:pilot:baseline-packet:self-test': 'node --test tools/prepare_shop_pilot_baseline_packet.test.mjs && node tools/prepare_shop_pilot_baseline_packet.mjs --self-test',
+      'shop:pilot:day0-readiness': 'node tools/prepare_shop_pilot_day0_readiness_packet.mjs',
+      'shop:pilot:day0-readiness:self-test': 'node --test tools/prepare_shop_pilot_day0_readiness_packet.test.mjs && node tools/prepare_shop_pilot_day0_readiness_packet.mjs --self-test',
       'shop:receipt:print-geometry:verify': 'node tools/verify_shop_receipt_print_geometry.mjs',
       'shop:receipt:print-geometry:self-test': 'node --test tools/verify_shop_receipt_print_geometry.test.mjs && node tools/verify_shop_receipt_print_geometry.mjs --self-test',
       'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
