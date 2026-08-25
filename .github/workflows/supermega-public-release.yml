@@ -95,10 +95,6 @@ jobs:
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
 
-      - name: Install app dependencies
-        working-directory: showroom
-        run: npm ci
-
       - name: Require production deploy credential
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

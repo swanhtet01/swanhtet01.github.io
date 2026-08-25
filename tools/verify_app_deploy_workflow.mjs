@@ -241,6 +241,10 @@ requireContract('app build contract',
   && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
+requireContract('coordinated release avoids redundant local app install',
+  !workflow.includes('Install app dependencies')
+  && !workflow.includes('working-directory: showroom\n        run: npm ci')
+  && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"'))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
