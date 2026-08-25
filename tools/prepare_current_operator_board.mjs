@@ -10,6 +10,7 @@ import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness
 import { buildApplyPlan } from './apply_github_main_protection.mjs'
 import { buildPullRequestPlan, readReleaseHandoffReceipt } from './apply_release_pull_request.mjs'
 import { buildReviewBranchPushPlan } from './apply_review_branch_push.mjs'
+import { validateGitHubMainProtectionSnapshot } from './collect_github_main_protection_snapshot.mjs'
 import { validateGitHubMainProtectionPacket } from './prepare_github_main_protection_packet.mjs'
 import { validateSupabasePreviewRehearsalProposal } from './prepare_supabase_preview_rehearsal_proposal.mjs'
 import { validateTechnicalEstate } from './manage_technical_estate.mjs'
@@ -196,6 +197,7 @@ export function buildCurrentOperatorBoard({
   technicalEstate,
   readiness,
   githubProposalReceipt,
+  githubProtectionSnapshot = null,
   supabaseProposalReceipt,
   githubApplyPlan,
   branchPushPlan,
@@ -237,24 +239,36 @@ export function buildCurrentOperatorBoard({
     || supabaseProposalReceipt.packet?.controls?.providerMutationsPerformed !== false) {
     fail('current_operator_board_controls_invalid')
   }
+  const githubProtectionSatisfied = githubProtectionSnapshot
+    ? validateGitHubMainProtectionSnapshot(githubProtectionSnapshot).assessment.ok === true
+    : false
+  const githubProtectionFailures = githubProtectionSnapshot
+    ? githubProtectionSnapshot.assessment.failures
+    : []
 
   const gates = [
     buildGateSummary({
       id: 'github_main_protection',
       label: 'GitHub main protection',
-      status: 'verification_or_owner_apply_required',
-      nextAction: 'Verify or apply the main ruleset before allowing branch/PR/release work to count as reviewable.',
+      status: githubProtectionSatisfied ? 'satisfied' : 'verification_or_owner_apply_required',
+      nextAction: githubProtectionSatisfied
+        ? 'Main protection is verified; continue to the exact review branch push gate.'
+        : 'Verify or apply the main ruleset before allowing branch/PR/release work to count as reviewable.',
       requiredApprovalEnv: githubApplyPlan.approval?.env || null,
       approvalDigest: githubApplyPlan.approval?.expectedDigest || null,
-      blockers: [
-        ...(githubApplyPlan.approval?.approved === true ? [] : ['owner_approval_missing']),
-        ...(githubApplyPlan.token?.present === true ? [] : ['github_token_missing']),
-        ...(githubApplyPlan.candidate?.clean === true ? [] : ['local_worktree_dirty']),
-      ],
+      blockers: githubProtectionSatisfied
+        ? []
+        : [
+            ...githubProtectionFailures,
+            ...(githubApplyPlan.approval?.approved === true ? [] : ['owner_approval_missing']),
+            ...(githubApplyPlan.token?.present === true ? [] : ['github_token_missing']),
+            ...(githubApplyPlan.candidate?.clean === true ? [] : ['local_worktree_dirty']),
+          ],
       evidence: [
         githubProposalReceipt.digest,
         githubProposalReceipt.packet?.digest,
         githubApplyPlan.contract,
+        githubProtectionSnapshot?.digest || null,
       ],
       writeKind: 'repository_ruleset_create_or_update',
     }),
@@ -421,6 +435,14 @@ export function buildCurrentOperatorBoard({
         digest: githubProposalReceipt.digest,
         packetDigest: githubProposalReceipt.packet?.digest || null,
       },
+      ...(githubProtectionSnapshot
+        ? [{
+            label: 'github-main-protection-live-snapshot',
+            path: null,
+            digest: githubProtectionSnapshot.digest,
+            assessmentOk: githubProtectionSnapshot.assessment.ok,
+          }]
+        : []),
       {
         label: 'supabase-preview-rehearsal-proposal',
         path: supabaseProposalReceipt.path || null,
@@ -530,6 +552,7 @@ export function renderOperatorBoardMarkdown(board) {
 
 export async function prepareCurrentOperatorBoard({
   handoffPath,
+  githubProtectionSnapshotPath = null,
   outputPath = null,
   markdownOutputPath = null,
   env = process.env,
@@ -538,6 +561,9 @@ export async function prepareCurrentOperatorBoard({
   const technicalEstateReceipt = await readJsonReceipt(DEFAULT_TECHNICAL_ESTATE, validateTechnicalEstate, 'current_operator_board_estate')
   const readinessReceipt = await readJsonReceipt(DEFAULT_READINESS, validateManagedPilotReadiness, 'current_operator_board_readiness')
   const githubProposalReceipt = await readJsonReceipt(DEFAULT_GITHUB_PROPOSAL, validateGitHubMainProtectionPacket, 'current_operator_board_github_proposal')
+  const githubProtectionSnapshotReceipt = githubProtectionSnapshotPath
+    ? await readJsonReceipt(githubProtectionSnapshotPath, validateGitHubMainProtectionSnapshot, 'current_operator_board_github_snapshot')
+    : null
   const supabaseProposalReceipt = await readJsonReceipt(DEFAULT_SUPABASE_PROPOSAL, validateSupabasePreviewRehearsalProposal, 'current_operator_board_supabase_proposal')
   const packageReceipt = await readJsonReceipt(DEFAULT_PACKAGE, null, 'current_operator_board_package')
   const gitState = currentGitState()
@@ -549,6 +575,7 @@ export async function prepareCurrentOperatorBoard({
     technicalEstate: technicalEstateReceipt.packet,
     readiness: readinessReceipt.packet,
     githubProposalReceipt,
+    githubProtectionSnapshot: githubProtectionSnapshotReceipt?.packet || null,
     supabaseProposalReceipt,
     githubApplyPlan,
     branchPushPlan,
@@ -584,11 +611,13 @@ function parseArgs(argv) {
     outputPath: null,
     markdownOutputPath: null,
     verifyPath: null,
+    githubProtectionSnapshotPath: null,
     selfTest: false,
   }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--handoff') args.handoffPath = argv[++index]
+    else if (arg === '--github-protection-snapshot') args.githubProtectionSnapshotPath = argv[++index]
     else if (arg === '--output') args.outputPath = argv[++index]
     else if (arg === '--markdown-output') args.markdownOutputPath = argv[++index]
     else if (arg === '--verify') args.verifyPath = argv[++index] || null

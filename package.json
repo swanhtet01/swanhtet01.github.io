@@ -812,7 +812,9 @@
     "website:managed:brief:acceptance:verify": "node tools/test_website_managed_brief_acceptance.mjs",
     "ecommerce:shop:exception:evidence:verify": "node tools/test_ecommerce_shop_exception_evidence.mjs",
     "github:main-protection:apply:plan": "node tools/apply_github_main_protection.mjs --plan",
-    "github:main-protection:apply:self-test": "node --test tools/apply_github_main_protection.test.mjs && node tools/apply_github_main_protection.mjs --self-test"
+    "github:main-protection:apply:self-test": "node --test tools/apply_github_main_protection.test.mjs && node tools/apply_github_main_protection.mjs --self-test",
+    "github:main-protection:snapshot": "node tools/collect_github_main_protection_snapshot.mjs",
+    "github:main-protection:snapshot:self-test": "node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4"

@@ -7,6 +7,9 @@ import {
   renderOperatorBoardMarkdown,
   validateCurrentOperatorBoard,
 } from './prepare_current_operator_board.mjs'
+import {
+  buildGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
 
 const repository = 'swanhtet01/swanhtet01.github.io'
 const products = ['shop', 'plant', 'website', 'ecommerce']
@@ -45,6 +48,16 @@ function fixture(overrides = {}) {
       pilotEvidence: { proofComplete: false, acceptedConsecutiveRuns: 0, requiredAcceptedConsecutiveRuns: 20 },
     },
     githubProposalReceipt: { path: 'github.json', digest: digestOf('1'), packet: { digest: digestOf('2') } },
+    githubProtectionSnapshot: buildGitHubMainProtectionSnapshot({
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: main },
+        protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+      },
+      rulesets: [],
+    }),
     supabaseProposalReceipt: {
       path: 'supabase.json',
       digest: digestOf('3'),
@@ -92,6 +105,7 @@ test('builds a no-write operator board with GitHub protection as the first curre
   const board = buildCurrentOperatorBoard(fixture())
   assert.equal(board.contract, CURRENT_OPERATOR_BOARD_CONTRACT)
   assert.equal(board.currentAction.gateId, 'github_main_protection')
+  assert.ok(board.currentAction.blockers.includes('main_unprotected'))
   assert.deepEqual(board.products.customerProducts, products)
   assert.equal(board.products.aiIsSharedCapability, true)
   assert.equal(board.controls.githubWritesPerformed, false)
@@ -114,6 +128,32 @@ test('keeps the ordered owner-gated path explicit through pilot activation', () 
   ])
   assert.equal(board.gates.find((gate) => gate.id === 'shop_pilot_evidence').status, 'private_observation_required')
   assert.ok(board.gates.find((gate) => gate.id === 'pull_request_creation').blockers.includes('remote_review_branch_not_exact'))
+})
+
+test('advances to review branch push once live GitHub main protection is verified', () => {
+  const protectedSnapshot = buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    branch: {
+      name: 'main',
+      protected: true,
+      protection: {
+        enabled: true,
+        required_status_checks: {
+          contexts: ['SuperMega App CI', 'Dependency Security Audit', 'Kernel Console - Verify & Owner-Gated Release'],
+          checks: [],
+        },
+        allow_force_pushes: { enabled: false },
+        allow_deletions: { enabled: false },
+        required_pull_request_reviews: { required_approving_review_count: 1 },
+        required_conversation_resolution: { enabled: true },
+      },
+      commit: { sha: main },
+    },
+    rulesets: [],
+  })
+  const board = buildCurrentOperatorBoard(fixture({ githubProtectionSnapshot: protectedSnapshot }))
+  assert.equal(board.gates[0].status, 'satisfied')
+  assert.equal(board.currentAction.gateId, 'review_branch_push')
 })
 
 test('fails closed for dirty worktree, fifth-product AI, and write controls', () => {

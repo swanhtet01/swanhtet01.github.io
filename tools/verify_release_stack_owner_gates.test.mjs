@@ -40,6 +40,8 @@ function input(overrides = {}) {
       'release:branch-push:apply:self-test': 'node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test',
       'release:pull-request:create': 'node tools/apply_release_pull_request.mjs',
       'release:pull-request:create:self-test': 'node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test',
+      'github:main-protection:snapshot': 'node tools/collect_github_main_protection_snapshot.mjs',
+      'github:main-protection:snapshot:self-test': 'node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test',
       'operator:board': 'node tools/prepare_current_operator_board.mjs',
       'operator:board:self-test': 'node --test tools/prepare_current_operator_board.test.mjs && node tools/prepare_current_operator_board.mjs --self-test',
       'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
