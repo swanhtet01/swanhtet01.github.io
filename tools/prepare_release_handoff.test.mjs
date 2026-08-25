@@ -6,6 +6,10 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 import { buildReleaseHandoff, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, writeExclusiveJson } from './prepare_release_handoff.mjs'
+import {
+  buildGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
+import { REQUIRED_MAIN_CHECKS } from './verify_github_main_protection.mjs'
 
 const candidate = 'a'.repeat(40)
 const main = 'b'.repeat(40)
@@ -56,8 +60,52 @@ function valid(overrides = {}) {
     relations: { mainIsAncestor: true, liveIsAncestor: true, remoteCandidateIsAncestor: null, candidateAheadOfMain: 173, candidateAheadOfLive: 225 },
     legacyReleaseBranch: { commit: legacy, isAncestorOfCandidate: false, legacyOnlyCommits: 3, candidateOnlyCommits: 334 },
     verification: { passed: true, verifiedCommit: candidate, workflowAuthority: validateWorkflowAuthority(workflow) },
+    githubMainProtection: unprotectedMainSnapshot(),
     ...overrides,
   }
+}
+
+function unprotectedMainSnapshot() {
+  return buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-07-29T13:59:00.000Z',
+    branch: {
+      name: 'main',
+      protected: false,
+      commit: { sha: main },
+      protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+    },
+    rulesets: [],
+  })
+}
+
+function protectedMainSnapshot() {
+  return buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-07-29T13:59:00.000Z',
+    branch: {
+      name: 'main',
+      protected: false,
+      commit: { sha: main },
+      protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+    },
+    rulesets: [{
+      id: 1,
+      name: 'SuperMega main release gate',
+      target: 'branch',
+      enforcement: 'active',
+      conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+      rules: [
+        { type: 'deletion' },
+        { type: 'non_fast_forward' },
+        { type: 'pull_request', parameters: { required_review_thread_resolution: true } },
+        {
+          type: 'required_status_checks',
+          parameters: {
+            required_status_checks: REQUIRED_MAIN_CHECKS.map((context) => ({ context })),
+          },
+        },
+      ],
+    }],
+  })
 }
 
 test('release handoff is immutable, review-only, and exact-commit bound', () => {
@@ -71,13 +119,23 @@ test('release handoff is immutable, review-only, and exact-commit bound', () => 
   assert.equal(packet.authority.pushApproved, false)
   assert.equal(packet.authority.deploymentApproved, false)
   assert.equal(packet.authority.remoteWritesPerformed, false)
-  assert.equal(packet.nextAction.kind, 'owner_review_initial_branch_push')
+  assert.equal(packet.githubMainProtection.assessment.ok, false)
+  assert.equal(packet.nextAction.kind, 'owner_review_github_main_protection')
   assert.equal(packet.nextAction.forcePushAllowed, false)
+  assert.equal(packet.actions.reviewBranchPush.kind, 'owner_review_initial_branch_push')
+  assert.equal(packet.actions.reviewBranchPush.forcePushAllowed, false)
   assert.match(packet.digest, /^sha256:[a-f0-9]{64}$/)
   const { digest, ...body } = packet
   assert.equal(digest, `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`)
   assert.doesNotMatch(JSON.stringify(packet), /token|secret|password|customer/i)
   assert.deepEqual(validateReleaseHandoffPacket(packet), packet)
+})
+
+test('release handoff advances to branch push only after main protection is verified', () => {
+  const packet = buildReleaseHandoff(valid({ githubMainProtection: protectedMainSnapshot() }))
+  assert.equal(packet.githubMainProtection.assessment.ok, true)
+  assert.equal(packet.nextAction.kind, 'owner_review_initial_branch_push')
+  assert.equal(packet.nextAction.approvalTemplate, packet.actions.reviewBranchPush.approvalTemplate)
 })
 
 test('release handoff fails closed on drift, dirty state, weak ancestry, or invented verification', () => {

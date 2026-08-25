@@ -10,6 +10,9 @@ import {
   validateGitHubMainProtectionPacket,
 } from './prepare_github_main_protection_packet.mjs'
 import {
+  buildGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
+import {
   buildReleaseHandoff,
   validateReleaseHandoffPacket,
 } from './prepare_release_handoff.mjs'
@@ -108,7 +111,14 @@ function validateReleaseHandoffForApproval(packet) {
     || handoff.nextAction?.deploymentIncluded !== false) {
     fail('release_owner_approval_next_action_controls_invalid')
   }
-  if (!String(handoff.nextAction?.approvalTemplate || '').includes(`push of ${commit} to origin/${branch} for review only`)) {
+  const branchPushAction = handoff.actions?.reviewBranchPush
+  if (!branchPushAction
+    || branchPushAction.branch !== branch
+    || branchPushAction.exactCommit !== commit
+    || branchPushAction.forcePushAllowed !== false
+    || branchPushAction.mergeIncluded !== false
+    || branchPushAction.deploymentIncluded !== false
+    || !String(branchPushAction.approvalTemplate || '').includes(`push of ${commit} to origin/${branch} for review only`)) {
     fail('release_owner_approval_branch_template_invalid')
   }
   falseOnly(handoff.authority, [
@@ -180,7 +190,7 @@ function approvalDigestSet({ handoff, githubProposal, supabaseProposal }) {
     },
     reviewBranchPush: {
       env: 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL',
-      digest: digest(handoff.nextAction.approvalTemplate),
+      digest: digest(handoff.actions.reviewBranchPush.approvalTemplate),
     },
     pullRequestCreation: {
       env: 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL',
@@ -207,7 +217,7 @@ export function buildReleaseOwnerApprovalMarkdown({
   const commitLabel = inferHandoffVersion({ handoff: handoffPacket, handoffVersion })
     ? `${inferHandoffVersion({ handoff: handoffPacket, handoffVersion })} commit`
     : 'candidate commit'
-  const branchApproval = handoffPacket.nextAction.approvalTemplate
+  const branchApproval = handoffPacket.actions.reviewBranchPush.approvalTemplate
   const prApproval = pullRequestApprovalTemplate(handoffPacket)
   const lines = [
     `# SuperMega Release Handoff Owner Approval Packet ${normalizedVersion}`,
@@ -489,6 +499,16 @@ function sampleHandoff() {
       verifiedCommit: commit,
       workflowAuthority: sampleWorkflowAuthority(),
     },
+    githubMainProtection: buildGitHubMainProtectionSnapshot({
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: remoteMain },
+        protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+      },
+      rulesets: [],
+    }),
   })
   Object.defineProperty(packet, '__sourcePath', {
     value: 'C:\\Users\\thesw\\OneDrive - BDA\\supermega.release-handoff.sample.json',

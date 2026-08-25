@@ -184,8 +184,9 @@ export function validateReviewBranchPushHandoff(packet) {
   const remoteCommit = packet.remote?.candidateCommit == null
     ? null
     : exactSha(packet.remote.candidateCommit, 'review_branch_push_remote_commit_invalid')
-  const kind = String(packet.nextAction?.kind || '')
-  const approvalTemplate = String(packet.nextAction?.approvalTemplate || '')
+  const action = isRecord(packet.actions?.reviewBranchPush) ? packet.actions.reviewBranchPush : packet.nextAction
+  const kind = String(action?.kind || '')
+  const approvalTemplate = String(action?.approvalTemplate || '')
 
   if (packet.repository !== REPOSITORY || packet.remote?.origin !== ORIGIN) fail('review_branch_push_repository_invalid')
   if (!BRANCH_PATTERN.test(branch) || branch.includes('..') || branch.endsWith('/') || branch.includes('//')) {
@@ -200,11 +201,11 @@ export function validateReviewBranchPushHandoff(packet) {
   }
   if (remoteState === 'unpublished' && kind !== 'owner_review_initial_branch_push') fail('review_branch_push_next_action_invalid')
   if (remoteState !== 'unpublished' && kind !== 'owner_review_fast_forward_branch_push') fail('review_branch_push_next_action_invalid')
-  if (packet.nextAction.exactCommit !== commit
-    || packet.nextAction.branch !== branch
-    || packet.nextAction.forcePushAllowed !== false
-    || packet.nextAction.mergeIncluded !== false
-    || packet.nextAction.deploymentIncluded !== false) {
+  if (action.exactCommit !== commit
+    || action.branch !== branch
+    || action.forcePushAllowed !== false
+    || action.mergeIncluded !== false
+    || action.deploymentIncluded !== false) {
     fail('review_branch_push_next_action_invalid')
   }
   if (!approvalTemplate.includes(`push of ${commit} to origin/${branch} for review only`)

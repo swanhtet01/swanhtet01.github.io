@@ -38,6 +38,59 @@ function packet(overrides = {}) {
       ...(overrides.remote || {}),
     },
     nextAction: {
+      kind: 'owner_review_github_main_protection',
+      branch,
+      exactCommit: commit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+      approvalTemplate: `I approve applying the SuperMega main release gate ruleset to ${repository} main after reviewing the signed plan for ${commit}. I do not approve branch push, pull request creation, merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+      ...(overrides.nextAction || {}),
+    },
+    actions: {
+      reviewBranchPush: {
+        kind: 'owner_review_initial_branch_push',
+        branch,
+        exactCommit: commit,
+        forcePushAllowed: false,
+        mergeIncluded: false,
+        deploymentIncluded: false,
+        approvalTemplate,
+      },
+      ...(overrides.actions || {}),
+    },
+    authority: {
+      pushApproved: false,
+      mergeApproved: false,
+      workflowDispatchApproved: false,
+      deploymentApproved: false,
+      domainChangeApproved: false,
+      providerMutationApproved: false,
+      remoteWritesPerformed: false,
+      providerWritesPerformed: false,
+      credentialValuesInspected: false,
+      ...(overrides.authority || {}),
+    },
+  }
+}
+
+function legacyPacket(overrides = {}) {
+  return {
+    repository,
+    candidate: {
+      branch,
+      commit,
+      clean: true,
+      ...(overrides.candidate || {}),
+    },
+    remote: {
+      origin,
+      mainCommit: remoteMain,
+      candidateCommit: null,
+      candidateBranchState: 'unpublished',
+      ...(overrides.remote || {}),
+    },
+    nextAction: {
       kind: 'owner_review_initial_branch_push',
       branch,
       exactCommit: commit,
@@ -247,16 +300,21 @@ test('execute no-ops when the remote branch already equals the candidate', async
       candidateCommit: commit,
       candidateBranchState: 'exact',
     },
-    nextAction: {
+    actions: { reviewBranchPush: {
       kind: 'owner_review_fast_forward_branch_push',
+      branch,
+      exactCommit: commit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
       approvalTemplate: `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
-    },
+    } },
   })
   const { git, calls } = stubGit({ before: commit, after: commit })
   const result = await applyReviewBranchPushWithGit({
     handoffReceipt: receipt(alreadyPublished),
     mainProtectionSnapshotReceipt: mainProtectionReceipt(),
-    env: { [approvalEnv]: alreadyPublished.nextAction.approvalTemplate },
+    env: { [approvalEnv]: alreadyPublished.actions.reviewBranchPush.approvalTemplate },
     git,
     verifyHandoff: async () => ({
       ok: true,
@@ -281,7 +339,7 @@ test('handoff validation rejects main, force, unsafe authority, and inconsistent
     /review_branch_push_branch_invalid/,
   )
   assert.throws(
-    () => validateReviewBranchPushHandoff(packet({ nextAction: { forcePushAllowed: true } })),
+    () => validateReviewBranchPushHandoff(packet({ actions: { reviewBranchPush: { ...packet().actions.reviewBranchPush, forcePushAllowed: true } } })),
     /review_branch_push_next_action_invalid/,
   )
   assert.throws(
@@ -292,4 +350,10 @@ test('handoff validation rejects main, force, unsafe authority, and inconsistent
     () => validateReviewBranchPushHandoff(packet({ remote: { candidateCommit: commit, candidateBranchState: 'unpublished' } })),
     /review_branch_push_remote_state_invalid/,
   )
+})
+
+test('handoff validation still accepts the legacy nextAction branch-push shape', () => {
+  const gate = validateReviewBranchPushHandoff(legacyPacket())
+  assert.equal(gate.nextActionKind, 'owner_review_initial_branch_push')
+  assert.equal(gate.approvalTemplate, approvalTemplate)
 })
