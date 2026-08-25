@@ -159,6 +159,27 @@ function exactShaDigest(value, field) {
   return normalized
 }
 
+function rounded(value) {
+  return Math.round(value * 1000) / 1000
+}
+
+function median(values) {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const raw = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  return rounded(raw)
+}
+
+function sum(values) {
+  return values.reduce((total, value) => total + value, 0)
+}
+
+function rate(numerator, denominator) {
+  if (denominator === 0) return 0
+  return rounded(numerator / denominator)
+}
+
 export function normalizeObservedRunInput(input) {
   assertNoPrivateIdentity(input)
   if (!exactKeys(input, REQUIRED_INPUT_KEYS)) throw new Error('shop_observed_run_input_keys_invalid')
@@ -242,6 +263,16 @@ async function readStoredRuns(workspace) {
 
 function evidenceSummary(entries) {
   const acceptedRunCount = entries.filter((entry) => entry.accepted === true).length
+  const acceptedEntries = entries.filter((entry) => entry.accepted === true)
+  const totalExceptionCount = sum(entries.map((entry) => entry.exceptionCount))
+  const totalOperatorCorrectionCount = sum(entries.map((entry) => entry.operatorCorrectionCount))
+  const acceptedExceptionCount = sum(acceptedEntries.map((entry) => entry.exceptionCount))
+  const acceptedOperatorCorrectionCount = sum(acceptedEntries.map((entry) => entry.operatorCorrectionCount))
+  const reloadRetryOutcomeCounts = {
+    passed: entries.filter((entry) => entry.reloadRetryOutcome === 'passed').length,
+    failed: entries.filter((entry) => entry.reloadRetryOutcome === 'failed').length,
+    notTested: entries.filter((entry) => entry.reloadRetryOutcome === 'not-tested').length,
+  }
   let acceptedConsecutiveRuns = 0
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     if (entries[index].accepted !== true) break
@@ -256,6 +287,22 @@ function evidenceSummary(entries) {
     acceptedRunCount,
     acceptedConsecutiveRuns,
     promotionEvidenceMet: acceptedConsecutiveRuns >= 20,
+    metrics: {
+      medianMinutesPerOrder: median(entries.map((entry) => entry.durationMinutesPerOrder)),
+      medianAcceptedMinutesPerOrder: median(acceptedEntries.map((entry) => entry.durationMinutesPerOrder)),
+      totalExceptionCount,
+      acceptedExceptionCount,
+      exceptionRatePerRun: rate(totalExceptionCount, entries.length),
+      acceptedExceptionRatePerRun: rate(acceptedExceptionCount, acceptedEntries.length),
+      medianCloseMinutes: median(entries.map((entry) => entry.closeMinutes)),
+      medianAcceptedCloseMinutes: median(acceptedEntries.map((entry) => entry.closeMinutes)),
+      totalOperatorCorrectionCount,
+      acceptedOperatorCorrectionCount,
+      operatorCorrectionRatePerRun: rate(totalOperatorCorrectionCount, entries.length),
+      acceptedOperatorCorrectionRatePerRun: rate(acceptedOperatorCorrectionCount, acceptedEntries.length),
+      reloadRetryOutcomeCounts,
+      latestReloadRetryOutcome: entries.at(-1)?.reloadRetryOutcome || null,
+    },
     externalWritesPerformed: false,
     customerContactPerformed: false,
     paymentAccepted: false,

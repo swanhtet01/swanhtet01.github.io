@@ -57,6 +57,16 @@ test('valid private run appends local evidence and returns no private values', a
     assert.equal(summary.acceptedRunCount, 1)
     assert.equal(summary.acceptedConsecutiveRuns, 1)
     assert.equal(summary.promotionEvidenceMet, false)
+    assert.equal(summary.metrics.medianMinutesPerOrder, 6)
+    assert.equal(summary.metrics.medianAcceptedMinutesPerOrder, 6)
+    assert.equal(summary.metrics.totalExceptionCount, 1)
+    assert.equal(summary.metrics.acceptedExceptionCount, 1)
+    assert.equal(summary.metrics.exceptionRatePerRun, 1)
+    assert.equal(summary.metrics.acceptedExceptionRatePerRun, 1)
+    assert.equal(summary.metrics.medianCloseMinutes, 20)
+    assert.equal(summary.metrics.totalOperatorCorrectionCount, 0)
+    assert.deepEqual(summary.metrics.reloadRetryOutcomeCounts, { passed: 1, failed: 0, notTested: 0 })
+    assert.equal(summary.metrics.latestReloadRetryOutcome, 'passed')
     assert.equal(summary.privateValuesReturned, false)
     assert.equal(summary.externalWritesPerformed, false)
     assert.equal(summary.customerContactPerformed, false)
@@ -74,12 +84,33 @@ test('rejected or failed run breaks the consecutive accepted run streak', async 
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-streak-'))
   try {
     await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(1) })
-    await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(2, { accepted: false, reloadRetryOutcome: 'failed' }) })
+    await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(2, {
+      accepted: false,
+      durationMinutesPerOrder: 10,
+      exceptionCount: 3,
+      closeMinutes: 40,
+      operatorCorrectionCount: 2,
+      reloadRetryOutcome: 'failed',
+    }) })
     const summary = await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(3) })
     assert.equal(summary.runCount, 3)
     assert.equal(summary.acceptedRunCount, 2)
     assert.equal(summary.acceptedConsecutiveRuns, 1)
     assert.equal(summary.promotionEvidenceMet, false)
+    assert.equal(summary.metrics.medianMinutesPerOrder, 6)
+    assert.equal(summary.metrics.medianAcceptedMinutesPerOrder, 6)
+    assert.equal(summary.metrics.totalExceptionCount, 5)
+    assert.equal(summary.metrics.acceptedExceptionCount, 2)
+    assert.equal(summary.metrics.exceptionRatePerRun, 1.667)
+    assert.equal(summary.metrics.acceptedExceptionRatePerRun, 1)
+    assert.equal(summary.metrics.medianCloseMinutes, 20)
+    assert.equal(summary.metrics.medianAcceptedCloseMinutes, 20)
+    assert.equal(summary.metrics.totalOperatorCorrectionCount, 2)
+    assert.equal(summary.metrics.acceptedOperatorCorrectionCount, 0)
+    assert.equal(summary.metrics.operatorCorrectionRatePerRun, 0.667)
+    assert.equal(summary.metrics.acceptedOperatorCorrectionRatePerRun, 0)
+    assert.deepEqual(summary.metrics.reloadRetryOutcomeCounts, { passed: 2, failed: 1, notTested: 0 })
+    assert.equal(summary.metrics.latestReloadRetryOutcome, 'passed')
   } finally {
     await rm(parent, { recursive: true, force: true })
   }
