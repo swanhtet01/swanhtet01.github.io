@@ -28,7 +28,7 @@ const requiredApprovals = [
   'domain_or_publish_change',
   'managed_activation',
 ]
-const hqChain = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && node tools/verify_hq_contract.mjs'
+const hqChain = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 
 function input(overrides = {}) {
   const packageManifest = {
@@ -36,6 +36,8 @@ function input(overrides = {}) {
     scripts: {
       'release:owner-gates:verify': 'node tools/verify_release_stack_owner_gates.mjs --verify',
       'release:owner-gates:self-test': 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test',
+      'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
+      'shop:pilot:launch-gate:self-test': 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test',
       'hq:verify': hqChain,
     },
   }

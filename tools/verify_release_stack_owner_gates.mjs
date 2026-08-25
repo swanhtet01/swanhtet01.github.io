@@ -45,7 +45,7 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   'payment',
   'hosted_scheduler_activation',
 ]
-const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && node tools/verify_hq_contract.mjs'
+const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 const SECRET_PATTERNS = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /sk-proj-[A-Za-z0-9_-]{20,}/,
@@ -110,6 +110,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   }
   if (scripts['release:owner-gates:self-test'] !== 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_self_test_script_missing')
+  }
+  if (scripts['shop:pilot:launch-gate:verify'] !== 'node tools/verify_shop_pilot_launch_gate.mjs --verify') {
+    addFailure(failures, 'release_stack_owner_gate_shop_launch_gate_script_missing')
+  }
+  if (scripts['shop:pilot:launch-gate:self-test'] !== 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_shop_launch_gate_self_test_script_missing')
   }
   if (scripts['hq:verify'] !== EXPECTED_HQ_VERIFY_CHAIN) addFailure(failures, 'release_stack_owner_gate_hq_chain_missing')
 
@@ -431,6 +437,8 @@ function sampleInput(overrides = {}) {
     scripts: {
       'release:owner-gates:verify': 'node tools/verify_release_stack_owner_gates.mjs --verify',
       'release:owner-gates:self-test': 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test',
+      'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
+      'shop:pilot:launch-gate:self-test': 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test',
       'hq:verify': EXPECTED_HQ_VERIFY_CHAIN,
     },
   }
