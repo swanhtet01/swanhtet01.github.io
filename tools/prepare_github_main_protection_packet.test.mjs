@@ -13,6 +13,7 @@ const sourceReceipts = [
   'package.json',
   'tools/verify_github_main_protection.mjs',
   'tools/prepare_github_main_protection_packet.mjs',
+  'tools/apply_github_main_protection.mjs',
 ].map((path) => ({ path, digest: `sha256:${createHash('sha256').update(path).digest('hex')}` }))
 
 function packet() {
@@ -28,6 +29,10 @@ test('builds an owner-gated GitHub ruleset proposal that satisfies the verifier'
   assert.equal(built.controls.githubWritesPerformed, false)
   assert.equal(built.githubApi.method, 'POST')
   assert.equal(built.githubApi.path, '/repos/swanhtet01/swanhtet01.github.io/rulesets')
+  assert.equal(built.applicator.tool, 'tools/apply_github_main_protection.mjs')
+  assert.equal(built.applicator.defaultMode, 'plan_only_no_github_write')
+  assert.equal(built.applicator.executeRequiresExactOwnerApproval, true)
+  assert.equal(built.applicator.credentialValueExposed, false)
   assert.deepEqual(built.proposedRuleset.bypass_actors, [])
   assert.deepEqual(built.proposedRuleset.conditions.ref_name.include, ['refs/heads/main'])
 

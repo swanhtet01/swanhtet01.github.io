@@ -1,0 +1,174 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import {
+  GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
+  applyGitHubMainProtectionWithClient,
+  buildApplyPlan,
+  selectRulesetAction,
+  validateOwnerApproval,
+} from './apply_github_main_protection.mjs'
+import {
+  buildGitHubMainProtectionPacket,
+} from './prepare_github_main_protection_packet.mjs'
+
+const approval = 'I approve one GitHub repository settings write to create or update the main protection ruleset for swanhtet01/swanhtet01.github.io using the reviewed SuperMega main release gate proposal only. I do not approve push, PR creation, merge, deployment, Supabase mutation, credential change, customer contact, payment, stock, domain, hosted-write, or managed activation.'
+
+const sourceReceipts = [
+  'package.json',
+  'tools/verify_github_main_protection.mjs',
+  'tools/prepare_github_main_protection_packet.mjs',
+  'tools/apply_github_main_protection.mjs',
+].map((path) => ({ path, digest: `sha256:${'0'.repeat(64)}` }))
+
+function proposalReceipt() {
+  const packet = buildGitHubMainProtectionPacket({ sourceReceipts })
+  return {
+    path: '/tmp/github-main-protection-proposal.json',
+    digest: `sha256:${'1'.repeat(64)}`,
+    packet,
+  }
+}
+
+function gitState() {
+  return {
+    branch: 'codex/release-stack-integration-rehearsal-20260825',
+    head: 'c280a33bee349b25468a39a16a8cd2769b2f0de7',
+    clean: true,
+  }
+}
+
+function branchSnapshot() {
+  return {
+    name: 'main',
+    protected: false,
+    protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+  }
+}
+
+function response(status, body) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() {
+      return JSON.stringify(body)
+    },
+  }
+}
+
+function fakeRequest({ beforeRulesets = [], afterRulesets = null, writeStatus = 201 } = {}) {
+  const calls = []
+  const request = async (url, options = {}) => {
+    const path = new URL(url).pathname.replace('/repos/swanhtet01/swanhtet01.github.io', '')
+    calls.push({
+      path,
+      method: options.method || 'GET',
+      body: options.body ? JSON.parse(options.body) : null,
+      authHeader: options.headers?.Authorization ? 'present' : 'missing',
+    })
+    if (path === '/rulesets' && (options.method || 'GET') === 'GET') {
+      return response(200, calls.filter((call) => call.path === '/rulesets' && call.method === 'GET').length === 1
+        ? beforeRulesets
+        : afterRulesets ?? beforeRulesets)
+    }
+    if (path === '/branches/main' && (options.method || 'GET') === 'GET') return response(200, branchSnapshot())
+    if (path === '/rulesets' && options.method === 'POST') return response(writeStatus, { id: 9 })
+    if (path === '/rulesets/7' && options.method === 'PUT') return response(writeStatus, { id: 7 })
+    return response(404, { message: 'not found' })
+  }
+  return { request, calls }
+}
+
+test('builds a plan-only applicator report without token or write execution', () => {
+  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {} })
+  assert.equal(plan.contract, GITHUB_MAIN_PROTECTION_APPLY_CONTRACT)
+  assert.equal(plan.mode, 'plan_only_no_github_write')
+  assert.equal(plan.controls.githubWritesPerformed, false)
+  assert.equal(plan.controls.repositorySettingsMutated, false)
+  assert.equal(plan.token.present, false)
+  assert.equal(plan.possibleWrite.headers.Authorization, 'Bearer <redacted>')
+  assert.equal(plan.possibleWrite.headers['Content-Type'], 'application/json')
+  assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+[A-Za-z0-9._-]{8,}/)
+})
+
+test('requires exact owner approval before execution', () => {
+  const proposal = proposalReceipt().packet
+  assert.equal(validateOwnerApproval({ proposal, env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval } }).approved, true)
+  assert.throws(() => validateOwnerApproval({ proposal, env: {}, execute: true }), /github_main_protection_apply_owner_approval_required/)
+  assert.throws(() => validateOwnerApproval({ proposal, env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: `${approval} ` }, execute: true }), /github_main_protection_apply_owner_approval_required/)
+  assert.throws(() => validateOwnerApproval({ proposal, env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval.replace('one GitHub', 'two GitHub') }, execute: true }), /github_main_protection_apply_owner_approval_required/)
+})
+
+test('selects create, update, and ambiguous ruleset states safely', () => {
+  assert.deepEqual(selectRulesetAction([]), {
+    action: 'create',
+    method: 'POST',
+    path: '/repos/swanhtet01/swanhtet01.github.io/rulesets',
+    rulesetId: null,
+  })
+  assert.deepEqual(selectRulesetAction([{ id: 7, name: 'SuperMega main release gate', target: 'branch' }]), {
+    action: 'update',
+    method: 'PUT',
+    path: '/repos/swanhtet01/swanhtet01.github.io/rulesets/7',
+    rulesetId: 7,
+  })
+  assert.throws(() => selectRulesetAction([
+    { id: 7, name: 'SuperMega main release gate', target: 'branch' },
+    { id: 8, name: 'SuperMega main release gate', target: 'branch' },
+  ]), /github_main_protection_apply_ruleset_ambiguous/)
+})
+
+test('executes create path only with approval, token, and post-write verification', async () => {
+  const proposed = proposalReceipt()
+  const { request, calls } = fakeRequest({ beforeRulesets: [], afterRulesets: [{ id: 9, ...proposed.packet.proposedRuleset }] })
+  const result = await applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    request,
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.action.kind, 'create')
+  assert.equal(result.controls.githubWritesPerformed, true)
+  assert.equal(result.controls.branchMutated, false)
+  assert.equal(result.controls.credentialValueExposed, false)
+  assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [
+    'GET /rulesets',
+    'POST /rulesets',
+    'GET /branches/main',
+    'GET /rulesets',
+  ])
+  assert.doesNotMatch(JSON.stringify(result), /github_pat_testtokennotprinted/)
+})
+
+test('executes update path for exactly one existing named ruleset', async () => {
+  const proposed = proposalReceipt()
+  const existing = { id: 7, ...proposed.packet.proposedRuleset }
+  const { request, calls } = fakeRequest({ beforeRulesets: [existing], afterRulesets: [existing], writeStatus: 200 })
+  const result = await applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GH_TOKEN: 'ghp_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    request,
+  })
+  assert.equal(result.action.kind, 'update')
+  assert.equal(result.action.rulesetId, 7)
+  assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [
+    'GET /rulesets',
+    'PUT /rulesets/7',
+    'GET /branches/main',
+    'GET /rulesets',
+  ])
+  assert.doesNotMatch(JSON.stringify(result), /ghp_testtokennotprinted/)
+})
+
+test('fails closed when post-write read-only verification does not pass', async () => {
+  const proposed = proposalReceipt()
+  const { request } = fakeRequest({ beforeRulesets: [], afterRulesets: [] })
+  await assert.rejects(() => applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    request,
+  }), /github_main_protection_apply_verification_failed/)
+})

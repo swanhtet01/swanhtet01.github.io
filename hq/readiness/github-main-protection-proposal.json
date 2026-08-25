@@ -91,6 +91,20 @@
     "supabaseMutated": false,
     "credentialValuesRequired": false
   },
+  "applicator": {
+    "tool": "tools/apply_github_main_protection.mjs",
+    "planCommand": "npm run github:main-protection:apply:plan",
+    "executeCommand": "node tools/apply_github_main_protection.mjs --execute",
+    "requiredApprovalEnv": "SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL",
+    "tokenEnv": [
+      "GITHUB_TOKEN",
+      "GH_TOKEN"
+    ],
+    "defaultMode": "plan_only_no_github_write",
+    "executeRequiresExactOwnerApproval": true,
+    "afterApplyVerifier": "tools/verify_github_main_protection.mjs",
+    "credentialValueExposed": false
+  },
   "ownerApprovalTemplate": "I approve one GitHub repository settings write to create or update the main protection ruleset for swanhtet01/swanhtet01.github.io using the reviewed SuperMega main release gate proposal only. I do not approve push, PR creation, merge, deployment, Supabase mutation, credential change, customer contact, payment, stock, domain, hosted-write, or managed activation.",
   "afterApplyVerification": {
     "readOnlySnapshotCommands": [
@@ -103,7 +117,7 @@
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:96b05f7c0af436e242e52bc3baf3da16920b4f800e74f8cd620c20fa78cbef5d"
+      "digest": "sha256:636157d6ab952ea9db9938b46370a4c89d7512ec44ba4f909791374bed816629"
     },
     {
       "path": "tools/verify_github_main_protection.mjs",
@@ -111,8 +125,12 @@
     },
     {
       "path": "tools/prepare_github_main_protection_packet.mjs",
-      "digest": "sha256:95722b99b1d737641edab947260fb64941c76a431ceea320e79a4fc130966617"
+      "digest": "sha256:b542b62b566228f7186a6b315e32989452468718593bee7019ace2966c568279"
+    },
+    {
+      "path": "tools/apply_github_main_protection.mjs",
+      "digest": "sha256:39066afba4310b24d4b6434dc53fbaa0e40b1e5fbcf344fa07e1d154d4897d60"
     }
   ],
-  "digest": "sha256:aeacf279acb75f4516c3e937b333ec43e889e06ce592e0bdf93ab921f4a3a6df"
+  "digest": "sha256:bf2fe0788aa635d21f3e4bdba7155d1352add5ed4dab74c4f092ed607f4771f6"
 }

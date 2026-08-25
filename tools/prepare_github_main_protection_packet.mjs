@@ -19,6 +19,7 @@ const SOURCES = [
   'package.json',
   'tools/verify_github_main_protection.mjs',
   'tools/prepare_github_main_protection_packet.mjs',
+  'tools/apply_github_main_protection.mjs',
 ]
 
 function fail(code) {
@@ -156,6 +157,17 @@ export function buildGitHubMainProtectionPacket({ sourceReceipts = [] } = {}) {
       supabaseMutated: false,
       credentialValuesRequired: false,
     },
+    applicator: {
+      tool: 'tools/apply_github_main_protection.mjs',
+      planCommand: 'npm run github:main-protection:apply:plan',
+      executeCommand: 'node tools/apply_github_main_protection.mjs --execute',
+      requiredApprovalEnv: 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL',
+      tokenEnv: ['GITHUB_TOKEN', 'GH_TOKEN'],
+      defaultMode: 'plan_only_no_github_write',
+      executeRequiresExactOwnerApproval: true,
+      afterApplyVerifier: 'tools/verify_github_main_protection.mjs',
+      credentialValueExposed: false,
+    },
     ownerApprovalTemplate: 'I approve one GitHub repository settings write to create or update the main protection ruleset for swanhtet01/swanhtet01.github.io using the reviewed SuperMega main release gate proposal only. I do not approve push, PR creation, merge, deployment, Supabase mutation, credential change, customer contact, payment, stock, domain, hosted-write, or managed activation.',
     afterApplyVerification: {
       readOnlySnapshotCommands: [
@@ -194,6 +206,17 @@ export function validateGitHubMainProtectionPacket(packet) {
     fail('github_main_protection_proposal_controls_invalid')
   }
   if (!String(packet.ownerApprovalTemplate || '').includes('I approve one GitHub repository settings write')) fail('github_main_protection_proposal_approval_invalid')
+  if (packet.applicator?.tool !== 'tools/apply_github_main_protection.mjs'
+    || packet.applicator?.planCommand !== 'npm run github:main-protection:apply:plan'
+    || packet.applicator?.executeCommand !== 'node tools/apply_github_main_protection.mjs --execute'
+    || packet.applicator?.requiredApprovalEnv !== 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'
+    || packet.applicator?.tokenEnv?.join(',') !== 'GITHUB_TOKEN,GH_TOKEN'
+    || packet.applicator?.defaultMode !== 'plan_only_no_github_write'
+    || packet.applicator?.executeRequiresExactOwnerApproval !== true
+    || packet.applicator?.afterApplyVerifier !== 'tools/verify_github_main_protection.mjs'
+    || packet.applicator?.credentialValueExposed !== false) {
+    fail('github_main_protection_proposal_applicator_invalid')
+  }
   if (!Array.isArray(packet.sourceReceipts) || packet.sourceReceipts.length !== SOURCES.length) fail('github_main_protection_proposal_sources_invalid')
   for (const receipt of packet.sourceReceipts) {
     if (!SOURCES.includes(receipt.path) || !/^sha256:[0-9a-f]{64}$/.test(String(receipt.digest || ''))) fail('github_main_protection_proposal_sources_invalid')
