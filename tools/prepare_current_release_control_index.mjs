@@ -99,6 +99,11 @@ function assertCandidateMatch(label, actualCommit, expectedCommit) {
   if (actualCommit !== expectedCommit) fail(`current_release_control_index_${label}_candidate_mismatch`)
 }
 
+function ownerApprovalPacketVersionFromPath(path) {
+  const match = /release-owner-approval-packet\.(v[0-9]{1,3})\./i.exec(basename(path || ''))
+  return match ? match[1].toLowerCase() : 'v1'
+}
+
 export function buildCurrentReleaseControlIndex(input = {}) {
   const handoff = input.handoff
   const candidateCommit = assertSha(handoff?.candidate?.commit, 'current_release_control_index_candidate_invalid')
@@ -394,13 +399,14 @@ async function collectInputs(options) {
   const githubProposal = await readJson(GITHUB_PROPOSAL_PATH, 'current_release_control_index_github_proposal_missing')
   const supabaseProposal = await readJson(SUPABASE_PROPOSAL_PATH, 'current_release_control_index_supabase_proposal_missing')
   const releaseOwnerApprovalMarkdown = await readText(options.releaseOwnerApprovalPath, 'current_release_control_index_owner_approval_missing')
+  const releaseOwnerApprovalVersion = ownerApprovalPacketVersionFromPath(options.releaseOwnerApprovalPath)
   const releaseOwnerApproval = validateReleaseOwnerApprovalMarkdown(releaseOwnerApprovalMarkdown, {
     handoff,
     githubProposal,
     githubProtectionSnapshot: githubMainProtectionSnapshot,
     githubProtectionSnapshotPath: snapshotPath,
     supabaseProposal,
-    version: 'v1',
+    version: releaseOwnerApprovalVersion,
   })
   let staleOwnerApprovalPacketObserved = false
   let staleOwnerApprovalPacketFileName = null
@@ -409,13 +415,14 @@ async function collectInputs(options) {
     staleOwnerApprovalPacketFileName = basename(options.staleOwnerApprovalPath)
     try {
       const staleMarkdown = await readText(options.staleOwnerApprovalPath, 'current_release_control_index_stale_owner_approval_missing')
+      const staleOwnerApprovalVersion = ownerApprovalPacketVersionFromPath(options.staleOwnerApprovalPath)
       validateReleaseOwnerApprovalMarkdown(staleMarkdown, {
         handoff,
         githubProposal,
         githubProtectionSnapshot: githubMainProtectionSnapshot,
         githubProtectionSnapshotPath: snapshotPath,
         supabaseProposal,
-        version: 'v1',
+        version: staleOwnerApprovalVersion,
       })
       fail('current_release_control_index_stale_owner_approval_unexpectedly_current')
     } catch (error) {
