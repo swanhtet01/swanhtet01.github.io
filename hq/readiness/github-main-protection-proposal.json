@@ -1,0 +1,118 @@
+{
+  "contract": "supermega.github-main-protection-proposal.v1",
+  "digestScope": "utf8_compact_json_without_digest",
+  "repository": "swanhtet01/swanhtet01.github.io",
+  "mode": "owner_approval_required",
+  "purpose": "Make the GitHub main-protection blocker executable without approving any other release action.",
+  "githubApi": {
+    "method": "POST",
+    "path": "/repos/swanhtet01/swanhtet01.github.io/rulesets",
+    "apiVersion": "2026-03-10",
+    "requiredPermission": "Administration repository permission: write",
+    "docs": [
+      "https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset",
+      "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets"
+    ]
+  },
+  "proposedRuleset": {
+    "name": "SuperMega main release gate",
+    "target": "branch",
+    "enforcement": "active",
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "include": [
+          "refs/heads/main"
+        ],
+        "exclude": []
+      }
+    },
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "type": "pull_request",
+        "parameters": {
+          "allowed_merge_methods": [
+            "merge",
+            "squash",
+            "rebase"
+          ],
+          "dismiss_stale_reviews_on_push": true,
+          "require_code_owner_review": false,
+          "require_last_push_approval": true,
+          "required_approving_review_count": 1,
+          "required_review_thread_resolution": true
+        }
+      },
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {
+              "context": "SuperMega App CI"
+            },
+            {
+              "context": "Dependency Security Audit"
+            },
+            {
+              "context": "Kernel Console - Verify & Owner-Gated Release"
+            }
+          ],
+          "strict_required_status_checks_policy": true
+        }
+      }
+    ]
+  },
+  "verifierCompatibility": {
+    "verifier": "tools/verify_github_main_protection.mjs",
+    "contract": "supermega.github-main-protection.v1",
+    "simulatedOk": true,
+    "requiredChecks": [
+      "SuperMega App CI",
+      "Dependency Security Audit",
+      "Kernel Console - Verify & Owner-Gated Release"
+    ],
+    "simulatedFailures": []
+  },
+  "controls": {
+    "githubWritesApproved": false,
+    "githubWritesPerformed": false,
+    "repositorySettingsMutated": false,
+    "branchMutated": false,
+    "pullRequestCreated": false,
+    "mergePerformed": false,
+    "deploymentPerformed": false,
+    "supabaseMutated": false,
+    "credentialValuesRequired": false
+  },
+  "ownerApprovalTemplate": "I approve one GitHub repository settings write to create or update the main protection ruleset for swanhtet01/swanhtet01.github.io using the reviewed SuperMega main release gate proposal only. I do not approve push, PR creation, merge, deployment, Supabase mutation, credential change, customer contact, payment, stock, domain, hosted-write, or managed activation.",
+  "afterApplyVerification": {
+    "readOnlySnapshotCommands": [
+      "GET /repos/swanhtet01/swanhtet01.github.io/branches/main",
+      "GET /repos/swanhtet01/swanhtet01.github.io/rulesets"
+    ],
+    "localVerificationCommand": "node tools/verify_github_main_protection.mjs --branch-file <branch-snapshot.json> --rulesets-file <rulesets-snapshot.json>",
+    "requiredResult": "ok:true"
+  },
+  "sourceReceipts": [
+    {
+      "path": "package.json",
+      "digest": "sha256:72eafb121a4b427855ec7d5c37cfa02cd09cc3b0c7347d23d9eaccba64d5c7e3"
+    },
+    {
+      "path": "tools/verify_github_main_protection.mjs",
+      "digest": "sha256:e4292c78ae87fa8aff23d2084b6dd5fa60464a9fd42e6b85f5c91c15e731a5c6"
+    },
+    {
+      "path": "tools/prepare_github_main_protection_packet.mjs",
+      "digest": "sha256:95722b99b1d737641edab947260fb64941c76a431ceea320e79a4fc130966617"
+    }
+  ],
+  "digest": "sha256:8569d350781661393be5ba6a07398ed07077cfbbdf9697c83d9c8937077a22da"
+}
