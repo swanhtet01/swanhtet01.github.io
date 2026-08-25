@@ -34,6 +34,8 @@ Shop trade links may include a reviewed `template` query parameter, such as ?pro
 
 Android phone smoke pass, before using this with a real owner: first load the sample while online, then turn off connectivity and repeat steps 1, 2, 4, 7, 8, 9, and 10. Record whether the camera prompt appears, whether the bottom bar remains usable with one thumb, whether the QR dialog opens or shows the no-saved-QR fallback, and whether reload keeps the order/close path. This is still rehearsal evidence only; it is not hosted pilot proof.
 
+For a recorded founder rehearsal, run the local `shop:android-smoke:packet` script and fill the private evidence fields it lists. Keep names, screenshots, and device notes in the private workspace; public reports get only pass/fail, counts, and digest.
+
 ## 4. Objection handling: the boundary
 
 "Is this touching my real money or messaging my customers?" — read the gate's own line:

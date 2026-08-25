@@ -286,15 +286,17 @@ with no failed requests. **F1 still stands** — none of this has been run on re
 Myanmar hardware over a real dropped connection, and the phone test is what
 turns a measured claim into a demonstrated one.
 
-`docs/demo-playbooks/shop.md` §2 is still the correct
-setup path, **but its §3 script is pre-#459 and demos roughly three of the nine
-rows below**: it has no camera-scan, payment-QR, product-photo, loyalty, or
-bottom-nav step, and its step 6 still walks the pre-#436
-`Reconcile payment` → `Complete` path that row 1 supersedes. Extending it is
-item A6 of the two-week plan. Two rows (Plant job board, Ecommerce storefront
-cards) are not Shop phone surfaces at all and have their own playbooks. The
-limits column is not hedging; it is what must be said out loud so a demo does
-not become an overclaim.
+`docs/demo-playbooks/shop.md` §2 is still the correct setup path, and §3 now
+covers the Shop phone surfaces that matter for a first owner demo: camera scan,
+keyboard fallback, bottom task bar, product photo, display-only payment QR,
+loyalty chip, current `Paid & handed over` handoff, and the online-first/offline
+drop smoke pass. `tools/prepare_shop_android_smoke_packet.mjs` packages that
+script into a private founder hardware rehearsal packet. **F1 still stands**:
+the packet makes the real-phone run repeatable, but it does not prove hosted
+pilot readiness, promotion evidence, or managed activation. Two rows (Plant job
+board, Ecommerce storefront cards) are not Shop phone surfaces at all and have
+their own playbooks. The limits column is not hedging; it is what must be said
+out loud so a demo does not become an overclaim.
 
 | Surface | Where it lives | Honest limit to say out loud |
 |---|---|---|
@@ -373,12 +375,11 @@ build gates and desktop emulation only. A camera permission prompt behaving
 unexpectedly in front of a shop owner is a first-meeting-ending failure.
 
 **Cheapest mitigation, in order of cost:** (a) the founder walks one Android
-phone through the nine rows of section 3 for an afternoon — **not** through
-`docs/demo-playbooks/shop.md` §3 as it stands, which scripts none of the
-camera, QR, photo, loyalty, or bottom-nav surfaces (see the §3 preamble); the
-plan's item A6 extends the playbook to cover them, and doing that first turns
-the smoke test into a repeatable script instead of a one-off. Zero build cost,
-zero gate spend, and it closes S1's and F1's open roadmap items.
+phone through the updated Shop playbook and `shop:android-smoke:packet` output
+for an afternoon. The playbook now covers the camera, QR, photo, loyalty, and
+bottom-nav surfaces; the packet keeps the evidence private and fail-closed. Zero
+build cost, zero gate spend, and it turns S1's and F1's open items into a real
+hardware decision instead of a synthetic claim.
 (b) ship the app-shell skeleton that `ANDROID-PERFORMANCE-BASELINE.md`'s "What
 to optimize first" item 3 describes — a static skeleton inside the 4 KB
 `index.html`, which "moves first visual feedback to well under 1 s on this
@@ -420,14 +421,14 @@ the founder can do, per the cited contract in each row.
 | **A3 — P2: Plant shop-floor scanning.** Reuse `BarcodeScanButton.tsx` for material issue and job dispatch. | Roadmap §1 P2 ("NOW after S1 ships"), §3 item 2 | Small-medium; no new dependency, no gate spend. |
 | **A4 — Doc-truth fix in the Shop demo playbook.** `docs/demo-playbooks/shop.md` §2's parallel-lane note says a `?template=` deep link "is not in the app at this commit — do not add a template parameter to app URLs in a live demo". It **is** in the app: `ProductOnboardingPage.tsx:105` reads `?template=` and `business-templates.ts:559-561` builds the path. | The two source lines above; `GTM-AI-OPERATIONS.md` (c) mechanism note | Directly unblocks step 3 of the critical path — the outreach drafts promise a trade-specific sample and the playbook currently forbids the link that delivers it. `docs/` is drift-guarded, so `node tools/test_demo_playbooks.mjs` must stay green. |
 | **A5 — Reconcile the two stale gap claims** in `PRODUCT-CATALOG-AND-PRICING.md` §2.1 and §2.4 (contradiction 5, section 1). | Roadmap S1/E1 SHIPPED rows | Doc-only. That document is the one sales copy is lifted from. |
-| **A6 — Extend `docs/demo-playbooks/shop.md` §3 to the surfaces that shipped 2026-08-19.** Its script predates #436/#459/#465/#469 and covers roughly three of section 3's nine rows: no camera scan, no payment QR, no product photo, no loyalty balance, no bottom-nav step, and a step 6 that still walks the superseded `Reconcile payment` → `Complete` path. | Section 3 of this brief; roadmap S1/S2/S3/E1/F1 SHIPPED rows | Prerequisite for founder item F1 — the on-device smoke test needs a script that exercises what is being smoke-tested. Same drift guard as A4: `node tools/test_demo_playbooks.mjs` must stay green. |
+| **A6 — CLOSED LOCAL 2026-08-25: extend `docs/demo-playbooks/shop.md` §3 to the surfaces that shipped 2026-08-19.** | Section 3 of this brief; roadmap S1/S2/S3/E1/F1 SHIPPED rows; `tools/prepare_shop_android_smoke_packet.mjs` | The on-device smoke test now has a repeatable script and private evidence-field packet. This closes the local doc/tooling slice only; founder item F1 still needs real Android hardware. Same drift guard as A4: `node tools/test_demo_playbooks.mjs` plus `npm run shop:android-smoke:self-test` must stay green. |
 | **A7 — Propose the runbook amendment for the schema-version trap.** `PRODUCTION-ACTIVATION-RUNBOOK.md` §2 sequences only v11 and hardcodes `SUPERMEGA_TRIAL_SCHEMA_VERSION=11`; it never mentions `SUPERMEGA_BILLING_SCHEMA_VERSION` at all, and its §4 "What you should NOT do" list does not warn about the v12/v13 case. Draft the amended step B for both forks, for founder confirmation. | "The schema-version trap" in section 2; `trial_store.py:52`/`3218`, `billing_rail.py:63`/`543` | The runbook is the document a founder follows literally at 2am during activation. Amending it is doc work an agent can draft; **adopting** it is the founder's call, and the runbook stays founder-owned. |
 
 ### Founder-only
 
 | Item | Cites | Why only the founder |
 |---|---|---|
-| **F1 — One Android phone smoke test** over section 3's nine rows: camera scan, bottom nav, QR dialog, one-tap sale, product photo, loyalty chip. Best run after A6 so it follows a script. Do the first load **on connectivity**, then drop the network and confirm the workflow still runs — that tests the offline claim honestly instead of assuming it. | Roadmap S1 and F1 open items | Needs real hardware. Closes two open roadmap items for the cost of an afternoon and retires most of Risk 2. |
+| **F1 — One Android phone smoke test** over section 3's nine rows: camera scan, bottom nav, QR dialog, one-tap sale, product photo, loyalty chip. Run it from the A6-updated playbook and the `shop:android-smoke:packet` evidence fields. Do the first load **on connectivity**, then drop the network and confirm the workflow still runs — that tests the offline claim honestly instead of assuming it. | Roadmap S1 and F1 open items | Needs real hardware. Closes two open roadmap items for the cost of an afternoon and retires most of Risk 2. |
 | **F2 — Make D1–D6, plus the migration-set fork** (critical-path step 6: Fork A all-migrations-before-tenant, or Fork B v11-now-billing-later). | `BILLING-RAIL-DESIGN.md` 49–54; "The schema-version trap" in section 2 | `CLAUDE.md` hard limit. D3/D4/D5 carry written recommendations, so the genuinely open ones are D1, D2, and the fork. D6 is not a free-standing scheduling call once the trap is understood — it comes with the two runtime env values. |
 | **F3 — Resolve the runbook §0 precondition** (contradiction 2): check whether the paired release carrying the self-serve fixes is live. | `PRODUCTION-ACTIVATION-RUNBOOK.md` §0; `PRODUCT-CATALOG-AND-PRICING.md` §7 | Release history is founder-visible; the dispatch itself is founder-only. Everything hosted is behind this. |
 | **F4 — Tick or explicitly defer the six GTM boxes.** | `GTM-AI-OPERATIONS.md` (f) | Named there as a hard gate. Deferring is a legitimate answer; leaving them ambiguous is what stalls Track A. |

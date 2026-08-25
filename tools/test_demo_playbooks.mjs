@@ -42,6 +42,7 @@ const manifest = JSON.parse(read('site-manifest.json'))
 const generator = read('tools/create_public_vercel_output.mjs')
 const productSetup = read('showroom/src/core/product-setup.ts')
 const accountRoutes = read('showroom/src/core/account-routes.ts')
+const packageManifest = JSON.parse(read('package.json'))
 
 // Derived tokens: parameterised URLs and labels the sources build at runtime.
 // Each derivation is guarded by the exact source pattern that produces it.
@@ -123,9 +124,13 @@ for (const required of [
   'Android phone smoke pass',
   'rehearsal evidence only',
   'not hosted pilot proof',
+  'shop:android-smoke:packet',
 ]) {
   check(shopPlaybook.includes(required), `shop_playbook_w2_coverage:${required}`)
 }
+check(packageManifest.scripts['shop:android-smoke:packet'] === 'node tools/prepare_shop_android_smoke_packet.mjs', 'shop_android_smoke_packet_script')
+check(packageManifest.scripts['shop:android-smoke:self-test'] === 'node --test tools/prepare_shop_android_smoke_packet.test.mjs && node tools/prepare_shop_android_smoke_packet.mjs --self-test', 'shop_android_smoke_self_test_script')
+check(packageManifest.scripts['demo:playbooks:verify'] === 'node tools/test_demo_playbooks.mjs && npm run shop:android-smoke:self-test', 'demo_playbooks_runs_shop_android_smoke')
 
 const readme = read(`${playbookDir}/README.md`)
 for (const name of ['shop.md', 'plant.md', 'website.md', 'ecommerce.md']) {
