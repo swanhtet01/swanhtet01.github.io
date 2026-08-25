@@ -21,13 +21,13 @@
     "privateIdentityExposed": false
   },
   "weeklyReport": {
-    "totalActions": 4,
+    "totalActions": 5,
     "openActionCount": 2,
-    "closedActionCount": 2,
+    "closedActionCount": 3,
     "ownerGatedCount": 2,
     "criticalOpenCount": 1,
-    "measuredResultCount": 2,
-    "closedCycleTimeDaysMedian": 0.452
+    "measuredResultCount": 3,
+    "closedCycleTimeDaysMedian": 0.448
   },
   "actions": [
     {
@@ -209,6 +209,52 @@
         "closedAt": "2026-08-25T10:45:00.000Z",
         "closureNote": "Added digest-bound Plant OEE source map and ambiguous quantity fail-closed gate.",
         "measuredResult": "plant:oee:window:verify 42 checks; plant:oee and plant:quality verify passed."
+      }
+    },
+    {
+      "id": "competitive-execution-cut",
+      "openedAt": "2026-08-26T00:00:00.000Z",
+      "productIds": [
+        "shop",
+        "plant",
+        "website",
+        "ecommerce"
+      ],
+      "sourceFinding": {
+        "sourceType": "audit_document",
+        "label": "Expert audits needed a current money-path execution cut",
+        "evidenceRef": "hq/strategy/COMPETITIVE-EXECUTION-CUT.md",
+        "evidenceDigest": "sha256:37378d8d30950bc5cf8f8e3d675c5eb492d5b72293a235b2979f2e801193afa3"
+      },
+      "recommendation": "Use the cut to keep Shop pilot, release integrity, and claim boundaries ahead of new product shells or broad agent work.",
+      "severity": "high",
+      "businessImpact": {
+        "kind": "trust",
+        "estimateLabel": "Turns audit volume into one sellable operating sequence without overclaiming.",
+        "measured": true
+      },
+      "owner": {
+        "role": "Technical Steward plus Product",
+        "namedPrivate": false
+      },
+      "dueDate": "2026-08-26",
+      "status": "closed",
+      "authority": {
+        "ownerApprovalRequired": false,
+        "externalWriteAllowed": false
+      },
+      "acceptance": {
+        "evidenceRequired": [
+          "Competitive cut names products, first commercial gate, forbidden ERP/parity claims, and delegation limits"
+        ],
+        "tests": [
+          "node tools/verify_hq_contract.mjs"
+        ]
+      },
+      "closure": {
+        "closedAt": "2026-08-26T00:00:00.000Z",
+        "closureNote": "Added source-controlled competitive execution cut and HQ contract guard.",
+        "measuredResult": "HQ contract check passed with competitive cut guard."
       }
     }
   ]

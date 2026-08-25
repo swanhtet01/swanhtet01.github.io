@@ -27,7 +27,7 @@ import {
 import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText, competitiveExecutionCutText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -65,6 +65,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'README.md'), 'utf8'),
   readFile(resolve(root, 'agent_os', 'agent_os_architecture.md'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
+  readFile(resolve(root, 'hq', 'strategy', 'COMPETITIVE-EXECUTION-CUT.md'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
@@ -105,6 +106,7 @@ for (const relativePath of databaseImplementationPaths) {
 }
 const databaseImplementationDigest = `sha256:${databaseImplementationHash.digest('hex')}`
 const normalizedAgentGovernanceText = agentGovernanceText.replace(/\r\n?/g, '\n')
+const competitiveExecutionCutNormalized = competitiveExecutionCutText.replace(/\s+/g, ' ')
 const liveReleaseCommit = now.match(/^Live release commit: `([0-9a-f]{40})`$/m)?.[1] ?? ''
 const executionOrderMarker = '## Execution order'
 const workboardExecutionOrder = workboard.includes(executionOrderMarker)
@@ -935,6 +937,19 @@ requireContract('internal systems are not customer products',
   portfolio.internalSystems?.map((entry) => entry.id).join(',') === 'company-system,rnd-system'
   && internalSystem('company-system')?.name === 'SuperMega HQ'
   && internalSystem('rnd-system')?.public === false)
+requireContract('competitive execution cut preserves money-path focus and claim boundaries',
+  competitiveExecutionCutText.includes('Contract: `supermega.competitive-execution-cut.v1`')
+  && competitiveExecutionCutText.includes('OneDrive expert/audit exports are advisory inputs only.')
+  && competitiveExecutionCutText.includes('AI is a shared capability, not a customer product.')
+  && competitiveExecutionCutNormalized.includes('Do not claim SAP, Odoo, Shopify, or POS-SaaS replacement parity until managed tenant, support, observability, recovery, and commercial evidence gates pass.')
+  && competitiveExecutionCutNormalized.includes('Shop remains the money-path product until its owner-private pilot has at least 20 consecutive accepted observed runs.')
+  && competitiveExecutionCutText.includes('The current first external gate is GitHub `main` protection.')
+  && competitiveExecutionCutNormalized.includes('The current first commercial evidence gate is the owner-private Shop baseline and pilot.')
+  && competitiveExecutionCutText.includes('The implementer cannot sign its own verification.')
+  && competitiveExecutionCutNormalized.includes('Do not create persistent subagents, recursive delegation, hosted agent runs, or parallel local model work.')
+  && competitiveExecutionCutNormalized.includes('No new product shell should be created until one of the four products completes a real owner-reviewed learning loop.')
+  && competitiveExecutionCutText.includes('No deploy, provider write, credential')
+  && competitiveExecutionCutNormalized.includes('managed activation is authorized by this document.'))
 
 requireContract('manifest has one canonical four-product registry',
   manifest.schemaVersion === 'supermega.site-context.v2'
