@@ -23,10 +23,11 @@ Generate a public-safe packet for Git/HQ review. The packet contains counts, der
 
 ```powershell
 npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"
-npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<public-baseline-packet.json>"
+npm.cmd run shop:pilot:intake-packet -- --output "<public-intake-packet.json>"
+npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>"
 ```
 
-If the launch gate reports `owner_private_baseline_ready`, the baseline digest is ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.
+If the launch gate reports `owner_private_handoff_ready`, the baseline and intake digests are ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.
 
 ## 1. Business and operator (who)
 

@@ -12,6 +12,11 @@ import {
   buildShopPilotBaselinePacket,
   validateShopPilotBaselinePacket,
 } from './prepare_shop_pilot_baseline_packet.mjs'
+import {
+  buildShopPilotPrivateIntakePacket,
+  sampleShopPilotPrivateIntakeInput,
+  validateShopPilotPrivateIntakePacket,
+} from './prepare_shop_pilot_private_intake_packet.mjs'
 import { verifyShopPilotPublicBoundary, verifyShopPilotPublicBoundaryFiles } from './verify_shop_pilot_public_boundary.mjs'
 
 export const SHOP_PILOT_LAUNCH_GATE_CONTRACT = 'supermega.shop-pilot-launch-gate.v1'
@@ -177,6 +182,82 @@ function summarizeBaselinePacket(input, failures) {
   }
 }
 
+function summarizeIntakePacket(input, failures) {
+  if (input === undefined || input === null) {
+    return {
+      present: false,
+      accepted: false,
+      contract: null,
+      status: 'missing',
+      digest: null,
+      publicBoundaryDigest: null,
+      readinessDigest: null,
+      privateStages: [],
+    }
+  }
+  let packet = null
+  try {
+    packet = validateShopPilotPrivateIntakePacket(input)
+  } catch (error) {
+    addFailure(failures, `shop_pilot_launch_gate_intake_packet_invalid:${String(error?.message || 'failed').slice(0, 120)}`)
+    return {
+      present: true,
+      accepted: false,
+      contract: input?.contract || null,
+      status: input?.status || 'invalid',
+      digest: input?.digest || null,
+      publicBoundaryDigest: input?.sourceState?.publicBoundaryDigest || null,
+      readinessDigest: input?.sourceState?.readinessDigest || null,
+      privateStages: [],
+    }
+  }
+  if (packet.ok !== true || packet.status !== 'owner_private_intake_ready') {
+    addFailure(failures, 'shop_pilot_launch_gate_intake_packet_not_ready')
+  }
+  if (packet.controls?.customerContactAllowed !== false
+    || packet.controls?.paymentAllowed !== false
+    || packet.controls?.stockMovementAllowed !== false
+    || packet.controls?.hostedWritesAllowed !== false
+    || packet.controls?.githubWritesAllowed !== false
+    || packet.controls?.vercelDeployAllowed !== false
+    || packet.controls?.supabaseWritesAllowed !== false
+    || packet.controls?.productionReleaseAllowed !== false
+    || packet.controls?.managedActivationAllowed !== false
+    || packet.controls?.externalEffectsAllowed !== false
+    || packet.controls?.credentialValuesIncluded !== false) {
+    addFailure(failures, 'shop_pilot_launch_gate_intake_packet_controls_invalid')
+  }
+  return {
+    present: true,
+    accepted: packet.ok === true && packet.status === 'owner_private_intake_ready',
+    contract: packet.contract,
+    status: packet.status,
+    digest: packet.digest,
+    publicBoundaryDigest: packet.sourceState?.publicBoundaryDigest || null,
+    readinessDigest: packet.sourceState?.readinessDigest || null,
+    privateStages: (packet.ownerPrivateIntake?.requiredPrivateStages || []).map((stage) => ({
+      id: stage.id,
+      storedOutsideGit: stage.storedOutsideGit === true,
+      mayContainIdentity: stage.mayContainIdentity === true,
+    })),
+  }
+}
+
+function launchStatus({ failures, baselineReady, intakeReady }) {
+  if (failures.length) return 'failed'
+  if (baselineReady && intakeReady) return 'owner_private_handoff_ready'
+  if (baselineReady) return 'owner_private_baseline_ready'
+  if (intakeReady) return 'owner_private_intake_ready'
+  return 'owner_private_intake_required'
+}
+
+function launchAuthority({ baselineReady, intakeReady }) {
+  if (baselineReady && intakeReady) return 'owner_private_baseline_and_intake_ready'
+  if (baselineReady) return 'owner_private_intake_and_baseline_ready'
+  if (intakeReady) return 'owner_private_intake_ready_baseline_required'
+  return 'owner_private_intake_only'
+}
+
 export function assessShopPilotLaunchGate(input = {}) {
   const failures = []
   const packageManifest = input.packageManifest || {}
@@ -187,6 +268,7 @@ export function assessShopPilotLaunchGate(input = {}) {
   const publicBoundaryVerification = input.publicBoundaryVerification || {}
   const gitState = input.gitState || {}
   const baselineEvidence = summarizeBaselinePacket(input.baselinePacket, failures)
+  const intakeEvidence = summarizeIntakePacket(input.intakePacket, failures)
 
   if (input.repository !== REPOSITORY) addFailure(failures, 'shop_pilot_launch_gate_repository_invalid')
   if (packageManifest.supermega?.productionSupabaseTargetStatus !== 'protected-unapproved') {
@@ -278,15 +360,16 @@ export function assessShopPilotLaunchGate(input = {}) {
   if (!gitState.branch || typeof gitState.branch !== 'string') addFailure(failures, 'shop_pilot_launch_gate_branch_invalid')
   if (Number.isInteger(gitState.aheadOfOriginMain) && gitState.aheadOfOriginMain < 1) addFailure(failures, 'shop_pilot_launch_gate_no_review_delta')
 
-  if (hasSecretShape({ readiness, publicBoundary, baselineEvidence })) addFailure(failures, 'shop_pilot_launch_gate_secret_shape_detected')
+  if (hasSecretShape({ readiness, publicBoundary, baselineEvidence, intakeEvidence })) addFailure(failures, 'shop_pilot_launch_gate_secret_shape_detected')
 
   const baselineReady = baselineEvidence.accepted === true
+  const intakeReady = intakeEvidence.accepted === true
   const body = {
     contract: SHOP_PILOT_LAUNCH_GATE_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
     generatedAt: input.generatedAt || new Date().toISOString(),
     repository: REPOSITORY,
-    status: failures.length ? 'failed' : (baselineReady ? 'owner_private_baseline_ready' : 'owner_private_intake_required'),
+    status: launchStatus({ failures, baselineReady, intakeReady }),
     ok: failures.length === 0,
     candidate: {
       branch: gitState.branch || null,
@@ -330,12 +413,15 @@ export function assessShopPilotLaunchGate(input = {}) {
       customerContactPerformed: publicBoundaryVerification.customerContactPerformed === true,
     },
     baselineEvidence,
+    intakeEvidence,
     launchReadiness: {
-      authority: baselineReady ? 'owner_private_intake_and_baseline_ready' : 'owner_private_intake_only',
+      authority: launchAuthority({ baselineReady, intakeReady }),
       privateWorkspaceMayBePreparedAfterOwnerInput: failures.length === 0,
       baselinePacketAccepted: baselineReady,
       baselinePacketDigest: baselineEvidence.digest,
       baselinePrivateInputDigest: baselineEvidence.privateInputDigest,
+      intakePacketAccepted: intakeReady,
+      intakePacketDigest: intakeEvidence.digest,
       readyForCustomerContact: false,
       readyForPayment: false,
       readyForDeployment: false,
@@ -346,7 +432,7 @@ export function assessShopPilotLaunchGate(input = {}) {
     },
     requiredNextGates: [
       gate('owner_private_baseline', 'Owner-observed manual Shop baseline packet', baselineReady ? 'satisfied_private_digest_only' : (failures.length ? 'blocked' : 'owner_action_required'), !baselineReady, 'At least three observed manual order and redemption runs must be captured privately before pilot day one.'),
-      gate('owner_private_intake', 'Owner selects and reviews the private Shop pilot workspace input', failures.length ? 'blocked' : 'owner_action_required', true, 'Only private intake preparation can proceed; participant identity remains outside Git, CI, HQ records, and reports.'),
+      gate('owner_private_intake', 'Owner selects and reviews the private Shop pilot workspace input', intakeReady ? 'satisfied_private_digest_only' : (failures.length ? 'blocked' : 'owner_action_required'), !intakeReady, 'Only private intake preparation can proceed; participant identity remains outside Git, CI, HQ records, and reports.'),
       gate('exact_preview_rehearsal', 'Exact-candidate protected preview rehearsal', 'owner_approval_required', true, 'The preview rehearsal must be bound to the reviewed SHA and migration digests before release.'),
       gate('real_shop_pilot_evidence', 'Real owner-reviewed Shop pilot evidence', 'blocked', true, '20 consecutive accepted receipt-and-anchor-bound runs are required; synthetic runs remain excluded.'),
       gate('managed_activation', 'Managed production activation', 'owner_approval_required', true, 'Production remains isolated-demo until every hosted proof passes and the owner approves exact activation.'),
@@ -379,14 +465,19 @@ export function validateShopPilotLaunchGate(report) {
   const { digest: actualDigest, ...body } = report
   if (actualDigest !== digest(JSON.stringify(body))) throw new Error('shop_pilot_launch_gate_digest_invalid')
   if (report.ok !== true
-    || !['owner_private_intake_required', 'owner_private_baseline_ready'].includes(report.status)
+    || !['owner_private_intake_required', 'owner_private_baseline_ready', 'owner_private_intake_ready', 'owner_private_handoff_ready'].includes(report.status)
     || report.failures?.length !== 0) {
     throw new Error('shop_pilot_launch_gate_not_passing')
   }
   const baselineAccepted = report.status === 'owner_private_baseline_ready'
-  if (report.launchReadiness?.authority !== (baselineAccepted ? 'owner_private_intake_and_baseline_ready' : 'owner_private_intake_only')
+    || report.status === 'owner_private_handoff_ready'
+  const intakeAccepted = report.status === 'owner_private_intake_ready'
+    || report.status === 'owner_private_handoff_ready'
+  if (report.launchReadiness?.authority !== launchAuthority({ baselineReady: baselineAccepted, intakeReady: intakeAccepted })
     || report.launchReadiness?.baselinePacketAccepted !== baselineAccepted
+    || report.launchReadiness?.intakePacketAccepted !== intakeAccepted
     || (baselineAccepted && (report.baselineEvidence?.accepted !== true || !/^sha256:[0-9a-f]{64}$/.test(report.baselineEvidence?.privateInputDigest || '')))
+    || (intakeAccepted && (report.intakeEvidence?.accepted !== true || !/^sha256:[0-9a-f]{64}$/.test(report.intakeEvidence?.digest || '')))
     || report.launchReadiness?.readyForCustomerContact !== false
     || report.launchReadiness?.readyForPayment !== false
     || report.launchReadiness?.readyForDeployment !== false
@@ -451,7 +542,7 @@ function runNoWriteVerifier(args) {
   }
 }
 
-async function currentReport({ baselinePacketPath = null } = {}) {
+async function currentReport({ baselinePacketPath = null, intakePacketPath = null } = {}) {
   runNoWriteVerifier(['tools/manage_technical_estate.mjs', '--verify'])
   runNoWriteVerifier(['tools/manage_managed_pilot_readiness.mjs', '--verify'])
   runNoWriteVerifier(['tools/verify_shop_pilot_public_boundary.mjs', '--file', 'hq/readiness/shop-pilot-public-boundary.json'])
@@ -463,6 +554,7 @@ async function currentReport({ baselinePacketPath = null } = {}) {
   const publicBoundary = await readJson('hq/readiness/shop-pilot-public-boundary.json')
   const publicBoundaryVerification = verifyShopPilotPublicBoundaryFiles(['hq/readiness/shop-pilot-public-boundary.json'])
   const baselinePacket = baselinePacketPath ? await readJson(baselinePacketPath) : null
+  const intakePacket = intakePacketPath ? await readJson(intakePacketPath) : null
 
   return assessShopPilotLaunchGate({
     generatedAt: new Date().toISOString(),
@@ -473,6 +565,7 @@ async function currentReport({ baselinePacketPath = null } = {}) {
     publicBoundary,
     publicBoundaryVerification,
     baselinePacket,
+    intakePacket,
     gitState: currentGitState(),
   })
 }
@@ -617,7 +710,10 @@ export function sampleShopPilotLaunchGateInput(overrides = {}) {
 function runSelfTest() {
   const valid = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput())
   const baselinePacket = buildShopPilotBaselinePacket(sampleBaselineInput(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  const intakePacket = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
   const withBaseline = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ baselinePacket }))
+  const withIntake = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ intakePacket }))
+  const withBoth = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ baselinePacket, intakePacket }))
   const blockedBaseline = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
     baselinePacket: buildShopPilotBaselinePacket(sampleBaselineInput({
       claimedMedianMinutesPerOrder: 11,
@@ -638,6 +734,9 @@ function runSelfTest() {
       controls: { ...sampleShopPilotLaunchGateInput().publicBoundary.controls, customerContactPerformed: true },
     },
   }))
+  const tamperedIntake = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
+    intakePacket: { ...intakePacket, controls: { ...intakePacket.controls, customerContactAllowed: true } },
+  }))
   const checks = {
     valid_candidate_is_private_intake_only: valid.ok === true && validateShopPilotLaunchGate(valid) === valid,
     public_safe_baseline_advances_private_handoff: withBaseline.ok === true
@@ -645,8 +744,21 @@ function runSelfTest() {
       && withBaseline.launchReadiness.baselinePacketAccepted === true
       && withBaseline.launchReadiness.readyForCustomerContact === false
       && validateShopPilotLaunchGate(withBaseline) === withBaseline,
+    public_safe_intake_advances_private_handoff: withIntake.ok === true
+      && withIntake.status === 'owner_private_intake_ready'
+      && withIntake.launchReadiness.intakePacketAccepted === true
+      && withIntake.launchReadiness.readyForDeployment === false
+      && validateShopPilotLaunchGate(withIntake) === withIntake,
+    baseline_and_intake_ready_still_no_external_effects: withBoth.ok === true
+      && withBoth.status === 'owner_private_handoff_ready'
+      && withBoth.launchReadiness.baselinePacketAccepted === true
+      && withBoth.launchReadiness.intakePacketAccepted === true
+      && withBoth.launchReadiness.readyForCustomerContact === false
+      && validateShopPilotLaunchGate(withBoth) === withBoth,
     blocked_baseline_fails_closed: blockedBaseline.ok === false
       && blockedBaseline.failures.includes('shop_pilot_launch_gate_baseline_packet_not_ready'),
+    tampered_intake_fails_closed: tamperedIntake.ok === false
+      && tamperedIntake.failures.some((failure) => failure.startsWith('shop_pilot_launch_gate_intake_packet_invalid')),
     dirty_worktree_fails_closed: dirty.ok === false && dirty.failures.includes('shop_pilot_launch_gate_worktree_dirty'),
     synthetic_proof_fails_closed: syntheticProof.ok === false && syntheticProof.failures.includes('shop_pilot_launch_gate_pilot_evidence_state_invalid'),
     contact_control_fails_closed: contactAllowed.ok === false && contactAllowed.failures.some((failure) => failure.startsWith('shop_pilot_launch_gate_public_boundary_invalid')),
@@ -665,12 +777,13 @@ function runSelfTest() {
 
 async function main() {
   const args = process.argv.slice(2)
-  const options = { selfTest: false, baselinePacketPath: null }
+  const options = { selfTest: false, baselinePacketPath: null, intakePacketPath: null }
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === '--self-test') options.selfTest = true
     else if (arg === '--verify') {}
     else if (arg === '--baseline-packet') options.baselinePacketPath = args[++index] || null
+    else if (arg === '--intake-packet') options.intakePacketPath = args[++index] || null
     else throw new Error(`shop_pilot_launch_gate_usage_invalid:${arg}`)
   }
   if (options.selfTest) {
@@ -679,7 +792,10 @@ async function main() {
     if (!result.ok) process.exitCode = 1
     return
   }
-  const report = await currentReport({ baselinePacketPath: options.baselinePacketPath })
+  const report = await currentReport({
+    baselinePacketPath: options.baselinePacketPath,
+    intakePacketPath: options.intakePacketPath,
+  })
   console.log(JSON.stringify({
     ok: report.ok,
     contract: report.contract,
@@ -688,6 +804,7 @@ async function main() {
     clean: report.candidate.clean,
     authority: report.launchReadiness.authority,
     baselinePacketAccepted: report.launchReadiness.baselinePacketAccepted,
+    intakePacketAccepted: report.launchReadiness.intakePacketAccepted,
     requiredNextGateIds: report.requiredNextGates.map((gate) => gate.id),
     failures: report.failures,
   }, null, 2))

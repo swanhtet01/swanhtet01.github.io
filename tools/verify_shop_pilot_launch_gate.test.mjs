@@ -6,6 +6,10 @@ import {
   buildShopPilotBaselinePacket,
 } from './prepare_shop_pilot_baseline_packet.mjs'
 import {
+  buildShopPilotPrivateIntakePacket,
+  sampleShopPilotPrivateIntakeInput,
+} from './prepare_shop_pilot_private_intake_packet.mjs'
+import {
   SHOP_PILOT_LAUNCH_GATE_CONTRACT,
   assessShopPilotLaunchGate,
   sampleShopPilotLaunchGateInput,
@@ -67,6 +71,7 @@ test('passes only as owner-private-intake readiness, not contact or activation r
   assert.equal(report.status, 'owner_private_intake_required')
   assert.equal(report.launchReadiness.authority, 'owner_private_intake_only')
   assert.equal(report.launchReadiness.baselinePacketAccepted, false)
+  assert.equal(report.launchReadiness.intakePacketAccepted, false)
   assert.equal(report.launchReadiness.privateWorkspaceMayBePreparedAfterOwnerInput, true)
   assert.equal(report.launchReadiness.readyForCustomerContact, false)
   assert.equal(report.launchReadiness.readyForPayment, false)
@@ -97,6 +102,39 @@ test('accepts a public-safe baseline packet only as private handoff evidence', (
   assert.equal(validateShopPilotLaunchGate(report), report)
 })
 
+test('accepts a public-safe intake packet while still requiring baseline and external gates', () => {
+  const intakePacket = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
+  const report = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ intakePacket }))
+  assert.equal(report.ok, true)
+  assert.equal(report.status, 'owner_private_intake_ready')
+  assert.equal(report.launchReadiness.authority, 'owner_private_intake_ready_baseline_required')
+  assert.equal(report.launchReadiness.baselinePacketAccepted, false)
+  assert.equal(report.launchReadiness.intakePacketAccepted, true)
+  assert.equal(report.launchReadiness.readyForCustomerContact, false)
+  assert.equal(report.launchReadiness.readyForDeployment, false)
+  assert.equal(report.intakeEvidence.accepted, true)
+  assert.equal(report.intakeEvidence.digest, intakePacket.digest)
+  assert.equal(validateShopPilotLaunchGate(report), report)
+})
+
+test('accepts baseline plus intake only as private handoff readiness', () => {
+  const baselinePacket = buildShopPilotBaselinePacket(baselineInput(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  const intakePacket = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
+  const report = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ baselinePacket, intakePacket }))
+  assert.equal(report.ok, true)
+  assert.equal(report.status, 'owner_private_handoff_ready')
+  assert.equal(report.launchReadiness.authority, 'owner_private_baseline_and_intake_ready')
+  assert.equal(report.launchReadiness.baselinePacketAccepted, true)
+  assert.equal(report.launchReadiness.intakePacketAccepted, true)
+  assert.equal(report.launchReadiness.readyForCustomerContact, false)
+  assert.equal(report.launchReadiness.readyForPayment, false)
+  assert.equal(report.launchReadiness.readyForDeployment, false)
+  assert.equal(report.launchReadiness.readyForManagedActivation, false)
+  assert.equal(report.requiredNextGates.find((gate) => gate.id === 'owner_private_baseline').status, 'satisfied_private_digest_only')
+  assert.equal(report.requiredNextGates.find((gate) => gate.id === 'owner_private_intake').status, 'satisfied_private_digest_only')
+  assert.equal(validateShopPilotLaunchGate(report), report)
+})
+
 test('fails closed for blocked or tampered baseline packets', () => {
   const blockedPacket = buildShopPilotBaselinePacket(baselineInput({
     claimedMedianMinutesPerOrder: 11,
@@ -112,6 +150,19 @@ test('fails closed for blocked or tampered baseline packets', () => {
   assert.equal(tampered.ok, false)
   assert.ok(tampered.failures.some((failure) => failure.startsWith('shop_pilot_launch_gate_baseline_packet_invalid')))
 })
+
+test('fails closed for tampered intake packets', () => {
+  const intakePacket = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
+  const tampered = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
+    intakePacket: {
+      ...intakePacket,
+      controls: { ...intakePacket.controls, customerContactAllowed: true },
+    },
+  }))
+  assert.equal(tampered.ok, false)
+  assert.ok(tampered.failures.some((failure) => failure.startsWith('shop_pilot_launch_gate_intake_packet_invalid')))
+})
+
 
 test('fails closed for dirty worktree and missing launch scripts', () => {
   const dirty = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
