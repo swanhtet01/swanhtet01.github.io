@@ -782,7 +782,7 @@
     "company:ally:auto:preflight": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/invoke_supermega_company_cycle.ps1 -Preflight -Json",
     "company:ally:auto:self-test": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/invoke_supermega_company_cycle.ps1 -SelfTest -Json",
     "release:owner-gates:verify": "node tools/verify_release_stack_owner_gates.mjs --verify",
-    "release:owner-gates:self-test": "node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test",
+    "release:owner-gates:self-test": "node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test && npm run release:owner-approval:packet:self-test",
     "release:branch-push:apply": "node tools/apply_review_branch_push.mjs",
     "release:branch-push:apply:self-test": "node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test",
     "release:pull-request:create": "node tools/apply_release_pull_request.mjs",

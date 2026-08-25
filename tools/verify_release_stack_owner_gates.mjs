@@ -108,7 +108,7 @@ export function assessReleaseStackOwnerGates(input = {}) {
   if (scripts['release:owner-gates:verify'] !== 'node tools/verify_release_stack_owner_gates.mjs --verify') {
     addFailure(failures, 'release_stack_owner_gate_package_script_missing')
   }
-  if (scripts['release:owner-gates:self-test'] !== 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test') {
+  if (scripts['release:owner-gates:self-test'] !== 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test && npm run release:owner-approval:packet:self-test') {
     addFailure(failures, 'release_stack_owner_gate_self_test_script_missing')
   }
   if (scripts['release:branch-push:apply'] !== 'node tools/apply_review_branch_push.mjs') {
@@ -466,7 +466,7 @@ function sampleInput(overrides = {}) {
     supermega: { productionSupabaseTargetStatus: 'protected-unapproved' },
     scripts: {
       'release:owner-gates:verify': 'node tools/verify_release_stack_owner_gates.mjs --verify',
-      'release:owner-gates:self-test': 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test',
+      'release:owner-gates:self-test': 'node --test tools/verify_release_stack_owner_gates.test.mjs && node tools/verify_release_stack_owner_gates.mjs --self-test && npm run release:owner-approval:packet:self-test',
       'release:branch-push:apply': 'node tools/apply_review_branch_push.mjs',
       'release:branch-push:apply:self-test': 'node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test',
       'release:pull-request:create': 'node tools/apply_release_pull_request.mjs',
