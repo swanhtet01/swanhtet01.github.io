@@ -42,6 +42,19 @@ test('verifies only the exact generated markdown for the current handoff', () =>
   )
 })
 
+test('uses a validated exact GitHub protection snapshot path when provided', () => {
+  const base = selfTestInput()
+  const input = {
+    ...base,
+    githubProtectionSnapshotPath: 'C:\\Users\\thesw\\OneDrive - BDA\\supermega.github-main-protection-snapshot.v82.generated-20260825.json',
+  }
+  const packet = buildReleaseOwnerApprovalPacket(input)
+
+  assert.ok(packet.markdown.includes('--github-protection-snapshot "C:\\Users\\thesw\\OneDrive - BDA\\supermega.github-main-protection-snapshot.v82.generated-20260825.json"'))
+  assert.equal(packet.markdown.includes('<github-main-protection-snapshot.json>'), false)
+  assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
+})
+
 test('rejects preview proposals that would allow production data or writes', () => {
   const input = selfTestInput()
   const unsafe = {
@@ -58,6 +71,26 @@ test('rejects preview proposals that would allow production data or writes', () 
   assert.throws(
     () => buildReleaseOwnerApprovalPacket(unsafe),
     /release_owner_approval_supabase_preview_invalid/,
+  )
+})
+
+test('rejects an unsafe GitHub protection snapshot before rendering exact commands', () => {
+  const input = selfTestInput()
+  const unsafe = {
+    ...input,
+    githubProtectionSnapshot: {
+      ...input.githubProtectionSnapshot,
+      controls: {
+        ...input.githubProtectionSnapshot.controls,
+        githubWritesPerformed: true,
+      },
+    },
+    githubProtectionSnapshotPath: 'C:\\Users\\thesw\\OneDrive - BDA\\supermega.github-main-protection-snapshot.v82.generated-20260825.json',
+  }
+
+  assert.throws(
+    () => buildReleaseOwnerApprovalPacket(unsafe),
+    /github_main_protection_snapshot_control_not_false:githubWritesPerformed|release_owner_approval_snapshot_controls_invalid/,
   )
 })
 

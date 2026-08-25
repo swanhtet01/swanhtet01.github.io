@@ -11,6 +11,7 @@ import {
 } from './prepare_github_main_protection_packet.mjs'
 import {
   buildGitHubMainProtectionSnapshot,
+  validateGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
 import {
   buildReleaseHandoff,
@@ -203,16 +204,33 @@ function approvalDigestSet({ handoff, githubProposal, supabaseProposal }) {
   }
 }
 
+function validatedSnapshotReference(snapshotPath = null, snapshot = null) {
+  if (!snapshotPath) return '<github-main-protection-snapshot.json>'
+  const packet = validateGitHubMainProtectionSnapshot(snapshot)
+  if (packet.repository !== REPOSITORY) fail('release_owner_approval_snapshot_repository_invalid')
+  if (packet.controls?.githubWritesPerformed !== false
+    || packet.controls?.repositorySettingsMutated !== false
+    || packet.controls?.credentialValueExposed !== false) {
+    fail('release_owner_approval_snapshot_controls_invalid')
+  }
+  const resolvedPath = resolve(snapshotPath)
+  if (hasSecretShape(resolvedPath)) fail('release_owner_approval_snapshot_path_secret_shape_detected')
+  return resolvedPath
+}
+
 export function buildReleaseOwnerApprovalMarkdown({
   handoff,
   githubProposal,
   supabaseProposal,
+  githubProtectionSnapshot = null,
+  githubProtectionSnapshotPath = null,
   version = 'v1',
   handoffVersion = null,
 } = {}) {
   const handoffPacket = validateReleaseHandoffForApproval(handoff)
   const githubPacket = validateGitHubMainProtectionPacket(githubProposal)
   const supabasePacket = validateSupabasePreviewProposalForApproval(supabaseProposal)
+  const snapshotReference = validatedSnapshotReference(githubProtectionSnapshotPath, githubProtectionSnapshot)
   const normalizedVersion = packetVersion(version)
   const commitLabel = inferHandoffVersion({ handoff: handoffPacket, handoffVersion })
     ? `${inferHandoffVersion({ handoff: handoffPacket, handoffVersion })} commit`
@@ -261,13 +279,13 @@ export function buildReleaseOwnerApprovalMarkdown({
     'Review command, no-write:',
     '',
     '```powershell',
-    `npm.cmd run release:branch-push:apply -- --plan --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "<github-main-protection-snapshot.json>"`,
+    `npm.cmd run release:branch-push:apply -- --plan --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     'Execute command, only after approval:',
     '',
     '```powershell',
-    `npm.cmd run release:branch-push:apply -- --execute --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "<github-main-protection-snapshot.json>"`,
+    `npm.cmd run release:branch-push:apply -- --execute --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     '## 3. Pull request creation',
@@ -283,13 +301,13 @@ export function buildReleaseOwnerApprovalMarkdown({
     'Review command, no-write:',
     '',
     '```powershell',
-    `npm.cmd run release:pull-request:create -- --plan --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "<github-main-protection-snapshot.json>"`,
+    `npm.cmd run release:pull-request:create -- --plan --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     'Execute command, only after branch push, approval, and token are available:',
     '',
     '```powershell',
-    `npm.cmd run release:pull-request:create -- --execute --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "<github-main-protection-snapshot.json>"`,
+    `npm.cmd run release:pull-request:create -- --execute --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     '## 4. Supabase preview rehearsal',
@@ -369,22 +387,29 @@ async function readJson(path, code) {
   }
 }
 
-async function readInputs({ handoffPath }) {
+async function readInputs({ handoffPath, githubProtectionSnapshotPath = null }) {
   const absoluteHandoffPath = resolve(handoffPath || '')
   const handoff = await readJson(absoluteHandoffPath, 'release_owner_approval_handoff_file_invalid')
   Object.defineProperty(handoff, '__sourcePath', {
     value: absoluteHandoffPath,
     enumerable: false,
   })
+  const absoluteGitHubProtectionSnapshotPath = githubProtectionSnapshotPath
+    ? resolve(githubProtectionSnapshotPath)
+    : null
   return {
     handoff,
     githubProposal: await readJson(GITHUB_PROPOSAL_PATH, 'release_owner_approval_github_file_invalid'),
+    githubProtectionSnapshot: absoluteGitHubProtectionSnapshotPath
+      ? await readJson(absoluteGitHubProtectionSnapshotPath, 'release_owner_approval_snapshot_file_invalid')
+      : null,
+    githubProtectionSnapshotPath: absoluteGitHubProtectionSnapshotPath,
     supabaseProposal: await readJson(SUPABASE_PROPOSAL_PATH, 'release_owner_approval_supabase_file_invalid'),
   }
 }
 
-async function writePacket({ handoffPath, outputPath, version }) {
-  const inputs = await readInputs({ handoffPath })
+async function writePacket({ handoffPath, githubProtectionSnapshotPath, outputPath, version }) {
+  const inputs = await readInputs({ handoffPath, githubProtectionSnapshotPath })
   const packet = buildReleaseOwnerApprovalPacket({ ...inputs, version })
   const absoluteOutput = resolve(outputPath || '')
   const existing = await readFile(absoluteOutput, 'utf8').catch((error) => {
@@ -423,8 +448,8 @@ async function writePacket({ handoffPath, outputPath, version }) {
   }
 }
 
-async function verifyPacket({ handoffPath, verifyPath, version }) {
-  const inputs = await readInputs({ handoffPath })
+async function verifyPacket({ handoffPath, githubProtectionSnapshotPath, verifyPath, version }) {
+  const inputs = await readInputs({ handoffPath, githubProtectionSnapshotPath })
   const actual = await readFile(resolve(verifyPath || ''), 'utf8')
   const verified = validateReleaseOwnerApprovalMarkdown(actual, { ...inputs, version })
   return {
@@ -556,6 +581,7 @@ function sampleSupabaseProposal() {
 }
 
 export function selfTestInput() {
+  const remoteMain = 'b'.repeat(40)
   return {
     handoff: sampleHandoff(),
     githubProposal: buildGitHubMainProtectionPacket({
@@ -565,6 +591,16 @@ export function selfTestInput() {
         'tools/prepare_github_main_protection_packet.mjs',
         'tools/apply_github_main_protection.mjs',
       ].map((path) => ({ path, digest: `sha256:${'0'.repeat(64)}` })),
+    }),
+    githubProtectionSnapshot: buildGitHubMainProtectionSnapshot({
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: remoteMain },
+        protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+      },
+      rulesets: [],
     }),
     supabaseProposal: sampleSupabaseProposal(),
     version: 'v0',
@@ -618,6 +654,8 @@ function parseArgs(argv) {
       options.mode = 'self-test'
     } else if (arg === '--handoff' && args[0]) {
       options.handoffPath = args.shift()
+    } else if ((arg === '--github-protection-snapshot' || arg === '--main-protection-snapshot') && args[0]) {
+      options.githubProtectionSnapshotPath = args.shift()
     } else if (arg === '--output' && args[0]) {
       options.outputPath = args.shift()
       options.mode = 'prepare'
