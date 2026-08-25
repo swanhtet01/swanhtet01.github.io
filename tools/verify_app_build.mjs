@@ -20019,6 +20019,33 @@ async function verifyOperationalReportRuntime() {
     assert(report.entries.every((entry) => entry.severity === 'ready'
       ? entry.actionability.workOrderRequired === false && entry.actionability.ownerReviewRequired === false && entry.actionability.ownerDueRequiredBeforeClosure === false && entry.actionability.evidenceRequiredBeforeClosure === false
       : entry.actionability.workOrderRequired === true && entry.actionability.ownerReviewRequired === true && entry.actionability.ownerDueRequiredBeforeClosure === true && entry.actionability.evidenceRequiredBeforeClosure === true), 'operational_report_actionability_gate_wrong')
+    const actionPacket = await model.exportOperationalReportActionPacket(report, { product: 'all', urgency: 'attention' }, {
+      ownerRole: 'Founder plus Product',
+      openedAt: '2026-07-29T12:00:00.000Z',
+      dueDate: '2026-07-31',
+    })
+    const actionEntryCount = report.entries.filter((entry) => entry.severity !== 'ready').length
+    assert(actionPacket.contract === model.OPERATIONAL_REPORT_ACTION_PACKET_CONTRACT && /^sha256:[0-9a-f]{64}$/.test(actionPacket.digest), 'operational_report_action_packet_not_digest_bound')
+    assert(actionPacket.actions.length === actionEntryCount && actionPacket.controls.reviewOnly && actionPacket.controls.operatingActionBoardReady && actionPacket.controls.externalWritesPerformed === false && actionPacket.controls.managedWritesPerformed === false, 'operational_report_action_packet_controls_invalid')
+    assert(actionPacket.actions.every((action) => action.status === 'owner-gated' && action.owner.namedPrivate === false && action.authority.ownerApprovalRequired === true && action.authority.externalWriteAllowed === false && action.closure.closedAt === null), 'operational_report_action_packet_authority_invalid')
+    assert(actionPacket.actions.some((action) => action.productIds.join(',') === 'shop') && actionPacket.actions.some((action) => action.productIds.join(',') === 'plant')
+      && actionPacket.actions.every((action) => action.productIds.every((productId) => productId !== 'commerce') && !action.id.startsWith('operational-commerce-') && !action.sourceFinding.evidenceRef.includes(':commerce:')), 'operational_report_action_packet_customer_products_invalid')
+    assert((await model.validateOperationalReportActionPacket(actionPacket)).digest === actionPacket.digest, 'operational_report_action_packet_not_revalidated')
+    const actionAuthorityTamper = structuredClone(actionPacket)
+    actionAuthorityTamper.actions[0].authority.externalWriteAllowed = true
+    let actionAuthorityTamperRejected = false
+    try { await model.validateOperationalReportActionPacket(actionAuthorityTamper) } catch { actionAuthorityTamperRejected = true }
+    assert(actionAuthorityTamperRejected, 'operational_report_action_packet_external_authority_accepted')
+    const privateActionTamper = structuredClone(actionPacket)
+    privateActionTamper.actions[0].owner.namedPrivate = true
+    let privateActionTamperRejected = false
+    try { await model.validateOperationalReportActionPacket(privateActionTamper) } catch { privateActionTamperRejected = true }
+    assert(privateActionTamperRejected, 'operational_report_action_packet_private_owner_accepted')
+    const readyActionPacket = await model.exportOperationalReportActionPacket(report, { product: 'all', urgency: 'critical' }, {
+      ownerRole: 'Founder plus Product',
+      dueDate: '2026-07-31',
+    })
+    assert(readyActionPacket.actions.every((action) => action.severity === 'critical'), 'operational_report_action_packet_view_filter_failed')
     assert(report.masterData.registryContract === masterData.SHARED_MASTER_DATA_CONTRACT && report.masterData.dimensions.length === 12 && report.masterData.duplicateCandidates === 0 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
     const registry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: commerceState, production: productionState, website: websiteState })
     assert(registry.contract === masterData.SHARED_MASTER_DATA_CONTRACT && registry.records.length === registry.summary.totalRecords && registry.controls.readOnly, 'shared_master_data_registry_contract_invalid')
