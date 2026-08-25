@@ -45,7 +45,7 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   'payment',
   'hosted_scheduler_activation',
 ]
-const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run product:readiness-matrix:self-test && npm run release:next-action-preflight:self-test && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:decision-packet:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
+const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operational:action-packet:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run product:readiness-matrix:self-test && npm run release:next-action-preflight:self-test && npm run release:owner-approval:packet:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:decision-packet:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 const SECRET_PATTERNS = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /sk-proj-[A-Za-z0-9_-]{20,}/,
@@ -158,6 +158,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   }
   if (scripts['operating:action-board:self-test'] !== 'node --test kernel/operating-action-board.test.mjs && node tools/verify_operating_action_board.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_operating_action_board_self_test_missing')
+  }
+  if (scripts['operational:action-packet'] !== 'node tools/prepare_operational_report_action_packet.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_operational_action_packet_script_missing')
+  }
+  if (scripts['operational:action-packet:self-test'] !== 'node --test tools/prepare_operational_report_action_packet.test.mjs && node tools/prepare_operational_report_action_packet.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_operational_action_packet_self_test_missing')
   }
   if (scripts['supermega:status:brief'] !== 'node tools/prepare_supermega_status_brief.mjs') {
     addFailure(failures, 'release_stack_owner_gate_status_brief_script_missing')
@@ -543,6 +549,8 @@ function sampleInput(overrides = {}) {
       'operator:board:self-test': 'node --test tools/prepare_current_operator_board.test.mjs && node tools/prepare_current_operator_board.mjs --self-test',
       'operating:action-board:verify': 'node tools/verify_operating_action_board.mjs',
       'operating:action-board:self-test': 'node --test kernel/operating-action-board.test.mjs && node tools/verify_operating_action_board.mjs --self-test',
+      'operational:action-packet': 'node tools/prepare_operational_report_action_packet.mjs',
+      'operational:action-packet:self-test': 'node --test tools/prepare_operational_report_action_packet.test.mjs && node tools/prepare_operational_report_action_packet.mjs --self-test',
       'supermega:status:brief': 'node tools/prepare_supermega_status_brief.mjs',
       'supermega:status:brief:self-test': 'node --test tools/prepare_supermega_status_brief.test.mjs && node tools/prepare_supermega_status_brief.mjs --self-test',
       'product:readiness-matrix': 'node tools/prepare_product_readiness_matrix.mjs',
