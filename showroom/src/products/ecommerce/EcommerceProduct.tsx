@@ -1485,6 +1485,19 @@ export function EcommerceProduct() {
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD' : 'Not charged'],
     ['Boundary', 'No booking'],
   ] as const
+  const requestWaitingInLocalMode = customerRequestState === 'waiting_shop_review' && !managedIdentity
+  const requestWaitingQueueLabel = requestWaitingInLocalMode ? 'Saved locally' : 'Request sent'
+  const ecommerceWaitingHeadline = requestWaitingInLocalMode ? 'Sample request saved locally' : 'Request sent to Shop'
+  const ecommerceWaitingSummary = requestWaitingInLocalMode
+    ? 'The sample customer request is saved on this device for Shop review. No Shop inbox write, charge, stock, delivery, or customer message happened.'
+    : 'No charge or stock change happens until Shop confirms the order.'
+  const ecommerceWaitingMetric = requestWaitingInLocalMode ? 'Local receipt' : 'Review waiting'
+  const waitingShopReviewReason = requestWaitingInLocalMode
+    ? 'The customer request is retained only in browser-local recovery until the operator opens the Shop review draft.'
+    : 'The customer request is retained in the Company Shop inbox for operator review.'
+  const waitingShopReviewGate = requestWaitingInLocalMode
+    ? 'Open the local Shop review draft before claiming Shop has received the request.'
+    : 'The Shop operator confirms stock, promise, payment, and delivery.'
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
     : !selectedSkus.length
@@ -1576,7 +1589,7 @@ export function EcommerceProduct() {
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
     ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
-    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
+    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? requestWaitingQueueLabel : 'No queue'],
   ] as const
   const aiAgentJob = pendingManagedRequests.length
     ? 'Review Ecommerce requests in Shop'
@@ -1596,7 +1609,7 @@ export function EcommerceProduct() {
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : customerRequestState === 'waiting_shop_review'
-      ? 'The customer request is retained separately from the Shop operator review.'
+      ? waitingShopReviewReason
     : ecommerceActiveOrderCount
       ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
     : importNeeded
@@ -1611,7 +1624,7 @@ export function EcommerceProduct() {
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : customerRequestState === 'waiting_shop_review'
-      ? 'The Shop operator confirms stock, promise, payment, and delivery.'
+      ? waitingShopReviewGate
     : ecommerceActiveOrderCount
       ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
     : importNeeded
@@ -1660,7 +1673,7 @@ export function EcommerceProduct() {
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
             : customerRequestState === 'waiting_shop_review'
-              ? 'Request sent to Shop'
+              ? ecommerceWaitingHeadline
             : ecommerceActiveOrderCount
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
@@ -1675,7 +1688,7 @@ export function EcommerceProduct() {
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
         : customerRequestState === 'waiting_shop_review'
-          ? 'No charge or stock change happens until Shop confirms the order.'
+          ? ecommerceWaitingSummary
         : ecommerceActiveOrderCount
           ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
           : managedIdentity
@@ -1706,7 +1719,7 @@ export function EcommerceProduct() {
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
       : customerRequestState === 'waiting_shop_review'
-        ? 'Review waiting'
+        ? ecommerceWaitingMetric
       : ecommerceActiveOrderCount
         ? `${ecommerceActiveOrderCount} in progress`
         : ecommerceCompletedOrderCount
