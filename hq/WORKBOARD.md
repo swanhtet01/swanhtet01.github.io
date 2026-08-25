@@ -1,11 +1,11 @@
 # SuperMega work board
 
-Updated: 2026-08-12
+Updated: 2026-08-26
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `main`
-Current accepted release checkpoint: `a8fad84e96ada08d2dcb923eec203cdff1604a73`
-Current accepted product checkpoint: `a8fad84e96ada08d2dcb923eec203cdff1604a73`
+Current accepted release checkpoint: `6647a2b241aa198a490643c5d38f6edb6e4caddc`
+Current accepted product checkpoint: `6647a2b241aa198a490643c5d38f6edb6e4caddc`
 Current accepted operating checkpoint: `63a245f`
 Current accepted agent-operations checkpoint: `a2e1b89`
 Current accepted security checkpoint: `98b8044`
@@ -30,6 +30,7 @@ Claude coordination is paused by founder direction.
 
 | ID | Team / worker | Status | Outcome | Write authority | Acceptance |
 | --- | --- | --- | --- | --- | --- |
+| OPS-762 | Technical Steward / Codex integrator | done-local | Convert the weekly operational report into a verified owner-safe action packet and refresh current release/operator evidence for the next gated release candidate. | `tools/prepare_operational_report_action_packet.mjs`, release/HQ launch gates, `hq/NOW.md`, readiness ledgers, and generated OneDrive packets only; no remote write authority | Candidate `d4b2c9b8a4b4ee4807a9f68a58a4e5c5315efd5a` passed full serial `app:verify` 661/661 and v87 handoff repeated 661/661. Packets `supermega.release-handoff.v87.generated-20260826.json`, `supermega.current-operator-board.v87.generated-20260826.*`, `supermega.product-readiness-matrix.v87.generated-20260826.*`, `supermega.status-brief.v87.generated-20260826.*`, `supermega.next-release-action-preflight.v87.generated-20260826.*`, and `supermega.operational-report-action-packet.d4b2c9b8.generated-20260826.*` are generated and secret-shape clean. Current blocker is GitHub `main` protection; no push, PR, merge, deployment, Supabase mutation, credential action, customer contact, payment, stock movement, or managed activation occurred. |
 | CEO-006 | CEO / Codex integrator | done-local | Correct the portfolio to Shop, Plant, Website, and Ecommerce, with AI assistance as shared infrastructure while preserving stable runtime data. | Authority, manifest, app shell, public generator, and verifiers in bounded slices | HQ, app-build, and public-output contracts passed; desktop/mobile routes preserved existing state; no push or deploy. |
 | CEO-007 | CEO / Codex integrator | done-local | Make all four products open into real work, support light and dark interfaces, and define honest reusable vertical packs without adding customer-facing setup clutter. | Product shell, Shop counter, Plant first screen, Website and Ecommerce entry states, template-pack manifest, and focused verifiers only | Shop counter sale, Ecommerce quote-to-Shop order, Plant output, Website responsive preview/editor, both themes, full local app/security gate, and zero-vulnerability dependency audits passed. Shop packs cover retail, cafe, restaurant, spa, gym, and school; Plant packs cover general, batch, food and beverage, apparel, and assembly. Planned modules remain explicitly unsellable as available. No subagent, model call, push, deploy, domain, credential, payment, customer send, or production write occurred. |
 | CEO-008 | CEO / Codex integrator | done-live | Publish the direct-product recovery as one exact paired release without exposing setup clutter or weakening rollback controls. | Existing GitHub protected release only; no ad-hoc provider deploy or domain mutation | Commit `2b25e747c1818703031a3bfcb958f7669655a157` serves from both canonical domains. Two stale verifier assumptions failed closed and rolled back before the corrected release passed candidate inspection, paired promotion, exact-release verification, domain controls, and independent rendered-browser checks. Production remains honestly labelled `isolated_demo`; managed persistence and security readiness remain false. |
