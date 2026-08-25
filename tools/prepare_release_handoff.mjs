@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { open, lstat, mkdir, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 
 import {
   GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
@@ -402,6 +402,44 @@ function run(file, args, { inherit = false, allowFailure = false } = {}) {
   }
 }
 
+function runStreaming(file, args, { timeoutMs = 35 * 60 * 1_000 } = {}) {
+  return new Promise((resolve) => {
+    let settled = false
+    let timedOut = false
+    let timer = null
+    const child = spawn(file, args, {
+      cwd: root,
+      env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      resolve(result)
+    }
+    timer = setTimeout(() => {
+      timedOut = true
+      child.kill('SIGTERM')
+    }, timeoutMs)
+    child.stdout.on('data', (chunk) => process.stdout.write(chunk))
+    child.stderr.on('data', (chunk) => process.stderr.write(chunk))
+    child.on('error', (error) => finish({
+      status: null,
+      signal: null,
+      errorCode: error?.code || 'spawn_error',
+      timedOut,
+    }))
+    child.on('exit', (status, signal) => finish({
+      status,
+      signal: signal || null,
+      errorCode: timedOut ? 'ETIMEDOUT' : null,
+      timedOut,
+    }))
+  })
+}
+
 function git(...args) {
   return run('git', args).stdout
 }
@@ -500,7 +538,7 @@ async function prepareReleaseHandoff(output) {
   validateReleaseCandidateAncestry(relations)
 
   const verificationCommand = appVerifyCommand()
-  const verified = run(verificationCommand.file, verificationCommand.args, { inherit: true, allowFailure: true })
+  const verified = await runStreaming(verificationCommand.file, verificationCommand.args)
   if (verified.errorCode) fail(`release_handoff_app_verify_spawn_error:${verified.errorCode}`)
   if (verified.signal) fail(`release_handoff_app_verify_signal:${verified.signal}`)
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
