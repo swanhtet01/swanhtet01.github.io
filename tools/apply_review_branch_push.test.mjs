@@ -9,6 +9,9 @@ import {
   validateReviewBranchPushReport,
   validateReviewBranchPushHandoff,
 } from './apply_review_branch_push.mjs'
+import {
+  buildGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
 
 const repository = 'swanhtet01/swanhtet01.github.io'
 const origin = `https://github.com/${repository}.git`
@@ -67,6 +70,44 @@ function receipt(packetValue = packet()) {
       digest: `sha256:${'2'.repeat(64)}`,
       ...packetValue,
     },
+  }
+}
+
+function mainProtectionReceipt() {
+  return {
+    path: 'C:\\evidence\\supermega.github-main-protection-snapshot.generated.json',
+    digest: `sha256:${'3'.repeat(64)}`,
+    packet: buildGitHubMainProtectionSnapshot({
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: remoteMain },
+        protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+      },
+      rulesets: [{
+        id: 1,
+        name: 'SuperMega main release gate',
+        target: 'branch',
+        enforcement: 'active',
+        conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+        rules: [
+          { type: 'deletion' },
+          { type: 'non_fast_forward' },
+          { type: 'pull_request', parameters: { required_review_thread_resolution: true } },
+          {
+            type: 'required_status_checks',
+            parameters: {
+              required_status_checks: [
+                { context: 'SuperMega App CI' },
+                { context: 'Dependency Security Audit' },
+                { context: 'Kernel Console - Verify & Owner-Gated Release' },
+              ],
+            },
+          },
+        ],
+      }],
+    }),
   }
 }
 
@@ -171,6 +212,7 @@ test('execute performs one normal exact-commit branch push and verifies the remo
   const { git, calls } = stubGit()
   const result = await applyReviewBranchPushWithGit({
     handoffReceipt: receipt(),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     env: { [approvalEnv]: approvalTemplate },
     git,
     verifyHandoff: async () => ({
@@ -213,6 +255,7 @@ test('execute no-ops when the remote branch already equals the candidate', async
   const { git, calls } = stubGit({ before: commit, after: commit })
   const result = await applyReviewBranchPushWithGit({
     handoffReceipt: receipt(alreadyPublished),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     env: { [approvalEnv]: alreadyPublished.nextAction.approvalTemplate },
     git,
     verifyHandoff: async () => ({

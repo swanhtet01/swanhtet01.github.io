@@ -10,6 +10,10 @@ import {
   validateReleaseHandoffPacket,
   verifyCurrentReleaseHandoff,
 } from './prepare_release_handoff.mjs'
+import {
+  buildGitHubMainProtectionSnapshot,
+  validateGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
 
 export const RELEASE_PULL_REQUEST_APPLY_CONTRACT = 'supermega.release-pull-request-apply.v1'
 
@@ -110,6 +114,61 @@ function assertNoSecretEcho(value) {
     || /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PRIVATE )?PRIVATE KEY-----/.test(text)) {
     fail('release_pull_request_secret_echo')
   }
+}
+
+export async function readGitHubMainProtectionSnapshotReceipt(path) {
+  const absolute = resolve(path || '')
+  const payload = await readFile(absolute, 'utf8')
+  if (Buffer.byteLength(payload, 'utf8') < 1 || Buffer.byteLength(payload, 'utf8') > MAX_FILE_BYTES) {
+    fail('release_pull_request_main_protection_snapshot_file_invalid')
+  }
+  let packet
+  try {
+    packet = validateGitHubMainProtectionSnapshot(JSON.parse(payload))
+  } catch (error) {
+    if (String(error?.message || '').startsWith('github_main_protection_snapshot_')) {
+      fail('release_pull_request_main_protection_snapshot_invalid')
+    }
+    throw error
+  }
+  return {
+    path: absolute,
+    digest: digest(payload),
+    packet,
+  }
+}
+
+function buildMainProtectionEvidence(snapshotReceipt = null) {
+  if (!snapshotReceipt?.packet) {
+    return {
+      path: null,
+      digest: null,
+      packetDigest: null,
+      assessmentOk: false,
+      currentAction: null,
+      failures: ['github_main_protection_snapshot_missing'],
+      verifiedForPullRequest: false,
+    }
+  }
+  const packet = validateGitHubMainProtectionSnapshot(snapshotReceipt.packet)
+  const failures = Array.isArray(packet.assessment?.failures) ? [...packet.assessment.failures] : []
+  const verifiedForPullRequest = packet.assessment?.ok === true
+    && packet.currentAction === 'main_protection_verified_continue_to_review_branch_push'
+  return {
+    path: snapshotReceipt.path || null,
+    digest: snapshotReceipt.digest || null,
+    packetDigest: packet.digest,
+    assessmentOk: packet.assessment?.ok === true,
+    currentAction: packet.currentAction,
+    failures,
+    verifiedForPullRequest,
+  }
+}
+
+function requireMainProtectionVerified(snapshotReceipt) {
+  const evidence = buildMainProtectionEvidence(snapshotReceipt)
+  if (!evidence.verifiedForPullRequest) fail('release_pull_request_main_protection_unverified')
+  return evidence
 }
 
 export async function readReleaseHandoffReceipt(path) {
@@ -232,6 +291,7 @@ function buildCreatePullRequestPayload({ gate, handoffReceipt }) {
 
 export function buildPullRequestPlan({
   handoffReceipt,
+  mainProtectionSnapshotReceipt = null,
   gitState = currentGitState(),
   env = process.env,
 } = {}) {
@@ -240,7 +300,12 @@ export function buildPullRequestPlan({
   const approval = validateOwnerApproval({ gate, env, execute: false })
   const token = tokenFromEnv(env)
   const payload = buildCreatePullRequestPayload({ gate, handoffReceipt })
+  const mainProtection = buildMainProtectionEvidence(mainProtectionSnapshotReceipt)
   const blockers = [
+    ...(mainProtection.verifiedForPullRequest ? [] : [
+      'github_main_protection_unverified',
+      ...mainProtection.failures,
+    ]),
     ...(gate.remoteBranchExact ? [] : ['remote_review_branch_not_exact']),
     ...(gitState.clean === true ? [] : ['local_worktree_dirty']),
     ...(approval.approved ? [] : ['owner_approval_missing']),
@@ -270,6 +335,7 @@ export function buildPullRequestPlan({
       branchExactForPr: gate.remoteBranchExact,
     },
     approval,
+    githubMainProtection: mainProtection,
     token: {
       present: Boolean(token),
       env: token?.key || null,
@@ -281,6 +347,7 @@ export function buildPullRequestPlan({
     },
     plannedNetworkReadsBeforeExecute: [
       'verify release handoff current state',
+      'verify signed GitHub main-protection snapshot assessment.ok is true',
       `git ls-remote --heads origin ${gate.branch}`,
       `GET /repos/${REPOSITORY}/pulls?state=open&head=${OWNER}:${gate.branch}&base=${BASE_BRANCH}`,
     ],
@@ -300,6 +367,7 @@ export function buildPullRequestPlan({
       '--execute flag',
       `${APPROVAL_ENV} exactly equals the owner approval template`,
       'GITHUB_TOKEN or GH_TOKEN is set',
+      'signed GitHub main-protection snapshot verifies assessment.ok:true',
       'release handoff re-verifies current remote/live state immediately before PR creation',
       'remote review branch equals the exact approved commit',
       'local worktree is clean',
@@ -352,6 +420,18 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
   if (!isRecord(packet.token) || packet.token.valueExposed !== false) {
     fail('release_pull_request_report_token_invalid')
   }
+  if (!isRecord(packet.githubMainProtection)
+    || typeof packet.githubMainProtection.assessmentOk !== 'boolean'
+    || typeof packet.githubMainProtection.verifiedForPullRequest !== 'boolean'
+    || !Array.isArray(packet.githubMainProtection.failures)) {
+    fail('release_pull_request_report_main_protection_invalid')
+  }
+  if (packet.githubMainProtection.digest != null) {
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(packet.githubMainProtection.digest || ''))
+      || !/^sha256:[0-9a-f]{64}$/.test(String(packet.githubMainProtection.packetDigest || ''))) {
+      fail('release_pull_request_report_main_protection_invalid')
+    }
+  }
   if (packet.mode === 'plan_only_no_github_write') {
     if (packet.ok !== true
       || packet.controls?.githubWritesPerformed !== false
@@ -374,6 +454,7 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
     }
     if (!Array.isArray(packet.plannedNetworkReadsBeforeExecute)
       || !packet.plannedNetworkReadsBeforeExecute.includes('verify release handoff current state')
+      || !packet.plannedNetworkReadsBeforeExecute.includes('verify signed GitHub main-protection snapshot assessment.ok is true')
       || !packet.plannedNetworkReadsBeforeExecute.includes(`git ls-remote --heads origin ${packet.candidate.branch}`)
       || !packet.plannedNetworkReadsBeforeExecute.includes(`GET /repos/${REPOSITORY}/pulls?state=open&head=${OWNER}:${packet.candidate.branch}&base=${BASE_BRANCH}`)) {
       fail('release_pull_request_plan_reads_invalid')
@@ -388,6 +469,7 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
     }
     if (!Array.isArray(packet.executionRequirements)
       || !packet.executionRequirements.includes('--execute flag')
+      || !packet.executionRequirements.includes('signed GitHub main-protection snapshot verifies assessment.ok:true')
       || !packet.executionRequirements.includes('remote review branch equals the exact approved commit')) {
       fail('release_pull_request_plan_requirements_invalid')
     }
@@ -461,6 +543,7 @@ function classifyExistingPulls(pulls, gate) {
 
 export async function applyReleasePullRequestWithClient({
   handoffReceipt,
+  mainProtectionSnapshotReceipt = null,
   env = process.env,
   git = gitDefault,
   request = fetch,
@@ -470,6 +553,7 @@ export async function applyReleasePullRequestWithClient({
   const gitState = currentGitState(git)
   validateLocalState({ gate, gitState, execute: true })
   const approval = validateOwnerApproval({ gate, env, execute: true })
+  const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
   const token = tokenFromEnv(env)
   if (!token) fail('release_pull_request_token_required')
 
@@ -500,6 +584,7 @@ export async function applyReleasePullRequestWithClient({
       repository: REPOSITORY,
       candidate: { branch: gate.branch, head: gate.commit, clean: true },
       approval,
+      githubMainProtection: mainProtection,
       token: { present: true, env: token.key, valueExposed: false },
       pullRequest: {
         number: existing.number,
@@ -552,6 +637,7 @@ export async function applyReleasePullRequestWithClient({
     repository: REPOSITORY,
     candidate: { branch: gate.branch, head: gate.commit, clean: true },
     approval,
+    githubMainProtection: mainProtection,
     token: { present: true, env: token.key, valueExposed: false },
     action: {
       method: 'POST',
@@ -586,7 +672,7 @@ export async function applyReleasePullRequestWithClient({
 
 function parseArgs(argv) {
   const args = [...argv]
-  const options = { mode: 'plan', handoff: null, output: null, verify: null }
+  const options = { mode: 'plan', handoff: null, githubProtectionSnapshot: null, output: null, verify: null }
   while (args.length) {
     const arg = args.shift()
     if (arg === '--plan') {
@@ -597,6 +683,8 @@ function parseArgs(argv) {
       options.mode = 'self-test'
     } else if (arg === '--handoff' && args[0]) {
       options.handoff = args.shift()
+    } else if ((arg === '--github-protection-snapshot' || arg === '--main-protection-snapshot') && args[0]) {
+      options.githubProtectionSnapshot = args.shift()
     } else if (arg === '--output' && args[0]) {
       options.output = args.shift()
     } else if (arg === '--verify' && args[0]) {
@@ -648,9 +736,138 @@ async function runSelfTest() {
     },
   }
   const receipt = { path: '<self-test>', digest: `sha256:${'1'.repeat(64)}`, packet: { digest: `sha256:${'2'.repeat(64)}`, ...packet } }
+  const mainProtectionSnapshotReceipt = {
+    path: '<main-protection-self-test>',
+    digest: `sha256:${'3'.repeat(64)}`,
+    packet: {
+      contract: 'supermega.github-main-protection-snapshot.v1',
+      digestScope: 'utf8_compact_json_without_digest',
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      repository: REPOSITORY,
+      mode: 'read_only_no_github_write',
+      source: {
+        branchUrl: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/branches/main',
+        rulesetsUrl: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/rulesets',
+        tokenPresent: false,
+        tokenEnv: null,
+        tokenValueExposed: false,
+      },
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: 'b'.repeat(40) },
+        protection: {
+          enabled: false,
+          required_status_checks: { contexts: [], checks: [] },
+          allow_force_pushes: null,
+          allow_deletions: null,
+          required_pull_request_reviews: null,
+          required_conversation_resolution: null,
+        },
+      },
+      rulesets: [{
+        id: 1,
+        name: 'SuperMega main release gate',
+        target: 'branch',
+        enforcement: 'active',
+        conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+        rules: [
+          { type: 'deletion' },
+          { type: 'non_fast_forward' },
+          {
+            type: 'pull_request',
+            parameters: {
+              required_review_thread_resolution: true,
+              require_review_thread_resolution: false,
+              requires_conversation_resolution: false,
+              require_last_push_approval: false,
+              required_approving_review_count: null,
+            },
+          },
+          {
+            type: 'required_status_checks',
+            parameters: {
+              required_status_checks: [
+                { context: 'SuperMega App CI' },
+                { context: 'Dependency Security Audit' },
+                { context: 'Kernel Console - Verify & Owner-Gated Release' },
+              ],
+              contexts: [],
+              strict_required_status_checks_policy: false,
+              do_not_enforce_on_create: false,
+            },
+          },
+        ],
+      }],
+      assessment: {
+        ok: true,
+        contract: 'supermega.github-main-protection.v1',
+        failures: [],
+        observedRequiredChecks: [
+          'SuperMega App CI',
+          'Dependency Security Audit',
+          'Kernel Console - Verify & Owner-Gated Release',
+        ],
+        evidence: {
+          branchProtected: false,
+          activeMainRulesets: ['SuperMega main release gate'],
+        },
+      },
+      currentAction: 'main_protection_verified_continue_to_review_branch_push',
+      requiredChecks: [
+        'SuperMega App CI',
+        'Dependency Security Audit',
+        'Kernel Console - Verify & Owner-Gated Release',
+      ],
+      controls: {
+        githubApiMethods: ['GET'],
+        githubWritesPerformed: false,
+        repositorySettingsMutated: false,
+        branchMutated: false,
+        pullRequestCreated: false,
+        mergePerformed: false,
+        deploymentPerformed: false,
+        supabaseMutated: false,
+        credentialValueExposed: false,
+      },
+    },
+  }
+  mainProtectionSnapshotReceipt.packet.digest = digest(JSON.stringify(mainProtectionSnapshotReceipt.packet))
+  mainProtectionSnapshotReceipt.packet = buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    branch: {
+      name: 'main',
+      protected: false,
+      commit: { sha: 'b'.repeat(40) },
+      protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+    },
+    rulesets: [{
+      id: 1,
+      name: 'SuperMega main release gate',
+      target: 'branch',
+      enforcement: 'active',
+      conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+      rules: [
+        { type: 'deletion' },
+        { type: 'non_fast_forward' },
+        { type: 'pull_request', parameters: { required_review_thread_resolution: true } },
+        {
+          type: 'required_status_checks',
+          parameters: {
+            required_status_checks: [
+              { context: 'SuperMega App CI' },
+              { context: 'Dependency Security Audit' },
+              { context: 'Kernel Console - Verify & Owner-Gated Release' },
+            ],
+          },
+        },
+      ],
+    }],
+  })
   const gate = validatePullRequestHandoff(packet)
   const plan = buildPullRequestPlan({
     handoffReceipt: receipt,
+    mainProtectionSnapshotReceipt,
     gitState: { branch, head: commit, clean: true, origin: ORIGIN },
     env: {},
   })
@@ -674,12 +891,18 @@ async function runSelfTest() {
           remote: { ...receipt.packet.remote, candidateCommit: null, candidateBranchState: 'unpublished' },
         },
       },
+      mainProtectionSnapshotReceipt,
       gitState: { branch, head: commit, clean: true, origin: ORIGIN },
       env: { GITHUB_TOKEN: 'placeholder' },
     }).readiness.blockers.includes('remote_review_branch_not_exact'),
     payload_is_public_review_only: plan.possibleWrite.payloadPreview.base === BASE_BRANCH
       && plan.possibleWrite.payloadPreview.head === branch
       && plan.possibleWrite.payloadPreview.draft === false,
+    main_protection_required_for_execute: buildPullRequestPlan({
+      handoffReceipt: receipt,
+      gitState: { branch, head: commit, clean: true, origin: ORIGIN },
+      env: { [APPROVAL_ENV]: gate.approvalTemplate, GITHUB_TOKEN: 'placeholder' },
+    }).readiness.blockers.includes('github_main_protection_snapshot_missing'),
     plan_digest_verifies: validatePullRequestReport(plan, { expectedMode: 'plan_only_no_github_write' }) === plan,
     no_secret_echo: plan.token.valueExposed === false,
   }
@@ -718,9 +941,12 @@ async function main() {
     return
   }
   const handoffReceipt = await readReleaseHandoffReceipt(options.handoff)
+  const mainProtectionSnapshotReceipt = options.githubProtectionSnapshot
+    ? await readGitHubMainProtectionSnapshotReceipt(options.githubProtectionSnapshot)
+    : null
   const result = options.mode === 'execute'
-    ? await applyReleasePullRequestWithClient({ handoffReceipt })
-    : buildPullRequestPlan({ handoffReceipt })
+    ? await applyReleasePullRequestWithClient({ handoffReceipt, mainProtectionSnapshotReceipt })
+    : buildPullRequestPlan({ handoffReceipt, mainProtectionSnapshotReceipt })
   if (options.output) {
     const output = await writeExclusive(options.output, `${JSON.stringify(validatePullRequestReport(result, { expectedMode: 'plan_only_no_github_write' }), null, 2)}\n`)
     console.log(JSON.stringify({

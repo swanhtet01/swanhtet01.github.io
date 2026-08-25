@@ -10,6 +10,10 @@ import {
   validateReleaseHandoffPacket,
   verifyCurrentReleaseHandoff,
 } from './prepare_release_handoff.mjs'
+import {
+  buildGitHubMainProtectionSnapshot,
+  validateGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
 
 export const REVIEW_BRANCH_PUSH_APPLY_CONTRACT = 'supermega.review-branch-push-apply.v1'
 
@@ -117,6 +121,61 @@ export async function readReleaseHandoffReceipt(path) {
   }
 }
 
+export async function readGitHubMainProtectionSnapshotReceipt(path) {
+  const absolute = resolve(path || '')
+  const payload = await readFile(absolute, 'utf8')
+  if (Buffer.byteLength(payload, 'utf8') < 1 || Buffer.byteLength(payload, 'utf8') > MAX_FILE_BYTES) {
+    fail('review_branch_push_main_protection_snapshot_file_invalid')
+  }
+  let packet
+  try {
+    packet = validateGitHubMainProtectionSnapshot(JSON.parse(payload))
+  } catch (error) {
+    if (String(error?.message || '').startsWith('github_main_protection_snapshot_')) {
+      fail('review_branch_push_main_protection_snapshot_invalid')
+    }
+    throw error
+  }
+  return {
+    path: absolute,
+    digest: digest(payload),
+    packet,
+  }
+}
+
+function buildMainProtectionEvidence(snapshotReceipt = null) {
+  if (!snapshotReceipt?.packet) {
+    return {
+      path: null,
+      digest: null,
+      packetDigest: null,
+      assessmentOk: false,
+      currentAction: null,
+      failures: ['github_main_protection_snapshot_missing'],
+      verifiedForBranchPush: false,
+    }
+  }
+  const packet = validateGitHubMainProtectionSnapshot(snapshotReceipt.packet)
+  const failures = Array.isArray(packet.assessment?.failures) ? [...packet.assessment.failures] : []
+  const verifiedForBranchPush = packet.assessment?.ok === true
+    && packet.currentAction === 'main_protection_verified_continue_to_review_branch_push'
+  return {
+    path: snapshotReceipt.path || null,
+    digest: snapshotReceipt.digest || null,
+    packetDigest: packet.digest,
+    assessmentOk: packet.assessment?.ok === true,
+    currentAction: packet.currentAction,
+    failures,
+    verifiedForBranchPush,
+  }
+}
+
+function requireMainProtectionVerified(snapshotReceipt) {
+  const evidence = buildMainProtectionEvidence(snapshotReceipt)
+  if (!evidence.verifiedForBranchPush) fail('review_branch_push_main_protection_unverified')
+  return evidence
+}
+
 export function validateReviewBranchPushHandoff(packet) {
   if (!isRecord(packet)) fail('review_branch_push_handoff_required')
   const branch = String(packet.candidate?.branch || '')
@@ -200,12 +259,22 @@ function validateLocalState({ gate, gitState, execute }) {
 
 export function buildReviewBranchPushPlan({
   handoffReceipt,
+  mainProtectionSnapshotReceipt = null,
   gitState = currentGitState(),
   env = process.env,
 } = {}) {
   const gate = validateReviewBranchPushHandoff(handoffReceipt?.packet)
   validateLocalState({ gate, gitState, execute: false })
   const approval = validateOwnerApproval({ gate, env, execute: false })
+  const mainProtection = buildMainProtectionEvidence(mainProtectionSnapshotReceipt)
+  const blockers = [
+    ...(mainProtection.verifiedForBranchPush ? [] : [
+      'github_main_protection_unverified',
+      ...mainProtection.failures,
+    ]),
+    ...(gitState.clean === true ? [] : ['local_worktree_dirty']),
+    ...(approval.approved ? [] : ['owner_approval_missing']),
+  ]
   const body = {
     ok: true,
     contract: REVIEW_BRANCH_PUSH_APPLY_CONTRACT,
@@ -229,8 +298,14 @@ export function buildReviewBranchPushPlan({
       mainCommit: handoffReceipt.packet?.remote?.mainCommit || null,
     },
     approval,
+    githubMainProtection: mainProtection,
+    readiness: {
+      executeReady: blockers.length === 0,
+      blockers,
+    },
     plannedNetworkReadsBeforeExecute: [
       'verify release handoff current state',
+      'verify signed GitHub main-protection snapshot assessment.ok is true',
       `git ls-remote --heads origin ${gate.branch}`,
     ],
     possibleWrite: {
@@ -246,6 +321,7 @@ export function buildReviewBranchPushPlan({
     executionRequirements: [
       '--execute flag',
       `${APPROVAL_ENV} exactly equals the release handoff owner approval template`,
+      'signed GitHub main-protection snapshot verifies assessment.ok:true',
       'release handoff re-verifies current remote/live state immediately before push',
       'local worktree is clean',
       'post-push remote branch equals the exact approved commit',
@@ -294,6 +370,18 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
     || !/^sha256:[0-9a-f]{64}$/.test(String(packet.approval.expectedDigest || ''))) {
     fail('review_branch_push_report_approval_invalid')
   }
+  if (!isRecord(packet.githubMainProtection)
+    || typeof packet.githubMainProtection.assessmentOk !== 'boolean'
+    || typeof packet.githubMainProtection.verifiedForBranchPush !== 'boolean'
+    || !Array.isArray(packet.githubMainProtection.failures)) {
+    fail('review_branch_push_report_main_protection_invalid')
+  }
+  if (packet.githubMainProtection.digest != null) {
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(packet.githubMainProtection.digest || ''))
+      || !/^sha256:[0-9a-f]{64}$/.test(String(packet.githubMainProtection.packetDigest || ''))) {
+      fail('review_branch_push_report_main_protection_invalid')
+    }
+  }
   if (packet.mode === 'plan_only_no_git_remote_write') {
     if (packet.ok !== true
       || packet.controls?.gitRemoteWritesPerformed !== false
@@ -311,8 +399,14 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
     }
     if (!Array.isArray(packet.plannedNetworkReadsBeforeExecute)
       || !packet.plannedNetworkReadsBeforeExecute.includes('verify release handoff current state')
+      || !packet.plannedNetworkReadsBeforeExecute.includes('verify signed GitHub main-protection snapshot assessment.ok is true')
       || !packet.plannedNetworkReadsBeforeExecute.includes(`git ls-remote --heads origin ${packet.candidate.branch}`)) {
       fail('review_branch_push_plan_reads_invalid')
+    }
+    if (!isRecord(packet.readiness)
+      || typeof packet.readiness.executeReady !== 'boolean'
+      || !Array.isArray(packet.readiness.blockers)) {
+      fail('review_branch_push_plan_readiness_invalid')
     }
     if (!isRecord(packet.possibleWrite)
       || packet.possibleWrite.branch !== packet.candidate.branch
@@ -330,6 +424,7 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
     }
     if (!Array.isArray(packet.executionRequirements)
       || !packet.executionRequirements.includes('--execute flag')
+      || !packet.executionRequirements.includes('signed GitHub main-protection snapshot verifies assessment.ok:true')
       || !packet.executionRequirements.includes('post-push remote branch equals the exact approved commit')) {
       fail('review_branch_push_plan_requirements_invalid')
     }
@@ -357,6 +452,7 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
 
 export async function applyReviewBranchPushWithGit({
   handoffReceipt,
+  mainProtectionSnapshotReceipt = null,
   env = process.env,
   git = gitDefault,
   verifyHandoff = verifyCurrentReleaseHandoff,
@@ -365,6 +461,7 @@ export async function applyReviewBranchPushWithGit({
   const gitState = currentGitState(git)
   validateLocalState({ gate, gitState, execute: true })
   const approval = validateOwnerApproval({ gate, env, execute: true })
+  const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
 
   const verification = await verifyHandoff(handoffReceipt.path)
   if (verification?.ok !== true
@@ -417,6 +514,7 @@ export async function applyReviewBranchPushWithGit({
       remoteCommitAfter: after,
     },
     approval,
+    githubMainProtection: mainProtection,
     verification: {
       handoffCurrent: true,
       remoteBranchExact: true,
@@ -442,7 +540,7 @@ export async function applyReviewBranchPushWithGit({
 
 function parseArgs(argv) {
   const args = [...argv]
-  const options = { mode: 'plan', handoff: null, output: null, verify: null }
+  const options = { mode: 'plan', handoff: null, githubProtectionSnapshot: null, output: null, verify: null }
   while (args.length) {
     const arg = args.shift()
     if (arg === '--plan') {
@@ -453,6 +551,8 @@ function parseArgs(argv) {
       options.mode = 'self-test'
     } else if (arg === '--handoff' && args[0]) {
       options.handoff = args.shift()
+    } else if ((arg === '--github-protection-snapshot' || arg === '--main-protection-snapshot') && args[0]) {
+      options.githubProtectionSnapshot = args.shift()
     } else if (arg === '--output' && args[0]) {
       options.output = args.shift()
     } else if (arg === '--verify' && args[0]) {
@@ -511,8 +611,137 @@ async function runSelfTest() {
     },
   }
   const receipt = { path: '<self-test>', digest: `sha256:${'1'.repeat(64)}`, packet: { digest: `sha256:${'2'.repeat(64)}`, ...packet } }
+  const mainProtectionSnapshotReceipt = {
+    path: '<main-protection-self-test>',
+    digest: `sha256:${'3'.repeat(64)}`,
+    packet: {
+      contract: 'supermega.github-main-protection-snapshot.v1',
+      digestScope: 'utf8_compact_json_without_digest',
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      repository: REPOSITORY,
+      mode: 'read_only_no_github_write',
+      source: {
+        branchUrl: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/branches/main',
+        rulesetsUrl: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/rulesets',
+        tokenPresent: false,
+        tokenEnv: null,
+        tokenValueExposed: false,
+      },
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: 'b'.repeat(40) },
+        protection: {
+          enabled: false,
+          required_status_checks: { contexts: [], checks: [] },
+          allow_force_pushes: null,
+          allow_deletions: null,
+          required_pull_request_reviews: null,
+          required_conversation_resolution: null,
+        },
+      },
+      rulesets: [{
+        id: 1,
+        name: 'SuperMega main release gate',
+        target: 'branch',
+        enforcement: 'active',
+        conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+        rules: [
+          { type: 'deletion' },
+          { type: 'non_fast_forward' },
+          {
+            type: 'pull_request',
+            parameters: {
+              required_review_thread_resolution: true,
+              require_review_thread_resolution: false,
+              requires_conversation_resolution: false,
+              require_last_push_approval: false,
+              required_approving_review_count: null,
+            },
+          },
+          {
+            type: 'required_status_checks',
+            parameters: {
+              required_status_checks: [
+                { context: 'SuperMega App CI' },
+                { context: 'Dependency Security Audit' },
+                { context: 'Kernel Console - Verify & Owner-Gated Release' },
+              ],
+              contexts: [],
+              strict_required_status_checks_policy: false,
+              do_not_enforce_on_create: false,
+            },
+          },
+        ],
+      }],
+      assessment: {
+        ok: true,
+        contract: 'supermega.github-main-protection.v1',
+        failures: [],
+        observedRequiredChecks: [
+          'SuperMega App CI',
+          'Dependency Security Audit',
+          'Kernel Console - Verify & Owner-Gated Release',
+        ],
+        evidence: {
+          branchProtected: false,
+          activeMainRulesets: ['SuperMega main release gate'],
+        },
+      },
+      currentAction: 'main_protection_verified_continue_to_review_branch_push',
+      requiredChecks: [
+        'SuperMega App CI',
+        'Dependency Security Audit',
+        'Kernel Console - Verify & Owner-Gated Release',
+      ],
+      controls: {
+        githubApiMethods: ['GET'],
+        githubWritesPerformed: false,
+        repositorySettingsMutated: false,
+        branchMutated: false,
+        pullRequestCreated: false,
+        mergePerformed: false,
+        deploymentPerformed: false,
+        supabaseMutated: false,
+        credentialValueExposed: false,
+      },
+    },
+  }
+  mainProtectionSnapshotReceipt.packet.digest = digest(JSON.stringify(mainProtectionSnapshotReceipt.packet))
+  mainProtectionSnapshotReceipt.packet = buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    branch: {
+      name: 'main',
+      protected: false,
+      commit: { sha: 'b'.repeat(40) },
+      protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+    },
+    rulesets: [{
+      id: 1,
+      name: 'SuperMega main release gate',
+      target: 'branch',
+      enforcement: 'active',
+      conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+      rules: [
+        { type: 'deletion' },
+        { type: 'non_fast_forward' },
+        { type: 'pull_request', parameters: { required_review_thread_resolution: true } },
+        {
+          type: 'required_status_checks',
+          parameters: {
+            required_status_checks: [
+              { context: 'SuperMega App CI' },
+              { context: 'Dependency Security Audit' },
+              { context: 'Kernel Console - Verify & Owner-Gated Release' },
+            ],
+          },
+        },
+      ],
+    }],
+  })
   const plan = buildReviewBranchPushPlan({
     handoffReceipt: receipt,
+    mainProtectionSnapshotReceipt,
     gitState: {
       branch: packet.candidate.branch,
       head: packet.candidate.commit,
@@ -535,6 +764,16 @@ async function runSelfTest() {
     })(),
     command_is_exact_commit_push: plan.possibleWrite.command?.join(' ') === `git push origin ${packet.candidate.commit}:refs/heads/${packet.candidate.branch}`,
     force_and_deletion_forbidden: plan.possibleWrite.forcePushAllowed === false && plan.possibleWrite.deleteAllowed === false,
+    main_protection_required_for_execute: buildReviewBranchPushPlan({
+      handoffReceipt: receipt,
+      gitState: {
+        branch: packet.candidate.branch,
+        head: packet.candidate.commit,
+        clean: true,
+        origin: ORIGIN,
+      },
+      env: { [APPROVAL_ENV]: approvalTemplate },
+    }).readiness.blockers.includes('github_main_protection_snapshot_missing'),
     plan_digest_verifies: validateReviewBranchPushReport(plan, { expectedMode: 'plan_only_no_git_remote_write' }) === plan,
     no_secret_echo: plan.controls.credentialValueExposed === false,
   }
@@ -573,9 +812,12 @@ async function main() {
     return
   }
   const handoffReceipt = await readReleaseHandoffReceipt(options.handoff)
+  const mainProtectionSnapshotReceipt = options.githubProtectionSnapshot
+    ? await readGitHubMainProtectionSnapshotReceipt(options.githubProtectionSnapshot)
+    : null
   const result = options.mode === 'execute'
-    ? await applyReviewBranchPushWithGit({ handoffReceipt })
-    : buildReviewBranchPushPlan({ handoffReceipt })
+    ? await applyReviewBranchPushWithGit({ handoffReceipt, mainProtectionSnapshotReceipt })
+    : buildReviewBranchPushPlan({ handoffReceipt, mainProtectionSnapshotReceipt })
   if (options.output) {
     const output = await writeExclusive(options.output, `${JSON.stringify(validateReviewBranchPushReport(result, { expectedMode: 'plan_only_no_git_remote_write' }), null, 2)}\n`)
     console.log(JSON.stringify({

@@ -568,8 +568,18 @@ export async function prepareCurrentOperatorBoard({
   const packageReceipt = await readJsonReceipt(DEFAULT_PACKAGE, null, 'current_operator_board_package')
   const gitState = currentGitState()
   const githubApplyPlan = buildApplyPlan({ proposalReceipt: githubProposalReceipt, gitState, env })
-  const branchPushPlan = buildReviewBranchPushPlan({ handoffReceipt, gitState, env })
-  const pullRequestPlan = buildPullRequestPlan({ handoffReceipt, gitState, env })
+  const branchPushPlan = buildReviewBranchPushPlan({
+    handoffReceipt,
+    mainProtectionSnapshotReceipt: githubProtectionSnapshotReceipt,
+    gitState,
+    env,
+  })
+  const pullRequestPlan = buildPullRequestPlan({
+    handoffReceipt,
+    mainProtectionSnapshotReceipt: githubProtectionSnapshotReceipt,
+    gitState,
+    env,
+  })
   const board = buildCurrentOperatorBoard({
     handoffReceipt,
     technicalEstate: technicalEstateReceipt.packet,

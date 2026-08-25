@@ -9,6 +9,9 @@ import {
   validatePullRequestHandoff,
   validatePullRequestReport,
 } from './apply_release_pull_request.mjs'
+import {
+  buildGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
 
 const repository = 'swanhtet01/swanhtet01.github.io'
 const origin = `https://github.com/${repository}.git`
@@ -65,6 +68,44 @@ function receipt(packetValue = packet()) {
   }
 }
 
+function mainProtectionReceipt() {
+  return {
+    path: 'C:\\evidence\\supermega.github-main-protection-snapshot.generated.json',
+    digest: `sha256:${'3'.repeat(64)}`,
+    packet: buildGitHubMainProtectionSnapshot({
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: main },
+        protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+      },
+      rulesets: [{
+        id: 1,
+        name: 'SuperMega main release gate',
+        target: 'branch',
+        enforcement: 'active',
+        conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+        rules: [
+          { type: 'deletion' },
+          { type: 'non_fast_forward' },
+          { type: 'pull_request', parameters: { required_review_thread_resolution: true } },
+          {
+            type: 'required_status_checks',
+            parameters: {
+              required_status_checks: [
+                { context: 'SuperMega App CI' },
+                { context: 'Dependency Security Audit' },
+                { context: 'Kernel Console - Verify & Owner-Gated Release' },
+              ],
+            },
+          },
+        ],
+      }],
+    }),
+  }
+}
+
 function gitState(overrides = {}) {
   return {
     branch,
@@ -108,6 +149,7 @@ test('plan is no-write and blocks execution until the remote branch is exact', (
   const unpublished = packet({ remote: { candidateCommit: null, candidateBranchState: 'unpublished' } })
   const plan = buildPullRequestPlan({
     handoffReceipt: receipt(unpublished),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     gitState: gitState(),
     env: {},
   })
@@ -134,6 +176,7 @@ test('plan is no-write and blocks execution until the remote branch is exact', (
 test('report validator rejects stale plan digests and wrong modes', () => {
   const plan = buildPullRequestPlan({
     handoffReceipt: receipt(),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     gitState: gitState(),
     env: {},
   })
@@ -155,6 +198,7 @@ test('plan becomes executable only with exact branch, clean tree, approval, and 
   }
   const plan = buildPullRequestPlan({
     handoffReceipt: receipt(),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     gitState: gitState(),
     env,
   })
@@ -183,6 +227,7 @@ test('execute creates one pull request after handoff and remote branch verificat
   const requests = []
   const result = await applyReleasePullRequestWithClient({
     handoffReceipt: receipt(),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     env: { [approvalEnv]: gate.approvalTemplate, GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
     git,
     verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
@@ -224,6 +269,7 @@ test('execute returns no-write when an exact open PR already exists', async () =
   const { git } = stubGit()
   const result = await applyReleasePullRequestWithClient({
     handoffReceipt: receipt(),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     env: { [approvalEnv]: gate.approvalTemplate, GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
     git,
     verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
@@ -263,6 +309,7 @@ test('fails closed for wrong branch, unsafe authority, stale local head, and mis
   await assert.rejects(
     applyReleasePullRequestWithClient({
       handoffReceipt: receipt(),
+      mainProtectionSnapshotReceipt: mainProtectionReceipt(),
       env: { [approvalEnv]: gate.approvalTemplate, GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
       git,
       verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
