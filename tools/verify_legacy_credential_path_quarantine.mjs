@@ -6,6 +6,7 @@ const targets = [
   'package.json',
   'tools/bootstrap_supermega_ops.ps1',
   'tools/sync_local_secrets.ps1',
+  'tools/github_secret_sync.py',
 ]
 
 const requiredSnippets = {
@@ -32,6 +33,17 @@ const requiredSnippets = {
     '$envMap["SUPERMEGA_LLM_PROVIDER"] = "ollama"',
     '$envMap["SUPERMEGA_OLLAMA_MODEL"] = "llama3.2:1b"',
   ],
+  'tools/github_secret_sync.py': [
+    'EXPECTED_OWNER_CONFIRMATION = "I APPROVE SUPERMEGA GITHUB SECRET WRITE"',
+    'parser.add_argument("--allow-external-write", action="store_true"',
+    'parser.add_argument("--owner-confirmation", default=""',
+    'parser.add_argument("--token-env", default=""',
+    'Refusing --token. Set GITHUB_TOKEN or GH_TOKEN and pass --token-env instead.',
+    'Quarantined legacy GitHub secret sync',
+    'secret_value_loaded = _load_secret_value(',
+    '"external_writes_performed": False',
+    '"secret_values_exposed": False',
+  ],
 }
 
 const forbiddenSnippets = [
@@ -42,6 +54,9 @@ const forbiddenSnippets = [
   '$envMap["SUPERMEGA_LLM_PROVIDER"] = "openai"',
   '$envMap["SUPERMEGA_OPENAI_MODEL"] = "gpt-5-mini"',
   '$envMap["SUPERMEGA_ANTHROPIC_MODEL"] = "claude-sonnet-4-20250514"',
+  'parser.add_argument("--token", required=True',
+  '.expanduser()',
+  '"response": key_resp.text',
 ]
 
 const errors = []
