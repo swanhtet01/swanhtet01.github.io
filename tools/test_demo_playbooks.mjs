@@ -148,6 +148,7 @@ const kitSourcePaths = [
   'docs/supermega-shop-sales-agent.md',
   'tools/create_shop_pilot_handoff.mjs',
   'tools/prepare_shop_pilot_baseline_packet.mjs',
+  'tools/prepare_shop_pilot_day0_readiness_packet.mjs',
   'tools/verify_shop_pilot_launch_gate.mjs',
 ]
 const kitCorpus = kitSourcePaths.map(read).join('\n')
