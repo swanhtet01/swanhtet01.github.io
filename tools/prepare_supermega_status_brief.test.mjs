@@ -82,7 +82,7 @@ function operatorBoard(overrides = {}) {
     githubApplyPlan: {
       contract: 'supermega.github-main-protection-apply.v1',
       mode: 'plan_only_no_github_write',
-      candidate: { clean: true },
+      candidate: { branch, head: commit, clean: true, expectedHead: commit, expectedHeadMatched: true, expectedHeadRequiredForExecute: true },
       approval: { env: 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL', approved: false, expectedDigest: digestOf('6') },
       token: { present: false },
       possibleWrite: { create: `POST /repos/${repository}/rulesets` },
