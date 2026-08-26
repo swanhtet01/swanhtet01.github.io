@@ -17,6 +17,20 @@ function digest(seed) {
   return `sha256:${createHash('sha256').update(seed).digest('hex')}`
 }
 
+function canonicalJson(value) {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value)
+  if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`
+  }
+  throw new Error('invalid_canonical_json_test_value')
+}
+
+function recordDigest(record) {
+  return `sha256:${createHash('sha256').update(canonicalJson(record)).digest('hex')}`
+}
+
 function runInput(index, overrides = {}) {
   return {
     contract: 'supermega.shop.observed_pilot_run_input.v1',
@@ -193,9 +207,35 @@ test('external-action booleans must be explicitly safe', () => {
 test('missing or malformed evidence and anchor digests are rejected', () => {
   assert.throws(() => normalizeObservedRunInput(runInput(1, { evidenceReferenceDigest: 'abc' })), /evidence_reference_digest_invalid/)
   assert.throws(() => normalizeObservedRunInput(runInput(1, { independentAnchorDigest: `sha256:${'A'.repeat(64)}` })), /independent_anchor_digest_invalid/)
+  assert.throws(() => normalizeObservedRunInput(runInput(1, { independentAnchorDigest: digest('evidence-1') })), /shop_observed_evidence_anchor_digest_not_independent/)
   const missing = runInput(1)
   delete missing.evidenceReferenceDigest
   assert.throws(() => normalizeObservedRunInput(missing), /shop_observed_run_input_keys_invalid/)
+})
+
+test('replayed evidence and anchor digests cannot inflate accepted run count', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-replay-'))
+  try {
+    await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(1) })
+    await assert.rejects(() => recordObservedShopPilotRun({
+      workspace: parent,
+      runInput: runInput(2, { evidenceReferenceDigest: digest('evidence-1') }),
+    }), /shop_observed_evidence_reference_digest_duplicate/)
+    await assert.rejects(() => recordObservedShopPilotRun({
+      workspace: parent,
+      runInput: runInput(3, { independentAnchorDigest: digest('anchor-1') }),
+    }), /shop_observed_independent_anchor_digest_duplicate/)
+    const summary = await verifyObservedShopPilotEvidence(parent)
+    assert.equal(summary.runCount, 1)
+    assert.deepEqual(summary.proofIntegrity, {
+      uniqueRunIds: true,
+      uniqueEvidenceReferenceDigests: true,
+      uniqueIndependentAnchorDigests: true,
+      evidenceAnchorDigestPairsDistinct: true,
+    })
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
 })
 
 test('attempted raw identity fields are rejected before storage', () => {
@@ -215,6 +255,32 @@ test('tampering with stored evidence or summary digest fails verification', asyn
     const runsPath = join(parent, 'observed-runs.private.jsonl')
     await writeFile(runsPath, (await readFile(runsPath, 'utf8')).replace('"accepted":true', '"accepted":false'))
     await assert.rejects(() => verifyObservedShopPilotEvidence(parent), /shop_observed_run_record_tampered/)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('tampered stored proof replay fails verification even when record digests are recomputed', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-replay-tamper-'))
+  try {
+    await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(1) })
+    await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(2) })
+    const runsPath = join(parent, 'observed-runs.private.jsonl')
+    const records = (await readFile(runsPath, 'utf8')).trim().split(/\r?\n/).map((line) => JSON.parse(line))
+    const tampered = records.map((record, index) => {
+      if (index !== 1) return record
+      const unsigned = {
+        ...record,
+        evidenceReferenceDigest: records[0].evidenceReferenceDigest,
+      }
+      delete unsigned.recordDigest
+      return {
+        ...unsigned,
+        recordDigest: recordDigest(unsigned),
+      }
+    })
+    await writeFile(runsPath, `${tampered.map((record) => JSON.stringify(record)).join('\n')}\n`)
+    await assert.rejects(() => verifyObservedShopPilotEvidence(parent), /shop_observed_evidence_reference_digest_duplicate/)
   } finally {
     await rm(parent, { recursive: true, force: true })
   }

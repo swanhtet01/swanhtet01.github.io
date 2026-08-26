@@ -140,6 +140,14 @@ function validateObservedEvidenceSummary(summary) {
   if (summary.pilotSequenceCoverageMet !== pilotSequenceCoverageMet) fail('shop_pilot_decision_pilot_sequence_coverage_flag_invalid')
   const requiredPromotionEvidenceMet = summary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && summary.pilotSequenceCoverageMet === true
   if (summary.promotionEvidenceMet !== requiredPromotionEvidenceMet) fail('shop_pilot_decision_promotion_evidence_flag_invalid')
+  const proofIntegrity = summary.proofIntegrity
+  if (!isRecord(proofIntegrity)
+    || proofIntegrity.uniqueRunIds !== true
+    || proofIntegrity.uniqueEvidenceReferenceDigests !== true
+    || proofIntegrity.uniqueIndependentAnchorDigests !== true
+    || proofIntegrity.evidenceAnchorDigestPairsDistinct !== true) {
+    fail('shop_pilot_decision_proof_integrity_invalid')
+  }
   const metrics = summary.metrics
   if (!isRecord(metrics)) fail('shop_pilot_decision_observed_metrics_invalid')
   finiteNumber(metrics.medianMinutesPerOrder, 'shop_pilot_decision_median_order_time', { nullable: summary.runCount === 0 })
@@ -266,6 +274,7 @@ export function buildShopPilotDecisionPacket({ baselinePacket, observedSummary, 
       acceptedConsecutivePilotDayIndexes: observed.acceptedConsecutivePilotDayIndexes,
       pilotSequenceCoverageMet: observed.pilotSequenceCoverageMet,
       promotionEvidenceMet: observed.promotionEvidenceMet,
+      proofIntegrity: observed.proofIntegrity,
       medianAcceptedMinutesPerOrder: observed.metrics.medianAcceptedMinutesPerOrder,
       acceptedExceptionRatePerRun: observed.metrics.acceptedExceptionRatePerRun,
       medianAcceptedCloseMinutes: observed.metrics.medianAcceptedCloseMinutes,
@@ -315,7 +324,12 @@ export function validateShopPilotDecisionPacket(packet) {
     || !Array.isArray(observed.acceptedConsecutivePilotDayIndexes)
     || observed.pilotSequenceCoverageMet !== REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => observed.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
     || observed.promotionEvidenceMet !== (observed.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && observed.pilotSequenceCoverageMet === true)
-    || observed.acceptedRunCount > observed.runCount) fail('shop_pilot_decision_observed_metrics_invalid')
+    || observed.acceptedRunCount > observed.runCount
+    || !isRecord(observed.proofIntegrity)
+    || observed.proofIntegrity.uniqueRunIds !== true
+    || observed.proofIntegrity.uniqueEvidenceReferenceDigests !== true
+    || observed.proofIntegrity.uniqueIndependentAnchorDigests !== true
+    || observed.proofIntegrity.evidenceAnchorDigestPairsDistinct !== true) fail('shop_pilot_decision_observed_metrics_invalid')
   const comparison = packet.comparison
   if (!isRecord(comparison)
     || comparison.baselineMedianMinutesPerOrder < 0.1
@@ -372,6 +386,10 @@ Recommendation: \`${packet.pilotDecision.recommendation}\`
 - Current accepted-streak pilot days covered: \`${packet.observedMetrics.acceptedConsecutivePilotDayIndexes.join(',') || 'none'}\`
 - Five-day pilot sequence covered: \`${packet.observedMetrics.pilotSequenceCoverageMet}\`
 - Promotion evidence met: \`${packet.observedMetrics.promotionEvidenceMet}\`
+- Unique run IDs: \`${packet.observedMetrics.proofIntegrity.uniqueRunIds}\`
+- Unique evidence reference digests: \`${packet.observedMetrics.proofIntegrity.uniqueEvidenceReferenceDigests}\`
+- Unique independent anchor digests: \`${packet.observedMetrics.proofIntegrity.uniqueIndependentAnchorDigests}\`
+- Evidence and anchor digests distinct per run: \`${packet.observedMetrics.proofIntegrity.evidenceAnchorDigestPairsDistinct}\`
 - Latest reload/retry outcome: \`${packet.observedMetrics.latestReloadRetryOutcome}\`
 
 No customer contact, payment, stock movement, hosted write, GitHub write, Vercel deployment, Supabase mutation, credential action, or managed activation was performed.
@@ -440,6 +458,12 @@ function sampleObservedSummary(overrides = {}) {
     acceptedConsecutivePilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
     pilotSequenceCoverageMet: true,
     promotionEvidenceMet: true,
+    proofIntegrity: {
+      uniqueRunIds: true,
+      uniqueEvidenceReferenceDigests: true,
+      uniqueIndependentAnchorDigests: true,
+      evidenceAnchorDigestPairsDistinct: true,
+    },
     metrics: {
       medianMinutesPerOrder: 6,
       medianAcceptedMinutesPerOrder: 6,

@@ -125,6 +125,12 @@ test('builds owner-safe decision packet from baseline and 20 anchored accepted o
     assert.equal(packet.observedMetrics.acceptedConsecutiveRuns, 20)
     assert.deepEqual(packet.observedMetrics.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
     assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, true)
+    assert.deepEqual(packet.observedMetrics.proofIntegrity, {
+      uniqueRunIds: true,
+      uniqueEvidenceReferenceDigests: true,
+      uniqueIndependentAnchorDigests: true,
+      evidenceAnchorDigestPairsDistinct: true,
+    })
     assert.equal(packet.comparison.orderTimeDeltaMinutes, -4)
     assert.equal(packet.comparison.exceptionRateDeltaPerRun, -0.2)
     assert.equal(packet.comparison.closeTimeDeltaMinutes, -8)
@@ -170,6 +176,34 @@ test('blocks decision readiness when 20 accepted runs miss five-day sequence cov
     assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, false)
     assert.deepEqual(packet.failures, ['pilot_sequence_days_missing'])
     assert.equal(packet.pilotDecision.recommendation, 'collect_more_observed_evidence')
+  })
+})
+
+test('rejects observed summaries without all proof-integrity gates true', async () => {
+  await withWorkspace(async (workspace) => {
+    let summary = null
+    for (let index = 1; index <= 20; index += 1) {
+      summary = await recordObservedShopPilotRun({ workspace, runInput: runInput(index) })
+    }
+    assert.throws(() => buildShopPilotDecisionPacket({
+      baselinePacket: baselinePacket(),
+      observedSummary: {
+        ...summary,
+        proofIntegrity: {
+          ...summary.proofIntegrity,
+          uniqueIndependentAnchorDigests: false,
+        },
+      },
+      generatedAt: '2026-08-25T00:00:00.000Z',
+    }), /shop_pilot_decision_proof_integrity_invalid/)
+    assert.throws(() => buildShopPilotDecisionPacket({
+      baselinePacket: baselinePacket(),
+      observedSummary: {
+        ...summary,
+        proofIntegrity: undefined,
+      },
+      generatedAt: '2026-08-25T00:00:00.000Z',
+    }), /shop_pilot_decision_proof_integrity_invalid/)
   })
 })
 

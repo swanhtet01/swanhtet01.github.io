@@ -75,6 +75,9 @@ check(
 )
 
 requireSnippet(recorderText, 'const promotionEvidenceMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet', files.recorder)
+requireSnippet(recorderText, "throw new Error('shop_observed_evidence_reference_digest_duplicate')", files.recorder)
+requireSnippet(recorderText, "throw new Error('shop_observed_independent_anchor_digest_duplicate')", files.recorder)
+requireSnippet(recorderText, "throw new Error('shop_observed_evidence_anchor_digest_not_independent')", files.recorder)
 requireSnippet(recorderText, 'externalWritesPerformed: false', files.recorder)
 requireSnippet(recorderText, 'customerContactPerformed: false', files.recorder)
 requireSnippet(recorderText, 'paymentAccepted: false', files.recorder)
@@ -87,6 +90,7 @@ requireSnippet(recorderText, "nextAction: promotionEvidenceMet ? 'owner_review_r
 requireSnippet(recorderTestText, 'nineteen accepted runs do not set promotionEvidenceMet', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs set promotionEvidenceMet', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs still require five-day pilot sequence coverage', files.recorderTest)
+requireSnippet(recorderTestText, 'replayed evidence and anchor digests cannot inflate accepted run count', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, false)', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, true)', files.recorderTest)
 
@@ -169,6 +173,9 @@ const result = {
     fiveDayPilotSequenceCoverageRequired: true,
     independentAnchorRequired: true,
     receiptRequired: true,
+    uniqueEvidenceReferenceDigestsRequired: true,
+    uniqueIndependentAnchorDigestsRequired: true,
+    evidenceAnchorDigestPairsMustBeDistinct: true,
     syntheticEvidenceAccepted: false,
   },
   gatesPreserved: {

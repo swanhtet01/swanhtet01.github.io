@@ -186,6 +186,27 @@ function uniqueSortedNumbers(values) {
   return [...new Set(values)].sort((a, b) => a - b)
 }
 
+function assertStoredProofIntegrity(entries) {
+  const seenRunIds = new Set()
+  const seenEvidenceReferenceDigests = new Set()
+  const seenIndependentAnchorDigests = new Set()
+  for (const entry of entries) {
+    if (seenRunIds.has(entry.runId)) throw new Error('shop_observed_run_id_duplicate')
+    if (seenEvidenceReferenceDigests.has(entry.evidenceReferenceDigest)) throw new Error('shop_observed_evidence_reference_digest_duplicate')
+    if (seenIndependentAnchorDigests.has(entry.independentAnchorDigest)) throw new Error('shop_observed_independent_anchor_digest_duplicate')
+    if (entry.evidenceReferenceDigest === entry.independentAnchorDigest) throw new Error('shop_observed_evidence_anchor_digest_not_independent')
+    seenRunIds.add(entry.runId)
+    seenEvidenceReferenceDigests.add(entry.evidenceReferenceDigest)
+    seenIndependentAnchorDigests.add(entry.independentAnchorDigest)
+  }
+  return {
+    uniqueRunIds: true,
+    uniqueEvidenceReferenceDigests: true,
+    uniqueIndependentAnchorDigests: true,
+    evidenceAnchorDigestPairsDistinct: true,
+  }
+}
+
 export function normalizeObservedRunInput(input) {
   assertNoPrivateIdentity(input)
   if (!exactKeys(input, REQUIRED_INPUT_KEYS)) throw new Error('shop_observed_run_input_keys_invalid')
@@ -197,6 +218,9 @@ export function normalizeObservedRunInput(input) {
   if (!RELOAD_RETRY_OUTCOMES.includes(reloadRetryOutcome)) throw new Error('reload_retry_outcome_invalid')
   const runId = exactText(input.runId, 'run_id', 80)
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/.test(runId)) throw new Error('run_id_invalid')
+  const evidenceReferenceDigest = exactShaDigest(input.evidenceReferenceDigest, 'evidence_reference_digest')
+  const independentAnchorDigest = exactShaDigest(input.independentAnchorDigest, 'independent_anchor_digest')
+  if (evidenceReferenceDigest === independentAnchorDigest) throw new Error('shop_observed_evidence_anchor_digest_not_independent')
   return {
     contract: SHOP_OBSERVED_RUN_INPUT_CONTRACT,
     product: SHOP_PILOT_PRODUCT,
@@ -218,8 +242,8 @@ export function normalizeObservedRunInput(input) {
     noStockMovement: exactTrue(input.noStockMovement, 'no_stock_movement'),
     noServerWrite: exactTrue(input.noServerWrite, 'no_server_write'),
     noHostedWrite: exactTrue(input.noHostedWrite, 'no_hosted_write'),
-    evidenceReferenceDigest: exactShaDigest(input.evidenceReferenceDigest, 'evidence_reference_digest'),
-    independentAnchorDigest: exactShaDigest(input.independentAnchorDigest, 'independent_anchor_digest'),
+    evidenceReferenceDigest,
+    independentAnchorDigest,
   }
 }
 
@@ -268,6 +292,7 @@ async function readStoredRuns(workspace) {
 }
 
 function evidenceSummary(entries) {
+  const proofIntegrity = assertStoredProofIntegrity(entries)
   const acceptedRunCount = entries.filter((entry) => entry.accepted === true).length
   const acceptedEntries = entries.filter((entry) => entry.accepted === true)
   const totalExceptionCount = sum(entries.map((entry) => entry.exceptionCount))
@@ -301,6 +326,7 @@ function evidenceSummary(entries) {
     acceptedConsecutivePilotDayIndexes,
     pilotSequenceCoverageMet,
     promotionEvidenceMet,
+    proofIntegrity,
     metrics: {
       medianMinutesPerOrder: median(entries.map((entry) => entry.durationMinutesPerOrder)),
       medianAcceptedMinutesPerOrder: median(acceptedEntries.map((entry) => entry.durationMinutesPerOrder)),
@@ -339,6 +365,8 @@ export async function recordObservedShopPilotRun({ workspace, runInput }) {
   const run = normalizeObservedRunInput(runInput)
   const existing = await readStoredRuns(root)
   if (existing.some((entry) => entry.runId === run.runId)) throw new Error('shop_observed_run_id_duplicate')
+  if (existing.some((entry) => entry.evidenceReferenceDigest === run.evidenceReferenceDigest)) throw new Error('shop_observed_evidence_reference_digest_duplicate')
+  if (existing.some((entry) => entry.independentAnchorDigest === run.independentAnchorDigest)) throw new Error('shop_observed_independent_anchor_digest_duplicate')
   const entry = evidenceEntry(run)
   const updated = [...existing, entry]
   const lines = `${updated.map((stored) => JSON.stringify(stored)).join('\n')}\n`
