@@ -33,7 +33,7 @@ is only engineering.
 
 | # | Finding | What it costs her today | Cost to fix | Gate |
 | --- | --- | --- | --- | --- |
-| **1** | **The Burmese product name has no owner path.** The counter renders a dedicated `nameMy` slot, but nothing in the app can write one. Only bookable-service rows in six packs ever get it. | The single highest-frequency Burmese on the till — the name of the thing she is selling — is English for every retail good she stocks, permanently. | S–M engineering **after** a policy reversal | **Founder** — `product-onboarding-runtime.ts:377` states the current policy is that the CSV *must not* grow a Burmese column. That decision has to move first. |
+| **1** | **The BILINGUAL product name has no owner path** — corrected 2026-08-26, see §2.5. A Burmese-only name is writable *today*: `Item name` (`CoreApp.tsx:2983`, `:2992`, `:7275`) is unrestricted free text with no `pattern`, and renders as `item.name` on the counter and receipt. What has no owner path is the English+Burmese PAIR. Provisioning does write `nameMy`, for rows that sell a bookable service. | She can type ဆန် today and it shows. What she cannot do is keep the English name *and* the Burmese one — so a shop wanting both, or a staff member who reads only one, is stuck. Not "English permanently". | S–M engineering **after** a policy reversal | **Founder** — `product-onboarding-runtime.ts:377` states the CSV *must not* grow a Burmese column. That decision has to move first. |
 | **2** | **7 of 53 `bi()` call sites render Burmese today**, and the distribution is inverted against shift order: signup 0, onboarding 0, work-mode bar 0, counter 2, receipt 1, Stock 0, Today 0, close 0. | She works through four entirely English surfaces before the first bilingual word, and two of the four Shop work modes (Today, Stock) have none at all. | Split: 28 already-signed-off verbs need only wiring; 40 wired strings need only sign-off | **Both, but cleanly separable** — see §2.3. The 28 are pure engineering. |
 | **3** | **Numeral script is split and device-dependent.** `formatMoney` is pinned to `en-US`; **200** other call sites use bare `toLocaleString()` and follow the phone. | On a Burmese-locale phone the counter renders a total in Arabic digits and the receipt for that same sale renders it in Burmese digits. Two scripts, one sale. | S engineering once decided | **Founder** — which script wins is a decision with a native input. §3. |
 | **4** | **Non-cash reconciliation is entirely manual, and the payment method list is a hardcoded three.** `['Cash', 'KBZPay', 'WavePay']`, inline at `CoreApp.tsx:1352`. | A shop taking AYA Pay, CB Pay, MPU or bank transfer has nowhere to put it, so its per-method daily close is wrong by construction. | S engineering for an owner-editable list; the reconciliation gap is by design | **Founder for scope, engineering for the list.** §4. |
@@ -228,9 +228,26 @@ renders `item.nameMy` inside `<small className="shop-product-my" lang="my">`
 accessible name references the node so the Burmese survives
 (`CoreApp.tsx:1325`).
 
-**Nothing in the app can write it.** `nameMy` appears in exactly four `.tsx`
-files and is read in all four; no form field anywhere sets it. Its only
-producer is `withShopServiceMyanmarNames` (`shop-service-scheduling.ts:847`),
+**No form can write it — but that is not the same as "no Burmese".**
+Corrected 2026-08-26 after review; the first version of this section said
+"nothing in the app can write it", which overstates the blocker in a way that
+changes what to build. Two things are true at once and the ranking depends on
+keeping them apart:
+
+- **A Burmese-ONLY name is writable today.** `Item name` (`CoreApp.tsx:2983`,
+  `:2992`, `:7275`) is unrestricted free text — no `pattern` attribute, no
+  charset guard — and whatever is typed renders as `item.name` on the tile, the
+  cart line and the receipt. An owner who is content to run a Burmese-only
+  catalog can do so this afternoon, with no engineering and no policy change.
+- **The bilingual PAIR is what has no owner path.** Nothing lets an owner keep
+  `Rice 5kg` *and* `ဆန်` on the same row. That is the actual gap, and it binds
+  on a shop that wants both — a mixed-literacy staff, or an owner who reads the
+  English SKU sheet but whose cashier does not.
+
+So the honest headline is *"cannot be bilingual"*, not *"is English
+permanently"*. `nameMy` appears in exactly four `.tsx` files and is read in all
+four; no form field anywhere sets it. Its only producer is
+`withShopServiceMyanmarNames` (`shop-service-scheduling.ts:847`),
 which pairs catalog rows to the six industry packs' **bookable services**. A
 row it cannot pair to a service "is returned exactly as it arrived"
 (`:840-842`).
@@ -386,14 +403,28 @@ here, and this is better than it is usually described.
   wallet-side identifier in the accountable record unless the cashier
   overwrites the prefilled field by hand. For a shop reconciling against a KBZ
   statement at month end, that is the field that matters.
-- **The three-method list is the bigger problem.** `PAYMENT_QR_METHODS` is
-  likewise fixed at `['KBZPay', 'WavePay']` (`payment-qr-store.ts:79`), and
-  there is no owner-editable method list anywhere. A Yangon shop taking **AYA
-  Pay, CB Pay, OK Dollar, MPU card or bank transfer** must record it as one of
-  three. The daily close settles expected amounts **per payment method**
-  (`CoreApp.tsx:1773-1778`), so every such sale corrupts the per-method
-  variance the close exists to surface. This is not a translation problem; it
-  is a "this shop cannot balance its till" problem.
+- **The three-method list is the bigger problem — but it is the COUNTER's
+  problem, not the app's.** Corrected 2026-08-26; the first version of this
+  bullet overstated it and the correction matters, because it changes what to
+  build. `PAYMENT_QR_METHODS` is fixed at `['KBZPay', 'WavePay']`
+  (`payment-qr-store.ts:79`) and the walk-in counter offers exactly three
+  buttons, with no owner-editable method list anywhere.
+
+  What is **not** true is that every other tender is forced into those three.
+  The manual-order form offers `Card` (`CoreApp.tsx:6814`), and Website order
+  intake offers `manual_bank_transfer`, recorded as `Manual bank transfer`. And
+  the close does **not** settle against a fixed three: it groups dynamically by
+  each order's own `payment` value (`CoreApp.tsx:1773-1781`, keyed through a
+  `Map`), so a card or bank-transfer sale lands in its own row and the
+  per-method variance stays intact.
+
+  So of the five tenders originally listed, **MPU card and bank transfer
+  already have a path** — just not from the walk-in counter. The genuine gap is
+  narrower and worth naming exactly: the three fixed counter buttons, and the
+  unsupported wallet BRANDS (AYA Pay, CB Pay, OK Dollar), which have no route
+  anywhere and must still be mis-recorded as one of the three. That is a real
+  till-balancing problem for a shop taking those wallets; it is not an app-wide
+  absence of card or bank-transfer recording.
 
 **Gate:** the reconciliation boundary is a **founder** scope question (and the
 current answer is defensible). The **owner-editable method list is engineering
@@ -446,12 +477,25 @@ real: median of 3 cold loads, Galaxy A13 profile, CPU ×6, 400 kbit/s,
 | `/shop/?tab=orders` | 4,100 ms | 424 KB | 2,031 ms |
 
 **What that means for a Yangon owner, stated plainly:** roughly **four seconds
-of blank screen** on first open, because `index.html` paints nothing and first
-paint waits for the entry chunk plus the eagerly-imported model chunks. The
-document's own key insight holds and is worth repeating: the chooser ships 37%
-less JS and paints at the same 4.05 s, so first paint is dominated by the
-**serial critical path**, not by bytes. Shaving kilobytes will not fix this;
-painting something before the JS lands would.
+of blank screen** on first open, because `index.html` paints nothing.
+
+**Corrected 2026-08-26 — the mechanism above was wrong, and it was wrong in a
+way that would have misdirected the fix.** The first version of this paragraph
+said first paint "waits for the entry chunk plus the eagerly-imported model
+chunks", then blamed a **serial critical path**. Both reproduce a claim
+`ANDROID-PERFORMANCE-BASELINE.md:179-192` had already withdrawn by direct
+measurement: `jsTransferBeforeFcpBytes` returns **91.3 KB gz on all seven
+routes, identically** — the four HTML-discoverable files only. *"No dynamically
+imported chunk — not `core-app`, not `commerce-model`, not the route chunks —
+is on the first-paint path on any route… There is no waterfall to flatten."*
+
+So FCP is set by one HTML round-trip, plus 91 KB gz at 400 kbit/s, plus
+parse/execute under ×6 CPU, and nothing else. The practical conclusion survives
+and is now correctly grounded: **painting something before the JS lands is the
+lever**, and shrinking the 91 KB entry set is the only other thing FCP responds
+to. Splitting the eager model layer is still worth doing for transfer and parse
+on `/shop/*` — but it will **not** move first paint, and this document should
+not be read as saying it will.
 
 **The staleness, which matters more than the numbers.** The baseline was last
 touched **2026-08-20** (`463f4b4a`). The service worker landed **2026-08-21**
