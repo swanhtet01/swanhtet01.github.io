@@ -91,8 +91,10 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(!(has(aiNative, 'Self-serve remains a later') && has(aiNative, 'not the active activation route')), failures, 'strategy_posture_ai_self_serve_deferred_missing')
   addIf(!has(aiNative, '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5'), failures, 'strategy_posture_ai_20_run_gate_missing')
   addIf(!has(aiNative, 'no public signup, claim-code provisioning, hosted tenant'), failures, 'strategy_posture_ai_no_signup_claim_missing')
+  addIf(!has(aiNative, 'GitHub main protection verified, review-branch publication still owner-gated'), failures, 'strategy_posture_ai_review_branch_gate_missing')
   addIf(has(aiNative, 'Managed onboarding is SELF-SERVE'), failures, 'strategy_posture_ai_active_self_serve_claim')
   addIf(has(aiNative, 'Phase B -- first self-serve tenants'), failures, 'strategy_posture_ai_self_serve_phase_active')
+  addIf(has(aiNative, 'GitHub main protection still owner-gated'), failures, 'strategy_posture_ai_stale_github_gate_claim')
   assertNoActiveStaleSchemaClaims(aiNative, failures, { liveSchemaVersion })
 
   for (const product of ['Shop', 'Plant', 'Website', 'Ecommerce']) {
@@ -101,7 +103,8 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(!has(competitiveCut, 'AI is a shared capability, not a customer product'), failures, 'strategy_posture_competitive_cut_ai_boundary_missing')
   addIf(!has(competitiveCut, 'Shop remains the money-path product'), failures, 'strategy_posture_competitive_cut_shop_first_missing')
   addIf(!has(competitiveCut, `${requiredRuns} consecutive accepted observed runs covering pilot days 1 through 5`), failures, 'strategy_posture_competitive_cut_run_gate_missing')
-  addIf(!has(competitiveCut, 'The current first external gate is GitHub `main` protection'), failures, 'strategy_posture_competitive_cut_github_gate_missing')
+  addIf(!has(competitiveCut, 'GitHub `main` protection is verified. The current first external gate is the exact review-branch push'), failures, 'strategy_posture_competitive_cut_review_branch_gate_missing')
+  addIf(has(competitiveCut, 'The current first external gate is GitHub `main` protection'), failures, 'strategy_posture_competitive_cut_stale_github_gate_claim')
   addIf(!(has(competitiveCut, 'Plant, Website, and Ecommerce keep security, dependency, regression, and') && has(competitiveCut, 'handoff maintenance until Shop produces a decision packet')), failures, 'strategy_posture_competitive_cut_non_shop_sequence_missing')
   addIf(!has(competitiveCut, 'No deploy, provider write, credential'), failures, 'strategy_posture_competitive_cut_authority_warning_missing')
 
@@ -177,6 +180,7 @@ function runSelfTest() {
     'Self-serve remains a later product expansion, not the active activation route',
     '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5',
     'no public signup, claim-code provisioning, hosted tenant',
+    'GitHub main protection verified, review-branch publication still owner-gated',
   ].join('\n')
   const competitiveCut = [
     'No deploy, provider write, credential',
@@ -187,7 +191,7 @@ function runSelfTest() {
     'AI is a shared capability, not a customer product',
     'Shop remains the money-path product',
     '20 consecutive accepted observed runs covering pilot days 1 through 5',
-    'The current first external gate is GitHub `main` protection',
+    'GitHub `main` protection is verified. The current first external gate is the exact review-branch push',
     'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
   ].join('\n')
   const clientReadiness = 'Freshness note, 2026-08-26\nProduction is at v11.'

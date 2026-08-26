@@ -75,8 +75,10 @@ Shop remains the money-path product until its owner-private pilot has at least
 
 The next evidence chain is:
 
-1. protect GitHub `main` and restore review authority;
-2. push/review the release-stack integration candidate through a PR;
+1. keep GitHub `main` protection verified and publish the exact review branch
+   only after owner-approved fast-forward push;
+2. create/review the release-stack integration PR only after the remote review
+   branch equals the candidate;
 3. rehearse Supabase from source on a clean preview branch;
 4. promote paired Vercel candidates only after owner approval;
 5. run owner-private Shop baseline and five-day pilot evidence;
@@ -151,8 +153,9 @@ Every future slice must explicitly check these failure modes:
 
 ## 8. Current practical next action
 
-The current first external gate is GitHub `main` protection. The current first
-commercial evidence gate is the owner-private Shop baseline and pilot.
+GitHub `main` protection is verified. The current first external gate is the
+exact review-branch push. The current first commercial evidence gate is the
+owner-private Shop baseline and pilot.
 
 Until those gates move, the SuperMega technical agent's useful work is not
 "make more agents." It is to keep one release candidate reviewable, one pilot

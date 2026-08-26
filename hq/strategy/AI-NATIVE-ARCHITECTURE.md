@@ -258,9 +258,10 @@ showroom CI run separately and fail CI on their own.
 ## 5. 90-day scalability roadmap (concrete triggers)
 
 Day 0 state: zero managed tenants, owner-named Shop pilot not yet observed,
-GitHub main protection still owner-gated, and production/external writes
-disabled. Current release packets must be generated from the reviewed candidate
-SHA and treated as stale when a newer artifact family supersedes them.
+GitHub main protection verified, review-branch publication still owner-gated,
+and production/external writes disabled. Current release packets must be
+generated from the reviewed candidate SHA and treated as stale when a newer
+artifact family supersedes them.
 
 Phase A -- prove the hosted spine (target: days 0-14)
 - After separate owner approval, execute the bounded rehearsal exactly as scoped

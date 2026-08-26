@@ -38,6 +38,7 @@ const aiNative = [
   'Self-serve remains a later product expansion, not the active activation route',
   '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5',
   'no public signup, claim-code provisioning, hosted tenant',
+  'GitHub main protection verified, review-branch publication still owner-gated',
 ].join('\n')
 
 const competitiveCut = [
@@ -49,7 +50,7 @@ const competitiveCut = [
   'AI is a shared capability, not a customer product',
   'Shop remains the money-path product',
   '20 consecutive accepted observed runs covering pilot days 1 through 5',
-  'The current first external gate is GitHub `main` protection',
+  'GitHub `main` protection is verified. The current first external gate is the exact review-branch push',
   'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
 ].join('\n')
 
@@ -81,6 +82,26 @@ test('rejects stale self-serve and stale schema strategy posture', () => {
   assert.ok(report.failures.includes('strategy_posture_ai_active_self_serve_claim'))
   assert.ok(report.failures.includes('strategy_posture_stale_claim:production schema v10 observed'))
   assert.ok(report.failures.includes('strategy_posture_stale_claim:Production is at v10'))
+})
+
+test('rejects stale GitHub-main-protection next-gate strategy text', () => {
+  const report = buildStrategyPostureReport({
+    readiness: readiness(),
+    aiNative: aiNative.replace(
+      'GitHub main protection verified, review-branch publication still owner-gated',
+      'GitHub main protection still owner-gated',
+    ),
+    competitiveCut: competitiveCut.replace(
+      'GitHub `main` protection is verified. The current first external gate is the exact review-branch push',
+      'The current first external gate is GitHub `main` protection',
+    ),
+    clientReadiness,
+  })
+  assert.equal(report.ok, false)
+  assert.ok(report.failures.includes('strategy_posture_ai_review_branch_gate_missing'))
+  assert.ok(report.failures.includes('strategy_posture_ai_stale_github_gate_claim'))
+  assert.ok(report.failures.includes('strategy_posture_competitive_cut_review_branch_gate_missing'))
+  assert.ok(report.failures.includes('strategy_posture_competitive_cut_stale_github_gate_claim'))
 })
 
 test('rejects readiness drift from the strategy authority', () => {
