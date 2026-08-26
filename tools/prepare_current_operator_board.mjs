@@ -594,6 +594,7 @@ export async function prepareCurrentOperatorBoard({
     mainProtectionSnapshotReceipt: githubProtectionSnapshotReceipt,
     gitState,
     env,
+    useGitHubCliAuth: true,
   })
   const board = buildCurrentOperatorBoard({
     handoffReceipt,

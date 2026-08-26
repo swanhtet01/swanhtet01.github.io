@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -238,4 +239,9 @@ test('renders a public-safe markdown board without credential-shaped text', () =
   assert.ok(markdown.includes('All provider writes'))
   assert.ok(!/ghp_[A-Za-z0-9]{20,}/.test(markdown))
   assert.ok(!/sk-[A-Za-z0-9_-]{20,}/.test(markdown))
+})
+
+test('generated board uses the same safe GitHub CLI auth readiness path as the PR plan', () => {
+  const source = readFileSync(new URL('./prepare_current_operator_board.mjs', import.meta.url), 'utf8')
+  assert.match(source, /const pullRequestPlan = buildPullRequestPlan\(\{[\s\S]*?useGitHubCliAuth: true,[\s\S]*?\}\)/)
 })
