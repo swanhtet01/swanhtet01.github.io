@@ -74,7 +74,7 @@ function fixture(overrides = {}) {
     githubApplyPlan: {
       contract: 'supermega.github-main-protection-apply.v1',
       mode: 'plan_only_no_github_write',
-      candidate: { clean: true },
+      candidate: { branch, head: commit, clean: true, expectedHead: commit, expectedHeadMatched: true, expectedHeadRequiredForExecute: true },
       approval: { env: 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL', approved: false, expectedDigest: digestOf('6') },
       token: { present: false },
       possibleWrite: { create: `POST /repos/${repository}/rulesets` },
@@ -170,6 +170,12 @@ test('fails closed for dirty worktree, fifth-product AI, and write controls', ()
       controls: { githubWritesPerformed: true },
     },
   })), /current_operator_board_controls_invalid/)
+  assert.throws(() => buildCurrentOperatorBoard(fixture({
+    githubApplyPlan: {
+      ...fixture().githubApplyPlan,
+      candidate: { ...fixture().githubApplyPlan.candidate, expectedHead: null, expectedHeadMatched: null },
+    },
+  })), /current_operator_board_github_apply_expected_head_invalid/)
 })
 
 test('renders a public-safe markdown board without credential-shaped text', () => {

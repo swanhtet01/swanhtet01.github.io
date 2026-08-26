@@ -144,8 +144,9 @@ function assertCurrentGitHubMainProtection(preflight, applyPlan) {
   if (packet.candidate?.commit !== plan.candidate?.head || packet.candidate?.clean !== true || plan.candidate?.clean !== true) {
     fail('github_main_protection_owner_action_card_candidate_invalid')
   }
-  if (plan.candidate?.expectedHead !== null
-    && (plan.candidate?.expectedHead !== packet.candidate.commit || plan.candidate?.expectedHeadMatched !== true)) {
+  if (plan.candidate?.expectedHead !== packet.candidate.commit
+    || plan.candidate?.expectedHeadMatched !== true
+    || plan.candidate?.expectedHeadRequiredForExecute !== true) {
     fail('github_main_protection_owner_action_card_expected_head_invalid')
   }
   if (plan.approval?.env !== 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'

@@ -239,6 +239,12 @@ export function buildCurrentOperatorBoard({
     || supabaseProposalReceipt.packet?.controls?.providerMutationsPerformed !== false) {
     fail('current_operator_board_controls_invalid')
   }
+  if (githubApplyPlan.candidate?.head !== releaseCommit
+    || githubApplyPlan.candidate?.expectedHead !== releaseCommit
+    || githubApplyPlan.candidate?.expectedHeadMatched !== true
+    || githubApplyPlan.candidate?.expectedHeadRequiredForExecute !== true) {
+    fail('current_operator_board_github_apply_expected_head_invalid')
+  }
   const githubProtectionSatisfied = githubProtectionSnapshot
     ? validateGitHubMainProtectionSnapshot(githubProtectionSnapshot).assessment.ok === true
     : false
@@ -567,7 +573,12 @@ export async function prepareCurrentOperatorBoard({
   const supabaseProposalReceipt = await readJsonReceipt(DEFAULT_SUPABASE_PROPOSAL, validateSupabasePreviewRehearsalProposal, 'current_operator_board_supabase_proposal')
   const packageReceipt = await readJsonReceipt(DEFAULT_PACKAGE, null, 'current_operator_board_package')
   const gitState = currentGitState()
-  const githubApplyPlan = buildApplyPlan({ proposalReceipt: githubProposalReceipt, gitState, env })
+  const githubApplyPlan = buildApplyPlan({
+    proposalReceipt: githubProposalReceipt,
+    gitState,
+    env,
+    expectedHead: handoffReceipt.packet?.candidate?.commit,
+  })
   const branchPushPlan = buildReviewBranchPushPlan({
     handoffReceipt,
     mainProtectionSnapshotReceipt: githubProtectionSnapshotReceipt,
@@ -684,7 +695,14 @@ function selfTestBoard() {
   const githubApplyPlan = {
     contract: 'supermega.github-main-protection-apply.v1',
     mode: 'plan_only_no_github_write',
-    candidate: { clean: true },
+    candidate: {
+      branch: handoffPacket.candidate.branch,
+      head: commit,
+      clean: true,
+      expectedHead: commit,
+      expectedHeadMatched: true,
+      expectedHeadRequiredForExecute: true,
+    },
     approval: { env: 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL', approved: false, expectedDigest: `sha256:${'6'.repeat(64)}` },
     token: { present: false },
     possibleWrite: { create: `POST /repos/${REPOSITORY}/rulesets` },

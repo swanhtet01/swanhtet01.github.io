@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -27,6 +28,16 @@ const live = 'c'.repeat(40)
 
 function digestOf(char) {
   return `sha256:${char.repeat(64)}`
+}
+
+function packetDigest(value) {
+  return `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`
+}
+
+function resignPacket(packet) {
+  const copy = { ...packet }
+  delete copy.digest
+  return { ...copy, digest: packetDigest(copy) }
 }
 
 function baseHandoff({ protectedMain = false } = {}) {
@@ -159,7 +170,7 @@ function githubSnapshot({ protectedMain = false } = {}) {
   })
 }
 
-function fixture({ protectedMain = false, env = {} } = {}) {
+function fixture({ protectedMain = false, env = {}, bindGitHubExpectedHead = true } = {}) {
   const handoff = baseHandoff({ protectedMain })
   const handoffReceipt = { name: 'release-handoff.json', digest: digestOf('0'), packet: handoff }
   const gitState = { branch: handoff.candidate.branch, head: commit, clean: true, origin }
@@ -175,7 +186,12 @@ function fixture({ protectedMain = false, env = {} } = {}) {
       ownerApprovalTemplate: `I approve one GitHub repository settings write to create or update the main protection ruleset for ${repository} using the reviewed SuperMega main release gate proposal only. I do not approve push, PR creation, merge, deployment, Supabase mutation, credential change, customer contact, payment, stock, domain, hosted-write, or managed activation.`,
     },
   }
-  const githubApplyPlan = buildApplyPlan({ proposalReceipt, gitState, env })
+  const githubApplyPlan = buildApplyPlan({
+    proposalReceipt,
+    gitState,
+    env,
+    expectedHead: bindGitHubExpectedHead ? commit : null,
+  })
   const branchPushPlan = buildReviewBranchPushPlan({ handoffReceipt, mainProtectionSnapshotReceipt: snapshotReceipt, gitState, env })
   const pullRequestPlan = buildPullRequestPlan({ handoffReceipt, mainProtectionSnapshotReceipt: snapshotReceipt, gitState, env })
   const estate = technicalEstate()
@@ -268,6 +284,10 @@ test('fails closed for candidate mismatch and write-control drift', () => {
       release: { ...fixture().productReadinessMatrix.release, candidateCommit: 'f'.repeat(40) },
     },
   }), /next_release_action_preflight_candidate_mismatch|product_readiness_matrix_digest_mismatch/)
+  assert.throws(
+    () => buildNextReleaseActionPreflight(fixture({ bindGitHubExpectedHead: false })),
+    /next_release_action_preflight_github_apply_expected_head_invalid/,
+  )
 
   const packet = buildNextReleaseActionPreflight(fixture())
   assert.throws(() => validateNextReleaseActionPreflight({

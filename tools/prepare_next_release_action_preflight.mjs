@@ -217,6 +217,11 @@ export function buildNextReleaseActionPreflight({
     || applyPlan.candidate?.head !== release.commit) {
     fail('next_release_action_preflight_candidate_mismatch')
   }
+  if (applyPlan.candidate?.expectedHead !== release.commit
+    || applyPlan.candidate?.expectedHeadMatched !== true
+    || applyPlan.candidate?.expectedHeadRequiredForExecute !== true) {
+    fail('next_release_action_preflight_github_apply_expected_head_invalid')
+  }
   if (!sameArray(matrix.productOrder, PRODUCT_ORDER) || !sameArray(board.products?.customerProducts, PRODUCT_ORDER)) {
     fail('next_release_action_preflight_product_order_invalid')
   }
