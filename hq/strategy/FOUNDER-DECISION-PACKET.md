@@ -1,6 +1,6 @@
 # Founder decision packet — every open founder-only decision, in one ordered list
 
-Date: 2026-08-24
+Date: 2026-08-24 (revised 2026-08-26 — see "Corrections applied on review")
 Status: **decision packet for the founder.** This document authorizes nothing:
 no deploy, no production write, no migration, no release dispatch, no billing or
 entitlement transition, no customer contact, and no gate change. It quotes no
@@ -25,19 +25,56 @@ can simply accept, and what it costs to change your mind later. Where a
 decision is referenced somewhere but was never actually specified, the entry
 says so instead of reconstructing it.
 
+**Corrections applied on review (2026-08-26).** Six findings against the first
+draft were verified against source at `6647a2b2` and applied. Five were correct
+and one was correct in part; each is marked in place with what the earlier draft
+said and why it was wrong, rather than silently rewritten:
+
+1. **P0 is new.** The product-identity question was filed in section 6 as an
+   unspecified gap. It is a founder decision, it precedes pricing, and it is now
+   numbered and first.
+2. **P2 now asks for the figure, not only the shape.** A shape-only answer
+   unblocks nothing — `prepare_managed_invoice.mjs` rejects the config outright.
+   The figure is set in `.secrets/`-class local storage, never in this repo.
+3. **P5's partial-approval option is withdrawn.** The four sub-approvals are one
+   decision; the runbook and the provisioner both enforce it. The caution the
+   old recommendation expressed now lives at the runbook-step layer, where it is
+   real.
+4. **P7's "v12 has never had a proof" claim is corrected.** v12's migration is
+   hosted-proven; four specific write-path assertions are not. They are named.
+5. **P9's "cheapest useful subset" now includes cadence/volume** — one of the
+   six hard gates, without which nothing can be sent.
+6. **P9 is conditionally part of the minimum subset**, because the repository
+   records zero real leads and cannot tell whether a prospect exists.
+
 ---
 
 ## 0. The minimum subset
 
-**Three decisions, plus one accept-the-default, make a first paying Myanmar
-client possible. Everything else in this packet changes what happens after that
-client, not whether they arrive.**
+**One prerequisite, four decisions, plus one conditional, make a first paying
+Myanmar client possible. Everything else in this packet changes what happens
+after that client, not whether they arrive.**
 
+- **P0** — which product is the first paying client buying: this repo's managed
+  Shop, or Shop Counter at `pos.supermega.dev`? **Answer this before P2** — it
+  determines the pricing shape, the figure, the invoice line items, and whether
+  P21 is a copy fix or a ratification.
 - **P1** — may the first payment be taken before the billing rail can record it?
-- **P2** — which pricing shape (D1)?
+- **P2** — which pricing shape (D1), **and what is the figure**? The shape alone
+  does not produce an invoice: `prepare_managed_invoice.mjs` rejects any config
+  whose `amount.totalMinor` is not positive and whose line items do not sum to
+  it. The figure is set in `.secrets/`-class local storage, never in this repo.
 - **P3** — which payment channels appear on the invoice (D2)?
 - **P4** — accept the three written recommendations for D3 (currency), D4 (tax)
   and D5 (entitlement lapse)? One "yes" closes all three.
+- **P9, conditionally** — *only if you do not already have a named prospect.*
+  This repository records **zero real leads**
+  (`PRODUCT-CATALOG-AND-PRICING.md` §"Commercial state"), and P9's six GTM gates
+  forbid contacting any real business until they are approved. If no prospect
+  exists, P9 is not a post-arrival decision — it is the step that produces the
+  client, and it belongs on this list. If you already know the person, strike
+  this line. **Only you can tell which case you are in**; the repo describes the
+  shape of client one and never says whether that person exists.
 
 That is the whole minimum. It is small on purpose, and the smallness is the
 most useful fact in this document: **no engineering work stands between the
@@ -55,7 +92,9 @@ whose entire differentiator is that every transaction has one.
 **What the minimum subset does NOT include, and why.** Production activation,
 the migration set, tenant #1, the hosted acceptance run, the Burmese counter
 slice and every item in sections 3-5 are all real and all founder-gated — but
-none of them is required for a first paying client under P1's fast path. They
+none of them is required for a first paying client under P1's fast path. P9 is
+the one entry outside section 1 that can be on this path, which is why it is
+listed above conditionally rather than deferred wholesale. They
 are required for a first *managed* client, for an in-rail invoice, and for
 scale. Section 2 sequences them honestly rather than implying they are on the
 critical path.
@@ -63,6 +102,81 @@ critical path.
 ---
 
 ## 1. The minimum subset, in full
+
+### P0 — Which product is the first paying client buying?
+
+**Answer with:** managed Shop (this repository), or Shop Counter
+(`pos.supermega.dev`), or both as one bundle.
+
+**Why this is numbered, and why it is first.** An earlier draft of this packet
+listed it in section 6 as "referenced but never specified" — a search result
+rather than a question. That was the wrong classification: it is the one
+decision that changes the *content* of the next three. Until it is answered,
+P2's shape, its figure and its invoice line items are all ambiguous, because
+they would describe two different products with different delivery costs; P3's
+payment channels are ambiguous, because the two products are billed by different
+entities' rails; and P21 cannot be answered at all, because whether the price
+already published on `pos.supermega.dev` is *your* price depends entirely on
+whether that is the product you are selling.
+
+**Blocked on this:** P2, P3 and P21 in substance, and P0's answer also
+determines whether section 2's whole managed-activation sequence is on the
+client-one path or not at all.
+
+**The two products are genuinely different things, and this repo already knows
+it.** `POS-PAGE-CLAIM-AUDIT.md` establishes that `pos.supermega.dev` is served
+by the Vercel project `spa-desk-pilot`, built from the repository
+`swanhtet01/supermega-workspace` in `spa-desk-pilot/` — **not** from this
+repository. This repo enforces the separation in its build gate:
+`tools/verify_app_build.mjs` lists `pos.supermega.dev` in its retired-context
+string set and fails the showroom build with `retired_context:pos.supermega.dev`
+if that string appears anywhere in the built app. (Cited by
+`POS-PAGE-CLAIM-AUDIT.md` as line 6582; that line number has since drifted —
+the check is at ~7280 on `6647a2b2`. The failure code is the stable reference.)
+
+**Options and their real cost.**
+
+- **Managed Shop (this repository).** Everything in this packet applies as
+  written. Cost: the audit scores this product **2 delivered, 6 partial, 1 not
+  built** against the nine sentences the POS page advertises — it is the weaker
+  product on the advertised feature surface today. It is also the product with
+  no approved price, so P2 starts from nothing (which is the honest starting
+  point, not a defect).
+- **Shop Counter (`pos.supermega.dev`).** Cost, and this is the decisive one:
+  **this packet does not govern it.** Its code is in another repository, its
+  price is already public (P21), and none of section 2 — production activation,
+  the migration set, tenant #1, the billing rail — is what delivers it. Choosing
+  this makes most of this document not your critical path, and makes P21 a
+  ratification rather than a copy fix. It scores **4 delivered, 5 partial, 0 not
+  built** on the same nine sentences.
+- **Both, as one bundle.** Cost: two codebases, two release paths and two claim
+  surfaces to keep honest simultaneously, from client one, with no shared
+  billing rail between them. The audit's most actionable finding is that the two
+  products have "close to opposite strengths", so a bundle is genuinely coherent
+  as a *product* story — it is the *operational* story that is expensive.
+
+**Recommendation: decide it explicitly, and this packet does not pick for you.**
+This is the one entry where the repository gives no basis for a recommendation:
+the choice turns on what you have actually promised a prospect and on which
+codebase you intend to maintain, and neither fact is in this repository. What
+the packet can say is the shape of the answer's consequence — if you answer
+Shop Counter, stop after P0, P21 and P3, because sections 2-5 are then about a
+product you are not selling first.
+
+**One thing that is NOT open, so you are not deciding it here:** whichever you
+pick, the figure itself is still unset and must be set per P2, in
+`.secrets/`-class local storage. Answering P0 "Shop Counter" does not import
+the published figure by default — that is exactly what P21 asks.
+
+**Reversibility:** high before a client, low after. Nothing in either repository
+changes on this answer; what is hard to reverse is telling a named prospect they
+are buying one product and then delivering the other.
+
+**Source:** `hq/strategy/POS-PAGE-CLAIM-AUDIT.md` ("First, a correction: this
+page does not sell the software in this repo", and the tally);
+`tools/verify_app_build.mjs` (`retired_context` string set); **P21**; **P2**.
+
+---
 
 ### P1 — May the first payment be taken before the billing rail can record it?
 
@@ -99,6 +213,16 @@ config file), keep the digest, and replay it as `issue-invoice` /
 `confirm-payment` once the rail reaches production. The record is then late,
 not absent.
 
+**That mitigation has one hard prerequisite, and it is P2's second half.** The
+preparer is not runnable on a shape alone: `validateInvoiceConfig` fails
+`config_total_minor_invalid` unless `amount.totalMinor` is a positive integer,
+and fails `config_total_mismatch` unless the line items plus decided tax sum
+exactly to it (`tools/prepare_managed_invoice.mjs:128-129,154-155`). So "charge
+now and keep the digest" requires the actual figure to exist in the founder's
+private config file first. Answering P1 "yes" without P2's figure produces no
+digest and no late record — it produces an unrecorded payment, which is the
+option this recommendation was chosen to avoid.
+
 **Reversibility:** high. The invoice can be recorded after the fact against the
 same digest. What cannot be undone is the fact that the first transaction's
 record was created retrospectively — so if that specific fact matters to you as
@@ -110,13 +234,33 @@ rows 1 and 10, plus "The honest shortest path, with its cost named");
 
 ---
 
-### P2 — Which pricing shape (D1)?
+### P2 — Which pricing shape (D1), and what is the figure?
 
-**Answer with:** A, B, or C.
+**Answer with:** two things, and the first is not sufficient without the second.
+
+1. **The shape:** A, B, or C.
+2. **The figure:** set the actual amount, currency and line-item split in a
+   founder-private config file in `.secrets/`-class local storage — outside this
+   repository, on your machine. Do not put it in a PR, an issue, a commit
+   message, or any file in this repo. `CLAUDE.md`'s hard limits forbid prices
+   anywhere in this public repo, `BILLING-RAIL-DESIGN.md` D1 confirms "no number
+   appears in this document or in code", and `FOUNDER-BOTTLENECK-STUDY.md` §4 A3
+   states the storage requirement in those exact terms.
+
+**Why the shape alone is not enough, stated mechanically.** Answering only A, B
+or C leaves the price unset, and an unset price is not a documentation gap — it
+is a hard validation failure. `validateInvoiceConfig` rejects the config with
+`config_total_minor_invalid` when `amount.totalMinor < 1`, and with
+`config_total_mismatch` when the line items plus decided tax do not sum exactly
+to `totalMinor` (`tools/prepare_managed_invoice.mjs:128-129,154-155`). It also
+requires at least one line item with a non-zero amount
+(`config_line_items_all_zero`). So a shape-only answer to P2 unblocks nothing:
+not the invoice config, not P1's charge-now path, not critical-path step 10.
+**Both halves, or the blocker stands.**
 
 **Blocked on this:** everything downstream of money. `prepare_managed_invoice.mjs`
 takes every monetary value from a founder-supplied config that does not exist
-until D1 does. `FOUNDER-BOTTLENECK-STUDY.md` §4 A3 states the prerequisite
+until D1 does — and that config is rejected outright until the figure exists too. `FOUNDER-BOTTLENECK-STUDY.md` §4 A3 states the prerequisite
 literally: "there is nothing to generate before a price exists". Critical-path
 step 10 (`CLIENT-READINESS-BRIEF.md` §2) cannot begin. This is the single most
 blocking item in the entire repository.
@@ -145,13 +289,16 @@ the build):
 
 **No amount appears anywhere in this document, in `BILLING-RAIL-DESIGN.md`, or
 in any code. That is by guard-enforced decision (`capability-tiers.ts` asserts
-no amount ever appears in it) and this packet does not weaken it.** Before you
-set a figure, `BILLING-RAIL-DESIGN.md` §7's own input list applies: delivery
-hours, support load, hosting and recovery cost, the customer's baseline value,
-currency, taxes, payment method, cancellation terms, and your minimum margin.
+no amount ever appears in it) and this packet does not weaken it — which is
+precisely why the figure has to be set somewhere else, and why "somewhere else"
+is named above as `.secrets/`-class local storage rather than left implicit.**
+Before you set a figure, `BILLING-RAIL-DESIGN.md` §7's own input list applies:
+delivery hours, support load, hosting and recovery cost, the customer's baseline
+value, currency, taxes, payment method, cancellation terms, and your minimum
+margin.
 
 **Recommendation: C for client one, with a nominal non-zero fee, then B from
-client two onward.** Reasoning: C matches the only pilot the ledger is shaped
+client two onward — and set that fee's figure before you act on P1.** Reasoning: C matches the only pilot the ledger is shaped
 for, and §7's own counsel — "consider a nominal non-zero invoice so the full
 record path is exercised with real money once, early" — converts C's single
 weakness into its strength: you exercise the whole invoice→transfer→confirm→grant
@@ -271,9 +418,11 @@ entitlement, and for the hosted acceptance evidence. **None of it is required
 for a first paying client under P1's fast path.** It is ordered so that P5 comes
 first because it gates the rest.
 
-### P5 — Grant the production-activation approval? (four named sub-approvals)
+### P5 — Grant the production-activation approval? (one decision, four named sub-approvals)
 
-**Answer with:** four yes/nos, or one yes for all four.
+**Answer with:** one yes or one no, covering all four named sub-approvals
+together. **They are not four independently grantable approvals** — see "Why
+this is one decision and not four" below.
 
 The four are already named machine-readably in
 `hq/readiness/managed-pilot-readiness.json` → `overall.nextAction.requires`, and
@@ -307,19 +456,50 @@ anything new. **The approval receipt is the one thing genuinely missing**
   runbook step D remains what it calls itself — "the one genuinely
   consequential, hardest-to-reverse step: once real customer tenants exist, they
   exist." Steps A-C stay reversible (env flags flip back; v11 is additive).
-- **Approve a subset.** Legitimate and cheap: approving 1 and 3 (runtime login,
-  exact release) lets the runtime login be provisioned and validated without
-  opening anything to a customer, because 4 (the activation window) is the
-  customer-facing switch and is separate.
+- **Approve a subset.** ~~Legitimate and cheap.~~ **Not available**, and an
+  earlier draft of this packet was wrong to offer it. See below.
 - **Approve none yet.** Nothing changes; the fast path in section 1 is
   unaffected.
 
-**Recommendation: approve 1 and 3 now, and hold 2 and 4 until you have a named
-client.** Reasoning: provisioning and validating the dedicated runtime login is
-the step most likely to surface a surprise, it is reversible (the login can be
-rotated), and it involves no customer. Naming the first owner (2) and opening
-the window (4) should be answered with a real person in front of you, and P6
-below determines *which* door that person walks through.
+**Why this is one decision and not four.** The four sub-approvals are the
+`requires` array of a **single** decision — `nextAction.decisionId:
+"managed-production-activation"` in `hq/readiness/managed-pilot-readiness.json`
+— not four separately grantable items, and the runbook is explicit about the
+consequence. `PRODUCTION-ACTIVATION-RUNBOOK.md` step A says: "Keep the committed
+target `protected-unapproved` until the founder approves the exact release,
+first named owner, runtime-role provisioning, and activation window **in one
+reviewed receipt**", and only "after that receipt and its separate
+`activation-approved` guard commit exist" may
+`tools/provision_supermega_runtime_role.py` run. The provisioner enforces this
+independently: `authorize_target` raises
+`production_target_not_activation_approved` whenever the production target's
+`package.json` status is anything other than `activation-approved`
+(`tools/provision_supermega_runtime_role.py`), and `_assert_package_guard_committed`
+additionally refuses to run against an uncommitted `package.json`.
+
+So approving only 1 and 3 leaves the target at `protected-unapproved`, the guard
+commit unmade, and the provisioner failing closed — **the runtime login cannot
+be provisioned at all under a partial approval.** Worse, making the guard commit
+anyway in order to unblock the provisioner would record `activation-approved`,
+which asserts all four; that would misrepresent approvals 2 and 4 as granted
+when they were not. There is no version of the subset that both works and is
+honest.
+
+**Recommendation: grant all four in one receipt when you are ready to activate
+at all — then stop after runbook steps A-B and hold C-D until you have a named
+client.** Reasoning: the caution behind the old subset recommendation was
+correct, but it belongs at the *runbook-step* layer, where it is genuinely
+separable, not at the *approval* layer, where it is not. Steps A-B (provision
+and validate the runtime login; tell the store to expect v11) expose nothing to
+any customer — the runbook says so directly: "Steps A-B are safe prep (no
+customer can create anything until C+D). ... You can do A-B, watch, then C-D."
+Step C is the customer-facing switch and step D is the one-way door. That
+sequencing gets you the surprise-surfacing value of provisioning early, with no
+customer exposure and no false approval record.
+
+If you are not ready to grant all four, the correct answer is **"approve none
+yet"**, and P6 below still determines which door client one eventually walks
+through when you are.
 
 **A real cost you should know before you plan the timing.** Recording the
 approval is not a five-minute edit. It requires flipping
@@ -335,9 +515,10 @@ verifiers (`verify_hq_contract.mjs:1091` and `:1142`,
 `verify_supabase_security_advisor_audit.mjs:339`) currently assert the
 un-approved state and must be updated in the same commit.
 
-**Reversibility:** sub-approvals 1-3 and runbook steps A-C are reversible. Step
-D (`SUPERMEGA_TRIAL_WRITES_ENABLED=true`) is the one-way door, and only once a
-real tenant has been created through it.
+**Reversibility:** the approval receipt itself and runbook steps A-C are
+reversible (the runtime login can be rotated; the env flags flip back; v11 is
+additive). Step D (`SUPERMEGA_TRIAL_WRITES_ENABLED=true`) is the one-way door,
+and only once a real tenant has been created through it.
 
 **Source:** `hq/readiness/managed-pilot-readiness.json` (`founderDecision`,
 `overall.nextAction`, `securityAudit`, `gates`);
@@ -419,17 +600,56 @@ both documents need that correction — it is folded into **P8**.
   `billing_rail.py:693`). No new migration proof needed. You keep the fast path
   in section 1 and reconcile later.
 - **Add v12.** Billing becomes operable: issue, confirm, void, record refund.
-  Cost: a disposable-branch proof of v12 first — **v12 has never had one**; and
-  `_premium_unlocked` stays `false` in-product, so **nothing the customer sees
-  changes when they pay.**
+  Cost: `_premium_unlocked` stays `false` in-product, so **nothing the customer
+  sees changes when they pay** — plus the narrow, named proof gap below.
 - **Add v12 and v13.** Billing operable *and* the premium flag actually
-  resolves. v13 is proven on a disposable hosted PostgreSQL 17 branch already
-  (`hq/readiness/billing-entitlement-read-proof.json`). Cost: a v12 proof still
-  needed, plus two live hazards PR #495 documents — the policy-predicate
+  resolves. Both migrations are already proven to *apply* on a disposable hosted
+  PostgreSQL 17 branch (`hq/readiness/billing-entitlement-read-proof.json`).
+  Cost: the narrow proof gap below, plus two live hazards PR #495 documents —
+  the policy-predicate
   fingerprint (`BILLING_ENTITLEMENT_READ_POLICY_DIGEST`) is a hash over
   PostgreSQL's *deparsed* rendering, so a server that deparses a correct policy
   differently takes billing down on an otherwise-correct database; and the
   env-scope trap below.
+
+**Correction: v12's migration proof is not missing — a narrower thing is.** An
+earlier draft of this packet said "v12 has never had" a disposable-branch proof.
+That is wrong, and the checked-in evidence says so plainly.
+`hq/readiness/billing-entitlement-read-proof.json` records the **full chain
+replayed from scratch, v1 through v13, each internal version guard enforced in
+sequence** (`instrument.migrationCount: 14`,
+`instrument.schemaVersionProven: 13`) on a fresh disposable hosted PostgreSQL
+17.6 branch, and `PRODUCT-CATALOG-AND-PRICING.md` describes v12 as hosted-proven
+on that basis. v12 applied cleanly on real hosted infrastructure. Do not ask for
+a generic re-proof of that.
+
+**What is genuinely unproven, named exactly.** That receipt's seven proofs all
+exercise the *runtime* role (`supermega_trial_backend`) and all concern v13's
+entitlement read, including the two that touch v12's tables only to show they
+stay dark (`billing_invoices_stays_dark`, `billing_events_stays_dark` →
+`permission_denied_no_policy_no_grant`). By design, v12 grants that role
+nothing, so **no recorded proof exercises v12's founder-privileged write path on
+hosted infrastructure.** The specific unproven assertions are:
+
+1. `BillingLedger.issue_invoice` writes a `billing.invoice.issued` row and event
+   against a hosted v12 database, under the privileged CLI connection rather
+   than the runtime role.
+2. `confirm_payment`, `void_invoice` and `record_refund` each produce their
+   expected immutable event and leave the invoice's one-way status machine in
+   the expected terminal state.
+3. `grant_entitlement` / `revoke_entitlement` write and revise the entitlement
+   row that v13's read policy then exposes — i.e. the two migrations compose in
+   the write→read direction, which the v13 receipt only ever tested from
+   pre-seeded fixtures.
+4. `_assert_schema`'s `require_write_privilege=True` branch passes against the
+   real hosted role attributes, not just against local fixtures.
+
+If you want that proof, ask for **those four assertions** on a disposable
+branch. If you do not, the honest statement of the risk is that v12's DDL is
+hosted-proven and v12's *usage* is only locally tested — which is a smaller and
+much cheaper gap than "v12 is unproven", and it is a gap you can also close
+after activation, before the first real invoice, because zero tenants means zero
+exposure.
 
 **The env-scope trap, which applies to every option except "stay at v11".** Two
 runtimes fail closed on an **exact** schema-version match read from an
@@ -443,7 +663,9 @@ inventory the store demands. So database and env must move together, in both
 directions, or every managed read and write fail-closes on a live tenant.
 
 **Recommendation: v12 and v13 together, in one window, before any tenant exists
-— conditional on a disposable-branch proof of v12 first.** Reasoning: the
+— and treat the four named v12 write-path assertions above as a proof you may
+run either before the window or after it and before the first real invoice, not
+as a blocker on the window itself.** Reasoning: the
 unavoidable window in which database and env disagree costs **nothing** while
 there are zero tenants and zero customers, and it is expensive and
 customer-visible later (a planned outage on a live partner). Do not take v12
@@ -496,6 +718,16 @@ follow it.
 
 **Answer with:** six yes/nos, or "skip — I have a prospect".
 
+**Read this entry as part of the minimum subset unless you already have a named
+prospect.** Section 0 lists it conditionally for that reason. This repository
+records **zero real leads** (`PRODUCT-CATALOG-AND-PRICING.md`, "Commercial
+state: zero real leads, zero managed tenants, zero revenue"), and the gates
+below forbid contacting any real business. If no prospect exists, no combination
+of P0-P4 produces a paying client, because there is nobody to sell to — P9 is
+then the step that *produces* the client, not a decision about what happens
+after one arrives. Only you can tell which case you are in; see the note at the
+end of this entry on exactly why the repository cannot.
+
 The six, from `GTM-AI-OPERATIONS.md` §(f), all currently unticked: approve the
 target lead list; approve the outreach copy; connect a real sending identity and
 consent to send under it; connect a social account; decide cadence and volume
@@ -514,19 +746,35 @@ the same way `production_activation` is a hard gate."
   already permits **batch** granularity rather than per-message, so its per-client
   cost is a policy choice you already hold rather than an engineering gap
   (`FOUNDER-BOTTLENECK-STUDY.md` §3).
-- **Approve a subset.** The cheapest useful subset is list + copy + sending
-  identity + replies-to-your-inbox. The social account is separable and buys
-  nothing for a first client.
+- **Approve a subset.** The cheapest subset that can actually send anything is
+  list + copy + sending identity + **cadence and volume limits** +
+  replies-to-your-inbox — five of the six. Cadence is not optional padding: it
+  is one of the six hard gates in its own right ("Decide on cadence and volume
+  limits. How many businesses get contacted per week, how many follow-ups"), so
+  a subset that omits it leaves outreach blocked no matter what else is
+  approved. **The social account is the only separable one** — it buys nothing
+  for a first client, and the posting-cadence half of the cadence gate travels
+  with it, so approving cadence for email volume and follow-up count alone is
+  coherent.
 - **Skip entirely.** Legitimate: the pilot the ledger is shaped for
   (`shop-spa-owner-pilot`) is one named business. If you already know that
   person, this whole entry is not on your path.
 
-**Recommendation: skip for client one; approve list + copy + sending identity +
-replies-to-your-inbox when you want client two.** Reasoning: a design partner
-you already know converts faster than any cold batch, and every approval here is
-a standing consent you would rather grant once you know what the first
-engagement actually taught you. Leave the social account unconnected — it is a
-second public surface to police for no first-client benefit.
+**Recommendation, and it is conditional on a fact only you hold.**
+
+- **If you already have a named prospect:** skip for client one; approve the
+  five-gate subset (list + copy + sending identity + cadence/volume +
+  replies-to-your-inbox) when you want client two. Reasoning: a design partner
+  you already know converts faster than any cold batch, and every approval here
+  is a standing consent you would rather grant once you know what the first
+  engagement actually taught you.
+- **If you do not:** approve that same five-gate subset **now**, as part of the
+  minimum subset, before or alongside P2. It is the only path in this packet
+  that produces a first client from a standing start, and holding it back does
+  not make client one arrive later — it makes client one not arrive.
+
+In both cases, leave the social account unconnected — it is a second public
+surface to police for no first-client benefit.
 
 **Note on what the repo does and does not tell me:** `hq/portfolio.json` and the
 readiness ledger describe the pilot as "one named Spa owner", and
@@ -989,9 +1237,12 @@ determinism objection are both defeated, and this entry does not resurrect them)
 
 **Answer with:** ratify, or remove.
 
-**Blocked on this:** nothing in this repository. It is here because it is the
-only place in the whole estate where a price is already public, and it directly
-contradicts P2.
+**Blocked on this:** nothing in this repository, but it is downstream of **P0**.
+It is here because it is the only place in the whole estate where a price is
+already public, and it directly contradicts P2. **P0 decides which of the two
+questions this entry actually is:** if client one buys Shop Counter, this is a
+ratification of your own product's price; if client one buys the managed Shop,
+it is a copy fix on a page selling a different product.
 
 **The situation, stated without quoting the figure.** The page at
 `pos.supermega.dev` publishes a specific setup figure four times — in
@@ -1018,9 +1269,9 @@ means going quote-per-customer everywhere — and the audit is specific that the
 `offers` block should be **deleted rather than merely hidden**, because caches
 persist.
 
-**Recommendation: answer P2 first, then make that page match it — and if the
-answer is quote-per-customer, delete the `offers` block rather than hiding the
-figure.** Reasoning: a published price you did not decide is worse than either
+**Recommendation: answer P0, then P2, then make that page match them — and if
+the answer is quote-per-customer, delete the `offers` block rather than hiding
+the figure.** Reasoning: a published price you did not decide is worse than either
 choice made deliberately, and it will be repeated back to you by third parties
 regardless of what this repo's documents say.
 
@@ -1216,19 +1467,26 @@ specified. Each is listed with what closed it, so nobody re-asks.
 **Referenced but never specified — I could not find where these were decided,
 and I have not reconstructed them:**
 
-6. **Which product is being sold to a first paying Myanmar client.** This repo's
-   documents assume the showroom Shop / managed tier and record that no price has
-   ever been approved. Meanwhile `pos.supermega.dev` sells **Shop Counter**, built
-   from a different repository, with a published price and `InStock` structured
-   data. `POS-PAGE-CLAIM-AUDIT.md` flags the *pricing* contradiction explicitly
-   (**P21**), but **no document anywhere states which product the first paying
-   client is buying.** That is a genuine gap, not an oversight in this packet, and
-   it may be the most consequential unwritten decision in the estate.
+6. **Which product is being sold to a first paying Myanmar client — promoted to
+   P0.** This was listed here as an unspecified gap in an earlier draft. That was
+   the wrong place for it: it is the most consequential unwritten decision in the
+   estate *and* it is answerable by the founder in one word, which makes it a
+   decision, not a search result. It is now **P0**, at the head of section 1,
+   with an answer format and its consequences for P2, P3 and P21 spelled out.
+   The finding that produced it stands unchanged: this repo's documents assume
+   the showroom Shop / managed tier and record that no price has ever been
+   approved, while `pos.supermega.dev` sells **Shop Counter**, built from a
+   different repository, with a published price and `InStock` structured data,
+   and no document anywhere states which of the two the first paying client is
+   buying.
 7. **Whether a real prospect exists.** `hq/portfolio.json`, the readiness ledger
    and `docs/CLIENT-TENANT-ACTIVATION.md` all describe the pilot as one named Spa
    owner and work a `beauty-spa` example through activation. The private intake
    they refer to is correctly not in this repository, so the repo describes the
-   *shape* of client one and never says whether that person exists. See **P9**.
+   *shape* of client one and never says whether that person exists. This is the
+   one unknown in section 6 that changes the **minimum subset** rather than only
+   annotating it: if the answer is "no prospect", **P9** joins section 0's list.
+   Section 0 and **P9** both now carry that condition explicitly.
 8. **Who runs the billing shift when step 10 binds.**
    `FOUNDER-BOTTLENECK-STUDY.md` §2 concludes the correct answer is a second
    trusted human rather than automation, and that the ceiling binds "somewhere in
@@ -1245,8 +1503,10 @@ and I have not reconstructed them:**
 **Deliberately excluded from this packet:**
 
 10. **Amounts, of any kind, in any currency.** None is approved and none appears
-    here. **P2** and **P21** are the places where a number will eventually live,
-    and both say only that you must set it.
+    here, and none may ever appear here — `CLAUDE.md`'s hard limits forbid prices
+    anywhere in this public repo. **P2** and **P21** are the entries that ask you
+    to set one; **P2** now also names where it must live (`.secrets/`-class local
+    storage, outside this repository) and what breaks until it does.
 11. **The `infra-http.mjs` DNS-rebinding TOCTOU gap** (`CLAUDE.md` queue item 4).
     It is verified, unfixed, and blocked on tooling — not on a founder decision.
     It is engineering work waiting on a Node-24-verified approach or on the PG17
@@ -1258,15 +1518,20 @@ and I have not reconstructed them:**
 
 ## 7. If you answer nothing else
 
-Answer **P1, P2, P3** and say **yes to P4**. That is the whole minimum, and on
-current evidence nothing else in this document stands between the company and its
-first paying client.
+Answer **P0** first (which product), then **P1**, then **P2** — *both* halves of
+P2: the shape and the figure, the figure set in `.secrets/`-class local storage
+— then **P3**, and say **yes to P4**. If you do not already have a named
+prospect, add the five-gate subset of **P9**, because in that case nothing else
+on this list produces a client.
 
-Then, in order: **P5** (the four sub-approvals), **P6** (which door client one
-walks through), **P7** (the migration set), and **P16** (commission the Burmese
-review) — because that is the shortest sequence from "a client is paying" to "a
-client is paying, on record, on hosted infrastructure, using a till their cashier
-can read."
+That is the whole minimum. On current evidence nothing else in this document
+stands between the company and its first paying client.
+
+Then, in order: **P5** (all four sub-approvals in one receipt — they are not
+grantable separately), **P6** (which door client one walks through), **P7** (the
+migration set), and **P16** (commission the Burmese review) — because that is
+the shortest sequence from "a client is paying" to "a client is paying, on
+record, on hosted infrastructure, using a till their cashier can read."
 
 ---
 
