@@ -84,6 +84,7 @@ function packetManifest() {
     successCriteria: {
       acceptedOrderToCloseRuns: 20,
       dailyClosesObserved: 5,
+      pilotDaySequenceCoverageRequired: true,
       unexplainedPaymentOrStockChanges: 0,
       ownerDecisionRequired: true,
     },
@@ -156,6 +157,7 @@ function ownerInputTemplate() {
     successTargets: {
       acceptedOrderToCloseRuns: 20,
       dailyClosesObserved: 5,
+      pilotDaySequenceCoverageRequired: true,
       unexplainedPaymentOrStockChanges: 0,
       ownerDecisionRecorded: false,
     },
@@ -289,6 +291,7 @@ Use this after the operator has completed the five-day proof plan. This is the c
 
 - 20 accepted order-to-close runs
 - 5 daily closes observed
+- accepted evidence covers pilot days 1 through 5
 - 0 unexplained payment or stock changes
 - every correction has an operator, reason, timestamp, and evidence reference
 - owner records a continue, revise, or stop decision

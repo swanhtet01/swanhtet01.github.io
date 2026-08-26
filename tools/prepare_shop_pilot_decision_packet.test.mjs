@@ -123,6 +123,8 @@ test('builds owner-safe decision packet from baseline and 20 anchored accepted o
     assert.equal(packet.status, 'owner_pilot_decision_ready')
     assert.equal(packet.ok, true)
     assert.equal(packet.observedMetrics.acceptedConsecutiveRuns, 20)
+    assert.deepEqual(packet.observedMetrics.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, true)
     assert.equal(packet.comparison.orderTimeDeltaMinutes, -4)
     assert.equal(packet.comparison.exceptionRateDeltaPerRun, -0.2)
     assert.equal(packet.comparison.closeTimeDeltaMinutes, -8)
@@ -147,6 +149,26 @@ test('blocks decision readiness until 20 consecutive accepted runs exist', async
     assert.equal(packet.status, 'blocked_collect_more_or_fix_observed_evidence')
     assert.equal(packet.ok, false)
     assert.deepEqual(packet.failures, ['accepted_consecutive_runs_below_20'])
+    assert.equal(packet.pilotDecision.recommendation, 'collect_more_observed_evidence')
+  })
+})
+
+test('blocks decision readiness when 20 accepted runs miss five-day sequence coverage', async () => {
+  await withWorkspace(async (workspace) => {
+    let summary = null
+    for (let index = 1; index <= 20; index += 1) {
+      summary = await recordObservedShopPilotRun({ workspace, runInput: runInput(index, { dayIndex: 1 }) })
+    }
+    const packet = validateShopPilotDecisionPacket(buildShopPilotDecisionPacket({
+      baselinePacket: baselinePacket(),
+      observedSummary: summary,
+      generatedAt: '2026-08-25T00:00:00.000Z',
+    }))
+    assert.equal(packet.status, 'blocked_collect_more_or_fix_observed_evidence')
+    assert.equal(packet.ok, false)
+    assert.deepEqual(packet.observedMetrics.acceptedConsecutivePilotDayIndexes, [1])
+    assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, false)
+    assert.deepEqual(packet.failures, ['pilot_sequence_days_missing'])
     assert.equal(packet.pilotDecision.recommendation, 'collect_more_observed_evidence')
   })
 })

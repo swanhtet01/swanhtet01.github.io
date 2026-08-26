@@ -24,6 +24,7 @@ const PRODUCT = SHOP_PILOT_PRODUCT
 const PILOT_MODE = SHOP_PILOT_MODE
 const VERTICAL_PACK = SHOP_PILOT_VERTICAL_PACK
 const REQUIRED_ACCEPTED_CONSECUTIVE_RUNS = 20
+const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
 const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|vercel_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
@@ -101,6 +102,13 @@ function finiteNumber(value, field, { min = 0, integer = false, nullable = false
   return value
 }
 
+function exactNumberArray(value, expected, field) {
+  if (!Array.isArray(value)
+    || value.length !== expected.length
+    || value.some((item, index) => item !== expected[index])) fail(`${field}_invalid`)
+  return value
+}
+
 function digestValue(value, field) {
   if (typeof value !== 'string' || !DIGEST_PATTERN.test(value)) fail(`${field}_invalid`)
   return value
@@ -119,7 +127,19 @@ function validateObservedEvidenceSummary(summary) {
   finiteNumber(summary.acceptedRunCount, 'shop_pilot_decision_observed_accepted_run_count', { integer: true })
   finiteNumber(summary.acceptedConsecutiveRuns, 'shop_pilot_decision_observed_consecutive_run_count', { integer: true })
   if (summary.acceptedRunCount > summary.runCount || summary.acceptedConsecutiveRuns > summary.acceptedRunCount) fail('shop_pilot_decision_observed_counts_invalid')
-  if (summary.promotionEvidenceMet !== (summary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS)) fail('shop_pilot_decision_promotion_evidence_flag_invalid')
+  if (finiteNumber(summary.requiredAcceptedConsecutiveRuns, 'shop_pilot_decision_required_consecutive_run_count', { integer: true }) !== REQUIRED_ACCEPTED_CONSECUTIVE_RUNS) {
+    fail('shop_pilot_decision_required_consecutive_run_count_invalid')
+  }
+  exactNumberArray(summary.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES, 'shop_pilot_decision_required_pilot_day_indexes')
+  if (!Array.isArray(summary.acceptedConsecutivePilotDayIndexes)
+    || summary.acceptedConsecutivePilotDayIndexes.length > REQUIRED_PILOT_DAY_INDEXES.length
+    || summary.acceptedConsecutivePilotDayIndexes.some((dayIndex, index, days) => !REQUIRED_PILOT_DAY_INDEXES.includes(dayIndex) || days.indexOf(dayIndex) !== index)) {
+    fail('shop_pilot_decision_accepted_pilot_day_indexes_invalid')
+  }
+  const pilotSequenceCoverageMet = REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => summary.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
+  if (summary.pilotSequenceCoverageMet !== pilotSequenceCoverageMet) fail('shop_pilot_decision_pilot_sequence_coverage_flag_invalid')
+  const requiredPromotionEvidenceMet = summary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && summary.pilotSequenceCoverageMet === true
+  if (summary.promotionEvidenceMet !== requiredPromotionEvidenceMet) fail('shop_pilot_decision_promotion_evidence_flag_invalid')
   const metrics = summary.metrics
   if (!isRecord(metrics)) fail('shop_pilot_decision_observed_metrics_invalid')
   finiteNumber(metrics.medianMinutesPerOrder, 'shop_pilot_decision_median_order_time', { nullable: summary.runCount === 0 })
@@ -160,6 +180,7 @@ function validateObservedEvidenceSummary(summary) {
 function buildBlockers(observedSummary) {
   const blockers = []
   if (observedSummary.acceptedConsecutiveRuns < REQUIRED_ACCEPTED_CONSECUTIVE_RUNS) blockers.push('accepted_consecutive_runs_below_20')
+  if (observedSummary.pilotSequenceCoverageMet !== true) blockers.push('pilot_sequence_days_missing')
   if (observedSummary.promotionEvidenceMet === true && observedSummary.metrics.latestReloadRetryOutcome !== 'passed') blockers.push('latest_reload_retry_not_passed')
   return blockers
 }
@@ -240,6 +261,10 @@ export function buildShopPilotDecisionPacket({ baselinePacket, observedSummary, 
       runCount: observed.runCount,
       acceptedRunCount: observed.acceptedRunCount,
       acceptedConsecutiveRuns: observed.acceptedConsecutiveRuns,
+      requiredAcceptedConsecutiveRuns: observed.requiredAcceptedConsecutiveRuns,
+      requiredPilotDayIndexes: observed.requiredPilotDayIndexes,
+      acceptedConsecutivePilotDayIndexes: observed.acceptedConsecutivePilotDayIndexes,
+      pilotSequenceCoverageMet: observed.pilotSequenceCoverageMet,
       promotionEvidenceMet: observed.promotionEvidenceMet,
       medianAcceptedMinutesPerOrder: observed.metrics.medianAcceptedMinutesPerOrder,
       acceptedExceptionRatePerRun: observed.metrics.acceptedExceptionRatePerRun,
@@ -285,7 +310,11 @@ export function validateShopPilotDecisionPacket(packet) {
   const observed = packet.observedMetrics
   if (!isRecord(observed)
     || observed.acceptedConsecutiveRuns < 0
-    || observed.promotionEvidenceMet !== (observed.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS)
+    || observed.requiredAcceptedConsecutiveRuns !== REQUIRED_ACCEPTED_CONSECUTIVE_RUNS
+    || JSON.stringify(observed.requiredPilotDayIndexes) !== JSON.stringify(REQUIRED_PILOT_DAY_INDEXES)
+    || !Array.isArray(observed.acceptedConsecutivePilotDayIndexes)
+    || observed.pilotSequenceCoverageMet !== REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => observed.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
+    || observed.promotionEvidenceMet !== (observed.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && observed.pilotSequenceCoverageMet === true)
     || observed.acceptedRunCount > observed.runCount) fail('shop_pilot_decision_observed_metrics_invalid')
   const comparison = packet.comparison
   if (!isRecord(comparison)
@@ -339,6 +368,9 @@ Recommendation: \`${packet.pilotDecision.recommendation}\`
 
 - Required consecutive accepted runs: \`${REQUIRED_ACCEPTED_CONSECUTIVE_RUNS}\`
 - Current consecutive accepted runs: \`${packet.observedMetrics.acceptedConsecutiveRuns}\`
+- Required pilot days covered: \`${packet.observedMetrics.requiredPilotDayIndexes.join(',')}\`
+- Current accepted-streak pilot days covered: \`${packet.observedMetrics.acceptedConsecutivePilotDayIndexes.join(',') || 'none'}\`
+- Five-day pilot sequence covered: \`${packet.observedMetrics.pilotSequenceCoverageMet}\`
 - Promotion evidence met: \`${packet.observedMetrics.promotionEvidenceMet}\`
 - Latest reload/retry outcome: \`${packet.observedMetrics.latestReloadRetryOutcome}\`
 
@@ -403,6 +435,10 @@ function sampleObservedSummary(overrides = {}) {
     runCount: 20,
     acceptedRunCount: 20,
     acceptedConsecutiveRuns: 20,
+    requiredAcceptedConsecutiveRuns: REQUIRED_ACCEPTED_CONSECUTIVE_RUNS,
+    requiredPilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+    acceptedConsecutivePilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+    pilotSequenceCoverageMet: true,
     promotionEvidenceMet: true,
     metrics: {
       medianMinutesPerOrder: 6,

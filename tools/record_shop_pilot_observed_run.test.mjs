@@ -56,6 +56,10 @@ test('valid private run appends local evidence and returns no private values', a
     assert.equal(summary.runCount, 1)
     assert.equal(summary.acceptedRunCount, 1)
     assert.equal(summary.acceptedConsecutiveRuns, 1)
+    assert.equal(summary.requiredAcceptedConsecutiveRuns, 20)
+    assert.deepEqual(summary.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1])
+    assert.equal(summary.pilotSequenceCoverageMet, false)
     assert.equal(summary.promotionEvidenceMet, false)
     assert.equal(summary.metrics.medianMinutesPerOrder, 6)
     assert.equal(summary.metrics.medianAcceptedMinutesPerOrder, 6)
@@ -96,6 +100,8 @@ test('rejected or failed run breaks the consecutive accepted run streak', async 
     assert.equal(summary.runCount, 3)
     assert.equal(summary.acceptedRunCount, 2)
     assert.equal(summary.acceptedConsecutiveRuns, 1)
+    assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [3])
+    assert.equal(summary.pilotSequenceCoverageMet, false)
     assert.equal(summary.promotionEvidenceMet, false)
     assert.equal(summary.metrics.medianMinutesPerOrder, 6)
     assert.equal(summary.metrics.medianAcceptedMinutesPerOrder, 6)
@@ -125,6 +131,8 @@ test('nineteen accepted runs do not set promotionEvidenceMet', async () => {
     }
     assert.equal(summary.runCount, 19)
     assert.equal(summary.acceptedConsecutiveRuns, 19)
+    assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.equal(summary.pilotSequenceCoverageMet, true)
     assert.equal(summary.promotionEvidenceMet, false)
     assert.equal(summary.nextAction, 'collect_more_observed_evidence')
   } finally {
@@ -142,8 +150,29 @@ test('twenty consecutive accepted runs set promotionEvidenceMet', async () => {
     assert.equal(summary.runCount, 20)
     assert.equal(summary.acceptedRunCount, 20)
     assert.equal(summary.acceptedConsecutiveRuns, 20)
+    assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.equal(summary.pilotSequenceCoverageMet, true)
     assert.equal(summary.promotionEvidenceMet, true)
     assert.equal(summary.nextAction, 'owner_review_required_before_activation')
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('twenty consecutive accepted runs still require five-day pilot sequence coverage', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-20-day-gap-'))
+  try {
+    let summary
+    for (let index = 1; index <= 20; index += 1) {
+      summary = await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(index, { dayIndex: 1 }) })
+    }
+    assert.equal(summary.runCount, 20)
+    assert.equal(summary.acceptedRunCount, 20)
+    assert.equal(summary.acceptedConsecutiveRuns, 20)
+    assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1])
+    assert.equal(summary.pilotSequenceCoverageMet, false)
+    assert.equal(summary.promotionEvidenceMet, false)
+    assert.equal(summary.nextAction, 'collect_more_observed_evidence')
   } finally {
     await rm(parent, { recursive: true, force: true })
   }

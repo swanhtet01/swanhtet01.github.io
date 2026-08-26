@@ -74,7 +74,7 @@ check(
   'preapp_verify_local_missing_shop_run001_claims_guard',
 )
 
-requireSnippet(recorderText, 'promotionEvidenceMet: acceptedConsecutiveRuns >= 20', files.recorder)
+requireSnippet(recorderText, 'const promotionEvidenceMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet', files.recorder)
 requireSnippet(recorderText, 'externalWritesPerformed: false', files.recorder)
 requireSnippet(recorderText, 'customerContactPerformed: false', files.recorder)
 requireSnippet(recorderText, 'paymentAccepted: false', files.recorder)
@@ -82,10 +82,11 @@ requireSnippet(recorderText, 'stockMovementPerformed: false', files.recorder)
 requireSnippet(recorderText, 'serverWritesPerformed: false', files.recorder)
 requireSnippet(recorderText, 'hostedWritesPerformed: false', files.recorder)
 requireSnippet(recorderText, 'privateValuesReturned: false', files.recorder)
-requireSnippet(recorderText, "nextAction: acceptedConsecutiveRuns >= 20 ? 'owner_review_required_before_activation' : 'collect_more_observed_evidence'", files.recorder)
+requireSnippet(recorderText, "nextAction: promotionEvidenceMet ? 'owner_review_required_before_activation' : 'collect_more_observed_evidence'", files.recorder)
 
 requireSnippet(recorderTestText, 'nineteen accepted runs do not set promotionEvidenceMet', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs set promotionEvidenceMet', files.recorderTest)
+requireSnippet(recorderTestText, 'twenty consecutive accepted runs still require five-day pilot sequence coverage', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, false)', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, true)', files.recorderTest)
 
@@ -165,6 +166,7 @@ const result = {
   checkedFiles,
   requiredPromotionEvidence: {
     acceptedConsecutiveRuns: 20,
+    fiveDayPilotSequenceCoverageRequired: true,
     independentAnchorRequired: true,
     receiptRequired: true,
     syntheticEvidenceAccepted: false,

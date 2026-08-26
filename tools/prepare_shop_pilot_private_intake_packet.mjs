@@ -257,6 +257,7 @@ export function buildShopPilotPrivateIntakePacket(input = {}) {
       ],
       promotionEvidenceRequiredAcceptedRuns: 20,
       promotionEvidenceAcceptedRuns: readiness.pilotEvidence?.acceptedConsecutiveRuns ?? 0,
+      promotionEvidenceRequiresFiveDaySequenceCoverage: true,
       minimumManualRunsBeforeDayOne: 3,
       fiveDayPilotSequence: ['walkthrough', 'reviewed_orders', 'daily_close_exception', 'return_reload_retry', 'evidence_review_backup'],
     },
@@ -369,7 +370,7 @@ ${packet.nextGates.map((gate) => `- ${gate.id}: ${gate.status}; blocks: ${gate.b
 
 ## Evidence rule
 
-Promotion evidence still requires ${packet.ownerPrivateIntake.promotionEvidenceRequiredAcceptedRuns} consecutive accepted real runs. Current accepted run count is ${packet.ownerPrivateIntake.promotionEvidenceAcceptedRuns}.
+Promotion evidence still requires ${packet.ownerPrivateIntake.promotionEvidenceRequiredAcceptedRuns} consecutive accepted real runs whose accepted streak covers pilot days 1 through 5. Current accepted run count is ${packet.ownerPrivateIntake.promotionEvidenceAcceptedRuns}.
 `
 }
 

@@ -14,6 +14,8 @@ export const SHOP_OBSERVED_EVIDENCE_CONTRACT = 'supermega.shop.observed_pilot_ev
 
 const RUNS_FILE = 'observed-runs.private.jsonl'
 const SUMMARY_FILE = 'observed-summary.private.json'
+const REQUIRED_ACCEPTED_CONSECUTIVE_RUNS = 20
+const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 const RELOAD_RETRY_OUTCOMES = Object.freeze(['passed', 'failed', 'not-tested'])
 const REQUIRED_INPUT_KEYS = Object.freeze([
   'accepted',
@@ -180,6 +182,10 @@ function rate(numerator, denominator) {
   return rounded(numerator / denominator)
 }
 
+function uniqueSortedNumbers(values) {
+  return [...new Set(values)].sort((a, b) => a - b)
+}
+
 export function normalizeObservedRunInput(input) {
   assertNoPrivateIdentity(input)
   if (!exactKeys(input, REQUIRED_INPUT_KEYS)) throw new Error('shop_observed_run_input_keys_invalid')
@@ -278,6 +284,10 @@ function evidenceSummary(entries) {
     if (entries[index].accepted !== true) break
     acceptedConsecutiveRuns += 1
   }
+  const acceptedConsecutiveEntries = entries.slice(entries.length - acceptedConsecutiveRuns)
+  const acceptedConsecutivePilotDayIndexes = uniqueSortedNumbers(acceptedConsecutiveEntries.map((entry) => entry.dayIndex))
+  const pilotSequenceCoverageMet = REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => acceptedConsecutivePilotDayIndexes.includes(dayIndex))
+  const promotionEvidenceMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet
   const summary = {
     contract: SHOP_OBSERVED_EVIDENCE_CONTRACT,
     product: SHOP_PILOT_PRODUCT,
@@ -286,7 +296,11 @@ function evidenceSummary(entries) {
     runCount: entries.length,
     acceptedRunCount,
     acceptedConsecutiveRuns,
-    promotionEvidenceMet: acceptedConsecutiveRuns >= 20,
+    requiredAcceptedConsecutiveRuns: REQUIRED_ACCEPTED_CONSECUTIVE_RUNS,
+    requiredPilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+    acceptedConsecutivePilotDayIndexes,
+    pilotSequenceCoverageMet,
+    promotionEvidenceMet,
     metrics: {
       medianMinutesPerOrder: median(entries.map((entry) => entry.durationMinutesPerOrder)),
       medianAcceptedMinutesPerOrder: median(acceptedEntries.map((entry) => entry.durationMinutesPerOrder)),
@@ -310,7 +324,7 @@ function evidenceSummary(entries) {
     serverWritesPerformed: false,
     hostedWritesPerformed: false,
     privateValuesReturned: false,
-    nextAction: acceptedConsecutiveRuns >= 20 ? 'owner_review_required_before_activation' : 'collect_more_observed_evidence',
+    nextAction: promotionEvidenceMet ? 'owner_review_required_before_activation' : 'collect_more_observed_evidence',
   }
   return { ...summary, summaryDigest: digest(summary) }
 }

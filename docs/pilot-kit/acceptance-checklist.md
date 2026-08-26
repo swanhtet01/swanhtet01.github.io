@@ -29,7 +29,7 @@ A pilot run counts as accepted only when all of the following hold, following th
 4. Zero wrong-target actions — nothing was done to the wrong order, item, or customer record.
 5. Zero external effects — no real message, payment, or stock movement happened because of the run.
 
-Any run failing any condition is recorded as not accepted, with the correction minutes it cost. Missing evidence is recorded as missing — per the generator's evidence rule: `Record failures and operator interventions; do not convert missing evidence into a success claim.` The measurement reference promotes a workflow only after 20 consecutive accepted runs; the five-day pilot feeds that same counting discipline, and the count restarts on any non-accepted run.
+Any run failing any condition is recorded as not accepted, with the correction minutes it cost. Missing evidence is recorded as missing — per the generator's evidence rule: `Record failures and operator interventions; do not convert missing evidence into a success claim.` The measurement reference promotes a workflow only after 20 consecutive accepted runs whose accepted streak also covers pilot days 1 through 5; the five-day pilot feeds that same counting discipline, and the count restarts on any non-accepted run.
 
 ## The five days
 
