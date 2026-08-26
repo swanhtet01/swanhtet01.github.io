@@ -214,6 +214,7 @@ function normalizeBaselineInput(input) {
     claimedMedianMinutesPerRedemption: numberValue(input.claimedMedianMinutesPerRedemption, 'shop_pilot_baseline_claimed_redemption_median', { min: 0.1, max: 1_440 }),
     weeklyPackageCorrectionCount: numberValue(input.weeklyPackageCorrectionCount, 'shop_pilot_baseline_weekly_package_correction_count', { min: 0, max: 100_000, integer: true }),
     observedErrorRunCount: numberValue(input.observedErrorRunCount, 'shop_pilot_baseline_observed_error_run_count', { min: 0, max: 100, integer: true }),
+    totalObservedErrorRunCount: numberValue(input.totalObservedErrorRunCount, 'shop_pilot_baseline_total_observed_error_run_count', { min: 0, max: 200, integer: true }),
     totalObservedErrorCostLabel: optionalText(input.totalObservedErrorCostLabel, 'shop_pilot_baseline_error_cost_label', 180),
     ownerConfirmedBaseline: exactTrue(input.ownerConfirmedBaseline, 'shop_pilot_baseline_owner_confirmed'),
     operatorAgreesReviewEveryRun: exactTrue(input.operatorAgreesReviewEveryRun, 'shop_pilot_baseline_operator_review'),
@@ -244,6 +245,7 @@ function assessBaseline(normalized) {
   if (!sameNumber(normalized.claimedMedianMinutesPerOrder, orderMedian)) failures.push('claimed_order_median_mismatch')
   if (!sameNumber(normalized.claimedMedianMinutesPerRedemption, redemptionMedian)) failures.push('claimed_redemption_median_mismatch')
   if (normalized.observedErrorRunCount !== observedErrorRunCount) failures.push('observed_error_count_mismatch')
+  if (normalized.totalObservedErrorRunCount !== observedErrorRunCount + observedRedemptionErrorRunCount) failures.push('total_observed_error_count_mismatch')
   if (observedErrorRunCount + observedRedemptionErrorRunCount > 0 && !normalized.totalObservedErrorCostLabel) failures.push('total_observed_error_cost_label_missing')
   if (observedErrorRunCount + observedRedemptionErrorRunCount === 0 && normalized.totalObservedErrorCostLabel) failures.push('total_observed_error_cost_label_without_error')
   if (normalized.reviewDate !== plusDays(normalized.proposedPilotStartDate, 4)) failures.push('review_date_must_close_five_day_plan')
@@ -284,6 +286,7 @@ export function buildShopPilotBaselinePacket(input, { generatedAt = new Date().t
       weeklyExceptionCount: normalized.weeklyExceptionCount,
       closeMinutesPerDay: normalized.closeMinutesPerDay,
       observedOrderErrorRunCount: assessment.observedErrorRunCount,
+      totalObservedErrorRunCount: assessment.observedErrorRunCount + assessment.observedRedemptionErrorRunCount,
       clientImportRowCount: normalized.clientImportRowCount,
       weeklyPackageSales: normalized.weeklyPackageSales,
       weeklyTreatmentRedemptions: normalized.weeklyTreatmentRedemptions,
@@ -422,6 +425,9 @@ export function validateShopPilotBaselinePacket(packet) {
     || metrics.uninterruptedOrderRunCount > metrics.observedOrderRunCount
     || metrics.uninterruptedRedemptionRunCount > metrics.observedRedemptionRunCount
     || metrics.weeklyOrders < 1
+    || metrics.observedOrderErrorRunCount < 0
+    || metrics.observedRedemptionErrorRunCount < 0
+    || metrics.totalObservedErrorRunCount !== metrics.observedOrderErrorRunCount + metrics.observedRedemptionErrorRunCount
     || metrics.clientImportRowCount < 1
     || metrics.weeklyPackageSales < 1
     || metrics.weeklyTreatmentRedemptions < 1) {
@@ -492,6 +498,7 @@ export function baselineInputTemplate() {
     claimedMedianMinutesPerRedemption: null,
     weeklyPackageCorrectionCount: null,
     observedErrorRunCount: null,
+    totalObservedErrorRunCount: null,
     totalObservedErrorCostLabel: null,
     ownerConfirmedBaseline: false,
     operatorAgreesReviewEveryRun: false,
@@ -530,6 +537,7 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '- At least 3 uninterrupted manual package-redemption runs.',
     '- Claimed medians must match the durations recorded below.',
     '- Observed order error count must match the recorded order runs.',
+    '- Total observed error-run count must match order plus package-redemption error runs.',
     '- Every run marked as an error must include a private cost/correction label; non-error runs must leave that label blank.',
     '- Total observed error cost label is required when any observed order or redemption run had an error, and must stay blank when none did.',
     '- Review date must be exactly 4 calendar days after the proposed Day-1 pilot start date.',
@@ -557,6 +565,8 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '| weeklyPackageSales | integer | Current package-sale count. |',
     '| weeklyTreatmentRedemptions | integer | Current redemption count. |',
     '| weeklyPackageCorrectionCount | integer | Current package-correction count. |',
+    '| observedErrorRunCount | integer | Manual order error-run count only; kept for order-baseline continuity. |',
+    '| totalObservedErrorRunCount | integer | All observed error runs across manual orders plus package redemptions. |',
     '| proposedPilotStartDate | YYYY-MM-DD | Day 1 of the five-day pilot. |',
     '| reviewDate | YYYY-MM-DD | Must equal Day 1 plus 4 days. |',
     '',
@@ -601,6 +611,8 @@ export function renderShopPilotBaselinePacketMarkdown(packet) {
     '## Public-safe metrics',
     '',
     `Observed order runs: ${packet.metrics.uninterruptedOrderRunCount}/${packet.metrics.observedOrderRunCount}`,
+    `Observed order error runs: ${packet.metrics.observedOrderErrorRunCount}`,
+    `Total observed error runs: ${packet.metrics.totalObservedErrorRunCount}`,
     `Median minutes per order: ${packet.metrics.medianMinutesPerOrder}`,
     `Weekly orders: ${packet.metrics.weeklyOrders}`,
     `Weekly exceptions: ${packet.metrics.weeklyExceptionCount}`,
@@ -688,6 +700,7 @@ function sampleInput(overrides = {}) {
     claimedMedianMinutesPerRedemption: 3,
     weeklyPackageCorrectionCount: 2,
     observedErrorRunCount: 1,
+    totalObservedErrorRunCount: 1,
     totalObservedErrorCostLabel: 'one manual correction, no monetary claim',
     ownerConfirmedBaseline: true,
     operatorAgreesReviewEveryRun: true,

@@ -56,6 +56,7 @@ function input(overrides = {}) {
     claimedMedianMinutesPerRedemption: 3,
     weeklyPackageCorrectionCount: 2,
     observedErrorRunCount: 1,
+    totalObservedErrorRunCount: 1,
     totalObservedErrorCostLabel: 'one manual correction, no monetary claim',
     ownerConfirmedBaseline: true,
     operatorAgreesReviewEveryRun: true,
@@ -76,6 +77,7 @@ test('builds a public-safe baseline packet from private owner-observed input', (
   assert.equal(packet.metrics.uninterruptedOrderRunCount, 3)
   assert.equal(packet.metrics.medianMinutesPerOrder, 8)
   assert.equal(packet.metrics.observedOrderErrorRunCount, 1)
+  assert.equal(packet.metrics.totalObservedErrorRunCount, 1)
   assert.equal(packet.metrics.medianMinutesPerRedemption, 3)
   assert.equal(packet.metrics.observedRedemptionErrorRunCount, 0)
   assert.equal(packet.publicIdentityIncluded, false)
@@ -114,6 +116,19 @@ test('blocks contradictory error labels before baseline evidence can be treated 
   assert.equal(missingRunCost.ok, false)
   assert.ok(missingRunCost.failures.includes('order_error_cost_label_missing'))
 
+  const missingTotalErrorCount = buildShopPilotBaselinePacket(input({
+    observedRedemptionRuns: [
+      input().observedRedemptionRuns[0],
+      { ...input().observedRedemptionRuns[1], errorOccurred: true, errorCostLabel: 'redemption balance correction' },
+      input().observedRedemptionRuns[2],
+    ],
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(missingTotalErrorCount.ok, false)
+  assert.equal(missingTotalErrorCount.metrics.observedOrderErrorRunCount, 1)
+  assert.equal(missingTotalErrorCount.metrics.observedRedemptionErrorRunCount, 1)
+  assert.equal(missingTotalErrorCount.metrics.totalObservedErrorRunCount, 2)
+  assert.ok(missingTotalErrorCount.failures.includes('total_observed_error_count_mismatch'))
+
   const strayRunCost = buildShopPilotBaselinePacket(input({
     observedOrderRuns: [
       { ...input().observedOrderRuns[0], errorCostLabel: 'label without an error' },
@@ -133,6 +148,7 @@ test('blocks contradictory error labels before baseline evidence can be treated 
   const noErrors = input({
     observedOrderRuns: input().observedOrderRuns.map((run) => ({ ...run, errorOccurred: false, errorCostLabel: null })),
     observedErrorRunCount: 0,
+    totalObservedErrorRunCount: 0,
     totalObservedErrorCostLabel: null,
   })
   assert.equal(buildShopPilotBaselinePacket(noErrors, { generatedAt: '2026-08-25T00:00:00.000Z' }).ok, true)
@@ -182,6 +198,7 @@ test('renders Markdown without private values or promotion claims', () => {
   const markdown = renderShopPilotBaselinePacketMarkdown(buildShopPilotBaselinePacket(input(), { generatedAt: '2026-08-25T00:00:00.000Z' }))
   assert.match(markdown, /Shop Pilot Baseline Packet/)
   assert.match(markdown, /Median minutes per order: 8/)
+  assert.match(markdown, /Total observed error runs: 1/)
   assert.match(markdown, /No business name, operator name/)
   assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation/i)
 })
@@ -191,6 +208,7 @@ test('renders a local owner worksheet without private values or promotion claims
   assert.match(markdown, /Shop Pilot Owner-Observed Baseline Worksheet/)
   assert.match(markdown, new RegExp(SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT))
   assert.match(markdown, /At least 3 uninterrupted manual order runs/)
+  assert.match(markdown, /Total observed error-run count/)
   assert.match(markdown, /node tools\/prepare_shop_pilot_baseline_packet\.mjs --input/)
   assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation|sk-proj-|ghp_/i)
 })

@@ -383,6 +383,7 @@ function sampleBaselinePacket() {
     claimedMedianMinutesPerRedemption: 9,
     weeklyPackageCorrectionCount: 2,
     observedErrorRunCount: 1,
+    totalObservedErrorRunCount: 1,
     totalObservedErrorCostLabel: 'one owner-observed exception',
     ownerConfirmedBaseline: true,
     operatorAgreesReviewEveryRun: true,
