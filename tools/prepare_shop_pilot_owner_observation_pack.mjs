@@ -86,6 +86,8 @@ const RUN_ACCEPTANCE_RULES = [
   'no_customer_message_payment_stock_movement_or_hosted_write',
   'owner_safe_packet_contains_counts_labels_digests_only',
 ]
+const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
+const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 
 function fail(code) {
   throw new Error(code)
@@ -106,6 +108,12 @@ function hasPrivateOrSecretShape(value) {
 
 function assertNoPrivateOrSecretShape(value, code = 'shop_pilot_owner_observation_pack_private_or_secret_shape') {
   if (hasPrivateOrSecretShape(value)) fail(code)
+}
+
+function sameArray(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((value, index) => value === expected[index])
 }
 
 function assertDigest(value, code) {
@@ -256,6 +264,7 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
       flows: evidence.requiredFlows.map(flowChecklist),
       requiredMetrics: [...evidence.requiredMetrics],
       requiredConfirmations: [...evidence.requiredConfirmations],
+      promotionEvidenceRequirement: { ...(evidence.promotionEvidenceRequirement || {}) },
       runAcceptanceRules: [...RUN_ACCEPTANCE_RULES],
       stopConditions: [...evidence.stopConditions],
     },
@@ -337,6 +346,7 @@ export function validateShopPilotOwnerObservationPack(packet) {
     fail('shop_pilot_owner_observation_pack_owner_action_invalid')
   }
   const checklist = packet.observationChecklist
+  const promotion = checklist?.promotionEvidenceRequirement
   if (!isRecord(checklist)
     || checklist.evidenceKind !== 'owner_observed_manual_operations_only'
     || checklist.minimumUninterruptedRunsPerFlow !== 3
@@ -348,6 +358,14 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || !checklist.requiredMetrics.includes('daily_close_minutes')
     || !Array.isArray(checklist.requiredConfirmations)
     || !checklist.requiredConfirmations.includes('no_external_effects')
+    || !isRecord(promotion)
+    || promotion.requiredAcceptedConsecutiveRuns !== REQUIRED_PROMOTION_ACCEPTED_RUNS
+    || promotion.acceptedConsecutiveRuns !== 0
+    || !sameArray(promotion.requiredPilotDayIndexes, REQUIRED_PROMOTION_PILOT_DAY_INDEXES)
+    || !sameArray(promotion.acceptedConsecutivePilotDayIndexes, [])
+    || promotion.pilotSequenceCoverageMet !== false
+    || promotion.readyForPromotionEvidence !== false
+    || promotion.syntheticEvidenceAccepted !== false
     || !Array.isArray(checklist.runAcceptanceRules)
     || !RUN_ACCEPTANCE_RULES.every((rule) => checklist.runAcceptanceRules.includes(rule))
     || !Array.isArray(checklist.stopConditions)
@@ -394,6 +412,7 @@ export function renderShopPilotOwnerObservationPackMarkdown(packet) {
     .join('\n')
   const metrics = packet.observationChecklist.requiredMetrics.map((metric) => `- ${metric}`).join('\n')
   const confirmations = packet.observationChecklist.requiredConfirmations.map((confirmation) => `- ${confirmation}`).join('\n')
+  const promotion = packet.observationChecklist.promotionEvidenceRequirement
   const acceptanceRules = packet.observationChecklist.runAcceptanceRules.map((rule) => `- ${rule}`).join('\n')
   const stopConditions = packet.observationChecklist.stopConditions.map((condition) => `- ${condition}`).join('\n')
   const commands = packet.commandPlan.commands.map((command) => `- ${command}`).join('\n')
@@ -428,6 +447,14 @@ ${metrics}
 Required confirmations:
 
 ${confirmations}
+
+Promotion evidence threshold:
+
+- Required accepted real runs: ${promotion.requiredAcceptedConsecutiveRuns}
+- Required pilot days covered: ${promotion.requiredPilotDayIndexes.join(', ')}
+- Accepted run count now: ${promotion.acceptedConsecutiveRuns}
+- Accepted pilot days now: ${promotion.acceptedConsecutivePilotDayIndexes.length ? promotion.acceptedConsecutivePilotDayIndexes.join(', ') : 'none'}
+- Synthetic evidence accepted: false
 
 Accepted runs must satisfy:
 

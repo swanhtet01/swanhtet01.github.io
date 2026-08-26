@@ -113,6 +113,8 @@ const BASELINE_CAPTURE_STOP_CONDITIONS = [
   'operator_declines_review_every_run',
   'owner_cannot_confirm_baseline',
 ]
+const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
+const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -133,6 +135,29 @@ function hasPrivateOrSecretShape(value) {
 
 function assertNoPrivateOrSecretShape(value, code = 'shop_pilot_day0_private_or_secret_shape') {
   if (hasPrivateOrSecretShape(value)) fail(code)
+}
+
+function sameArray(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((value, index) => value === expected[index])
+}
+
+function promotionEvidenceRequirementFor(launchGateReport) {
+  const readiness = launchGateReport.launchReadiness || {}
+  return {
+    requiredAcceptedConsecutiveRuns: readiness.promotionEvidenceRequiredAcceptedRuns ?? REQUIRED_PROMOTION_ACCEPTED_RUNS,
+    acceptedConsecutiveRuns: readiness.promotionEvidenceAcceptedRuns ?? 0,
+    requiredPilotDayIndexes: Array.isArray(readiness.promotionEvidenceRequiredPilotDayIndexes)
+      ? [...readiness.promotionEvidenceRequiredPilotDayIndexes]
+      : [...REQUIRED_PROMOTION_PILOT_DAY_INDEXES],
+    acceptedConsecutivePilotDayIndexes: Array.isArray(readiness.promotionEvidenceAcceptedPilotDayIndexes)
+      ? [...readiness.promotionEvidenceAcceptedPilotDayIndexes]
+      : [],
+    pilotSequenceCoverageMet: readiness.promotionEvidencePilotSequenceCoverageMet === true,
+    readyForPromotionEvidence: false,
+    syntheticEvidenceAccepted: false,
+  }
 }
 
 function validateLaunchGateDigest(report) {
@@ -467,6 +492,7 @@ function ownerPrivateBaselineChecklistFor(status, launchGateReport) {
     ],
     requiredMetrics: [...BASELINE_CAPTURE_REQUIRED_METRICS],
     requiredConfirmations: [...BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS],
+    promotionEvidenceRequirement: promotionEvidenceRequirementFor(launchGateReport),
     stopConditions: [...BASELINE_CAPTURE_STOP_CONDITIONS],
     publicOutputAllowed: {
       counts: true,
@@ -546,6 +572,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
   const baselineAccepted = launchGateReport.launchReadiness?.baselinePacketAccepted === true
   const intakeAccepted = launchGateReport.launchReadiness?.intakePacketAccepted === true
   const ownerPrivateHandoffReady = status === 'day0_owner_private_handoff_ready'
+  const promotionEvidenceRequirement = promotionEvidenceRequirementFor(launchGateReport)
   const sourceDigests = {
     launchGateDigest: launchGateReport.digest,
     baselinePacketDigest: launchGateReport.launchReadiness?.baselinePacketDigest || null,
@@ -591,6 +618,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       readyForManagedActivation: false,
       readyForPromotionEvidence: false,
     },
+    promotionEvidenceRequirement,
     pilotWindow: launchGateReport.baselineEvidence?.pilotWindow || null,
     releaseGate: {
       source: releaseGate.source,
@@ -667,6 +695,7 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
   const baselineAccepted = packet.day0Readiness?.baselinePacketAccepted === true
   const intakeAccepted = packet.day0Readiness?.intakePacketAccepted === true
   const shouldBeReady = packet.ok === true && baselineAccepted && intakeAccepted
+  const promotion = packet.promotionEvidenceRequirement
   if (packet.day0ReadyForOwnerPrivateHandoff !== shouldBeReady
     || packet.day0Readiness?.ownerPrivateHandoffReady !== shouldBeReady
     || packet.day0Readiness?.readyForCustomerContact !== false
@@ -675,6 +704,16 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || packet.day0Readiness?.readyForManagedActivation !== false
     || packet.day0Readiness?.readyForPromotionEvidence !== false) {
     fail('shop_pilot_day0_readiness_invalid')
+  }
+  if (!isRecord(promotion)
+    || promotion.requiredAcceptedConsecutiveRuns !== REQUIRED_PROMOTION_ACCEPTED_RUNS
+    || promotion.acceptedConsecutiveRuns !== 0
+    || !sameArray(promotion.requiredPilotDayIndexes, REQUIRED_PROMOTION_PILOT_DAY_INDEXES)
+    || !sameArray(promotion.acceptedConsecutivePilotDayIndexes, [])
+    || promotion.pilotSequenceCoverageMet !== false
+    || promotion.readyForPromotionEvidence !== false
+    || promotion.syntheticEvidenceAccepted !== false) {
+    fail('shop_pilot_day0_promotion_evidence_requirement_invalid')
   }
   if (packet.status === 'day0_owner_private_handoff_ready' && !shouldBeReady) fail('shop_pilot_day0_ready_status_invalid')
   if (packet.status !== 'day0_owner_private_handoff_ready' && shouldBeReady) fail('shop_pilot_day0_blocked_status_invalid')
@@ -786,6 +825,11 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
   const expectedChecklist = ownerPrivateBaselineChecklistFor(packet.status, {
     launchReadiness: {
       baselinePacketAccepted: packet.day0Readiness.baselinePacketAccepted,
+      promotionEvidenceRequiredAcceptedRuns: promotion.requiredAcceptedConsecutiveRuns,
+      promotionEvidenceAcceptedRuns: promotion.acceptedConsecutiveRuns,
+      promotionEvidenceRequiredPilotDayIndexes: promotion.requiredPilotDayIndexes,
+      promotionEvidenceAcceptedPilotDayIndexes: promotion.acceptedConsecutivePilotDayIndexes,
+      promotionEvidencePilotSequenceCoverageMet: promotion.pilotSequenceCoverageMet,
     },
     baselineEvidence: {
       metrics: {
@@ -813,6 +857,8 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || !Array.isArray(checklist.requiredConfirmations)
     || checklist.requiredConfirmations.length !== BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS.length
     || !BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS.every((confirmation) => checklist.requiredConfirmations.includes(confirmation))
+    || !isRecord(checklist.promotionEvidenceRequirement)
+    || JSON.stringify(checklist.promotionEvidenceRequirement) !== JSON.stringify(promotion)
     || !Array.isArray(checklist.stopConditions)
     || checklist.stopConditions.length !== BASELINE_CAPTURE_STOP_CONDITIONS.length
     || !BASELINE_CAPTURE_STOP_CONDITIONS.every((condition) => checklist.stopConditions.includes(condition))
@@ -859,6 +905,7 @@ export function renderShopPilotDay0ReadinessMarkdown(packet) {
   const checklistFlows = checklist.requiredFlows.map((flow) => `- ${flow.label}: ${flow.uninterruptedRuns}/${flow.observedRuns} uninterrupted/observed; required uninterrupted ${flow.requiredUninterruptedRuns}; accepted ${flow.accepted}`).join('\n')
   const checklistMetrics = checklist.requiredMetrics.map((metric) => `- ${metric}`).join('\n')
   const checklistConfirmations = checklist.requiredConfirmations.map((confirmation) => `- ${confirmation}`).join('\n')
+  const promotion = packet.promotionEvidenceRequirement
   const checklistStopConditions = checklist.stopConditions.map((condition) => `- ${condition}`).join('\n')
   return `# Shop Pilot Day-0 Readiness
 
@@ -874,6 +921,10 @@ Candidate: \`${packet.candidate.branch || 'unknown'} @ ${packet.candidate.head |
 - Owner-private handoff ready: ${packet.day0Readiness.ownerPrivateHandoffReady}
 - Ready for customer contact: false
 - Ready for deployment or managed activation: false
+- Ready for promotion evidence: false
+- Required promotion evidence: ${promotion.requiredAcceptedConsecutiveRuns} consecutive accepted real runs covering pilot days ${promotion.requiredPilotDayIndexes.join(', ')}
+- Current promotion accepted run count: ${promotion.acceptedConsecutiveRuns}
+- Five-day pilot sequence covered: ${promotion.pilotSequenceCoverageMet}
 
 ## Release gate
 
@@ -940,6 +991,14 @@ ${checklistMetrics}
 Required confirmations:
 
 ${checklistConfirmations}
+
+Promotion evidence threshold:
+
+- Required accepted real runs: ${promotion.requiredAcceptedConsecutiveRuns}
+- Required pilot days covered: ${promotion.requiredPilotDayIndexes.join(', ')}
+- Accepted run count now: ${promotion.acceptedConsecutiveRuns}
+- Accepted pilot days now: ${promotion.acceptedConsecutivePilotDayIndexes.length ? promotion.acceptedConsecutivePilotDayIndexes.join(', ') : 'none'}
+- Synthetic evidence accepted: false
 
 Stop and do not generate the owner-safe baseline packet if any condition occurs:
 
@@ -1019,6 +1078,10 @@ function runSelfTest() {
       && empty.ownerPrivateObservationBridge.authorizations.githubWritesAllowed === false
       && empty.ownerPrivateBaselineChecklist.state === 'owner_private_baseline_capture_required'
       && empty.ownerPrivateBaselineChecklist.readyToGeneratePublicBaselinePacket === false
+      && empty.promotionEvidenceRequirement.requiredAcceptedConsecutiveRuns === 20
+      && JSON.stringify(empty.promotionEvidenceRequirement.requiredPilotDayIndexes) === JSON.stringify([1, 2, 3, 4, 5])
+      && empty.promotionEvidenceRequirement.pilotSequenceCoverageMet === false
+      && empty.ownerPrivateBaselineChecklist.promotionEvidenceRequirement.requiredAcceptedConsecutiveRuns === 20
       && empty.ownerPrivateBaselineChecklist.stopConditions.includes('synthetic_or_supermega_demo_run_used_as_baseline')
       && validateShopPilotDay0ReadinessPacket(empty) === empty,
     intake_only_requires_baseline: withIntake.ok === true

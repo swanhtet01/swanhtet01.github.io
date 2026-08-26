@@ -79,6 +79,8 @@ const RELEASE_CONTROL_GATE_IDS = [
   'review_branch_push',
   'pull_request_creation',
 ]
+const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
+const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 
 function fail(code) {
   throw new Error(code)
@@ -99,6 +101,12 @@ function hasPrivateOrSecretShape(value) {
 
 function assertNoPrivateOrSecretShape(value, code = 'shop_pilot_day0_owner_baseline_card_private_or_secret_shape') {
   if (hasPrivateOrSecretShape(value)) fail(code)
+}
+
+function sameArray(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((value, index) => value === expected[index])
 }
 
 function sourceDigest(value, code) {
@@ -209,6 +217,7 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
       requiredFlows: requiredFlowSummary(day0Packet),
       requiredMetrics: [...(checklist.requiredMetrics || [])],
       requiredConfirmations: [...(checklist.requiredConfirmations || [])],
+      promotionEvidenceRequirement: { ...(day0Packet.promotionEvidenceRequirement || checklist.promotionEvidenceRequirement || {}) },
       stopConditions: [...(checklist.stopConditions || [])],
     },
     commandPlan: {
@@ -275,6 +284,7 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     fail('shop_pilot_day0_owner_baseline_card_artifacts_invalid')
   }
   const evidence = card.minimumEvidence
+  const promotion = evidence.promotionEvidenceRequirement
   if (!isRecord(evidence)
     || evidence.evidenceKind !== 'owner_observed_manual_operations_only'
     || !Array.isArray(evidence.requiredFlows)
@@ -284,6 +294,14 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || !evidence.requiredMetrics.includes('daily_close_minutes')
     || !Array.isArray(evidence.requiredConfirmations)
     || !evidence.requiredConfirmations.includes('no_external_effects')
+    || !isRecord(promotion)
+    || promotion.requiredAcceptedConsecutiveRuns !== REQUIRED_PROMOTION_ACCEPTED_RUNS
+    || promotion.acceptedConsecutiveRuns !== 0
+    || !sameArray(promotion.requiredPilotDayIndexes, REQUIRED_PROMOTION_PILOT_DAY_INDEXES)
+    || !sameArray(promotion.acceptedConsecutivePilotDayIndexes, [])
+    || promotion.pilotSequenceCoverageMet !== false
+    || promotion.readyForPromotionEvidence !== false
+    || promotion.syntheticEvidenceAccepted !== false
     || !Array.isArray(evidence.stopConditions)
     || !evidence.stopConditions.includes('raw_identity_or_private_note_would_enter_owner_safe_packet')) {
     fail('shop_pilot_day0_owner_baseline_card_evidence_invalid')
@@ -318,6 +336,7 @@ export function renderShopPilotDay0OwnerBaselineActionCardMarkdown(card) {
   const flows = evidence.requiredFlows.map((flow) => `- ${flow.label}: ${flow.uninterruptedRuns}/${flow.observedRuns} uninterrupted/observed now; required uninterrupted ${flow.requiredUninterruptedRuns}`).join('\n')
   const metrics = evidence.requiredMetrics.map((metric) => `- ${metric}`).join('\n')
   const confirmations = evidence.requiredConfirmations.map((confirmation) => `- ${confirmation}`).join('\n')
+  const promotion = evidence.promotionEvidenceRequirement
   const stopConditions = evidence.stopConditions.map((condition) => `- ${condition}`).join('\n')
   const commands = card.commandPlan.commands.map((command) => `- ${command}`).join('\n')
   const blockers = card.blockersStillActive.map((blocker) => `- ${blocker}`).join('\n')
@@ -363,6 +382,14 @@ ${metrics}
 Required confirmations:
 
 ${confirmations}
+
+Promotion evidence threshold:
+
+- Required accepted real runs: ${promotion.requiredAcceptedConsecutiveRuns}
+- Required pilot days covered: ${promotion.requiredPilotDayIndexes.join(', ')}
+- Accepted run count now: ${promotion.acceptedConsecutiveRuns}
+- Accepted pilot days now: ${promotion.acceptedConsecutivePilotDayIndexes.length ? promotion.acceptedConsecutivePilotDayIndexes.join(', ') : 'none'}
+- Synthetic evidence accepted: false
 
 Stop and do not generate the owner-safe baseline packet if any condition occurs:
 
