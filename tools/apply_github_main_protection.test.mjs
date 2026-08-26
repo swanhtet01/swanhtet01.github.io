@@ -81,7 +81,7 @@ function fakeRequest({ beforeRulesets = [], afterRulesets = null, writeStatus = 
 }
 
 test('builds a plan-only applicator report without token or write execution', () => {
-  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {} })
+  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {}, expectedHead: gitState().head })
   assert.equal(plan.contract, GITHUB_MAIN_PROTECTION_APPLY_CONTRACT)
   assert.equal(plan.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(plan.mode, 'plan_only_no_github_write')
@@ -90,13 +90,16 @@ test('builds a plan-only applicator report without token or write execution', ()
   assert.equal(plan.controls.githubWritesPerformed, false)
   assert.equal(plan.controls.repositorySettingsMutated, false)
   assert.equal(plan.token.present, false)
+  assert.equal(plan.candidate.expectedHead, gitState().head)
+  assert.equal(plan.candidate.expectedHeadMatched, true)
+  assert.equal(plan.candidate.expectedHeadRequiredForExecute, true)
   assert.equal(plan.possibleWrite.headers.Authorization, 'Bearer <redacted>')
   assert.equal(plan.possibleWrite.headers['Content-Type'], 'application/json')
   assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+[A-Za-z0-9._-]{8,}/)
 })
 
 test('rejects tampered plan reports before owner execution', () => {
-  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {} })
+  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {}, expectedHead: gitState().head })
   assert.throws(
     () => validateApplyReport({ ...plan, mode: 'executed_owner_approved_github_settings_write' }, { expectedMode: 'plan_only_no_github_write' }),
     /github_main_protection_apply_report_digest_invalid/,
@@ -145,6 +148,7 @@ test('executes create path only with approval, token, and post-write verificatio
     proposalReceipt: proposed,
     env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
     gitState: gitState(),
+    expectedHead: gitState().head,
     request,
   })
   assert.equal(result.ok, true)
@@ -154,6 +158,8 @@ test('executes create path only with approval, token, and post-write verificatio
   assert.equal(validateApplyReport(result, { expectedMode: 'executed_owner_approved_github_settings_write' }), result)
   assert.equal(result.controls.branchMutated, false)
   assert.equal(result.controls.credentialValueExposed, false)
+  assert.equal(result.candidate.expectedHead, gitState().head)
+  assert.equal(result.candidate.expectedHeadMatched, true)
   assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [
     'GET /rulesets',
     'POST /rulesets',
@@ -171,6 +177,7 @@ test('executes update path for exactly one existing named ruleset', async () => 
     proposalReceipt: proposed,
     env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GH_TOKEN: 'ghp_testtokennotprinted_1234567890' },
     gitState: gitState(),
+    expectedHead: gitState().head,
     request,
   })
   assert.equal(result.action.kind, 'update')
@@ -191,6 +198,29 @@ test('fails closed when post-write read-only verification does not pass', async 
     proposalReceipt: proposed,
     env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
     gitState: gitState(),
+    expectedHead: gitState().head,
     request,
   }), /github_main_protection_apply_verification_failed/)
+})
+
+test('rejects missing or mismatched expected head before any GitHub write path', async () => {
+  const proposed = proposalReceipt()
+  const first = fakeRequest({ beforeRulesets: [], afterRulesets: [{ id: 9, ...proposed.packet.proposedRuleset }] })
+  await assert.rejects(() => applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    request: first.request,
+  }), /github_main_protection_apply_expected_head_required/)
+  assert.deepEqual(first.calls, [])
+
+  const second = fakeRequest({ beforeRulesets: [], afterRulesets: [{ id: 9, ...proposed.packet.proposedRuleset }] })
+  await assert.rejects(() => applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    expectedHead: 'f'.repeat(40),
+    request: second.request,
+  }), /github_main_protection_apply_expected_head_mismatch/)
+  assert.deepEqual(second.calls, [])
 })

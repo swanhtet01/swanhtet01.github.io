@@ -23,6 +23,7 @@ const RULESET_NAME = 'SuperMega main release gate'
 const APPROVAL_ENV = 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'
 const TOKEN_ENVS = ['GITHUB_TOKEN', 'GH_TOKEN']
 const API_BASE = `https://api.github.com/repos/${REPOSITORY}`
+const SHA_PATTERN = /^[0-9a-f]{40}$/
 
 function fail(code) {
   throw new Error(code)
@@ -38,6 +39,16 @@ function digest(value) {
 
 function signed(body) {
   return { ...body, digest: digest(JSON.stringify(body)) }
+}
+
+function normalizedExpectedHead(value, { required = false } = {}) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) {
+    if (required) fail('github_main_protection_apply_expected_head_required')
+    return null
+  }
+  if (!SHA_PATTERN.test(normalized)) fail('github_main_protection_apply_expected_head_invalid')
+  return normalized
 }
 
 function git(args, { optional = false } = {}) {
@@ -173,11 +184,12 @@ function assertNoSecretEcho(value) {
   }
 }
 
-export function buildApplyPlan({ proposalReceipt, gitState = currentGitState(), env = process.env } = {}) {
+export function buildApplyPlan({ proposalReceipt, gitState = currentGitState(), env = process.env, expectedHead = null } = {}) {
   if (!isRecord(proposalReceipt?.packet)) fail('github_main_protection_apply_proposal_required')
   const proposal = proposalReceipt.packet
   const token = tokenFromEnv(env)
   const approval = validateOwnerApproval({ proposal, env, execute: false })
+  const expected = normalizedExpectedHead(expectedHead)
   const body = {
     ok: true,
     contract: GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
@@ -194,6 +206,9 @@ export function buildApplyPlan({ proposalReceipt, gitState = currentGitState(), 
       branch: gitState.branch || null,
       head: gitState.head || null,
       clean: gitState.clean === true,
+      expectedHead: expected,
+      expectedHeadMatched: expected ? String(gitState.head || '').toLowerCase() === expected : null,
+      expectedHeadRequiredForExecute: true,
     },
     approval,
     token: {
@@ -213,9 +228,11 @@ export function buildApplyPlan({ proposalReceipt, gitState = currentGitState(), 
     },
     executionRequirements: [
       '--execute flag',
+      '--expected-head exactly equals the owner-reviewed candidate commit',
       `${APPROVAL_ENV} exactly equals the owner approval template`,
       'GITHUB_TOKEN or GH_TOKEN is set',
       'local worktree is clean',
+      'local HEAD equals --expected-head before any GitHub write',
       'after-apply read-only verifier returns ok:true',
     ],
     controls: {
@@ -250,8 +267,15 @@ export function validateApplyReport(packet, { expectedMode = null } = {}) {
   if (!isRecord(packet.candidate)
     || typeof packet.candidate.branch !== 'string'
     || !/^[0-9a-f]{40}$/.test(String(packet.candidate.head || ''))
-    || typeof packet.candidate.clean !== 'boolean') {
+    || typeof packet.candidate.clean !== 'boolean'
+    || packet.candidate.expectedHeadRequiredForExecute !== true) {
     fail('github_main_protection_apply_report_candidate_invalid')
+  }
+  if (packet.candidate.expectedHead !== null && !SHA_PATTERN.test(String(packet.candidate.expectedHead || ''))) {
+    fail('github_main_protection_apply_report_candidate_expected_head_invalid')
+  }
+  if (packet.candidate.expectedHead !== null && typeof packet.candidate.expectedHeadMatched !== 'boolean') {
+    fail('github_main_protection_apply_report_candidate_expected_head_match_invalid')
   }
   if (!isRecord(packet.token) || packet.token.valueExposed !== false) fail('github_main_protection_apply_report_token_invalid')
   if (packet.mode === 'plan_only_no_github_write') {
@@ -279,6 +303,8 @@ export function validateApplyReport(packet, { expectedMode = null } = {}) {
     }
     if (!Array.isArray(packet.executionRequirements)
       || !packet.executionRequirements.includes('--execute flag')
+      || !packet.executionRequirements.includes('--expected-head exactly equals the owner-reviewed candidate commit')
+      || !packet.executionRequirements.includes('local HEAD equals --expected-head before any GitHub write')
       || !packet.executionRequirements.includes('after-apply read-only verifier returns ok:true')) {
       fail('github_main_protection_apply_plan_requirements_invalid')
     }
@@ -287,7 +313,9 @@ export function validateApplyReport(packet, { expectedMode = null } = {}) {
       || packet.controls?.repositorySettingsMutated !== true
       || packet.controls?.branchMutated !== false
       || packet.controls?.credentialValueExposed !== false
-      || packet.verification?.ok !== true) {
+      || packet.verification?.ok !== true
+      || packet.candidate.expectedHead !== packet.candidate.head
+      || packet.candidate.expectedHeadMatched !== true) {
       fail('github_main_protection_apply_execute_controls_invalid')
     }
   } else {
@@ -302,10 +330,13 @@ export async function applyGitHubMainProtectionWithClient({
   env = process.env,
   gitState = currentGitState(),
   request = fetch,
+  expectedHead = null,
 } = {}) {
   if (!gitState.clean) fail('github_main_protection_apply_worktree_dirty')
   const proposal = proposalReceipt?.packet
   if (!isRecord(proposal)) fail('github_main_protection_apply_proposal_required')
+  const expected = normalizedExpectedHead(expectedHead, { required: true })
+  if (String(gitState.head || '').toLowerCase() !== expected) fail('github_main_protection_apply_expected_head_mismatch')
   const approval = validateOwnerApproval({ proposal, env, execute: true })
   const token = tokenFromEnv(env)
   if (!token) fail('github_main_protection_apply_token_required')
@@ -355,6 +386,9 @@ export async function applyGitHubMainProtectionWithClient({
       branch: gitState.branch || null,
       head: gitState.head || null,
       clean: true,
+      expectedHead: expected,
+      expectedHeadMatched: true,
+      expectedHeadRequiredForExecute: true,
     },
     action: {
       kind: selected.action,
@@ -398,6 +432,7 @@ function parseArgs(argv) {
     proposal: DEFAULT_PROPOSAL,
     output: null,
     verify: null,
+    expectedHead: null,
   }
   while (args.length) {
     const arg = args.shift()
@@ -409,6 +444,8 @@ function parseArgs(argv) {
       options.mode = 'self-test'
     } else if (arg === '--proposal' && args[0]) {
       options.proposal = args.shift()
+    } else if (arg === '--expected-head' && args[0]) {
+      options.expectedHead = normalizedExpectedHead(args.shift())
     } else if (arg === '--output' && args[0]) {
       options.output = args.shift()
     } else if (arg === '--verify' && args[0]) {
@@ -447,6 +484,7 @@ async function runSelfTest() {
     proposalReceipt,
     gitState: { branch: 'codex/release-stack-integration-rehearsal-20260825', head: '0'.repeat(40), clean: true },
     env: {},
+    expectedHead: '0'.repeat(40),
   })
   const selectedCreate = selectRulesetAction([])
   const selectedUpdate = selectRulesetAction([{ id: 7, name: RULESET_NAME, target: 'branch' }])
@@ -462,6 +500,7 @@ async function runSelfTest() {
     })(),
     create_or_update_selected: selectedCreate.method === 'POST' && selectedUpdate.method === 'PUT' && selectedUpdate.rulesetId === 7,
     plan_digest_verifies: validateApplyReport(plan, { expectedMode: 'plan_only_no_github_write' }) === plan,
+    expected_head_guard_documented: plan.candidate.expectedHead === '0'.repeat(40) && plan.candidate.expectedHeadMatched === true,
     no_secret_echo: plan.token.valueExposed === false,
   }
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([key]) => key)
@@ -500,8 +539,8 @@ async function main() {
   }
   const proposalReceipt = await readProposal(options.proposal)
   const result = options.mode === 'execute'
-    ? await applyGitHubMainProtectionWithClient({ proposalReceipt })
-    : buildApplyPlan({ proposalReceipt })
+    ? await applyGitHubMainProtectionWithClient({ proposalReceipt, expectedHead: options.expectedHead })
+    : buildApplyPlan({ proposalReceipt, expectedHead: options.expectedHead })
   if (options.output) {
     const output = await writeExclusive(options.output, `${JSON.stringify(validateApplyReport(result, { expectedMode: 'plan_only_no_github_write' }), null, 2)}\n`)
     console.log(JSON.stringify({

@@ -110,8 +110,14 @@ function parseGitHubMainProtectionOwnerSection(markdown, expectedApprovalDigest,
   if (!reviewCommand.includes('github:main-protection:apply:plan -- --proposal "hq/readiness/github-main-protection-proposal.json"')) {
     fail('github_main_protection_owner_action_card_review_command_invalid')
   }
+  if (!reviewCommand.includes(`--expected-head "${candidateCommit}"`)) {
+    fail('github_main_protection_owner_action_card_review_expected_head_invalid')
+  }
   if (!executeCommand.includes('apply_github_main_protection.mjs --execute --proposal "hq/readiness/github-main-protection-proposal.json"')) {
     fail('github_main_protection_owner_action_card_execute_command_invalid')
+  }
+  if (!executeCommand.includes(`--expected-head "${candidateCommit}"`)) {
+    fail('github_main_protection_owner_action_card_execute_expected_head_invalid')
   }
   return { approvalText, reviewCommand, executeCommand }
 }
@@ -137,6 +143,10 @@ function assertCurrentGitHubMainProtection(preflight, applyPlan) {
   }
   if (packet.candidate?.commit !== plan.candidate?.head || packet.candidate?.clean !== true || plan.candidate?.clean !== true) {
     fail('github_main_protection_owner_action_card_candidate_invalid')
+  }
+  if (plan.candidate?.expectedHead !== null
+    && (plan.candidate?.expectedHead !== packet.candidate.commit || plan.candidate?.expectedHeadMatched !== true)) {
+    fail('github_main_protection_owner_action_card_expected_head_invalid')
   }
   if (plan.approval?.env !== 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'
     || plan.approval?.approved !== false
@@ -176,6 +186,7 @@ export function buildGitHubMainProtectionOwnerActionCard({
       exactApprovalDigest: plan.approval.expectedDigest,
       candidateCommit: packet.candidate.commit,
       candidateBranch: packet.candidate.branch,
+      expectedHead: packet.candidate.commit,
     },
     source: {
       preflightDigest: packet.digest,
@@ -234,7 +245,8 @@ export function validateGitHubMainProtectionOwnerActionCard(card) {
     || card.currentAction.approvalEnv !== 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'
     || card.currentAction.tokenRequired !== true
     || !DIGEST_PATTERN.test(card.currentAction.exactApprovalDigest || '')
-    || !SHA_PATTERN.test(card.currentAction.candidateCommit || '')) {
+    || !SHA_PATTERN.test(card.currentAction.candidateCommit || '')
+    || card.currentAction.expectedHead !== card.currentAction.candidateCommit) {
     fail('github_main_protection_owner_action_card_action_invalid')
   }
   if (!isRecord(card.source)
@@ -254,7 +266,9 @@ export function validateGitHubMainProtectionOwnerActionCard(card) {
   if (!isRecord(card.commands)
     || card.commands.runFromRepositoryRoot !== true
     || !card.commands.reviewNoWrite.includes('github:main-protection:apply:plan')
-    || !card.commands.executeAfterApprovalAndTokenOnly.includes('apply_github_main_protection.mjs --execute')) {
+    || !card.commands.reviewNoWrite.includes(`--expected-head "${card.currentAction.candidateCommit}"`)
+    || !card.commands.executeAfterApprovalAndTokenOnly.includes('apply_github_main_protection.mjs --execute')
+    || !card.commands.executeAfterApprovalAndTokenOnly.includes(`--expected-head "${card.currentAction.candidateCommit}"`)) {
     fail('github_main_protection_owner_action_card_commands_invalid')
   }
   if (!Array.isArray(card.blockersNow)

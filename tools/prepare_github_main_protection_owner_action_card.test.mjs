@@ -77,6 +77,7 @@ function applyPlan({ proposalPath = 'hq/readiness/github-main-protection-proposa
       clean: true,
     },
     env: {},
+    expectedHead: commit,
   })
 }
 
@@ -182,13 +183,13 @@ ${buildGitHubMainProtectionPacket({ sourceReceipts }).ownerApprovalTemplate}
 Review command, no-write:
 
 \`\`\`powershell
-npm.cmd run github:main-protection:apply:plan -- --proposal "hq/readiness/github-main-protection-proposal.json"
+npm.cmd run github:main-protection:apply:plan -- --proposal "hq/readiness/github-main-protection-proposal.json" --expected-head "${commit}"
 \`\`\`
 
 Execute command, only after approval and token are available:
 
 \`\`\`powershell
-node tools/apply_github_main_protection.mjs --execute --proposal "hq/readiness/github-main-protection-proposal.json"
+node tools/apply_github_main_protection.mjs --execute --proposal "hq/readiness/github-main-protection-proposal.json" --expected-head "${commit}"
 \`\`\`
 
 `
@@ -206,6 +207,8 @@ test('builds a public-safe owner action card for GitHub main protection only', (
   assert.equal(card.contract, GITHUB_MAIN_PROTECTION_OWNER_ACTION_CARD_CONTRACT)
   assert.equal(card.currentAction.id, 'github_main_protection')
   assert.equal(card.currentAction.allowedNow, false)
+  assert.equal(card.currentAction.expectedHead, commit)
+  assert.match(card.commands.executeAfterApprovalAndTokenOnly, new RegExp(`--expected-head "${commit}"`))
   assert.equal(card.mustRemainFalse.branchPushAllowed, false)
   assert.equal(card.mustRemainFalse.pullRequestAllowed, false)
   assert.equal(card.controls.githubWritesPerformed, false)
@@ -226,6 +229,7 @@ test('renders concise markdown without granting later release actions', () => {
   assert.match(markdown, /Apply GitHub main protection only|GitHub Main Protection Owner Action Card/)
   assert.match(markdown, /does not approve branch push, PR creation, merge, deployment/)
   assert.match(markdown, /github:main-protection:apply:plan/)
+  assert.match(markdown, new RegExp(`--expected-head "${commit}"`))
   assert.doesNotMatch(markdown, /[A-Za-z]:\\|ghp_|github_pat_|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
 })
 
@@ -238,6 +242,15 @@ test('rejects stale owner text and non-GitHub current gates', () => {
       releaseOwnerApprovalMarkdown: ownerMarkdown(plan).replace('one GitHub repository settings write', 'two GitHub repository settings writes'),
     }),
     /github_main_protection_owner_action_card_owner_approval_digest_invalid/,
+  )
+
+  assert.throws(
+    () => buildGitHubMainProtectionOwnerActionCard({
+      preflight: preflight(plan),
+      githubMainProtectionApplyPlan: plan,
+      releaseOwnerApprovalMarkdown: ownerMarkdown(plan).replaceAll(` --expected-head "${commit}"`, ''),
+    }),
+    /github_main_protection_owner_action_card_(review|execute)_expected_head_invalid/,
   )
 
   const wrongPreflight = preflight(plan)

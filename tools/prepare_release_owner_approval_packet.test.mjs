@@ -30,6 +30,7 @@ test('builds an exact owner approval packet for the release handoff commit', () 
   assert.doesNotMatch(packet.markdown, /[A-Za-z]:\\/)
   assert.ok(packet.markdown.includes('github:main-protection:apply:plan -- --proposal "'))
   assert.ok(packet.markdown.includes('apply_github_main_protection.mjs --execute --proposal "'))
+  assert.ok(packet.markdown.includes(`--expected-head "${input.handoff.candidate.commit}"`))
   assert.equal(packet.controls.githubWritesPerformed, false)
   assert.equal(packet.controls.supabaseMutationsPerformed, false)
   assert.equal(packet.controls.customerContactPerformed, false)
@@ -103,6 +104,7 @@ test('binds GitHub main protection commands to the reviewed proposal path', () =
   const packet = buildReleaseOwnerApprovalPacket(input)
 
   assert.match(packet.markdown, /hq\/readiness\/github-main-protection-proposal\.json"/)
+  assert.match(packet.markdown, /--expected-head "[0-9a-f]{40}"/)
   assert.doesNotMatch(packet.markdown, /github:main-protection:apply:plan\s*```/)
   assert.doesNotMatch(packet.markdown, /apply_github_main_protection\.mjs --execute\s*```/)
 
