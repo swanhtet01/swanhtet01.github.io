@@ -52,7 +52,7 @@ function baselineInput() {
     claimedMedianMinutesPerRedemption: 9,
     weeklyPackageCorrectionCount: 2,
     observedErrorRunCount: 1,
-    totalObservedErrorCostLabel: null,
+    totalObservedErrorCostLabel: 'one owner-observed exception',
     ownerConfirmedBaseline: true,
     operatorAgreesReviewEveryRun: true,
     proposedPilotStartDate: '2026-08-26',

@@ -77,6 +77,7 @@ test('builds a public-safe baseline packet from private owner-observed input', (
   assert.equal(packet.metrics.medianMinutesPerOrder, 8)
   assert.equal(packet.metrics.observedOrderErrorRunCount, 1)
   assert.equal(packet.metrics.medianMinutesPerRedemption, 3)
+  assert.equal(packet.metrics.observedRedemptionErrorRunCount, 0)
   assert.equal(packet.publicIdentityIncluded, false)
   assert.equal(packet.controls.externalWritesPerformed, false)
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
@@ -100,6 +101,48 @@ test('blocks mismatched medians, interrupted evidence, and wrong review window w
   assert.ok(packet.failures.includes('review_date_must_close_five_day_plan'))
   assert.doesNotMatch(JSON.stringify(packet), /Private Spa Sample|Private Operator/)
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
+})
+
+test('blocks contradictory error labels before baseline evidence can be treated as ready', () => {
+  const missingRunCost = buildShopPilotBaselinePacket(input({
+    observedOrderRuns: [
+      input().observedOrderRuns[0],
+      { ...input().observedOrderRuns[1], errorCostLabel: null },
+      input().observedOrderRuns[2],
+    ],
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(missingRunCost.ok, false)
+  assert.ok(missingRunCost.failures.includes('order_error_cost_label_missing'))
+
+  const strayRunCost = buildShopPilotBaselinePacket(input({
+    observedOrderRuns: [
+      { ...input().observedOrderRuns[0], errorCostLabel: 'label without an error' },
+      input().observedOrderRuns[1],
+      input().observedOrderRuns[2],
+    ],
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(strayRunCost.ok, false)
+  assert.ok(strayRunCost.failures.includes('order_error_cost_label_without_error'))
+
+  const missingTotalCost = buildShopPilotBaselinePacket(input({
+    totalObservedErrorCostLabel: null,
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(missingTotalCost.ok, false)
+  assert.ok(missingTotalCost.failures.includes('total_observed_error_cost_label_missing'))
+
+  const noErrors = input({
+    observedOrderRuns: input().observedOrderRuns.map((run) => ({ ...run, errorOccurred: false, errorCostLabel: null })),
+    observedErrorRunCount: 0,
+    totalObservedErrorCostLabel: null,
+  })
+  assert.equal(buildShopPilotBaselinePacket(noErrors, { generatedAt: '2026-08-25T00:00:00.000Z' }).ok, true)
+  const strayTotalCost = buildShopPilotBaselinePacket({
+    ...noErrors,
+    totalObservedErrorCostLabel: 'no matching error run',
+  }, { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(strayTotalCost.ok, false)
+  assert.ok(strayTotalCost.failures.includes('total_observed_error_cost_label_without_error'))
+  assert.doesNotMatch(JSON.stringify(strayTotalCost), /Private Spa Sample|Private Operator/)
 })
 
 test('preflights private baseline input with safe actionability codes only', () => {

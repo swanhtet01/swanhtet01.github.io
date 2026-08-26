@@ -232,11 +232,20 @@ function assessBaseline(normalized) {
   const orderMedian = median(orderRuns.map((run) => run.durationMinutes))
   const redemptionMedian = median(redemptionRuns.map((run) => run.durationMinutes))
   const observedErrorRunCount = normalized.observedOrderRuns.filter((run) => run.errorOccurred).length
+  const observedRedemptionErrorRunCount = normalized.observedRedemptionRuns.filter((run) => run.errorOccurred).length
+  for (const [kind, runs] of [['order', normalized.observedOrderRuns], ['redemption', normalized.observedRedemptionRuns]]) {
+    for (const run of runs) {
+      if (run.errorOccurred && !run.errorCostLabel) failures.push(`${kind}_error_cost_label_missing`)
+      if (!run.errorOccurred && run.errorCostLabel) failures.push(`${kind}_error_cost_label_without_error`)
+    }
+  }
   if (orderRuns.length < MIN_OBSERVED_RUNS) failures.push('order_observed_runs_below_three')
   if (redemptionRuns.length < MIN_OBSERVED_RUNS) failures.push('redemption_observed_runs_below_three')
   if (!sameNumber(normalized.claimedMedianMinutesPerOrder, orderMedian)) failures.push('claimed_order_median_mismatch')
   if (!sameNumber(normalized.claimedMedianMinutesPerRedemption, redemptionMedian)) failures.push('claimed_redemption_median_mismatch')
   if (normalized.observedErrorRunCount !== observedErrorRunCount) failures.push('observed_error_count_mismatch')
+  if (observedErrorRunCount + observedRedemptionErrorRunCount > 0 && !normalized.totalObservedErrorCostLabel) failures.push('total_observed_error_cost_label_missing')
+  if (observedErrorRunCount + observedRedemptionErrorRunCount === 0 && normalized.totalObservedErrorCostLabel) failures.push('total_observed_error_cost_label_without_error')
   if (normalized.reviewDate !== plusDays(normalized.proposedPilotStartDate, 4)) failures.push('review_date_must_close_five_day_plan')
   return {
     failures,
@@ -245,6 +254,7 @@ function assessBaseline(normalized) {
     orderMedian,
     redemptionMedian,
     observedErrorRunCount,
+    observedRedemptionErrorRunCount,
   }
 }
 
@@ -279,6 +289,7 @@ export function buildShopPilotBaselinePacket(input, { generatedAt = new Date().t
       weeklyTreatmentRedemptions: normalized.weeklyTreatmentRedemptions,
       observedRedemptionRunCount: normalized.observedRedemptionRuns.length,
       uninterruptedRedemptionRunCount: assessment.redemptionRuns.length,
+      observedRedemptionErrorRunCount: assessment.observedRedemptionErrorRunCount,
       medianMinutesPerRedemption: assessment.redemptionMedian,
       weeklyPackageCorrectionCount: normalized.weeklyPackageCorrectionCount,
     },
@@ -519,6 +530,8 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '- At least 3 uninterrupted manual package-redemption runs.',
     '- Claimed medians must match the durations recorded below.',
     '- Observed order error count must match the recorded order runs.',
+    '- Every run marked as an error must include a private cost/correction label; non-error runs must leave that label blank.',
+    '- Total observed error cost label is required when any observed order or redemption run had an error, and must stay blank when none did.',
     '- Review date must be exactly 4 calendar days after the proposed Day-1 pilot start date.',
     '- Owner confirmations must be true: baseline confirmed, operator reviews every run, no SuperMega demo measured, and no external effects.',
     '',
