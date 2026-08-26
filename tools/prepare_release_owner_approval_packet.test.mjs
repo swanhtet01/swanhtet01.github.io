@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -42,6 +46,40 @@ test('verifies only the exact generated markdown for the current handoff', () =>
     () => validateReleaseOwnerApprovalMarkdown(stale, input),
     /release_owner_approval_packet_stale/,
   )
+})
+
+test('CLI infers version from versioned output and verify paths', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'release-owner-approval-version-'))
+  try {
+    const input = selfTestInput()
+    const handoffPath = join(directory, 'supermega.release-handoff.v109.generated-20260826.json')
+    const outputPath = join(directory, 'supermega.release-owner-approval-packet.v109.generated-20260826.md')
+    await writeFile(handoffPath, `${JSON.stringify(input.handoff, null, 2)}\n`, 'utf8')
+
+    const write = spawnSync(process.execPath, [
+      'tools/prepare_release_owner_approval_packet.mjs',
+      '--handoff',
+      handoffPath,
+      '--output',
+      outputPath,
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    assert.equal(write.status, 0, write.stderr || write.stdout)
+    assert.equal(JSON.parse(write.stdout).candidate.commit, input.handoff.candidate.commit)
+
+    const verify = spawnSync(process.execPath, [
+      'tools/prepare_release_owner_approval_packet.mjs',
+      '--handoff',
+      handoffPath,
+      '--verify',
+      outputPath,
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    assert.equal(verify.status, 0, verify.stderr || verify.stdout)
+    const verified = JSON.parse(verify.stdout)
+    assert.equal(verified.ok, true)
+    assert.equal(verified.version, 'v109')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test('uses a validated exact GitHub protection snapshot path when provided', () => {

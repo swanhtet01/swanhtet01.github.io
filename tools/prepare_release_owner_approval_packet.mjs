@@ -77,11 +77,28 @@ function packetVersion(value) {
   return normalized
 }
 
+function inferPacketVersionFromPath(path) {
+  const match = /release-(?:handoff|owner-approval-packet)\.(v[0-9]{1,3})\./i.exec(String(path || ''))
+  return match ? packetVersion(match[1]) : null
+}
+
+function inferPacketVersionFromMarkdown(markdown) {
+  const match = /^# SuperMega Release Handoff Owner Approval Packet (v[0-9]{1,3})$/im.exec(normalize(markdown))
+  return match ? packetVersion(match[1]) : null
+}
+
 function inferHandoffVersion({ handoff, handoffVersion } = {}) {
   if (handoffVersion) return packetVersion(handoffVersion)
-  const sourcePath = String(handoff?.__sourcePath || '')
-  const match = /release-handoff\.(v[0-9]{1,3})\./i.exec(sourcePath)
-  return match ? packetVersion(match[1]) : null
+  return inferPacketVersionFromPath(handoff?.__sourcePath)
+}
+
+function resolvePacketVersion({ explicitVersion = null, path = null, markdown = null, handoff = null } = {}) {
+  return explicitVersion
+    ? packetVersion(explicitVersion)
+    : inferPacketVersionFromPath(path)
+      || inferPacketVersionFromMarkdown(markdown)
+      || inferHandoffVersion({ handoff })
+      || packetVersion('v1')
 }
 
 function falseOnly(record, keys, prefix) {
@@ -420,7 +437,8 @@ async function readInputs({ handoffPath, githubProtectionSnapshotPath = null }) 
 
 async function writePacket({ handoffPath, githubProtectionSnapshotPath, outputPath, version }) {
   const inputs = await readInputs({ handoffPath, githubProtectionSnapshotPath })
-  const packet = buildReleaseOwnerApprovalPacket({ ...inputs, version })
+  const resolvedVersion = resolvePacketVersion({ explicitVersion: version, path: outputPath, handoff: inputs.handoff })
+  const packet = buildReleaseOwnerApprovalPacket({ ...inputs, version: resolvedVersion })
   const absoluteOutput = resolve(outputPath || '')
   const existing = await readFile(absoluteOutput, 'utf8').catch((error) => {
     if (error?.code === 'ENOENT') return null
@@ -461,7 +479,8 @@ async function writePacket({ handoffPath, githubProtectionSnapshotPath, outputPa
 async function verifyPacket({ handoffPath, githubProtectionSnapshotPath, verifyPath, version }) {
   const inputs = await readInputs({ handoffPath, githubProtectionSnapshotPath })
   const actual = await readFile(resolve(verifyPath || ''), 'utf8')
-  const verified = validateReleaseOwnerApprovalMarkdown(actual, { ...inputs, version })
+  const resolvedVersion = resolvePacketVersion({ explicitVersion: version, path: verifyPath, markdown: actual, handoff: inputs.handoff })
+  const verified = validateReleaseOwnerApprovalMarkdown(actual, { ...inputs, version: resolvedVersion })
   return {
     ...verified,
     mode: 'verified',
@@ -655,7 +674,7 @@ function parseArgs(argv) {
     handoffPath: null,
     outputPath: null,
     verifyPath: null,
-    version: 'v1',
+    version: null,
   }
   const args = [...argv]
   while (args.length) {
@@ -682,7 +701,7 @@ function parseArgs(argv) {
   if (!options.handoffPath) fail('release_owner_approval_handoff_required')
   if (options.mode === 'prepare' && !options.outputPath) fail('release_owner_approval_output_required')
   if (options.mode === 'verify' && !options.verifyPath) fail('release_owner_approval_verify_path_required')
-  options.version = packetVersion(options.version)
+  options.version = options.version ? packetVersion(options.version) : null
   return options
 }
 
