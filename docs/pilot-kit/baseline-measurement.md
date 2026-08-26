@@ -19,14 +19,17 @@ After this private form is complete, copy the same facts into a private JSON bas
 npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>"
 ```
 
-Generate an owner-safe packet for local/HQ review. The packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation. Owner-safe does not mean public website, customer-facing, or publishable.
+Run the local input lint before generating any owner-safe packet. If the lint returns anything other than `baseline_input_ready`, stop and fix the private observation file locally; do not generate or hand-edit the owner-safe packet.
 
 ```powershell
+npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"
 npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"
 npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"
 npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"
 npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"
 ```
+
+The owner-safe packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation. Owner-safe does not mean public website, customer-facing, or publishable.
 
 If the launch gate reports `owner_private_handoff_ready` and the Day-0 packet reports `day0_owner_private_handoff_ready`, the baseline and intake digests are ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.
 

@@ -190,6 +190,13 @@ const kitBaseline = read(`${kitDir}/baseline-measurement.md`)
 for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day', 'client_import_row_count', 'weekly_package_sales', 'weekly_treatment_redemptions', 'median_minutes_per_redemption', 'weekly_package_correction_count']) {
   check(kitBaseline.includes(`\`${fieldName}\``), `pilot_kit_baseline_field:${fieldName}`)
 }
+const baselineLintCommand = 'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"'
+const baselineGenerateCommand = 'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"'
+check(kitBaseline.includes(baselineLintCommand), 'pilot_kit_baseline_lint_command')
+check(kitBaseline.includes('`baseline_input_ready`'), 'pilot_kit_baseline_lint_ready_status')
+check(kitBaseline.indexOf(baselineLintCommand) >= 0
+  && kitBaseline.indexOf(baselineLintCommand) < kitBaseline.indexOf(baselineGenerateCommand), 'pilot_kit_baseline_lint_before_generate')
+check(kitBaseline.includes('do not generate or hand-edit the owner-safe packet'), 'pilot_kit_baseline_no_hand_edit')
 
 const kitAcceptance = read(`${kitDir}/acceptance-checklist.md`)
 for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 'close_minutes_per_day', 'operator_corrections', 'reload_and_retry_result', 'client_import_minutes', 'package_sale_minutes', 'treatment_redemption_minutes', 'package_balance_result']) {
