@@ -112,11 +112,42 @@ function ownerApprovalPacketVersionFromPath(path) {
   return match ? match[1].toLowerCase() : 'v1'
 }
 
+function artifactFamilyVersionFromPath(path) {
+  const match = /\.((?:v)[0-9]{1,3})\./i.exec(basename(path || ''))
+  return match ? match[1].toLowerCase() : null
+}
+
+function assertSingleArtifactFamilyVersion(paths = {}) {
+  const required = [
+    'handoff',
+    'githubMainProtectionSnapshot',
+    'githubMainProtectionApplyPlan',
+    'reviewBranchPushPlan',
+    'pullRequestCreatePlan',
+    'operatorBoard',
+    'productReadinessMatrix',
+    'statusBrief',
+    'nextReleaseActionPreflight',
+    'releaseOwnerApproval',
+    'shopPilotDay0Readiness',
+  ]
+  const versions = new Map()
+  for (const key of required) {
+    const version = artifactFamilyVersionFromPath(paths[key])
+    if (!version) fail(`current_release_control_index_${key}_artifact_version_missing`)
+    versions.set(key, version)
+  }
+  const uniqueVersions = [...new Set(versions.values())]
+  if (uniqueVersions.length !== 1) fail('current_release_control_index_artifact_family_version_mismatch')
+  return uniqueVersions[0]
+}
+
 export function buildCurrentReleaseControlIndex(input = {}) {
   const handoff = input.handoff
   const candidateCommit = assertSha(handoff?.candidate?.commit, 'current_release_control_index_candidate_invalid')
   const candidateBranch = String(handoff?.candidate?.branch || '')
   if (!candidateBranch || handoff?.candidate?.clean !== true) fail('current_release_control_index_candidate_invalid')
+  const artifactFamilyVersion = assertSingleArtifactFamilyVersion(input.paths || {})
 
   assertCandidateMatch('github_apply_plan', input.githubMainProtectionApplyPlan?.candidate?.head, candidateCommit)
   assertCandidateMatch('branch_push_plan', input.reviewBranchPushPlan?.candidate?.head, candidateCommit)
@@ -167,6 +198,10 @@ export function buildCurrentReleaseControlIndex(input = {}) {
     generatedAt: input.generatedAt || new Date().toISOString(),
     mode: 'local_owner_control_no_external_effects',
     repository: handoff.repository,
+    artifactFamily: {
+      version: artifactFamilyVersion,
+      rule: 'All authoritative generated artifacts for a current release-control index must share one v-number family.',
+    },
     candidate: {
       branch: candidateBranch,
       commit: candidateCommit,
@@ -316,6 +351,12 @@ export function validateCurrentReleaseControlIndex(packet) {
       fail(`current_release_control_index_${key}_artifact_invalid`)
     }
   }
+  const artifactFamilyVersion = packet.artifactFamily?.version || null
+  if (!/^v[0-9]{1,3}$/.test(artifactFamilyVersion || '')) fail('current_release_control_index_artifact_family_invalid')
+  const artifactVersions = required.map((key) => artifactFamilyVersionFromPath(artifacts[key].fileName))
+  if (artifactVersions.some((version) => version !== artifactFamilyVersion)) {
+    fail('current_release_control_index_artifact_family_mismatch')
+  }
   if (artifacts.releaseOwnerApprovalPacket.status !== 'verified_current') fail('current_release_control_index_owner_packet_invalid')
   if (packet.shopPilot?.customerContactAllowed !== false || packet.shopPilot?.managedActivationAllowed !== false) {
     fail('current_release_control_index_shop_pilot_invalid')
@@ -337,6 +378,7 @@ Contract: \`${packet.contract}\`
 Digest: \`${packet.digest}\`
 Candidate: \`${packet.candidate.branch} @ ${packet.candidate.commit}\`
 Current gate: \`${packet.currentOwnerAction.gateId}\`
+Artifact family: \`${packet.artifactFamily.version}\`
 
 ## Use these files for the current candidate
 

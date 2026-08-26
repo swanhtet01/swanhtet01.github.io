@@ -26,6 +26,7 @@ test('builds a current release control index for one exact candidate', () => {
   assert.equal(packet.currentOwnerAction.paymentOrStockAllowedNow, false)
   assert.equal(packet.currentOwnerAction.managedActivationAllowedNow, false)
   assert.equal(packet.authoritativeArtifacts.releaseOwnerApprovalPacket.status, 'verified_current')
+  assert.equal(packet.artifactFamily.version, 'v99')
   assert.equal(packet.shopPilot.currentPrivateGate, 'private_observation_incomplete')
   assert.equal(validateCurrentReleaseControlIndex(packet), packet)
 })
@@ -107,6 +108,29 @@ test('rejects mismatched candidate authority and unsafe owner action drift', () 
         ...packet.currentOwnerAction,
         deployAllowedNow: true,
       },
+    }),
+    /current_release_control_index_digest_invalid/,
+  )
+})
+
+test('rejects mixed generated artifact version families', () => {
+  const base = sampleCurrentReleaseControlIndexInput()
+  assert.throws(
+    () => buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+      paths: {
+        ...base.paths,
+        releaseOwnerApproval: 'supermega.release-owner-approval-packet.v100.generated-20260826.md',
+      },
+    })),
+    /current_release_control_index_artifact_family_version_mismatch/,
+  )
+
+  const packet = buildCurrentReleaseControlIndex(base)
+  assert.throws(
+    () => validateCurrentReleaseControlIndex({
+      ...packet,
+      artifactFamily: { ...packet.artifactFamily, version: 'v100' },
+      digest: packet.digest,
     }),
     /current_release_control_index_digest_invalid/,
   )
