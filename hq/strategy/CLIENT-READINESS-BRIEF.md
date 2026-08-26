@@ -20,6 +20,16 @@ its generator `kernel/managed-pilot-readiness.mjs`, `hq/portfolio.json`,
 documents), `docs/demo-playbooks/shop.md`, and the product source files cited
 in section 3.
 
+**Freshness note, 2026-08-26:** current release/readiness authority has moved
+from the self-serve activation framing in this brief to the owner-named Shop
+pilot sequence captured in `COMPETITIVE-EXECUTION-CUT.md`,
+`AI-NATIVE-ARCHITECTURE.md`, and
+`hq/readiness/managed-pilot-readiness.json`. Protected production is now schema
+v11 with zero drift from the local v11 target, browser roles denied, public
+browser quarantine recorded, managed writes disabled, and pilot mode
+`owner_named`. Treat any instruction below that asks the founder to apply v11
+as historical unless re-confirmed against the runbook and readiness ledger.
+
 ---
 
 ## 1. Where we actually are
@@ -231,9 +241,10 @@ this brief said exactly that; it was wrong, and it is corrected here.
 applies the migration, not to leaving the runtime env untouched.
 
 **Why steps 10–11 cannot be pulled forward — checked in the code, not
-assumed.** Production is at v10 (`securityAudit.liveSchemaVersion` in the
-ledger), so `billing_rail`'s `_assert_schema` rejects it outright. Every
-ledger method is also workspace-scoped (`_workspace_id`,
+assumed.** Production is at v11 (`securityAudit.liveSchemaVersion` in the
+ledger), while billing schema v12/v13 remains separately gated; `billing_rail`'s
+`_assert_schema` rejects the current production posture. Every ledger method is
+also workspace-scoped (`_workspace_id`,
 `where workspace_id = %s`), and no workspace row exists until step 8 creates
 one. So an `issue-invoice` run against production today fail-closes twice
 over. **Steps 7 and 8 are prerequisites for step 10, not parallel tracks.**

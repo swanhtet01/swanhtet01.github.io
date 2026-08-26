@@ -143,7 +143,7 @@ Authority: hq/portfolio.json agentOperatingModel + pilot-data/agent_team_system.
       |
       +-- Managed backend (planned, currently isolated_demo):
             Supabase Postgres 17, project zvtzwcimpvvtkowflhda
-            production schema v10 observed with the public-browser quarantine,
+            production schema v11 observed with the public-browser quarantine,
             browser roles denied, writes off until gates pass
             rehearsal flow: disposable preview branch, apply migrations,
             prove isolation/storage/recovery, delete after evidence
@@ -183,7 +183,7 @@ Stage 1: single project, per-tenant RLS. One database, tenant_id on every
   row, RLS policies already rehearsed locally (56 PostgreSQL 17 checks,
   tenant isolation, session revocation -- readiness gate local_postgres17 is
   ready-local). Preview-branch rehearsal proves the complete source-controlled
-  migration chain against current v10 production parity and browser quarantine
+  migration chain against current v11 production parity and browser quarantine
   before production migration.
 
 Stage 2: same project, operational hardening. Connection pooling, the
@@ -240,7 +240,7 @@ showroom CI run separately and fail CI on their own.
   (RESEND_API_KEY et al.), GitGuardian in CI, dependency-security workflow,
   no keys in the built artifact (verified by the public output gate).
 - Database: RLS on every managed table, browser roles denied, metadata
-  quarantine for legacy public tables observed on production schema v10 and
+  quarantine for legacy public tables observed on production schema v11 and
   required to remain reproducible from source; production writes remain
   disabled until separate founder approval
   (production_activation gate).
@@ -265,7 +265,7 @@ SHA and treated as stale when a newer artifact family supersedes them.
 Phase A -- prove the hosted spine (target: days 0-14)
 - After separate owner approval, execute the bounded rehearsal exactly as scoped
   in managed-pilot-readiness.json: create one preview branch, apply the complete
-  source-controlled migration chain, prove v10 parity, browser quarantine,
+  source-controlled migration chain, prove v11 parity, browser quarantine,
   hosted isolation / storage / recovery / session-revocation, capture evidence,
   and delete the branch (max lifetime 24h).
 - Trigger: rehearsal green -> propose production migration to the founder.

@@ -191,7 +191,8 @@ external actions (portfolio.json nonGoals; order-intake eval "What this is not")
 Tags: [product] / [platform] / [gate]. FD = requires a founder decision.
 
 1.  [platform][gate] FD-approved: execute the bounded preview-branch rehearsal
-    (v8-v10 + browser quarantine, 24h lifetime, delete after evidence) per
+    (complete source-controlled migration chain against current v11 parity +
+    browser quarantine, 24h lifetime, delete after evidence) per
     hq/readiness/managed-pilot-readiness.json. Unblocks everything hosted.
 2.  [platform][gate] FD: on green rehearsal, propose the production migration.
     On red, fix locally and repeat; production stays untouched.
