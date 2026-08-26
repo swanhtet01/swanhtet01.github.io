@@ -71,7 +71,7 @@ gated.
 ## 4. One outcome that matters first
 
 Shop remains the money-path product until its owner-private pilot has at least
-20 consecutive accepted observed runs.
+20 consecutive accepted observed runs covering pilot days 1 through 5.
 
 The next evidence chain is:
 
@@ -157,4 +157,3 @@ commercial evidence gate is the owner-private Shop baseline and pilot.
 Until those gates move, the SuperMega technical agent's useful work is not
 "make more agents." It is to keep one release candidate reviewable, one pilot
 path measurable, and every product claim tied to a source and a gate.
-

@@ -46,7 +46,14 @@ function fixture(overrides = {}) {
       pilotMode: 'owner_named',
       overall: { hostedActivationReady: false, blockingGateIds: ['preview_rehearsal', 'pilot_evidence', 'production_activation'] },
       liveProduction: { operatingMode: 'isolated_demo', managedWritesEnabled: false },
-      pilotEvidence: { proofComplete: false, acceptedConsecutiveRuns: 0, requiredAcceptedConsecutiveRuns: 20 },
+      pilotEvidence: {
+        proofComplete: false,
+        acceptedConsecutiveRuns: 0,
+        requiredAcceptedConsecutiveRuns: 20,
+        requiredPilotDayIndexes: [1, 2, 3, 4, 5],
+        acceptedConsecutivePilotDayIndexes: [],
+        pilotSequenceCoverageMet: false,
+      },
     },
     githubProposalReceipt: { path: 'github.json', digest: digestOf('1'), packet: { digest: digestOf('2') } },
     githubProtectionSnapshot: buildGitHubMainProtectionSnapshot({
@@ -128,6 +135,7 @@ test('keeps the ordered owner-gated path explicit through pilot activation', () 
     'managed_activation',
   ])
   assert.equal(board.gates.find((gate) => gate.id === 'shop_pilot_evidence').status, 'private_observation_required')
+  assert.ok(board.gates.find((gate) => gate.id === 'shop_pilot_evidence').blockers.includes('pilot_sequence_days_missing'))
   assert.ok(board.gates.find((gate) => gate.id === 'pull_request_creation').blockers.includes('remote_review_branch_not_exact'))
 })
 

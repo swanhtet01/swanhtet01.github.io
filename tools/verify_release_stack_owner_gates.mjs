@@ -36,6 +36,7 @@ const REQUIRED_OWNER_APPROVALS = [
   'managed_activation',
 ]
 const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
+const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
 const REQUIRED_SAFE_AUTOMATED_ACTIONS = ['rebuild_local_evidence', 'verify_current_ledger', 'rehearse_local_client_package']
 const REQUIRED_FORBIDDEN_ACTIONS = [
   'deploy',
@@ -287,6 +288,9 @@ export function assessReleaseStackOwnerGates(input = {}) {
     || readiness.pilotEvidence?.proofComplete !== false
     || readiness.pilotEvidence?.requiredAcceptedConsecutiveRuns !== 20
     || readiness.pilotEvidence?.acceptedConsecutiveRuns !== 0
+    || !sameArray(readiness.pilotEvidence?.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
+    || !sameArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes, [])
+    || readiness.pilotEvidence?.pilotSequenceCoverageMet !== false
     || readiness.pilotEvidence?.syntheticEvidenceAccepted !== false
     || readiness.pilotEvidence?.publicIdentityAllowed !== false
     || readiness.pilotEvidence?.privateWorkspaceRequired !== true) {
@@ -409,7 +413,7 @@ export function assessReleaseStackOwnerGates(input = {}) {
       gate('push_and_pr', 'Push and pull request creation', 'owner_approval_required', true, true, 'Local branch is reviewable only after explicit push and PR approval.'),
       gate('supabase_preview_rehearsal', 'Clean Supabase preview rehearsal', 'owner_approval_required', true, true, 'Source proposal prepared; no branch may be created without separate approval.'),
       gate('paired_vercel_preview_release', 'Paired Vercel preview and production promotion', 'owner_approval_required', true, true, 'Exact reviewed SHA must be previewed and owner-promoted as a pair.'),
-      gate('shop_pilot_evidence', 'Owner-named Shop pilot evidence', 'owner_approval_required', true, true, '20 consecutive accepted operator-reviewed runs are required for promotion evidence.'),
+      gate('shop_pilot_evidence', 'Owner-named Shop pilot evidence', 'owner_approval_required', true, true, '20 consecutive accepted operator-reviewed runs covering pilot days 1 through 5 are required for promotion evidence.'),
       gate('managed_activation', 'Managed production activation', 'owner_approval_required', true, true, 'Production remains isolated-demo until every hosted proof passes and owner approves exact activation.'),
     ],
     proposals: {
@@ -640,6 +644,9 @@ function sampleInput(overrides = {}) {
       proofComplete: false,
       requiredAcceptedConsecutiveRuns: 20,
       acceptedConsecutiveRuns: 0,
+      requiredPilotDayIndexes: [...REQUIRED_PILOT_DAY_INDEXES],
+      acceptedConsecutivePilotDayIndexes: [],
+      pilotSequenceCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       privateWorkspaceRequired: true,

@@ -356,6 +356,7 @@ export function buildCurrentOperatorBoard({
       nextAction: 'Collect owner-private observed Shop evidence; synthetic fixtures do not count as promotion proof.',
       blockers: [
         ...(readiness.pilotEvidence?.acceptedConsecutiveRuns >= readiness.pilotEvidence?.requiredAcceptedConsecutiveRuns ? [] : ['accepted_runs_below_20']),
+        ...(readiness.pilotEvidence?.pilotSequenceCoverageMet === true ? [] : ['pilot_sequence_days_missing']),
         ...(readiness.pilotEvidence?.proofComplete === true ? [] : ['real_observation_missing']),
       ],
       evidence: [],
@@ -681,7 +682,14 @@ function selfTestBoard() {
     pilotMode: 'owner_named',
     overall: { hostedActivationReady: false, blockingGateIds: ['preview_rehearsal', 'pilot_evidence', 'production_activation'] },
     liveProduction: { operatingMode: 'isolated_demo', managedWritesEnabled: false },
-    pilotEvidence: { proofComplete: false, acceptedConsecutiveRuns: 0, requiredAcceptedConsecutiveRuns: 20 },
+    pilotEvidence: {
+      proofComplete: false,
+      acceptedConsecutiveRuns: 0,
+      requiredAcceptedConsecutiveRuns: 20,
+      requiredPilotDayIndexes: [1, 2, 3, 4, 5],
+      acceptedConsecutivePilotDayIndexes: [],
+      pilotSequenceCoverageMet: false,
+    },
   }
   const githubProposalReceipt = { path: 'github.json', digest: `sha256:${'1'.repeat(64)}`, packet: { digest: `sha256:${'2'.repeat(64)}` } }
   const supabaseProposalReceipt = {

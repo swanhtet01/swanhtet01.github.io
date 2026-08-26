@@ -144,9 +144,9 @@ function productNextAction(productId, shopPilotDay0Readiness = null) {
   if (productId === 'shop') {
     if (shopPilotDay0Readiness?.day0Readiness?.intakePacketAccepted === true
       && shopPilotDay0Readiness?.day0Readiness?.baselinePacketAccepted !== true) {
-      return 'After GitHub main protection and review PR gates, capture the owner-private baseline, rehearse preview, then collect 20 consecutive accepted observed runs before activation review.'
+      return 'After GitHub main protection and review PR gates, capture the owner-private baseline, rehearse preview, then collect 20 consecutive accepted observed runs covering pilot days 1 through 5 before activation review.'
     }
-    return 'After GitHub main protection and review PR gates, capture owner-private baseline and intake, rehearse preview, then collect 20 consecutive accepted observed runs before activation review.'
+    return 'After GitHub main protection and review PR gates, capture owner-private baseline and intake, rehearse preview, then collect 20 consecutive accepted observed runs covering pilot days 1 through 5 before activation review.'
   }
   if (productId === 'plant') {
     return 'Keep security and regression maintenance only until Shop pilot decision; then run one order-bound OEE review with operator, supervisor, source mapping, and measured correction effort.'

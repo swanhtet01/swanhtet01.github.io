@@ -15,6 +15,7 @@ const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
 const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
+const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
 const REQUIRED_FALSE_CONTROLS = [
   'automaticSendAllowed',
   'paymentAllowed',
@@ -152,6 +153,9 @@ function assertCurrentSources(input, failures) {
     || readiness.pilotEvidence?.proofComplete !== false
     || readiness.pilotEvidence?.requiredAcceptedConsecutiveRuns !== 20
     || readiness.pilotEvidence?.acceptedConsecutiveRuns !== 0
+    || !sameArray(readiness.pilotEvidence?.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
+    || !sameArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes, [])
+    || readiness.pilotEvidence?.pilotSequenceCoverageMet !== false
     || readiness.pilotEvidence?.syntheticEvidenceAccepted !== false
     || readiness.pilotEvidence?.publicIdentityAllowed !== false
     || readiness.pilotEvidence?.privateWorkspaceRequired !== true) {
@@ -235,6 +239,9 @@ export function buildShopPilotPrivateIntakePacket(input = {}) {
       pilotProofComplete: readiness.pilotEvidence?.proofComplete === true,
       requiredAcceptedConsecutiveRuns: readiness.pilotEvidence?.requiredAcceptedConsecutiveRuns ?? null,
       acceptedConsecutiveRuns: readiness.pilotEvidence?.acceptedConsecutiveRuns ?? null,
+      requiredPilotDayIndexes: Array.isArray(readiness.pilotEvidence?.requiredPilotDayIndexes) ? [...readiness.pilotEvidence.requiredPilotDayIndexes] : [],
+      acceptedConsecutivePilotDayIndexes: Array.isArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes) ? [...readiness.pilotEvidence.acceptedConsecutivePilotDayIndexes] : [],
+      pilotSequenceCoverageMet: readiness.pilotEvidence?.pilotSequenceCoverageMet === true,
     },
     publicBoundary: {
       stage: publicBoundary.stage || null,
@@ -310,7 +317,10 @@ export function validateShopPilotPrivateIntakePacket(packet) {
     || packet.readiness?.previewRehearsalProofComplete !== false
     || packet.readiness?.pilotProofComplete !== false
     || packet.readiness?.requiredAcceptedConsecutiveRuns !== 20
-    || packet.readiness?.acceptedConsecutiveRuns !== 0) {
+    || packet.readiness?.acceptedConsecutiveRuns !== 0
+    || !sameArray(packet.readiness?.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
+    || !sameArray(packet.readiness?.acceptedConsecutivePilotDayIndexes, [])
+    || packet.readiness?.pilotSequenceCoverageMet !== false) {
     throw new Error('shop_pilot_private_intake_packet_readiness_invalid')
   }
   if (packet.publicBoundary?.participantIdentityPresent !== false
@@ -468,6 +478,9 @@ export function sampleShopPilotPrivateIntakeInput(overrides = {}) {
       proofComplete: false,
       requiredAcceptedConsecutiveRuns: 20,
       acceptedConsecutiveRuns: 0,
+      requiredPilotDayIndexes: [...REQUIRED_PILOT_DAY_INDEXES],
+      acceptedConsecutivePilotDayIndexes: [],
+      pilotSequenceCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       privateWorkspaceRequired: true,

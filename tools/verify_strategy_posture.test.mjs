@@ -20,6 +20,9 @@ function readiness(overrides = {}) {
     pilotEvidence: {
       productId: 'shop',
       requiredAcceptedConsecutiveRuns: 20,
+      requiredPilotDayIndexes: [1, 2, 3, 4, 5],
+      acceptedConsecutivePilotDayIndexes: [],
+      pilotSequenceCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       ...(overrides.pilotEvidence || {}),
@@ -33,7 +36,7 @@ const aiNative = [
   'production schema v11 observed with the public-browser quarantine',
   'current v11 production parity',
   'Self-serve remains a later product expansion, not the active activation route',
-  '20 consecutive accepted receipt-and-anchor-bound runs',
+  '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5',
   'no public signup, claim-code provisioning, hosted tenant',
 ].join('\n')
 
@@ -45,7 +48,7 @@ const competitiveCut = [
   'Ecommerce',
   'AI is a shared capability, not a customer product',
   'Shop remains the money-path product',
-  '20 consecutive accepted observed runs',
+  '20 consecutive accepted observed runs covering pilot days 1 through 5',
   'The current first external gate is GitHub `main` protection',
   'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
 ].join('\n')
@@ -62,6 +65,9 @@ test('accepts the current owner-named strategy posture', () => {
   assert.equal(report.ok, true)
   assert.equal(report.liveSchemaVersion, 11)
   assert.deepEqual(report.productSequence, ['shop', 'plant', 'website', 'ecommerce'])
+  assert.deepEqual(report.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+  assert.deepEqual(report.acceptedConsecutivePilotDayIndexes, [])
+  assert.equal(report.pilotSequenceCoverageMet, false)
 })
 
 test('rejects stale self-serve and stale schema strategy posture', () => {

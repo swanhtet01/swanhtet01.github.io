@@ -42,6 +42,7 @@ const LOCAL_GATE_EVIDENCE = '56 checks, TLS, RLS, tenant isolation, active-sessi
 const REQUIRED_DATABASE_CHECK_COUNT = 56
 const REQUIRED_SOURCE_RECEIPT_COUNT = 10
 const REQUIRED_ACCEPTED_PILOT_RUNS = 20
+const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 export const STORAGE_PRIVACY_PROOF_CONTRACT = 'supermega.hosted-storage-privacy-proof.v1'
 export const MANAGED_PERSISTENCE_PROOF_CONTRACT = 'supermega.managed-persistence-proof.v1'
 export const SELF_SERVE_PILOT_PROOF_CONTRACT = 'supermega.self-serve-pilot-proof.v1'
@@ -126,7 +127,7 @@ function previewRehearsalEvidence(complete) {
 
 function pilotEvidence(complete, shopNextGate) {
   return complete
-    ? `Owner-named Shop pilot has ${REQUIRED_ACCEPTED_PILOT_RUNS} consecutive accepted receipt-and-anchor-bound runs with private identity retained outside public source.`
+    ? `Owner-named Shop pilot has ${REQUIRED_ACCEPTED_PILOT_RUNS} consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5, with private identity retained outside public source.`
     : `Owner-named Shop pilot proof is absent. Required proof remains: ${shopNextGate}`
 }
 
@@ -422,6 +423,9 @@ export function buildManagedPilotReadiness(input = {}) {
       proofComplete: pilotEvidenceComplete,
       requiredAcceptedConsecutiveRuns: REQUIRED_ACCEPTED_PILOT_RUNS,
       acceptedConsecutiveRuns: 0,
+      requiredPilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+      acceptedConsecutivePilotDayIndexes: [],
+      pilotSequenceCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       privateWorkspaceRequired: true,
@@ -569,6 +573,10 @@ export function validateManagedPilotReadiness(value) {
     || pilot.proofComplete !== false
     || pilot.requiredAcceptedConsecutiveRuns !== REQUIRED_ACCEPTED_PILOT_RUNS
     || pilot.acceptedConsecutiveRuns !== 0
+    || JSON.stringify(pilot.requiredPilotDayIndexes) !== JSON.stringify(REQUIRED_PILOT_DAY_INDEXES)
+    || !Array.isArray(pilot.acceptedConsecutivePilotDayIndexes)
+    || pilot.acceptedConsecutivePilotDayIndexes.length !== 0
+    || pilot.pilotSequenceCoverageMet !== false
     || pilot.syntheticEvidenceAccepted !== false
     || pilot.publicIdentityAllowed !== false
     || pilot.privateWorkspaceRequired !== true) fail('managed_pilot_readiness_pilot_evidence_invalid')

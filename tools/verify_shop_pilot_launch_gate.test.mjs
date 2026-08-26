@@ -81,6 +81,12 @@ test('passes only as owner-private-intake readiness, not contact or activation r
   assert.equal(report.launchReadiness.readyForPromotionEvidence, false)
   assert.equal(report.launchReadiness.promotionEvidenceRequiredAcceptedRuns, 20)
   assert.equal(report.launchReadiness.promotionEvidenceAcceptedRuns, 0)
+  assert.deepEqual(report.launchReadiness.promotionEvidenceRequiredPilotDayIndexes, [1, 2, 3, 4, 5])
+  assert.deepEqual(report.launchReadiness.promotionEvidenceAcceptedPilotDayIndexes, [])
+  assert.equal(report.launchReadiness.promotionEvidencePilotSequenceCoverageMet, false)
+  assert.deepEqual(report.readiness.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+  assert.deepEqual(report.readiness.acceptedConsecutivePilotDayIndexes, [])
+  assert.equal(report.readiness.pilotSequenceCoverageMet, false)
   assert.deepEqual(report.products.customerProducts, ['shop', 'plant', 'website', 'ecommerce'])
   assert.equal(report.publicBoundary.participantIdentityPresent, false)
   assert.equal(validateShopPilotLaunchGate(report), report)
@@ -206,6 +212,19 @@ test('rejects synthetic, public-identity, and accepted-run promotion claims', ()
   }))
   assert.equal(acceptedRun.ok, false)
   assert.ok(acceptedRun.failures.includes('shop_pilot_launch_gate_pilot_evidence_state_invalid'))
+
+  const prematureSequence = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
+    readiness: {
+      ...sampleShopPilotLaunchGateInput().readiness,
+      pilotEvidence: {
+        ...sampleShopPilotLaunchGateInput().readiness.pilotEvidence,
+        acceptedConsecutivePilotDayIndexes: [1, 2, 3, 4, 5],
+        pilotSequenceCoverageMet: true,
+      },
+    },
+  }))
+  assert.equal(prematureSequence.ok, false)
+  assert.ok(prematureSequence.failures.includes('shop_pilot_launch_gate_pilot_evidence_state_invalid'))
 })
 
 test('rejects unsafe public boundary controls and customer contact states', () => {

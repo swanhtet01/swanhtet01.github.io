@@ -25,6 +25,9 @@ test('builds a public-safe owner private intake packet only', () => {
   assert.equal(packet.readiness.managedWritesEnabled, false)
   assert.equal(packet.readiness.pilotProofComplete, false)
   assert.equal(packet.readiness.acceptedConsecutiveRuns, 0)
+  assert.deepEqual(packet.readiness.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+  assert.deepEqual(packet.readiness.acceptedConsecutivePilotDayIndexes, [])
+  assert.equal(packet.readiness.pilotSequenceCoverageMet, false)
   assert.equal(packet.ownerPrivateIntake.promotionEvidenceRequiredAcceptedRuns, 20)
   assert.equal(packet.ownerPrivateIntake.promotionEvidenceRequiresFiveDaySequenceCoverage, true)
   assert.equal(packet.ownerPrivateIntake.promotionEvidenceAcceptedRuns, 0)
@@ -65,6 +68,18 @@ test('fails closed when public boundary or pilot proof claims become unsafe', ()
   }))
   assert.equal(claimedRun.ok, false)
   assert.ok(claimedRun.failures.includes('shop_pilot_private_intake_pilot_evidence_invalid'))
+
+  const missingPilotSequence = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput({
+    readiness: {
+      ...sampleShopPilotPrivateIntakeInput().readiness,
+      pilotEvidence: {
+        ...sampleShopPilotPrivateIntakeInput().readiness.pilotEvidence,
+        requiredPilotDayIndexes: [],
+      },
+    },
+  }))
+  assert.equal(missingPilotSequence.ok, false)
+  assert.ok(missingPilotSequence.failures.includes('shop_pilot_private_intake_pilot_evidence_invalid'))
 })
 
 test('rejects missing scripts and tampered packets', () => {

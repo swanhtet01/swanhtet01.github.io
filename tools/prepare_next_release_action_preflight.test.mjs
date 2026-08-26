@@ -100,7 +100,14 @@ function readiness() {
       blockingGateIds: ['preview_rehearsal', 'pilot_evidence', 'production_activation'],
     },
     liveProduction: { operatingMode: 'isolated_demo', managedWritesEnabled: false },
-    pilotEvidence: { proofComplete: false, acceptedConsecutiveRuns: 0, requiredAcceptedConsecutiveRuns: 20 },
+    pilotEvidence: {
+      proofComplete: false,
+      acceptedConsecutiveRuns: 0,
+      requiredAcceptedConsecutiveRuns: 20,
+      requiredPilotDayIndexes: [1, 2, 3, 4, 5],
+      acceptedConsecutivePilotDayIndexes: [],
+      pilotSequenceCoverageMet: false,
+    },
     products: products.map((productId) => ({
       productId,
       localStatus: 'release-candidate-local',
