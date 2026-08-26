@@ -356,6 +356,8 @@ export function buildReleaseOwnerApprovalMarkdown({
     '',
     'Required env: `SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL`',
     '',
+    'Safety behavior: execute rechecks open pull requests first. If an exact open PR already exists for this branch and commit, it returns a no-write existing-PR report instead of creating a duplicate. Mismatched or ambiguous open PRs fail closed.',
+    '',
     'Exact approval text:',
     '',
     '```text',

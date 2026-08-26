@@ -363,6 +363,7 @@ export function buildPullRequestPlan({
         maintainer_can_modify: payload.maintainer_can_modify,
       },
     },
+    existingPullRequestPolicy: existingPullRequestPolicy(gate.branch),
     executionRequirements: [
       '--execute flag',
       `${APPROVAL_ENV} exactly equals the owner approval template`,
@@ -370,6 +371,7 @@ export function buildPullRequestPlan({
       'signed GitHub main-protection snapshot verifies assessment.ok:true',
       'release handoff re-verifies current remote/live state immediately before PR creation',
       'remote review branch equals the exact approved commit',
+      'existing exact open PR returns no-write instead of duplicate creation',
       'local worktree is clean',
       'no existing open pull request conflicts with the branch/base pair',
     ],
@@ -467,10 +469,20 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
       || packet.possibleWrite?.payloadPreview?.draft !== false) {
       fail('release_pull_request_plan_write_invalid')
     }
+    if (packet.existingPullRequestPolicy?.checkedDuringPlan !== false
+      || packet.existingPullRequestPolicy?.checkedImmediatelyBeforeCreate !== true
+      || packet.existingPullRequestPolicy?.query !== `GET /repos/${REPOSITORY}${pullsQueryPath(packet.candidate.branch)}`
+      || packet.existingPullRequestPolicy?.exactOpenPullRequestResult !== 'return_existing_pr_without_github_write'
+      || packet.existingPullRequestPolicy?.mismatchedOpenPullRequestResult !== 'fail_closed_release_pull_request_existing_pr_mismatch'
+      || packet.existingPullRequestPolicy?.ambiguousOpenPullRequestResult !== 'fail_closed_release_pull_request_existing_pr_ambiguous'
+      || packet.existingPullRequestPolicy?.duplicateCreationAllowed !== false) {
+      fail('release_pull_request_plan_existing_pr_policy_invalid')
+    }
     if (!Array.isArray(packet.executionRequirements)
       || !packet.executionRequirements.includes('--execute flag')
       || !packet.executionRequirements.includes('signed GitHub main-protection snapshot verifies assessment.ok:true')
-      || !packet.executionRequirements.includes('remote review branch equals the exact approved commit')) {
+      || !packet.executionRequirements.includes('remote review branch equals the exact approved commit')
+      || !packet.executionRequirements.includes('existing exact open PR returns no-write instead of duplicate creation')) {
       fail('release_pull_request_plan_requirements_invalid')
     }
   } else if (packet.mode === 'executed_owner_approved_existing_pr_no_write'
@@ -527,6 +539,18 @@ function pullsQueryPath(branch) {
     per_page: '10',
   })
   return `/pulls?${params.toString()}`
+}
+
+function existingPullRequestPolicy(branch) {
+  return {
+    checkedDuringPlan: false,
+    checkedImmediatelyBeforeCreate: true,
+    query: `GET /repos/${REPOSITORY}${pullsQueryPath(branch)}`,
+    exactOpenPullRequestResult: 'return_existing_pr_without_github_write',
+    mismatchedOpenPullRequestResult: 'fail_closed_release_pull_request_existing_pr_mismatch',
+    ambiguousOpenPullRequestResult: 'fail_closed_release_pull_request_existing_pr_ambiguous',
+    duplicateCreationAllowed: false,
+  }
 }
 
 function classifyExistingPulls(pulls, gate) {

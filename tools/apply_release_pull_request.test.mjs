@@ -170,6 +170,14 @@ test('plan is no-write and blocks execution until the remote branch is exact', (
   assert.equal(plan.possibleWrite.path, `/repos/${repository}/pulls`)
   assert.equal(plan.possibleWrite.payloadPreview.head, branch)
   assert.equal(plan.possibleWrite.payloadPreview.base, 'main')
+  assert.equal(plan.existingPullRequestPolicy.checkedDuringPlan, false)
+  assert.equal(plan.existingPullRequestPolicy.checkedImmediatelyBeforeCreate, true)
+  assert.equal(
+    plan.existingPullRequestPolicy.query,
+    `GET /repos/${repository}/pulls?state=open&head=swanhtet01%3A${encodeURIComponent(branch)}&base=main&per_page=10`,
+  )
+  assert.equal(plan.existingPullRequestPolicy.exactOpenPullRequestResult, 'return_existing_pr_without_github_write')
+  assert.equal(plan.existingPullRequestPolicy.duplicateCreationAllowed, false)
   assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+\w+/)
 })
 
