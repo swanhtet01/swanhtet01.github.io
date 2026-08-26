@@ -81,7 +81,7 @@ function fakeRequest({ beforeRulesets = [], afterRulesets = null, writeStatus = 
 }
 
 test('builds a plan-only applicator report without token or write execution', () => {
-  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {}, expectedHead: gitState().head })
+  const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {} })
   assert.equal(plan.contract, GITHUB_MAIN_PROTECTION_APPLY_CONTRACT)
   assert.equal(plan.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(plan.mode, 'plan_only_no_github_write')

@@ -189,7 +189,7 @@ export function buildApplyPlan({ proposalReceipt, gitState = currentGitState(), 
   const proposal = proposalReceipt.packet
   const token = tokenFromEnv(env)
   const approval = validateOwnerApproval({ proposal, env, execute: false })
-  const expected = normalizedExpectedHead(expectedHead)
+  const expected = normalizedExpectedHead(expectedHead ?? gitState.head)
   const body = {
     ok: true,
     contract: GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
