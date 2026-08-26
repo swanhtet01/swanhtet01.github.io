@@ -47,6 +47,11 @@ const LEAK_PATTERNS = [
   ['token_shape', /(sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sbp_[A-Za-z0-9_]{20,}|sb_secret_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/gi],
   ['private_key', /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PRIVATE )?PRIVATE KEY-----/g],
 ]
+const CONFUSING_OWNER_MARKDOWN_PATTERNS = [
+  ['public_packet_label', /raw_identity_or_private_note_would_enter_public_packet/gi],
+  ['public_baseline_packet_label', /(?:ready to generate|generate|converted into)\s+(?:a\s+)?public(?:-safe)?\s+baseline\s+packet/gi],
+  ['public_safe_baseline_metrics_label', /public-safe\s+baseline\s+metrics/gi],
+]
 
 function fail(code) {
   throw new Error(code)
@@ -97,6 +102,16 @@ function artifactFamilyStamp(fileName) {
 export function scanOwnerFacingText(fileName, text) {
   const findings = []
   for (const [pattern, regex] of LEAK_PATTERNS) {
+    const matches = [...normalize(text).matchAll(regex)]
+    if (matches.length) findings.push({ fileName, pattern, count: matches.length })
+  }
+  return findings
+}
+
+export function scanOwnerFacingMarkdownClarity(fileName, text) {
+  if (!String(fileName || '').toLowerCase().endsWith('.md')) return []
+  const findings = []
+  for (const [pattern, regex] of CONFUSING_OWNER_MARKDOWN_PATTERNS) {
     const matches = [...normalize(text).matchAll(regex)]
     if (matches.length) findings.push({ fileName, pattern, count: matches.length })
   }
@@ -332,16 +347,20 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
   ].filter(Boolean))
 
   const leakFindings = []
+  const clarityFindings = []
   let ownerFacingFilesScanned = 0
   ownerFacingFilesScanned += 1
   leakFindings.push(...scanOwnerFacingText(basename(controlPath), controlText))
+  clarityFindings.push(...scanOwnerFacingMarkdownClarity(basename(controlPath), controlText))
   for (const fileName of ownerFacingNames) {
     const file = await maybeRead(baseDir, fileName)
     if (!file) continue
     ownerFacingFilesScanned += 1
     leakFindings.push(...scanOwnerFacingText(file.fileName, file.text))
+    clarityFindings.push(...scanOwnerFacingMarkdownClarity(file.fileName, file.text))
   }
   if (leakFindings.length) fail(`release_artifact_family_owner_facing_leak:${leakFindings[0].fileName}:${leakFindings[0].pattern}`)
+  if (clarityFindings.length) fail(`release_artifact_family_owner_facing_clarity:${clarityFindings[0].fileName}:${clarityFindings[0].pattern}`)
   if (!controlsRemainFalse(controlIndex.controls)) fail('release_artifact_family_controls_invalid')
 
   return {
@@ -356,6 +375,7 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     extraArtifactsVerified: [...new Set(extraArtifacts)].sort(),
     ownerFacingFilesScanned,
     ownerFacingLeakFindings: 0,
+    ownerFacingClarityFindings: 0,
     blockersStillExpected: [
       'github_main_protection_unverified',
       'owner_observed_baseline_packet_missing',
@@ -381,12 +401,16 @@ export function runSelfTest() {
   const family = artifactFamilyStamp('supermega.release-handoff.v115.generated-20260826.json')
   const safeFindings = scanOwnerFacingText('safe.md', `Candidate sha256:${'a'.repeat(64)} with owner gates false.`)
   const leakFindings = scanOwnerFacingText('unsafe.md', 'C:\\Users\\owner\\secret.txt owner@example.com ghp_123456789012345678901234')
+  const clarityFindings = scanOwnerFacingMarkdownClarity('confusing.md', 'Ready to generate public baseline packet: false')
+  const jsonClarityFindings = scanOwnerFacingMarkdownClarity('artifact.json', '{"completionSignal":"public_safe_baseline_packet_digest"}')
   const checks = {
     family_version_and_date_detected: family.version === 'v115' && family.date === '20260826',
     safe_text_has_no_findings: safeFindings.length === 0,
     leak_text_detects_path_contact_and_token: leakFindings.some((finding) => finding.pattern === 'windows_absolute_path')
       && leakFindings.some((finding) => finding.pattern === 'email_like')
       && leakFindings.some((finding) => finding.pattern === 'token_shape'),
+    confusing_owner_markdown_labels_detected: clarityFindings.some((finding) => finding.pattern === 'public_baseline_packet_label'),
+    json_internal_contract_tokens_not_flagged_as_markdown_clarity: jsonClarityFindings.length === 0,
     invalid_family_rejected: (() => {
       try {
         artifactFamilyStamp('supermega.release-handoff.generated.json')

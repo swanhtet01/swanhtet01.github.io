@@ -101,7 +101,7 @@ const BASELINE_CAPTURE_STOP_CONDITIONS = [
   'fewer_than_three_uninterrupted_manual_order_runs',
   'fewer_than_three_uninterrupted_package_redemption_runs',
   'synthetic_or_supermega_demo_run_used_as_baseline',
-  'raw_identity_or_private_note_would_enter_public_packet',
+  'raw_identity_or_private_note_would_enter_owner_safe_packet',
   'customer_message_payment_stock_or_hosted_write_needed',
   'operator_declines_review_every_run',
   'owner_cannot_confirm_baseline',
@@ -719,6 +719,9 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
 
 export function renderShopPilotDay0ReadinessMarkdown(packet) {
   validateShopPilotDay0ReadinessPacket(packet)
+  const ownerFacingToken = (value) => String(value || '')
+    .replace(/public_safe/g, 'owner_safe')
+    .replace(/public_packet/g, 'owner_safe_packet')
   const blockers = packet.blockers.length ? packet.blockers.map((blocker) => `- ${blocker}`).join('\n') : '- none'
   const commands = packet.privateCommands.map((command) => `- ${command}`).join('\n')
   const prep = packet.ownerPrivatePreparation
@@ -774,7 +777,7 @@ Candidate: \`${packet.candidate.branch || 'unknown'} @ ${packet.candidate.head |
 - Relative orchestrator command: ${bridge.relativeOrchestratorCommand}
 - Expected current gate: ${bridge.expectedCurrentGate || 'not required for current Day-0 state'}
 - Next local action: ${bridge.nextLocalAction}
-- Completion signal: ${bridge.completionSignal}
+- Completion signal: ${ownerFacingToken(bridge.completionSignal)}
 - Ready to record initial state: false
 - External effects allowed: false
 
@@ -785,13 +788,13 @@ ${bridgeArtifacts}
 ## Owner-private baseline capture checklist
 
 - Contract: \`${checklist.contract}\`
-- State: ${checklist.state}
+- State: ${ownerFacingToken(checklist.state)}
 - Evidence kind: ${checklist.evidenceKind}
-- Completion signal: ${checklist.completionSignal}
-- Ready to generate public baseline packet: ${checklist.readyToGeneratePublicBaselinePacket}
-- Public output allows raw identity: false
-- Public output allows raw notes: false
-- Public output allows local paths: false
+- Completion signal: ${ownerFacingToken(checklist.completionSignal)}
+- Ready to generate owner-safe baseline packet: ${checklist.readyToGeneratePublicBaselinePacket}
+- Owner-safe packet allows raw identity: false
+- Owner-safe packet allows raw notes: false
+- Owner-safe packet allows local paths: false
 - External effects allowed: false
 
 Required observed flows:
@@ -810,7 +813,7 @@ Stop and do not generate the owner-safe baseline packet if any condition occurs:
 
 ${checklistStopConditions}
 
-## Public-safe baseline metrics
+## Owner-safe baseline metrics
 
 - Observed order runs: ${packet.day0Readiness.uninterruptedOrderRunCount}/${packet.day0Readiness.observedOrderRunCount}
 - Observed redemption runs: ${packet.day0Readiness.uninterruptedRedemptionRunCount}/${packet.day0Readiness.observedRedemptionRunCount}

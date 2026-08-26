@@ -110,7 +110,7 @@ test('renders an owner-baseline action card without local paths, identity, or au
   assert.equal(card.controls.paymentAllowed, false)
   assert.equal(card.controls.stockMovementAllowed, false)
   assert.ok(card.commandPlan.commands.some((command) => command.includes('--lint-input "<private-baseline-input.json>"')))
-  assert.ok(card.minimumEvidence.stopConditions.includes('raw_identity_or_private_note_would_enter_public_packet'))
+  assert.ok(card.minimumEvidence.stopConditions.includes('raw_identity_or_private_note_would_enter_owner_safe_packet'))
 
   const markdown = renderShopPilotDay0OwnerBaselineActionCardMarkdown(card)
   assert.match(markdown, /Capture the owner-observed manual Shop baseline/)
@@ -163,7 +163,7 @@ test('rejects non-baseline Day-0 states and private/path leakage', () => {
   )
 })
 
-test('CLI writes and verifies the public-safe action card', async () => {
+test('CLI writes and verifies the owner-safe action card', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'shop-day0-owner-card-'))
   try {
     const day0Path = join(dir, 'day0.json')
@@ -192,6 +192,8 @@ test('CLI writes and verifies the public-safe action card', async () => {
 
     const markdown = await readFile(markdownPath, 'utf8')
     assert.match(markdown, /Local paths included: false/)
+    assert.match(markdown, /raw_identity_or_private_note_would_enter_owner_safe_packet/)
+    assert.doesNotMatch(markdown, /raw_identity_or_private_note_would_enter_public_packet|public baseline packet/i)
     assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
   } finally {
     await rm(dir, { recursive: true, force: true })

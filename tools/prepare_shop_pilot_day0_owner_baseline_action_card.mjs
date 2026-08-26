@@ -260,7 +260,7 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || !Array.isArray(evidence.requiredConfirmations)
     || !evidence.requiredConfirmations.includes('no_external_effects')
     || !Array.isArray(evidence.stopConditions)
-    || !evidence.stopConditions.includes('raw_identity_or_private_note_would_enter_public_packet')) {
+    || !evidence.stopConditions.includes('raw_identity_or_private_note_would_enter_owner_safe_packet')) {
     fail('shop_pilot_day0_owner_baseline_card_evidence_invalid')
   }
   if (!isRecord(card.commandPlan)
@@ -394,7 +394,7 @@ function runSelfTest() {
     checks: {
       card_valid: true,
       markdown_safe: !hasPrivateOrSecretShape(markdown),
-      lint_before_public_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
+      lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
       tamper_detected: tamperDetected,
     },
     externalWritesPerformed: false,
