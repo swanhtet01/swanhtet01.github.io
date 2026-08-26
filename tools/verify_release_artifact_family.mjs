@@ -112,7 +112,8 @@ export function verifyShopDay0ProductMatrixBinding(productReadinessMatrix, shopP
   const shopProduct = productReadinessMatrix?.products?.find((product) => product.productId === 'shop')
   if (!shopProduct) fail('release_artifact_family_product_matrix_shop_missing')
   if (!Array.isArray(shopProduct.currentBlockers)) fail('release_artifact_family_product_matrix_shop_blockers_invalid')
-  if (productReadinessMatrix.sourceDigests?.shopPilotDay0ReadinessDigest !== shopPilotDay0Artifact?.digest) {
+  const expectedSourceDigest = shopPilotDay0Artifact?.sourceDigest || shopPilotDay0Artifact?.digest
+  if (productReadinessMatrix.sourceDigests?.shopPilotDay0ReadinessDigest !== expectedSourceDigest) {
     fail('release_artifact_family_product_matrix_shop_day0_digest_mismatch')
   }
   if (shopPilotDay0Readiness.day0Readiness?.intakePacketAccepted === true
@@ -263,10 +264,19 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
   ]
   const semanticArtifacts = ['releaseHandoff', 'githubMainProtectionSnapshot']
   const verifiedPackets = { releaseHandoff: handoff, githubMainProtectionSnapshot: snapshot }
+  const verifiedSourceDigests = {}
   for (const [label, validator, options] of jsonArtifacts) {
     const artifact = artifacts[label]
-    const packet = validator(await readJson(artifactPath(baseDir, artifact.fileName), `release_artifact_family_${label}_missing`), options)
+    const artifactText = await readText(artifactPath(baseDir, artifact.fileName), `release_artifact_family_${label}_missing`)
+    let artifactJson = null
+    try {
+      artifactJson = JSON.parse(artifactText)
+    } catch {
+      fail(`release_artifact_family_${label}_missing_json_invalid`)
+    }
+    const packet = validator(artifactJson, options)
     verifiedPackets[label] = packet
+    verifiedSourceDigests[label] = digest(artifactText)
     jsonDigestFromPacket(label, packet, artifact)
     semanticArtifacts.push(label)
     if (packet?.candidate?.commit && packet.candidate.commit !== controlIndex.candidate.commit) fail(`release_artifact_family_${label}_candidate_mismatch`)
@@ -277,7 +287,10 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
   verifyShopDay0ProductMatrixBinding(
     verifiedPackets.productReadinessMatrix,
     verifiedPackets.shopPilotDay0Readiness,
-    artifacts.shopPilotDay0Readiness,
+    {
+      ...artifacts.shopPilotDay0Readiness,
+      sourceDigest: verifiedSourceDigests.shopPilotDay0Readiness,
+    },
   )
 
   const githubProposal = await readJson(GITHUB_PROPOSAL_PATH, 'release_artifact_family_github_proposal_missing')

@@ -43,9 +43,12 @@ test('artifact verification requires an explicit control index path', async () =
 })
 
 test('product matrix must stay bound to Shop Day-0 intake and baseline state', () => {
-  const day0Artifact = { digest: `sha256:${'a'.repeat(64)}` }
+  const day0Artifact = {
+    digest: `sha256:${'a'.repeat(64)}`,
+    sourceDigest: `sha256:${'b'.repeat(64)}`,
+  }
   const matrix = {
-    sourceDigests: { shopPilotDay0ReadinessDigest: day0Artifact.digest },
+    sourceDigests: { shopPilotDay0ReadinessDigest: day0Artifact.sourceDigest },
     products: [
       {
         productId: 'shop',
@@ -62,7 +65,7 @@ test('product matrix must stay bound to Shop Day-0 intake and baseline state', (
   assert.equal(verifyShopDay0ProductMatrixBinding(matrix, day0, day0Artifact), true)
   assert.throws(() => verifyShopDay0ProductMatrixBinding({
     ...matrix,
-    sourceDigests: { shopPilotDay0ReadinessDigest: `sha256:${'b'.repeat(64)}` },
+    sourceDigests: { shopPilotDay0ReadinessDigest: day0Artifact.digest },
   }, day0, day0Artifact), /shop_day0_digest_mismatch/)
   assert.throws(() => verifyShopDay0ProductMatrixBinding({
     ...matrix,
