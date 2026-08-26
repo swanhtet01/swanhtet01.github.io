@@ -324,7 +324,9 @@ This card performed no external writes and grants no authority beyond the single
 async function readJson(path, code) {
   const text = await readFile(resolve(path || ''), 'utf8').catch(() => null)
   if (!text) fail(code)
-  return JSON.parse(text)
+  const packet = JSON.parse(text)
+  assertPublicSafe(packet, `${code}_private_or_secret_shape`)
+  return packet
 }
 
 async function readText(path, code) {
