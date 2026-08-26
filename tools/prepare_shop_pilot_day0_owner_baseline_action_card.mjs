@@ -61,10 +61,10 @@ const REQUIRED_FALSE_CONTROLS = [
 const BASELINE_COMMANDS = [
   'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
   'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
-  'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"',
-  'npm.cmd run shop:pilot:baseline-packet -- --verify "<public-baseline-packet.json>"',
-  'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>"',
-  'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>" --output "<public-day0-packet.json>" --markdown-output "<public-day0-packet.md>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"',
+  'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"',
+  'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
 ]
 const NON_CLAIMS = [
   'not_production_release',
@@ -160,7 +160,7 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
     },
     action: {
       id: 'capture-owner-observed-baseline',
-      label: 'Capture owner-observed manual Shop baseline, lint it locally, then generate a public-safe baseline packet',
+      label: 'Capture owner-observed manual Shop baseline, lint it locally, then generate an owner-safe baseline packet',
       allowedNow: day0Packet.ownerPrivateObservationBridge?.allowedNow || 'owner_private_local_observation_only',
       privateWorkspaceRequired: true,
       safeBeforeReleaseGate: day0Packet.nextOwnerPrivateStep?.safeBeforeReleaseGate === true,
@@ -306,7 +306,7 @@ Candidate: \`${card.candidate.branch || 'unknown'} @ ${card.candidate.head || 'u
 
 ## Owner action now
 
-Capture the owner-observed manual Shop baseline in the private workspace, run the local baseline input preflight, then generate only the public-safe baseline packet if the preflight returns \`${card.action.expectedPreflightStatus}\`.
+Capture the owner-observed manual Shop baseline in the private workspace, run the local baseline input preflight, then generate only the owner-safe baseline packet if the preflight returns \`${card.action.expectedPreflightStatus}\`.
 
 - Allowed now: ${card.action.allowedNow}
 - Private workspace required: true
@@ -338,13 +338,13 @@ Required confirmations:
 
 ${confirmations}
 
-Stop and do not generate the public baseline packet if any condition occurs:
+Stop and do not generate the owner-safe baseline packet if any condition occurs:
 
 ${stopConditions}
 
 ## Commands
 
-Use placeholder filenames in the private workspace. Do not paste local paths, names, contacts, raw notes, credentials, payment, or stock details into any public packet.
+Use placeholder filenames in the private workspace. Do not paste local paths, names, contacts, raw notes, credentials, payment, or stock details into any owner-safe packet. Owner-safe does not mean public website, customer-facing, or publishable.
 
 ${commands}
 

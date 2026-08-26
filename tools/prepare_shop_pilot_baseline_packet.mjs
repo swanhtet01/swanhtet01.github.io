@@ -357,8 +357,8 @@ export function preflightShopPilotBaselineInput(input, { generatedAt = new Date(
       metrics: { ...packet.metrics },
       pilotWindow: { ...packet.pilotWindow },
       nextAction: ready
-        ? 'Generate the public-safe baseline packet and then run the Shop Day-0 readiness gate with the intake packet.'
-        : 'Fix the private owner-observed baseline input locally; do not generate or edit a public packet yet.',
+        ? 'Generate the owner-safe baseline packet and then run the Shop Day-0 readiness gate with the intake packet.'
+        : 'Fix the private owner-observed baseline input locally; do not generate or edit an owner-safe packet yet.',
     }
     assertPublicSafe(body, 'shop_pilot_baseline_preflight_public_private_value')
     return {
@@ -375,7 +375,7 @@ export function preflightShopPilotBaselineInput(input, { generatedAt = new Date(
       privateInputDigest: null,
       metrics: null,
       pilotWindow: null,
-      nextAction: 'Fix the private owner-observed baseline input locally; do not generate or edit a public packet yet.',
+      nextAction: 'Fix the private owner-observed baseline input locally; do not generate or edit an owner-safe packet yet.',
     }
     assertPublicSafe(body, 'shop_pilot_baseline_preflight_public_private_value')
     return {
@@ -544,12 +544,13 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     `Contract: \`${SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT}\``,
     `JSON input contract: \`${SHOP_PILOT_BASELINE_INPUT_CONTRACT}\``,
     '',
-    'Purpose: capture the private manual-process baseline before Shop pilot Day 1. This worksheet is for local owner use only; the generated public packet must contain counts, booleans, labels, dates, and digests only.',
+    'Purpose: capture the private manual-process baseline before Shop pilot Day 1. This worksheet is for local owner use only; the generated owner-safe packet must contain counts, booleans, labels, dates, and digests only.',
     '',
     '## Safety boundary',
     '',
     '- Keep the business name, operator name, observation place, and raw notes only in the private JSON input.',
-    '- Do not include customer contact details, message bodies, credential values, payment details, stock records, screenshots, or raw private evidence in public packets.',
+    '- Do not include customer contact details, message bodies, credential values, payment details, stock records, screenshots, or raw private evidence in owner-safe packets.',
+    '- Owner-safe packets are not public website, customer-facing, or publishable artifacts.',
     '- This worksheet does not authorize customer contact, payment, stock movement, server write, hosted write, deployment, production release, or managed activation.',
     '',
     '## Minimum evidence for a ready baseline packet',
@@ -609,11 +610,11 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '```powershell',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --template "<private-baseline-input.json>"',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --lint-input "<private-baseline-input.json>"',
-    'node tools/prepare_shop_pilot_baseline_packet.mjs --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"',
-    'node tools/prepare_shop_pilot_baseline_packet.mjs --verify "<public-baseline-packet.json>"',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --verify "<owner-safe-baseline-packet.json>"',
     '```',
     '',
-    'If the packet is blocked, fix the private observation data locally and regenerate the public packet. Do not edit a public packet by hand.',
+    'If the packet is blocked, fix the private observation data locally and regenerate the owner-safe packet. Do not edit an owner-safe packet by hand.',
   ].join('\n')
   assertPublicSafe(body, 'shop_pilot_baseline_worksheet_private_value')
   return body

@@ -19,13 +19,13 @@ After this private form is complete, copy the same facts into a private JSON bas
 npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>"
 ```
 
-Generate a public-safe packet for Git/HQ review. The packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation.
+Generate an owner-safe packet for local/HQ review. The packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation. Owner-safe does not mean public website, customer-facing, or publishable.
 
 ```powershell
-npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"
-npm.cmd run shop:pilot:intake-packet -- --output "<public-intake-packet.json>"
-npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>"
-npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>" --output "<public-day0-packet.json>" --markdown-output "<public-day0-packet.md>"
+npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"
+npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"
+npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"
+npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"
 ```
 
 If the launch gate reports `owner_private_handoff_ready` and the Day-0 packet reports `day0_owner_private_handoff_ready`, the baseline and intake digests are ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.

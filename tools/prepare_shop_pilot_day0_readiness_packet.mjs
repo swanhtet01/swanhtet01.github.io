@@ -170,7 +170,7 @@ function ownerActionFor(status) {
     return 'Prepare the owner-private Shop handoff using the accepted baseline and intake digests; still do not contact the participant or enable hosted writes.'
   }
   if (status === 'blocked_owner_observed_baseline_required') {
-    return 'Capture at least three owner-observed manual Shop order runs and three package-redemption runs, then generate the public-safe baseline packet.'
+    return 'Capture at least three owner-observed manual Shop order runs and three package-redemption runs, then generate the owner-safe baseline packet.'
   }
   if (status === 'blocked_owner_private_intake_required') {
     return 'Generate and review the owner-private Shop intake packet before day-one handoff.'
@@ -526,10 +526,10 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
     privateCommands: [
       'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
       'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
-      'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<public-baseline-packet.json>" --markdown-output "<public-baseline-packet.md>"',
-      'npm.cmd run shop:pilot:intake-packet -- --output "<public-intake-packet.json>"',
-      'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>"',
-      'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<public-baseline-packet.json>" --intake-packet "<public-intake-packet.json>" --output "<public-day0-packet.json>" --markdown-output "<public-day0-packet.md>"',
+      'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
+      'npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"',
+      'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"',
+      'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
     ],
     forbiddenActions: [
       'customer_contact',
@@ -806,7 +806,7 @@ Required confirmations:
 
 ${checklistConfirmations}
 
-Stop and do not generate the public baseline packet if any condition occurs:
+Stop and do not generate the owner-safe baseline packet if any condition occurs:
 
 ${checklistStopConditions}
 
