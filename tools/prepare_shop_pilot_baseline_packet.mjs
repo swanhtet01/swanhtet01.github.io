@@ -251,6 +251,7 @@ function assessBaseline(normalized, generatedAt) {
   }
   if (baselineDate > generatedDate) failures.push('baseline_observed_at_after_packet_day')
   if (baselineDate >= normalized.proposedPilotStartDate) failures.push('baseline_observed_at_must_precede_pilot_start')
+  if (generatedDate >= normalized.proposedPilotStartDate) failures.push('baseline_packet_generated_at_must_precede_pilot_start')
   if (orderRuns.length < MIN_OBSERVED_RUNS) failures.push('order_observed_runs_below_three')
   if (redemptionRuns.length < MIN_OBSERVED_RUNS) failures.push('redemption_observed_runs_below_three')
   if (!sameNumber(normalized.claimedMedianMinutesPerOrder, orderMedian)) failures.push('claimed_order_median_mismatch')
@@ -456,12 +457,20 @@ export function validateShopPilotBaselinePacket(packet) {
     || confirmations.noExternalEffects !== true) {
     fail('shop_pilot_baseline_packet_confirmations_invalid')
   }
-  const reviewWindowValid = isRecord(packet.pilotWindow)
+  const pilotStartDateValid = isRecord(packet.pilotWindow) && DATE_PATTERN.test(packet.pilotWindow.proposedPilotStartDate || '')
+  const reviewWindowValid = pilotStartDateValid
+    && DATE_PATTERN.test(packet.pilotWindow.reviewDate || '')
     && packet.pilotWindow.durationDays === 5
     && packet.pilotWindow.reviewDate === plusDays(packet.pilotWindow.proposedPilotStartDate, 4)
   if (!reviewWindowValid
     && (packet.ok === true || !packet.failures.includes('review_date_must_close_five_day_plan'))) {
     fail('shop_pilot_baseline_packet_window_invalid')
+  }
+  const generatedBeforePilotStart = pilotStartDateValid && isoDate(packet.generatedAt) < packet.pilotWindow.proposedPilotStartDate
+  if (pilotStartDateValid
+    && !generatedBeforePilotStart
+    && (packet.ok === true || !packet.failures.includes('baseline_packet_generated_at_must_precede_pilot_start'))) {
+    fail('shop_pilot_baseline_packet_generated_window_invalid')
   }
   if (!isRecord(packet.controls) || FALSE_CONTROL_FIELDS.some((field) => packet.controls[field] !== false)) {
     fail('shop_pilot_baseline_packet_controls_invalid')
@@ -553,6 +562,7 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '- Every run marked as an error must include a private cost/correction label; non-error runs must leave that label blank.',
     '- Total observed error cost label is required when any observed order or redemption run had an error, and must stay blank when none did.',
     '- Review date must be exactly 4 calendar days after the proposed Day-1 pilot start date.',
+    '- Generate the baseline packet before the proposed Day-1 pilot start date.',
     '- Owner confirmations must be true: baseline confirmed, operator reviews every run, no SuperMega demo measured, and no external effects.',
     '',
     '## Private baseline fields to fill in JSON',

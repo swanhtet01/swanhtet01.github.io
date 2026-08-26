@@ -131,6 +131,12 @@ test('blocks baseline evidence dated after packet day or on the pilot start date
   assert.ok(onPilotStart.failures.includes('redemption_observed_at_must_precede_pilot_start'))
   assert.doesNotMatch(JSON.stringify(onPilotStart), /Private Spa Sample|Private Operator/)
   assert.equal(validateShopPilotBaselineInputPreflight(onPilotStart), onPilotStart)
+
+  const generatedOnPilotStart = buildShopPilotBaselinePacket(input(), { generatedAt: '2026-08-31T00:00:00.000Z' })
+  assert.equal(generatedOnPilotStart.ok, false)
+  assert.equal(generatedOnPilotStart.status, 'blocked_collect_more_private_baseline')
+  assert.ok(generatedOnPilotStart.failures.includes('baseline_packet_generated_at_must_precede_pilot_start'))
+  assert.equal(validateShopPilotBaselinePacket(generatedOnPilotStart), generatedOnPilotStart)
 })
 
 test('blocks contradictory error labels before baseline evidence can be treated as ready', () => {
@@ -237,6 +243,7 @@ test('renders a local owner worksheet without private values or promotion claims
   assert.match(markdown, new RegExp(SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT))
   assert.match(markdown, /At least 3 uninterrupted manual order runs/)
   assert.match(markdown, /Total observed error-run count/)
+  assert.match(markdown, /Generate the baseline packet before the proposed Day-1 pilot start date/)
   assert.match(markdown, /node tools\/prepare_shop_pilot_baseline_packet\.mjs --input/)
   assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation|sk-proj-|ghp_/i)
 })

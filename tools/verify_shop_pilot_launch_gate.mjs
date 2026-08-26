@@ -621,6 +621,7 @@ function sampleBaselineInput(overrides = {}) {
     claimedMedianMinutesPerRedemption: 3,
     weeklyPackageCorrectionCount: 2,
     observedErrorRunCount: 1,
+    totalObservedErrorRunCount: 1,
     totalObservedErrorCostLabel: 'one manual correction, no monetary claim',
     ownerConfirmedBaseline: true,
     operatorAgreesReviewEveryRun: true,

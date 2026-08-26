@@ -11,6 +11,18 @@ import {
   renderProductReadinessMatrixMarkdown,
   validateProductReadinessMatrix,
 } from './prepare_product_readiness_matrix.mjs'
+import {
+  buildShopPilotDay0ReadinessPacket,
+  sampleShopPilotDay0ReadinessInput,
+} from './prepare_shop_pilot_day0_readiness_packet.mjs'
+import {
+  buildShopPilotPrivateIntakePacket,
+  sampleShopPilotPrivateIntakeInput,
+} from './prepare_shop_pilot_private_intake_packet.mjs'
+import {
+  assessShopPilotLaunchGate,
+  sampleShopPilotLaunchGateInput,
+} from './verify_shop_pilot_launch_gate.mjs'
 
 const products = ['shop', 'plant', 'website', 'ecommerce']
 
@@ -86,11 +98,16 @@ function fixture(overrides = {}) {
     ],
     digest: digestOf('4'),
   }
+  const intakePacket = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
+  const shopPilotDay0Readiness = buildShopPilotDay0ReadinessPacket(sampleShopPilotDay0ReadinessInput({
+    launchGateReport: assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ intakePacket })),
+  }))
   return {
     releaseHandoff,
     technicalEstate,
     readiness,
     operatingActionBoard,
+    shopPilotDay0Readiness,
     generatedAt: '2026-08-25T00:00:00.000Z',
     ...overrides,
   }
@@ -106,6 +123,23 @@ test('builds a four-product readiness matrix with Shop first and GitHub gate fir
   assert.equal(matrix.products[0].evidenceLevel, 'local_verified_release_candidate')
   assert.ok(matrix.products[0].currentBlockers.includes('owner_private_baseline'))
   assert.ok(matrix.products.find((product) => product.productId === 'plant').currentBlockers.includes('shop_pilot_decision_not_complete'))
+})
+
+test('removes the Shop private-intake blocker only when Day-0 intake is accepted', () => {
+  const matrix = validateProductReadinessMatrix(buildProductReadinessMatrix(fixture()))
+  const shop = matrix.products[0]
+  assert.ok(shop.currentBlockers.includes('owner_private_baseline'))
+  assert.equal(shop.currentBlockers.includes('owner_private_intake'), false)
+  assert.ok(shop.currentBlockers.includes('real_shop_pilot_evidence'))
+  assert.match(shop.nextAction, /capture the owner-private baseline/)
+  assert.doesNotMatch(shop.nextAction, /baseline and intake/)
+  assert.equal(matrix.sourceDigests.shopPilotDay0ReadinessDigest, fixture().shopPilotDay0Readiness.digest)
+
+  const withoutDay0 = buildProductReadinessMatrix({
+    ...fixture(),
+    shopPilotDay0Readiness: null,
+  })
+  assert.ok(withoutDay0.products[0].currentBlockers.includes('owner_private_intake'))
 })
 
 test('preserves forbidden claims and false external-effect controls', () => {

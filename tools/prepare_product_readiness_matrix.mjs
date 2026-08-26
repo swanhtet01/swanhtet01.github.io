@@ -9,6 +9,7 @@ import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness
 import { validateOperatingActionBoard } from '../kernel/operating-action-board.mjs'
 import { validateTechnicalEstate } from './manage_technical_estate.mjs'
 import { validateReleaseHandoffPacket } from './prepare_release_handoff.mjs'
+import { validateShopPilotDay0ReadinessPacket } from './prepare_shop_pilot_day0_readiness_packet.mjs'
 
 export const PRODUCT_READINESS_MATRIX_CONTRACT = 'supermega.product-readiness-matrix.v1'
 
@@ -138,8 +139,12 @@ function productEvidenceLevel({ releaseVerified, readinessItem }) {
   return 'source_mapped_unverified'
 }
 
-function productNextAction(productId) {
+function productNextAction(productId, shopPilotDay0Readiness = null) {
   if (productId === 'shop') {
+    if (shopPilotDay0Readiness?.day0Readiness?.intakePacketAccepted === true
+      && shopPilotDay0Readiness?.day0Readiness?.baselinePacketAccepted !== true) {
+      return 'After GitHub main protection and review PR gates, capture the owner-private baseline, rehearse preview, then collect 20 consecutive accepted observed runs before activation review.'
+    }
     return 'After GitHub main protection and review PR gates, capture owner-private baseline and intake, rehearse preview, then collect 20 consecutive accepted observed runs before activation review.'
   }
   if (productId === 'plant') {
@@ -151,12 +156,12 @@ function productNextAction(productId) {
   return 'Keep storefront exception and handoff maintenance only until Shop pilot decision; then prove cart-to-Shop exception handling before payment, delivery, refund, or stock automation.'
 }
 
-function productBlockers(productId, releaseGate, readinessItem, readiness) {
+function productBlockers(productId, releaseGate, readinessItem, readiness, shopPilotDay0Readiness = null) {
   const blockers = []
   if (releaseGate === 'github_main_protection') blockers.push('github_main_protection')
   if (productId === 'shop') {
-    blockers.push('owner_private_baseline')
-    blockers.push('owner_private_intake')
+    if (shopPilotDay0Readiness?.day0Readiness?.baselinePacketAccepted !== true) blockers.push('owner_private_baseline')
+    if (shopPilotDay0Readiness?.day0Readiness?.intakePacketAccepted !== true) blockers.push('owner_private_intake')
     blockers.push('real_shop_pilot_evidence')
   } else {
     blockers.push('shop_pilot_decision_not_complete')
@@ -171,7 +176,7 @@ function productBlockers(productId, releaseGate, readinessItem, readiness) {
   return blockers
 }
 
-function matrixProduct({ product, readinessItem, releaseGate, releaseVerified, readiness }) {
+function matrixProduct({ product, readinessItem, releaseGate, releaseVerified, readiness, shopPilotDay0Readiness }) {
   return {
     productId: text(product.productId, 'product_readiness_matrix_product_id', 40),
     name: text(product.name || product.productId, 'product_readiness_matrix_product_name', 80),
@@ -184,9 +189,9 @@ function matrixProduct({ product, readinessItem, releaseGate, releaseVerified, r
     sourcePathCount: Array.isArray(product.sourcePaths) ? product.sourcePaths.length : 0,
     workOrderId: text(readinessItem?.workOrderId || product.workOrderId || `${product.productId}-work-order`, 'product_readiness_matrix_work_order', 120),
     evidenceLevel: productEvidenceLevel({ releaseVerified, readinessItem }),
-    currentBlockers: productBlockers(product.productId, releaseGate, readinessItem, readiness),
+    currentBlockers: productBlockers(product.productId, releaseGate, readinessItem, readiness, shopPilotDay0Readiness),
     requiredProof: text(readinessItem?.requiredProof || product.requiredProof, 'product_readiness_matrix_required_proof', 520),
-    nextAction: productNextAction(product.productId),
+    nextAction: productNextAction(product.productId, shopPilotDay0Readiness),
     claims: {
       localCandidateVerified: releaseVerified && readinessItem?.localStatus === 'release-candidate-local',
       productionLive: false,
@@ -203,9 +208,10 @@ export function buildProductReadinessMatrix({
   technicalEstate,
   readiness,
   operatingActionBoard,
+  shopPilotDay0Readiness = null,
   sourceDigests = {},
 } = {}) {
-  assertPublicSafe({ releaseHandoff, technicalEstate, readiness, operatingActionBoard })
+  assertPublicSafe({ releaseHandoff, technicalEstate, readiness, operatingActionBoard, shopPilotDay0Readiness })
   if (!isRecord(releaseHandoff)) fail('product_readiness_matrix_handoff_required')
   if (!isRecord(technicalEstate)) fail('product_readiness_matrix_estate_required')
   if (!isRecord(readiness)) fail('product_readiness_matrix_readiness_required')
@@ -223,6 +229,9 @@ export function buildProductReadinessMatrix({
     && releaseHandoff.verification?.verifiedCommit === releaseCommit
   const releaseGate = releaseGateFrom(releaseHandoff)
   const readinessByProduct = new Map((readiness.products || []).map((item) => [item.productId, item]))
+  const shopPilotDay0Packet = shopPilotDay0Readiness
+    ? validateShopPilotDay0ReadinessPacket(shopPilotDay0Readiness)
+    : null
   const matrix = {
     contract: PRODUCT_READINESS_MATRIX_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -253,6 +262,7 @@ export function buildProductReadinessMatrix({
       releaseGate,
       releaseVerified,
       readiness,
+      shopPilotDay0Readiness: shopPilotDay0Packet,
     })),
     operatingLoop: {
       actionBoardContract: text(operatingActionBoard.contract, 'product_readiness_matrix_action_contract', 100),
@@ -277,6 +287,9 @@ export function buildProductReadinessMatrix({
       technicalEstateDigest: sourceDigestFor(sourceDigests.technicalEstate || { packet: technicalEstate }),
       managedReadinessDigest: sourceDigestFor(sourceDigests.readiness || { packet: readiness }),
       operatingActionBoardDigest: sourceDigestFor(sourceDigests.operatingActionBoard || { packet: operatingActionBoard }),
+      ...(shopPilotDay0Packet
+        ? { shopPilotDay0ReadinessDigest: sourceDigestFor(sourceDigests.shopPilotDay0Readiness || { packet: shopPilotDay0Packet }) }
+        : {}),
     },
     controls: Object.fromEntries(FALSE_CONTROL_FIELDS.map((field) => [field, false])),
   }
@@ -339,6 +352,8 @@ export function validateProductReadinessMatrix(matrix) {
     || !DIGEST_PATTERN.test(matrix.sourceDigests.technicalEstateDigest || '')
     || !DIGEST_PATTERN.test(matrix.sourceDigests.managedReadinessDigest || '')
     || !DIGEST_PATTERN.test(matrix.sourceDigests.operatingActionBoardDigest || '')) fail('product_readiness_matrix_source_digests_invalid')
+  if (matrix.sourceDigests.shopPilotDay0ReadinessDigest !== undefined
+    && !DIGEST_PATTERN.test(matrix.sourceDigests.shopPilotDay0ReadinessDigest || '')) fail('product_readiness_matrix_source_digests_invalid')
   if (!isRecord(matrix.controls) || FALSE_CONTROL_FIELDS.some((field) => matrix.controls[field] !== false)) fail('product_readiness_matrix_controls_invalid')
   exactDigest(matrix.digest, 'product_readiness_matrix_digest_invalid')
   if (matrix.digest !== packetDigest(cloneWithoutDigest(matrix))) fail('product_readiness_matrix_digest_mismatch')
@@ -480,6 +495,7 @@ function parseArgs(argv) {
     technicalEstate: DEFAULT_TECHNICAL_ESTATE,
     readiness: DEFAULT_READINESS,
     operatingActionBoard: DEFAULT_OPERATING_ACTION_BOARD,
+    shopPilotDay0Readiness: null,
     output: null,
     markdownOutput: null,
   }
@@ -491,6 +507,7 @@ function parseArgs(argv) {
     else if (arg === '--technical-estate') options.technicalEstate = argv[++index] || null
     else if (arg === '--readiness') options.readiness = argv[++index] || null
     else if (arg === '--operating-action-board') options.operatingActionBoard = argv[++index] || null
+    else if (arg === '--shop-day0-readiness') options.shopPilotDay0Readiness = argv[++index] || null
     else if (arg === '--output') options.output = argv[++index] || null
     else if (arg === '--markdown-output') options.markdownOutput = argv[++index] || null
     else fail(`product_readiness_matrix_usage_invalid:${arg}`)
@@ -523,17 +540,22 @@ async function main() {
   const estateReceipt = await readJsonReceipt(options.technicalEstate, validateTechnicalEstate, 'product_readiness_matrix_estate')
   const readinessReceipt = await readJsonReceipt(options.readiness, validateManagedPilotReadiness, 'product_readiness_matrix_readiness')
   const actionBoardReceipt = await readJsonReceipt(options.operatingActionBoard, validateOperatingActionBoard, 'product_readiness_matrix_action_board')
+  const shopPilotDay0Receipt = options.shopPilotDay0Readiness
+    ? await readJsonReceipt(options.shopPilotDay0Readiness, validateShopPilotDay0ReadinessPacket, 'product_readiness_matrix_shop_day0')
+    : null
   const packet = buildProductReadinessMatrix({
     generatedAt: new Date().toISOString(),
     releaseHandoff: handoffReceipt.packet,
     technicalEstate: estateReceipt.packet,
     readiness: readinessReceipt.packet,
     operatingActionBoard: actionBoardReceipt.packet,
+    shopPilotDay0Readiness: shopPilotDay0Receipt?.packet || null,
     sourceDigests: {
       releaseHandoff: handoffReceipt,
       technicalEstate: estateReceipt,
       readiness: readinessReceipt,
       operatingActionBoard: actionBoardReceipt,
+      ...(shopPilotDay0Receipt ? { shopPilotDay0Readiness: shopPilotDay0Receipt } : {}),
     },
   })
   await writeExclusive(options.output, `${JSON.stringify(packet, null, 2)}\n`)
