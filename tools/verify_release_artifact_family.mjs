@@ -158,6 +158,35 @@ export function verifyShopPrivateIntakeDay0Binding(shopPilotDay0Readiness, extra
   return true
 }
 
+function releaseBlockerForGate(gateId) {
+  if (gateId === 'github_main_protection') return 'github_main_protection_unverified'
+  if (gateId === 'review_branch_push') return 'review_branch_push_missing'
+  if (gateId === 'pull_request_creation') return 'pull_request_creation_missing'
+  fail('release_artifact_family_shop_day0_release_gate_invalid')
+}
+
+export function verifyShopDay0ReleaseGateBinding(shopPilotDay0Readiness, controlIndex) {
+  const gateId = controlIndex.currentOwnerAction.gateId
+  const expectedBlocker = releaseBlockerForGate(gateId)
+  if (shopPilotDay0Readiness.sourceDigests?.currentReleaseControlIndexDigest !== controlIndex.digest) {
+    fail('release_artifact_family_shop_day0_release_control_digest_mismatch')
+  }
+  if (shopPilotDay0Readiness.releaseGate?.currentReleaseControlIndexProvided !== true
+    || shopPilotDay0Readiness.releaseGate?.currentReleaseControlIndexDigest !== controlIndex.digest
+    || shopPilotDay0Readiness.releaseGate?.currentGateId !== gateId
+    || shopPilotDay0Readiness.releaseGate?.currentBlocker !== expectedBlocker
+    || shopPilotDay0Readiness.releaseGate?.mainProtectionVerified !== (gateId !== 'github_main_protection')) {
+    fail('release_artifact_family_shop_day0_release_gate_mismatch')
+  }
+  if (!shopPilotDay0Readiness.blockers?.includes(expectedBlocker)) {
+    fail('release_artifact_family_shop_day0_release_blocker_missing')
+  }
+  if (gateId !== 'github_main_protection' && shopPilotDay0Readiness.blockers?.includes('github_main_protection_unverified')) {
+    fail('release_artifact_family_shop_day0_stale_github_blocker')
+  }
+  return true
+}
+
 function artifactPath(artifactsDir, fileName) {
   if (!fileName || fileName.includes('/') || fileName.includes('\\')) fail('release_artifact_family_file_name_invalid')
   return resolve(artifactsDir, fileName)
@@ -374,6 +403,7 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
       sourceDigest: verifiedSourceDigests.shopPilotDay0Readiness,
     },
   )
+  verifyShopDay0ReleaseGateBinding(verifiedPackets.shopPilotDay0Readiness, controlIndex)
   const adminTechnicalCoordination = await verifyRequiredAdminTechnicalCoordinationArtifact(
     baseDir,
     family,

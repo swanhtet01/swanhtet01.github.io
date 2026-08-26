@@ -6,6 +6,7 @@ import {
   runSelfTest,
   scanOwnerFacingText,
   verifyAdminTechnicalCoordinationBinding,
+  verifyShopDay0ReleaseGateBinding,
   verifyShopPrivateIntakeDay0Binding,
   verifyShopDay0ProductMatrixBinding,
   verifyReleaseArtifactFamily,
@@ -175,4 +176,32 @@ test('private intake packet must be reflected in Day-0 readiness', () => {
     day0Readiness: { intakePacketAccepted: true },
     sourceDigests: {},
   }, ['shop_private_intake_packet']), /shop_private_intake_digest_missing/)
+})
+
+test('Shop Day-0 release gate must match the current release index', () => {
+  const digest = `sha256:${'a'.repeat(64)}`
+  const controlIndex = {
+    digest,
+    currentOwnerAction: { gateId: 'review_branch_push' },
+  }
+  const day0 = {
+    sourceDigests: { currentReleaseControlIndexDigest: digest },
+    releaseGate: {
+      currentReleaseControlIndexProvided: true,
+      currentReleaseControlIndexDigest: digest,
+      currentGateId: 'review_branch_push',
+      currentBlocker: 'review_branch_push_missing',
+      mainProtectionVerified: true,
+    },
+    blockers: ['owner_observed_baseline_packet_missing', 'review_branch_push_missing', 'preview_rehearsal_missing'],
+  }
+  assert.equal(verifyShopDay0ReleaseGateBinding(day0, controlIndex), true)
+  assert.throws(() => verifyShopDay0ReleaseGateBinding({
+    ...day0,
+    blockers: [...day0.blockers, 'github_main_protection_unverified'],
+  }, controlIndex), /stale_github_blocker/)
+  assert.throws(() => verifyShopDay0ReleaseGateBinding({
+    ...day0,
+    sourceDigests: { currentReleaseControlIndexDigest: `sha256:${'b'.repeat(64)}` },
+  }, controlIndex), /release_control_digest_mismatch/)
 })

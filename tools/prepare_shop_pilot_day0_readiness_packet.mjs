@@ -36,6 +36,12 @@ const STATUSES = [
   'blocked_owner_observed_baseline_required',
   'day0_owner_private_handoff_ready',
 ]
+const RELEASE_CONTROL_INDEX_CONTRACT = 'supermega.current-release-control-index.v1'
+const RELEASE_CONTROL_GATE_IDS = [
+  'github_main_protection',
+  'review_branch_push',
+  'pull_request_creation',
+]
 const SECRET_OR_PRIVATE_PATTERNS = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /sk-proj-[A-Za-z0-9_-]{20,}/,
@@ -150,7 +156,63 @@ function day0Status(launchGateReport) {
   return 'blocked_owner_baseline_and_intake_required'
 }
 
-function blockersFor(status, launchGateReport) {
+function releaseBlockerForGate(gateId) {
+  if (gateId === 'github_main_protection') return 'github_main_protection_unverified'
+  if (gateId === 'review_branch_push') return 'review_branch_push_missing'
+  if (gateId === 'pull_request_creation') return 'pull_request_creation_missing'
+  fail('shop_pilot_day0_release_gate_invalid')
+}
+
+function releaseControlSummaryFor(input, launchGateReport) {
+  const controlIndex = input?.currentReleaseControlIndex || null
+  if (!controlIndex) {
+    return {
+      provided: false,
+      digest: null,
+      currentGateId: 'github_main_protection',
+      mainProtectionVerified: false,
+      currentBlocker: 'github_main_protection_unverified',
+      source: 'not_supplied_fail_closed',
+    }
+  }
+  assertNoPrivateOrSecretShape(controlIndex, 'shop_pilot_day0_release_control_private_or_secret_shape')
+  if (!isRecord(controlIndex) || controlIndex.contract !== RELEASE_CONTROL_INDEX_CONTRACT) {
+    fail('shop_pilot_day0_release_control_contract_invalid')
+  }
+  const { digest: actualDigest, ...body } = controlIndex
+  if (!DIGEST_PATTERN.test(String(actualDigest || '')) || actualDigest !== digest(JSON.stringify(body))) {
+    fail('shop_pilot_day0_release_control_digest_invalid')
+  }
+  const gateId = String(controlIndex.currentOwnerAction?.gateId || '')
+  if (!RELEASE_CONTROL_GATE_IDS.includes(gateId)) fail('shop_pilot_day0_release_gate_invalid')
+  const releaseCommit = String(controlIndex.candidate?.commit || '')
+  const launchCommit = String(launchGateReport.candidate?.head || '')
+  if (releaseCommit && launchCommit && releaseCommit !== launchCommit) {
+    fail('shop_pilot_day0_release_control_candidate_mismatch')
+  }
+  if (controlIndex.currentOwnerAction?.branchPushAllowedNow !== false
+    || controlIndex.currentOwnerAction?.pullRequestAllowedNow !== false
+    || controlIndex.currentOwnerAction?.deployAllowedNow !== false
+    || controlIndex.currentOwnerAction?.supabaseWriteAllowedNow !== false
+    || controlIndex.currentOwnerAction?.customerContactAllowedNow !== false
+    || controlIndex.currentOwnerAction?.paymentOrStockAllowedNow !== false
+    || controlIndex.currentOwnerAction?.managedActivationAllowedNow !== false) {
+    fail('shop_pilot_day0_release_control_owner_action_invalid')
+  }
+  if (!isRecord(controlIndex.controls) || Object.values(controlIndex.controls).some((value) => value !== false)) {
+    fail('shop_pilot_day0_release_control_controls_invalid')
+  }
+  return {
+    provided: true,
+    digest: actualDigest,
+    currentGateId: gateId,
+    mainProtectionVerified: gateId !== 'github_main_protection',
+    currentBlocker: releaseBlockerForGate(gateId),
+    source: 'current_release_control_index',
+  }
+}
+
+function blockersFor(status, launchGateReport, releaseControl) {
   const blockers = []
   if (status === 'blocked_launch_gate_failed') blockers.push(...(launchGateReport.failures || ['launch_gate_failed']))
   if (status === 'blocked_owner_baseline_and_intake_required' || status === 'blocked_owner_observed_baseline_required') {
@@ -159,7 +221,7 @@ function blockersFor(status, launchGateReport) {
   if (status === 'blocked_owner_baseline_and_intake_required' || status === 'blocked_owner_private_intake_required') {
     blockers.push('owner_private_intake_packet_missing')
   }
-  blockers.push('github_main_protection_unverified')
+  blockers.push(releaseControl.currentBlocker)
   blockers.push('preview_rehearsal_missing')
   blockers.push('real_pilot_evidence_missing')
   return [...new Set(blockers)]
@@ -469,6 +531,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
   assertNoPrivateOrSecretShape(input.launchGateReport)
   assertNoPrivateOrSecretShape(input.ownerPrivatePreparation)
   const launchGateReport = validateLaunchGateDigest(input.launchGateReport)
+  const releaseControl = releaseControlSummaryFor(input, launchGateReport)
   const status = day0Status(launchGateReport)
   const baselineAccepted = launchGateReport.launchReadiness?.baselinePacketAccepted === true
   const intakeAccepted = launchGateReport.launchReadiness?.intakePacketAccepted === true
@@ -479,6 +542,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
     baselinePrivateInputDigest: launchGateReport.launchReadiness?.baselinePrivateInputDigest || null,
     intakePacketDigest: launchGateReport.launchReadiness?.intakePacketDigest || null,
     publicBoundaryDigest: launchGateReport.publicBoundary?.fileDigest || null,
+    currentReleaseControlIndexDigest: releaseControl.digest,
   }
   const body = {
     contract: SHOP_PILOT_DAY0_READINESS_CONTRACT,
@@ -517,12 +581,28 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       readyForPromotionEvidence: false,
     },
     pilotWindow: launchGateReport.baselineEvidence?.pilotWindow || null,
+    releaseGate: {
+      source: releaseControl.source,
+      currentGateId: releaseControl.currentGateId,
+      currentBlocker: releaseControl.currentBlocker,
+      currentReleaseControlIndexProvided: releaseControl.provided,
+      currentReleaseControlIndexDigest: releaseControl.digest,
+      mainProtectionVerified: releaseControl.mainProtectionVerified,
+      ownerApprovalStillRequired: true,
+      branchPushAllowedNow: false,
+      pullRequestAllowedNow: false,
+      deployAllowedNow: false,
+      supabaseWriteAllowedNow: false,
+      customerContactAllowedNow: false,
+      paymentOrStockAllowedNow: false,
+      managedActivationAllowedNow: false,
+    },
     ownerAction: ownerActionFor(status),
     nextOwnerPrivateStep: nextOwnerPrivateStepFor(status),
     ownerPrivatePreparation: ownerPrivatePreparationFor(status, sourceDigests, input.ownerPrivatePreparation),
     ownerPrivateObservationBridge: ownerPrivateObservationBridgeFor(status),
     ownerPrivateBaselineChecklist: ownerPrivateBaselineChecklistFor(status, launchGateReport),
-    blockers: blockersFor(status, launchGateReport),
+    blockers: blockersFor(status, launchGateReport, releaseControl),
     privateCommands: [
       'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
       'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
@@ -589,10 +669,34 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
   if (!isRecord(packet.sourceDigests)
     || !DIGEST_PATTERN.test(packet.sourceDigests.launchGateDigest || '')
     || (baselineAccepted && !DIGEST_PATTERN.test(packet.sourceDigests.baselinePacketDigest || ''))
-    || (intakeAccepted && !DIGEST_PATTERN.test(packet.sourceDigests.intakePacketDigest || ''))) {
+    || (intakeAccepted && !DIGEST_PATTERN.test(packet.sourceDigests.intakePacketDigest || ''))
+    || (packet.sourceDigests.currentReleaseControlIndexDigest !== null && !DIGEST_PATTERN.test(packet.sourceDigests.currentReleaseControlIndexDigest || ''))) {
     fail('shop_pilot_day0_source_digests_invalid')
   }
   if (!Array.isArray(packet.blockers) || packet.blockers.length < 3) fail('shop_pilot_day0_blockers_invalid')
+  if (!isRecord(packet.releaseGate)
+    || !RELEASE_CONTROL_GATE_IDS.includes(packet.releaseGate.currentGateId)
+    || packet.releaseGate.currentBlocker !== releaseBlockerForGate(packet.releaseGate.currentGateId)
+    || packet.releaseGate.ownerApprovalStillRequired !== true
+    || packet.releaseGate.branchPushAllowedNow !== false
+    || packet.releaseGate.pullRequestAllowedNow !== false
+    || packet.releaseGate.deployAllowedNow !== false
+    || packet.releaseGate.supabaseWriteAllowedNow !== false
+    || packet.releaseGate.customerContactAllowedNow !== false
+    || packet.releaseGate.paymentOrStockAllowedNow !== false
+    || packet.releaseGate.managedActivationAllowedNow !== false
+    || packet.releaseGate.currentReleaseControlIndexDigest !== packet.sourceDigests.currentReleaseControlIndexDigest
+    || (packet.releaseGate.currentReleaseControlIndexProvided !== true && packet.releaseGate.source !== 'not_supplied_fail_closed')
+    || (packet.releaseGate.currentReleaseControlIndexProvided === true && packet.releaseGate.source !== 'current_release_control_index')
+    || (packet.releaseGate.currentReleaseControlIndexProvided === true && !DIGEST_PATTERN.test(packet.releaseGate.currentReleaseControlIndexDigest || ''))
+    || (packet.releaseGate.currentReleaseControlIndexProvided !== true && packet.releaseGate.currentReleaseControlIndexDigest !== null)
+    || packet.releaseGate.mainProtectionVerified !== (packet.releaseGate.currentGateId !== 'github_main_protection')) {
+    fail('shop_pilot_day0_release_gate_invalid')
+  }
+  if (!packet.blockers.includes(packet.releaseGate.currentBlocker)) fail('shop_pilot_day0_release_gate_blocker_missing')
+  if (packet.releaseGate.currentGateId !== 'github_main_protection' && packet.blockers.includes('github_main_protection_unverified')) {
+    fail('shop_pilot_day0_stale_github_main_protection_blocker')
+  }
   if (!isRecord(packet.nextOwnerPrivateStep)
     || typeof packet.nextOwnerPrivateStep.id !== 'string'
     || typeof packet.nextOwnerPrivateStep.label !== 'string'
@@ -751,6 +855,14 @@ Candidate: \`${packet.candidate.branch || 'unknown'} @ ${packet.candidate.head |
 - Ready for customer contact: false
 - Ready for deployment or managed activation: false
 
+## Release gate
+
+- Source: ${packet.releaseGate.source}
+- Current gate: \`${packet.releaseGate.currentGateId}\`
+- Current release blocker: \`${packet.releaseGate.currentBlocker}\`
+- Main protection verified: ${packet.releaseGate.mainProtectionVerified}
+- Owner approval still required: true
+
 ## Next owner-private step
 
 - Step: ${packet.nextOwnerPrivateStep.label} (${packet.nextOwnerPrivateStep.id})
@@ -858,6 +970,45 @@ function runSelfTest() {
   const withBoth = buildShopPilotDay0ReadinessPacket(sampleShopPilotDay0ReadinessInput({
     launchGateReport: assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ baselinePacket, intakePacket })),
   }))
+  const releaseControlInput = sampleShopPilotDay0ReadinessInput({
+    launchGateReport: assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ intakePacket })),
+  })
+  const releaseControlBody = {
+    contract: RELEASE_CONTROL_INDEX_CONTRACT,
+    mode: 'local_owner_control_no_external_effects',
+    candidate: {
+      commit: releaseControlInput.launchGateReport.candidate.head,
+    },
+    currentOwnerAction: {
+      gateId: 'review_branch_push',
+      branchPushAllowedNow: false,
+      pullRequestAllowedNow: false,
+      deployAllowedNow: false,
+      supabaseWriteAllowedNow: false,
+      customerContactAllowedNow: false,
+      paymentOrStockAllowedNow: false,
+      managedActivationAllowedNow: false,
+    },
+    controls: {
+      externalWritesPerformed: false,
+      gitRemoteWritesPerformed: false,
+      githubWritesPerformed: false,
+      vercelDeploymentsPerformed: false,
+      supabaseMutationsPerformed: false,
+      credentialValuesInspected: false,
+      customerContactPerformed: false,
+      paymentOrStockActionPerformed: false,
+      managedActivationPerformed: false,
+    },
+  }
+  const releaseControlIndex = {
+    ...releaseControlBody,
+    digest: digest(JSON.stringify(releaseControlBody)),
+  }
+  const withReleaseControl = buildShopPilotDay0ReadinessPacket({
+    ...releaseControlInput,
+    currentReleaseControlIndex: releaseControlIndex,
+  })
   const dirty = buildShopPilotDay0ReadinessPacket(sampleShopPilotDay0ReadinessInput({
     launchGateReport: assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
       gitState: { ...sampleShopPilotLaunchGateInput().gitState, clean: false },
@@ -879,6 +1030,11 @@ function runSelfTest() {
       && withIntake.day0Readiness.intakePacketAccepted === true
       && withIntake.day0Readiness.baselinePacketAccepted === false
       && validateShopPilotDay0ReadinessPacket(withIntake) === withIntake,
+    release_control_replaces_stale_github_blocker: withReleaseControl.releaseGate.currentGateId === 'review_branch_push'
+      && withReleaseControl.releaseGate.mainProtectionVerified === true
+      && withReleaseControl.blockers.includes('review_branch_push_missing')
+      && !withReleaseControl.blockers.includes('github_main_protection_unverified')
+      && validateShopPilotDay0ReadinessPacket(withReleaseControl) === withReleaseControl,
     both_packets_ready_still_no_external_effects: withBoth.ok === true
       && withBoth.status === 'day0_owner_private_handoff_ready'
       && withBoth.day0ReadyForOwnerPrivateHandoff === true
@@ -922,6 +1078,7 @@ function parseArgs(argv) {
     intakePacketPath: null,
     baselineTemplatePath: null,
     baselineWorksheetPath: null,
+    currentReleaseControlIndexPath: null,
     output: null,
     markdownOutput: null,
   }
@@ -933,6 +1090,7 @@ function parseArgs(argv) {
     else if (arg === '--intake-packet') options.intakePacketPath = argv[++index] || null
     else if (arg === '--baseline-template') options.baselineTemplatePath = argv[++index] || null
     else if (arg === '--baseline-worksheet') options.baselineWorksheetPath = argv[++index] || null
+    else if (arg === '--current-release-control-index') options.currentReleaseControlIndexPath = argv[++index] || null
     else if (arg === '--output') options.output = argv[++index] || null
     else if (arg === '--markdown-output') options.markdownOutput = argv[++index] || null
     else fail(`shop_pilot_day0_usage_invalid:${arg}`)
@@ -997,6 +1155,7 @@ async function main() {
       intakePacketPath: options.intakePacketPath,
     }),
     ownerPrivatePreparation: await ownerPrivatePreparationFromFiles(options),
+    currentReleaseControlIndex: options.currentReleaseControlIndexPath ? await readJson(options.currentReleaseControlIndexPath) : null,
   }))
   if (options.output) await writeOutput(options.output, `${JSON.stringify(packet, null, 2)}\n`)
   if (options.markdownOutput) await writeOutput(options.markdownOutput, `${renderShopPilotDay0ReadinessMarkdown(packet)}\n`)
