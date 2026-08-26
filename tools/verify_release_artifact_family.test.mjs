@@ -5,6 +5,7 @@ import {
   RELEASE_ARTIFACT_FAMILY_VERIFIER_CONTRACT,
   runSelfTest,
   scanOwnerFacingText,
+  verifyShopDay0ProductMatrixBinding,
   verifyReleaseArtifactFamily,
 } from './verify_release_artifact_family.mjs'
 
@@ -39,4 +40,36 @@ test('artifact verification requires an explicit control index path', async () =
     () => verifyReleaseArtifactFamily(),
     /release_artifact_family_control_index_missing/,
   )
+})
+
+test('product matrix must stay bound to Shop Day-0 intake and baseline state', () => {
+  const day0Artifact = { digest: `sha256:${'a'.repeat(64)}` }
+  const matrix = {
+    sourceDigests: { shopPilotDay0ReadinessDigest: day0Artifact.digest },
+    products: [
+      {
+        productId: 'shop',
+        currentBlockers: ['github_main_protection', 'owner_private_baseline', 'real_shop_pilot_evidence'],
+      },
+    ],
+  }
+  const day0 = {
+    day0Readiness: {
+      baselinePacketAccepted: false,
+      intakePacketAccepted: true,
+    },
+  }
+  assert.equal(verifyShopDay0ProductMatrixBinding(matrix, day0, day0Artifact), true)
+  assert.throws(() => verifyShopDay0ProductMatrixBinding({
+    ...matrix,
+    sourceDigests: { shopPilotDay0ReadinessDigest: `sha256:${'b'.repeat(64)}` },
+  }, day0, day0Artifact), /shop_day0_digest_mismatch/)
+  assert.throws(() => verifyShopDay0ProductMatrixBinding({
+    ...matrix,
+    products: [{ productId: 'shop', currentBlockers: [...matrix.products[0].currentBlockers, 'owner_private_intake'] }],
+  }, day0, day0Artifact), /stale_shop_intake_blocker/)
+  assert.throws(() => verifyShopDay0ProductMatrixBinding({
+    ...matrix,
+    products: [{ productId: 'shop', currentBlockers: ['github_main_protection', 'real_shop_pilot_evidence'] }],
+  }, day0, day0Artifact), /missing_shop_baseline_blocker/)
 })

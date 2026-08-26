@@ -108,6 +108,28 @@ function controlsRemainFalse(report) {
   return isRecord(controls) && FALSE_CONTROL_KEYS.every((key) => controls[key] === false || controls[key] === undefined)
 }
 
+export function verifyShopDay0ProductMatrixBinding(productReadinessMatrix, shopPilotDay0Readiness, shopPilotDay0Artifact) {
+  const shopProduct = productReadinessMatrix?.products?.find((product) => product.productId === 'shop')
+  if (!shopProduct) fail('release_artifact_family_product_matrix_shop_missing')
+  if (!Array.isArray(shopProduct.currentBlockers)) fail('release_artifact_family_product_matrix_shop_blockers_invalid')
+  if (productReadinessMatrix.sourceDigests?.shopPilotDay0ReadinessDigest !== shopPilotDay0Artifact?.digest) {
+    fail('release_artifact_family_product_matrix_shop_day0_digest_mismatch')
+  }
+  if (shopPilotDay0Readiness.day0Readiness?.intakePacketAccepted === true
+    && shopProduct.currentBlockers.includes('owner_private_intake')) {
+    fail('release_artifact_family_product_matrix_stale_shop_intake_blocker')
+  }
+  if (shopPilotDay0Readiness.day0Readiness?.baselinePacketAccepted === true
+    && shopProduct.currentBlockers.includes('owner_private_baseline')) {
+    fail('release_artifact_family_product_matrix_stale_shop_baseline_blocker')
+  }
+  if (shopPilotDay0Readiness.day0Readiness?.baselinePacketAccepted !== true
+    && !shopProduct.currentBlockers.includes('owner_private_baseline')) {
+    fail('release_artifact_family_product_matrix_missing_shop_baseline_blocker')
+  }
+  return true
+}
+
 function artifactPath(artifactsDir, fileName) {
   if (!fileName || fileName.includes('/') || fileName.includes('\\')) fail('release_artifact_family_file_name_invalid')
   return resolve(artifactsDir, fileName)
@@ -240,9 +262,11 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     ['shopPilotDay0OwnerBaselineActionCard', validateShopPilotDay0OwnerBaselineActionCard],
   ]
   const semanticArtifacts = ['releaseHandoff', 'githubMainProtectionSnapshot']
+  const verifiedPackets = { releaseHandoff: handoff, githubMainProtectionSnapshot: snapshot }
   for (const [label, validator, options] of jsonArtifacts) {
     const artifact = artifacts[label]
     const packet = validator(await readJson(artifactPath(baseDir, artifact.fileName), `release_artifact_family_${label}_missing`), options)
+    verifiedPackets[label] = packet
     jsonDigestFromPacket(label, packet, artifact)
     semanticArtifacts.push(label)
     if (packet?.candidate?.commit && packet.candidate.commit !== controlIndex.candidate.commit) fail(`release_artifact_family_${label}_candidate_mismatch`)
@@ -250,6 +274,11 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     if (packet?.candidateCommit && packet.candidateCommit !== controlIndex.candidate.commit) fail(`release_artifact_family_${label}_candidate_mismatch`)
     if (packet?.currentAction?.candidateCommit && packet.currentAction.candidateCommit !== controlIndex.candidate.commit) fail(`release_artifact_family_${label}_candidate_mismatch`)
   }
+  verifyShopDay0ProductMatrixBinding(
+    verifiedPackets.productReadinessMatrix,
+    verifiedPackets.shopPilotDay0Readiness,
+    artifacts.shopPilotDay0Readiness,
+  )
 
   const githubProposal = await readJson(GITHUB_PROPOSAL_PATH, 'release_artifact_family_github_proposal_missing')
   const supabaseProposal = await readJson(SUPABASE_PROPOSAL_PATH, 'release_artifact_family_supabase_proposal_missing')
