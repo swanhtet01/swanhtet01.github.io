@@ -6,6 +6,7 @@ import {
   runSelfTest,
   scanOwnerFacingText,
   verifyAdminTechnicalCoordinationBinding,
+  verifyShopPrivateIntakeDay0Binding,
   verifyShopDay0ProductMatrixBinding,
   verifyReleaseArtifactFamily,
 } from './verify_release_artifact_family.mjs'
@@ -154,4 +155,24 @@ test('admin technical coordination packet must bind to the same current release 
     () => verifyAdminTechnicalCoordinationBinding(adminPacket, differentControlIndex, controlIndexFileName),
     /admin_technical_coordination_candidate_mismatch/,
   )
+})
+
+test('private intake packet must be reflected in Day-0 readiness', () => {
+  const sourceDigests = { intakePacketDigest: `sha256:${'a'.repeat(64)}` }
+  assert.equal(verifyShopPrivateIntakeDay0Binding({
+    day0Readiness: { intakePacketAccepted: true },
+    sourceDigests,
+  }, ['shop_private_intake_packet']), true)
+  assert.equal(verifyShopPrivateIntakeDay0Binding({
+    day0Readiness: { intakePacketAccepted: false },
+    sourceDigests: {},
+  }, []), true)
+  assert.throws(() => verifyShopPrivateIntakeDay0Binding({
+    day0Readiness: { intakePacketAccepted: false },
+    sourceDigests,
+  }, ['shop_private_intake_packet']), /shop_private_intake_not_bound_to_day0/)
+  assert.throws(() => verifyShopPrivateIntakeDay0Binding({
+    day0Readiness: { intakePacketAccepted: true },
+    sourceDigests: {},
+  }, ['shop_private_intake_packet']), /shop_private_intake_digest_missing/)
 })

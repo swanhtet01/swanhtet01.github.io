@@ -147,6 +147,17 @@ export function verifyShopDay0ProductMatrixBinding(productReadinessMatrix, shopP
   return true
 }
 
+export function verifyShopPrivateIntakeDay0Binding(shopPilotDay0Readiness, extraArtifacts) {
+  const hasPrivateIntakePacket = Array.isArray(extraArtifacts) && extraArtifacts.includes('shop_private_intake_packet')
+  if (hasPrivateIntakePacket && shopPilotDay0Readiness?.day0Readiness?.intakePacketAccepted !== true) {
+    fail('release_artifact_family_shop_private_intake_not_bound_to_day0')
+  }
+  if (hasPrivateIntakePacket && !DIGEST_PATTERN.test(String(shopPilotDay0Readiness?.sourceDigests?.intakePacketDigest || ''))) {
+    fail('release_artifact_family_shop_private_intake_digest_missing')
+  }
+  return true
+}
+
 function artifactPath(artifactsDir, fileName) {
   if (!fileName || fileName.includes('/') || fileName.includes('\\')) fail('release_artifact_family_file_name_invalid')
   return resolve(artifactsDir, fileName)
@@ -394,6 +405,7 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     const verifiedExtra = await verifyExtraArtifact(baseDir, fileName)
     if (verifiedExtra) extraArtifacts.push(verifiedExtra)
   }
+  verifyShopPrivateIntakeDay0Binding(verifiedPackets.shopPilotDay0Readiness, extraArtifacts)
 
   const ownerFacingNames = new Set([
     basename(controlPath),
