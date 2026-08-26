@@ -26,6 +26,8 @@ test('builds a current release control index for one exact candidate', () => {
   assert.equal(packet.currentOwnerAction.paymentOrStockAllowedNow, false)
   assert.equal(packet.currentOwnerAction.managedActivationAllowedNow, false)
   assert.equal(packet.authoritativeArtifacts.releaseOwnerApprovalPacket.status, 'verified_current')
+  assert.equal(packet.authoritativeArtifacts.githubMainProtectionOwnerActionCard.currentAction, 'github_main_protection')
+  assert.equal(packet.authoritativeArtifacts.shopPilotDay0OwnerBaselineActionCard.currentAction, 'capture-owner-observed-baseline')
   assert.equal(packet.artifactFamily.version, 'v99')
   assert.equal(packet.shopPilot.currentPrivateGate, 'private_observation_incomplete')
   assert.equal(validateCurrentReleaseControlIndex(packet), packet)
@@ -152,6 +154,8 @@ test('renders public-safe markdown and verifies CLI packet', async () => {
     const markdown = await readFile(markdownPath, 'utf8')
     assert.doesNotMatch(markdown, /sk-|github_pat_|ghp_|postgres:|owner@example|ready for managed activation/i)
     assert.match(markdown, /Only the artifacts listed above are current/)
+    assert.match(markdown, /supermega\.github-main-protection-owner-action-card\.v99\.generated-20260826\.json/)
+    assert.match(markdown, /supermega\.shop-pilot-day0-owner-baseline-action-card\.v99\.generated-20260826\.json/)
   } finally {
     await rm(parent, { recursive: true, force: true })
   }

@@ -805,6 +805,8 @@
     "release:pull-request:create:self-test": "node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test",
     "release:owner-approval:packet": "node tools/prepare_release_owner_approval_packet.mjs",
     "release:owner-approval:packet:self-test": "node --test tools/prepare_release_owner_approval_packet.test.mjs && node tools/prepare_release_owner_approval_packet.mjs --self-test",
+    "release:artifact-family:verify": "node tools/verify_release_artifact_family.mjs",
+    "release:artifact-family:self-test": "node --test tools/verify_release_artifact_family.test.mjs && node tools/verify_release_artifact_family.mjs --self-test",
     "release:control-index": "node tools/prepare_current_release_control_index.mjs",
     "release:control-index:self-test": "node --test tools/prepare_current_release_control_index.test.mjs && node tools/prepare_current_release_control_index.mjs --self-test",
     "release:next-action-preflight": "node tools/prepare_next_release_action_preflight.mjs",

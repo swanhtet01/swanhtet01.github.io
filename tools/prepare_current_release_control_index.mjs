@@ -15,7 +15,9 @@ import { validateProductReadinessMatrix } from './prepare_product_readiness_matr
 import { validateSuperMegaStatusBrief } from './prepare_supermega_status_brief.mjs'
 import { validateNextReleaseActionPreflight } from './prepare_next_release_action_preflight.mjs'
 import { validateReleaseOwnerApprovalMarkdown } from './prepare_release_owner_approval_packet.mjs'
+import { validateGitHubMainProtectionOwnerActionCard } from './prepare_github_main_protection_owner_action_card.mjs'
 import { validateShopPilotDay0ReadinessPacket } from './prepare_shop_pilot_day0_readiness_packet.mjs'
+import { validateShopPilotDay0OwnerBaselineActionCard } from './prepare_shop_pilot_day0_owner_baseline_action_card.mjs'
 
 export const CURRENT_RELEASE_CONTROL_INDEX_CONTRACT = 'supermega.current-release-control-index.v1'
 
@@ -129,7 +131,9 @@ function assertSingleArtifactFamilyVersion(paths = {}) {
     'statusBrief',
     'nextReleaseActionPreflight',
     'releaseOwnerApproval',
+    'githubMainProtectionOwnerActionCard',
     'shopPilotDay0Readiness',
+    'shopPilotDay0OwnerBaselineActionCard',
   ]
   const versions = new Map()
   for (const key of required) {
@@ -155,12 +159,17 @@ export function buildCurrentReleaseControlIndex(input = {}) {
   assertCandidateMatch('operator_board', input.operatorBoard?.candidate?.commit, candidateCommit)
   assertCandidateMatch('preflight', preflightCandidateCommit(input.nextReleaseActionPreflight), candidateCommit)
   assertCandidateMatch('owner_approval', input.releaseOwnerApproval?.candidate?.commit, candidateCommit)
+  assertCandidateMatch('github_owner_action_card', input.githubMainProtectionOwnerActionCard?.currentAction?.candidateCommit, candidateCommit)
   if (input.shopPilotDay0Readiness?.candidate?.head) {
     assertCandidateMatch('shop_day0', input.shopPilotDay0Readiness.candidate.head, candidateCommit)
+  }
+  if (input.shopPilotDay0OwnerBaselineActionCard?.candidate?.head) {
+    assertCandidateMatch('shop_day0_owner_baseline_card', input.shopPilotDay0OwnerBaselineActionCard.candidate.head, candidateCommit)
   }
 
   const currentGateId = preflightCurrentGateId(input.nextReleaseActionPreflight)
   if (currentGateId !== 'github_main_protection') fail('current_release_control_index_gate_invalid')
+  if (input.githubMainProtectionOwnerActionCard?.currentAction?.id !== currentGateId) fail('current_release_control_index_github_owner_card_gate_mismatch')
   if (input.operatorBoard?.currentAction?.gateId !== currentGateId) fail('current_release_control_index_operator_gate_mismatch')
   if (input.productReadinessMatrix?.release?.currentGateId !== currentGateId) fail('current_release_control_index_matrix_gate_mismatch')
   if (input.statusBrief?.release?.currentGateId !== currentGateId) fail('current_release_control_index_status_gate_mismatch')
@@ -186,7 +195,9 @@ export function buildCurrentReleaseControlIndex(input = {}) {
     ['status_brief', input.statusBrief?.controls],
     ['preflight', input.nextReleaseActionPreflight],
     ['owner_approval', input.releaseOwnerApproval?.controls],
+    ['github_owner_action_card', input.githubMainProtectionOwnerActionCard?.controls],
     ['shop_day0', input.shopPilotDay0Readiness?.controls],
+    ['shop_day0_owner_baseline_card', input.shopPilotDay0OwnerBaselineActionCard?.controls],
   ]
   for (const [label, sourceControls] of controlSources) {
     if (sourceControls && !controlsFalse(sourceControls)) fail(`current_release_control_index_${label}_controls_invalid`)
@@ -266,10 +277,22 @@ export function buildCurrentReleaseControlIndex(input = {}) {
         digest: input.releaseOwnerApproval.digest,
         status: 'verified_current',
       }),
+      githubMainProtectionOwnerActionCard: compactArtifact({
+        path: input.paths?.githubMainProtectionOwnerActionCard,
+        digest: input.githubMainProtectionOwnerActionCard.digest,
+        status: input.githubMainProtectionOwnerActionCard.currentAction.status,
+        currentAction: input.githubMainProtectionOwnerActionCard.currentAction.id,
+      }),
       shopPilotDay0Readiness: compactArtifact({
         path: input.paths?.shopPilotDay0Readiness,
         digest: input.shopPilotDay0Readiness.digest,
         status: input.shopPilotDay0Readiness.status,
+      }),
+      shopPilotDay0OwnerBaselineActionCard: compactArtifact({
+        path: input.paths?.shopPilotDay0OwnerBaselineActionCard,
+        digest: input.shopPilotDay0OwnerBaselineActionCard.digest,
+        status: input.shopPilotDay0OwnerBaselineActionCard.status,
+        currentAction: input.shopPilotDay0OwnerBaselineActionCard.action.id,
       }),
     },
     stalePacketPolicy: {
@@ -282,6 +305,7 @@ export function buildCurrentReleaseControlIndex(input = {}) {
       gateId: currentGateId,
       label: 'Approve GitHub main protection only',
       sourcePacketFileName: basename(input.paths?.releaseOwnerApproval || ''),
+      sourceActionCardFileName: basename(input.paths?.githubMainProtectionOwnerActionCard || ''),
       exactCommit: candidateCommit,
       externalWriteRequiresOwnerApproval: true,
       branchPushAllowedNow: false,
@@ -297,6 +321,7 @@ export function buildCurrentReleaseControlIndex(input = {}) {
       day0ReadyForOwnerPrivateHandoff: input.shopPilotDay0Readiness.day0ReadyForOwnerPrivateHandoff === true,
       currentPrivateGate: input.shopPilotDay0Readiness.ownerPrivateObservationBridge?.expectedCurrentGate || null,
       nextLocalAction: input.shopPilotDay0Readiness.ownerPrivateObservationBridge?.nextLocalAction || null,
+      ownerBaselineActionCardFileName: basename(input.paths?.shopPilotDay0OwnerBaselineActionCard || ''),
       customerContactAllowed: false,
       managedActivationAllowed: false,
     },
@@ -338,7 +363,9 @@ export function validateCurrentReleaseControlIndex(packet) {
     'statusBrief',
     'nextReleaseActionPreflight',
     'releaseOwnerApprovalPacket',
+    'githubMainProtectionOwnerActionCard',
     'shopPilotDay0Readiness',
+    'shopPilotDay0OwnerBaselineActionCard',
   ]
   if (!isRecord(artifacts)) fail('current_release_control_index_artifacts_invalid')
   for (const key of required) {
@@ -358,6 +385,14 @@ export function validateCurrentReleaseControlIndex(packet) {
     fail('current_release_control_index_artifact_family_mismatch')
   }
   if (artifacts.releaseOwnerApprovalPacket.status !== 'verified_current') fail('current_release_control_index_owner_packet_invalid')
+  if (artifacts.githubMainProtectionOwnerActionCard.status !== 'owner_approval_or_token_required'
+    || artifacts.githubMainProtectionOwnerActionCard.currentAction !== 'github_main_protection') {
+    fail('current_release_control_index_github_owner_action_card_invalid')
+  }
+  if (artifacts.shopPilotDay0OwnerBaselineActionCard.status !== 'owner_observed_baseline_action_required'
+    || artifacts.shopPilotDay0OwnerBaselineActionCard.currentAction !== 'capture-owner-observed-baseline') {
+    fail('current_release_control_index_shop_day0_owner_baseline_card_invalid')
+  }
   if (packet.shopPilot?.customerContactAllowed !== false || packet.shopPilot?.managedActivationAllowed !== false) {
     fail('current_release_control_index_shop_pilot_invalid')
   }
@@ -386,7 +421,7 @@ ${artifactLines}
 
 ## Current owner action
 
-Use \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 1 only: GitHub main protection for \`${packet.currentOwnerAction.exactCommit}\`.
+Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 1 only: GitHub main protection for \`${packet.currentOwnerAction.exactCommit}\`.
 
 - Branch push allowed now: false
 - Pull request allowed now: false
@@ -401,6 +436,7 @@ Use \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 1 
 - Day-0 status: \`${packet.shopPilot.day0Status}\`
 - Private gate: \`${packet.shopPilot.currentPrivateGate || 'not active'}\`
 - Next local action: \`${packet.shopPilot.nextLocalAction || 'none'}\`
+- Owner baseline action card: \`${packet.shopPilot.ownerBaselineActionCardFileName || 'not generated'}\`
 - Customer contact allowed: false
 - Managed activation allowed: false
 
@@ -446,6 +482,8 @@ async function collectInputs(options) {
   const statusBrief = validateSuperMegaStatusBrief(await readJson(options.statusBriefPath, 'current_release_control_index_status_brief_missing'))
   const nextReleaseActionPreflight = validateNextReleaseActionPreflight(await readJson(options.nextReleaseActionPreflightPath, 'current_release_control_index_preflight_missing'))
   const shopPilotDay0Readiness = validateShopPilotDay0ReadinessPacket(await readJson(options.shopPilotDay0ReadinessPath, 'current_release_control_index_shop_day0_missing'))
+  const githubMainProtectionOwnerActionCard = validateGitHubMainProtectionOwnerActionCard(await readJson(options.githubMainProtectionOwnerActionCardPath, 'current_release_control_index_github_owner_action_card_missing'))
+  const shopPilotDay0OwnerBaselineActionCard = validateShopPilotDay0OwnerBaselineActionCard(await readJson(options.shopPilotDay0OwnerBaselineActionCardPath, 'current_release_control_index_shop_day0_owner_baseline_card_missing'))
   const githubProposal = await readJson(GITHUB_PROPOSAL_PATH, 'current_release_control_index_github_proposal_missing')
   const supabaseProposal = await readJson(SUPABASE_PROPOSAL_PATH, 'current_release_control_index_supabase_proposal_missing')
   const releaseOwnerApprovalMarkdown = await readText(options.releaseOwnerApprovalPath, 'current_release_control_index_owner_approval_missing')
@@ -492,7 +530,9 @@ async function collectInputs(options) {
     statusBrief,
     nextReleaseActionPreflight,
     releaseOwnerApproval,
+    githubMainProtectionOwnerActionCard,
     shopPilotDay0Readiness,
+    shopPilotDay0OwnerBaselineActionCard,
     staleOwnerApprovalPacketObserved,
     staleOwnerApprovalPacketFileName,
     staleOwnerApprovalRejection,
@@ -507,7 +547,9 @@ async function collectInputs(options) {
       statusBrief: options.statusBriefPath,
       nextReleaseActionPreflight: options.nextReleaseActionPreflightPath,
       releaseOwnerApproval: options.releaseOwnerApprovalPath,
+      githubMainProtectionOwnerActionCard: options.githubMainProtectionOwnerActionCardPath,
       shopPilotDay0Readiness: options.shopPilotDay0ReadinessPath,
+      shopPilotDay0OwnerBaselineActionCard: options.shopPilotDay0OwnerBaselineActionCardPath,
     },
   }
 }
@@ -537,6 +579,15 @@ export function sampleCurrentReleaseControlIndexInput(overrides = {}) {
     statusBrief: { digest: digestA, release: { currentGateId: 'github_main_protection' }, controls },
     nextReleaseActionPreflight: { digest: digestB, candidateCommit: commit, currentGateId: 'github_main_protection', controls },
     releaseOwnerApproval: { digest: digestC, candidate: { commit }, controls },
+    githubMainProtectionOwnerActionCard: {
+      digest: digestA,
+      currentAction: {
+        id: 'github_main_protection',
+        status: 'owner_approval_or_token_required',
+        candidateCommit: commit,
+      },
+      controls,
+    },
     shopPilotDay0Readiness: {
       digest: digestA,
       status: 'blocked_owner_observed_baseline_required',
@@ -546,6 +597,13 @@ export function sampleCurrentReleaseControlIndexInput(overrides = {}) {
         expectedCurrentGate: 'private_observation_incomplete',
         nextLocalAction: 'perform_real_observation_and_fill_private_evidence_anchor',
       },
+      controls,
+    },
+    shopPilotDay0OwnerBaselineActionCard: {
+      digest: digestB,
+      status: 'owner_observed_baseline_action_required',
+      candidate: { head: commit },
+      action: { id: 'capture-owner-observed-baseline' },
       controls,
     },
     paths: {
@@ -559,7 +617,9 @@ export function sampleCurrentReleaseControlIndexInput(overrides = {}) {
       statusBrief: 'supermega.status-brief.v99.generated-20260826.json',
       nextReleaseActionPreflight: 'supermega.next-release-action-preflight.v99.generated-20260826.json',
       releaseOwnerApproval: 'supermega.release-owner-approval-packet.v99.generated-20260826.md',
+      githubMainProtectionOwnerActionCard: 'supermega.github-main-protection-owner-action-card.v99.generated-20260826.json',
       shopPilotDay0Readiness: 'supermega.shop-pilot-day0-readiness.v99.generated-20260826.json',
+      shopPilotDay0OwnerBaselineActionCard: 'supermega.shop-pilot-day0-owner-baseline-action-card.v99.generated-20260826.json',
     },
     ...overrides,
   }
@@ -582,6 +642,8 @@ export function runSelfTest() {
   const checks = {
     validates_current_index: validateCurrentReleaseControlIndex(packet) === packet,
     markdown_names_current_owner_packet: markdown.includes('supermega.release-owner-approval-packet.v99.generated-20260826.md'),
+    markdown_names_current_owner_action_card: markdown.includes('supermega.github-main-protection-owner-action-card.v99.generated-20260826.json'),
+    markdown_names_current_shop_day0_owner_card: markdown.includes('supermega.shop-pilot-day0-owner-baseline-action-card.v99.generated-20260826.json'),
     stale_owner_packet_recorded_without_authority: validateCurrentReleaseControlIndex(stalePacket) === stalePacket
       && stalePacket.stalePacketPolicy.staleOwnerApprovalPacketObserved === true
       && stalePacket.currentOwnerAction.sourcePacketFileName !== stalePacket.stalePacketPolicy.staleOwnerApprovalPacketFileName,
@@ -629,7 +691,9 @@ function parseArgs(argv) {
     statusBriefPath: null,
     nextReleaseActionPreflightPath: null,
     releaseOwnerApprovalPath: null,
+    githubMainProtectionOwnerActionCardPath: null,
     shopPilotDay0ReadinessPath: null,
+    shopPilotDay0OwnerBaselineActionCardPath: null,
     staleOwnerApprovalPath: null,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -648,7 +712,9 @@ function parseArgs(argv) {
     else if (arg === '--status-brief') options.statusBriefPath = argv[++index] || null
     else if (arg === '--next-release-action-preflight') options.nextReleaseActionPreflightPath = argv[++index] || null
     else if (arg === '--release-owner-approval') options.releaseOwnerApprovalPath = argv[++index] || null
+    else if (arg === '--github-owner-action-card') options.githubMainProtectionOwnerActionCardPath = argv[++index] || null
     else if (arg === '--shop-day0-readiness') options.shopPilotDay0ReadinessPath = argv[++index] || null
+    else if (arg === '--shop-day0-owner-baseline-card') options.shopPilotDay0OwnerBaselineActionCardPath = argv[++index] || null
     else if (arg === '--stale-owner-approval') options.staleOwnerApprovalPath = argv[++index] || null
     else fail(`current_release_control_index_usage_invalid:${arg}`)
   }
