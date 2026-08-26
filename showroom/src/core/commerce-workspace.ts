@@ -5701,11 +5701,23 @@ export function commerceStorefrontRequests(state: CommerceState) {
   return state.storefrontRequests ?? []
 }
 
+// Read on every workspace change -- which is once per sale -- so this validates the state it
+// was handed rather than a deep copy of it. The copy that used to open this function bought
+// nothing: validateCommerceState is a PREDICATE and not a normaliser, returning its argument
+// by reference and leaving it byte for byte as it found it (pinned in
+// test_commerce_state_validator.mjs), so there was never a mutation here for a caller to be
+// defended against. Nor was the copy what kept callers unaliased -- every order and request
+// this function hands back is cloned individually on its way out, below.
+//
+// Measured 2026-08-24 on a Shop driven to its enforced 2 MiB ceiling through the real
+// transitions (2,229 orders, 2,090,587 bytes) with the buying contract's own ceiling of 100
+// storefront requests: the copy was 11 ms of the 129 ms this call costs. Pinned by count
+// rather than by clock in test_ecommerce_order_coexistence.mjs (5d).
 export function commerceStorefrontOrderTimeline(
   state: CommerceState,
   requests: CommerceStorefrontRequest[] = commerceStorefrontRequests(state),
 ): CommerceStorefrontOrderTimelineEntry[] {
-  const current = validateCommerceState(structuredClone(state))
+  const current = validateCommerceState(state)
   const seenIds = new Set<string>()
   for (const request of requests) {
     if (seenIds.has(request.id)) throw new Error(`Duplicate Ecommerce request ${request.id} cannot be projected.`)

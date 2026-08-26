@@ -28,6 +28,7 @@ const bundle = await build({
       commerceOrderAcknowledgementReader, receiveCommerceStock,
       commerceOrderHasReleasableReservation, advanceCommerceOrder, reconcileCommercePayment,
       commerceOrderCorrectionExpectation, recordCommerceOrderCorrection,
+      commerceStorefrontOrderTimeline, validateCommerceState,
     } from './commerce-workspace.ts'
     export {
       ecommerceCancellationMatchesCurrentShop, buildEcommerceCancellationIntent,
@@ -47,6 +48,7 @@ const {
   commerceOrderAcknowledgementReader, receiveCommerceStock,
   commerceOrderHasReleasableReservation, advanceCommerceOrder, reconcileCommercePayment,
   commerceOrderCorrectionExpectation, recordCommerceOrderCorrection,
+  commerceStorefrontOrderTimeline, validateCommerceState,
   ecommerceCancellationMatchesCurrentShop, buildEcommerceCancellationIntent,
   createEmptyEcommerceBuyingState, recordEcommerceOrderRequestV2, recordEcommerceCancellationIntent,
   buildEcommercePimProjection, buildEcommerceCheckoutQuote, buildEcommerceOrderRequestV2,
@@ -502,6 +504,105 @@ function cancellationIntentFor(state, orderId) {
     let perCallRefused = null
     try { commerceOrderAcknowledgement(corrupted, ceilingOrderId(0)) } catch (error) { perCallRefused = error }
     check(Boolean(perCallRefused), 'and the per-call entry point refuses the same corruption, so neither route hands out an unchecked document')
+  }
+
+  // --- 5d. the OTHER reader on this screen: the storefront order timeline --------
+  //
+  // commerceStorefrontOrderTimeline is the second thing this screen reads out of the same
+  // workspace, and it opened by deep-copying the whole thing before validating the copy:
+  // validateCommerceState(structuredClone(state)). At the 2 MiB write ceiling that copy is
+  // ~11 ms of the ~129 ms the call costs, paid once per workspace change -- which is once
+  // per sale -- and, at the unmemoized call site in EcommerceProduct.tsx, once per keystroke.
+  //
+  // The copy bought nothing. validateCommerceState is a PREDICATE, not a normaliser: it
+  // returns its argument by reference and leaves it byte for byte as it found it (pinned in
+  // test_commerce_state_validator.mjs), so there was no mutation for the caller to be
+  // defended against. Everything this function hands back is cloned individually on its way
+  // out -- the order at the `structuredClone(matchingOrders[0])` line and the request at the
+  // `structuredClone(request)` line -- so the copy was not what kept callers unaliased
+  // either. 5d pins all of those claims at once, against the ceiling fixture above.
+  //
+  // Cost is COUNTED, not timed, on the same terms as 5b: a millisecond threshold stops
+  // discriminating the moment the runner gets faster.
+  {
+    const beforeCall = JSON.stringify(state)
+
+    // (i) how many times one call deep-copies the WHOLE workspace. Counted by identity
+    // against the state object itself, so a per-order or per-request clone -- which this
+    // function legitimately makes, and which is what keeps the result unaliased -- is never
+    // miscounted as the whole-workspace copy. `everyClone` is the control: if the
+    // interception below ever stopped seeing anything at all, a count of zero
+    // whole-workspace copies would otherwise pass while proving nothing.
+    const realClone = globalThis.structuredClone
+    let wholeWorkspaceCopies = 0
+    let everyClone = 0
+    globalThis.structuredClone = function (value, ...rest) {
+      everyClone += 1
+      if (value === state) wholeWorkspaceCopies += 1
+      return realClone.call(this, value, ...rest)
+    }
+    let entries
+    try { entries = commerceStorefrontOrderTimeline(state, requests) }
+    finally { globalThis.structuredClone = realClone }
+    check(entries.length === requests.length, `the timeline projects every request on the screen (${entries.length} of ${requests.length})`)
+    check(everyClone > 0, 'control: the clone counter is actually seeing this function clone things')
+    check(
+      wholeWorkspaceCopies === 0,
+      `reading the timeline never deep-copies the whole workspace (copied it ${wholeWorkspaceCopies} times)`,
+    )
+
+    // (ii) the projection did not change. Both paths are RUN: the timeline over the state as
+    // held, against the timeline over a state deep-copied first -- which is precisely what
+    // the removed line used to compute. Nothing is written down, so there is no side for a
+    // hardcoded expectation to hide on.
+    check(
+      JSON.stringify(commerceStorefrontOrderTimeline(state, requests))
+        === JSON.stringify(commerceStorefrontOrderTimeline(realClone(state), requests)),
+      'and projects the same timeline, byte for byte, as it does over a workspace copied first',
+    )
+
+    // (iii) reading does not write. The screen re-reads this on every workspace change, so a
+    // reader that edited the workspace underneath itself would compound silently.
+    check(JSON.stringify(state) === beforeCall, 'reading the timeline leaves the workspace byte for byte as it found it')
+
+    // (iv) the caller still cannot reach into the workspace through the result. This is the
+    // property the whole-workspace copy could plausibly have been holding up, so it is
+    // asserted rather than argued: every order and request handed back is written through
+    // and the workspace is checked for the damage.
+    const held = new Set()
+    for (const order of state.orders) held.add(order)
+    for (const request of requests) held.add(request)
+    const aliased = entries.filter((entry) => held.has(entry.order) || held.has(entry.request))
+    check(aliased.length === 0, `no entry hands back an object the workspace or the request list still holds (${aliased.length} aliased)`)
+    const withOrder = entries.filter((entry) => entry.order)
+    check(withOrder.length > 0, 'control: the fixture produces entries that actually carry an order to alias')
+    for (const entry of withOrder) entry.order.total = -1
+    for (const entry of entries) entry.request.customerReference = 'OVERWRITTEN'
+    check(
+      JSON.stringify(state) === beforeCall,
+      'and writing through every order and request the timeline returned reaches nothing in the workspace',
+    )
+
+    // (v) and it still refuses a workspace nobody validated. What changed is how many copies
+    // of one state are made, never whether it is checked.
+    //
+    // The corruption is an order total edited away from its own calculation, chosen for two
+    // reasons: the validator rejects it (asserted first, so this cannot be vacuous), and the
+    // timeline itself never looks at it -- it filters orders by sourceRecordId and reads
+    // status, paymentStatus, refundStatus and returns, never the total. So only the
+    // validation can be refusing this. A duplicated order id would NOT do: the timeline
+    // carries its own 'multiple Shop orders' check and would throw on its own, proving
+    // nothing about whether the state was validated.
+    const corruptedTimeline = realClone(state)
+    const editable = corruptedTimeline.orders.find((order) => order.calculation && order.sourceRecordId)
+    check(Boolean(editable), 'control: the ceiling fixture carries a request-linked order with a calculation to corrupt')
+    editable.total += 1
+    let validatorRefused = null
+    try { validateCommerceState(corruptedTimeline) } catch (error) { validatorRefused = error }
+    check(Boolean(validatorRefused), 'the validator rejects an order total edited away from its calculation, or (v) proves nothing')
+    let timelineRefused = null
+    try { commerceStorefrontOrderTimeline(corruptedTimeline, requests) } catch (error) { timelineRefused = error }
+    check(Boolean(timelineRefused), 'and the timeline refuses to project from that workspace, so dropping the copy did not drop the check')
   }
 }
 
