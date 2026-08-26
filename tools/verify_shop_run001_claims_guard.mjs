@@ -64,6 +64,14 @@ check(
   'package_script_missing:shop:run001:claims:verify',
 )
 check(
+  packageJson?.scripts?.['client:pilot:observed-evidence:template'] === 'node tools/record_shop_pilot_observed_run.mjs --template',
+  'package_script_missing:client:pilot:observed-evidence:template',
+)
+check(
+  packageJson?.scripts?.['client:pilot:observed-evidence:validate'] === 'node tools/record_shop_pilot_observed_run.mjs --validate-run-input',
+  'package_script_missing:client:pilot:observed-evidence:validate',
+)
+check(
   typeof packageJson?.scripts?.['preapp:verify'] === 'string'
     && packageJson.scripts['preapp:verify'].includes('shop:run001:claims:verify'),
   'preapp_verify_missing_shop_run001_claims_guard',
@@ -79,6 +87,11 @@ requireSnippet(recorderText, "const readyForOwnerDecisionReview = promotionEvide
 requireSnippet(recorderText, 'acceptedConsecutiveRunsRemaining', files.recorder)
 requireSnippet(recorderText, 'missingPilotDayIndexes', files.recorder)
 requireSnippet(recorderText, 'promotionProgress', files.recorder)
+requireSnippet(recorderText, 'SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT', files.recorder)
+requireSnippet(recorderText, 'buildObservedRunInputTemplate', files.recorder)
+requireSnippet(recorderText, 'validateObservedRunInputTemplate', files.recorder)
+requireSnippet(recorderText, 'metadata_only_no_record_write', files.recorder)
+requireSnippet(recorderText, 'template_written_no_record_write', files.recorder)
 requireSnippet(recorderText, "throw new Error('shop_observed_evidence_reference_digest_duplicate')", files.recorder)
 requireSnippet(recorderText, "throw new Error('shop_observed_independent_anchor_digest_duplicate')", files.recorder)
 requireSnippet(recorderText, "throw new Error('shop_observed_evidence_anchor_digest_not_independent')", files.recorder)
@@ -96,6 +109,8 @@ requireSnippet(recorderTestText, 'twenty consecutive accepted runs set promotion
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs still require five-day pilot sequence coverage', files.recorderTest)
 requireSnippet(recorderTestText, 'replayed evidence and anchor digests cannot inflate accepted run count', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty accepted runs still block owner decision review until latest reload retry passes', files.recorderTest)
+requireSnippet(recorderTestText, 'private run input template is fillable but not recordable evidence', files.recorderTest)
+requireSnippet(recorderTestText, 'CLI writes private run template and validates filled run input with metadata-only stdout', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, false)', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, true)', files.recorderTest)
 
@@ -180,6 +195,8 @@ const result = {
     receiptRequired: true,
     latestReloadRetryPassedRequired: true,
     promotionProgressRequired: true,
+    privateRunInputTemplateRequired: true,
+    metadataOnlyRunInputValidationRequired: true,
     uniqueEvidenceReferenceDigestsRequired: true,
     uniqueIndependentAnchorDigestsRequired: true,
     evidenceAnchorDigestPairsMustBeDistinct: true,

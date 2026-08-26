@@ -741,6 +741,8 @@
     "client:pilot:public-boundary:verify": "node tools/verify_shop_pilot_public_boundary.mjs --file hq/readiness/shop-pilot-public-boundary.json",
     "client:pilot:public-boundary:self-test": "node --test tools/verify_shop_pilot_public_boundary.test.mjs",
     "client:pilot:observed-evidence": "node tools/record_shop_pilot_observed_run.mjs",
+    "client:pilot:observed-evidence:template": "node tools/record_shop_pilot_observed_run.mjs --template",
+    "client:pilot:observed-evidence:validate": "node tools/record_shop_pilot_observed_run.mjs --validate-run-input",
     "client:pilot:observed-evidence:self-test": "node --test tools/record_shop_pilot_observed_run.test.mjs",
     "shop:pilot:decision-packet": "node tools/prepare_shop_pilot_decision_packet.mjs",
     "shop:pilot:decision-packet:self-test": "node --test tools/prepare_shop_pilot_decision_packet.test.mjs && node tools/prepare_shop_pilot_decision_packet.mjs --self-test",

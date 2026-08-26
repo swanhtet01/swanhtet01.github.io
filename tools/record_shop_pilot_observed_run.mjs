@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
@@ -11,6 +11,7 @@ import {
 
 export const SHOP_OBSERVED_RUN_INPUT_CONTRACT = 'supermega.shop.observed_pilot_run_input.v1'
 export const SHOP_OBSERVED_EVIDENCE_CONTRACT = 'supermega.shop.observed_pilot_evidence.v1'
+export const SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT = 'supermega.shop.observed_pilot_run_input_template.v1'
 
 const RUNS_FILE = 'observed-runs.private.jsonl'
 const SUMMARY_FILE = 'observed-summary.private.json'
@@ -40,6 +41,15 @@ const REQUIRED_INPUT_KEYS = Object.freeze([
   'runId',
   'targetCorrect',
   'verticalPack',
+])
+const TEMPLATE_NULL_INPUT_FIELDS = Object.freeze([
+  'closeMinutes',
+  'durationMinutesPerOrder',
+  'evidenceReferenceDigest',
+  'exceptionCount',
+  'independentAnchorDigest',
+  'observedAt',
+  'operatorCorrectionCount',
 ])
 const FORBIDDEN_PRIVATE_KEYS = Object.freeze(new Set([
   'address',
@@ -84,6 +94,10 @@ function sha256(value) {
 
 function digest(value) {
   return `sha256:${sha256(canonicalJson(value))}`
+}
+
+function digestText(value) {
+  return `sha256:${sha256(String(value))}`
 }
 
 async function exists(path) {
@@ -190,6 +204,14 @@ function missingPilotDayIndexes(acceptedConsecutivePilotDayIndexes) {
   return REQUIRED_PILOT_DAY_INDEXES.filter((dayIndex) => !acceptedConsecutivePilotDayIndexes.includes(dayIndex))
 }
 
+function defaultRunId(runOrdinal) {
+  return `RUN-${String(runOrdinal).padStart(3, '0')}`
+}
+
+function defaultDayIndex(runOrdinal) {
+  return ((runOrdinal - 1) % REQUIRED_PILOT_DAY_INDEXES.length) + 1
+}
+
 function assertStoredProofIntegrity(entries) {
   const seenRunIds = new Set()
   const seenEvidenceReferenceDigests = new Set()
@@ -249,6 +271,123 @@ export function normalizeObservedRunInput(input) {
     evidenceReferenceDigest,
     independentAnchorDigest,
   }
+}
+
+export function buildObservedRunInputTemplate({
+  runOrdinal = 1,
+  runId = defaultRunId(runOrdinal),
+  dayIndex = defaultDayIndex(runOrdinal),
+  generatedAt = new Date().toISOString(),
+} = {}) {
+  const ordinal = exactNumber(runOrdinal, 'run_ordinal', { min: 1, max: 100000, integer: true })
+  const normalizedRunId = exactText(runId, 'run_id', 80)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/.test(normalizedRunId)) throw new Error('run_id_invalid')
+  const normalizedDayIndex = exactNumber(dayIndex, 'day_index', { min: 1, max: 5, integer: true })
+  const normalizedGeneratedAt = exactIsoUtc(generatedAt, 'generated_at')
+  const runInput = {
+    contract: SHOP_OBSERVED_RUN_INPUT_CONTRACT,
+    product: SHOP_PILOT_PRODUCT,
+    pilotMode: SHOP_PILOT_MODE,
+    verticalPack: SHOP_PILOT_VERTICAL_PACK,
+    runId: normalizedRunId,
+    observedAt: null,
+    dayIndex: normalizedDayIndex,
+    operatorReviewed: true,
+    targetCorrect: true,
+    accepted: false,
+    durationMinutesPerOrder: null,
+    exceptionCount: null,
+    closeMinutes: null,
+    operatorCorrectionCount: null,
+    reloadRetryOutcome: 'not-tested',
+    noRealMessageSent: true,
+    noPaymentAccepted: true,
+    noStockMovement: true,
+    noServerWrite: true,
+    noHostedWrite: true,
+    evidenceReferenceDigest: null,
+    independentAnchorDigest: null,
+  }
+  const body = {
+    contract: SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
+    generatedAt: normalizedGeneratedAt,
+    product: SHOP_PILOT_PRODUCT,
+    pilotMode: SHOP_PILOT_MODE,
+    verticalPack: SHOP_PILOT_VERTICAL_PACK,
+    runOrdinal: ordinal,
+    runInput,
+    fillBeforeRecord: {
+      requiredFields: TEMPLATE_NULL_INPUT_FIELDS,
+      evidenceReferenceDigest: 'sha256 digest of the private run evidence receipt',
+      independentAnchorDigest: 'sha256 digest of the independently sealed private anchor',
+      observedAt: 'exact UTC ISO timestamp of the real observed run',
+      durationMinutesPerOrder: 'measured real minutes for this observed order run',
+      exceptionCount: 'integer count of exceptions observed in this run',
+      closeMinutes: 'measured daily-close minutes associated with this run',
+      operatorCorrectionCount: 'integer count of operator corrections for this run',
+    },
+    controls: {
+      externalWritesPerformed: false,
+      customerContactPerformed: false,
+      paymentAccepted: false,
+      stockMovementPerformed: false,
+      serverWritesPerformed: false,
+      hostedWritesPerformed: false,
+      privateValuesReturned: false,
+      syntheticEvidenceAccepted: false,
+    },
+  }
+  assertNoPrivateIdentity(body)
+  return { ...body, digest: digest(body) }
+}
+
+export function validateObservedRunInputTemplate(template) {
+  assertNoPrivateIdentity(template)
+  if (!template || typeof template !== 'object' || Array.isArray(template)) throw new Error('shop_observed_run_input_template_invalid')
+  if (template.contract !== SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT) throw new Error('shop_observed_run_input_template_contract_invalid')
+  if (template.digestScope !== 'utf8_compact_json_without_digest') throw new Error('shop_observed_run_input_template_digest_scope_invalid')
+  if (template.product !== SHOP_PILOT_PRODUCT || template.pilotMode !== SHOP_PILOT_MODE || template.verticalPack !== SHOP_PILOT_VERTICAL_PACK) {
+    throw new Error('shop_observed_run_input_template_scope_invalid')
+  }
+  exactIsoUtc(template.generatedAt, 'generated_at')
+  exactNumber(template.runOrdinal, 'run_ordinal', { min: 1, max: 100000, integer: true })
+  if (!template.runInput || typeof template.runInput !== 'object' || Array.isArray(template.runInput)) throw new Error('shop_observed_run_input_template_run_input_invalid')
+  if (!exactKeys(template.runInput, REQUIRED_INPUT_KEYS)) throw new Error('shop_observed_run_input_template_keys_invalid')
+  if (template.runInput.contract !== SHOP_OBSERVED_RUN_INPUT_CONTRACT) throw new Error('shop_observed_run_input_template_input_contract_invalid')
+  if (template.runInput.product !== SHOP_PILOT_PRODUCT || template.runInput.pilotMode !== SHOP_PILOT_MODE || template.runInput.verticalPack !== SHOP_PILOT_VERTICAL_PACK) {
+    throw new Error('shop_observed_run_input_template_input_scope_invalid')
+  }
+  const runId = exactText(template.runInput.runId, 'run_id', 80)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/.test(runId)) throw new Error('run_id_invalid')
+  exactNumber(template.runInput.dayIndex, 'day_index', { min: 1, max: 5, integer: true })
+  if (!TEMPLATE_NULL_INPUT_FIELDS.every((field) => template.runInput[field] === null)) throw new Error('shop_observed_run_input_template_fillable_fields_invalid')
+  if (template.runInput.operatorReviewed !== true
+    || template.runInput.targetCorrect !== true
+    || template.runInput.accepted !== false
+    || template.runInput.reloadRetryOutcome !== 'not-tested'
+    || template.runInput.noRealMessageSent !== true
+    || template.runInput.noPaymentAccepted !== true
+    || template.runInput.noStockMovement !== true
+    || template.runInput.noServerWrite !== true
+    || template.runInput.noHostedWrite !== true) {
+    throw new Error('shop_observed_run_input_template_defaults_invalid')
+  }
+  if (!template.controls
+    || template.controls.externalWritesPerformed !== false
+    || template.controls.customerContactPerformed !== false
+    || template.controls.paymentAccepted !== false
+    || template.controls.stockMovementPerformed !== false
+    || template.controls.serverWritesPerformed !== false
+    || template.controls.hostedWritesPerformed !== false
+    || template.controls.privateValuesReturned !== false
+    || template.controls.syntheticEvidenceAccepted !== false) {
+    throw new Error('shop_observed_run_input_template_controls_invalid')
+  }
+  const copy = { ...template }
+  delete copy.digest
+  if (template.digest !== digest(copy)) throw new Error('shop_observed_run_input_template_digest_mismatch')
+  return template
 }
 
 function evidenceEntry(run) {
@@ -379,6 +518,12 @@ async function writeSummary(workspace, summary) {
   await writeFile(resolve(workspace, SUMMARY_FILE), `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
 }
 
+async function writeNewJson(path, value) {
+  const absolute = resolve(path)
+  await mkdir(dirname(absolute), { recursive: true })
+  await writeFile(absolute, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
+}
+
 export async function recordObservedShopPilotRun({ workspace, runInput }) {
   const root = resolve(workspace)
   await mkdir(root, { recursive: true })
@@ -407,17 +552,76 @@ export async function verifyObservedShopPilotEvidence(workspace) {
   return expected
 }
 
+function publicRunInputValidation(run) {
+  return {
+    ok: true,
+    contract: SHOP_OBSERVED_RUN_INPUT_CONTRACT,
+    mode: 'metadata_only_no_record_write',
+    product: run.product,
+    pilotMode: run.pilotMode,
+    verticalPack: run.verticalPack,
+    runIdDigest: digestText(run.runId),
+    dayIndex: run.dayIndex,
+    accepted: run.accepted,
+    operatorReviewed: run.operatorReviewed,
+    targetCorrect: run.targetCorrect,
+    reloadRetryOutcome: run.reloadRetryOutcome,
+    externalWritesPerformed: false,
+    customerContactPerformed: false,
+    paymentAccepted: false,
+    stockMovementPerformed: false,
+    serverWritesPerformed: false,
+    hostedWritesPerformed: false,
+    privateValuesReturned: false,
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const record = args.includes('--record')
   const verify = args.includes('--verify')
+  const template = args.includes('--template')
+  const validateRunInput = args.includes('--validate-run-input')
   const workspaceIndex = args.indexOf('--workspace')
   const runInputIndex = args.indexOf('--run-input')
-  if (record === verify || workspaceIndex < 0 || !args[workspaceIndex + 1]) {
-    throw new Error('usage: node tools/record_shop_pilot_observed_run.mjs (--record --run-input private-run.json | --verify) --workspace private-workspace')
+  const outputIndex = args.indexOf('--output')
+  const runOrdinalIndex = args.indexOf('--run-ordinal')
+  const dayIndexIndex = args.indexOf('--day-index')
+  const selectedModes = [record, verify, template, validateRunInput].filter(Boolean).length
+  if (selectedModes !== 1) {
+    throw new Error('usage: node tools/record_shop_pilot_observed_run.mjs (--template --workspace private-workspace --output private-template.json | --validate-run-input --run-input private-run.json | --record --workspace private-workspace --run-input private-run.json | --verify --workspace private-workspace)')
+  }
+  if ((record || verify || template) && (workspaceIndex < 0 || !args[workspaceIndex + 1])) {
+    throw new Error('workspace_required')
   }
   let result
-  if (record) {
+  if (template) {
+    if (outputIndex < 0 || !args[outputIndex + 1]) throw new Error('output_required')
+    const existing = await readStoredRuns(args[workspaceIndex + 1])
+    const runOrdinal = runOrdinalIndex >= 0 && args[runOrdinalIndex + 1] ? Number(args[runOrdinalIndex + 1]) : existing.length + 1
+    const dayIndex = dayIndexIndex >= 0 && args[dayIndexIndex + 1] ? Number(args[dayIndexIndex + 1]) : defaultDayIndex(runOrdinal)
+    const built = validateObservedRunInputTemplate(buildObservedRunInputTemplate({ runOrdinal, dayIndex }))
+    await writeNewJson(args[outputIndex + 1], built)
+    result = {
+      ok: true,
+      contract: SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT,
+      mode: 'template_written_no_record_write',
+      outputWritten: true,
+      digest: built.digest,
+      runOrdinal: built.runOrdinal,
+      dayIndex: built.runInput.dayIndex,
+      externalWritesPerformed: false,
+      customerContactPerformed: false,
+      paymentAccepted: false,
+      stockMovementPerformed: false,
+      serverWritesPerformed: false,
+      hostedWritesPerformed: false,
+      privateValuesReturned: false,
+    }
+  } else if (validateRunInput) {
+    if (runInputIndex < 0 || !args[runInputIndex + 1]) throw new Error('run_input_required')
+    result = publicRunInputValidation(normalizeObservedRunInput(JSON.parse(await readFile(resolve(args[runInputIndex + 1]), 'utf8'))))
+  } else if (record) {
     if (runInputIndex < 0 || !args[runInputIndex + 1]) throw new Error('run_input_required')
     result = await recordObservedShopPilotRun({
       workspace: args[workspaceIndex + 1],
