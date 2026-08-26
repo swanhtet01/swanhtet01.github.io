@@ -25,6 +25,7 @@ const ORIGIN = `https://github.com/${REPOSITORY}.git`
 const BASE_BRANCH = 'main'
 const APPROVAL_ENV = 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'
 const TOKEN_ENVS = ['GITHUB_TOKEN', 'GH_TOKEN']
+const GH_CLI_TOKEN_KEY = 'gh_cli'
 const API_BASE = `https://api.github.com/repos/${REPOSITORY}`
 const API_VERSION = '2026-03-10'
 const MAX_FILE_BYTES = 1_000_000
@@ -56,7 +57,7 @@ function exactSha(value, code) {
 function tokenFromEnv(env = process.env) {
   for (const key of TOKEN_ENVS) {
     const value = String(env[key] || '').trim()
-    if (value) return { key, value }
+    if (value) return { key, value, source: 'environment' }
   }
   return null
 }
@@ -78,6 +79,52 @@ function gitDefault(args, { optional = false, timeout = 120_000 } = {}) {
     stdout: String(result.stdout || '').trim(),
     stderr: String(result.stderr || '').trim(),
   }
+}
+
+function ghDefault(args, { optional = false, timeout = 30_000 } = {}) {
+  const result = spawnSync('gh', args, {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    maxBuffer: 2_000_000,
+    timeout,
+    windowsHide: true,
+  })
+  const status = result.status ?? 1
+  if (!optional && (result.error || result.signal || status !== 0)) {
+    fail(`release_pull_request_gh_cli_failed:${String(args[0] || 'gh').slice(0, 40)}`)
+  }
+  return {
+    status,
+    stdout: String(result.stdout || '').trim(),
+    stderr: String(result.stderr || '').trim(),
+    errorCode: result.error?.code || null,
+    signal: result.signal || null,
+  }
+}
+
+function githubCliAuthPresence(gh = ghDefault) {
+  const result = gh(['auth', 'status', '--hostname', 'github.com'], { optional: true, timeout: 30_000 })
+  if (result.status !== 0 || result.errorCode || result.signal) return null
+  const output = `${result.stdout}\n${result.stderr}`
+  if (!/Logged in to github\.com/i.test(output)) return null
+  return { key: GH_CLI_TOKEN_KEY, value: null, source: 'github_cli_keyring' }
+}
+
+function githubCliExecutionToken(gh = ghDefault) {
+  const result = gh(['auth', 'token', '--hostname', 'github.com'], { optional: true, timeout: 30_000 })
+  if (result.status !== 0 || result.errorCode || result.signal) return null
+  const value = String(result.stdout || '').trim()
+  if (!value || /\s/.test(value)) return null
+  return { key: GH_CLI_TOKEN_KEY, value, source: 'github_cli_keyring' }
+}
+
+function tokenForPlan({ env = process.env, gh = ghDefault, useGitHubCliAuth = false } = {}) {
+  return tokenFromEnv(env) || (useGitHubCliAuth ? githubCliAuthPresence(gh) : null)
+}
+
+function tokenForExecute({ env = process.env, gh = ghDefault, useGitHubCliAuth = false } = {}) {
+  return tokenFromEnv(env) || (useGitHubCliAuth ? githubCliExecutionToken(gh) : null)
 }
 
 function currentGitState(git = gitDefault) {
@@ -294,11 +341,13 @@ export function buildPullRequestPlan({
   mainProtectionSnapshotReceipt = null,
   gitState = currentGitState(),
   env = process.env,
+  gh = ghDefault,
+  useGitHubCliAuth = false,
 } = {}) {
   const gate = validatePullRequestHandoff(handoffReceipt?.packet)
   validateLocalState({ gate, gitState, execute: false })
   const approval = validateOwnerApproval({ gate, env, execute: false })
-  const token = tokenFromEnv(env)
+  const token = tokenForPlan({ env, gh, useGitHubCliAuth })
   const payload = buildCreatePullRequestPayload({ gate, handoffReceipt })
   const mainProtection = buildMainProtectionEvidence(mainProtectionSnapshotReceipt)
   const blockers = [
@@ -339,6 +388,7 @@ export function buildPullRequestPlan({
     token: {
       present: Boolean(token),
       env: token?.key || null,
+      source: token?.source || null,
       valueExposed: false,
     },
     readiness: {
@@ -350,6 +400,7 @@ export function buildPullRequestPlan({
       'verify signed GitHub main-protection snapshot assessment.ok is true',
       `git ls-remote --heads origin ${gate.branch}`,
       `GET /repos/${REPOSITORY}/pulls?state=open&head=${OWNER}:${gate.branch}&base=${BASE_BRANCH}`,
+      'gh auth status --hostname github.com when env token is absent',
     ],
     possibleWrite: {
       method: 'POST',
@@ -367,7 +418,7 @@ export function buildPullRequestPlan({
     executionRequirements: [
       '--execute flag',
       `${APPROVAL_ENV} exactly equals the owner approval template`,
-      'GITHUB_TOKEN or GH_TOKEN is set',
+      'GITHUB_TOKEN, GH_TOKEN, or authenticated GitHub CLI keyring is available',
       'signed GitHub main-protection snapshot verifies assessment.ok:true',
       'release handoff re-verifies current remote/live state immediately before PR creation',
       'remote review branch equals the exact approved commit',
@@ -570,6 +621,8 @@ export async function applyReleasePullRequestWithClient({
   mainProtectionSnapshotReceipt = null,
   env = process.env,
   git = gitDefault,
+  gh = ghDefault,
+  useGitHubCliAuth = false,
   request = fetch,
   verifyHandoff = verifyCurrentReleaseHandoff,
 } = {}) {
@@ -578,7 +631,7 @@ export async function applyReleasePullRequestWithClient({
   validateLocalState({ gate, gitState, execute: true })
   const approval = validateOwnerApproval({ gate, env, execute: true })
   const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
-  const token = tokenFromEnv(env)
+  const token = tokenForExecute({ env, gh, useGitHubCliAuth })
   if (!token) fail('release_pull_request_token_required')
 
   const verification = await verifyHandoff(handoffReceipt.path)
@@ -609,7 +662,7 @@ export async function applyReleasePullRequestWithClient({
       candidate: { branch: gate.branch, head: gate.commit, clean: true },
       approval,
       githubMainProtection: mainProtection,
-      token: { present: true, env: token.key, valueExposed: false },
+      token: { present: true, env: token.key, source: token.source || null, valueExposed: false },
       pullRequest: {
         number: existing.number,
         state: existing.state,
@@ -662,7 +715,7 @@ export async function applyReleasePullRequestWithClient({
     candidate: { branch: gate.branch, head: gate.commit, clean: true },
     approval,
     githubMainProtection: mainProtection,
-    token: { present: true, env: token.key, valueExposed: false },
+    token: { present: true, env: token.key, source: token.source || null, valueExposed: false },
     action: {
       method: 'POST',
       path: `/repos/${REPOSITORY}/pulls`,
@@ -969,8 +1022,8 @@ async function main() {
     ? await readGitHubMainProtectionSnapshotReceipt(options.githubProtectionSnapshot)
     : null
   const result = options.mode === 'execute'
-    ? await applyReleasePullRequestWithClient({ handoffReceipt, mainProtectionSnapshotReceipt })
-    : buildPullRequestPlan({ handoffReceipt, mainProtectionSnapshotReceipt })
+    ? await applyReleasePullRequestWithClient({ handoffReceipt, mainProtectionSnapshotReceipt, useGitHubCliAuth: true })
+    : buildPullRequestPlan({ handoffReceipt, mainProtectionSnapshotReceipt, useGitHubCliAuth: true })
   if (options.output) {
     const output = await writeExclusive(options.output, `${JSON.stringify(validatePullRequestReport(result, { expectedMode: 'plan_only_no_github_write' }), null, 2)}\n`)
     console.log(JSON.stringify({

@@ -137,6 +137,34 @@ function stubGit({ remote = commit } = {}) {
   return { git, calls }
 }
 
+function stubGh({ statusToken = 'gho_placeholder_token_value_0000', authStatusOk = true } = {}) {
+  const calls = []
+  const gh = (args) => {
+    calls.push([...args])
+    const command = args.join(' ')
+    if (command === 'auth status --hostname github.com') {
+      return {
+        status: authStatusOk ? 0 : 1,
+        stdout: '',
+        stderr: authStatusOk ? 'Logged in to github.com account swanhtet01 (keyring)' : 'not logged in',
+        errorCode: null,
+        signal: null,
+      }
+    }
+    if (command === 'auth token --hostname github.com') {
+      return {
+        status: statusToken ? 0 : 1,
+        stdout: statusToken || '',
+        stderr: '',
+        errorCode: null,
+        signal: null,
+      }
+    }
+    throw new Error(`unexpected gh call: ${command}`)
+  }
+  return { gh, calls }
+}
+
 function response(status, json) {
   return {
     ok: status >= 200 && status < 300,
@@ -217,6 +245,27 @@ test('plan becomes executable only with exact branch, clean tree, approval, and 
   assert.equal(plan.token.valueExposed, false)
 })
 
+test('plan can use authenticated GitHub CLI keyring as token readiness without exposing token value', () => {
+  const gate = validatePullRequestHandoff(packet())
+  const { gh, calls } = stubGh()
+  const plan = buildPullRequestPlan({
+    handoffReceipt: receipt(),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+    gitState: gitState(),
+    env: { [approvalEnv]: gate.approvalTemplate },
+    gh,
+    useGitHubCliAuth: true,
+  })
+  assert.equal(plan.readiness.executeReady, true)
+  assert.deepEqual(plan.readiness.blockers, [])
+  assert.equal(plan.token.present, true)
+  assert.equal(plan.token.env, 'gh_cli')
+  assert.equal(plan.token.source, 'github_cli_keyring')
+  assert.equal(plan.token.valueExposed, false)
+  assert.deepEqual(calls, [['auth', 'status', '--hostname', 'github.com']])
+  assert.doesNotMatch(JSON.stringify(plan), /gho_placeholder/)
+})
+
 test('execution requires exact owner approval', () => {
   const gate = validatePullRequestHandoff(packet())
   assert.throws(
@@ -270,6 +319,41 @@ test('execute creates one pull request after handoff and remote branch verificat
   assert.ok(String(requests[0].url).includes('/pulls?'))
   assert.ok(String(requests[1].url).endsWith('/pulls'))
   assert.doesNotMatch(JSON.stringify(result), /ghp_placeholder/)
+})
+
+test('execute can use GitHub CLI keyring token without exposing it in the report', async () => {
+  const gate = validatePullRequestHandoff(packet())
+  const { git } = stubGit()
+  const { gh, calls } = stubGh()
+  const result = await applyReleasePullRequestWithClient({
+    handoffReceipt: receipt(),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+    env: { [approvalEnv]: gate.approvalTemplate },
+    git,
+    gh,
+    useGitHubCliAuth: true,
+    verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
+    request: async (url, options) => {
+      assert.match(String(options.headers.Authorization), /^Bearer gho_placeholder_token_value_0000$/)
+      if (options.method === 'GET') return response(200, [])
+      if (options.method === 'POST') {
+        return response(201, {
+          number: 43,
+          state: 'open',
+          html_url: 'https://github.com/swanhtet01/swanhtet01.github.io/pull/43',
+          head: { ref: branch, sha: commit },
+          base: { ref: 'main' },
+        })
+      }
+      throw new Error(`unexpected request ${options.method}`)
+    },
+  })
+  assert.equal(result.mode, 'executed_owner_approved_github_pr_write')
+  assert.equal(result.token.env, 'gh_cli')
+  assert.equal(result.token.source, 'github_cli_keyring')
+  assert.equal(result.token.valueExposed, false)
+  assert.deepEqual(calls, [['auth', 'token', '--hostname', 'github.com']])
+  assert.doesNotMatch(JSON.stringify(result), /gho_placeholder/)
 })
 
 test('execute returns no-write when an exact open PR already exists', async () => {
