@@ -1286,7 +1286,39 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
             previous `aria-label={`Add ${item.name} to this sale`}` announced the
             action and the English name and then nothing else: not the price, not
             the stock level, not the quantity already in the sale, and never
-            item.nameMy -- the Burmese product name the owner typed in themselves.
+            item.nameMy -- the item's Burmese name, when it has one.
+
+            On that last point, correcting this comment's own first version
+            (2026-08-24). It said "the Burmese product name the owner typed in
+            themselves", which is wrong in one direction; a first attempt at
+            this correction then said the field has no in-app producer at all,
+            which is wrong in the other. Both are recorded rather than edited
+            away because the first was relayed outward in a merged PR body.
+            What is actually true:
+
+              - Installing a working sample or a business template DOES write
+                it. provisionLocalShopWorkingSample (product-onboarding-
+                runtime.ts:381) and provisionLocalShopBusinessTemplateSample
+                (:420) both pass their catalog rows through
+                withShopServiceMyanmarNames, which copies a pack's Burmese
+                SERVICE name onto each row that sells that service.
+              - So the coverage is service rows, not goods. All 25 bookable
+                services carry nameMy, so a spa, salon, fitness, school or
+                catering catalog gets bilingual rows; a mini-mart's rice and
+                cooking oil pair to no service and get none.
+              - No FORM writes it at any point. The catalog draft has no
+                Burmese field, and the CSV importer does not carry one
+                (product-onboarding-runtime.ts:377 says it must not grow one),
+                so an owner can never add or edit the pair themselves.
+              - An owner CAN type a Burmese-only product name into the ordinary
+                free-text Item name field; that renders here as item.name and
+                on the receipt. It is the bilingual PAIR that is closed to
+                them, not Burmese text.
+
+            So this reference is correct and load-bearing -- on a service
+            catalog it is already carrying Burmese today. Do not read it as
+            evidence that a Myanmar RETAIL catalog is bilingual; that case is
+            still open. See hq/strategy/MYANMAR-READINESS-AUDIT.md.
             The quantity badge's own aria-label sat inside that override and was
             announced nowhere.
 
