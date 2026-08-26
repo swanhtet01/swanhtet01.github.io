@@ -64,7 +64,7 @@ const BASELINE_COMMANDS = [
   'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
   'npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"',
   'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"',
-  'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
+  'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
 ]
 const NON_CLAIMS = [
   'not_production_release',
@@ -73,6 +73,11 @@ const NON_CLAIMS = [
   'not_customer_contact_authority',
   'not_payment_or_stock_movement',
   'not_revenue_or_pilot_proof',
+]
+const RELEASE_CONTROL_GATE_IDS = [
+  'github_main_protection',
+  'review_branch_push',
+  'pull_request_creation',
 ]
 
 function fail(code) {
@@ -101,6 +106,13 @@ function sourceDigest(value, code) {
   const normalized = String(value)
   if (!DIGEST_PATTERN.test(normalized)) fail(code)
   return normalized
+}
+
+function releaseBlockerForGate(gateId) {
+  if (gateId === 'github_main_protection') return 'github_main_protection_unverified'
+  if (gateId === 'review_branch_push') return 'review_branch_push_missing'
+  if (gateId === 'pull_request_creation') return 'pull_request_creation_missing'
+  return null
 }
 
 function requiredFlowSummary(packet) {
@@ -151,6 +163,12 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
       day0Status: day0Packet.status,
       launchGateDigest: day0Packet.sourceDigests?.launchGateDigest || null,
       acceptedIntakePacketDigest: sourceDigest(prep.acceptedIntakePacketDigest, 'shop_pilot_day0_owner_baseline_card_intake_digest_invalid'),
+      releaseHandoffDigest: sourceDigest(day0Packet.sourceDigests?.releaseHandoffDigest, 'shop_pilot_day0_owner_baseline_card_release_handoff_digest_invalid'),
+      githubMainProtectionSnapshotDigest: sourceDigest(day0Packet.sourceDigests?.githubMainProtectionSnapshotDigest, 'shop_pilot_day0_owner_baseline_card_github_snapshot_digest_invalid'),
+      releaseGateEvidenceProvided: day0Packet.releaseGate?.releaseEvidenceProvided === true,
+      releaseGateCurrentGateId: day0Packet.releaseGate?.currentGateId || null,
+      releaseGateCurrentBlocker: day0Packet.releaseGate?.currentBlocker || null,
+      mainProtectionVerified: day0Packet.releaseGate?.mainProtectionVerified === true,
     },
     candidate: {
       branch: day0Packet.candidate?.branch || null,
@@ -223,7 +241,14 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || !DIGEST_PATTERN.test(card.source.day0Digest || '')
     || !BASELINE_REQUIRED_STATUSES.includes(card.source.day0Status)
     || !DIGEST_PATTERN.test(card.source.launchGateDigest || '')
-    || (card.source.acceptedIntakePacketDigest !== null && !DIGEST_PATTERN.test(card.source.acceptedIntakePacketDigest))) {
+    || (card.source.acceptedIntakePacketDigest !== null && !DIGEST_PATTERN.test(card.source.acceptedIntakePacketDigest))
+    || !RELEASE_CONTROL_GATE_IDS.includes(card.source.releaseGateCurrentGateId)
+    || card.source.releaseGateCurrentBlocker !== releaseBlockerForGate(card.source.releaseGateCurrentGateId)
+    || typeof card.source.releaseGateEvidenceProvided !== 'boolean'
+    || typeof card.source.mainProtectionVerified !== 'boolean'
+    || (card.source.releaseHandoffDigest !== null && !DIGEST_PATTERN.test(card.source.releaseHandoffDigest))
+    || (card.source.githubMainProtectionSnapshotDigest !== null && !DIGEST_PATTERN.test(card.source.githubMainProtectionSnapshotDigest))
+    || (card.source.releaseGateEvidenceProvided === true && (!DIGEST_PATTERN.test(card.source.releaseHandoffDigest || '') || !DIGEST_PATTERN.test(card.source.githubMainProtectionSnapshotDigest || '')))) {
     fail('shop_pilot_day0_owner_baseline_card_source_invalid')
   }
   if (!isRecord(card.action)
@@ -274,7 +299,8 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
   }
   if (!Array.isArray(card.blockersStillActive)
     || !card.blockersStillActive.includes('owner_observed_baseline_packet_missing')
-    || !card.blockersStillActive.includes('github_main_protection_unverified')
+    || !card.blockersStillActive.includes(releaseBlockerForGate(card.source.releaseGateCurrentGateId))
+    || (card.source.releaseGateCurrentGateId !== 'github_main_protection' && card.blockersStillActive.includes('github_main_protection_unverified'))
     || !Array.isArray(card.nonClaims)
     || !NON_CLAIMS.every((claim) => card.nonClaims.includes(claim))) {
     fail('shop_pilot_day0_owner_baseline_card_blockers_invalid')

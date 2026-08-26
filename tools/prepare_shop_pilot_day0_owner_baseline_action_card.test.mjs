@@ -93,6 +93,17 @@ function day0Packet({ withBaseline = false, withIntake = true } = {}) {
   }))
 }
 
+function releaseEvidence(launchGateReport) {
+  return {
+    source: 'release_handoff_and_github_snapshot',
+    candidateCommit: launchGateReport.candidate.head,
+    currentGateId: 'review_branch_push',
+    releaseHandoffDigest: `sha256:${'c'.repeat(64)}`,
+    githubMainProtectionSnapshotDigest: `sha256:${'d'.repeat(64)}`,
+    mainProtectionVerified: true,
+  }
+}
+
 test('renders an owner-baseline action card without local paths, identity, or authority', () => {
   const card = buildShopPilotDay0OwnerBaselineActionCard({
     generatedAt: '2026-08-26T00:00:00.000Z',
@@ -110,14 +121,44 @@ test('renders an owner-baseline action card without local paths, identity, or au
   assert.equal(card.controls.paymentAllowed, false)
   assert.equal(card.controls.stockMovementAllowed, false)
   assert.ok(card.commandPlan.commands.some((command) => command.includes('--lint-input "<private-baseline-input.json>"')))
+  assert.ok(card.commandPlan.commands.some((command) => command.includes('--release-handoff "<release-handoff.json>"') && command.includes('--github-protection-snapshot "<github-protection-snapshot.json>"')))
   assert.ok(card.minimumEvidence.stopConditions.includes('raw_identity_or_private_note_would_enter_owner_safe_packet'))
 
   const markdown = renderShopPilotDay0OwnerBaselineActionCardMarkdown(card)
   assert.match(markdown, /Capture the owner-observed manual Shop baseline/)
   assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)
+  assert.match(markdown, /--release-handoff "<release-handoff\.json>"/)
   assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
   assert.doesNotMatch(markdown, /Private Baseline Spa|Private Baseline Operator/)
   assert.doesNotMatch(markdown, /ready for managed activation|production release ready|pilot proof/i)
+})
+
+test('binds owner-baseline card to the current release blocker when release evidence is present', () => {
+  const intakePacket = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
+  const launchGateReport = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ intakePacket }))
+  const packet = buildShopPilotDay0ReadinessPacket(sampleShopPilotDay0ReadinessInput({
+    launchGateReport,
+    releaseGateEvidence: releaseEvidence(launchGateReport),
+    ownerPrivatePreparation: {
+      baselineInputTemplateDigest: `sha256:${'a'.repeat(64)}`,
+      baselineInputTemplateBlank: true,
+      baselineWorksheetDigest: `sha256:${'b'.repeat(64)}`,
+      baselineWorksheetBlank: true,
+    },
+  }))
+  const card = buildShopPilotDay0OwnerBaselineActionCard({
+    generatedAt: '2026-08-26T00:00:00.000Z',
+    day0Packet: packet,
+  })
+  assert.equal(card.source.releaseGateEvidenceProvided, true)
+  assert.equal(card.source.releaseGateCurrentGateId, 'review_branch_push')
+  assert.equal(card.source.releaseGateCurrentBlocker, 'review_branch_push_missing')
+  assert.equal(card.source.mainProtectionVerified, true)
+  assert.equal(card.source.releaseHandoffDigest, `sha256:${'c'.repeat(64)}`)
+  assert.equal(card.source.githubMainProtectionSnapshotDigest, `sha256:${'d'.repeat(64)}`)
+  assert.ok(card.blockersStillActive.includes('review_branch_push_missing'))
+  assert.equal(card.blockersStillActive.includes('github_main_protection_unverified'), false)
+  assert.equal(validateShopPilotDay0OwnerBaselineActionCard(card), card)
 })
 
 test('can guide baseline-first state when intake is also missing', () => {

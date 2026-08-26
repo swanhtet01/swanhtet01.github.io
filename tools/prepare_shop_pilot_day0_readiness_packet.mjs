@@ -621,7 +621,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
       'npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"',
       'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"',
-      'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
+      'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
     ],
     forbiddenActions: [
       'customer_contact',
@@ -829,7 +829,11 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
   if (packet.status === 'blocked_owner_observed_baseline_required' && packet.nextOwnerPrivateStep.id !== 'capture-owner-observed-baseline') fail('shop_pilot_day0_next_step_status_mismatch')
   if (packet.status === 'blocked_owner_baseline_and_intake_required' && packet.nextOwnerPrivateStep.id !== 'capture-baseline-then-intake') fail('shop_pilot_day0_next_step_status_mismatch')
   if (packet.status === 'day0_owner_private_handoff_ready' && packet.nextOwnerPrivateStep.id !== 'prepare-day-one-private-handoff') fail('shop_pilot_day0_next_step_status_mismatch')
-  if (!Array.isArray(packet.privateCommands) || packet.privateCommands.length < 5) fail('shop_pilot_day0_private_commands_invalid')
+  if (!Array.isArray(packet.privateCommands)
+    || packet.privateCommands.length < 5
+    || !packet.privateCommands.some((command) => command.includes('--release-handoff "<release-handoff.json>"') && command.includes('--github-protection-snapshot "<github-protection-snapshot.json>"'))) {
+    fail('shop_pilot_day0_private_commands_invalid')
+  }
   if (!Array.isArray(packet.forbiddenActions) || !packet.forbiddenActions.includes('managed_activation')) fail('shop_pilot_day0_forbidden_actions_invalid')
   if (!isRecord(packet.controls) || REQUIRED_FALSE_CONTROLS.some((key) => packet.controls[key] !== (key === 'noWritePacket'))) {
     fail('shop_pilot_day0_controls_invalid')
@@ -1026,6 +1030,7 @@ function runSelfTest() {
       && withReleaseGateEvidence.releaseGate.mainProtectionVerified === true
       && withReleaseGateEvidence.blockers.includes('review_branch_push_missing')
       && !withReleaseGateEvidence.blockers.includes('github_main_protection_unverified')
+      && withReleaseGateEvidence.privateCommands.some((command) => command.includes('--release-handoff "<release-handoff.json>"') && command.includes('--github-protection-snapshot "<github-protection-snapshot.json>"'))
       && validateShopPilotDay0ReadinessPacket(withReleaseGateEvidence) === withReleaseGateEvidence,
     both_packets_ready_still_no_external_effects: withBoth.ok === true
       && withBoth.status === 'day0_owner_private_handoff_ready'
