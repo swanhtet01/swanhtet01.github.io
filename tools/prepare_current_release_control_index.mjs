@@ -135,9 +135,19 @@ function artifactKeysForGate(currentGateId) {
   return required
 }
 
-function currentOwnerActionLabel(currentGateId) {
+function reviewBranchPushActionKind(input) {
+  return String(input?.reviewBranchPushPlan?.possibleWrite?.kind || '')
+}
+
+function reviewBranchPushActionLabel(input) {
+  return reviewBranchPushActionKind(input) === 'fast_forward_branch_push'
+    ? 'fast-forward-only review-branch push'
+    : 'initial review-branch push'
+}
+
+function currentOwnerActionLabel(currentGateId, input) {
   if (currentGateId === 'pull_request_creation') return 'Approve one review-only pull request creation only'
-  if (currentGateId === 'review_branch_push') return 'Approve exact initial review-branch push only'
+  if (currentGateId === 'review_branch_push') return `Approve exact ${reviewBranchPushActionLabel(input)} only`
   return 'Approve GitHub main protection only'
 }
 
@@ -331,7 +341,7 @@ export function buildCurrentReleaseControlIndex(input = {}) {
     },
     currentOwnerAction: {
       gateId: currentGateId,
-      label: currentOwnerActionLabel(currentGateId),
+      label: currentOwnerActionLabel(currentGateId, input),
       sourcePacketFileName: basename(input.paths?.releaseOwnerApproval || ''),
       sourceActionCardFileName: basename(currentOwnerActionSourcePath(input, currentGateId) || ''),
       exactCommit: candidateCommit,
@@ -443,8 +453,11 @@ export function renderCurrentReleaseControlIndexMarkdown(packet) {
   const staleLine = packet.stalePacketPolicy.staleOwnerApprovalPacketObserved
     ? `Observed stale owner approval packet rejected: \`${packet.stalePacketPolicy.staleOwnerApprovalPacketFileName}\` (${packet.stalePacketPolicy.staleOwnerApprovalRejection}).`
     : 'No stale owner approval packet was supplied for this index.'
+  const branchPushInstruction = packet.currentOwnerAction.label
+    .replace(/^Approve exact /, '')
+    .replace(/ only$/, '')
   const ownerInstruction = packet.currentOwnerAction.gateId === 'review_branch_push'
-    ? `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 2 only: initial review-branch push for \`${packet.currentOwnerAction.exactCommit}\`.`
+    ? `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 2 only: ${branchPushInstruction} for \`${packet.currentOwnerAction.exactCommit}\`.`
     : packet.currentOwnerAction.gateId === 'pull_request_creation'
       ? `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 3 only: review-only pull request creation for \`${packet.currentOwnerAction.exactCommit}\`.`
       : `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 1 only: GitHub main protection for \`${packet.currentOwnerAction.exactCommit}\`.`

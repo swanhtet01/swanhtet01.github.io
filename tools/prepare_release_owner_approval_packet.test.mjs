@@ -73,6 +73,51 @@ test('names branch push as current safest next step once main protection is veri
   assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
 })
 
+test('names fast-forward branch push when the review branch already exists', () => {
+  const base = selfTestInput()
+  const remoteCommit = '1'.repeat(40)
+  const githubProtectionSnapshot = {
+    ...base.githubProtectionSnapshot,
+    assessmentOk: true,
+    assessment: {
+      ...(base.githubProtectionSnapshot.assessment || {}),
+      ok: true,
+    },
+    currentAction: 'main_protection_verified_continue_to_review_branch_push',
+  }
+  const handoff = buildReleaseHandoff({
+    generatedAt: base.handoff.generatedAt,
+    repository: base.handoff.repository,
+    candidate: base.handoff.candidate,
+    remote: {
+      ...base.handoff.remote,
+      candidateCommit: remoteCommit,
+    },
+    live: { app: base.handoff.live.identity, public: base.handoff.live.identity },
+    githubMainProtection: base.handoff.githubMainProtection,
+    relations: {
+      ...base.handoff.relations,
+      remoteCandidateIsAncestor: true,
+    },
+    legacyReleaseBranch: {
+      ...base.handoff.legacyReleaseBranch,
+      isAncestorOfCandidate: false,
+    },
+    verification: base.handoff.verification,
+  })
+  const input = {
+    ...base,
+    handoff,
+    githubProtectionSnapshot,
+  }
+  const packet = buildReleaseOwnerApprovalPacket(input)
+
+  assert.match(packet.markdown, /## 2\. Fast-forward-only review-branch push/)
+  assert.match(packet.markdown, /GitHub main protection is verified\. Next approve the exact fast-forward-only review-branch push only\./)
+  assert.doesNotMatch(packet.markdown, /Next approve the exact initial review-branch push only/)
+  assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
+})
+
 test('names pull request creation as current safest next step once review branch is exact', () => {
   const base = selfTestInput()
   const githubProtectionSnapshot = {

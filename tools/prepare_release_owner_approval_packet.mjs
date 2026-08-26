@@ -258,6 +258,12 @@ function handoffReference(handoff) {
     : '<owner-artifact-dir>\\release-handoff.json'
 }
 
+function branchPushActionLabel(handoff) {
+  return handoff?.actions?.reviewBranchPush?.kind === 'owner_review_fast_forward_branch_push'
+    ? 'fast-forward-only review-branch push'
+    : 'initial review-branch push'
+}
+
 function currentSafestNextStep({ handoff, githubProtectionSnapshot, commitLabel }) {
   const mainProtectionVerified = githubProtectionSnapshot?.assessmentOk === true
     || githubProtectionSnapshot?.assessment?.ok === true
@@ -265,7 +271,7 @@ function currentSafestNextStep({ handoff, githubProtectionSnapshot, commitLabel 
     return `GitHub main protection and the review branch are verified. Next approve one review-only pull request creation only. Only after that PR exists, required checks pass, conversations are resolved, and the owner separately approves merge should merge be considered.`
   }
   if (mainProtectionVerified) {
-    return `GitHub main protection is verified. Next approve the exact initial review-branch push only. Only after the remote branch equals the exact ${commitLabel} should PR creation be considered.`
+    return `GitHub main protection is verified. Next approve the exact ${branchPushActionLabel(handoff)} only. Only after the remote branch equals the exact ${commitLabel} should PR creation be considered.`
   }
   return `First approve and apply the GitHub main protection ruleset. Then approve the exact initial branch push. Only after the remote branch equals the exact ${commitLabel} should PR creation be considered.`
 }
@@ -292,6 +298,7 @@ export function buildReleaseOwnerApprovalMarkdown({
     : 'candidate commit'
   const branchApproval = handoffPacket.actions.reviewBranchPush.approvalTemplate
   const prApproval = pullRequestApprovalTemplate(handoffPacket)
+  const branchPushHeading = branchPushActionLabel(handoffPacket)
   const lines = [
     `# SuperMega Release Handoff Owner Approval Packet ${normalizedVersion}`,
     '',
@@ -323,7 +330,7 @@ export function buildReleaseOwnerApprovalMarkdown({
     `node tools/apply_github_main_protection.mjs --execute --proposal "${githubProposalReference}" --expected-head "${handoffPacket.candidate.commit}"`,
     '```',
     '',
-    '## 2. Initial review-branch push',
+    `## 2. ${branchPushHeading[0].toUpperCase()}${branchPushHeading.slice(1)}`,
     '',
     'Required env: `SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL`',
     '',

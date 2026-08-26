@@ -86,6 +86,47 @@ test('builds a current release control index after main protection advances to b
   assert.equal(validateCurrentReleaseControlIndex(packet), packet)
 })
 
+test('labels a review branch update as fast-forward when the remote branch already exists', () => {
+  const base = sampleCurrentReleaseControlIndexInput()
+  const paths = { ...base.paths }
+  delete paths.githubMainProtectionOwnerActionCard
+  const packet = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+    githubMainProtectionSnapshot: {
+      ...base.githubMainProtectionSnapshot,
+      assessmentOk: true,
+      currentAction: 'main_protection_verified_continue_to_review_branch_push',
+    },
+    reviewBranchPushPlan: {
+      ...base.reviewBranchPushPlan,
+      possibleWrite: { kind: 'fast_forward_branch_push' },
+    },
+    operatorBoard: {
+      ...base.operatorBoard,
+      currentAction: { gateId: 'review_branch_push' },
+    },
+    productReadinessMatrix: {
+      ...base.productReadinessMatrix,
+      release: { currentGateId: 'review_branch_push' },
+    },
+    statusBrief: {
+      ...base.statusBrief,
+      release: { currentGateId: 'review_branch_push' },
+    },
+    nextReleaseActionPreflight: {
+      ...base.nextReleaseActionPreflight,
+      currentGateId: 'review_branch_push',
+    },
+    githubMainProtectionOwnerActionCard: null,
+    paths,
+  }))
+
+  assert.equal(packet.currentOwnerAction.label, 'Approve exact fast-forward-only review-branch push only')
+  const markdown = renderCurrentReleaseControlIndexMarkdown(packet)
+  assert.match(markdown, /approve section 2 only: fast-forward-only review-branch push/)
+  assert.doesNotMatch(markdown, /section 2 only: initial review-branch push/)
+  assert.equal(validateCurrentReleaseControlIndex(packet), packet)
+})
+
 test('builds a current release control index after branch push advances to PR creation', () => {
   const base = sampleCurrentReleaseControlIndexInput()
   const paths = { ...base.paths }
