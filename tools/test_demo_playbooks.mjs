@@ -126,6 +126,7 @@ const kitSourcePaths = [
   'hq/portfolio.json',
   'docs/supermega-shop-sales-agent.md',
   'tools/create_shop_pilot_handoff.mjs',
+  'tools/record_shop_pilot_observed_run.mjs',
 ]
 const kitCorpus = kitSourcePaths.map(read).join('\n')
 const kitDerived = new Set(kitSourcePaths)
@@ -147,7 +148,7 @@ check(handoffGenerator.includes('paymentAccepted: false'), 'kit_handoff_no_payme
 
 const kitDir = 'docs/pilot-kit'
 const kitFiles = readdirSync(resolve(root, kitDir)).sort()
-check(kitFiles.join(',') === 'README.md,acceptance-checklist.md,baseline-measurement.md,pilot-agreement-outline.md', `pilot_kit_file_set:${kitFiles.join(',')}`)
+check(kitFiles.join(',') === 'README.md,acceptance-checklist.md,baseline-measurement.md,pilot-agreement-outline.md,runner-field-guide.md', `pilot_kit_file_set:${kitFiles.join(',')}`)
 
 for (const file of kitFiles) {
   const text = read(`${kitDir}/${file}`)
@@ -158,8 +159,28 @@ for (const file of kitFiles) {
 
 const kitReadme = read(`${kitDir}/README.md`)
 check(kitReadme.includes('managed-production-activation'), 'pilot_kit_readme_names_decision_id')
-for (const name of ['baseline-measurement.md', 'acceptance-checklist.md', 'pilot-agreement-outline.md']) {
+for (const name of ['baseline-measurement.md', 'acceptance-checklist.md', 'pilot-agreement-outline.md', 'runner-field-guide.md']) {
   check(kitReadme.includes(name), `pilot_kit_readme_indexes:${name}`)
+}
+
+// The runner field guide is the kit's delegation document: it exists so someone
+// who is not the founder can run the five days. Two facts make or break it and
+// both are pinned, because a document that quietly loses either becomes worse
+// than nothing. (1) It must keep marking every required measurement with a
+// provenance mark -- nothing in showroom/ computes any of them, so an unmarked
+// sheet invites a fabricated number, which is the same class of error as a
+// guided sample earning a proof counter. (2) It must keep the stop-and-call
+// boundaries, whose reasons are what survive contact with a shop floor.
+const kitRunnerGuide = read(`${kitDir}/runner-field-guide.md`)
+for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 'close_minutes_per_day', 'operator_corrections', 'reload_and_retry_result', 'client_import_minutes', 'package_sale_minutes', 'treatment_redemption_minutes', 'package_balance_result']) {
+  check(kitRunnerGuide.includes(`\`${measurement}\``), `pilot_kit_runner_measurement:${measurement}`)
+}
+for (const mark of ['**[P] the product tells you**', '**[W] you watch and write it down**', '**[H] only a human can say**']) {
+  check(kitRunnerGuide.includes(mark), `pilot_kit_runner_provenance_mark:${mark}`)
+}
+check(kitRunnerGuide.includes('## 5. The boundaries — stop and call the founder'), 'pilot_kit_runner_boundaries_section')
+for (const boundary of ['about to say that money arrived', 'about to say a price', 'about to contact a stranger', 'about to connect anything to anything', 'about to write a number you did not see']) {
+  check(kitRunnerGuide.includes(boundary), `pilot_kit_runner_boundary:${boundary}`)
 }
 
 const kitBaseline = read(`${kitDir}/baseline-measurement.md`)

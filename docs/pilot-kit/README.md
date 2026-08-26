@@ -13,6 +13,7 @@ This kit is the paperwork for that preparation. It authorizes nothing: the found
 1. [baseline-measurement.md](baseline-measurement.md) — the form the founder fills in WITH the Spa owner before day 1: named business, named operator, the measured package-and-treatment process, at least three observed timings, error and cost counts, and the four baseline numbers the handoff generator requires.
 2. [acceptance-checklist.md](acceptance-checklist.md) — the day-by-day five-day plan: the four start gates, what evidence gets captured daily, what an accepted run means, and how each day maps to the readiness contract's acceptance-evidence requirement.
 3. [pilot-agreement-outline.md](pilot-agreement-outline.md) — a plain-language outline of what the partner gets and gives. Outline only, marked NOT LEGAL ADVICE; it contains no invented commitments.
+4. [runner-field-guide.md](runner-field-guide.md) — read only when the person on the shop floor is **not** the founder. Documents 1 through 3 assume the founder is running the days; this one covers what changes for a trained runner: how to spend each day's hours, which of the required measurements the product can tell you and which are the runner's own handwriting, the stop-and-call-the-founder boundaries, honest answers for the known product gaps, and the shape of the day-5 handback. It authorizes nothing and it quotes no price.
 
 ## How it connects to the existing machinery
 
