@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { buildReleaseHandoff, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, writeExclusiveJson } from './prepare_release_handoff.mjs'
+import { buildReleaseHandoff, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, withReleaseHandoffOutputLock, writeExclusiveJson } from './prepare_release_handoff.mjs'
 import {
   buildGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
@@ -183,4 +183,29 @@ test('release handoff output is exclusive and non-overwriting', async () => {
   assert.equal(receipt.packetDigest, packet.digest)
   assert.deepEqual(JSON.parse(payload), packet)
   await assert.rejects(writeExclusiveJson(output, packet), /release_handoff_output_exists/)
+})
+
+test('release handoff output lock prevents duplicate expensive generation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-release-handoff-lock-'))
+  const output = join(directory, 'packet.json')
+  let release
+  const first = withReleaseHandoffOutputLock(output, async (lockedOutput) => {
+    assert.equal(lockedOutput, output)
+    return new Promise((resolve) => {
+      release = () => resolve('first')
+    })
+  })
+  while (!release) await new Promise((resolve) => setImmediate(resolve))
+  await assert.rejects(
+    withReleaseHandoffOutputLock(output, async () => 'second'),
+    /release_handoff_output_lock_exists/,
+  )
+  release()
+  assert.equal(await first, 'first')
+  assert.equal(await withReleaseHandoffOutputLock(output, async () => 'after-release'), 'after-release')
+  await writeFile(output, '{}\n', 'utf8')
+  await assert.rejects(
+    withReleaseHandoffOutputLock(output, async () => 'after-output'),
+    /release_handoff_output_exists/,
+  )
 })

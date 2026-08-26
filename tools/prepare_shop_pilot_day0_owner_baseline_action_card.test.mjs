@@ -1,0 +1,198 @@
+import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import test from 'node:test'
+
+import {
+  buildShopPilotBaselinePacket,
+  SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+} from './prepare_shop_pilot_baseline_packet.mjs'
+import {
+  buildShopPilotDay0ReadinessPacket,
+  sampleShopPilotDay0ReadinessInput,
+} from './prepare_shop_pilot_day0_readiness_packet.mjs'
+import {
+  buildShopPilotPrivateIntakePacket,
+  sampleShopPilotPrivateIntakeInput,
+} from './prepare_shop_pilot_private_intake_packet.mjs'
+import {
+  buildShopPilotDay0OwnerBaselineActionCard,
+  renderShopPilotDay0OwnerBaselineActionCardMarkdown,
+  validateShopPilotDay0OwnerBaselineActionCard,
+} from './prepare_shop_pilot_day0_owner_baseline_action_card.mjs'
+import {
+  assessShopPilotLaunchGate,
+  sampleShopPilotLaunchGateInput,
+} from './verify_shop_pilot_launch_gate.mjs'
+
+function baselineInput() {
+  return {
+    contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
+    product: 'shop',
+    pilotMode: 'owner_named',
+    verticalPack: 'spa-services',
+    observedAt: '2026-08-25T08:00:00.000Z',
+    businessName: 'Private Baseline Spa',
+    namedOperator: 'Private Baseline Operator',
+    operatorRole: 'Shop manager',
+    founderObserver: 'Founder',
+    observationPlace: 'Private shop floor',
+    processSummary: 'Owner records package sale and redemption manually, then closes the day.',
+    processStartsAt: 'Client asks for a prepaid package',
+    processEndsAt: 'Payment reconciled, treatment completed, balance updated, and book closed',
+    correctionPath: 'Owner marks the wrong entry and writes the correction beside the record',
+    recordSystem: 'Notebook',
+    observedOrderRuns: [
+      { runId: 'order-run-001', observedAt: '2026-08-25T08:01:00.000Z', startedWhen: 'client request began', endedWhen: 'manual entry completed', durationMinutes: 7, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'order-run-002', observedAt: '2026-08-25T08:20:00.000Z', startedWhen: 'client request began', endedWhen: 'manual entry completed', durationMinutes: 8, interrupted: false, errorOccurred: true, errorCostLabel: 'one correction before final balance' },
+      { runId: 'order-run-003', observedAt: '2026-08-25T08:40:00.000Z', startedWhen: 'client request began', endedWhen: 'manual entry completed', durationMinutes: 9, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    observedRedemptionRuns: [
+      { runId: 'redemption-run-001', observedAt: '2026-08-25T09:01:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 2, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-002', observedAt: '2026-08-25T09:20:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 3, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
+    weeklyOrders: 120,
+    claimedMedianMinutesPerOrder: 8,
+    weeklyExceptionCount: 12,
+    closeMinutesPerDay: 45,
+    clientImportRowCount: 40,
+    weeklyPackageSales: 12,
+    weeklyTreatmentRedemptions: 24,
+    claimedMedianMinutesPerRedemption: 3,
+    weeklyPackageCorrectionCount: 2,
+    observedErrorRunCount: 1,
+    totalObservedErrorCostLabel: 'one manual correction, no monetary claim',
+    ownerConfirmedBaseline: true,
+    operatorAgreesReviewEveryRun: true,
+    proposedPilotStartDate: '2026-08-31',
+    reviewDate: '2026-09-04',
+    noSuperMegaDemoMeasured: true,
+    noExternalEffects: true,
+  }
+}
+
+function day0Packet({ withBaseline = false, withIntake = true } = {}) {
+  const baselinePacket = withBaseline
+    ? buildShopPilotBaselinePacket(baselineInput(), { generatedAt: '2026-08-25T00:00:00.000Z' })
+    : null
+  const intakePacket = withIntake
+    ? buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
+    : null
+  return buildShopPilotDay0ReadinessPacket(sampleShopPilotDay0ReadinessInput({
+    launchGateReport: assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ baselinePacket, intakePacket })),
+    ownerPrivatePreparation: {
+      baselineInputTemplateDigest: `sha256:${'a'.repeat(64)}`,
+      baselineInputTemplateBlank: true,
+      baselineWorksheetDigest: `sha256:${'b'.repeat(64)}`,
+      baselineWorksheetBlank: true,
+    },
+  }))
+}
+
+test('renders an owner-baseline action card without local paths, identity, or authority', () => {
+  const card = buildShopPilotDay0OwnerBaselineActionCard({
+    generatedAt: '2026-08-26T00:00:00.000Z',
+    day0Packet: day0Packet(),
+  })
+  assert.equal(validateShopPilotDay0OwnerBaselineActionCard(card), card)
+  assert.equal(card.status, 'owner_observed_baseline_action_required')
+  assert.equal(card.source.day0Status, 'blocked_owner_observed_baseline_required')
+  assert.equal(card.ownerPrivatePrepArtifacts.artifactPolicy, 'digests_only_no_paths')
+  assert.equal(card.ownerPrivatePrepArtifacts.localPathsIncluded, false)
+  assert.equal(card.controls.githubWritesAllowed, false)
+  assert.equal(card.controls.vercelDeployAllowed, false)
+  assert.equal(card.controls.supabaseWritesAllowed, false)
+  assert.equal(card.controls.customerContactAllowed, false)
+  assert.equal(card.controls.paymentAllowed, false)
+  assert.equal(card.controls.stockMovementAllowed, false)
+  assert.ok(card.commandPlan.commands.some((command) => command.includes('--lint-input "<private-baseline-input.json>"')))
+  assert.ok(card.minimumEvidence.stopConditions.includes('raw_identity_or_private_note_would_enter_public_packet'))
+
+  const markdown = renderShopPilotDay0OwnerBaselineActionCardMarkdown(card)
+  assert.match(markdown, /Capture the owner-observed manual Shop baseline/)
+  assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)
+  assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
+  assert.doesNotMatch(markdown, /Private Baseline Spa|Private Baseline Operator/)
+  assert.doesNotMatch(markdown, /ready for managed activation|production release ready|pilot proof/i)
+})
+
+test('can guide baseline-first state when intake is also missing', () => {
+  const card = buildShopPilotDay0OwnerBaselineActionCard({
+    generatedAt: '2026-08-26T00:00:00.000Z',
+    day0Packet: day0Packet({ withIntake: false }),
+  })
+  assert.equal(card.source.day0Status, 'blocked_owner_baseline_and_intake_required')
+  assert.ok(card.blockersStillActive.includes('owner_private_intake_packet_missing'))
+  assert.equal(validateShopPilotDay0OwnerBaselineActionCard(card), card)
+})
+
+test('rejects non-baseline Day-0 states and private/path leakage', () => {
+  assert.throws(
+    () => buildShopPilotDay0OwnerBaselineActionCard({ day0Packet: day0Packet({ withBaseline: true, withIntake: true }) }),
+    /shop_pilot_day0_owner_baseline_card_not_applicable/,
+  )
+
+  const packet = day0Packet()
+  assert.throws(
+    () => buildShopPilotDay0OwnerBaselineActionCard({
+      day0Packet: {
+        ...packet,
+        ownerPrivatePreparation: {
+          ...packet.ownerPrivatePreparation,
+          localPath: 'C:\\Users\\owner\\private-baseline-input.json',
+        },
+      },
+    }),
+    /shop_pilot_day0_(?:owner_baseline_card_)?private_or_secret_shape/,
+  )
+
+  const card = buildShopPilotDay0OwnerBaselineActionCard({ day0Packet: packet })
+  assert.throws(
+    () => validateShopPilotDay0OwnerBaselineActionCard({
+      ...card,
+      commandPlan: {
+        ...card.commandPlan,
+        commands: [...card.commandPlan.commands, 'npm.cmd run deploy'],
+      },
+    }),
+    /shop_pilot_day0_owner_baseline_card_digest_invalid/,
+  )
+})
+
+test('CLI writes and verifies the public-safe action card', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'shop-day0-owner-card-'))
+  try {
+    const day0Path = join(dir, 'day0.json')
+    const outputPath = join(dir, 'card.json')
+    const markdownPath = join(dir, 'card.md')
+    await import('node:fs/promises').then(({ writeFile }) => writeFile(day0Path, `${JSON.stringify(day0Packet(), null, 2)}\n`, 'utf8'))
+
+    const run = spawnSync(process.execPath, [
+      'tools/prepare_shop_pilot_day0_owner_baseline_action_card.mjs',
+      '--day0-readiness',
+      day0Path,
+      '--output',
+      outputPath,
+      '--markdown-output',
+      markdownPath,
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    assert.equal(run.status, 0, run.stderr || run.stdout)
+
+    const verify = spawnSync(process.execPath, [
+      'tools/prepare_shop_pilot_day0_owner_baseline_action_card.mjs',
+      '--verify',
+      outputPath,
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    assert.equal(verify.status, 0, verify.stderr || verify.stdout)
+    assert.equal(JSON.parse(verify.stdout).ok, true)
+
+    const markdown = await readFile(markdownPath, 'utf8')
+    assert.match(markdown, /Local paths included: false/)
+    assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

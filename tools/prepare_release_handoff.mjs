@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto'
-import { open, lstat, mkdir, readFile } from 'node:fs/promises'
+import { open, lstat, mkdir, readFile, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
@@ -507,6 +507,33 @@ export async function writeExclusiveJson(outputPath, packet) {
   }
 }
 
+export async function withReleaseHandoffOutputLock(outputPath, action) {
+  const absolute = resolve(outputPath)
+  await mkdir(dirname(absolute), { recursive: true })
+  const existing = await lstat(absolute).catch(() => null)
+  if (existing) fail('release_handoff_output_exists')
+  const lockPath = `${absolute}.lock`
+  let handle
+  try {
+    handle = await open(lockPath, 'wx', 0o600)
+  } catch (error) {
+    if (error?.code === 'EEXIST') fail('release_handoff_output_lock_exists')
+    throw error
+  }
+  try {
+    await handle.writeFile(`${JSON.stringify({
+      contract: `${RELEASE_HANDOFF_CONTRACT}.lock`,
+      output: absolute,
+      pid: process.pid,
+      createdAt: new Date().toISOString(),
+    })}\n`, 'utf8')
+    return await action(absolute)
+  } finally {
+    await handle.close().catch(() => {})
+    await rm(lockPath, { force: true }).catch(() => {})
+  }
+}
+
 function parseArgs(argv) {
   if (argv.length !== 2 || !argv[1]) fail('release_handoff_path_required')
   if (argv[0] === '--output') return { mode: 'prepare', path: argv[1] }
@@ -515,6 +542,7 @@ function parseArgs(argv) {
 }
 
 async function prepareReleaseHandoff(output) {
+  return withReleaseHandoffOutputLock(output, async (lockedOutput) => {
   const branch = git('symbolic-ref', '--short', 'HEAD')
   const candidateCommit = exactSha(git('rev-parse', 'HEAD'), 'release_handoff_candidate_invalid')
   const origin = git('remote', 'get-url', 'origin')
@@ -564,8 +592,9 @@ async function prepareReleaseHandoff(output) {
     verification: { passed: true, verifiedCommit: candidateCommit, workflowAuthority },
     githubMainProtection,
   })
-  const receipt = await writeExclusiveJson(output, packet)
+  const receipt = await writeExclusiveJson(lockedOutput, packet)
   return { ok: true, contract: RELEASE_HANDOFF_CONTRACT, ...receipt }
+  })
 }
 
 export async function verifyCurrentReleaseHandoff(inputPath) {
