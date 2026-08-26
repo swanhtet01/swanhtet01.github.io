@@ -18,6 +18,7 @@ const OWNER = 'swanhtet01'
 const REPO = 'swanhtet01.github.io'
 const BRANCH_URL = `https://api.github.com/repos/${OWNER}/${REPO}/branches/main`
 const RULESETS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/rulesets`
+const RULESET_DETAIL_URL_PREFIX = `${RULESETS_URL}/`
 const TOKEN_ENVS = ['GITHUB_TOKEN', 'GH_TOKEN']
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const SHA_PATTERN = /^[0-9a-f]{40}$/
@@ -335,6 +336,31 @@ async function githubGetJson(url, { env = process.env, request = fetch } = {}) {
   }
 }
 
+async function githubGetJsonOptional(url, { env = process.env, request = fetch } = {}) {
+  try {
+    return await githubGetJson(url, { env, request })
+  } catch {
+    return null
+  }
+}
+
+async function expandRulesetsWithDetails(rulesets, { env = process.env, request = fetch } = {}) {
+  if (!Array.isArray(rulesets)) fail('github_main_protection_snapshot_rulesets_invalid')
+  const expanded = []
+  for (const ruleset of rulesets) {
+    if (!isRecord(ruleset)) fail('github_main_protection_snapshot_rulesets_invalid')
+    const id = /^\d+$/.test(String(ruleset.id || '')) ? String(ruleset.id) : null
+    const needsDetail = id && asArray(ruleset.rules).length === 0
+    if (!needsDetail) {
+      expanded.push(ruleset)
+      continue
+    }
+    const detail = await githubGetJsonOptional(`${RULESET_DETAIL_URL_PREFIX}${id}`, { env, request })
+    expanded.push(isRecord(detail?.json) ? detail.json : ruleset)
+  }
+  return expanded
+}
+
 async function writeJson(path, value) {
   const absolute = resolve(path || '')
   await mkdir(dirname(absolute), { recursive: true })
@@ -351,10 +377,11 @@ export async function collectGitHubMainProtectionSnapshot({
 } = {}) {
   const branch = await githubGetJson(BRANCH_URL, { env, request })
   const rulesets = await githubGetJson(RULESETS_URL, { env, request })
+  const expandedRulesets = await expandRulesetsWithDetails(rulesets.json, { env, request })
   const tokenEnv = branch.tokenEnv || rulesets.tokenEnv || null
   const packet = buildGitHubMainProtectionSnapshot({
     branch: branch.json,
-    rulesets: rulesets.json,
+    rulesets: expandedRulesets,
     tokenEnv,
   })
   const outputs = {

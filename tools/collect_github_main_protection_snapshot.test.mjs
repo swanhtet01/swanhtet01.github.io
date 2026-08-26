@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
   buildGitHubMainProtectionSnapshot,
+  collectGitHubMainProtectionSnapshot,
   sanitizeBranchSnapshot,
   sanitizeRulesetsSnapshot,
   validateGitHubMainProtectionSnapshot,
@@ -85,6 +86,37 @@ test('ruleset sanitizer keeps only protection-relevant fields', () => {
   assert.deepEqual(sanitized[0].rules.map((rule) => rule.type), ['deletion', 'non_fast_forward', 'pull_request', 'required_status_checks'])
   assert.ok(!JSON.stringify(sanitized).includes('private-node-id-not-needed'))
   assert.ok(!JSON.stringify(sanitized).includes('integration_id'))
+})
+
+test('collector expands ruleset list entries before protection assessment', async () => {
+  const calls = []
+  const listRuleset = {
+    id: 123,
+    name: 'SuperMega main release gate',
+    target: 'branch',
+    enforcement: 'active',
+    conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+    rules: [],
+  }
+  const request = async (url) => {
+    calls.push(String(url))
+    let body
+    if (String(url).endsWith('/branches/main')) body = branch
+    else if (String(url).endsWith('/rulesets')) body = [listRuleset]
+    else if (String(url).endsWith('/rulesets/123')) body = rulesets[0]
+    else throw new Error(`unexpected_url:${url}`)
+    return {
+      ok: true,
+      status: 200,
+      async text() {
+        return JSON.stringify(body)
+      },
+    }
+  }
+  const { packet } = await collectGitHubMainProtectionSnapshot({ request, env: {} })
+  assert.equal(packet.assessment.ok, true)
+  assert.ok(calls.some((url) => url.endsWith('/rulesets/123')))
+  assert.deepEqual(packet.rulesets[0].rules.map((rule) => rule.type), ['deletion', 'non_fast_forward', 'pull_request', 'required_status_checks'])
 })
 
 test('rejects tampered write controls and digest mismatch', () => {
