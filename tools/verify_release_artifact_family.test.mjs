@@ -5,9 +5,15 @@ import {
   RELEASE_ARTIFACT_FAMILY_VERIFIER_CONTRACT,
   runSelfTest,
   scanOwnerFacingText,
+  verifyAdminTechnicalCoordinationBinding,
   verifyShopDay0ProductMatrixBinding,
   verifyReleaseArtifactFamily,
 } from './verify_release_artifact_family.mjs'
+import {
+  buildCurrentReleaseControlIndex,
+  sampleCurrentReleaseControlIndexInput,
+} from './prepare_current_release_control_index.mjs'
+import { buildAdminTechnicalCoordinationPacket } from './prepare_admin_technical_coordination_packet.mjs'
 
 test('release artifact family verifier self-test remains fail-closed', () => {
   const result = runSelfTest()
@@ -75,4 +81,77 @@ test('product matrix must stay bound to Shop Day-0 intake and baseline state', (
     ...matrix,
     products: [{ productId: 'shop', currentBlockers: ['github_main_protection', 'real_shop_pilot_evidence'] }],
   }, day0, day0Artifact), /missing_shop_baseline_blocker/)
+})
+
+test('admin technical coordination packet must bind to the same current release index', () => {
+  const controlIndexFileName = 'supermega.current-release-control-index.v99.generated-20260826.json'
+  const controlIndex = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput())
+  const adminPacket = buildAdminTechnicalCoordinationPacket({
+    currentReleaseControlIndex: controlIndex,
+    remoteReviewBranchCommit: 'b'.repeat(40),
+    remoteMainCommit: 'c'.repeat(40),
+    sourceFileNames: { currentReleaseControlIndex: controlIndexFileName },
+  })
+
+  assert.equal(
+    verifyAdminTechnicalCoordinationBinding(adminPacket, controlIndex, controlIndexFileName),
+    adminPacket,
+  )
+
+  const differentControlIndex = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+    handoff: {
+      ...sampleCurrentReleaseControlIndexInput().handoff,
+      candidate: {
+        ...sampleCurrentReleaseControlIndexInput().handoff.candidate,
+        commit: 'd'.repeat(40),
+      },
+    },
+    githubMainProtectionApplyPlan: {
+      ...sampleCurrentReleaseControlIndexInput().githubMainProtectionApplyPlan,
+      candidate: { head: 'd'.repeat(40) },
+    },
+    reviewBranchPushPlan: {
+      ...sampleCurrentReleaseControlIndexInput().reviewBranchPushPlan,
+      candidate: { head: 'd'.repeat(40) },
+    },
+    pullRequestCreatePlan: {
+      ...sampleCurrentReleaseControlIndexInput().pullRequestCreatePlan,
+      candidate: { head: 'd'.repeat(40) },
+    },
+    operatorBoard: {
+      ...sampleCurrentReleaseControlIndexInput().operatorBoard,
+      candidate: {
+        ...sampleCurrentReleaseControlIndexInput().operatorBoard.candidate,
+        commit: 'd'.repeat(40),
+      },
+    },
+    nextReleaseActionPreflight: {
+      ...sampleCurrentReleaseControlIndexInput().nextReleaseActionPreflight,
+      candidateCommit: 'd'.repeat(40),
+    },
+    releaseOwnerApproval: {
+      ...sampleCurrentReleaseControlIndexInput().releaseOwnerApproval,
+      candidate: { commit: 'd'.repeat(40) },
+    },
+    githubMainProtectionOwnerActionCard: {
+      ...sampleCurrentReleaseControlIndexInput().githubMainProtectionOwnerActionCard,
+      currentAction: {
+        ...sampleCurrentReleaseControlIndexInput().githubMainProtectionOwnerActionCard.currentAction,
+        candidateCommit: 'd'.repeat(40),
+      },
+    },
+    shopPilotDay0Readiness: {
+      ...sampleCurrentReleaseControlIndexInput().shopPilotDay0Readiness,
+      candidate: { head: 'd'.repeat(40) },
+    },
+    shopPilotDay0OwnerBaselineActionCard: {
+      ...sampleCurrentReleaseControlIndexInput().shopPilotDay0OwnerBaselineActionCard,
+      candidate: { head: 'd'.repeat(40) },
+    },
+  }))
+
+  assert.throws(
+    () => verifyAdminTechnicalCoordinationBinding(adminPacket, differentControlIndex, controlIndexFileName),
+    /admin_technical_coordination_candidate_mismatch/,
+  )
 })

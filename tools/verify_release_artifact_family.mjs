@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,6 +14,7 @@ import { validateCurrentReleaseControlIndex } from './prepare_current_release_co
 import { validateGitHubMainProtectionOwnerActionCard } from './prepare_github_main_protection_owner_action_card.mjs'
 import { validateNextReleaseActionPreflight } from './prepare_next_release_action_preflight.mjs'
 import { validateProductReadinessMatrix } from './prepare_product_readiness_matrix.mjs'
+import { validateAdminTechnicalCoordinationPacket } from './prepare_admin_technical_coordination_packet.mjs'
 import { validateReleaseHandoffPacket } from './prepare_release_handoff.mjs'
 import { validateReleaseOwnerApprovalMarkdown } from './prepare_release_owner_approval_packet.mjs'
 import { validateShopPilotBaselinePacket } from './prepare_shop_pilot_baseline_packet.mjs'
@@ -214,6 +215,59 @@ function ownerFacingFamilyFileNames({ suffix }) {
   ]
 }
 
+function adminTechnicalCoordinationRegex({ version, date }, extension) {
+  return new RegExp(`^supermega\\.admin-technical-${version}-coordination-packet\\.v[0-9]{1,3}\\.generated-${date}\\.${extension}$`, 'i')
+}
+
+function uniqueAdminTechnicalCoordinationFile(entries, family, extension) {
+  const regex = adminTechnicalCoordinationRegex(family, extension)
+  const matches = entries.filter((entry) => regex.test(entry)).sort()
+  if (matches.length !== 1) {
+    fail(matches.length === 0
+      ? `release_artifact_family_admin_technical_coordination_${extension}_missing`
+      : `release_artifact_family_admin_technical_coordination_${extension}_ambiguous`)
+  }
+  return matches[0]
+}
+
+export function verifyAdminTechnicalCoordinationBinding(packet, controlIndex, controlIndexFileName) {
+  const verified = validateAdminTechnicalCoordinationPacket(packet)
+  if (verified.candidate.commit !== controlIndex.candidate.commit) {
+    fail('release_artifact_family_admin_technical_coordination_candidate_mismatch')
+  }
+  if (verified.candidate.branch !== controlIndex.candidate.branch) {
+    fail('release_artifact_family_admin_technical_coordination_branch_mismatch')
+  }
+  if (verified.currentOwnerAction.gateId !== controlIndex.currentOwnerAction.gateId
+    || verified.currentOwnerAction.sourcePacketFileName !== controlIndex.currentOwnerAction.sourcePacketFileName
+    || verified.currentOwnerAction.sourceActionCardFileName !== controlIndex.currentOwnerAction.sourceActionCardFileName
+    || verified.currentOwnerAction.exactCommit !== controlIndex.candidate.commit) {
+    fail('release_artifact_family_admin_technical_coordination_owner_action_mismatch')
+  }
+  if (verified.shopPilot.day0Status !== controlIndex.shopPilot.day0Status
+    || verified.shopPilot.currentPrivateGate !== controlIndex.shopPilot.currentPrivateGate
+    || verified.shopPilot.customerContactAllowed !== false
+    || verified.shopPilot.managedActivationAllowed !== false) {
+    fail('release_artifact_family_admin_technical_coordination_shop_gate_mismatch')
+  }
+  if (verified.sourceFiles?.currentReleaseControlIndex !== controlIndexFileName) {
+    fail('release_artifact_family_admin_technical_coordination_source_index_mismatch')
+  }
+  return verified
+}
+
+async function verifyRequiredAdminTechnicalCoordinationArtifact(baseDir, family, controlIndex, controlIndexFileName) {
+  const entries = await readdir(baseDir).catch(() => [])
+  const jsonFileName = uniqueAdminTechnicalCoordinationFile(entries, family, 'json')
+  const markdownFileName = uniqueAdminTechnicalCoordinationFile(entries, family, 'md')
+  const packet = verifyAdminTechnicalCoordinationBinding(
+    await readJson(artifactPath(baseDir, jsonFileName), 'release_artifact_family_admin_technical_coordination_missing'),
+    controlIndex,
+    controlIndexFileName,
+  )
+  return { jsonFileName, markdownFileName, packet }
+}
+
 async function maybeRead(artifactsDir, fileName) {
   return readFile(artifactPath(artifactsDir, fileName), 'utf8').then(
     (text) => ({ fileName, text }),
@@ -309,6 +363,14 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
       sourceDigest: verifiedSourceDigests.shopPilotDay0Readiness,
     },
   )
+  const adminTechnicalCoordination = await verifyRequiredAdminTechnicalCoordinationArtifact(
+    baseDir,
+    family,
+    controlIndex,
+    basename(controlPath),
+  )
+  semanticArtifacts.push('adminTechnicalCoordinationPacket')
+  verifiedPackets.adminTechnicalCoordinationPacket = adminTechnicalCoordination.packet
 
   const githubProposal = await readJson(GITHUB_PROPOSAL_PATH, 'release_artifact_family_github_proposal_missing')
   const supabaseProposal = await readJson(SUPABASE_PROPOSAL_PATH, 'release_artifact_family_supabase_proposal_missing')
@@ -345,6 +407,8 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     markdownCounterpartName(artifacts.nextReleaseActionPreflight.fileName),
     artifacts.shopPilotDay0Readiness.fileName,
     markdownCounterpartName(artifacts.shopPilotDay0Readiness.fileName),
+    adminTechnicalCoordination.jsonFileName,
+    adminTechnicalCoordination.markdownFileName,
     ...ownerFacingFamilyFileNames(family),
   ].filter(Boolean))
 
