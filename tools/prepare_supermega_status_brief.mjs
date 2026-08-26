@@ -123,8 +123,15 @@ function buildControls(operatorBoard, actionBoard) {
   return Object.fromEntries(CONTROL_FIELDS.map((field) => [field, false]))
 }
 
-function selectCurrentOperatingAction(actions) {
-  const openActions = actions.filter((action) => OPEN_ACTION_STATUSES.has(action.status))
+function actionIsSatisfiedByReleaseGate(action, operatorBoard) {
+  if (action?.id !== 'release-main-protection') return false
+  const mainProtectionGate = operatorBoard?.gates?.find((gate) => gate?.id === 'github_main_protection')
+  return mainProtectionGate?.status === 'satisfied'
+}
+
+function selectCurrentOperatingAction(actions, operatorBoard) {
+  const openActions = actions.filter((action) =>
+    OPEN_ACTION_STATUSES.has(action.status) && !actionIsSatisfiedByReleaseGate(action, operatorBoard))
   if (!openActions.length) return null
   return [...openActions].sort((a, b) => {
     const severity = (SEVERITY_RANK.get(a.severity) ?? 99) - (SEVERITY_RANK.get(b.severity) ?? 99)
@@ -218,7 +225,7 @@ export function buildSuperMegaStatusBrief({
     fail('supermega_status_brief_live_mode_invalid')
   }
 
-  const currentOperatingAction = selectCurrentOperatingAction(actionBoard.actions)
+  const currentOperatingAction = selectCurrentOperatingAction(actionBoard.actions, operator)
   const controls = buildControls(operator, actionBoard)
   const nextWork = buildNextWork({ operatorBoard: operator, actionBoard, currentOperatingAction })
   const releaseBlockers = Array.isArray(operator.currentAction.blockers)

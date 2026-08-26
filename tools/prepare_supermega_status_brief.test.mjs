@@ -21,6 +21,11 @@ const commit = 'a'.repeat(40)
 const main = 'b'.repeat(40)
 const live = 'c'.repeat(40)
 const branch = 'codex/release-stack-integration-rehearsal-20260825'
+const requiredMainChecks = [
+  'SuperMega App CI',
+  'Dependency Security Audit',
+  'Kernel Console - Verify & Owner-Gated Release',
+]
 
 function digestOf(char) {
   return `sha256:${char.repeat(64)}`
@@ -106,6 +111,26 @@ function operatorBoard(overrides = {}) {
     },
     gitState: { branch, head: commit, clean: true },
     ...overrides,
+  })
+}
+
+function protectedMainSnapshot() {
+  return buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    branch: {
+      name: 'main',
+      protected: true,
+      commit: { sha: main },
+      protection: {
+        enabled: true,
+        allow_force_pushes: { enabled: false },
+        allow_deletions: { enabled: false },
+        required_pull_request_reviews: { required_approving_review_count: 1 },
+        required_conversation_resolution: { enabled: true },
+        required_status_checks: { contexts: requiredMainChecks, checks: [] },
+      },
+    },
+    rulesets: [],
   })
 }
 
@@ -231,6 +256,30 @@ test('keeps the money path explicit without claiming Shop pilot proof', () => {
   assert.ok(brief.nextWork.some((item) => item.id === 'action-shop-owner-pilot-baseline'))
   assert.equal(brief.products.managedWritesEnabled, false)
   assert.ok(brief.release.blockers.includes('main_unprotected'))
+})
+
+test('does not present satisfied main protection as the current operating action', () => {
+  const brief = buildSuperMegaStatusBrief({
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    operatorBoard: operatorBoard({
+      githubProtectionSnapshot: protectedMainSnapshot(),
+      branchPushPlan: {
+        contract: 'supermega.review-branch-push-apply.v1',
+        mode: 'plan_only_no_git_remote_write',
+        candidate: { clean: true },
+        approval: { env: 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL', approved: false, expectedDigest: digestOf('7') },
+        possibleWrite: { kind: 'fast_forward_branch_push' },
+        controls: { gitRemoteWritesPerformed: false },
+      },
+    }),
+    operatingActionBoard: actionBoard(),
+  })
+  assert.equal(brief.release.currentGateId, 'review_branch_push')
+  assert.equal(brief.operatingActions.currentOperatingAction.id, 'shop-owner-pilot-baseline')
+  assert.equal(brief.nextWork[0].id, 'gate-review_branch_push')
+  assert.ok(!brief.nextWork.some((item) => item.id === 'action-release-main-protection'))
+  assert.ok(brief.nextWork.some((item) => item.id === 'action-shop-owner-pilot-baseline'))
+  assert.equal(validateSuperMegaStatusBrief(brief), brief)
 })
 
 test('fails closed on live-write, private-owner, fifth-product, and stale action summaries', () => {
