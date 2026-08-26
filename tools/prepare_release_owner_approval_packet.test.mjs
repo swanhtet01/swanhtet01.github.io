@@ -26,6 +26,8 @@ test('builds an exact owner approval packet for the release handoff commit', () 
   assert.ok(packet.markdown.includes('SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'))
   assert.ok(packet.markdown.includes('SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'))
   assert.ok(packet.markdown.includes('No approval below grants merge, production release, deployment'))
+  assert.ok(packet.markdown.includes('this packet intentionally avoids raw local paths'))
+  assert.doesNotMatch(packet.markdown, /[A-Za-z]:\\/)
   assert.ok(packet.markdown.includes('github:main-protection:apply:plan -- --proposal "'))
   assert.ok(packet.markdown.includes('apply_github_main_protection.mjs --execute --proposal "'))
   assert.equal(packet.controls.githubWritesPerformed, false)
@@ -82,7 +84,7 @@ test('CLI infers version from versioned output and verify paths', async () => {
   }
 })
 
-test('uses a validated exact GitHub protection snapshot path when provided', () => {
+test('uses a validated owner-safe GitHub protection snapshot reference when provided', () => {
   const base = selfTestInput()
   const input = {
     ...base,
@@ -90,7 +92,8 @@ test('uses a validated exact GitHub protection snapshot path when provided', () 
   }
   const packet = buildReleaseOwnerApprovalPacket(input)
 
-  assert.ok(packet.markdown.includes('--github-protection-snapshot "C:\\Users\\thesw\\OneDrive - BDA\\supermega.github-main-protection-snapshot.v82.generated-20260825.json"'))
+  assert.ok(packet.markdown.includes('--github-protection-snapshot "<owner-artifact-dir>\\supermega.github-main-protection-snapshot.v82.generated-20260825.json"'))
+  assert.doesNotMatch(packet.markdown, /[A-Za-z]:\\/)
   assert.equal(packet.markdown.includes('<github-main-protection-snapshot.json>'), false)
   assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
 })
@@ -99,7 +102,7 @@ test('binds GitHub main protection commands to the reviewed proposal path', () =
   const input = selfTestInput()
   const packet = buildReleaseOwnerApprovalPacket(input)
 
-  assert.match(packet.markdown, /github-main-protection-proposal\.json"/)
+  assert.match(packet.markdown, /hq\/readiness\/github-main-protection-proposal\.json"/)
   assert.doesNotMatch(packet.markdown, /github:main-protection:apply:plan\s*```/)
   assert.doesNotMatch(packet.markdown, /apply_github_main_protection\.mjs --execute\s*```/)
 

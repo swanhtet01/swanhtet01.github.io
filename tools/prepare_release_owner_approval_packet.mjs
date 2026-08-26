@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
@@ -232,7 +232,7 @@ function validatedSnapshotReference(snapshotPath = null, snapshot = null) {
   }
   const resolvedPath = resolve(snapshotPath)
   if (hasSecretShape(resolvedPath)) fail('release_owner_approval_snapshot_path_secret_shape_detected')
-  return resolvedPath
+  return ownerSafePathReference(resolvedPath, 'github-main-protection-snapshot.json')
 }
 
 function validatedGitHubProposalReference(proposalPath = GITHUB_PROPOSAL_PATH, proposal = null) {
@@ -240,7 +240,22 @@ function validatedGitHubProposalReference(proposalPath = GITHUB_PROPOSAL_PATH, p
   if (packet.repository !== REPOSITORY) fail('release_owner_approval_github_proposal_repository_invalid')
   const resolvedPath = resolve(proposalPath || GITHUB_PROPOSAL_PATH)
   if (hasSecretShape(resolvedPath)) fail('release_owner_approval_github_proposal_path_secret_shape_detected')
-  return resolvedPath
+  return ownerSafePathReference(resolvedPath, 'github-main-protection-proposal.json')
+}
+
+function ownerSafePathReference(path, fallbackName) {
+  const resolvedPath = resolve(path || fallbackName || '')
+  const relativePath = relative(root, resolvedPath)
+  if (relativePath && !relativePath.startsWith('..') && !isAbsolute(relativePath)) {
+    return relativePath.replace(/\\/g, '/')
+  }
+  return `<owner-artifact-dir>\\${basename(resolvedPath) || fallbackName}`
+}
+
+function handoffReference(handoff) {
+  return handoff?.__sourcePath
+    ? ownerSafePathReference(handoff.__sourcePath, 'release-handoff.json')
+    : '<owner-artifact-dir>\\release-handoff.json'
 }
 
 export function buildReleaseOwnerApprovalMarkdown({
@@ -258,6 +273,7 @@ export function buildReleaseOwnerApprovalMarkdown({
   const supabasePacket = validateSupabasePreviewProposalForApproval(supabaseProposal)
   const githubProposalReference = validatedGitHubProposalReference(githubProposalPath, githubPacket)
   const snapshotReference = validatedSnapshotReference(githubProtectionSnapshotPath, githubProtectionSnapshot)
+  const handoffPathReference = handoffReference(handoffPacket)
   const normalizedVersion = packetVersion(version)
   const commitLabel = inferHandoffVersion({ handoff: handoffPacket, handoffVersion })
     ? `${inferHandoffVersion({ handoff: handoffPacket, handoffVersion })} commit`
@@ -270,6 +286,8 @@ export function buildReleaseOwnerApprovalMarkdown({
     `Use these approvals one at a time only if you want the next external action to happen. This packet is current for candidate commit \`${handoffPacket.candidate.commit}\`.`,
     '',
     'No approval below grants merge, production release, deployment, Supabase production mutation, credential rotation, payment, customer contact, stock movement, domain changes, hosted writes, or managed activation unless that exact action is named.',
+    '',
+    'Run commands from the repository root. Replace `<owner-artifact-dir>` with the local folder that contains the named generated packet files; this packet intentionally avoids raw local paths.',
     '',
     '## 1. GitHub main protection ruleset',
     '',
@@ -306,13 +324,13 @@ export function buildReleaseOwnerApprovalMarkdown({
     'Review command, no-write:',
     '',
     '```powershell',
-    `npm.cmd run release:branch-push:apply -- --plan --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
+    `npm.cmd run release:branch-push:apply -- --plan --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     'Execute command, only after approval:',
     '',
     '```powershell',
-    `npm.cmd run release:branch-push:apply -- --execute --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
+    `npm.cmd run release:branch-push:apply -- --execute --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     '## 3. Pull request creation',
@@ -328,13 +346,13 @@ export function buildReleaseOwnerApprovalMarkdown({
     'Review command, no-write:',
     '',
     '```powershell',
-    `npm.cmd run release:pull-request:create -- --plan --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
+    `npm.cmd run release:pull-request:create -- --plan --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     'Execute command, only after branch push, approval, and token are available:',
     '',
     '```powershell',
-    `npm.cmd run release:pull-request:create -- --execute --handoff "${handoffPacket.__sourcePath || '<release-handoff.json>'}" --github-protection-snapshot "${snapshotReference}"`,
+    `npm.cmd run release:pull-request:create -- --execute --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
     '## 4. Supabase preview rehearsal',
