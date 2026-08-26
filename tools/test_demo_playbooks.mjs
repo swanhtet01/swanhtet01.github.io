@@ -149,6 +149,7 @@ const kitSourcePaths = [
   'tools/create_shop_pilot_handoff.mjs',
   'tools/prepare_shop_pilot_baseline_packet.mjs',
   'tools/prepare_shop_pilot_day0_readiness_packet.mjs',
+  'tools/record_shop_pilot_observed_run.mjs',
   'tools/verify_shop_pilot_launch_gate.mjs',
 ]
 const kitCorpus = kitSourcePaths.map(read).join('\n')
@@ -168,6 +169,10 @@ const handoffGenerator = read('tools/create_shop_pilot_handoff.mjs')
 check(handoffGenerator.includes('durationDays: 5'), 'kit_handoff_duration_pin')
 check(handoffGenerator.includes("throw new Error('review_date_must_close_five_day_plan')"), 'kit_handoff_review_date_pin')
 check(handoffGenerator.includes('paymentAccepted: false'), 'kit_handoff_no_payment_pin')
+const observedRunRecorder = read('tools/record_shop_pilot_observed_run.mjs')
+check(observedRunRecorder.includes('evidenceReferenceDigest')
+  && observedRunRecorder.includes('independentAnchorDigest')
+  && observedRunRecorder.includes('shop_observed_evidence_anchor_digest_not_independent'), 'kit_observed_run_receipt_anchor_pin')
 
 const kitDir = 'docs/pilot-kit'
 const kitFiles = readdirSync(resolve(root, kitDir)).sort()
@@ -208,6 +213,10 @@ for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 
 for (const gateName of ['isolatedNonProductionTenantApproved', 'namedOperatorAuthorized', 'pilotDataHandlingApproved', 'ownerReviewedCommercialDraft']) {
   check(kitAcceptance.includes(`\`${gateName}\``), `pilot_kit_acceptance_gate:${gateName}`)
 }
+for (const receiptAnchorToken of ['evidenceReferenceDigest', 'independentAnchorDigest', 'client:pilot:observed-evidence:template', 'client:pilot:observed-evidence:validate', 'client:pilot:observed-evidence']) {
+  check(kitAcceptance.includes(`\`${receiptAnchorToken}\``), `pilot_kit_acceptance_receipt_anchor:${receiptAnchorToken}`)
+}
+check(kitAcceptance.includes('If either digest is missing, reused, or equal to the other digest, the run does not count.'), 'pilot_kit_acceptance_digest_pair_fail_closed')
 
 check(read(`${kitDir}/pilot-agreement-outline.md`).includes('NOT LEGAL ADVICE'), 'pilot_kit_agreement_disclaimer')
 
