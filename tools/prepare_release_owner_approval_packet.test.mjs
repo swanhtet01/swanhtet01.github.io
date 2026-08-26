@@ -11,6 +11,7 @@ import {
   selfTestInput,
   validateReleaseOwnerApprovalMarkdown,
 } from './prepare_release_owner_approval_packet.mjs'
+import { buildReleaseHandoff } from './prepare_release_handoff.mjs'
 
 test('builds an exact owner approval packet for the release handoff commit', () => {
   const input = selfTestInput()
@@ -69,6 +70,46 @@ test('names branch push as current safest next step once main protection is veri
 
   assert.match(packet.markdown, /GitHub main protection is verified\. Next approve the exact initial review-branch push only\./)
   assert.doesNotMatch(packet.markdown, /First approve and apply the GitHub main protection ruleset\./)
+  assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
+})
+
+test('names pull request creation as current safest next step once review branch is exact', () => {
+  const base = selfTestInput()
+  const githubProtectionSnapshot = {
+    ...base.githubProtectionSnapshot,
+    assessmentOk: true,
+    assessment: {
+      ...(base.githubProtectionSnapshot.assessment || {}),
+      ok: true,
+    },
+    currentAction: 'main_protection_verified_continue_to_review_branch_push',
+  }
+  const handoff = buildReleaseHandoff({
+    generatedAt: base.handoff.generatedAt,
+    repository: base.handoff.repository,
+    candidate: base.handoff.candidate,
+    remote: {
+      ...base.handoff.remote,
+      candidateCommit: base.handoff.candidate.commit,
+    },
+    live: { app: base.handoff.live.identity, public: base.handoff.live.identity },
+    githubMainProtection: base.handoff.githubMainProtection,
+    relations: base.handoff.relations,
+    legacyReleaseBranch: {
+      ...base.handoff.legacyReleaseBranch,
+      isAncestorOfCandidate: false,
+    },
+    verification: base.handoff.verification,
+  })
+  const input = {
+    ...base,
+    handoff,
+    githubProtectionSnapshot,
+  }
+  const packet = buildReleaseOwnerApprovalPacket(input)
+
+  assert.match(packet.markdown, /GitHub main protection and the review branch are verified\. Next approve one review-only pull request creation only\./)
+  assert.doesNotMatch(packet.markdown, /Next approve the exact initial review-branch push only/)
   assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
 })
 

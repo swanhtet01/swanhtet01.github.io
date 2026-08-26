@@ -86,6 +86,48 @@ test('builds a current release control index after main protection advances to b
   assert.equal(validateCurrentReleaseControlIndex(packet), packet)
 })
 
+test('builds a current release control index after branch push advances to PR creation', () => {
+  const base = sampleCurrentReleaseControlIndexInput()
+  const paths = { ...base.paths }
+  delete paths.githubMainProtectionOwnerActionCard
+  const packet = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+    githubMainProtectionSnapshot: {
+      ...base.githubMainProtectionSnapshot,
+      assessmentOk: true,
+      currentAction: 'main_protection_verified_continue_to_review_branch_push',
+    },
+    reviewBranchPushPlan: {
+      ...base.reviewBranchPushPlan,
+      possibleWrite: { kind: 'already_published_no_push' },
+    },
+    operatorBoard: {
+      ...base.operatorBoard,
+      currentAction: { gateId: 'pull_request_creation' },
+    },
+    productReadinessMatrix: {
+      ...base.productReadinessMatrix,
+      release: { currentGateId: 'pull_request_creation' },
+    },
+    statusBrief: {
+      ...base.statusBrief,
+      release: { currentGateId: 'pull_request_creation' },
+    },
+    nextReleaseActionPreflight: {
+      ...base.nextReleaseActionPreflight,
+      currentGateId: 'pull_request_creation',
+    },
+    githubMainProtectionOwnerActionCard: null,
+    paths,
+  }))
+
+  assert.equal(packet.currentOwnerAction.gateId, 'pull_request_creation')
+  assert.equal(packet.currentOwnerAction.sourceActionCardFileName, 'supermega.pull-request-create-plan.v99.generated-20260826.json')
+  assert.equal(packet.authoritativeArtifacts.githubMainProtectionOwnerActionCard, undefined)
+  const markdown = renderCurrentReleaseControlIndexMarkdown(packet)
+  assert.match(markdown, /approve section 3 only: review-only pull request creation/)
+  assert.equal(validateCurrentReleaseControlIndex(packet), packet)
+})
+
 test('accepts current preflight candidate schema without weakening mismatch guard', () => {
   const base = sampleCurrentReleaseControlIndexInput()
   const packet = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({

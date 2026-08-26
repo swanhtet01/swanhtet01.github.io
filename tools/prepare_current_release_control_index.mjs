@@ -109,7 +109,7 @@ function preflightCurrentGateId(preflight) {
   return preflight?.currentGateId || preflight?.currentAction?.gateId || preflight?.release?.currentGateId || null
 }
 
-const SUPPORTED_CURRENT_GATE_IDS = new Set(['github_main_protection', 'review_branch_push'])
+const SUPPORTED_CURRENT_GATE_IDS = new Set(['github_main_protection', 'review_branch_push', 'pull_request_creation'])
 
 function assertSupportedCurrentGateId(gateId) {
   if (!SUPPORTED_CURRENT_GATE_IDS.has(gateId)) fail('current_release_control_index_gate_invalid')
@@ -136,14 +136,15 @@ function artifactKeysForGate(currentGateId) {
 }
 
 function currentOwnerActionLabel(currentGateId) {
+  if (currentGateId === 'pull_request_creation') return 'Approve one review-only pull request creation only'
   if (currentGateId === 'review_branch_push') return 'Approve exact initial review-branch push only'
   return 'Approve GitHub main protection only'
 }
 
 function currentOwnerActionSourcePath(input, currentGateId) {
-  return currentGateId === 'review_branch_push'
-    ? input.paths?.reviewBranchPushPlan
-    : input.paths?.githubMainProtectionOwnerActionCard
+  if (currentGateId === 'review_branch_push') return input.paths?.reviewBranchPushPlan
+  if (currentGateId === 'pull_request_creation') return input.paths?.pullRequestCreatePlan
+  return input.paths?.githubMainProtectionOwnerActionCard
 }
 
 function ownerApprovalPacketVersionFromPath(path) {
@@ -420,6 +421,10 @@ export function validateCurrentReleaseControlIndex(packet) {
     && packet.currentOwnerAction.sourceActionCardFileName !== artifacts.reviewBranchPushPlan.fileName) {
     fail('current_release_control_index_review_branch_action_card_invalid')
   }
+  if (currentGateId === 'pull_request_creation'
+    && packet.currentOwnerAction.sourceActionCardFileName !== artifacts.pullRequestCreatePlan.fileName) {
+    fail('current_release_control_index_pull_request_action_card_invalid')
+  }
   if (artifacts.shopPilotDay0OwnerBaselineActionCard.status !== 'owner_observed_baseline_action_required'
     || artifacts.shopPilotDay0OwnerBaselineActionCard.currentAction !== 'capture-owner-observed-baseline') {
     fail('current_release_control_index_shop_day0_owner_baseline_card_invalid')
@@ -440,7 +445,9 @@ export function renderCurrentReleaseControlIndexMarkdown(packet) {
     : 'No stale owner approval packet was supplied for this index.'
   const ownerInstruction = packet.currentOwnerAction.gateId === 'review_branch_push'
     ? `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 2 only: initial review-branch push for \`${packet.currentOwnerAction.exactCommit}\`.`
-    : `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 1 only: GitHub main protection for \`${packet.currentOwnerAction.exactCommit}\`.`
+    : packet.currentOwnerAction.gateId === 'pull_request_creation'
+      ? `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 3 only: review-only pull request creation for \`${packet.currentOwnerAction.exactCommit}\`.`
+      : `Use \`${packet.currentOwnerAction.sourceActionCardFileName}\` with \`${packet.currentOwnerAction.sourcePacketFileName}\` and approve section 1 only: GitHub main protection for \`${packet.currentOwnerAction.exactCommit}\`.`
   return `# SuperMega Current Release Control Index
 
 Contract: \`${packet.contract}\`

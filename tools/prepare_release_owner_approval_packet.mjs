@@ -258,9 +258,12 @@ function handoffReference(handoff) {
     : '<owner-artifact-dir>\\release-handoff.json'
 }
 
-function currentSafestNextStep({ githubProtectionSnapshot, commitLabel }) {
+function currentSafestNextStep({ handoff, githubProtectionSnapshot, commitLabel }) {
   const mainProtectionVerified = githubProtectionSnapshot?.assessmentOk === true
     || githubProtectionSnapshot?.assessment?.ok === true
+  if (mainProtectionVerified && handoff?.remote?.candidateBranchState === 'exact') {
+    return `GitHub main protection and the review branch are verified. Next approve one review-only pull request creation only. Only after that PR exists, required checks pass, conversations are resolved, and the owner separately approves merge should merge be considered.`
+  }
   if (mainProtectionVerified) {
     return `GitHub main protection is verified. Next approve the exact initial review-branch push only. Only after the remote branch equals the exact ${commitLabel} should PR creation be considered.`
   }
@@ -376,7 +379,7 @@ export function buildReleaseOwnerApprovalMarkdown({
     '',
     '## Current safest next step',
     '',
-    currentSafestNextStep({ githubProtectionSnapshot, commitLabel }),
+    currentSafestNextStep({ handoff: handoffPacket, githubProtectionSnapshot, commitLabel }),
   ]
   const markdown = `${lines.join('\n')}\n`
   if (hasSecretShape(markdown)) fail('release_owner_approval_packet_secret_shape_detected')
