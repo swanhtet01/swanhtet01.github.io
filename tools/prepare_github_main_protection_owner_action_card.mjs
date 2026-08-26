@@ -321,11 +321,11 @@ This card performed no external writes and grants no authority beyond the single
 `
 }
 
-async function readJson(path, code) {
+async function readJson(path, code, { publicSafe = true } = {}) {
   const text = await readFile(resolve(path || ''), 'utf8').catch(() => null)
   if (!text) fail(code)
   const packet = JSON.parse(text)
-  assertPublicSafe(packet, `${code}_private_or_secret_shape`)
+  if (publicSafe) assertPublicSafe(packet, `${code}_private_or_secret_shape`)
   return packet
 }
 
@@ -349,8 +349,8 @@ async function writeExclusive(path, payload) {
 
 async function writeCard(options) {
   const card = buildGitHubMainProtectionOwnerActionCard({
-    preflight: await readJson(options.preflightPath, 'github_main_protection_owner_action_card_preflight_missing'),
-    githubMainProtectionApplyPlan: await readJson(options.applyPlanPath, 'github_main_protection_owner_action_card_apply_plan_missing'),
+    preflight: await readJson(options.preflightPath, 'github_main_protection_owner_action_card_preflight_missing', { publicSafe: false }),
+    githubMainProtectionApplyPlan: await readJson(options.applyPlanPath, 'github_main_protection_owner_action_card_apply_plan_missing', { publicSafe: false }),
     releaseOwnerApprovalMarkdown: await readText(options.ownerApprovalPath, 'github_main_protection_owner_action_card_owner_packet_missing'),
   })
   validateGitHubMainProtectionOwnerActionCard(card)

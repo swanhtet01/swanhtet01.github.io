@@ -62,12 +62,12 @@ function falseControls() {
   }
 }
 
-function applyPlan() {
+function applyPlan({ proposalPath = 'hq/readiness/github-main-protection-proposal.json' } = {}) {
   const proposalPacket = buildGitHubMainProtectionPacket({ sourceReceipts })
   return buildApplyPlan({
     proposalReceipt: {
       name: 'github-main-protection-proposal.json',
-      path: 'hq/readiness/github-main-protection-proposal.json',
+      path: proposalPath,
       digest: `sha256:${'1'.repeat(64)}`,
       packet: proposalPacket,
     },
@@ -256,7 +256,9 @@ test('rejects stale owner text and non-GitHub current gates', () => {
 test('CLI writes and verifies a local no-write action card', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'github-main-protection-card-'))
   try {
-    const plan = applyPlan()
+    const plan = applyPlan({
+      proposalPath: 'C:\\Users\\thesw\\Projects\\supermega-platform\\hq\\readiness\\github-main-protection-proposal.json',
+    })
     const preflightPath = join(directory, 'preflight.json')
     const planPath = join(directory, 'apply-plan.json')
     const ownerPath = join(directory, 'owner.md')
