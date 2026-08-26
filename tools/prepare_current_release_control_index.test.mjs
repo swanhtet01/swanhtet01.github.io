@@ -48,6 +48,44 @@ test('records a stale owner packet without making it authoritative', () => {
   assert.equal(validateCurrentReleaseControlIndex(packet), packet)
 })
 
+test('builds a current release control index after main protection advances to branch push', () => {
+  const base = sampleCurrentReleaseControlIndexInput()
+  const paths = { ...base.paths }
+  delete paths.githubMainProtectionOwnerActionCard
+  const packet = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({
+    githubMainProtectionSnapshot: {
+      ...base.githubMainProtectionSnapshot,
+      assessmentOk: true,
+      currentAction: 'main_protection_verified_continue_to_review_branch_push',
+    },
+    operatorBoard: {
+      ...base.operatorBoard,
+      currentAction: { gateId: 'review_branch_push' },
+    },
+    productReadinessMatrix: {
+      ...base.productReadinessMatrix,
+      release: { currentGateId: 'review_branch_push' },
+    },
+    statusBrief: {
+      ...base.statusBrief,
+      release: { currentGateId: 'review_branch_push' },
+    },
+    nextReleaseActionPreflight: {
+      ...base.nextReleaseActionPreflight,
+      currentGateId: 'review_branch_push',
+    },
+    githubMainProtectionOwnerActionCard: null,
+    paths,
+  }))
+
+  assert.equal(packet.currentOwnerAction.gateId, 'review_branch_push')
+  assert.equal(packet.currentOwnerAction.sourceActionCardFileName, 'supermega.review-branch-push-plan.v99.generated-20260826.json')
+  assert.equal(packet.authoritativeArtifacts.githubMainProtectionOwnerActionCard, undefined)
+  const markdown = renderCurrentReleaseControlIndexMarkdown(packet)
+  assert.match(markdown, /approve section 2 only: initial review-branch push/)
+  assert.equal(validateCurrentReleaseControlIndex(packet), packet)
+})
+
 test('accepts current preflight candidate schema without weakening mismatch guard', () => {
   const base = sampleCurrentReleaseControlIndexInput()
   const packet = buildCurrentReleaseControlIndex(sampleCurrentReleaseControlIndexInput({

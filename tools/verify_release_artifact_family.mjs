@@ -273,7 +273,9 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     ['productReadinessMatrix', validateProductReadinessMatrix],
     ['statusBrief', validateSuperMegaStatusBrief],
     ['nextReleaseActionPreflight', validateNextReleaseActionPreflight],
-    ['githubMainProtectionOwnerActionCard', validateGitHubMainProtectionOwnerActionCard],
+    ...(artifacts.githubMainProtectionOwnerActionCard
+      ? [['githubMainProtectionOwnerActionCard', validateGitHubMainProtectionOwnerActionCard]]
+      : []),
     ['shopPilotDay0Readiness', validateShopPilotDay0ReadinessPacket],
     ['shopPilotDay0OwnerBaselineActionCard', validateShopPilotDay0OwnerBaselineActionCard],
   ]
@@ -377,7 +379,9 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     ownerFacingLeakFindings: 0,
     ownerFacingClarityFindings: 0,
     blockersStillExpected: [
-      'github_main_protection_unverified',
+      controlIndex.currentOwnerAction.gateId === 'github_main_protection'
+        ? 'github_main_protection_unverified'
+        : 'owner_approval_missing',
       'owner_observed_baseline_packet_missing',
       'preview_rehearsal_missing',
       'real_pilot_evidence_missing',

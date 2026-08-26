@@ -51,6 +51,27 @@ test('verifies only the exact generated markdown for the current handoff', () =>
   )
 })
 
+test('names branch push as current safest next step once main protection is verified', () => {
+  const base = selfTestInput()
+  const input = {
+    ...base,
+    githubProtectionSnapshot: {
+      ...base.githubProtectionSnapshot,
+      assessmentOk: true,
+      assessment: {
+        ...(base.githubProtectionSnapshot.assessment || {}),
+        ok: true,
+      },
+      currentAction: 'main_protection_verified_continue_to_review_branch_push',
+    },
+  }
+  const packet = buildReleaseOwnerApprovalPacket(input)
+
+  assert.match(packet.markdown, /GitHub main protection is verified\. Next approve the exact initial review-branch push only\./)
+  assert.doesNotMatch(packet.markdown, /First approve and apply the GitHub main protection ruleset\./)
+  assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
+})
+
 test('CLI infers version from versioned output and verify paths', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'release-owner-approval-version-'))
   try {
