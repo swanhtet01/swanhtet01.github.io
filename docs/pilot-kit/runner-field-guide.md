@@ -106,10 +106,11 @@ If the owner wants to see the product working on day 1, use the guided sample an
 say what it is: a demonstration, not their shop's record. **Do not write a guided
 sample down as a run.** See boundary 5.
 
-### 3.3 Day 2 — the first real runs: a counter sale
+### 3.3 Day 2 — the first real runs, and the package sale
 
 **Done looks like:** four or more accepted runs recorded, each timed, each
-reviewed by the operator, and a timed close.
+reviewed by the operator; **one of those runs is the reviewed client's prepaid
+package sale, settled so the payment is reconciled**; and a timed close.
 
 The run, in the product, is exactly this sequence, and the operator does all of it:
 
@@ -125,34 +126,102 @@ The run, in the product, is exactly this sequence, and the operator does all of 
 sale. **Stop it** when the settle action is confirmed. That is one value of
 `median_minutes_per_order`. Write it on the sheet immediately, not from memory.
 
+**The package sale is that same sequence with a different line on it.** The
+vertical pack ships two prepaid packages: `Myanmar massage · 5 sessions`, SKU
+`SPA-PACK-MASSAGE-5`, and `Facial treatment · 3 sessions`, SKU
+`SPA-PACK-FACIAL-3`. Sell one of them to the client whose import row you reviewed
+yesterday, **by name** — not to a walk-in, and not to `Guest`, because an unnamed
+buyer earns no balance and tomorrow will have nothing to spend. Settling the sale
+is what marks the payment `reconciled`, and nothing counts as a package until it
+is settled. Time this run on its own and write it down as `package_sale_minutes`.
+It is also one of the day's accepted runs; it does not replace them.
+
+This is not a scheduling choice you are free to move. The generated handoff fixes
+day 2 as `Spa services vertical pack package sale` and will ask you for the
+reconciled sale by name. A day 2 without one hands the founder back a plan with a
+hole where a proof should be.
+
 | Block | Hour by hour |
 | --- | --- |
 | A | Ask the operator for one sentence about yesterday. Write it in their words. |
 | B | Observe only. Count exceptions: anything that did not go the normal way. |
-| C | Runs. Aim for five, expect four. Between runs, say nothing except what the operator asks. Silence is a measurement instrument. |
+| C | **The package sale first**, while everyone is fresh: the reviewed client by name, a package SKU, settled through `Orders`. Time it end to end — that is `package_sale_minutes`. Do not book the treatment yet; that is tomorrow. |
+| C | Then ordinary counter sales. Aim for five runs on the day counting the package sale, expect four. Between runs, say nothing except what the operator asks. Silence is a measurement instrument. |
 | C | After each run, ask the operator two questions and only two: "was that right?" and "did you have to fix anything?" Their answer, not yours, decides whether the run is accepted. |
 | D | Observe only. |
 | E | The operator taps `Save daily close`. Time it from the first tap to the confirmed close. That is one value of `close_minutes_per_day`. |
 | E | Note the close's own numbers: how many orders, and how many payment and stock exceptions it recorded. |
 
-### 3.4 Day 3 — the package sale, the redemption, and one deliberate refusal
+### 3.4 Day 3 — the treatment, the redemption, and one deliberate refusal
 
-**Done looks like:** a reconciled package sale, a matching completed treatment
-with one redemption recorded, one refused mismatch, and a timed close.
+**Done looks like:** a completed treatment matching yesterday's package, one
+redemption recorded against it, the refusal pair captured in writing, and a timed
+close.
 
-The vertical pack ships two prepaid packages — for example
-`Myanmar massage · 5 sessions`, SKU `SPA-PACK-MASSAGE-5`. The balance is not
-something you compute: `spaMembershipBalances` projects remaining sessions from
-the reconciled orders and the redemption events. Read it off the screen.
+Yesterday's package is already paid for; today it gets used. The balance is not
+something you compute: `spaMembershipBalances` projects the remaining sessions
+from the reconciled orders and the redemption events. Read it off the screen.
 
 | Block | Hour by hour |
 | --- | --- |
-| A | Agree with the operator which single mismatch you will rehearse today, and tell the owner it will be rehearsed on purpose so nobody thinks the product broke. |
-| C | Package sale run: time it end to end. That is `package_sale_minutes`. |
-| C | Treatment and redemption run: time it end to end. That is `treatment_redemption_minutes`. Read the remaining sessions off the screen after the redemption and write the number down. |
-| C | **The deliberate refusal.** The operator attempts one redemption that should not be allowed — wrong customer, wrong treatment, unreconciled payment, or a refunded package. Write down, in one sentence, exactly what the screen said. If it did **not** refuse, that is the single most important line you will write all week. Stop, write it down word for word, and call the founder the same day. |
+| A | Agree with the operator which refusal pair you will rehearse today, and tell the owner it is being rehearsed on purpose so nobody thinks the product broke. |
+| C | Book and complete the treatment that matches the package, then redeem the session. Time it end to end. That is `treatment_redemption_minutes`. Read the remaining sessions off the screen afterwards and write that number down: it is `package_balance_result`. |
+| C | **The deliberate refusal.** Read 3.4.1 before you attempt it. The product refuses this by withholding the action rather than by printing a message, so the evidence you have to capture is not the evidence you would expect. |
 | D | Observe only. |
 | E | Close, timed. Note whether the counted money matched. |
+
+#### 3.4.1 The refusal is a missing button, not a message
+
+Expect no error text at all. This catches people out, so read it once slowly.
+
+`Use package` is not a button that accepts a redemption and then judges it. The
+screen builds `membershipByBookingId` first, and a booking earns an entry only
+when every one of these holds: the booking is `completed`, no redemption has been
+recorded against it already, and `spaMembershipBalances` reports a balance for
+that exact client **and** that exact treatment with sessions still left. The
+button is drawn only for a booking that has an entry. And `spaMembershipBalances`
+counts a package only from an order that is `completed`, with `paymentStatus`
+`reconciled`, and not refunded.
+
+Follow that through and the mismatches you might have expected to stage all land
+in the same place: for a wrong client, a wrong treatment, an unsettled package or
+a refunded one there is no entry, so **there is no button to press**. Nothing
+refuses you, because nothing is offered. Two of the four you cannot stage on day
+3 at all — a package that was never settled earns no balance to mis-spend in the
+first place, and the product will not let a completed, paid order be cancelled,
+so you cannot refund yesterday's package to watch the entitlement be withdrawn.
+
+So do not stand there waiting for a sentence to copy down. There is none, and a
+runner who waits for one leaves the most important box on the sheet empty.
+**The absence of the action is the evidence.** But absence is only evidence when
+you can show the same screen offering the action a moment earlier, on a booking
+that deserved it. So capture it as a pair, in this order:
+
+| Half | What the operator does | What you write down |
+| --- | --- | --- |
+| **The covered treatment** | Complete the `Traditional Myanmar massage` booking for the client who holds `SPA-PACK-MASSAGE-5` — the redemption run above. | That `Use package` was present, and the session count shown on it. |
+| **The uncovered treatment** | For the **same client**, on the **same day**, book and complete a `Facial treatment` — a service that client holds no package for. Look at that booking. | That no `Use package` is on it. The booking, the client, the treatment, and the clock time. |
+
+One client, one screen, two bookings, one action offered and one withheld. That
+is a refusal a reader can check, and unlike a note saying nothing happened it
+cannot be mistaken for a screen that had not finished loading. If you would
+rather vary the client than the treatment, complete a `Traditional Myanmar
+massage` booking for a **different** client who holds no package and read that
+row instead. Either way both halves must be on the screen at the same time.
+
+**The line that matters most.** If `Use package` appears where it should not —
+on the facial, on a client with no package, or on a booking whose session was
+already used — stop. That is the single most important line you will write all
+week. Write the booking, the client, the treatment and the exact button text
+word for word, and call the founder the same day. The same applies if the
+operator presses it and the screen takes a session it should not have taken.
+
+Two smaller notes, neither of which is the day-3 evidence. Once a session has
+been used, `Use package` disappears from that booking — the guard against
+spending one session twice is the same withheld action, with a notice ending
+`already used its package session.` behind it for a stale screen that gets there
+first. And a package sold to an unnamed buyer produces no balance at all, which
+is why day 2 insists on the client by name.
 
 ### 3.5 Day 4 — the close, the reload, and recovery
 
@@ -275,9 +344,11 @@ One row per run. Copy this onto paper before you travel.
 computes `acceptedConsecutiveRuns` from the end of the list backwards, and only
 sets `promotionEvidenceMet` at **twenty consecutive accepted runs**. Day 1
 produces none. That leaves four days to produce twenty unbroken — five a day,
-with no failures. One non-accepted run resets the count to zero. Know this on
-day 2, not on day 5. It is not your job to protect the streak by hiding a bad
-run; it is your job to know what the streak means when you hand it back.
+with no failures. One non-accepted run in the file resets the count to zero —
+and a run the file will not accept at all does not reset it, which is worse; see
+caution 3 in 4.4. Know this on day 2, not on day 5. It is not your job to
+protect the streak by hiding a bad run; it is your job to know what the streak
+means, and what it quietly leaves out, when you hand it back.
 
 ### 4.4 The evidence tool, and why you may not be able to use it live
 
@@ -296,7 +367,7 @@ It reads nothing from the product. Every one of its numbers —
 does not make anything measured. It makes what you attested hard to alter later,
 which is a real and different kind of value.
 
-Two cautions.
+Three cautions, and the third is the one that costs you if you miss it.
 
 1. **It covers five of the nine measurements.** `client_import_minutes`,
    `package_sale_minutes`, `treatment_redemption_minutes` and
@@ -307,8 +378,44 @@ Two cautions.
    the founder rules on what each is a digest *of* (section 8), do not invent an
    answer and do not run the tool live. Instead, on every run, write down the
    literal strings a digest would be taken from — including the order's own
-   `evidenceReference` value — so that whatever the founder decides, the rows can
-   be loaded afterwards **without anyone going back to the shop to ask**.
+   `evidenceReference` value — so that whatever the founder decides, the rows
+   that *can* be loaded can be loaded afterwards **without anyone going back to
+   the shop to ask**. Read caution 3 before you assume that means all of them.
+
+3. **It cannot hold every run, and this is the limit that will bite.** Of the
+   judgement fields the recorder demands, only `accepted` may be false — it is
+   the one field checked with an ordinary boolean test. `operatorReviewed` and
+   `targetCorrect` are checked with `exactTrue`, which accepts nothing but
+   `true` and otherwise refuses the whole row on `operator_reviewed` or
+   `target_correct`. The same exact-`true` test guards `noRealMessageSent`,
+   `noPaymentAccepted`, `noStockMovement`, `noServerWrite` and `noHostedWrite`.
+
+   Read what that means. The two worst things a run can do — the operator never
+   checked it, or it landed on the wrong record — are precisely the two the file
+   can **never** carry, no matter what the founder later rules about the
+   digests. A run that ends that way is not "pending a decision". It is not
+   loadable, and no future decision makes it loadable. Neither is a run that
+   moved real stock, sent a real message, or wrote to a real server.
+
+   Do not let that silence read as a clean week. A refused row does not merely
+   go missing: the streak is counted from the end of the recorded list
+   backwards, so the good runs on either side of the gap join up and report a
+   longer unbroken run than actually happened. `acceptedConsecutiveRuns` would
+   then be an overstatement produced by the tool's own admission rules, and
+   nobody reading the file afterwards can see the hole. So:
+
+   - Write the run up on paper in full, exactly as section 4.3 requires. The
+     paper sheet, not the tool, is the record of the week.
+   - Mark it on the sheet **not loadable**, and name the field that failed —
+     review, or target, or which boundary it crossed.
+   - In the handback, put the tool's `acceptedConsecutiveRuns` and the true
+     streak from your sheet side by side whenever they differ, and say which is
+     which. The tool's number is not wrong; it is answering a narrower question
+     than the owner is asking.
+   - A run that *was* reviewed and *did* hit the right record but failed for any
+     other reason — an exception, a correction, a time nobody is happy with —
+     belongs in the file with `accepted` false. Those the tool handles honestly,
+     and those are the ones that should break the streak inside it.
 
 ---
 
