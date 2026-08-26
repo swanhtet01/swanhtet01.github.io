@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
@@ -20,6 +21,9 @@ const requiredSnippets = {
     '[switch]$AllowExternalWrites',
     '[string]$OwnerConfirmation = ""',
     'I APPROVE SUPERMEGA GITHUB SECRET AND WORKFLOW WRITES',
+    '$CloudAiProviderKeys = @(',
+    'Assert-NoCloudAiProviderSecrets -EnvMap $envMap',
+    'Hosted AI provider secret key is quarantined for this SuperMega release lane',
     'Legacy default env-file discovery is quarantined',
     'Legacy service-account default paths are quarantined',
     'Refusing to infer a token from git remote URLs',
@@ -31,8 +35,11 @@ const requiredSnippets = {
     'Legacy default secret-source paths are quarantined',
     'Default app env-file writes are quarantined',
     'Default showroom env-file writes are quarantined',
+    'Remove-CloudAiProviderMaterial -Target $envMap',
     '$envMap["SUPERMEGA_LLM_PROVIDER"] = "ollama"',
+    '$envMap["SUPERMEGA_OLLAMA_ENABLED"] = "1"',
     '$envMap["SUPERMEGA_OLLAMA_MODEL"] = "llama3.2:1b"',
+    '$envMap["OLLAMA_KEEP_ALIVE"] = "0s"',
   ],
   'tools/github_secret_sync.py': [
     'EXPECTED_OWNER_CONFIRMATION = "I APPROVE SUPERMEGA GITHUB SECRET WRITE"',
@@ -55,6 +62,9 @@ const forbiddenSnippets = [
   '$envMap["SUPERMEGA_LLM_PROVIDER"] = "openai"',
   '$envMap["SUPERMEGA_OPENAI_MODEL"] = "gpt-5-mini"',
   '$envMap["SUPERMEGA_ANTHROPIC_MODEL"] = "claude-sonnet-4-20250514"',
+  '$envMap["ANTHROPIC_API_KEY"] = $anthropic',
+  '$envMap["OPENAI_API_KEY"] = $openai',
+  'Set-GitHubSecret -RepoName $Repo -Name "OPENAI_API_KEY"',
   'parser.add_argument("--token", required=True',
   '.expanduser()',
   '"response": key_resp.text',
@@ -87,6 +97,7 @@ for (const rel of targets) {
 }
 
 runGitHubSecretSyncBehaviorChecks()
+runLocalSecretMaterializerBehaviorChecks()
 
 const result = {
   ok: errors.length === 0,
@@ -221,6 +232,113 @@ function runPython(args) {
       UNIT_TEST_SECRET_VALUE: '',
     },
     timeout: 10_000,
+    windowsHide: true,
+  })
+}
+
+function runLocalSecretMaterializerBehaviorChecks() {
+  const script = path.join(repoRoot, 'tools', 'sync_local_secrets.ps1')
+  if (!fs.existsSync(script)) {
+    errors.push('local_secret_materializer_behavior_missing_script')
+    return
+  }
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'supermega-secret-materializer-'))
+  try {
+    const source = path.join(tempRoot, 'owner-secrets.txt')
+    const appEnv = path.join(tempRoot, '.env.app.local')
+    const showroomEnv = path.join(tempRoot, '.env.showroom.local')
+    fs.writeFileSync(source, [
+      'claude api',
+      'anthropic-legacy-placeholder',
+      'google places api',
+      'google-places-placeholder',
+      'openai',
+      'supermega',
+      'openai-legacy-placeholder',
+      'client id',
+      'gmail-client-placeholder',
+      'secret',
+      'GOCSPX-gmail-placeholder',
+      '',
+    ].join('\n'), 'utf8')
+    fs.writeFileSync(appEnv, [
+      'OPENAI_API_KEY=existing-openai-placeholder',
+      'ANTHROPIC_API_KEY=existing-anthropic-placeholder',
+      'OPENROUTER_API_KEY=existing-openrouter-placeholder',
+      'SUPERMEGA_OR_MODEL_REASON=openai/gpt-4o',
+      '',
+    ].join('\n'), 'utf8')
+    fs.writeFileSync(showroomEnv, '', 'utf8')
+
+    const child = runPowerShell([
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', script,
+      '-SecretsFile', source,
+      '-OutputPath', appEnv,
+      '-ShowroomOutputPath', showroomEnv,
+      '-AllowLocalSecretWrite',
+      '-OwnerConfirmation', 'I APPROVE SUPERMEGA LOCAL SECRET MATERIALIZATION',
+    ])
+    const appText = fs.readFileSync(appEnv, 'utf8')
+    const showroomText = fs.readFileSync(showroomEnv, 'utf8')
+    const forbidden = [
+      'OPENAI_API_KEY=',
+      'ANTHROPIC_API_KEY=',
+      'CLAUDE_API_KEY=',
+      'OPENROUTER_API_KEY=',
+      'AI_GATEWAY_API_KEY=',
+      'SUPERMEGA_OR_MODEL_REASON=',
+      'anthropic-legacy-placeholder',
+      'openai-legacy-placeholder',
+      'existing-openai-placeholder',
+      'existing-anthropic-placeholder',
+      'existing-openrouter-placeholder',
+    ]
+    const required = [
+      'SUPERMEGA_LLM_PROVIDER=ollama',
+      'SUPERMEGA_OLLAMA_ENABLED=1',
+      'SUPERMEGA_OLLAMA_MODEL=llama3.2:1b',
+      'OLLAMA_KEEP_ALIVE=0s',
+      'GOOGLE_PLACES_API_KEY=google-places-placeholder',
+      'GMAIL_OAUTH_CLIENT_ID=gmail-client-placeholder',
+    ]
+    const ok = child.status === 0
+      && required.every((snippet) => appText.includes(snippet))
+      && forbidden.every((snippet) => !appText.includes(snippet) && !showroomText.includes(snippet))
+      && !/anthropic|openai|openrouter/i.test(String(child.stdout || '') + String(child.stderr || ''))
+
+    behaviorChecks.push({
+      name: 'local_secret_materializer_scrubs_hosted_ai_keys',
+      ok,
+      status: child.status,
+      externalWritesPerformed: false,
+      secretValuesExposed: false,
+    })
+    if (!ok) errors.push('local_secret_materializer_behavior_failed:local_secret_materializer_scrubs_hosted_ai_keys')
+  } finally {
+    const resolvedTempRoot = path.resolve(tempRoot)
+    const resolvedOsTemp = path.resolve(os.tmpdir())
+    if (resolvedTempRoot.startsWith(resolvedOsTemp + path.sep)) {
+      fs.rmSync(resolvedTempRoot, { recursive: true, force: true })
+    }
+  }
+}
+
+function runPowerShell(args) {
+  return spawnSync('powershell', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OPENAI_API_KEY: '',
+      ANTHROPIC_API_KEY: '',
+      CLAUDE_API_KEY: '',
+      OPENROUTER_API_KEY: '',
+      AI_GATEWAY_API_KEY: '',
+    },
+    timeout: 15_000,
     windowsHide: true,
   })
 }

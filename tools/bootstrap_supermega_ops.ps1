@@ -16,6 +16,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ExpectedOwnerConfirmation = "I APPROVE SUPERMEGA GITHUB SECRET AND WORKFLOW WRITES"
+$CloudAiProviderKeys = @(
+    "AI_GATEWAY_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "SUPERMEGA_ANTHROPIC_MODEL",
+    "SUPERMEGA_OPENAI_MODEL",
+    "SUPERMEGA_OR_MODEL_BULK",
+    "SUPERMEGA_OR_MODEL_REASON",
+    "SUPERMEGA_OR_MODEL_DEEP"
+)
 
 function Require-Command {
     param([string]$Name)
@@ -56,6 +68,16 @@ function Resolve-EnvFilePath {
         throw "Env file not found: $Provided"
     }
     return (Resolve-Path -LiteralPath $Provided).Path
+}
+
+function Assert-NoCloudAiProviderSecrets {
+    param([hashtable]$EnvMap)
+
+    foreach ($key in $CloudAiProviderKeys) {
+        if ($EnvMap.ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$EnvMap[$key])) {
+            throw "Hosted AI provider secret key is quarantined for this SuperMega release lane: $key. Use local Ollama only."
+        }
+    }
 }
 
 function Assert-ExternalWriteApproval {
@@ -114,6 +136,7 @@ try {
     $env:GH_TOKEN = Get-GitHubToken
     $resolvedEnvFile = Resolve-EnvFilePath -Provided $EnvFile
     $envMap = Load-EnvMap -PathValue $resolvedEnvFile
+    Assert-NoCloudAiProviderSecrets -EnvMap $envMap
 
     $dbUrl = (gcloud secrets versions access latest --secret=supermega-database-url --project $ProjectId).Trim()
     $liveServiceUrl = ""
@@ -133,7 +156,6 @@ try {
     Set-GitHubSecret -RepoName $Repo -Name "SUPERMEGA_APP_USERNAME" -Value ([string]$envMap["SUPERMEGA_APP_USERNAME"])
     Set-GitHubSecret -RepoName $Repo -Name "SUPERMEGA_APP_PASSWORD" -Value ([string]$envMap["SUPERMEGA_APP_PASSWORD"])
     Set-GitHubSecret -RepoName $Repo -Name "SUPERMEGA_DATABASE_URL" -Value $dbUrl
-    Set-GitHubSecret -RepoName $Repo -Name "OPENAI_API_KEY" -Value ([string]$envMap["OPENAI_API_KEY"])
     Set-GitHubSecret -RepoName $Repo -Name "VITE_GOOGLE_MAPS_API_KEY" -Value ([string]$envMap["GOOGLE_MAPS_API_KEY"])
 
     if ($envMap.ContainsKey("RESEND_API_KEY")) {

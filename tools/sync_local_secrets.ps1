@@ -11,6 +11,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ExpectedOwnerConfirmation = "I APPROVE SUPERMEGA LOCAL SECRET MATERIALIZATION"
+$CloudAiProviderKeys = @(
+    "AI_GATEWAY_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "SUPERMEGA_ANTHROPIC_MODEL",
+    "SUPERMEGA_OPENAI_MODEL",
+    "SUPERMEGA_OR_MODEL_BULK",
+    "SUPERMEGA_OR_MODEL_REASON",
+    "SUPERMEGA_OR_MODEL_DEEP"
+)
 
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -88,6 +100,16 @@ function Find-FirstExistingPath {
     return ""
 }
 
+function Remove-CloudAiProviderMaterial {
+    param([hashtable]$Target)
+
+    foreach ($key in $CloudAiProviderKeys) {
+        if ($Target.Contains($key)) {
+            [void]$Target.Remove($key)
+        }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $SecretsFile)) {
     Write-Warning ("Secret source file not found: " + $SecretsFile)
     exit 0
@@ -95,9 +117,7 @@ if (-not (Test-Path -LiteralPath $SecretsFile)) {
 
 $raw = Get-Content -Raw -LiteralPath $SecretsFile
 
-$anthropic = [regex]::Match($raw, '(?ms)^\s*claude api\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
 $places = [regex]::Match($raw, '(?ms)^\s*google places api\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
-$openai = [regex]::Match($raw, '(?ms)^\s*openai\s*$\s*supermega\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
 $gmailClientId = [regex]::Match($raw, '(?ms)^\s*client id\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
 $gmailClientSecret = [regex]::Match($raw, '(?ms)^\s*secret\s*$\s*(GOCSPX-[^\r\n]+)').Groups[1].Value.Trim()
 
@@ -107,6 +127,7 @@ $existingMap = Read-KeyValueFile -Path $OutputPath
 
 Merge-Defaults -Target $envMap -Defaults $exampleMap
 Merge-Defaults -Target $envMap -Defaults $existingMap
+Remove-CloudAiProviderMaterial -Target $envMap
 
 $envMap["SUPERMEGA_AUTH_REQUIRED"] = "1"
 $envMap["SUPERMEGA_APP_USERNAME"] = "owner"
@@ -119,17 +140,13 @@ $envMap["SUPERMEGA_WORKSPACE_PLAN"] = "pilot"
 $envMap["SUPERMEGA_SESSION_HOURS"] = "336"
 $envMap["SUPERMEGA_CORS_ORIGINS"] = "http://localhost:8787"
 $envMap["SUPERMEGA_LLM_PROVIDER"] = "ollama"
+$envMap["SUPERMEGA_OLLAMA_ENABLED"] = "1"
 $envMap["SUPERMEGA_OLLAMA_MODEL"] = "llama3.2:1b"
+$envMap["OLLAMA_KEEP_ALIVE"] = "0s"
 
-if (-not [string]::IsNullOrWhiteSpace($anthropic)) {
-    $envMap["ANTHROPIC_API_KEY"] = $anthropic
-}
 if (-not [string]::IsNullOrWhiteSpace($places)) {
     $envMap["GOOGLE_PLACES_API_KEY"] = $places
     $envMap["GOOGLE_MAPS_API_KEY"] = $places
-}
-if (-not [string]::IsNullOrWhiteSpace($openai)) {
-    $envMap["OPENAI_API_KEY"] = $openai
 }
 if (-not [string]::IsNullOrWhiteSpace($gmailClientId)) {
     $envMap["GMAIL_OAUTH_CLIENT_ID"] = $gmailClientId
