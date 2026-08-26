@@ -75,6 +75,18 @@ test('valid private run appends local evidence and returns no private values', a
     assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1])
     assert.equal(summary.pilotSequenceCoverageMet, false)
     assert.equal(summary.promotionEvidenceMet, false)
+    assert.deepEqual(summary.promotionProgress, {
+      requiredAcceptedConsecutiveRuns: 20,
+      acceptedConsecutiveRuns: 1,
+      acceptedConsecutiveRunsRemaining: 19,
+      requiredPilotDayIndexes: [1, 2, 3, 4, 5],
+      acceptedConsecutivePilotDayIndexes: [1],
+      missingPilotDayIndexes: [2, 3, 4, 5],
+      pilotSequenceCoverageMet: false,
+      proofIntegrityMet: true,
+      latestReloadRetryOutcome: 'passed',
+      readyForOwnerDecisionReview: false,
+    })
     assert.equal(summary.metrics.medianMinutesPerOrder, 6)
     assert.equal(summary.metrics.medianAcceptedMinutesPerOrder, 6)
     assert.equal(summary.metrics.totalExceptionCount, 1)
@@ -117,6 +129,9 @@ test('rejected or failed run breaks the consecutive accepted run streak', async 
     assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [3])
     assert.equal(summary.pilotSequenceCoverageMet, false)
     assert.equal(summary.promotionEvidenceMet, false)
+    assert.equal(summary.promotionProgress.acceptedConsecutiveRunsRemaining, 19)
+    assert.deepEqual(summary.promotionProgress.missingPilotDayIndexes, [1, 2, 4, 5])
+    assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, false)
     assert.equal(summary.metrics.medianMinutesPerOrder, 6)
     assert.equal(summary.metrics.medianAcceptedMinutesPerOrder, 6)
     assert.equal(summary.metrics.totalExceptionCount, 5)
@@ -148,6 +163,9 @@ test('nineteen accepted runs do not set promotionEvidenceMet', async () => {
     assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
     assert.equal(summary.pilotSequenceCoverageMet, true)
     assert.equal(summary.promotionEvidenceMet, false)
+    assert.equal(summary.promotionProgress.acceptedConsecutiveRunsRemaining, 1)
+    assert.deepEqual(summary.promotionProgress.missingPilotDayIndexes, [])
+    assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, false)
     assert.equal(summary.nextAction, 'collect_more_observed_evidence')
   } finally {
     await rm(parent, { recursive: true, force: true })
@@ -167,6 +185,9 @@ test('twenty consecutive accepted runs set promotionEvidenceMet', async () => {
     assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
     assert.equal(summary.pilotSequenceCoverageMet, true)
     assert.equal(summary.promotionEvidenceMet, true)
+    assert.equal(summary.promotionProgress.acceptedConsecutiveRunsRemaining, 0)
+    assert.deepEqual(summary.promotionProgress.missingPilotDayIndexes, [])
+    assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, true)
     assert.equal(summary.nextAction, 'owner_review_required_before_activation')
   } finally {
     await rm(parent, { recursive: true, force: true })
@@ -186,6 +207,30 @@ test('twenty consecutive accepted runs still require five-day pilot sequence cov
     assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1])
     assert.equal(summary.pilotSequenceCoverageMet, false)
     assert.equal(summary.promotionEvidenceMet, false)
+    assert.deepEqual(summary.promotionProgress.missingPilotDayIndexes, [2, 3, 4, 5])
+    assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, false)
+    assert.equal(summary.nextAction, 'collect_more_observed_evidence')
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('twenty accepted runs still block owner decision review until latest reload retry passes', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-20-reload-failed-'))
+  try {
+    let summary
+    for (let index = 1; index <= 20; index += 1) {
+      summary = await recordObservedShopPilotRun({
+        workspace: parent,
+        runInput: runInput(index, index === 20 ? { reloadRetryOutcome: 'failed' } : {}),
+      })
+    }
+    assert.equal(summary.acceptedConsecutiveRuns, 20)
+    assert.equal(summary.pilotSequenceCoverageMet, true)
+    assert.equal(summary.promotionEvidenceMet, true)
+    assert.equal(summary.promotionProgress.acceptedConsecutiveRunsRemaining, 0)
+    assert.equal(summary.promotionProgress.latestReloadRetryOutcome, 'failed')
+    assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, false)
     assert.equal(summary.nextAction, 'collect_more_observed_evidence')
   } finally {
     await rm(parent, { recursive: true, force: true })

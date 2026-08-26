@@ -123,8 +123,11 @@ test('builds owner-safe decision packet from baseline and 20 anchored accepted o
     assert.equal(packet.status, 'owner_pilot_decision_ready')
     assert.equal(packet.ok, true)
     assert.equal(packet.observedMetrics.acceptedConsecutiveRuns, 20)
+    assert.equal(packet.observedMetrics.acceptedConsecutiveRunsRemaining, 0)
     assert.deepEqual(packet.observedMetrics.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.deepEqual(packet.observedMetrics.missingPilotDayIndexes, [])
     assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, true)
+    assert.equal(packet.observedMetrics.readyForOwnerDecisionReview, true)
     assert.deepEqual(packet.observedMetrics.proofIntegrity, {
       uniqueRunIds: true,
       uniqueEvidenceReferenceDigests: true,
@@ -154,6 +157,7 @@ test('blocks decision readiness until 20 consecutive accepted runs exist', async
     }))
     assert.equal(packet.status, 'blocked_collect_more_or_fix_observed_evidence')
     assert.equal(packet.ok, false)
+    assert.equal(packet.observedMetrics.acceptedConsecutiveRunsRemaining, 1)
     assert.deepEqual(packet.failures, ['accepted_consecutive_runs_below_20'])
     assert.equal(packet.pilotDecision.recommendation, 'collect_more_observed_evidence')
   })
@@ -173,6 +177,7 @@ test('blocks decision readiness when 20 accepted runs miss five-day sequence cov
     assert.equal(packet.status, 'blocked_collect_more_or_fix_observed_evidence')
     assert.equal(packet.ok, false)
     assert.deepEqual(packet.observedMetrics.acceptedConsecutivePilotDayIndexes, [1])
+    assert.deepEqual(packet.observedMetrics.missingPilotDayIndexes, [2, 3, 4, 5])
     assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, false)
     assert.deepEqual(packet.failures, ['pilot_sequence_days_missing'])
     assert.equal(packet.pilotDecision.recommendation, 'collect_more_observed_evidence')
@@ -207,6 +212,26 @@ test('rejects observed summaries without all proof-integrity gates true', async 
   })
 })
 
+test('rejects observed summaries with inconsistent promotion progress', async () => {
+  await withWorkspace(async (workspace) => {
+    let summary = null
+    for (let index = 1; index <= 19; index += 1) {
+      summary = await recordObservedShopPilotRun({ workspace, runInput: runInput(index) })
+    }
+    assert.throws(() => buildShopPilotDecisionPacket({
+      baselinePacket: baselinePacket(),
+      observedSummary: {
+        ...summary,
+        promotionProgress: {
+          ...summary.promotionProgress,
+          acceptedConsecutiveRunsRemaining: 0,
+        },
+      },
+      generatedAt: '2026-08-25T00:00:00.000Z',
+    }), /shop_pilot_decision_promotion_progress_invalid/)
+  })
+})
+
 test('requires reload retry pass before owner decision readiness', async () => {
   await withWorkspace(async (workspace) => {
     let summary = null
@@ -222,6 +247,7 @@ test('requires reload retry pass before owner decision readiness', async () => {
       generatedAt: '2026-08-25T00:00:00.000Z',
     }))
     assert.equal(packet.ok, false)
+    assert.equal(packet.observedMetrics.readyForOwnerDecisionReview, false)
     assert.equal(packet.pilotDecision.outcomeStatus, 'blocked_reload_retry')
     assert.deepEqual(packet.failures, ['latest_reload_retry_not_passed'])
     assert.equal(packet.pilotDecision.recommendation, 'fix_reload_retry_and_repeat_observed_runs_before_activation_review')

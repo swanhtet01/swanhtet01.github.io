@@ -186,6 +186,10 @@ function uniqueSortedNumbers(values) {
   return [...new Set(values)].sort((a, b) => a - b)
 }
 
+function missingPilotDayIndexes(acceptedConsecutivePilotDayIndexes) {
+  return REQUIRED_PILOT_DAY_INDEXES.filter((dayIndex) => !acceptedConsecutivePilotDayIndexes.includes(dayIndex))
+}
+
 function assertStoredProofIntegrity(entries) {
   const seenRunIds = new Set()
   const seenEvidenceReferenceDigests = new Set()
@@ -311,8 +315,12 @@ function evidenceSummary(entries) {
   }
   const acceptedConsecutiveEntries = entries.slice(entries.length - acceptedConsecutiveRuns)
   const acceptedConsecutivePilotDayIndexes = uniqueSortedNumbers(acceptedConsecutiveEntries.map((entry) => entry.dayIndex))
+  const missingPilotDays = missingPilotDayIndexes(acceptedConsecutivePilotDayIndexes)
   const pilotSequenceCoverageMet = REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => acceptedConsecutivePilotDayIndexes.includes(dayIndex))
   const promotionEvidenceMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet
+  const latestReloadRetryOutcome = entries.at(-1)?.reloadRetryOutcome || null
+  const readyForOwnerDecisionReview = promotionEvidenceMet && latestReloadRetryOutcome === 'passed'
+  const acceptedConsecutiveRunsRemaining = Math.max(0, REQUIRED_ACCEPTED_CONSECUTIVE_RUNS - acceptedConsecutiveRuns)
   const summary = {
     contract: SHOP_OBSERVED_EVIDENCE_CONTRACT,
     product: SHOP_PILOT_PRODUCT,
@@ -327,6 +335,18 @@ function evidenceSummary(entries) {
     pilotSequenceCoverageMet,
     promotionEvidenceMet,
     proofIntegrity,
+    promotionProgress: {
+      requiredAcceptedConsecutiveRuns: REQUIRED_ACCEPTED_CONSECUTIVE_RUNS,
+      acceptedConsecutiveRuns,
+      acceptedConsecutiveRunsRemaining,
+      requiredPilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+      acceptedConsecutivePilotDayIndexes,
+      missingPilotDayIndexes: missingPilotDays,
+      pilotSequenceCoverageMet,
+      proofIntegrityMet: true,
+      latestReloadRetryOutcome,
+      readyForOwnerDecisionReview,
+    },
     metrics: {
       medianMinutesPerOrder: median(entries.map((entry) => entry.durationMinutesPerOrder)),
       medianAcceptedMinutesPerOrder: median(acceptedEntries.map((entry) => entry.durationMinutesPerOrder)),
@@ -341,7 +361,7 @@ function evidenceSummary(entries) {
       operatorCorrectionRatePerRun: rate(totalOperatorCorrectionCount, entries.length),
       acceptedOperatorCorrectionRatePerRun: rate(acceptedOperatorCorrectionCount, acceptedEntries.length),
       reloadRetryOutcomeCounts,
-      latestReloadRetryOutcome: entries.at(-1)?.reloadRetryOutcome || null,
+      latestReloadRetryOutcome,
     },
     externalWritesPerformed: false,
     customerContactPerformed: false,
@@ -350,7 +370,7 @@ function evidenceSummary(entries) {
     serverWritesPerformed: false,
     hostedWritesPerformed: false,
     privateValuesReturned: false,
-    nextAction: promotionEvidenceMet ? 'owner_review_required_before_activation' : 'collect_more_observed_evidence',
+    nextAction: readyForOwnerDecisionReview ? 'owner_review_required_before_activation' : 'collect_more_observed_evidence',
   }
   return { ...summary, summaryDigest: digest(summary) }
 }
