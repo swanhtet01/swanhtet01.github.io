@@ -530,12 +530,23 @@ usable. This is a genuinely valuable half-hour.
 
 ### 6.2 "My staff cannot read this — it is in English"
 
-**What is true today.** Thirty-three common action words already render in both
-languages — English, a middle dot, then Burmese — including `Save`, `Cancel`,
-`Receive`, `Return`, `Export` and `Complete`. And the owner's **own** product
-names can be Burmese today: the counter tile and the sale line both show a
-Burmese product name under the English one, and the shipped spa business template
-already carries Burmese names such as `စပါ အလှပြင်ဆိုင်`.
+**What is true today — and be careful which words you point at.** Thirty-three
+common action words are signed off by a native speaker, but **only five are
+actually wired to a control that exists**: `Cancel`, `Close`, `Open`, `Back` and
+`Clear`, across seven places. Those five render as English, a middle dot, then
+Burmese. The other twenty-eight are signed off and have no call site anywhere, so
+they render nothing — do **not** name `Save`, `Receive`, `Return`, `Export` or
+`Complete` as examples, because an owner who goes looking for them will find
+English and you will have been wrong in front of them.
+
+The owner's **own** product names can carry Burmese today, with one distinction
+worth keeping straight. The plain `Item name` field is free text, so a
+Burmese-only product name works immediately and shows on the tile, the sale line
+and the receipt. What no form can set is the *bilingual pair* — English and
+Burmese on the same row. That pair is written only by the working-sample and
+business-template provisioning, for rows that sell a bookable service, which is
+why the shipped spa template already carries names such as
+`စပါ အလှပြင်ဆိုင်` and a mini-mart's rice and oil do not.
 
 **What is not true today.** Most of what a cashier actually reads at the counter
 is still English on purpose. The four work modes (`Today`, `Sell`, `Orders`,
