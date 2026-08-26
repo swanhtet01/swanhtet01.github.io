@@ -41,6 +41,29 @@ npm.cmd run client:pilot:workspace -- --decide --workspace "<private-workspace>"
 npm.cmd run client:pilot:workspace -- --verify --workspace "<private-workspace>"
 ```
 
+## Day-0 baseline and observed pilot evidence
+
+After the owner has captured the private baseline, use the deterministic packet tools before any pilot-day recording. Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot; never treat a stale release gate as pilot-ready.
+
+```powershell
+npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"
+npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"
+npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"
+npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"
+npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"
+```
+
+During the five-day private pilot, create and validate one private run input per real observed run before recording it:
+
+```powershell
+npm.cmd run client:pilot:observed-evidence:template -- --workspace "<private-observed-workspace>" --output "<private-observed-run-input.json>"
+npm.cmd run client:pilot:observed-evidence:validate -- --run-input "<private-observed-run-input.json>"
+npm.cmd run client:pilot:observed-evidence -- --record --workspace "<private-observed-workspace>" --run-input "<private-observed-run-input.json>"
+npm.cmd run client:pilot:observed-evidence -- --verify --workspace "<private-observed-workspace>"
+```
+
+Every counted run requires `evidenceReferenceDigest` for the private evidence receipt and `independentAnchorDigest` for the independently sealed private anchor. If either digest is missing, reused, or equal to the other digest, the run does not count. Promotion evidence still requires 20 consecutive accepted real runs covering pilot days 1 through 5; synthetic or sample runs do not close the gate.
+
 Never overwrite existing outputs. On `stage_incomplete`, `stale_or_tampered`, `binding_mismatch`, or another validation error, stop the transition and preserve the files for owner review.
 
 ## Reporting boundary

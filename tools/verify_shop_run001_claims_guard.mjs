@@ -14,6 +14,7 @@ const files = {
   recorder: 'tools/record_shop_pilot_observed_run.mjs',
   recorderTest: 'tools/record_shop_pilot_observed_run.test.mjs',
   ownerObservationPack: 'tools/prepare_shop_pilot_owner_observation_pack.mjs',
+  salesAgentGuide: 'docs/supermega-shop-sales-agent.md',
 }
 
 const errors = []
@@ -53,6 +54,7 @@ const ownerPacketText = read(files.ownerPacket)
 const recorderText = read(files.recorder)
 const recorderTestText = read(files.recorderTest)
 const ownerObservationPackText = read(files.ownerObservationPack)
+const salesAgentGuideText = read(files.salesAgentGuide)
 
 let packageJson = {}
 try {
@@ -124,6 +126,18 @@ requireSnippet(ownerObservationPackText, 'independentAnchorDigestRequiredBeforeR
 requireSnippet(ownerObservationPackText, 'client:pilot:observed-evidence:template', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'client:pilot:observed-evidence:validate', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'shop:pilot:decision-packet', files.ownerObservationPack)
+
+requireSnippet(salesAgentGuideText, 'Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, 'shop:pilot:day0-readiness', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, '--release-handoff "<release-handoff.json>"', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, '--github-protection-snapshot "<github-protection-snapshot.json>"', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, 'client:pilot:observed-evidence:template', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, 'client:pilot:observed-evidence:validate', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, 'evidenceReferenceDigest', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, 'independentAnchorDigest', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, 'If either digest is missing, reused, or equal to the other digest, the run does not count.', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, '20 consecutive accepted real runs covering pilot days 1 through 5', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, 'synthetic or sample runs do not close the gate', files.salesAgentGuide)
 
 requireSnippet(onboardingText, 'Shop pilot proof rule', files.onboarding)
 requireSnippet(onboardingText, 'accepted order-to-close runs', files.onboarding)
