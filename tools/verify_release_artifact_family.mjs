@@ -153,6 +153,29 @@ function derivedFamilyFileNames({ suffix }) {
   ]
 }
 
+function ownerFacingFamilyFileNames({ suffix }) {
+  return [
+    `supermega.current-release-control-index.${suffix}.json`,
+    `supermega.current-release-control-index.${suffix}.md`,
+    `supermega.product-readiness-matrix.${suffix}.json`,
+    `supermega.product-readiness-matrix.${suffix}.md`,
+    `supermega.status-brief.${suffix}.json`,
+    `supermega.status-brief.${suffix}.md`,
+    `supermega.next-release-action-preflight.${suffix}.json`,
+    `supermega.next-release-action-preflight.${suffix}.md`,
+    `supermega.shop-pilot-private-intake-packet.${suffix}.json`,
+    `supermega.shop-pilot-private-intake-packet.${suffix}.md`,
+    `supermega.shop-pilot-baseline-input.template.private.${suffix}.json`,
+    `supermega.shop-pilot-baseline-worksheet.private.${suffix}.md`,
+    `supermega.shop-pilot-day0-readiness.${suffix}.json`,
+    `supermega.shop-pilot-day0-readiness.${suffix}.md`,
+    `supermega.shop-pilot-day0-owner-baseline-action-card.${suffix}.json`,
+    `supermega.shop-pilot-day0-owner-baseline-action-card.${suffix}.md`,
+    `supermega.github-main-protection-owner-action-card.${suffix}.json`,
+    `supermega.github-main-protection-owner-action-card.${suffix}.md`,
+  ]
+}
+
 async function maybeRead(artifactsDir, fileName) {
   return readFile(artifactPath(artifactsDir, fileName), 'utf8').then(
     (text) => ({ fileName, text }),
@@ -195,6 +218,10 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
   const handoffText = await readText(handoffPath, 'release_artifact_family_handoff_missing')
   if (digest(handoffText) !== artifacts.releaseHandoff.digest) fail('release_artifact_family_handoff_file_digest_mismatch')
   const handoff = validateReleaseHandoffPacket(JSON.parse(handoffText))
+  Object.defineProperty(handoff, '__sourcePath', {
+    value: handoffPath,
+    enumerable: false,
+  })
   jsonDigestFromPacket('releaseHandoff', handoff, artifacts.releaseHandoff)
 
   const snapshot = validateGitHubMainProtectionSnapshot(await readJson(snapshotPath, 'release_artifact_family_snapshot_missing'))
@@ -251,8 +278,6 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     basename(controlPath),
     basename(controlPath).replace(/\.json$/i, '.md'),
     artifacts.releaseOwnerApprovalPacket.fileName,
-    artifacts.currentOperatorBoard.fileName,
-    markdownCounterpartName(artifacts.currentOperatorBoard.fileName),
     artifacts.productReadinessMatrix.fileName,
     markdownCounterpartName(artifacts.productReadinessMatrix.fileName),
     artifacts.statusBrief.fileName,
@@ -261,11 +286,13 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     markdownCounterpartName(artifacts.nextReleaseActionPreflight.fileName),
     artifacts.shopPilotDay0Readiness.fileName,
     markdownCounterpartName(artifacts.shopPilotDay0Readiness.fileName),
-    ...derivedFamilyFileNames(family),
+    ...ownerFacingFamilyFileNames(family),
   ].filter(Boolean))
 
   const leakFindings = []
   let ownerFacingFilesScanned = 0
+  ownerFacingFilesScanned += 1
+  leakFindings.push(...scanOwnerFacingText(basename(controlPath), controlText))
   for (const fileName of ownerFacingNames) {
     const file = await maybeRead(baseDir, fileName)
     if (!file) continue
