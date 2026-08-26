@@ -370,7 +370,7 @@ export function buildReleaseOwnerApprovalMarkdown({
     `npm.cmd run release:pull-request:create -- --plan --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
-    'Execute command, only after branch push, approval, and token are available:',
+    'Execute command, only after branch push and approval. Authentication may come from `GITHUB_TOKEN`, `GH_TOKEN`, or an authenticated GitHub CLI keyring; token values must not be pasted into this packet or terminal output.',
     '',
     '```powershell',
     `npm.cmd run release:pull-request:create -- --execute --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
