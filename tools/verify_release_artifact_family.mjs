@@ -168,11 +168,16 @@ function releaseBlockerForGate(gateId) {
 export function verifyShopDay0ReleaseGateBinding(shopPilotDay0Readiness, controlIndex) {
   const gateId = controlIndex.currentOwnerAction.gateId
   const expectedBlocker = releaseBlockerForGate(gateId)
-  if (shopPilotDay0Readiness.sourceDigests?.currentReleaseControlIndexDigest !== controlIndex.digest) {
-    fail('release_artifact_family_shop_day0_release_control_digest_mismatch')
+  const expectedHandoffDigest = controlIndex.authoritativeArtifacts?.releaseHandoff?.packetDigest
+  const expectedSnapshotDigest = controlIndex.authoritativeArtifacts?.githubMainProtectionSnapshot?.digest
+  if (shopPilotDay0Readiness.sourceDigests?.releaseHandoffDigest !== expectedHandoffDigest
+    || shopPilotDay0Readiness.sourceDigests?.githubMainProtectionSnapshotDigest !== expectedSnapshotDigest) {
+    fail('release_artifact_family_shop_day0_release_evidence_digest_mismatch')
   }
-  if (shopPilotDay0Readiness.releaseGate?.currentReleaseControlIndexProvided !== true
-    || shopPilotDay0Readiness.releaseGate?.currentReleaseControlIndexDigest !== controlIndex.digest
+  if (shopPilotDay0Readiness.releaseGate?.releaseEvidenceProvided !== true
+    || shopPilotDay0Readiness.releaseGate?.source !== 'release_handoff_and_github_snapshot'
+    || shopPilotDay0Readiness.releaseGate?.releaseHandoffDigest !== expectedHandoffDigest
+    || shopPilotDay0Readiness.releaseGate?.githubMainProtectionSnapshotDigest !== expectedSnapshotDigest
     || shopPilotDay0Readiness.releaseGate?.currentGateId !== gateId
     || shopPilotDay0Readiness.releaseGate?.currentBlocker !== expectedBlocker
     || shopPilotDay0Readiness.releaseGate?.mainProtectionVerified !== (gateId !== 'github_main_protection')) {

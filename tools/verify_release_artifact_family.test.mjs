@@ -179,16 +179,25 @@ test('private intake packet must be reflected in Day-0 readiness', () => {
 })
 
 test('Shop Day-0 release gate must match the current release index', () => {
-  const digest = `sha256:${'a'.repeat(64)}`
+  const handoffDigest = `sha256:${'a'.repeat(64)}`
+  const snapshotDigest = `sha256:${'b'.repeat(64)}`
   const controlIndex = {
-    digest,
     currentOwnerAction: { gateId: 'review_branch_push' },
+    authoritativeArtifacts: {
+      releaseHandoff: { packetDigest: handoffDigest },
+      githubMainProtectionSnapshot: { digest: snapshotDigest },
+    },
   }
   const day0 = {
-    sourceDigests: { currentReleaseControlIndexDigest: digest },
+    sourceDigests: {
+      releaseHandoffDigest: handoffDigest,
+      githubMainProtectionSnapshotDigest: snapshotDigest,
+    },
     releaseGate: {
-      currentReleaseControlIndexProvided: true,
-      currentReleaseControlIndexDigest: digest,
+      source: 'release_handoff_and_github_snapshot',
+      releaseEvidenceProvided: true,
+      releaseHandoffDigest: handoffDigest,
+      githubMainProtectionSnapshotDigest: snapshotDigest,
       currentGateId: 'review_branch_push',
       currentBlocker: 'review_branch_push_missing',
       mainProtectionVerified: true,
@@ -202,6 +211,9 @@ test('Shop Day-0 release gate must match the current release index', () => {
   }, controlIndex), /stale_github_blocker/)
   assert.throws(() => verifyShopDay0ReleaseGateBinding({
     ...day0,
-    sourceDigests: { currentReleaseControlIndexDigest: `sha256:${'b'.repeat(64)}` },
-  }, controlIndex), /release_control_digest_mismatch/)
+    sourceDigests: {
+      releaseHandoffDigest: `sha256:${'c'.repeat(64)}`,
+      githubMainProtectionSnapshotDigest: snapshotDigest,
+    },
+  }, controlIndex), /release_evidence_digest_mismatch/)
 })
