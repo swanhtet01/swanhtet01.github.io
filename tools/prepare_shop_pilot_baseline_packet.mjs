@@ -138,6 +138,10 @@ function plusDays(date, days) {
   return new Date(instant).toISOString().slice(0, 10)
 }
 
+function isoDate(value) {
+  return String(value).slice(0, 10)
+}
+
 function median(values) {
   if (!values.length) return null
   const sorted = [...values].sort((a, b) => a - b)
@@ -226,8 +230,10 @@ function normalizeBaselineInput(input) {
   return normalized
 }
 
-function assessBaseline(normalized) {
+function assessBaseline(normalized, generatedAt) {
   const failures = []
+  const generatedDate = isoDate(generatedAt)
+  const baselineDate = isoDate(normalized.observedAt)
   const orderRuns = normalized.observedOrderRuns.filter((run) => run.interrupted === false)
   const redemptionRuns = normalized.observedRedemptionRuns.filter((run) => run.interrupted === false)
   const orderMedian = median(orderRuns.map((run) => run.durationMinutes))
@@ -236,10 +242,15 @@ function assessBaseline(normalized) {
   const observedRedemptionErrorRunCount = normalized.observedRedemptionRuns.filter((run) => run.errorOccurred).length
   for (const [kind, runs] of [['order', normalized.observedOrderRuns], ['redemption', normalized.observedRedemptionRuns]]) {
     for (const run of runs) {
+      const runDate = isoDate(run.observedAt)
+      if (runDate > generatedDate) failures.push(`${kind}_observed_at_after_packet_day`)
+      if (runDate >= normalized.proposedPilotStartDate) failures.push(`${kind}_observed_at_must_precede_pilot_start`)
       if (run.errorOccurred && !run.errorCostLabel) failures.push(`${kind}_error_cost_label_missing`)
       if (!run.errorOccurred && run.errorCostLabel) failures.push(`${kind}_error_cost_label_without_error`)
     }
   }
+  if (baselineDate > generatedDate) failures.push('baseline_observed_at_after_packet_day')
+  if (baselineDate >= normalized.proposedPilotStartDate) failures.push('baseline_observed_at_must_precede_pilot_start')
   if (orderRuns.length < MIN_OBSERVED_RUNS) failures.push('order_observed_runs_below_three')
   if (redemptionRuns.length < MIN_OBSERVED_RUNS) failures.push('redemption_observed_runs_below_three')
   if (!sameNumber(normalized.claimedMedianMinutesPerOrder, orderMedian)) failures.push('claimed_order_median_mismatch')
@@ -262,13 +273,14 @@ function assessBaseline(normalized) {
 
 export function buildShopPilotBaselinePacket(input, { generatedAt = new Date().toISOString() } = {}) {
   const normalized = normalizeBaselineInput(input)
-  const assessment = assessBaseline(normalized)
+  const normalizedGeneratedAt = iso(generatedAt, 'shop_pilot_baseline_generated_at')
+  const assessment = assessBaseline(normalized, normalizedGeneratedAt)
   const ready = assessment.failures.length === 0
   const privateInputDigest = canonicalDigest(normalized)
   const packetWithoutDigest = {
     contract: SHOP_PILOT_BASELINE_PACKET_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
-    generatedAt: iso(generatedAt, 'shop_pilot_baseline_generated_at'),
+    generatedAt: normalizedGeneratedAt,
     product: PRODUCT,
     pilotMode: PILOT_MODE,
     verticalPack: VERTICAL_PACK,

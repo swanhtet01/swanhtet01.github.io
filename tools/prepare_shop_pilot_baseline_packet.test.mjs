@@ -105,6 +105,34 @@ test('blocks mismatched medians, interrupted evidence, and wrong review window w
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
 })
 
+test('blocks baseline evidence dated after packet day or on the pilot start date', () => {
+  const futureDated = buildShopPilotBaselinePacket(input({
+    observedAt: '2026-08-26T08:00:00.000Z',
+    observedOrderRuns: input().observedOrderRuns.map((run) => ({ ...run, observedAt: '2026-08-26T08:01:00.000Z' })),
+    observedRedemptionRuns: input().observedRedemptionRuns.map((run) => ({ ...run, observedAt: '2026-08-26T09:01:00.000Z' })),
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(futureDated.ok, false)
+  assert.equal(futureDated.status, 'blocked_collect_more_private_baseline')
+  assert.ok(futureDated.failures.includes('baseline_observed_at_after_packet_day'))
+  assert.ok(futureDated.failures.includes('order_observed_at_after_packet_day'))
+  assert.ok(futureDated.failures.includes('redemption_observed_at_after_packet_day'))
+  assert.doesNotMatch(JSON.stringify(futureDated), /Private Spa Sample|Private Operator/)
+  assert.equal(validateShopPilotBaselinePacket(futureDated), futureDated)
+
+  const onPilotStart = preflightShopPilotBaselineInput(input({
+    observedAt: '2026-08-31T08:00:00.000Z',
+    observedOrderRuns: input().observedOrderRuns.map((run) => ({ ...run, observedAt: '2026-08-31T08:01:00.000Z' })),
+    observedRedemptionRuns: input().observedRedemptionRuns.map((run) => ({ ...run, observedAt: '2026-08-31T09:01:00.000Z' })),
+  }), { generatedAt: '2026-09-01T00:00:00.000Z' })
+  assert.equal(onPilotStart.status, 'baseline_input_blocked')
+  assert.equal(onPilotStart.safeToGeneratePublicBaselinePacket, false)
+  assert.ok(onPilotStart.failures.includes('baseline_observed_at_must_precede_pilot_start'))
+  assert.ok(onPilotStart.failures.includes('order_observed_at_must_precede_pilot_start'))
+  assert.ok(onPilotStart.failures.includes('redemption_observed_at_must_precede_pilot_start'))
+  assert.doesNotMatch(JSON.stringify(onPilotStart), /Private Spa Sample|Private Operator/)
+  assert.equal(validateShopPilotBaselineInputPreflight(onPilotStart), onPilotStart)
+})
+
 test('blocks contradictory error labels before baseline evidence can be treated as ready', () => {
   const missingRunCost = buildShopPilotBaselinePacket(input({
     observedOrderRuns: [
