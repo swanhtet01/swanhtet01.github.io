@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -28,16 +27,6 @@ const live = 'c'.repeat(40)
 
 function digestOf(char) {
   return `sha256:${char.repeat(64)}`
-}
-
-function packetDigest(value) {
-  return `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`
-}
-
-function resignPacket(packet) {
-  const copy = { ...packet }
-  delete copy.digest
-  return { ...copy, digest: packetDigest(copy) }
 }
 
 function baseHandoff({ protectedMain = false } = {}) {
@@ -190,8 +179,11 @@ function fixture({ protectedMain = false, env = {}, bindGitHubExpectedHead = tru
     proposalReceipt,
     gitState,
     env,
-    expectedHead: bindGitHubExpectedHead ? commit : null,
+    expectedHead: bindGitHubExpectedHead ? commit : 'f'.repeat(40),
   })
+  const operatorBoardApplyPlan = bindGitHubExpectedHead
+    ? githubApplyPlan
+    : buildApplyPlan({ proposalReceipt, gitState, env, expectedHead: commit })
   const branchPushPlan = buildReviewBranchPushPlan({ handoffReceipt, mainProtectionSnapshotReceipt: snapshotReceipt, gitState, env })
   const pullRequestPlan = buildPullRequestPlan({ handoffReceipt, mainProtectionSnapshotReceipt: snapshotReceipt, gitState, env })
   const estate = technicalEstate()
@@ -217,7 +209,7 @@ function fixture({ protectedMain = false, env = {}, bindGitHubExpectedHead = tru
         controls: { providerMutationsPerformed: false },
       },
     },
-    githubApplyPlan,
+    githubApplyPlan: operatorBoardApplyPlan,
     branchPushPlan,
     pullRequestPlan,
     gitState,
@@ -286,7 +278,7 @@ test('fails closed for candidate mismatch and write-control drift', () => {
   }), /next_release_action_preflight_candidate_mismatch|product_readiness_matrix_digest_mismatch/)
   assert.throws(
     () => buildNextReleaseActionPreflight(fixture({ bindGitHubExpectedHead: false })),
-    /next_release_action_preflight_github_apply_expected_head_invalid/,
+    /next_release_action_preflight_github_apply_expected_head_invalid|current_operator_board_github_apply_expected_head_invalid/,
   )
 
   const packet = buildNextReleaseActionPreflight(fixture())
