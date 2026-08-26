@@ -141,6 +141,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   if (scripts['github:main-protection:apply:self-test'] !== 'node --test tools/apply_github_main_protection.test.mjs && node tools/apply_github_main_protection.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_github_apply_self_test_missing')
   }
+  if (scripts['github:main-protection:owner-action-card'] !== 'node tools/prepare_github_main_protection_owner_action_card.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_github_owner_action_card_script_missing')
+  }
+  if (scripts['github:main-protection:owner-action-card:self-test'] !== 'node --test tools/prepare_github_main_protection_owner_action_card.test.mjs && node tools/prepare_github_main_protection_owner_action_card.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_github_owner_action_card_self_test_missing')
+  }
   if (scripts['github:main-protection:snapshot'] !== 'node tools/collect_github_main_protection_snapshot.mjs') {
     addFailure(failures, 'release_stack_owner_gate_github_snapshot_script_missing')
   }
@@ -543,6 +549,8 @@ function sampleInput(overrides = {}) {
       'release:next-action-preflight:self-test': 'node --test tools/prepare_next_release_action_preflight.test.mjs && node tools/prepare_next_release_action_preflight.mjs --self-test',
       'github:main-protection:apply:plan': 'node tools/apply_github_main_protection.mjs --plan',
       'github:main-protection:apply:self-test': 'node --test tools/apply_github_main_protection.test.mjs && node tools/apply_github_main_protection.mjs --self-test',
+      'github:main-protection:owner-action-card': 'node tools/prepare_github_main_protection_owner_action_card.mjs',
+      'github:main-protection:owner-action-card:self-test': 'node --test tools/prepare_github_main_protection_owner_action_card.test.mjs && node tools/prepare_github_main_protection_owner_action_card.mjs --self-test',
       'github:main-protection:snapshot': 'node tools/collect_github_main_protection_snapshot.mjs',
       'github:main-protection:snapshot:self-test': 'node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test',
       'operator:board': 'node tools/prepare_current_operator_board.mjs',
