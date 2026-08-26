@@ -210,6 +210,8 @@ export function validateReviewBranchPushHandoff(packet) {
   }
   if (!approvalTemplate.includes(`push of ${commit} to origin/${branch} for review only`)
     || !approvalTemplate.includes('I do not approve merge')
+    || !approvalTemplate.includes('customer contact')
+    || !approvalTemplate.includes('stock')
     || /force/i.test(approvalTemplate)
     || /deploy/i.test(approvalTemplate.replace('deployment', ''))) {
     fail('review_branch_push_approval_template_invalid')
@@ -587,7 +589,7 @@ async function writeExclusive(path, content) {
 }
 
 async function runSelfTest() {
-  const approvalTemplate = `I approve one normal initial push of ${'a'.repeat(40)} to origin/codex/release-stack-integration-rehearsal-20260825 for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`
+  const approvalTemplate = `I approve one normal initial push of ${'a'.repeat(40)} to origin/codex/release-stack-integration-rehearsal-20260825 for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
   const packet = {
     repository: REPOSITORY,
     candidate: {

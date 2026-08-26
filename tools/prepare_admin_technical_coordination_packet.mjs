@@ -105,7 +105,7 @@ function currentReviewActionKind(controlIndex) {
 }
 
 function branchPushApprovalText({ commit, branch }) {
-  return `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`
+  return `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
 }
 
 function sourceSummary(sourceFileNames = {}) {

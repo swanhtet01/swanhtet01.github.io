@@ -227,7 +227,7 @@ function reviewBranchPushAction({ remoteBranchState, branch, candidateCommit }) 
     forcePushAllowed: false,
     mergeIncluded: false,
     deploymentIncluded: false,
-    approvalTemplate: `I approve one normal ${action} push of ${candidateCommit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+    approvalTemplate: `I approve one normal ${action} push of ${candidateCommit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
   }
 }
 
@@ -241,7 +241,7 @@ function githubMainProtectionAction({ branch, candidateCommit }) {
     deploymentIncluded: false,
     gitRemoteWriteIncluded: false,
     pullRequestIncluded: false,
-    approvalTemplate: `I approve applying the SuperMega main release gate ruleset to ${REPOSITORY} main after reviewing the signed plan for ${candidateCommit}. I do not approve branch push, pull request creation, merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+    approvalTemplate: `I approve applying the SuperMega main release gate ruleset to ${REPOSITORY} main after reviewing the signed plan for ${candidateCommit}. I do not approve branch push, pull request creation, merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
   }
 }
 

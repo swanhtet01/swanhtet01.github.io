@@ -127,7 +127,9 @@ test('release handoff is immutable, review-only, and exact-commit bound', () => 
   assert.match(packet.digest, /^sha256:[a-f0-9]{64}$/)
   const { digest, ...body } = packet
   assert.equal(digest, `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`)
-  assert.doesNotMatch(JSON.stringify(packet), /token|secret|password|customer/i)
+  assert.match(packet.actions.reviewBranchPush.approvalTemplate, /customer contact/)
+  assert.match(packet.actions.reviewBranchPush.approvalTemplate, /stock/)
+  assert.doesNotMatch(JSON.stringify(packet), /token|secret|password/i)
   assert.deepEqual(validateReleaseHandoffPacket(packet), packet)
 })
 

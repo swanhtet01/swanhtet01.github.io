@@ -53,8 +53,8 @@ function baseHandoff({ protectedMain = false, branchPublished = false } = {}) {
         mergeIncluded: false,
         deploymentIncluded: false,
         approvalTemplate: branchPublished
-          ? `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`
-          : `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+          ? `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
+          : `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
       },
     },
     nextAction: { forcePushAllowed: false, mergeIncluded: false, deploymentIncluded: false },

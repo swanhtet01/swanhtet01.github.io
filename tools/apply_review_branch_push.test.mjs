@@ -18,7 +18,7 @@ const origin = `https://github.com/${repository}.git`
 const branch = 'codex/release-stack-integration-rehearsal-20260825'
 const commit = 'a'.repeat(40)
 const remoteMain = 'b'.repeat(40)
-const approvalTemplate = `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`
+const approvalTemplate = `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
 const approvalEnv = 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'
 
 function packet(overrides = {}) {
@@ -44,7 +44,7 @@ function packet(overrides = {}) {
       forcePushAllowed: false,
       mergeIncluded: false,
       deploymentIncluded: false,
-      approvalTemplate: `I approve applying the SuperMega main release gate ruleset to ${repository} main after reviewing the signed plan for ${commit}. I do not approve branch push, pull request creation, merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+      approvalTemplate: `I approve applying the SuperMega main release gate ruleset to ${repository} main after reviewing the signed plan for ${commit}. I do not approve branch push, pull request creation, merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
       ...(overrides.nextAction || {}),
     },
     actions: {
@@ -307,7 +307,7 @@ test('execute no-ops when the remote branch already equals the candidate', async
       forcePushAllowed: false,
       mergeIncluded: false,
       deploymentIncluded: false,
-      approvalTemplate: `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+      approvalTemplate: `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
     } },
   })
   const { git, calls } = stubGit({ before: commit, after: commit })
@@ -346,7 +346,7 @@ test('plan treats an already-published branch as satisfied without a second push
       forcePushAllowed: false,
       mergeIncluded: false,
       deploymentIncluded: false,
-      approvalTemplate: `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+      approvalTemplate: `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
     } },
   })
   const plan = buildReviewBranchPushPlan({
@@ -378,6 +378,17 @@ test('handoff validation rejects main, force, unsafe authority, and inconsistent
   assert.throws(
     () => validateReviewBranchPushHandoff(packet({ remote: { candidateCommit: commit, candidateBranchState: 'unpublished' } })),
     /review_branch_push_remote_state_invalid/,
+  )
+  assert.throws(
+    () => validateReviewBranchPushHandoff(packet({
+      actions: {
+        reviewBranchPush: {
+          ...packet().actions.reviewBranchPush,
+          approvalTemplate: approvalTemplate.replace(', customer contact, stock', ''),
+        },
+      },
+    })),
+    /review_branch_push_approval_template_invalid/,
   )
 })
 

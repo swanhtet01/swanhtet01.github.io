@@ -136,7 +136,9 @@ function validateReleaseHandoffForApproval(packet) {
     || branchPushAction.forcePushAllowed !== false
     || branchPushAction.mergeIncluded !== false
     || branchPushAction.deploymentIncluded !== false
-    || !String(branchPushAction.approvalTemplate || '').includes(`push of ${commit} to origin/${branch} for review only`)) {
+    || !String(branchPushAction.approvalTemplate || '').includes(`push of ${commit} to origin/${branch} for review only`)
+    || !String(branchPushAction.approvalTemplate || '').includes('customer contact')
+    || !String(branchPushAction.approvalTemplate || '').includes('stock')) {
     fail('release_owner_approval_branch_template_invalid')
   }
   falseOnly(handoff.authority, [
