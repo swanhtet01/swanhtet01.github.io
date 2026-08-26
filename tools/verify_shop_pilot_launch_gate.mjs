@@ -33,7 +33,8 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   'payment',
   'hosted_scheduler_activation',
 ]
-export const SHOP_PILOT_LAUNCH_HQ_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:owner-action-card:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operational:action-packet:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run product:readiness-matrix:self-test && npm run release:next-action-preflight:self-test && npm run release:owner-approval:packet:self-test && npm run release:control-index:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:day0-owner-baseline-card:self-test && npm run shop:pilot:decision-packet:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
+export const SHOP_PILOT_LAUNCH_HQ_RUNNER = 'node tools/run_hq_verify.mjs'
+export const SHOP_PILOT_LAUNCH_HQ_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:owner-action-card:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operational:action-packet:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run product:readiness-matrix:self-test && npm run release:next-action-preflight:self-test && npm run release:owner-approval:packet:self-test && npm run release:control-index:self-test && npm run release:artifact-family:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:day0-owner-baseline-card:self-test && npm run shop:pilot:decision-packet:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && node tools/verify_hq_contract.mjs'
 const REQUIRED_SCRIPTS = {
   'client:pilot:workspace': 'node tools/manage_shop_pilot_workspace.mjs',
   'client:pilot:handoff': 'node tools/create_shop_pilot_handoff.mjs',
@@ -289,7 +290,8 @@ export function assessShopPilotLaunchGate(input = {}) {
   for (const [name, command] of Object.entries(REQUIRED_SCRIPTS)) {
     if (scripts[name] !== command) addFailure(failures, `shop_pilot_launch_gate_script_missing:${name}`)
   }
-  if (scripts['hq:verify'] !== SHOP_PILOT_LAUNCH_HQ_CHAIN) addFailure(failures, 'shop_pilot_launch_gate_hq_chain_missing')
+  if (scripts['hq:verify'] !== SHOP_PILOT_LAUNCH_HQ_RUNNER) addFailure(failures, 'shop_pilot_launch_gate_hq_runner_missing')
+  if (scripts['hq:verify:steps'] !== SHOP_PILOT_LAUNCH_HQ_CHAIN) addFailure(failures, 'shop_pilot_launch_gate_hq_chain_missing')
 
   if (technicalEstate.schemaVersion !== 'supermega.technical-estate.v1') addFailure(failures, 'shop_pilot_launch_gate_estate_contract_invalid')
   if (technicalEstate.canonicalSource?.repository !== REPOSITORY) addFailure(failures, 'shop_pilot_launch_gate_estate_repository_invalid')
@@ -635,7 +637,8 @@ export function sampleShopPilotLaunchGateInput(overrides = {}) {
     supermega: { productionSupabaseTargetStatus: 'protected-unapproved' },
     scripts: {
       ...REQUIRED_SCRIPTS,
-      'hq:verify': SHOP_PILOT_LAUNCH_HQ_CHAIN,
+      'hq:verify': SHOP_PILOT_LAUNCH_HQ_RUNNER,
+      'hq:verify:steps': SHOP_PILOT_LAUNCH_HQ_CHAIN,
     },
   }
   const technicalEstate = {
