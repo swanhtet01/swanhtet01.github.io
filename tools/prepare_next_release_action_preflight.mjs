@@ -175,6 +175,11 @@ function firstOpenGate(gates) {
   return open || gates[gates.length - 1]
 }
 
+function reviewBranchAlreadyPublished(branchPlan) {
+  return branchPlan?.possibleWrite?.kind === 'already_published_no_push'
+    || branchPlan?.remoteBefore?.candidateBranchState === 'exact'
+}
+
 function approvalBlockers(approval, token = null) {
   const blockers = []
   if (approval?.approved !== true) blockers.push('owner_approval_missing')
@@ -236,6 +241,7 @@ export function buildNextReleaseActionPreflight({
       ]
   const branchBlockers = strings(branchPlan.readiness?.blockers || [], 'next_release_action_preflight_branch_readiness', 80)
   const prBlockers = strings(prPlan.readiness?.blockers || [], 'next_release_action_preflight_pr_readiness', 80)
+  const branchPublished = reviewBranchAlreadyPublished(branchPlan)
   const shop = matrix.products.find((product) => product.productId === 'shop')
   if (!shop) fail('next_release_action_preflight_shop_missing')
 
@@ -252,9 +258,17 @@ export function buildNextReleaseActionPreflight({
     gateStatus({
       id: 'review_branch_push',
       label: 'Review branch push',
-      status: branchPlan.readiness?.executeReady === true ? 'ready_for_exact_owner_execution' : 'blocked',
+      status: branchPublished
+        ? 'satisfied'
+        : branchPlan.readiness?.executeReady === true
+          ? 'ready_for_exact_owner_execution'
+          : 'blocked',
       executeReady: branchPlan.readiness?.executeReady === true,
-      blockers: githubSatisfied ? branchBlockers : ['github_main_protection_unverified', ...branchBlockers],
+      blockers: branchPublished
+        ? []
+        : githubSatisfied
+          ? branchBlockers
+          : ['github_main_protection_unverified', ...branchBlockers],
       approvalEnv: branchPlan.approval?.env || null,
       digest: branchPlan.digest,
     }),

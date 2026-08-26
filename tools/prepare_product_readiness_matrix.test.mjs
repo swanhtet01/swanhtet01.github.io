@@ -161,6 +161,22 @@ test('advances the current gate only after GitHub main protection is satisfied',
   assert.equal(matrix.release.currentGateId, 'review_branch_push')
 })
 
+test('advances the current gate to pull request creation once the review branch is exact', () => {
+  const base = fixture().releaseHandoff
+  const matrix = validateProductReadinessMatrix(buildProductReadinessMatrix(fixture({
+    releaseHandoff: {
+      ...base,
+      remote: {
+        ...base.remote,
+        candidateBranchState: 'exact',
+        candidateCommit: base.candidate.commit,
+      },
+      githubMainProtection: { assessment: { ok: true, failures: [] } },
+    },
+  })))
+  assert.equal(matrix.release.currentGateId, 'pull_request_creation')
+})
+
 test('fails closed for fifth-product AI and write-control drift', () => {
   assert.throws(() => buildProductReadinessMatrix(fixture({
     technicalEstate: {

@@ -333,6 +333,35 @@ test('execute no-ops when the remote branch already equals the candidate', async
   assert.equal(calls.some((args) => args[0] === 'push'), false)
 })
 
+test('plan treats an already-published branch as satisfied without a second push approval', () => {
+  const alreadyPublished = packet({
+    remote: {
+      candidateCommit: commit,
+      candidateBranchState: 'exact',
+    },
+    actions: { reviewBranchPush: {
+      kind: 'owner_review_fast_forward_branch_push',
+      branch,
+      exactCommit: commit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+      approvalTemplate: `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+    } },
+  })
+  const plan = buildReviewBranchPushPlan({
+    handoffReceipt: receipt(alreadyPublished),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+    gitState: { branch, head: commit, clean: true, origin },
+    env: {},
+  })
+  assert.equal(plan.possibleWrite.kind, 'already_published_no_push')
+  assert.equal(plan.possibleWrite.command, null)
+  assert.equal(plan.readiness.executeReady, true)
+  assert.deepEqual(plan.readiness.blockers, [])
+  assert.equal(plan.controls.gitRemoteWritesApproved, false)
+})
+
 test('handoff validation rejects main, force, unsafe authority, and inconsistent remote state', () => {
   assert.throws(
     () => validateReviewBranchPushHandoff(packet({ candidate: { branch: 'main' }, nextAction: { branch: 'main' } })),

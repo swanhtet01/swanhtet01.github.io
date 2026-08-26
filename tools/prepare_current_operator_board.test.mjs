@@ -156,6 +156,59 @@ test('advances to review branch push once live GitHub main protection is verifie
   assert.equal(board.currentAction.gateId, 'review_branch_push')
 })
 
+test('advances to pull request creation when the review branch already matches the candidate', () => {
+  const protectedSnapshot = buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    branch: {
+      name: 'main',
+      protected: true,
+      protection: {
+        enabled: true,
+        required_status_checks: {
+          contexts: ['SuperMega App CI', 'Dependency Security Audit', 'Kernel Console - Verify & Owner-Gated Release'],
+          checks: [],
+        },
+        allow_force_pushes: { enabled: false },
+        allow_deletions: { enabled: false },
+        required_pull_request_reviews: { required_approving_review_count: 1 },
+        required_conversation_resolution: { enabled: true },
+      },
+      commit: { sha: main },
+    },
+    rulesets: [],
+  })
+  const base = fixture({ githubProtectionSnapshot: protectedSnapshot })
+  const board = buildCurrentOperatorBoard(fixture({
+    githubProtectionSnapshot: protectedSnapshot,
+    handoffReceipt: {
+      ...base.handoffReceipt,
+      packet: {
+        ...base.handoffReceipt.packet,
+        remote: {
+          ...base.handoffReceipt.packet.remote,
+          candidateBranchState: 'exact',
+          candidateCommit: commit,
+        },
+      },
+    },
+    branchPushPlan: {
+      ...base.branchPushPlan,
+      remoteBefore: { candidateBranchState: 'exact', candidateCommit: commit },
+      readiness: { executeReady: false, blockers: ['owner_approval_missing'] },
+      possibleWrite: { kind: 'already_published_no_push' },
+    },
+    pullRequestPlan: {
+      ...base.pullRequestPlan,
+      remoteBefore: { branchExactForPr: true, candidateBranchState: 'exact', candidateCommit: commit },
+      readiness: { executeReady: false, blockers: ['owner_approval_missing', 'github_token_missing'] },
+    },
+  }))
+  assert.equal(board.gates.find((gate) => gate.id === 'review_branch_push').status, 'satisfied')
+  assert.deepEqual(board.gates.find((gate) => gate.id === 'review_branch_push').blockers, [])
+  assert.equal(board.currentAction.gateId, 'pull_request_creation')
+  assert.ok(board.currentAction.blockers.includes('owner_approval_missing'))
+})
+
 test('fails closed for dirty worktree, fifth-product AI, and write controls', () => {
   assert.throws(() => buildCurrentOperatorBoard(fixture({ gitState: { ...fixture().gitState, clean: false } })), /current_operator_board_worktree_dirty/)
   assert.throws(() => buildCurrentOperatorBoard(fixture({

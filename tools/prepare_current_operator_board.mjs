@@ -138,9 +138,9 @@ async function readJsonReceipt(path, validate, code) {
 
 function planStatus(plan) {
   if (!isRecord(plan)) return 'invalid'
+  if (plan.possibleWrite?.kind === 'already_published_no_push') return 'satisfied'
   if (plan.readiness?.executeReady === true) return 'ready_if_execute_requested'
   if (Array.isArray(plan.readiness?.blockers) && plan.readiness.blockers.length) return 'blocked'
-  if (plan.possibleWrite?.kind === 'already_published_no_push') return 'satisfied'
   if (plan.approval?.approved === true && plan.token?.present === true) return 'ready_if_execute_requested'
   return 'owner_gate_pending'
 }
@@ -251,6 +251,8 @@ export function buildCurrentOperatorBoard({
   const githubProtectionFailures = githubProtectionSnapshot
     ? githubProtectionSnapshot.assessment.failures
     : []
+  const branchAlreadyPublished = branchPushPlan.possibleWrite?.kind === 'already_published_no_push'
+    || branchPushPlan.remoteBefore?.candidateBranchState === 'exact'
 
   const gates = [
     buildGateSummary({
@@ -287,10 +289,12 @@ export function buildCurrentOperatorBoard({
         : 'Owner may approve exactly one normal review-branch push for the handoff commit.',
       requiredApprovalEnv: branchPushPlan.approval?.env || null,
       approvalDigest: branchPushPlan.approval?.expectedDigest || null,
-      blockers: [
-        ...(branchPushPlan.candidate?.clean === true ? [] : ['local_worktree_dirty']),
-        ...(branchPushPlan.approval?.approved === true ? [] : ['owner_approval_missing']),
-      ],
+      blockers: branchAlreadyPublished
+        ? []
+        : [
+            ...(branchPushPlan.candidate?.clean === true ? [] : ['local_worktree_dirty']),
+            ...(branchPushPlan.approval?.approved === true ? [] : ['owner_approval_missing']),
+          ],
       evidence: [
         handoffDigest,
         packetDigest,

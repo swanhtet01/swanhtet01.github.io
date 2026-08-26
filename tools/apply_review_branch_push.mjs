@@ -268,13 +268,14 @@ export function buildReviewBranchPushPlan({
   validateLocalState({ gate, gitState, execute: false })
   const approval = validateOwnerApproval({ gate, env, execute: false })
   const mainProtection = buildMainProtectionEvidence(mainProtectionSnapshotReceipt)
+  const alreadyPublished = gate.pushKind === 'already_published_no_push'
   const blockers = [
     ...(mainProtection.verifiedForBranchPush ? [] : [
       'github_main_protection_unverified',
       ...mainProtection.failures,
     ]),
     ...(gitState.clean === true ? [] : ['local_worktree_dirty']),
-    ...(approval.approved ? [] : ['owner_approval_missing']),
+    ...(alreadyPublished || approval.approved ? [] : ['owner_approval_missing']),
   ]
   const body = {
     ok: true,
@@ -319,14 +320,22 @@ export function buildReviewBranchPushPlan({
       branch: gate.branch,
       exactCommit: gate.commit,
     },
-    executionRequirements: [
-      '--execute flag',
-      `${APPROVAL_ENV} exactly equals the release handoff owner approval template`,
-      'signed GitHub main-protection snapshot verifies assessment.ok:true',
-      'release handoff re-verifies current remote/live state immediately before push',
-      'local worktree is clean',
-      'post-push remote branch equals the exact approved commit',
-    ],
+    executionRequirements: alreadyPublished
+      ? [
+          '--execute flag',
+          'signed GitHub main-protection snapshot verifies assessment.ok:true',
+          'release handoff re-verifies current remote/live state immediately before no-op confirmation',
+          'local worktree is clean',
+          'remote branch equals the exact handoff commit',
+        ]
+      : [
+          '--execute flag',
+          `${APPROVAL_ENV} exactly equals the release handoff owner approval template`,
+          'signed GitHub main-protection snapshot verifies assessment.ok:true',
+          'release handoff re-verifies current remote/live state immediately before push',
+          'local worktree is clean',
+          'post-push remote branch equals the exact approved commit',
+        ],
     controls: {
       gitRemoteWritesApproved: approval.approved,
       gitRemoteWritesPerformed: false,
@@ -426,7 +435,9 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
     if (!Array.isArray(packet.executionRequirements)
       || !packet.executionRequirements.includes('--execute flag')
       || !packet.executionRequirements.includes('signed GitHub main-protection snapshot verifies assessment.ok:true')
-      || !packet.executionRequirements.includes('post-push remote branch equals the exact approved commit')) {
+      || !(packet.possibleWrite.command === null
+        ? packet.executionRequirements.includes('remote branch equals the exact handoff commit')
+        : packet.executionRequirements.includes('post-push remote branch equals the exact approved commit'))) {
       fail('review_branch_push_plan_requirements_invalid')
     }
   } else if (packet.mode === 'executed_owner_approved_git_remote_write'

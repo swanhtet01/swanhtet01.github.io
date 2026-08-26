@@ -29,13 +29,13 @@ function digestOf(char) {
   return `sha256:${char.repeat(64)}`
 }
 
-function baseHandoff({ protectedMain = false } = {}) {
+function baseHandoff({ protectedMain = false, branchPublished = false } = {}) {
   const branch = 'codex/release-stack-integration-rehearsal-20260825'
   return {
     generatedAt: '2026-08-25T00:00:00.000Z',
     repository,
     candidate: { branch, commit, clean: true },
-    remote: { origin, mainCommit: main, candidateBranchState: 'unpublished', candidateCommit: null },
+    remote: { origin, mainCommit: main, candidateBranchState: branchPublished ? 'exact' : 'unpublished', candidateCommit: branchPublished ? commit : null },
     live: { canonicalPair: ['https://supermega.dev', 'https://app.supermega.dev'], identity: { commit: live } },
     relations: { candidateAheadOfMain: 100, candidateAheadOfLive: 102 },
     verification: { passed: true, verifiedCommit: commit, workflowAuthority: { workflowDigest: digestOf('d') } },
@@ -46,13 +46,15 @@ function baseHandoff({ protectedMain = false } = {}) {
     },
     actions: {
       reviewBranchPush: {
-        kind: 'owner_review_initial_branch_push',
+        kind: branchPublished ? 'owner_review_fast_forward_branch_push' : 'owner_review_initial_branch_push',
         branch,
         exactCommit: commit,
         forcePushAllowed: false,
         mergeIncluded: false,
         deploymentIncluded: false,
-        approvalTemplate: `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
+        approvalTemplate: branchPublished
+          ? `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`
+          : `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
       },
     },
     nextAction: { forcePushAllowed: false, mergeIncluded: false, deploymentIncluded: false },
@@ -159,8 +161,8 @@ function githubSnapshot({ protectedMain = false } = {}) {
   })
 }
 
-function fixture({ protectedMain = false, env = {}, bindGitHubExpectedHead = true } = {}) {
-  const handoff = baseHandoff({ protectedMain })
+function fixture({ protectedMain = false, branchPublished = false, env = {}, bindGitHubExpectedHead = true } = {}) {
+  const handoff = baseHandoff({ protectedMain, branchPublished })
   const handoffReceipt = { name: 'release-handoff.json', digest: digestOf('0'), packet: handoff }
   const gitState = { branch: handoff.candidate.branch, head: commit, clean: true, origin }
   const snapshot = githubSnapshot({ protectedMain })
@@ -266,6 +268,15 @@ test('advances to branch push only after GitHub main protection is verified', ()
   assert.equal(packet.gates[0].status, 'satisfied')
   assert.equal(packet.currentAction.gateId, 'review_branch_push')
   assert.ok(packet.currentAction.blockers.includes('owner_approval_missing'))
+})
+
+test('advances to pull request creation after the review branch is already exact', () => {
+  const packet = buildNextReleaseActionPreflight(fixture({ protectedMain: true, branchPublished: true }))
+  assert.equal(packet.gates.find((gate) => gate.id === 'review_branch_push').status, 'satisfied')
+  assert.deepEqual(packet.gates.find((gate) => gate.id === 'review_branch_push').blockers, [])
+  assert.equal(packet.currentAction.gateId, 'pull_request_creation')
+  assert.ok(packet.currentAction.blockers.includes('owner_approval_missing'))
+  assert.ok(packet.currentAction.blockers.includes('github_token_missing'))
 })
 
 test('fails closed for candidate mismatch and write-control drift', () => {

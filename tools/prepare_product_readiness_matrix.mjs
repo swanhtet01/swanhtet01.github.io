@@ -131,7 +131,8 @@ function sourceDigestFor(receipt) {
 
 function releaseGateFrom(handoff) {
   const githubOk = handoff.githubMainProtection?.assessment?.ok === true
-  return githubOk ? 'review_branch_push' : 'github_main_protection'
+  if (!githubOk) return 'github_main_protection'
+  return handoff.remote?.candidateBranchState === 'exact' ? 'pull_request_creation' : 'review_branch_push'
 }
 
 function productEvidenceLevel({ releaseVerified, readinessItem }) {
@@ -333,7 +334,7 @@ export function validateProductReadinessMatrix(matrix) {
     || !SHA_PATTERN.test(release.remoteMainCommit || '')
     || release.candidateClean !== true
     || release.localVerificationPassed !== true
-    || !['github_main_protection', 'review_branch_push'].includes(release.currentGateId)
+    || !['github_main_protection', 'review_branch_push', 'pull_request_creation'].includes(release.currentGateId)
     || release.releaseOrDeploymentAllowed !== false) fail('product_readiness_matrix_release_invalid')
   if (!Array.isArray(matrix.products)
     || !sameArray(matrix.products.map((product) => product.productId), PRODUCT_ORDER)) fail('product_readiness_matrix_products_invalid')
