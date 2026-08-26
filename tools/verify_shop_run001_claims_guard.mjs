@@ -13,6 +13,7 @@ const files = {
   ownerPacket: 'tools/create_shop_spa_owner_onboarding_packet.mjs',
   recorder: 'tools/record_shop_pilot_observed_run.mjs',
   recorderTest: 'tools/record_shop_pilot_observed_run.test.mjs',
+  ownerObservationPack: 'tools/prepare_shop_pilot_owner_observation_pack.mjs',
 }
 
 const errors = []
@@ -51,6 +52,7 @@ const coreAppText = read(files.coreApp)
 const ownerPacketText = read(files.ownerPacket)
 const recorderText = read(files.recorder)
 const recorderTestText = read(files.recorderTest)
+const ownerObservationPackText = read(files.ownerObservationPack)
 
 let packageJson = {}
 try {
@@ -114,6 +116,15 @@ requireSnippet(recorderTestText, 'CLI writes private run template and validates 
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, false)', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, true)', files.recorderTest)
 
+requireSnippet(ownerObservationPackText, 'observedRunEvidenceCommandPlan', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'privateRunInputTemplateRequiredBeforeEachRun', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'metadataOnlyValidationRequiredBeforeRecord', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'receiptDigestRequiredBeforeRecord', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'independentAnchorDigestRequiredBeforeRecord', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'client:pilot:observed-evidence:template', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'client:pilot:observed-evidence:validate', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'shop:pilot:decision-packet', files.ownerObservationPack)
+
 requireSnippet(onboardingText, 'Shop pilot proof rule', files.onboarding)
 requireSnippet(onboardingText, 'accepted order-to-close runs', files.onboarding)
 requireSnippet(onboardingText, 'daily closes observed', files.onboarding)
@@ -159,6 +170,7 @@ const claimTargets = [
   [files.onboarding, onboardingText],
   [files.coreApp, coreAppText],
   [files.ownerPacket, ownerPacketText],
+  [files.ownerObservationPack, ownerObservationPackText],
 ]
 
 const forbiddenClaimPatterns = [

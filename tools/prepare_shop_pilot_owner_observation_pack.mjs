@@ -86,6 +86,13 @@ const RUN_ACCEPTANCE_RULES = [
   'no_customer_message_payment_stock_movement_or_hosted_write',
   'owner_safe_packet_contains_counts_labels_digests_only',
 ]
+const OBSERVED_RUN_EVIDENCE_COMMANDS = [
+  'npm.cmd run client:pilot:observed-evidence:template -- --workspace "<private-observed-workspace>" --output "<private-observed-run-input.json>"',
+  'npm.cmd run client:pilot:observed-evidence:validate -- --run-input "<private-observed-run-input.json>"',
+  'npm.cmd run client:pilot:observed-evidence -- --record --workspace "<private-observed-workspace>" --run-input "<private-observed-run-input.json>"',
+  'npm.cmd run client:pilot:observed-evidence -- --verify --workspace "<private-observed-workspace>"',
+  'npm.cmd run shop:pilot:decision-packet -- --baseline-packet "<owner-safe-baseline-packet.json>" --observed-workspace "<private-observed-workspace>" --output "<owner-safe-decision-packet.json>" --markdown-output "<owner-safe-decision-packet.md>"',
+]
 const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
 const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 
@@ -213,6 +220,25 @@ function assertCommandOrder(commands) {
   }
 }
 
+function assertObservedRunCommandOrder(commands) {
+  const templateIndex = commands.findIndex((command) => command.includes('client:pilot:observed-evidence:template'))
+  const validateIndex = commands.findIndex((command) => command.includes('client:pilot:observed-evidence:validate'))
+  const recordIndex = commands.findIndex((command) => command.includes('--record') && command.includes('client:pilot:observed-evidence'))
+  const verifyIndex = commands.findIndex((command) => command.includes('--verify') && command.includes('client:pilot:observed-evidence'))
+  const decisionIndex = commands.findIndex((command) => command.includes('shop:pilot:decision-packet') && command.includes('--observed-workspace'))
+  if (templateIndex < 0
+    || validateIndex < 0
+    || recordIndex < 0
+    || verifyIndex < 0
+    || decisionIndex < 0
+    || templateIndex > validateIndex
+    || validateIndex > recordIndex
+    || recordIndex > verifyIndex
+    || verifyIndex > decisionIndex) {
+    fail('shop_pilot_owner_observation_pack_observed_run_command_order_invalid')
+  }
+}
+
 export function buildShopPilotOwnerObservationPack(input = {}) {
   const day0Packet = validateShopPilotDay0ReadinessPacket(input.day0Packet)
   const ownerBaselineActionCard = validateShopPilotDay0OwnerBaselineActionCard(input.ownerBaselineActionCard)
@@ -281,6 +307,17 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
       mustGenerateBlankTemplateFirst: true,
       mustRunLintBeforeOwnerSafePacket: true,
       commands,
+    },
+    observedRunEvidenceCommandPlan: {
+      placeholdersOnly: true,
+      privateRunInputTemplateRequiredBeforeEachRun: true,
+      metadataOnlyValidationRequiredBeforeRecord: true,
+      receiptDigestRequiredBeforeRecord: true,
+      independentAnchorDigestRequiredBeforeRecord: true,
+      decisionPacketOnlyAfterObservedSummaryVerify: true,
+      requiredAcceptedConsecutiveRuns: REQUIRED_PROMOTION_ACCEPTED_RUNS,
+      requiredPilotDayIndexes: [...REQUIRED_PROMOTION_PILOT_DAY_INDEXES],
+      commands: [...OBSERVED_RUN_EVIDENCE_COMMANDS],
     },
     blockersStillActive: [...ownerBaselineActionCard.blockersStillActive],
     nonClaims: [...NON_CLAIMS],
@@ -392,6 +429,22 @@ export function validateShopPilotOwnerObservationPack(packet) {
     fail('shop_pilot_owner_observation_pack_command_plan_invalid')
   }
   assertCommandOrder(packet.commandPlan.commands)
+  const observedRunPlan = packet.observedRunEvidenceCommandPlan
+  if (!isRecord(observedRunPlan)
+    || observedRunPlan.placeholdersOnly !== true
+    || observedRunPlan.privateRunInputTemplateRequiredBeforeEachRun !== true
+    || observedRunPlan.metadataOnlyValidationRequiredBeforeRecord !== true
+    || observedRunPlan.receiptDigestRequiredBeforeRecord !== true
+    || observedRunPlan.independentAnchorDigestRequiredBeforeRecord !== true
+    || observedRunPlan.decisionPacketOnlyAfterObservedSummaryVerify !== true
+    || observedRunPlan.requiredAcceptedConsecutiveRuns !== REQUIRED_PROMOTION_ACCEPTED_RUNS
+    || !sameArray(observedRunPlan.requiredPilotDayIndexes, REQUIRED_PROMOTION_PILOT_DAY_INDEXES)
+    || !Array.isArray(observedRunPlan.commands)
+    || observedRunPlan.commands.length !== OBSERVED_RUN_EVIDENCE_COMMANDS.length
+    || observedRunPlan.commands.some((command) => !OBSERVED_RUN_EVIDENCE_COMMANDS.includes(command))) {
+    fail('shop_pilot_owner_observation_pack_observed_run_plan_invalid')
+  }
+  assertObservedRunCommandOrder(observedRunPlan.commands)
   if (!Array.isArray(packet.blockersStillActive)
     || !packet.blockersStillActive.includes('owner_observed_baseline_packet_missing')
     || !Array.isArray(packet.nonClaims)
@@ -416,6 +469,7 @@ export function renderShopPilotOwnerObservationPackMarkdown(packet) {
   const acceptanceRules = packet.observationChecklist.runAcceptanceRules.map((rule) => `- ${rule}`).join('\n')
   const stopConditions = packet.observationChecklist.stopConditions.map((condition) => `- ${condition}`).join('\n')
   const commands = packet.commandPlan.commands.map((command) => `- ${command}`).join('\n')
+  const observedRunCommands = packet.observedRunEvidenceCommandPlan.commands.map((command) => `- ${command}`).join('\n')
   const blockers = packet.blockersStillActive.map((blocker) => `- ${blocker}`).join('\n')
   const nonClaims = packet.nonClaims.map((claim) => `- ${claim}`).join('\n')
   return `# Shop Pilot Owner Observation Pack
@@ -469,6 +523,12 @@ ${stopConditions}
 Use placeholder filenames inside the private workspace. The owner-safe packet may contain counts, labels, booleans, durations, dates, and digests only; no names, contacts, raw notes, local paths, credentials, payment details, stock movement details, or row-level private evidence.
 
 ${commands}
+
+## Commands during the five-day private pilot
+
+After the owner-safe baseline packet exists and the owner starts real private pilot observation, use a new private run input for each real run. Template creation and metadata-only validation do not record evidence. Recording requires both a private receipt digest and an independent private anchor digest, and the decision packet remains owner-review only.
+
+${observedRunCommands}
 
 ## Blockers still active
 
@@ -552,6 +612,8 @@ function runSelfTest() {
     ok: validateShopPilotOwnerObservationPack(pack) === pack
       && markdown.includes('Observe real manual Shop work')
       && markdown.includes('--lint-input "<private-baseline-input.json>"')
+      && markdown.includes('client:pilot:observed-evidence:template')
+      && markdown.includes('client:pilot:observed-evidence:validate')
       && !hasPrivateOrSecretShape(markdown)
       && staleRejected,
     contract: `${SHOP_PILOT_OWNER_OBSERVATION_PACK_CONTRACT}.self-test`,
@@ -559,6 +621,8 @@ function runSelfTest() {
       pack_valid: true,
       current_release_gate_bound: pack.currentReleaseGate?.currentGateId === 'review_branch_push',
       lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
+      private_run_template_before_record: markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
+      metadata_validation_before_record: markdown.indexOf('client:pilot:observed-evidence:validate') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
       markdown_safe: !hasPrivateOrSecretShape(markdown),
       stale_control_index_rejected: staleRejected,
     },

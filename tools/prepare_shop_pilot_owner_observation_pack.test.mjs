@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -33,6 +34,10 @@ import {
   assessShopPilotLaunchGate,
   sampleShopPilotLaunchGateInput,
 } from './verify_shop_pilot_launch_gate.mjs'
+
+function packetDigest(body) {
+  return `sha256:${createHash('sha256').update(JSON.stringify(body).replace(/\r\n?/g, '\n')).digest('hex')}`
+}
 
 function baselineInput() {
   return {
@@ -161,15 +166,65 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.deepEqual(pack.observationChecklist.promotionEvidenceRequirement.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.equal(pack.observationChecklist.promotionEvidenceRequirement.pilotSequenceCoverageMet, false)
   assert.ok(pack.observationChecklist.runAcceptanceRules.includes('real_manual_operations_only'))
+  assert.equal(pack.observedRunEvidenceCommandPlan.privateRunInputTemplateRequiredBeforeEachRun, true)
+  assert.equal(pack.observedRunEvidenceCommandPlan.metadataOnlyValidationRequiredBeforeRecord, true)
+  assert.equal(pack.observedRunEvidenceCommandPlan.receiptDigestRequiredBeforeRecord, true)
+  assert.equal(pack.observedRunEvidenceCommandPlan.independentAnchorDigestRequiredBeforeRecord, true)
+  assert.equal(pack.observedRunEvidenceCommandPlan.requiredAcceptedConsecutiveRuns, 20)
+  assert.deepEqual(pack.observedRunEvidenceCommandPlan.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+  assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('client:pilot:observed-evidence:template')))
+  assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('client:pilot:observed-evidence:validate')))
+  assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('--record --workspace "<private-observed-workspace>"')))
 
   const markdown = renderShopPilotOwnerObservationPackMarkdown(pack)
   assert.match(markdown, /Observe real manual Shop work/)
   assert.match(markdown, /Required accepted real runs: 20/)
   assert.match(markdown, /Required pilot days covered: 1, 2, 3, 4, 5/)
   assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)
+  assert.match(markdown, /Commands during the five-day private pilot/)
+  assert.match(markdown, /client:pilot:observed-evidence:template/)
+  assert.match(markdown, /client:pilot:observed-evidence:validate/)
+  assert.ok(markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'))
+  assert.ok(markdown.indexOf('client:pilot:observed-evidence:validate') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'))
   assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
   assert.doesNotMatch(markdown, /Private Baseline Spa|Private Baseline Operator/)
   assert.doesNotMatch(markdown, /ready for managed activation|production release ready|pilot success/i)
+})
+
+test('rejects owner observation packs that omit the private run template workflow', () => {
+  const day0 = day0Packet()
+  const card = buildShopPilotDay0OwnerBaselineActionCard({ day0Packet: day0 })
+  const pack = buildShopPilotOwnerObservationPack({ day0Packet: day0, ownerBaselineActionCard: card })
+  const withoutTemplateCommand = {
+    ...pack,
+    observedRunEvidenceCommandPlan: {
+      ...pack.observedRunEvidenceCommandPlan,
+      commands: pack.observedRunEvidenceCommandPlan.commands.filter((command) => !command.includes('client:pilot:observed-evidence:template')),
+    },
+  }
+  delete withoutTemplateCommand.digest
+  assert.throws(
+    () => validateShopPilotOwnerObservationPack({
+      ...withoutTemplateCommand,
+      digest: packetDigest(withoutTemplateCommand),
+    }),
+    /shop_pilot_owner_observation_pack_observed_run_plan_invalid/,
+  )
+  const body = {
+    ...pack,
+    observedRunEvidenceCommandPlan: {
+      ...pack.observedRunEvidenceCommandPlan,
+      metadataOnlyValidationRequiredBeforeRecord: false,
+    },
+  }
+  delete body.digest
+  assert.throws(
+    () => validateShopPilotOwnerObservationPack({
+      ...body,
+      digest: packetDigest(body),
+    }),
+    /shop_pilot_owner_observation_pack_observed_run_plan_invalid/,
+  )
 })
 
 test('rejects stale release-control binding and redacts source paths to file names', () => {
@@ -243,6 +298,8 @@ test('CLI writes and verifies the owner observation pack', async () => {
     const markdown = await readFile(markdownPath, 'utf8')
     assert.match(markdown, /External writes allowed now: false/)
     assert.match(markdown, /owner-safe packet may contain counts/)
+    assert.match(markdown, /client:pilot:observed-evidence:template/)
+    assert.match(markdown, /client:pilot:observed-evidence:validate/)
     assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
   } finally {
     await rm(dir, { recursive: true, force: true })
