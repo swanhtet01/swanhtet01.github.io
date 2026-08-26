@@ -23,7 +23,7 @@ Shop trade links may include a reviewed `template` query parameter, such as ?pro
 
 1. Start on the `Sell` tab (`/shop/?tab=counter`). Read the heading: `Tap an item to add it`. Point out the sample catalog tiles with prices and stock counts.
 2. Tap two or three items. The `Current sale` panel fills; on a phone the cart is the bottom bar. Tiles show a stored photo where the shop has added one; otherwise the built-in artwork, so a catalog with no photos never looks broken.
-3. Show the two ways to find an item without scrolling. Type into `Search or scan SKU`, then tap the camera control beside it — its label is `Scan a barcode with the camera`. On a phone this is the moment that lands: the client points their own camera at a barcode from their own shelf and the item appears. If the browser refuses camera permission, say so plainly and fall back to typing the SKU; do not retry the prompt in front of the client.
+3. Show the two ways to find an item without scrolling. Type into `Search or scan SKU`, then tap the camera control beside it — its label is `Scan a barcode with the camera`. On a phone this is the moment that lands: the client points their own camera at a barcode from their own shelf and the item appears. **Check the camera control is actually there before you promise it.** It is built on the platform `BarcodeDetector` API alone, so on a browser without that API `BarcodeScanButton` renders nothing at all — no disabled control, no message. That is Firefox and desktop Safari, and it is why this step can silently have nothing to tap. If the control is absent, do not mention the camera: scan straight into `Search or scan SKU` with a keyboard-wedge scanner, or type the SKU — both add the item on Enter by exact-SKU match. If the control is present but the browser refuses camera permission, say so plainly and fall back to typing the SKU; do not retry the prompt in front of the client.
 4. In the sale panel, leave Customer as `Guest` or type a name, then pick a payment method: `Cash`, `KBZPay`, or `WavePay`.
 5. If the shop has saved a merchant QR on this device and you picked `KBZPay` or `WavePay`, a `Show` QR control appears carrying the amount due. Open it: the dialog reads `Scan to pay` above the code and `Amount due` above the figure. **Say what this is and is not** — it displays the shop's own saved QR so the customer can scan and type the amount. SuperMega takes no payment, sees no payment, and confirms nothing; the owner still confirms money arrived in `Orders`. If no QR is saved yet the app says so and points to `Add your merchant QR`, which is the honest thing to demo when it happens.
 6. Tap `Review order`. The accountable gate opens (`Review counter order`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
@@ -52,15 +52,24 @@ Neither is on by default. Offering them unprompted lengthens the demo and
 invites a question the free tier does not answer.
 
 - **Receipt.** After an order exists, the receipt dialog (`Order record`)
-  offers `Print receipt` and `Copy text`. Printing goes through the browser to
-  whatever printer the device already has. There is no thermal/ESC-POS receipt
-  printer support — if the client asks for one, say it is not built rather
-  than implying the browser path is equivalent.
+  offers `Print receipt` and `Copy text`. Say what the printout IS: an internal
+  order record carrying the confirmation and the calculation evidence, not a
+  shop-branded customer slip. Printing goes through the browser to whatever
+  printer the device already has. There is no thermal/ESC-POS receipt printer
+  support — if the client asks for a customer receipt on a till roll, say that
+  neither the format nor the printer path is built, rather than implying the
+  browser path is equivalent.
 - **Loyalty points.** Off unless the shop turns it on for this device. Once on,
   a known customer's balance appears at the counter as a `pts` chip, and
   `Points balance` shows on the receipt. Points are a projection over sales
   this device recorded — they are not an account, they do not sync between
-  devices, and nothing is redeemed without the owner confirming it.
+  devices, and no redemption is recorded without a named person confirming it on
+  the accountable gate. Say **accountable operator confirmation**, not owner
+  approval: any operator who can write Shop changes can open `Redeem points`, and
+  the gate records the name it is given rather than checking a role. What the
+  product guarantees is that a redemption carries a name, a reason and a
+  reversible record — not that only the owner could have done it. If a client asks
+  for owner-only redemption, say it is not built.
 
 ## 4. Objection handling: the boundary
 
