@@ -242,6 +242,11 @@ export function buildNextReleaseActionPreflight({
   const branchBlockers = strings(branchPlan.readiness?.blockers || [], 'next_release_action_preflight_branch_readiness', 80)
   const prBlockers = strings(prPlan.readiness?.blockers || [], 'next_release_action_preflight_pr_readiness', 80)
   const branchPublished = reviewBranchAlreadyPublished(branchPlan)
+  const prDependencyBlockers = branchPublished ? [] : ['review_branch_push_not_satisfied']
+  const prExecuteReady = branchPublished && prPlan.readiness?.executeReady === true
+  if (!branchPublished && prPlan.readiness?.executeReady === true) {
+    fail('next_release_action_preflight_pr_ready_without_review_branch')
+  }
   const shop = matrix.products.find((product) => product.productId === 'shop')
   if (!shop) fail('next_release_action_preflight_shop_missing')
 
@@ -263,7 +268,7 @@ export function buildNextReleaseActionPreflight({
         : branchPlan.readiness?.executeReady === true
           ? 'ready_for_exact_owner_execution'
           : 'blocked',
-      executeReady: branchPlan.readiness?.executeReady === true,
+      executeReady: !branchPublished && branchPlan.readiness?.executeReady === true,
       blockers: branchPublished
         ? []
         : githubSatisfied
@@ -275,9 +280,9 @@ export function buildNextReleaseActionPreflight({
     gateStatus({
       id: 'pull_request_creation',
       label: 'Pull request creation',
-      status: prPlan.readiness?.executeReady === true ? 'ready_for_exact_owner_execution' : 'blocked',
-      executeReady: prPlan.readiness?.executeReady === true,
-      blockers: githubSatisfied ? prBlockers : ['github_main_protection_unverified', ...prBlockers],
+      status: prExecuteReady ? 'ready_for_exact_owner_execution' : 'blocked',
+      executeReady: prExecuteReady,
+      blockers: githubSatisfied ? [...prDependencyBlockers, ...prBlockers] : ['github_main_protection_unverified', ...prDependencyBlockers, ...prBlockers],
       approvalEnv: prPlan.approval?.env || null,
       digest: prPlan.digest,
     }),
@@ -411,6 +416,22 @@ export function validateNextReleaseActionPreflight(packet) {
   ])) fail('next_release_action_preflight_gates_invalid')
   if (packet.gates[0].status !== 'satisfied' && packet.currentAction.gateId !== 'github_main_protection') {
     fail('next_release_action_preflight_current_action_invalid')
+  }
+  const executeReadyGates = packet.gates.filter((gate) => gate.executeReady === true)
+  if (executeReadyGates.length > 1
+    || (executeReadyGates.length === 1 && executeReadyGates[0].id !== packet.currentAction.gateId)) {
+    fail('next_release_action_preflight_execute_ready_ambiguous')
+  }
+  const githubMainGate = packet.gates.find((gate) => gate.id === 'github_main_protection')
+  const reviewBranchGate = packet.gates.find((gate) => gate.id === 'review_branch_push')
+  const pullRequestGate = packet.gates.find((gate) => gate.id === 'pull_request_creation')
+  if (githubMainGate?.status === 'satisfied' && reviewBranchGate?.status !== 'satisfied') {
+    if (pullRequestGate?.status !== 'blocked'
+      || pullRequestGate?.executeReady !== false
+      || !pullRequestGate?.blockers?.includes('review_branch_push_not_satisfied')
+      || packet.currentAction.gateId === 'pull_request_creation') {
+      fail('next_release_action_preflight_pr_requires_review_branch')
+    }
   }
   if (!isRecord(packet.allowedNow)
     || !Array.isArray(packet.allowedNow.localVerification)

@@ -24,6 +24,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce']
 const commit = 'a'.repeat(40)
 const main = 'b'.repeat(40)
 const live = 'c'.repeat(40)
+const prApprovalEnv = 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'
 
 function digestOf(char) {
   return `sha256:${char.repeat(64)}`
@@ -279,6 +280,10 @@ test('advances to branch push only after GitHub main protection is verified', ()
   assert.equal(packet.gates[0].status, 'satisfied')
   assert.equal(packet.currentAction.gateId, 'review_branch_push')
   assert.ok(packet.currentAction.blockers.includes('owner_approval_missing'))
+  const pullRequestGate = packet.gates.find((gate) => gate.id === 'pull_request_creation')
+  assert.equal(pullRequestGate.status, 'blocked')
+  assert.equal(pullRequestGate.executeReady, false)
+  assert.ok(pullRequestGate.blockers.includes('review_branch_push_not_satisfied'))
 })
 
 test('advances to pull request creation after the review branch is already exact', () => {
@@ -288,6 +293,46 @@ test('advances to pull request creation after the review branch is already exact
   assert.equal(packet.currentAction.gateId, 'pull_request_creation')
   assert.ok(packet.currentAction.blockers.includes('owner_approval_missing'))
   assert.ok(packet.currentAction.blockers.includes('github_token_missing'))
+})
+
+test('rejects an executable PR plan when the review branch push gate is not satisfied', () => {
+  const unpublished = fixture({ protectedMain: true })
+  const approvalTemplate = `I approve one GitHub pull request creation from ${unpublished.handoff.candidate.branch} at ${commit} into main for SuperMega review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
+  const publishedReady = fixture({
+    protectedMain: true,
+    branchPublished: true,
+    env: {
+      [prApprovalEnv]: approvalTemplate,
+      GITHUB_TOKEN: 'placeholder-token',
+    },
+  })
+  assert.equal(publishedReady.pullRequestPlan.readiness.executeReady, true)
+  assert.throws(
+    () => buildNextReleaseActionPreflight({
+      ...unpublished,
+      pullRequestPlan: publishedReady.pullRequestPlan,
+      pullRequestPlanReceipt: { ...unpublished.pullRequestPlanReceipt, packet: publishedReady.pullRequestPlan },
+    }),
+    /next_release_action_preflight_pr_ready_without_review_branch/,
+  )
+})
+
+test('rejects ambiguous packets with multiple execute-ready gates', () => {
+  const packet = buildNextReleaseActionPreflight(fixture({ protectedMain: true }))
+  const pullRequestIndex = packet.gates.findIndex((gate) => gate.id === 'pull_request_creation')
+  const tampered = {
+    ...packet,
+    gates: packet.gates.map((gate, index) => index === pullRequestIndex
+      ? { ...gate, executeReady: true }
+      : gate),
+  }
+  assert.throws(
+    () => validateNextReleaseActionPreflight({
+      ...tampered,
+      digest: `sha256:${'0'.repeat(64)}`,
+    }),
+    /next_release_action_preflight_execute_ready_ambiguous|next_release_action_preflight_digest_mismatch/,
+  )
 })
 
 test('fails closed for candidate mismatch and write-control drift', () => {
