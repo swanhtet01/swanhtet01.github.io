@@ -197,12 +197,16 @@ for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_ex
 }
 const baselineLintCommand = 'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"'
 const baselineGenerateCommand = 'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"'
-const day0ReleaseBoundCommand = 'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"'
+const launchGateReportCommand = 'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"'
+const launchGateVerifyCommand = 'npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"'
+const day0ReleaseBoundCommand = 'npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"'
 check(kitBaseline.includes(baselineLintCommand), 'pilot_kit_baseline_lint_command')
 check(kitBaseline.includes('`baseline_input_ready`'), 'pilot_kit_baseline_lint_ready_status')
 check(kitBaseline.indexOf(baselineLintCommand) >= 0
   && kitBaseline.indexOf(baselineLintCommand) < kitBaseline.indexOf(baselineGenerateCommand), 'pilot_kit_baseline_lint_before_generate')
 check(kitBaseline.includes('do not generate or hand-edit the owner-safe packet'), 'pilot_kit_baseline_no_hand_edit')
+check(kitBaseline.includes(launchGateReportCommand), 'pilot_kit_launch_gate_report_command')
+check(kitBaseline.includes(launchGateVerifyCommand), 'pilot_kit_launch_gate_verify_command')
 check(kitBaseline.includes(day0ReleaseBoundCommand), 'pilot_kit_day0_release_bound_command')
 check(kitReadme.includes('must include the current release handoff plus GitHub protection snapshot'), 'pilot_kit_readme_day0_release_binding')
 
