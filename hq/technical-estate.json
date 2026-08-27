@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:7e01a46f97e4b0d86c63139d8e4c34ec75ac4680af7594d285369742f40391f7",
+  "sourceDigest": "sha256:0003a21795e7abb0032232c3b14e5e63b7a4587d48367f93522bab872119ec0e",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -79,6 +79,7 @@
         "showroom/src/core/CoreShell.tsx",
         "showroom/src/products/shop",
         "showroom/src/core/ShopToday.tsx",
+        "showroom/src/core/shop-profit-control.ts",
         "showroom/src/core/ShopInventoryFoundation.tsx"
       ],
       "releaseWorkflow": ".github/workflows/supermega-public-release.yml",
@@ -239,7 +240,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:2111aeff42a8a86749100cb8bd00faaa4d4dd36c8b86b69cf81ce9240d4a7008"
+      "digest": "sha256:a1abddc3f52535737a4c17f72c42bcb5bedd513b8b13ae9548fa1ae4f3e3490c"
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",

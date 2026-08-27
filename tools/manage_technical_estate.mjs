@@ -37,6 +37,7 @@ const PRODUCT_SOURCE_PATHS = {
     'showroom/src/core/CoreShell.tsx',
     'showroom/src/products/shop',
     'showroom/src/core/ShopToday.tsx',
+    'showroom/src/core/shop-profit-control.ts',
     'showroom/src/core/ShopInventoryFoundation.tsx',
   ],
   plant: [
