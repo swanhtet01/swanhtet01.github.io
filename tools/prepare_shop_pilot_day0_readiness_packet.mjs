@@ -114,6 +114,13 @@ const BASELINE_CAPTURE_STOP_CONDITIONS = [
   'operator_declines_review_every_run',
   'owner_cannot_confirm_baseline',
 ]
+const BASELINE_CAPTURE_PRIVATE_INPUTS = [
+  'manual_order_runs',
+  'package_redemption_runs',
+  'daily_close_runs',
+  'daily_close_minutes',
+  'exception_count',
+]
 const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
 const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 
@@ -268,13 +275,13 @@ function ownerActionFor(status) {
     return 'Prepare the owner-private Shop handoff using the accepted baseline and intake digests; still do not contact the participant or enable hosted writes.'
   }
   if (status === 'blocked_owner_observed_baseline_required') {
-    return 'Capture at least three owner-observed manual Shop order runs and three package-redemption runs, then generate the owner-safe baseline packet.'
+    return 'Capture at least three owner-observed manual Shop order runs, three package-redemption runs, and three daily-close runs, then generate the owner-safe baseline packet.'
   }
   if (status === 'blocked_owner_private_intake_required') {
     return 'Generate and review the owner-private Shop intake packet before day-one handoff.'
   }
   if (status === 'blocked_owner_baseline_and_intake_required') {
-    return 'Complete both private prerequisites: owner-observed baseline packet and owner-private intake packet.'
+    return 'Complete both private prerequisites: owner-observed baseline packet for orders, package redemptions, and daily close, plus the owner-private intake packet.'
   }
   return 'Fix the failing launch-gate evidence before day-zero pilot readiness can be assessed.'
 }
@@ -298,9 +305,9 @@ function nextOwnerPrivateStepFor(status) {
     return {
       ...base,
       id: 'capture-owner-observed-baseline',
-      label: 'Capture owner-observed baseline runs',
+      label: 'Capture owner-observed order, redemption, and close baseline runs',
       commandId: 'shop:pilot:baseline-packet',
-      requiredPrivateInputs: ['manual_order_runs', 'package_redemption_runs', 'daily_close_minutes', 'exception_count'],
+      requiredPrivateInputs: [...BASELINE_CAPTURE_PRIVATE_INPUTS],
       completionSignal: 'public_safe_baseline_packet_digest',
     }
   }
@@ -318,9 +325,9 @@ function nextOwnerPrivateStepFor(status) {
     return {
       ...base,
       id: 'capture-baseline-then-intake',
-      label: 'Capture baseline first, then prepare intake',
+      label: 'Capture order, redemption, and close baseline first, then prepare intake',
       commandId: 'shop:pilot:baseline-packet',
-      requiredPrivateInputs: ['manual_order_runs', 'package_redemption_runs', 'daily_close_minutes', 'exception_count'],
+      requiredPrivateInputs: [...BASELINE_CAPTURE_PRIVATE_INPUTS],
       completionSignal: 'baseline_packet_digest_then_intake_packet_digest',
     }
   }
@@ -899,6 +906,10 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
   if (packet.status === 'blocked_owner_observed_baseline_required' && packet.nextOwnerPrivateStep.id !== 'capture-owner-observed-baseline') fail('shop_pilot_day0_next_step_status_mismatch')
   if (packet.status === 'blocked_owner_baseline_and_intake_required' && packet.nextOwnerPrivateStep.id !== 'capture-baseline-then-intake') fail('shop_pilot_day0_next_step_status_mismatch')
   if (packet.status === 'day0_owner_private_handoff_ready' && packet.nextOwnerPrivateStep.id !== 'prepare-day-one-private-handoff') fail('shop_pilot_day0_next_step_status_mismatch')
+  if ((packet.status === 'blocked_owner_observed_baseline_required' || packet.status === 'blocked_owner_baseline_and_intake_required')
+    && !sameArray(packet.nextOwnerPrivateStep.requiredPrivateInputs, BASELINE_CAPTURE_PRIVATE_INPUTS)) {
+    fail('shop_pilot_day0_next_step_baseline_inputs_invalid')
+  }
   if (!Array.isArray(packet.privateCommands)
     || packet.privateCommands.length < 5
     || !packet.privateCommands.some((command) => command.includes('--release-handoff "<release-handoff.json>"') && command.includes('--github-protection-snapshot "<github-protection-snapshot.json>"'))) {
