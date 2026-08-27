@@ -83,8 +83,8 @@ function runInput(index, overrides = {}) {
     pilotMode: 'owner_named',
     verticalPack: 'spa-services',
     runId: `run-${String(index).padStart(2, '0')}`,
-    observedAt: new Date(Date.UTC(2026, 7, 25, 8, index, 0)).toISOString(),
-    dayIndex: (index % 5) + 1,
+    observedAt: new Date(Date.UTC(2026, 7, 25 + ((index - 1) % 5), 8, index, 0)).toISOString(),
+    dayIndex: ((index - 1) % 5) + 1,
     operatorReviewed: true,
     targetCorrect: true,
     accepted: true,
@@ -132,6 +132,9 @@ test('builds owner-safe decision packet from baseline and 20 anchored accepted o
     assert.deepEqual(packet.observedMetrics.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
     assert.deepEqual(packet.observedMetrics.missingPilotDayIndexes, [])
     assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, true)
+    assert.equal(packet.observedMetrics.requiredPilotCalendarDates, 5)
+    assert.equal(packet.observedMetrics.acceptedConsecutiveObservedDateCount >= 5, true)
+    assert.equal(packet.observedMetrics.pilotCalendarCoverageMet, true)
     assert.equal(packet.observedMetrics.readyForOwnerDecisionReview, true)
     assert.deepEqual(packet.observedMetrics.proofIntegrity, {
       uniqueRunIds: true,
@@ -186,6 +189,32 @@ test('blocks decision readiness when 20 accepted runs miss five-day sequence cov
     assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, false)
     assert.deepEqual(packet.failures, ['pilot_sequence_days_missing'])
     assert.equal(packet.pilotDecision.recommendation, 'collect_more_observed_evidence')
+  })
+})
+
+test('blocks decision readiness when 20 accepted runs miss five observed calendar dates', async () => {
+  await withWorkspace(async (workspace) => {
+    let summary = null
+    for (let index = 1; index <= 20; index += 1) {
+      summary = await recordObservedShopPilotRun({
+        workspace,
+        runInput: runInput(index, { observedAt: '2026-08-25T08:00:00.000Z' }),
+      })
+    }
+    const packet = validateShopPilotDecisionPacket(buildShopPilotDecisionPacket({
+      baselinePacket: baselinePacket(),
+      observedSummary: summary,
+      generatedAt: '2026-08-25T00:00:00.000Z',
+    }))
+    assert.equal(packet.ok, false)
+    assert.equal(packet.observedMetrics.acceptedConsecutiveRuns, 20)
+    assert.deepEqual(packet.observedMetrics.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.equal(packet.observedMetrics.pilotSequenceCoverageMet, true)
+    assert.deepEqual(packet.observedMetrics.acceptedConsecutiveObservedDates, ['2026-08-25'])
+    assert.equal(packet.observedMetrics.acceptedConsecutiveObservedDateCount, 1)
+    assert.equal(packet.observedMetrics.pilotCalendarCoverageMet, false)
+    assert.equal(packet.observedMetrics.promotionEvidenceMet, false)
+    assert.deepEqual(packet.failures, ['pilot_calendar_dates_missing'])
   })
 })
 

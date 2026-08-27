@@ -75,8 +75,11 @@ test('valid private run appends local evidence and returns no private values', a
     assert.equal(summary.acceptedConsecutiveRuns, 1)
     assert.equal(summary.requiredAcceptedConsecutiveRuns, 20)
     assert.deepEqual(summary.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.equal(summary.requiredPilotCalendarDates, 5)
     assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1])
+    assert.deepEqual(summary.acceptedConsecutiveObservedDates, ['2026-08-02'])
     assert.equal(summary.pilotSequenceCoverageMet, false)
+    assert.equal(summary.pilotCalendarCoverageMet, false)
     assert.equal(summary.promotionEvidenceMet, false)
     assert.deepEqual(summary.promotionProgress, {
       requiredAcceptedConsecutiveRuns: 20,
@@ -86,6 +89,10 @@ test('valid private run appends local evidence and returns no private values', a
       acceptedConsecutivePilotDayIndexes: [1],
       missingPilotDayIndexes: [2, 3, 4, 5],
       pilotSequenceCoverageMet: false,
+      requiredPilotCalendarDates: 5,
+      acceptedConsecutiveObservedDateCount: 1,
+      acceptedConsecutiveObservedDates: ['2026-08-02'],
+      pilotCalendarCoverageMet: false,
       proofIntegrityMet: true,
       latestReloadRetryOutcome: 'passed',
       readyForOwnerDecisionReview: false,
@@ -190,6 +197,8 @@ test('twenty consecutive accepted runs set promotionEvidenceMet', async () => {
     assert.equal(summary.promotionEvidenceMet, true)
     assert.equal(summary.promotionProgress.acceptedConsecutiveRunsRemaining, 0)
     assert.deepEqual(summary.promotionProgress.missingPilotDayIndexes, [])
+    assert.equal(summary.promotionProgress.acceptedConsecutiveObservedDateCount >= 5, true)
+    assert.equal(summary.promotionProgress.pilotCalendarCoverageMet, true)
     assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, true)
     assert.equal(summary.nextAction, 'owner_review_required_before_activation')
   } finally {
@@ -211,6 +220,31 @@ test('twenty consecutive accepted runs still require five-day pilot sequence cov
     assert.equal(summary.pilotSequenceCoverageMet, false)
     assert.equal(summary.promotionEvidenceMet, false)
     assert.deepEqual(summary.promotionProgress.missingPilotDayIndexes, [2, 3, 4, 5])
+    assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, false)
+    assert.equal(summary.nextAction, 'collect_more_observed_evidence')
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('twenty accepted runs still require five distinct observed dates', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-20-date-gap-'))
+  try {
+    let summary
+    for (let index = 1; index <= 20; index += 1) {
+      summary = await recordObservedShopPilotRun({
+        workspace: parent,
+        runInput: runInput(index, { observedAt: '2026-08-25T08:00:00.000Z' }),
+      })
+    }
+    assert.equal(summary.acceptedConsecutiveRuns, 20)
+    assert.deepEqual(summary.acceptedConsecutivePilotDayIndexes, [1, 2, 3, 4, 5])
+    assert.equal(summary.pilotSequenceCoverageMet, true)
+    assert.deepEqual(summary.acceptedConsecutiveObservedDates, ['2026-08-25'])
+    assert.equal(summary.pilotCalendarCoverageMet, false)
+    assert.equal(summary.promotionEvidenceMet, false)
+    assert.equal(summary.promotionProgress.acceptedConsecutiveObservedDateCount, 1)
+    assert.equal(summary.promotionProgress.pilotCalendarCoverageMet, false)
     assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, false)
     assert.equal(summary.nextAction, 'collect_more_observed_evidence')
   } finally {

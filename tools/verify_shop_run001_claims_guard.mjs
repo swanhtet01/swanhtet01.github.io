@@ -91,10 +91,12 @@ check(
 )
 
 requireSnippet(recorderText, 'const runAndDayCoverageMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet', files.recorder)
-requireSnippet(recorderText, "const promotionEvidenceMet = runAndDayCoverageMet && latestReloadRetryOutcome === 'passed'", files.recorder)
+requireSnippet(recorderText, 'const pilotCalendarCoverageMet = acceptedConsecutiveObservedDates.length >= REQUIRED_PILOT_CALENDAR_DATES', files.recorder)
+requireSnippet(recorderText, "const promotionEvidenceMet = runAndDayCoverageMet && pilotCalendarCoverageMet && latestReloadRetryOutcome === 'passed'", files.recorder)
 requireSnippet(recorderText, 'const readyForOwnerDecisionReview = promotionEvidenceMet', files.recorder)
 requireSnippet(recorderText, 'acceptedConsecutiveRunsRemaining', files.recorder)
 requireSnippet(recorderText, 'missingPilotDayIndexes', files.recorder)
+requireSnippet(recorderText, 'acceptedConsecutiveObservedDates', files.recorder)
 requireSnippet(recorderText, 'promotionProgress', files.recorder)
 requireSnippet(recorderText, 'SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT', files.recorder)
 requireSnippet(recorderText, 'buildObservedRunInputTemplate', files.recorder)
@@ -116,6 +118,7 @@ requireSnippet(recorderText, "nextAction: readyForOwnerDecisionReview ? 'owner_r
 requireSnippet(recorderTestText, 'nineteen accepted runs do not set promotionEvidenceMet', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs set promotionEvidenceMet', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs still require five-day pilot sequence coverage', files.recorderTest)
+requireSnippet(recorderTestText, 'twenty accepted runs still require five distinct observed dates', files.recorderTest)
 requireSnippet(recorderTestText, 'replayed evidence and anchor digests cannot inflate accepted run count', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty accepted runs do not set promotion evidence until latest reload retry passes', files.recorderTest)
 requireSnippet(recorderTestText, 'private run input template is fillable but not recordable evidence', files.recorderTest)
@@ -126,6 +129,7 @@ requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, tru
 requireSnippet(ownerObservationPackText, 'observedRunEvidenceCommandPlan', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'privateRunInputTemplateRequiredBeforeEachRun', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'metadataOnlyValidationRequiredBeforeRecord', files.ownerObservationPack)
+requireSnippet(ownerObservationPackText, 'requiredPilotCalendarDates', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'receiptDigestRequiredBeforeRecord', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'independentAnchorDigestRequiredBeforeRecord', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'client:pilot:observed-evidence:template', files.ownerObservationPack)
@@ -229,6 +233,7 @@ const result = {
   requiredPromotionEvidence: {
     acceptedConsecutiveRuns: 20,
     fiveDayPilotSequenceCoverageRequired: true,
+    fiveObservedCalendarDatesRequired: true,
     independentAnchorRequired: true,
     receiptRequired: true,
     latestReloadRetryPassedRequired: true,

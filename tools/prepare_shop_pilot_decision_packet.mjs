@@ -25,7 +25,9 @@ const PILOT_MODE = SHOP_PILOT_MODE
 const VERTICAL_PACK = SHOP_PILOT_VERTICAL_PACK
 const REQUIRED_ACCEPTED_CONSECUTIVE_RUNS = 20
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
+const REQUIRED_PILOT_CALENDAR_DATES = 5
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|vercel_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
 const PHONE_PATTERN = /(?<![A-Za-z0-9])(?:\+?95|09)[\s().-]*\d(?:[\s().-]*\d){6,12}(?![A-Za-z0-9])/u
@@ -116,6 +118,24 @@ function sameNumberArray(left, right) {
     && left.every((item, index) => item === right[index])
 }
 
+function sameStringArray(left, right) {
+  return Array.isArray(left)
+    && Array.isArray(right)
+    && left.length === right.length
+    && left.every((item, index) => item === right[index])
+}
+
+function sortedDateArray(value, field) {
+  if (!Array.isArray(value)
+    || value.some((item, index, dates) => typeof item !== 'string'
+      || !DATE_PATTERN.test(item)
+      || dates.indexOf(item) !== index)
+    || !sameStringArray(value, [...value].sort())) {
+    fail(`${field}_invalid`)
+  }
+  return value
+}
+
 function digestValue(value, field) {
   if (typeof value !== 'string' || !DIGEST_PATTERN.test(value)) fail(`${field}_invalid`)
   return value
@@ -145,9 +165,15 @@ function validateObservedEvidenceSummary(summary) {
   }
   const pilotSequenceCoverageMet = REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => summary.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
   if (summary.pilotSequenceCoverageMet !== pilotSequenceCoverageMet) fail('shop_pilot_decision_pilot_sequence_coverage_flag_invalid')
+  if (finiteNumber(summary.requiredPilotCalendarDates, 'shop_pilot_decision_required_calendar_date_count', { integer: true }) !== REQUIRED_PILOT_CALENDAR_DATES) {
+    fail('shop_pilot_decision_required_calendar_date_count_invalid')
+  }
+  const acceptedConsecutiveObservedDates = sortedDateArray(summary.acceptedConsecutiveObservedDates, 'shop_pilot_decision_accepted_observed_dates')
+  const pilotCalendarCoverageMet = acceptedConsecutiveObservedDates.length >= REQUIRED_PILOT_CALENDAR_DATES
+  if (summary.pilotCalendarCoverageMet !== pilotCalendarCoverageMet) fail('shop_pilot_decision_pilot_calendar_coverage_flag_invalid')
   const latestReloadRetryOutcome = isRecord(summary.metrics) ? summary.metrics.latestReloadRetryOutcome : null
   const runAndDayCoverageMet = summary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && summary.pilotSequenceCoverageMet === true
-  const requiredPromotionEvidenceMet = runAndDayCoverageMet && latestReloadRetryOutcome === 'passed'
+  const requiredPromotionEvidenceMet = runAndDayCoverageMet && pilotCalendarCoverageMet && latestReloadRetryOutcome === 'passed'
   if (summary.promotionEvidenceMet !== requiredPromotionEvidenceMet) fail('shop_pilot_decision_promotion_evidence_flag_invalid')
   const proofIntegrity = summary.proofIntegrity
   if (!isRecord(proofIntegrity)
@@ -192,6 +218,10 @@ function validateObservedEvidenceSummary(summary) {
     || !sameNumberArray(promotionProgress.acceptedConsecutivePilotDayIndexes, summary.acceptedConsecutivePilotDayIndexes)
     || !sameNumberArray(promotionProgress.missingPilotDayIndexes, expectedMissingPilotDayIndexes)
     || promotionProgress.pilotSequenceCoverageMet !== pilotSequenceCoverageMet
+    || promotionProgress.requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || promotionProgress.acceptedConsecutiveObservedDateCount !== acceptedConsecutiveObservedDates.length
+    || !sameStringArray(promotionProgress.acceptedConsecutiveObservedDates, acceptedConsecutiveObservedDates)
+    || promotionProgress.pilotCalendarCoverageMet !== pilotCalendarCoverageMet
     || promotionProgress.proofIntegrityMet !== true
     || promotionProgress.latestReloadRetryOutcome !== metrics.latestReloadRetryOutcome
     || promotionProgress.readyForOwnerDecisionReview !== expectedReadyForOwnerDecisionReview) {
@@ -215,8 +245,10 @@ function buildBlockers(observedSummary) {
   const blockers = []
   if (observedSummary.acceptedConsecutiveRuns < REQUIRED_ACCEPTED_CONSECUTIVE_RUNS) blockers.push('accepted_consecutive_runs_below_20')
   if (observedSummary.pilotSequenceCoverageMet !== true) blockers.push('pilot_sequence_days_missing')
+  if (observedSummary.pilotCalendarCoverageMet !== true) blockers.push('pilot_calendar_dates_missing')
   if (observedSummary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS
     && observedSummary.pilotSequenceCoverageMet === true
+    && observedSummary.pilotCalendarCoverageMet === true
     && observedSummary.metrics.latestReloadRetryOutcome !== 'passed') {
     blockers.push('latest_reload_retry_not_passed')
   }
@@ -226,6 +258,7 @@ function buildBlockers(observedSummary) {
 function targetStatus(comparison, observedSummary) {
   if (observedSummary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS
     && observedSummary.pilotSequenceCoverageMet === true
+    && observedSummary.pilotCalendarCoverageMet === true
     && observedSummary.metrics.latestReloadRetryOutcome !== 'passed') {
     return 'blocked_reload_retry'
   }
@@ -306,9 +339,13 @@ export function buildShopPilotDecisionPacket({ baselinePacket, observedSummary, 
       requiredAcceptedConsecutiveRuns: observed.requiredAcceptedConsecutiveRuns,
       requiredPilotDayIndexes: observed.requiredPilotDayIndexes,
       acceptedConsecutivePilotDayIndexes: observed.acceptedConsecutivePilotDayIndexes,
+      requiredPilotCalendarDates: observed.requiredPilotCalendarDates,
+      acceptedConsecutiveObservedDateCount: observed.promotionProgress.acceptedConsecutiveObservedDateCount,
+      acceptedConsecutiveObservedDates: observed.promotionProgress.acceptedConsecutiveObservedDates,
       acceptedConsecutiveRunsRemaining: observed.promotionProgress.acceptedConsecutiveRunsRemaining,
       missingPilotDayIndexes: observed.promotionProgress.missingPilotDayIndexes,
       pilotSequenceCoverageMet: observed.pilotSequenceCoverageMet,
+      pilotCalendarCoverageMet: observed.pilotCalendarCoverageMet,
       promotionEvidenceMet: observed.promotionEvidenceMet,
       readyForOwnerDecisionReview: observed.promotionProgress.readyForOwnerDecisionReview,
       proofIntegrity: observed.proofIntegrity,
@@ -360,8 +397,14 @@ export function validateShopPilotDecisionPacket(packet) {
     || JSON.stringify(observed.requiredPilotDayIndexes) !== JSON.stringify(REQUIRED_PILOT_DAY_INDEXES)
     || !Array.isArray(observed.acceptedConsecutivePilotDayIndexes)
     || observed.pilotSequenceCoverageMet !== REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => observed.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
+    || observed.requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || !Array.isArray(observed.acceptedConsecutiveObservedDates)
+    || !sameStringArray(observed.acceptedConsecutiveObservedDates, [...observed.acceptedConsecutiveObservedDates].sort())
+    || observed.acceptedConsecutiveObservedDates.some((date, index, dates) => typeof date !== 'string' || !DATE_PATTERN.test(date) || dates.indexOf(date) !== index)
+    || observed.acceptedConsecutiveObservedDateCount !== observed.acceptedConsecutiveObservedDates.length
+    || observed.pilotCalendarCoverageMet !== (observed.acceptedConsecutiveObservedDateCount >= REQUIRED_PILOT_CALENDAR_DATES)
     || ![null, 'passed', 'failed', 'not-tested'].includes(observed.latestReloadRetryOutcome)
-    || observed.promotionEvidenceMet !== (observed.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && observed.pilotSequenceCoverageMet === true && observed.latestReloadRetryOutcome === 'passed')
+    || observed.promotionEvidenceMet !== (observed.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && observed.pilotSequenceCoverageMet === true && observed.pilotCalendarCoverageMet === true && observed.latestReloadRetryOutcome === 'passed')
     || observed.acceptedRunCount > observed.runCount
     || observed.acceptedConsecutiveRunsRemaining !== Math.max(0, REQUIRED_ACCEPTED_CONSECUTIVE_RUNS - observed.acceptedConsecutiveRuns)
     || !sameNumberArray(observed.missingPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES.filter((dayIndex) => !observed.acceptedConsecutivePilotDayIndexes.includes(dayIndex)))
@@ -428,6 +471,9 @@ Recommendation: \`${packet.pilotDecision.recommendation}\`
 - Current accepted-streak pilot days covered: \`${packet.observedMetrics.acceptedConsecutivePilotDayIndexes.join(',') || 'none'}\`
 - Missing accepted-streak pilot days: \`${packet.observedMetrics.missingPilotDayIndexes.join(',') || 'none'}\`
 - Five-day pilot sequence covered: \`${packet.observedMetrics.pilotSequenceCoverageMet}\`
+- Required observed calendar dates: \`${packet.observedMetrics.requiredPilotCalendarDates}\`
+- Accepted-streak observed calendar dates: \`${packet.observedMetrics.acceptedConsecutiveObservedDates.join(',') || 'none'}\`
+- Calendar-date coverage met: \`${packet.observedMetrics.pilotCalendarCoverageMet}\`
 - Promotion evidence met: \`${packet.observedMetrics.promotionEvidenceMet}\`
 - Ready for owner decision review: \`${packet.observedMetrics.readyForOwnerDecisionReview}\`
 - Unique run IDs: \`${packet.observedMetrics.proofIntegrity.uniqueRunIds}\`
@@ -504,8 +550,11 @@ function sampleObservedSummary(overrides = {}) {
     acceptedConsecutiveRuns: 20,
     requiredAcceptedConsecutiveRuns: REQUIRED_ACCEPTED_CONSECUTIVE_RUNS,
     requiredPilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+    requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
     acceptedConsecutivePilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+    acceptedConsecutiveObservedDates: ['2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30'],
     pilotSequenceCoverageMet: true,
+    pilotCalendarCoverageMet: true,
     promotionEvidenceMet: true,
     proofIntegrity: {
       uniqueRunIds: true,
@@ -521,6 +570,10 @@ function sampleObservedSummary(overrides = {}) {
       acceptedConsecutivePilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
       missingPilotDayIndexes: [],
       pilotSequenceCoverageMet: true,
+      requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      acceptedConsecutiveObservedDateCount: REQUIRED_PILOT_CALENDAR_DATES,
+      acceptedConsecutiveObservedDates: ['2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30'],
+      pilotCalendarCoverageMet: true,
       proofIntegrityMet: true,
       latestReloadRetryOutcome: 'passed',
       readyForOwnerDecisionReview: true,

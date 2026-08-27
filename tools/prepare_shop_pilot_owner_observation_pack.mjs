@@ -95,6 +95,7 @@ const OBSERVED_RUN_EVIDENCE_COMMANDS = [
 ]
 const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
 const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
+const REQUIRED_PROMOTION_CALENDAR_DATES = 5
 
 function fail(code) {
   throw new Error(code)
@@ -291,7 +292,13 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
       flows: evidence.requiredFlows.map(flowChecklist),
       requiredMetrics: [...evidence.requiredMetrics],
       requiredConfirmations: [...evidence.requiredConfirmations],
-      promotionEvidenceRequirement: { ...(evidence.promotionEvidenceRequirement || {}) },
+      promotionEvidenceRequirement: {
+        ...(evidence.promotionEvidenceRequirement || {}),
+        requiredPilotCalendarDates: REQUIRED_PROMOTION_CALENDAR_DATES,
+        acceptedConsecutiveObservedDateCount: 0,
+        acceptedConsecutiveObservedDates: [],
+        pilotCalendarCoverageMet: false,
+      },
       runAcceptanceRules: [...RUN_ACCEPTANCE_RULES],
       stopConditions: [...evidence.stopConditions],
     },
@@ -318,6 +325,7 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
       decisionPacketOnlyAfterObservedSummaryVerify: true,
       requiredAcceptedConsecutiveRuns: REQUIRED_PROMOTION_ACCEPTED_RUNS,
       requiredPilotDayIndexes: [...REQUIRED_PROMOTION_PILOT_DAY_INDEXES],
+      requiredPilotCalendarDates: REQUIRED_PROMOTION_CALENDAR_DATES,
       commands: [...OBSERVED_RUN_EVIDENCE_COMMANDS],
     },
     blockersStillActive: [...ownerBaselineActionCard.blockersStillActive],
@@ -404,6 +412,10 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || !sameArray(promotion.requiredPilotDayIndexes, REQUIRED_PROMOTION_PILOT_DAY_INDEXES)
     || !sameArray(promotion.acceptedConsecutivePilotDayIndexes, [])
     || promotion.pilotSequenceCoverageMet !== false
+    || promotion.requiredPilotCalendarDates !== REQUIRED_PROMOTION_CALENDAR_DATES
+    || promotion.acceptedConsecutiveObservedDateCount !== 0
+    || !sameArray(promotion.acceptedConsecutiveObservedDates, [])
+    || promotion.pilotCalendarCoverageMet !== false
     || promotion.readyForPromotionEvidence !== false
     || promotion.syntheticEvidenceAccepted !== false
     || !Array.isArray(checklist.runAcceptanceRules)
@@ -442,6 +454,7 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || observedRunPlan.decisionPacketOnlyAfterObservedSummaryVerify !== true
     || observedRunPlan.requiredAcceptedConsecutiveRuns !== REQUIRED_PROMOTION_ACCEPTED_RUNS
     || !sameArray(observedRunPlan.requiredPilotDayIndexes, REQUIRED_PROMOTION_PILOT_DAY_INDEXES)
+    || observedRunPlan.requiredPilotCalendarDates !== REQUIRED_PROMOTION_CALENDAR_DATES
     || !Array.isArray(observedRunPlan.commands)
     || observedRunPlan.commands.length !== OBSERVED_RUN_EVIDENCE_COMMANDS.length
     || observedRunPlan.commands.some((command) => !OBSERVED_RUN_EVIDENCE_COMMANDS.includes(command))) {
@@ -511,8 +524,10 @@ Promotion evidence threshold:
 
 - Required accepted real runs: ${promotion.requiredAcceptedConsecutiveRuns}
 - Required pilot days covered: ${promotion.requiredPilotDayIndexes.join(', ')}
+- Required observed calendar dates: ${promotion.requiredPilotCalendarDates}
 - Accepted run count now: ${promotion.acceptedConsecutiveRuns}
 - Accepted pilot days now: ${promotion.acceptedConsecutivePilotDayIndexes.length ? promotion.acceptedConsecutivePilotDayIndexes.join(', ') : 'none'}
+- Accepted observed dates now: ${promotion.acceptedConsecutiveObservedDateCount}
 - Synthetic evidence accepted: false
 
 Accepted runs must satisfy:
@@ -627,6 +642,7 @@ function runSelfTest() {
       pack_valid: true,
       current_release_gate_bound: pack.currentReleaseGate?.currentGateId === 'review_branch_push',
       expected_baseline_preflight_status_named: pack.ownerAction.expectedBaselinePreflightStatus === 'baseline_input_ready',
+      required_observed_calendar_dates_named: pack.observedRunEvidenceCommandPlan.requiredPilotCalendarDates === REQUIRED_PROMOTION_CALENDAR_DATES,
       lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
       private_run_template_before_record: markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
       metadata_validation_before_record: markdown.indexOf('client:pilot:observed-evidence:validate') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),

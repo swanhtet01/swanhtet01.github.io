@@ -17,6 +17,7 @@ const RUNS_FILE = 'observed-runs.private.jsonl'
 const SUMMARY_FILE = 'observed-summary.private.json'
 const REQUIRED_ACCEPTED_CONSECUTIVE_RUNS = 20
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
+const REQUIRED_PILOT_CALENDAR_DATES = 5
 const RELOAD_RETRY_OUTCOMES = Object.freeze(['passed', 'failed', 'not-tested'])
 const REQUIRED_INPUT_KEYS = Object.freeze([
   'accepted',
@@ -198,6 +199,14 @@ function rate(numerator, denominator) {
 
 function uniqueSortedNumbers(values) {
   return [...new Set(values)].sort((a, b) => a - b)
+}
+
+function uniqueSortedStrings(values) {
+  return [...new Set(values)].sort()
+}
+
+function observedDate(isoInstant) {
+  return String(isoInstant || '').slice(0, 10)
 }
 
 function missingPilotDayIndexes(acceptedConsecutivePilotDayIndexes) {
@@ -454,11 +463,13 @@ function evidenceSummary(entries) {
   }
   const acceptedConsecutiveEntries = entries.slice(entries.length - acceptedConsecutiveRuns)
   const acceptedConsecutivePilotDayIndexes = uniqueSortedNumbers(acceptedConsecutiveEntries.map((entry) => entry.dayIndex))
+  const acceptedConsecutiveObservedDates = uniqueSortedStrings(acceptedConsecutiveEntries.map((entry) => observedDate(entry.observedAt)))
   const missingPilotDays = missingPilotDayIndexes(acceptedConsecutivePilotDayIndexes)
   const pilotSequenceCoverageMet = REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => acceptedConsecutivePilotDayIndexes.includes(dayIndex))
+  const pilotCalendarCoverageMet = acceptedConsecutiveObservedDates.length >= REQUIRED_PILOT_CALENDAR_DATES
   const latestReloadRetryOutcome = entries.at(-1)?.reloadRetryOutcome || null
   const runAndDayCoverageMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet
-  const promotionEvidenceMet = runAndDayCoverageMet && latestReloadRetryOutcome === 'passed'
+  const promotionEvidenceMet = runAndDayCoverageMet && pilotCalendarCoverageMet && latestReloadRetryOutcome === 'passed'
   const readyForOwnerDecisionReview = promotionEvidenceMet
   const acceptedConsecutiveRunsRemaining = Math.max(0, REQUIRED_ACCEPTED_CONSECUTIVE_RUNS - acceptedConsecutiveRuns)
   const summary = {
@@ -471,8 +482,11 @@ function evidenceSummary(entries) {
     acceptedConsecutiveRuns,
     requiredAcceptedConsecutiveRuns: REQUIRED_ACCEPTED_CONSECUTIVE_RUNS,
     requiredPilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
+    requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
     acceptedConsecutivePilotDayIndexes,
+    acceptedConsecutiveObservedDates,
     pilotSequenceCoverageMet,
+    pilotCalendarCoverageMet,
     promotionEvidenceMet,
     proofIntegrity,
     promotionProgress: {
@@ -483,6 +497,10 @@ function evidenceSummary(entries) {
       acceptedConsecutivePilotDayIndexes,
       missingPilotDayIndexes: missingPilotDays,
       pilotSequenceCoverageMet,
+      requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      acceptedConsecutiveObservedDateCount: acceptedConsecutiveObservedDates.length,
+      acceptedConsecutiveObservedDates,
+      pilotCalendarCoverageMet,
       proofIntegrityMet: true,
       latestReloadRetryOutcome,
       readyForOwnerDecisionReview,
