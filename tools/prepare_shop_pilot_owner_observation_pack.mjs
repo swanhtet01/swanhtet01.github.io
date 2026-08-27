@@ -282,6 +282,7 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
       privateWorkspaceRequired: true,
       safeBeforeReleaseGate: true,
       releaseGateStillRequiredBeforePilotActivation: true,
+      expectedBaselinePreflightStatus: ownerBaselineActionCard.action.expectedPreflightStatus,
       completionSignal: 'owner_safe_baseline_packet_digest',
     },
     observationChecklist: {
@@ -379,6 +380,7 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || action.privateWorkspaceRequired !== true
     || action.safeBeforeReleaseGate !== true
     || action.releaseGateStillRequiredBeforePilotActivation !== true
+    || action.expectedBaselinePreflightStatus !== 'baseline_input_ready'
     || action.completionSignal !== 'owner_safe_baseline_packet_digest') {
     fail('shop_pilot_owner_observation_pack_owner_action_invalid')
   }
@@ -490,6 +492,8 @@ External writes allowed now: false` : 'No current release-control index was atta
 ## Owner observation task
 
 Observe real manual Shop work in the private workspace, then create only an owner-safe baseline packet. This pack does not authorize a branch push, PR, merge, deployment, database write, customer contact, payment, stock movement, or managed activation.
+
+Required baseline preflight status before generating the owner-safe baseline packet: \`${packet.ownerAction.expectedBaselinePreflightStatus}\`
 
 Required flows:
 
@@ -612,6 +616,7 @@ function runSelfTest() {
   return {
     ok: validateShopPilotOwnerObservationPack(pack) === pack
       && markdown.includes('Observe real manual Shop work')
+      && markdown.includes('Required baseline preflight status before generating the owner-safe baseline packet: `baseline_input_ready`')
       && markdown.includes('--lint-input "<private-baseline-input.json>"')
       && markdown.includes('client:pilot:observed-evidence:template')
       && markdown.includes('client:pilot:observed-evidence:validate')
@@ -621,6 +626,7 @@ function runSelfTest() {
     checks: {
       pack_valid: true,
       current_release_gate_bound: pack.currentReleaseGate?.currentGateId === 'review_branch_push',
+      expected_baseline_preflight_status_named: pack.ownerAction.expectedBaselinePreflightStatus === 'baseline_input_ready',
       lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
       private_run_template_before_record: markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
       metadata_validation_before_record: markdown.indexOf('client:pilot:observed-evidence:validate') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),

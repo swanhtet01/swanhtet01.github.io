@@ -163,6 +163,7 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.equal(pack.currentReleaseGate.branchPushAllowedNow, false)
   assert.equal(pack.currentReleaseGate.deployAllowedNow, false)
   assert.equal(pack.currentReleaseGate.supabaseWriteAllowedNow, false)
+  assert.equal(pack.ownerAction.expectedBaselinePreflightStatus, 'baseline_input_ready')
   assert.equal(pack.controls.githubWritesAllowed, false)
   assert.equal(pack.controls.customerContactAllowed, false)
   assert.equal(pack.observationChecklist.minimumUninterruptedRunsPerFlow, 3)
@@ -188,6 +189,7 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.match(markdown, /Manual daily close/)
   assert.match(markdown, /Required accepted real runs: 20/)
   assert.match(markdown, /Required pilot days covered: 1, 2, 3, 4, 5/)
+  assert.match(markdown, /Required baseline preflight status before generating the owner-safe baseline packet: `baseline_input_ready`/)
   assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)
   assert.match(markdown, /Commands during the five-day private pilot/)
   assert.match(markdown, /client:pilot:observed-evidence:template/)
@@ -232,6 +234,27 @@ test('rejects owner observation packs that omit the private run template workflo
       digest: packetDigest(body),
     }),
     /shop_pilot_owner_observation_pack_observed_run_plan_invalid/,
+  )
+})
+
+test('rejects owner observation packs with stale baseline preflight status', () => {
+  const day0 = day0Packet()
+  const card = buildShopPilotDay0OwnerBaselineActionCard({ day0Packet: day0 })
+  const pack = buildShopPilotOwnerObservationPack({ day0Packet: day0, ownerBaselineActionCard: card })
+  const body = {
+    ...pack,
+    ownerAction: {
+      ...pack.ownerAction,
+      expectedBaselinePreflightStatus: 'ready',
+    },
+  }
+  delete body.digest
+  assert.throws(
+    () => validateShopPilotOwnerObservationPack({
+      ...body,
+      digest: packetDigest(body),
+    }),
+    /shop_pilot_owner_observation_pack_owner_action_invalid/,
   )
 })
 
