@@ -47,6 +47,11 @@ function baselineInput(overrides = {}) {
       { runId: 'redemption-run-002', observedAt: '2026-08-25T09:20:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 3, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
+    observedCloseRuns: [
+      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
     weeklyOrders: 120,
     claimedMedianMinutesPerOrder: 8,
     weeklyExceptionCount: 12,
@@ -108,6 +113,8 @@ test('accepts a public-safe baseline packet only as private handoff evidence', (
   assert.equal(report.baselineEvidence.accepted, true)
   assert.equal(report.baselineEvidence.digest, baselinePacket.digest)
   assert.equal(report.baselineEvidence.metrics.medianMinutesPerOrder, 8)
+  assert.equal(report.baselineEvidence.metrics.uninterruptedCloseRunCount, 3)
+  assert.equal(report.baselineEvidence.metrics.medianCloseMinutesPerDay, 45)
   assert.equal(JSON.stringify(report).includes('Private Spa Sample'), false)
   assert.equal(JSON.stringify(report).includes('Private Operator'), false)
   assert.equal(validateShopPilotLaunchGate(report), report)

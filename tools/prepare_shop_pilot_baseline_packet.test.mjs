@@ -46,6 +46,11 @@ function input(overrides = {}) {
       { runId: 'redemption-run-002', observedAt: '2026-08-25T09:20:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 3, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
+    observedCloseRuns: [
+      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
+    ],
     weeklyOrders: 120,
     claimedMedianMinutesPerOrder: 8,
     weeklyExceptionCount: 12,
@@ -80,6 +85,9 @@ test('builds a public-safe baseline packet from private owner-observed input', (
   assert.equal(packet.metrics.totalObservedErrorRunCount, 1)
   assert.equal(packet.metrics.medianMinutesPerRedemption, 3)
   assert.equal(packet.metrics.observedRedemptionErrorRunCount, 0)
+  assert.equal(packet.metrics.uninterruptedCloseRunCount, 3)
+  assert.equal(packet.metrics.medianCloseMinutesPerDay, 45)
+  assert.equal(packet.metrics.observedCloseErrorRunCount, 0)
   assert.equal(packet.publicIdentityIncluded, false)
   assert.equal(packet.controls.externalWritesPerformed, false)
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
@@ -89,17 +97,24 @@ test('builds a public-safe baseline packet from private owner-observed input', (
 test('blocks mismatched medians, interrupted evidence, and wrong review window without leaking identity', () => {
   const interruptedRuns = input({
     claimedMedianMinutesPerOrder: 7,
+    closeMinutesPerDay: 44,
     reviewDate: '2026-09-05',
     observedOrderRuns: [
       ...input().observedOrderRuns.slice(0, 2),
       { ...input().observedOrderRuns[2], interrupted: true },
+    ],
+    observedCloseRuns: [
+      ...input().observedCloseRuns.slice(0, 2),
+      { ...input().observedCloseRuns[2], interrupted: true },
     ],
   })
   const packet = buildShopPilotBaselinePacket(interruptedRuns, { generatedAt: '2026-08-25T00:00:00.000Z' })
   assert.equal(packet.ok, false)
   assert.equal(packet.status, 'blocked_collect_more_private_baseline')
   assert.ok(packet.failures.includes('order_observed_runs_below_three'))
+  assert.ok(packet.failures.includes('close_observed_runs_below_three'))
   assert.ok(packet.failures.includes('claimed_order_median_mismatch'))
+  assert.ok(packet.failures.includes('claimed_close_median_mismatch'))
   assert.ok(packet.failures.includes('review_date_must_close_five_day_plan'))
   assert.doesNotMatch(JSON.stringify(packet), /Private Spa Sample|Private Operator/)
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
@@ -110,12 +125,14 @@ test('blocks baseline evidence dated after packet day or on the pilot start date
     observedAt: '2026-08-26T08:00:00.000Z',
     observedOrderRuns: input().observedOrderRuns.map((run) => ({ ...run, observedAt: '2026-08-26T08:01:00.000Z' })),
     observedRedemptionRuns: input().observedRedemptionRuns.map((run) => ({ ...run, observedAt: '2026-08-26T09:01:00.000Z' })),
+    observedCloseRuns: input().observedCloseRuns.map((run) => ({ ...run, observedAt: '2026-08-26T18:01:00.000Z' })),
   }), { generatedAt: '2026-08-25T00:00:00.000Z' })
   assert.equal(futureDated.ok, false)
   assert.equal(futureDated.status, 'blocked_collect_more_private_baseline')
   assert.ok(futureDated.failures.includes('baseline_observed_at_after_packet_day'))
   assert.ok(futureDated.failures.includes('order_observed_at_after_packet_day'))
   assert.ok(futureDated.failures.includes('redemption_observed_at_after_packet_day'))
+  assert.ok(futureDated.failures.includes('close_observed_at_after_packet_day'))
   assert.doesNotMatch(JSON.stringify(futureDated), /Private Spa Sample|Private Operator/)
   assert.equal(validateShopPilotBaselinePacket(futureDated), futureDated)
 
@@ -123,12 +140,14 @@ test('blocks baseline evidence dated after packet day or on the pilot start date
     observedAt: '2026-08-31T08:00:00.000Z',
     observedOrderRuns: input().observedOrderRuns.map((run) => ({ ...run, observedAt: '2026-08-31T08:01:00.000Z' })),
     observedRedemptionRuns: input().observedRedemptionRuns.map((run) => ({ ...run, observedAt: '2026-08-31T09:01:00.000Z' })),
+    observedCloseRuns: input().observedCloseRuns.map((run) => ({ ...run, observedAt: '2026-08-31T18:01:00.000Z' })),
   }), { generatedAt: '2026-09-01T00:00:00.000Z' })
   assert.equal(onPilotStart.status, 'baseline_input_blocked')
   assert.equal(onPilotStart.safeToGeneratePublicBaselinePacket, false)
   assert.ok(onPilotStart.failures.includes('baseline_observed_at_must_precede_pilot_start'))
   assert.ok(onPilotStart.failures.includes('order_observed_at_must_precede_pilot_start'))
   assert.ok(onPilotStart.failures.includes('redemption_observed_at_must_precede_pilot_start'))
+  assert.ok(onPilotStart.failures.includes('close_observed_at_must_precede_pilot_start'))
   assert.doesNotMatch(JSON.stringify(onPilotStart), /Private Spa Sample|Private Operator/)
   assert.equal(validateShopPilotBaselineInputPreflight(onPilotStart), onPilotStart)
 
@@ -232,6 +251,7 @@ test('renders Markdown without private values or promotion claims', () => {
   const markdown = renderShopPilotBaselinePacketMarkdown(buildShopPilotBaselinePacket(input(), { generatedAt: '2026-08-25T00:00:00.000Z' }))
   assert.match(markdown, /Shop Pilot Baseline Packet/)
   assert.match(markdown, /Median minutes per order: 8/)
+  assert.match(markdown, /Median close minutes per day: 45/)
   assert.match(markdown, /Total observed error runs: 1/)
   assert.match(markdown, /No business name, operator name/)
   assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation/i)
@@ -242,6 +262,7 @@ test('renders a local owner worksheet without private values or promotion claims
   assert.match(markdown, /Shop Pilot Owner-Observed Baseline Worksheet/)
   assert.match(markdown, new RegExp(SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT))
   assert.match(markdown, /At least 3 uninterrupted manual order runs/)
+  assert.match(markdown, /At least 3 uninterrupted manual daily-close runs/)
   assert.match(markdown, /Total observed error-run count/)
   assert.match(markdown, /Generate the baseline packet before the proposed Day-1 pilot start date/)
   assert.match(markdown, /node tools\/prepare_shop_pilot_baseline_packet\.mjs --input/)
@@ -267,6 +288,7 @@ test('template is blank and CLI generates metadata-only packet output', async ()
     assert.equal(templateJson.businessName, '')
     const worksheet = await readFile(worksheetPath, 'utf8')
     assert.match(worksheet, /Manual order runs/)
+    assert.match(worksheet, /Daily-close runs/)
     assert.match(worksheet, /--lint-input/)
     assert.doesNotMatch(worksheet, /Private Spa Sample|Private Operator|owner@example|sk-proj-|ghp_/i)
 
