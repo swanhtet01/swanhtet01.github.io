@@ -348,6 +348,8 @@ export function buildReleaseOwnerApprovalMarkdown({
     `npm.cmd run release:branch-push:apply -- --plan --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
+    'Fast-forward proof: when the review branch already exists, the no-write plan must show `fastForwardProof.ok: true` and `fastForwardProof.status: "proven_ancestor"` before execution. If that proof is missing, unavailable, or not-fast-forward, do not approve or execute the branch push.',
+    '',
     'Execute command, only after approval:',
     '',
     '```powershell',
@@ -687,6 +689,9 @@ function runSelfTest() {
     exact_commit_bound: packet.markdown.includes(input.handoff.candidate.commit),
     github_owner_env_present: packet.markdown.includes('SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'),
     branch_owner_env_present: packet.markdown.includes('SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'),
+    branch_fast_forward_proof_visible: packet.markdown.includes('fastForwardProof.ok: true')
+      && packet.markdown.includes('fastForwardProof.status: "proven_ancestor"')
+      && packet.markdown.includes('do not approve or execute the branch push'),
     pr_owner_env_present: packet.markdown.includes('SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'),
     verifier_accepts_exact_markdown: verified.ok === true && verified.digest === packet.digest,
     stale_markdown_rejected: (() => {
