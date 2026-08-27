@@ -9,9 +9,12 @@ import test from 'node:test'
 import {
   SHOP_OBSERVED_EVIDENCE_CONTRACT,
   SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT,
+  SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT,
   buildObservedRunInputTemplate,
   normalizeObservedRunInput,
+  preflightObservedRunInput,
   recordObservedShopPilotRun,
+  validateObservedRunInputValidation,
   validateObservedRunInputTemplate,
   verifyObservedShopPilotEvidence,
 } from './record_shop_pilot_observed_run.mjs'
@@ -334,6 +337,34 @@ test('template validation rejects unsafe defaults and tampering', () => {
   }), /shop_observed_run_input_template_digest_mismatch/)
 })
 
+test('preflights filled private observed-run input as owner-safe validation artifact', () => {
+  const ready = validateObservedRunInputValidation(preflightObservedRunInput(runInput(1), { generatedAt: '2026-08-25T00:00:00.000Z' }))
+  assert.equal(ready.contract, SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT)
+  assert.equal(ready.mode, 'metadata_only_no_record_write')
+  assert.equal(ready.status, 'observed_run_input_ready')
+  assert.equal(ready.safeToRecordPrivateObservedRun, true)
+  assert.match(ready.privateRunInputDigest, /^sha256:[0-9a-f]{64}$/)
+  assert.match(ready.run.runIdDigest, /^sha256:[0-9a-f]{64}$/)
+  assert.equal(ready.run.observedDate, '2026-08-02')
+  assert.equal(ready.run.dayIndex, 1)
+  assert.equal(ready.run.durationMinutesPerOrder, 6)
+  assert.equal(ready.run.evidenceReferenceDigest, digest('evidence-1'))
+  assert.equal(ready.run.independentAnchorDigest, digest('anchor-1'))
+  assert.equal(ready.controls.externalWritesPerformed, false)
+  assert.doesNotMatch(JSON.stringify(ready), /RUN-001|owner@example|Sample Spa|Private Spa|supermega-shop-observed/i)
+
+  const invalid = validateObservedRunInputValidation(preflightObservedRunInput({
+    ...runInput(2),
+    email: 'owner@example.invalid',
+  }, { generatedAt: '2026-08-25T00:00:00.000Z' }))
+  assert.equal(invalid.status, 'observed_run_input_invalid')
+  assert.equal(invalid.safeToRecordPrivateObservedRun, false)
+  assert.deepEqual(invalid.failures, ['shop_observed_private_identity_field_rejected'])
+  assert.equal(invalid.privateRunInputDigest, null)
+  assert.equal(invalid.run, null)
+  assert.doesNotMatch(JSON.stringify(invalid), /owner@example|RUN-002/i)
+})
+
 test('replayed evidence and anchor digests cannot inflate accepted run count', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-replay-'))
   try {
@@ -433,6 +464,7 @@ test('CLI writes private run template and validates filled run input with metada
   const workspace = join(parent, 'workspace')
   const templatePath = join(parent, 'private-run-template.json')
   const inputPath = join(parent, 'filled-run.private.json')
+  const validationPath = join(parent, 'owner-safe-run-validation.json')
   const tool = resolve('tools/record_shop_pilot_observed_run.mjs')
   try {
     const templated = spawnSync(process.execPath, [
@@ -459,13 +491,41 @@ test('CLI writes private run template and validates filled run input with metada
       '--validate-run-input',
       '--run-input',
       inputPath,
+      '--output',
+      validationPath,
     ], { encoding: 'utf8' })
     assert.equal(validated.status, 0, validated.stderr || validated.stdout)
     const validation = JSON.parse(validated.stdout)
     assert.equal(validation.mode, 'metadata_only_no_record_write')
+    assert.equal(validation.status, 'observed_run_input_ready')
+    assert.equal(validation.safeToRecordPrivateObservedRun, true)
     assert.equal(validation.dayIndex, 1)
-    assert.match(validation.runIdDigest, /^sha256:[0-9a-f]{64}$/)
-    assert.doesNotMatch(validated.stdout, /RUN-001|supermega-shop-observed-template|filled-run|@|https?:\/\//i)
+    assert.equal(validation.validationOutputWritten, true)
+    assert.match(validation.privateRunInputDigest, /^sha256:[0-9a-f]{64}$/)
+    assert.doesNotMatch(validated.stdout, /RUN-001|supermega-shop-observed-template|filled-run|owner-safe-run-validation|@|https?:\/\//i)
+    const validationArtifact = validateObservedRunInputValidation(JSON.parse(await readFile(validationPath, 'utf8')))
+    assert.equal(validationArtifact.run.dayIndex, 1)
+    assert.match(validationArtifact.run.runIdDigest, /^sha256:[0-9a-f]{64}$/)
+    assert.doesNotMatch(JSON.stringify(validationArtifact), /RUN-001|owner@example|Sample Spa|Private Spa|supermega-shop-observed/i)
+
+    const verifiedValidation = spawnSync(process.execPath, [
+      tool,
+      '--verify-run-input-validation',
+      validationPath,
+    ], { encoding: 'utf8' })
+    assert.equal(verifiedValidation.status, 0, verifiedValidation.stderr || verifiedValidation.stdout)
+    assert.equal(JSON.parse(verifiedValidation.stdout).safeToRecordPrivateObservedRun, true)
+    assert.doesNotMatch(verifiedValidation.stdout, /RUN-001|supermega-shop-observed-template|owner-safe-run-validation|@|https?:\/\//i)
+
+    const overwrite = spawnSync(process.execPath, [
+      tool,
+      '--validate-run-input',
+      '--run-input',
+      inputPath,
+      '--output',
+      validationPath,
+    ], { encoding: 'utf8' })
+    assert.notEqual(overwrite.status, 0)
     assert.equal((await verifyObservedShopPilotEvidence(workspace)).runCount, 0)
   } finally {
     await rm(parent, { recursive: true, force: true })

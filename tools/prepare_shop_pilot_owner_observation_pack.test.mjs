@@ -183,6 +183,7 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.ok(pack.observationChecklist.runAcceptanceRules.includes('real_manual_operations_only'))
   assert.equal(pack.observedRunEvidenceCommandPlan.privateRunInputTemplateRequiredBeforeEachRun, true)
   assert.equal(pack.observedRunEvidenceCommandPlan.metadataOnlyValidationRequiredBeforeRecord, true)
+  assert.equal(pack.observedRunEvidenceCommandPlan.ownerSafeValidationArtifactRequiredBeforeRecord, true)
   assert.equal(pack.observedRunEvidenceCommandPlan.receiptDigestRequiredBeforeRecord, true)
   assert.equal(pack.observedRunEvidenceCommandPlan.independentAnchorDigestRequiredBeforeRecord, true)
   assert.equal(pack.observedRunEvidenceCommandPlan.requiredAcceptedConsecutiveRuns, 20)
@@ -195,7 +196,8 @@ test('builds a privacy-safe owner observation pack bound to current release cont
       < pack.commandPlan.commands.findIndex((command) => command.includes('--input "<private-baseline-input.json>"') && command.includes('--output "<owner-safe-baseline-packet.json>"')),
   )
   assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('client:pilot:observed-evidence:template')))
-  assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('client:pilot:observed-evidence:validate')))
+  assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('client:pilot:observed-evidence:validate') && command.includes('--output "<owner-safe-observed-run-validation.json>"')))
+  assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('--verify-run-input-validation "<owner-safe-observed-run-validation.json>"')))
   assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('--record --workspace "<private-observed-workspace>"')))
 
   const markdown = renderShopPilotOwnerObservationPackMarkdown(pack)
@@ -211,8 +213,10 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.match(markdown, /Commands during the five-day private pilot/)
   assert.match(markdown, /client:pilot:observed-evidence:template/)
   assert.match(markdown, /client:pilot:observed-evidence:validate/)
+  assert.match(markdown, /--verify-run-input-validation "<owner-safe-observed-run-validation\.json>"/)
   assert.ok(markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'))
   assert.ok(markdown.indexOf('client:pilot:observed-evidence:validate') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'))
+  assert.ok(markdown.indexOf('--verify-run-input-validation "<owner-safe-observed-run-validation.json>"') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'))
   assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
   assert.doesNotMatch(markdown, /Private Baseline Spa|Private Baseline Operator/)
   assert.doesNotMatch(markdown, /ready for managed activation|production release ready|pilot success/i)
@@ -241,7 +245,7 @@ test('rejects owner observation packs that omit the private run template workflo
     ...pack,
     observedRunEvidenceCommandPlan: {
       ...pack.observedRunEvidenceCommandPlan,
-      metadataOnlyValidationRequiredBeforeRecord: false,
+      ownerSafeValidationArtifactRequiredBeforeRecord: false,
     },
   }
   delete body.digest
@@ -348,6 +352,7 @@ test('CLI writes and verifies the owner observation pack', async () => {
     assert.match(markdown, /owner-safe packet may contain counts/)
     assert.match(markdown, /client:pilot:observed-evidence:template/)
     assert.match(markdown, /client:pilot:observed-evidence:validate/)
+    assert.match(markdown, /--verify-run-input-validation "<owner-safe-observed-run-validation\.json>"/)
     assert.doesNotMatch(markdown, /[A-Za-z]:\\/)
   } finally {
     await rm(dir, { recursive: true, force: true })

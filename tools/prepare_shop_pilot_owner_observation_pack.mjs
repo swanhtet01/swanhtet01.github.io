@@ -88,7 +88,8 @@ const RUN_ACCEPTANCE_RULES = [
 ]
 const OBSERVED_RUN_EVIDENCE_COMMANDS = [
   'npm.cmd run client:pilot:observed-evidence:template -- --workspace "<private-observed-workspace>" --output "<private-observed-run-input.json>"',
-  'npm.cmd run client:pilot:observed-evidence:validate -- --run-input "<private-observed-run-input.json>"',
+  'npm.cmd run client:pilot:observed-evidence:validate -- --run-input "<private-observed-run-input.json>" --output "<owner-safe-observed-run-validation.json>"',
+  'npm.cmd run client:pilot:observed-evidence -- --verify-run-input-validation "<owner-safe-observed-run-validation.json>"',
   'npm.cmd run client:pilot:observed-evidence -- --record --workspace "<private-observed-workspace>" --run-input "<private-observed-run-input.json>"',
   'npm.cmd run client:pilot:observed-evidence -- --verify --workspace "<private-observed-workspace>"',
   'npm.cmd run shop:pilot:decision-packet -- --baseline-packet "<owner-safe-baseline-packet.json>" --observed-workspace "<private-observed-workspace>" --output "<owner-safe-decision-packet.json>" --markdown-output "<owner-safe-decision-packet.md>"',
@@ -231,16 +232,19 @@ function assertCommandOrder(commands) {
 function assertObservedRunCommandOrder(commands) {
   const templateIndex = commands.findIndex((command) => command.includes('client:pilot:observed-evidence:template'))
   const validateIndex = commands.findIndex((command) => command.includes('client:pilot:observed-evidence:validate'))
+  const verifyValidationIndex = commands.findIndex((command) => command.includes('--verify-run-input-validation "<owner-safe-observed-run-validation.json>"'))
   const recordIndex = commands.findIndex((command) => command.includes('--record') && command.includes('client:pilot:observed-evidence'))
-  const verifyIndex = commands.findIndex((command) => command.includes('--verify') && command.includes('client:pilot:observed-evidence'))
+  const verifyIndex = commands.findIndex((command) => command.includes('--verify --workspace "<private-observed-workspace>"') && command.includes('client:pilot:observed-evidence'))
   const decisionIndex = commands.findIndex((command) => command.includes('shop:pilot:decision-packet') && command.includes('--observed-workspace'))
   if (templateIndex < 0
     || validateIndex < 0
+    || verifyValidationIndex < 0
     || recordIndex < 0
     || verifyIndex < 0
     || decisionIndex < 0
     || templateIndex > validateIndex
-    || validateIndex > recordIndex
+    || validateIndex > verifyValidationIndex
+    || verifyValidationIndex > recordIndex
     || recordIndex > verifyIndex
     || verifyIndex > decisionIndex) {
     fail('shop_pilot_owner_observation_pack_observed_run_command_order_invalid')
@@ -327,6 +331,7 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
       placeholdersOnly: true,
       privateRunInputTemplateRequiredBeforeEachRun: true,
       metadataOnlyValidationRequiredBeforeRecord: true,
+      ownerSafeValidationArtifactRequiredBeforeRecord: true,
       receiptDigestRequiredBeforeRecord: true,
       independentAnchorDigestRequiredBeforeRecord: true,
       decisionPacketOnlyAfterObservedSummaryVerify: true,
@@ -460,6 +465,7 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || observedRunPlan.placeholdersOnly !== true
     || observedRunPlan.privateRunInputTemplateRequiredBeforeEachRun !== true
     || observedRunPlan.metadataOnlyValidationRequiredBeforeRecord !== true
+    || observedRunPlan.ownerSafeValidationArtifactRequiredBeforeRecord !== true
     || observedRunPlan.receiptDigestRequiredBeforeRecord !== true
     || observedRunPlan.independentAnchorDigestRequiredBeforeRecord !== true
     || observedRunPlan.decisionPacketOnlyAfterObservedSummaryVerify !== true
@@ -562,7 +568,7 @@ ${commands}
 
 ## Commands during the five-day private pilot
 
-After the owner-safe baseline packet exists and the owner starts real private pilot observation, use a new private run input for each real run. Template creation and metadata-only validation do not record evidence. Recording requires both a private receipt digest and an independent private anchor digest, and the decision packet remains owner-review only.
+After the owner-safe baseline packet exists and the owner starts real private pilot observation, use a new private run input for each real run. Template creation and metadata-only validation do not record evidence. The validation step must write an owner-safe validation artifact, and that artifact must verify before recording. Recording requires both a private receipt digest and an independent private anchor digest, and the decision packet remains owner-review only.
 
 ${observedRunCommands}
 
@@ -651,6 +657,7 @@ function runSelfTest() {
       && markdown.includes('--lint-input "<private-baseline-input.json>"')
       && markdown.includes('client:pilot:observed-evidence:template')
       && markdown.includes('client:pilot:observed-evidence:validate')
+      && markdown.includes('--verify-run-input-validation "<owner-safe-observed-run-validation.json>"')
       && !hasPrivateOrSecretShape(markdown)
       && staleRejected,
     contract: `${SHOP_PILOT_OWNER_OBSERVATION_PACK_CONTRACT}.self-test`,
@@ -664,6 +671,7 @@ function runSelfTest() {
       lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
       private_run_template_before_record: markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
       metadata_validation_before_record: markdown.indexOf('client:pilot:observed-evidence:validate') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
+      owner_safe_validation_artifact_before_record: markdown.indexOf('--verify-run-input-validation "<owner-safe-observed-run-validation.json>"') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
       markdown_safe: !hasPrivateOrSecretShape(markdown),
       stale_control_index_rejected: staleRejected,
     },

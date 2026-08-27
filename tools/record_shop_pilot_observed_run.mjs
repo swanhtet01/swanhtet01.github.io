@@ -12,6 +12,7 @@ import {
 export const SHOP_OBSERVED_RUN_INPUT_CONTRACT = 'supermega.shop.observed_pilot_run_input.v1'
 export const SHOP_OBSERVED_EVIDENCE_CONTRACT = 'supermega.shop.observed_pilot_evidence.v1'
 export const SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT = 'supermega.shop.observed_pilot_run_input_template.v1'
+export const SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT = 'supermega.shop.observed_pilot_run_input_validation.v1'
 
 const RUNS_FILE = 'observed-runs.private.jsonl'
 const SUMMARY_FILE = 'observed-summary.private.json'
@@ -19,6 +20,16 @@ const REQUIRED_ACCEPTED_CONSECUTIVE_RUNS = 20
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 const REQUIRED_PILOT_CALENDAR_DATES = 5
 const RELOAD_RETRY_OUTCOMES = Object.freeze(['passed', 'failed', 'not-tested'])
+const PUBLIC_CONTROL_FIELDS = Object.freeze([
+  'externalWritesPerformed',
+  'customerContactPerformed',
+  'paymentAccepted',
+  'stockMovementPerformed',
+  'serverWritesPerformed',
+  'hostedWritesPerformed',
+  'privateValuesReturned',
+  'syntheticEvidenceAccepted',
+])
 const REQUIRED_INPUT_KEYS = Object.freeze([
   'accepted',
   'closeMinutes',
@@ -122,6 +133,9 @@ function assertNoPrivateIdentity(value, path = 'input') {
   }
   if (!value || typeof value !== 'object') {
     if (typeof value === 'string') {
+      if (/^sha256:[0-9a-f]{64}$/.test(value)) return
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return
       if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(value)) throw new Error('shop_observed_private_identity_value_rejected')
       if (/\b(?:\+?\d[\d .().-]{7,}\d)\b/.test(value)) throw new Error('shop_observed_private_identity_value_rejected')
       if (/https?:\/\//i.test(value)) throw new Error('shop_observed_private_identity_value_rejected')
@@ -161,6 +175,11 @@ function exactText(value, field, max = 120) {
   const normalized = value.trim()
   if (normalized.length > max || /[\u0000-\u001f\u007f]/.test(normalized)) throw new Error(`${field}_invalid`)
   return normalized
+}
+
+function safeFailureCode(error) {
+  const code = String(error?.message || 'shop_observed_run_input_invalid')
+  return /^[a-z0-9_:-]{1,120}$/.test(code) ? code : 'shop_observed_run_input_invalid'
 }
 
 function exactIsoUtc(value, field) {
@@ -207,6 +226,10 @@ function uniqueSortedStrings(values) {
 
 function observedDate(isoInstant) {
   return String(isoInstant || '').slice(0, 10)
+}
+
+function publicControls() {
+  return Object.fromEntries(PUBLIC_CONTROL_FIELDS.map((field) => [field, false]))
 }
 
 function missingPilotDayIndexes(acceptedConsecutivePilotDayIndexes) {
@@ -573,26 +596,121 @@ export async function verifyObservedShopPilotEvidence(workspace) {
 
 function publicRunInputValidation(run) {
   return {
-    ok: true,
-    contract: SHOP_OBSERVED_RUN_INPUT_CONTRACT,
-    mode: 'metadata_only_no_record_write',
-    product: run.product,
-    pilotMode: run.pilotMode,
-    verticalPack: run.verticalPack,
     runIdDigest: digestText(run.runId),
+    observedDate: observedDate(run.observedAt),
     dayIndex: run.dayIndex,
     accepted: run.accepted,
     operatorReviewed: run.operatorReviewed,
     targetCorrect: run.targetCorrect,
+    durationMinutesPerOrder: run.durationMinutesPerOrder,
+    exceptionCount: run.exceptionCount,
+    closeMinutes: run.closeMinutes,
+    operatorCorrectionCount: run.operatorCorrectionCount,
     reloadRetryOutcome: run.reloadRetryOutcome,
-    externalWritesPerformed: false,
-    customerContactPerformed: false,
-    paymentAccepted: false,
-    stockMovementPerformed: false,
-    serverWritesPerformed: false,
-    hostedWritesPerformed: false,
-    privateValuesReturned: false,
+    noRealMessageSent: run.noRealMessageSent,
+    noPaymentAccepted: run.noPaymentAccepted,
+    noStockMovement: run.noStockMovement,
+    noServerWrite: run.noServerWrite,
+    noHostedWrite: run.noHostedWrite,
+    evidenceReferenceDigest: run.evidenceReferenceDigest,
+    independentAnchorDigest: run.independentAnchorDigest,
   }
+}
+
+export function preflightObservedRunInput(input, { generatedAt = new Date().toISOString() } = {}) {
+  const base = {
+    contract: SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
+    generatedAt: exactIsoUtc(generatedAt, 'generated_at'),
+    product: SHOP_PILOT_PRODUCT,
+    pilotMode: SHOP_PILOT_MODE,
+    verticalPack: SHOP_PILOT_VERTICAL_PACK,
+    mode: 'metadata_only_no_record_write',
+    privateRunInputRetainedByTool: false,
+    publicIdentityIncluded: false,
+    controls: publicControls(),
+  }
+  try {
+    const run = normalizeObservedRunInput(input)
+    const body = {
+      ...base,
+      ok: true,
+      status: 'observed_run_input_ready',
+      safeToRecordPrivateObservedRun: true,
+      failures: [],
+      privateRunInputDigest: digest(run),
+      run: publicRunInputValidation(run),
+      nextAction: 'Record this private observed run only in the private workspace, then verify the observed summary before generating an owner-safe decision packet.',
+    }
+    assertNoPrivateIdentity(body)
+    return { ...body, digest: digest(body) }
+  } catch (error) {
+    const body = {
+      ...base,
+      ok: false,
+      status: 'observed_run_input_invalid',
+      safeToRecordPrivateObservedRun: false,
+      failures: [safeFailureCode(error)],
+      privateRunInputDigest: null,
+      run: null,
+      nextAction: 'Fix the private run input locally; do not record pilot evidence yet.',
+    }
+    assertNoPrivateIdentity(body)
+    return { ...body, digest: digest(body) }
+  }
+}
+
+export function validateObservedRunInputValidation(packet) {
+  assertNoPrivateIdentity(packet)
+  if (!packet || typeof packet !== 'object' || Array.isArray(packet)) throw new Error('shop_observed_run_input_validation_required')
+  if (packet.contract !== SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT) throw new Error('shop_observed_run_input_validation_contract_invalid')
+  if (packet.digestScope !== 'utf8_compact_json_without_digest') throw new Error('shop_observed_run_input_validation_digest_scope_invalid')
+  exactIsoUtc(packet.generatedAt, 'generated_at')
+  if (packet.product !== SHOP_PILOT_PRODUCT || packet.pilotMode !== SHOP_PILOT_MODE || packet.verticalPack !== SHOP_PILOT_VERTICAL_PACK) {
+    throw new Error('shop_observed_run_input_validation_scope_invalid')
+  }
+  if (packet.mode !== 'metadata_only_no_record_write') throw new Error('shop_observed_run_input_validation_mode_invalid')
+  if (!['observed_run_input_ready', 'observed_run_input_invalid'].includes(packet.status)) throw new Error('shop_observed_run_input_validation_status_invalid')
+  if ((packet.status === 'observed_run_input_ready') !== (packet.ok === true)) throw new Error('shop_observed_run_input_validation_ok_invalid')
+  if (packet.safeToRecordPrivateObservedRun !== (packet.status === 'observed_run_input_ready')) throw new Error('shop_observed_run_input_validation_safe_to_record_invalid')
+  if (packet.privateRunInputRetainedByTool !== false || packet.publicIdentityIncluded !== false) throw new Error('shop_observed_run_input_validation_privacy_invalid')
+  if (!Array.isArray(packet.failures) || (packet.ok === true && packet.failures.length !== 0)) throw new Error('shop_observed_run_input_validation_failures_invalid')
+  if (!packet.controls || typeof packet.controls !== 'object' || Array.isArray(packet.controls)
+    || PUBLIC_CONTROL_FIELDS.some((field) => packet.controls[field] !== false)) {
+    throw new Error('shop_observed_run_input_validation_controls_invalid')
+  }
+  if (packet.status === 'observed_run_input_invalid') {
+    if (packet.privateRunInputDigest !== null || packet.run !== null) throw new Error('shop_observed_run_input_validation_invalid_payload')
+  } else {
+    exactShaDigest(packet.privateRunInputDigest, 'private_run_input_digest')
+    if (!packet.run || typeof packet.run !== 'object' || Array.isArray(packet.run)) throw new Error('shop_observed_run_input_validation_run_invalid')
+    exactShaDigest(packet.run.runIdDigest, 'run_id_digest')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(packet.run.observedDate || '')) throw new Error('observed_date_invalid')
+    exactNumber(packet.run.dayIndex, 'day_index', { min: 1, max: 5, integer: true })
+    exactBoolean(packet.run.accepted, 'accepted')
+    exactTrue(packet.run.operatorReviewed, 'operator_reviewed')
+    exactTrue(packet.run.targetCorrect, 'target_correct')
+    exactNumber(packet.run.durationMinutesPerOrder, 'duration_minutes_per_order', { min: 0.1, max: 1440 })
+    exactNumber(packet.run.exceptionCount, 'exception_count', { min: 0, max: 100000, integer: true })
+    exactNumber(packet.run.closeMinutes, 'close_minutes', { min: 0, max: 1440 })
+    exactNumber(packet.run.operatorCorrectionCount, 'operator_correction_count', { min: 0, max: 100000, integer: true })
+    const reloadRetryOutcome = exactText(packet.run.reloadRetryOutcome, 'reload_retry_outcome', 20)
+    if (!RELOAD_RETRY_OUTCOMES.includes(reloadRetryOutcome)) throw new Error('reload_retry_outcome_invalid')
+    exactTrue(packet.run.noRealMessageSent, 'no_real_message_sent')
+    exactTrue(packet.run.noPaymentAccepted, 'no_payment_accepted')
+    exactTrue(packet.run.noStockMovement, 'no_stock_movement')
+    exactTrue(packet.run.noServerWrite, 'no_server_write')
+    exactTrue(packet.run.noHostedWrite, 'no_hosted_write')
+    const evidenceReferenceDigest = exactShaDigest(packet.run.evidenceReferenceDigest, 'evidence_reference_digest')
+    const independentAnchorDigest = exactShaDigest(packet.run.independentAnchorDigest, 'independent_anchor_digest')
+    if (evidenceReferenceDigest === independentAnchorDigest) throw new Error('shop_observed_evidence_anchor_digest_not_independent')
+  }
+  exactText(packet.nextAction, 'next_action', 240)
+  exactShaDigest(packet.digest, 'validation_digest')
+  const copy = { ...packet }
+  delete copy.digest
+  if (packet.digest !== digest(copy)) throw new Error('shop_observed_run_input_validation_digest_mismatch')
+  return packet
 }
 
 async function main() {
@@ -601,14 +719,16 @@ async function main() {
   const verify = args.includes('--verify')
   const template = args.includes('--template')
   const validateRunInput = args.includes('--validate-run-input')
+  const verifyRunInputValidationIndex = args.indexOf('--verify-run-input-validation')
+  const verifyRunInputValidation = verifyRunInputValidationIndex >= 0
   const workspaceIndex = args.indexOf('--workspace')
   const runInputIndex = args.indexOf('--run-input')
   const outputIndex = args.indexOf('--output')
   const runOrdinalIndex = args.indexOf('--run-ordinal')
   const dayIndexIndex = args.indexOf('--day-index')
-  const selectedModes = [record, verify, template, validateRunInput].filter(Boolean).length
+  const selectedModes = [record, verify, template, validateRunInput, verifyRunInputValidation].filter(Boolean).length
   if (selectedModes !== 1) {
-    throw new Error('usage: node tools/record_shop_pilot_observed_run.mjs (--template --workspace private-workspace --output private-template.json | --validate-run-input --run-input private-run.json | --record --workspace private-workspace --run-input private-run.json | --verify --workspace private-workspace)')
+    throw new Error('usage: node tools/record_shop_pilot_observed_run.mjs (--template --workspace private-workspace --output private-template.json | --validate-run-input --run-input private-run.json [--output owner-safe-validation.json] | --verify-run-input-validation owner-safe-validation.json | --record --workspace private-workspace --run-input private-run.json | --verify --workspace private-workspace)')
   }
   if ((record || verify || template) && (workspaceIndex < 0 || !args[workspaceIndex + 1])) {
     throw new Error('workspace_required')
@@ -639,7 +759,40 @@ async function main() {
     }
   } else if (validateRunInput) {
     if (runInputIndex < 0 || !args[runInputIndex + 1]) throw new Error('run_input_required')
-    result = publicRunInputValidation(normalizeObservedRunInput(JSON.parse(await readFile(resolve(args[runInputIndex + 1]), 'utf8'))))
+    const packet = validateObservedRunInputValidation(preflightObservedRunInput(JSON.parse(await readFile(resolve(args[runInputIndex + 1]), 'utf8'))))
+    if (outputIndex >= 0) {
+      if (!args[outputIndex + 1]) throw new Error('output_required')
+      await writeNewJson(args[outputIndex + 1], packet)
+    }
+    result = {
+      ok: packet.ok,
+      contract: packet.contract,
+      mode: packet.mode,
+      status: packet.status,
+      safeToRecordPrivateObservedRun: packet.safeToRecordPrivateObservedRun,
+      failures: packet.failures,
+      privateRunInputDigest: packet.privateRunInputDigest,
+      runIdDigest: packet.run?.runIdDigest ?? null,
+      dayIndex: packet.run?.dayIndex ?? null,
+      accepted: packet.run?.accepted ?? null,
+      validationOutputWritten: outputIndex >= 0,
+      digest: packet.digest,
+      externalWritesPerformed: false,
+    }
+    if (!packet.ok) process.exitCode = 1
+  } else if (verifyRunInputValidation) {
+    if (!args[verifyRunInputValidationIndex + 1]) throw new Error('run_input_validation_required')
+    const packet = validateObservedRunInputValidation(JSON.parse(await readFile(resolve(args[verifyRunInputValidationIndex + 1]), 'utf8')))
+    result = {
+      ok: true,
+      contract: packet.contract,
+      mode: packet.mode,
+      status: packet.status,
+      safeToRecordPrivateObservedRun: packet.safeToRecordPrivateObservedRun,
+      digest: packet.digest,
+      privateIdentityIncluded: packet.publicIdentityIncluded,
+      externalWritesPerformed: false,
+    }
   } else if (record) {
     if (runInputIndex < 0 || !args[runInputIndex + 1]) throw new Error('run_input_required')
     result = await recordObservedShopPilotRun({
