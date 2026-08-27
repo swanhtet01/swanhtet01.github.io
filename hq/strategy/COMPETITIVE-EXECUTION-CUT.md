@@ -42,6 +42,12 @@ AI is a shared capability, not a customer product. The AI lane prepares bounded
 drafts and advisory synthesis only; it does not create orders, payments,
 messages, stock movements, migrations, releases, or customer records.
 
+Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`,
+`OLLAMA_KEEP_ALIVE=0s`, and no cloud fallback. OpenAI, Anthropic, OpenRouter,
+hosted AI, Vercel Agent Runs, provider-key eval lanes, and paid model routing
+are inactive until a separate owner-approved source-controlled cut changes
+this policy.
+
 No new product shell should be created until one of the four products completes
 a real owner-reviewed learning loop. Add depth inside the four products before
 adding breadth.

@@ -52,9 +52,23 @@ const competitiveCut = [
   '20 consecutive accepted observed runs covering pilot days 1 through 5',
   'GitHub `main` protection is verified. The current first external gate is the exact review-branch push',
   'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
+  'Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
 ].join('\n')
 
 const clientReadiness = 'Freshness note, 2026-08-26\nProduction is at v11.'
+
+const productSupremacy = [
+  'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended',
+  'Active AI R&D is local Ollama only: `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
+].join('\n')
+
+const orderIntakeEvalPlan = [
+  'Freshness note, 2026-08-27: cloud-provider eval lanes are suspended',
+  'local-ollama lane',
+  '`llama3.2:1b`',
+  '`OLLAMA_KEEP_ALIVE=0s`',
+  'no cloud fallback',
+].join('\n')
 
 test('accepts the current owner-named strategy posture', () => {
   const report = buildStrategyPostureReport({
@@ -62,6 +76,8 @@ test('accepts the current owner-named strategy posture', () => {
     aiNative,
     competitiveCut,
     clientReadiness,
+    productSupremacy,
+    orderIntakeEvalPlan,
   })
   assert.equal(report.ok, true)
   assert.equal(report.liveSchemaVersion, 11)
@@ -77,6 +93,8 @@ test('rejects stale self-serve and stale schema strategy posture', () => {
     aiNative: `${aiNative}\nManaged onboarding is SELF-SERVE\nproduction schema v10 observed`,
     competitiveCut,
     clientReadiness: `${clientReadiness}\nProduction is at v10`,
+    productSupremacy,
+    orderIntakeEvalPlan,
   })
   assert.equal(report.ok, false)
   assert.ok(report.failures.includes('strategy_posture_ai_active_self_serve_claim'))
@@ -96,6 +114,8 @@ test('rejects stale GitHub-main-protection next-gate strategy text', () => {
       'The current first external gate is GitHub `main` protection',
     ),
     clientReadiness,
+    productSupremacy,
+    orderIntakeEvalPlan,
   })
   assert.equal(report.ok, false)
   assert.ok(report.failures.includes('strategy_posture_ai_review_branch_gate_missing'))
@@ -110,8 +130,24 @@ test('rejects readiness drift from the strategy authority', () => {
     aiNative,
     competitiveCut,
     clientReadiness,
+    productSupremacy,
+    orderIntakeEvalPlan,
   })
   assert.equal(report.ok, false)
   assert.ok(report.failures.includes('strategy_posture_pilot_mode_not_owner_named'))
   assert.ok(report.failures.includes('strategy_posture_schema_drift_present'))
+})
+
+test('rejects active cloud-provider AI eval runbooks in current strategy posture', () => {
+  const report = buildStrategyPostureReport({
+    readiness: readiness(),
+    aiNative,
+    competitiveCut,
+    clientReadiness,
+    productSupremacy: `${productSupremacy}\nOPENAI_API_KEY`,
+    orderIntakeEvalPlan: `${orderIntakeEvalPlan}\nANTHROPIC_API_KEY`,
+  })
+  assert.equal(report.ok, false)
+  assert.ok(report.failures.includes('strategy_posture_product_supremacy_cloud_ai_runbook_active:OPENAI_API_KEY'))
+  assert.ok(report.failures.includes('strategy_posture_order_intake_cloud_ai_runbook_active:ANTHROPIC_API_KEY'))
 })

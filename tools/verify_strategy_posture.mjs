@@ -13,8 +13,20 @@ const DEFAULT_PATHS = {
   aiNative: resolve(root, 'hq', 'strategy', 'AI-NATIVE-ARCHITECTURE.md'),
   competitiveCut: resolve(root, 'hq', 'strategy', 'COMPETITIVE-EXECUTION-CUT.md'),
   clientReadiness: resolve(root, 'hq', 'strategy', 'CLIENT-READINESS-BRIEF.md'),
+  productSupremacy: resolve(root, 'hq', 'strategy', 'PRODUCT-SUPREMACY-ROADMAP.md'),
+  orderIntakeEvalPlan: resolve(root, 'hq', 'strategy', 'AI-ORDER-INTAKE-EVAL-PLAN.md'),
 }
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
+const STALE_CLOUD_AI_RUNBOOK_FRAGMENTS = Object.freeze([
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_API_KEY',
+  'OPENROUTER_API_KEY',
+  'OPENAI_API_KEY',
+  'OpenAI endpoint every prior run used',
+  'Anthropic primary',
+  'Optional cross-provider fallback',
+  'production-parity lane: the deployed trial endpoint path uses OpenAI',
+])
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -53,12 +65,20 @@ function assertNoActiveStaleSchemaClaims(text, failures, { liveSchemaVersion }) 
   }
 }
 
+function assertNoActiveCloudAiRunbook(text, failures, label) {
+  for (const fragment of STALE_CLOUD_AI_RUNBOOK_FRAGMENTS) {
+    addIf(has(text, fragment), failures, `strategy_posture_${label}_cloud_ai_runbook_active:${fragment}`)
+  }
+}
+
 export function buildStrategyPostureReport(input = {}) {
   const failures = []
   const readiness = input.readiness
   const aiNative = String(input.aiNative || '')
   const competitiveCut = String(input.competitiveCut || '')
   const clientReadiness = String(input.clientReadiness || '')
+  const productSupremacy = String(input.productSupremacy || '')
+  const orderIntakeEvalPlan = String(input.orderIntakeEvalPlan || '')
 
   addIf(!isRecord(readiness), failures, 'strategy_posture_readiness_missing')
   const liveSchemaVersion = Number(readiness?.liveProduction?.schemaVersion)
@@ -107,9 +127,18 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(has(competitiveCut, 'The current first external gate is GitHub `main` protection'), failures, 'strategy_posture_competitive_cut_stale_github_gate_claim')
   addIf(!(has(competitiveCut, 'Plant, Website, and Ecommerce keep security, dependency, regression, and') && has(competitiveCut, 'handoff maintenance until Shop produces a decision packet')), failures, 'strategy_posture_competitive_cut_non_shop_sequence_missing')
   addIf(!has(competitiveCut, 'No deploy, provider write, credential'), failures, 'strategy_posture_competitive_cut_authority_warning_missing')
+  addIf(!(has(competitiveCut, 'Current 30-day AI runtime policy: local Ollama only') && has(competitiveCut, '`llama3.2:1b`') && has(competitiveCut, '`OLLAMA_KEEP_ALIVE=0s`') && has(competitiveCut, 'no cloud fallback')), failures, 'strategy_posture_competitive_cut_local_ai_policy_missing')
 
   addIf(!has(clientReadiness, 'Freshness note, 2026-08-26'), failures, 'strategy_posture_client_freshness_note_missing')
   assertNoActiveStaleSchemaClaims(clientReadiness, failures, { liveSchemaVersion })
+
+  addIf(!has(productSupremacy, 'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended'), failures, 'strategy_posture_product_supremacy_local_ai_freshness_missing')
+  addIf(!(has(productSupremacy, 'Active AI R&D is local Ollama only') && has(productSupremacy, '`llama3.2:1b`') && has(productSupremacy, '`OLLAMA_KEEP_ALIVE=0s`') && has(productSupremacy, 'no cloud fallback')), failures, 'strategy_posture_product_supremacy_local_ai_policy_missing')
+  assertNoActiveCloudAiRunbook(productSupremacy, failures, 'product_supremacy')
+
+  addIf(!has(orderIntakeEvalPlan, 'Freshness note, 2026-08-27: cloud-provider eval lanes are suspended'), failures, 'strategy_posture_order_intake_local_ai_freshness_missing')
+  addIf(!(has(orderIntakeEvalPlan, 'local-ollama lane') && has(orderIntakeEvalPlan, '`llama3.2:1b`') && has(orderIntakeEvalPlan, '`OLLAMA_KEEP_ALIVE=0s`') && has(orderIntakeEvalPlan, 'no cloud fallback')), failures, 'strategy_posture_order_intake_local_ai_policy_missing')
+  assertNoActiveCloudAiRunbook(orderIntakeEvalPlan, failures, 'order_intake')
 
   return {
     ok: failures.length === 0,
@@ -125,6 +154,8 @@ export function buildStrategyPostureReport(input = {}) {
       'hq/strategy/AI-NATIVE-ARCHITECTURE.md',
       'hq/strategy/COMPETITIVE-EXECUTION-CUT.md',
       'hq/strategy/CLIENT-READINESS-BRIEF.md',
+      'hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md',
+      'hq/strategy/AI-ORDER-INTAKE-EVAL-PLAN.md',
     ],
     failures,
     controls: {
@@ -147,6 +178,8 @@ async function runVerify(paths = DEFAULT_PATHS) {
     aiNative: await readFile(paths.aiNative, 'utf8'),
     competitiveCut: await readFile(paths.competitiveCut, 'utf8'),
     clientReadiness: await readFile(paths.clientReadiness, 'utf8'),
+    productSupremacy: await readFile(paths.productSupremacy, 'utf8'),
+    orderIntakeEvalPlan: await readFile(paths.orderIntakeEvalPlan, 'utf8'),
   })
 }
 
@@ -193,25 +226,52 @@ function runSelfTest() {
     '20 consecutive accepted observed runs covering pilot days 1 through 5',
     'GitHub `main` protection is verified. The current first external gate is the exact review-branch push',
     'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
+    'Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
   ].join('\n')
   const clientReadiness = 'Freshness note, 2026-08-26\nProduction is at v11.'
-  const good = buildStrategyPostureReport({ readiness, aiNative, competitiveCut, clientReadiness })
+  const productSupremacy = [
+    'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended',
+    'Active AI R&D is local Ollama only: `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
+  ].join('\n')
+  const orderIntakeEvalPlan = [
+    'Freshness note, 2026-08-27: cloud-provider eval lanes are suspended',
+    'local-ollama lane',
+    '`llama3.2:1b`',
+    '`OLLAMA_KEEP_ALIVE=0s`',
+    'no cloud fallback',
+  ].join('\n')
+  const good = buildStrategyPostureReport({ readiness, aiNative, competitiveCut, clientReadiness, productSupremacy, orderIntakeEvalPlan })
   const badSelfServe = buildStrategyPostureReport({
     readiness,
     aiNative: `${aiNative}\nManaged onboarding is SELF-SERVE`,
     competitiveCut,
     clientReadiness,
+    productSupremacy,
+    orderIntakeEvalPlan,
   })
   const badSchema = buildStrategyPostureReport({
     readiness,
     aiNative: aiNative.replace('v11', 'v10'),
     competitiveCut,
     clientReadiness,
+    productSupremacy,
+    orderIntakeEvalPlan,
+  })
+  const badCloudAi = buildStrategyPostureReport({
+    readiness,
+    aiNative,
+    competitiveCut,
+    clientReadiness,
+    productSupremacy: `${productSupremacy}\nOPENAI_API_KEY`,
+    orderIntakeEvalPlan: `${orderIntakeEvalPlan}\nANTHROPIC_API_KEY`,
   })
   const checks = {
     good_report_passes: good.ok === true,
     active_self_serve_claim_rejected: badSelfServe.ok === false && badSelfServe.failures.includes('strategy_posture_ai_active_self_serve_claim'),
     stale_schema_line_rejected: badSchema.ok === false && badSchema.failures.includes('strategy_posture_ai_schema_line_stale'),
+    active_cloud_ai_runbook_rejected: badCloudAi.ok === false
+      && badCloudAi.failures.includes('strategy_posture_product_supremacy_cloud_ai_runbook_active:OPENAI_API_KEY')
+      && badCloudAi.failures.includes('strategy_posture_order_intake_cloud_ai_runbook_active:ANTHROPIC_API_KEY'),
   }
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name)
   return {
