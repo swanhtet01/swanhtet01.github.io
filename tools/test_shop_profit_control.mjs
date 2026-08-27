@@ -7,7 +7,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { projectShopProfitControl } from './shop-profit-control.ts'`,
+    contents: `export { formatHiddenShopProfitControlPriorities, formatShopProfitControlMetric, projectShopProfitControl } from './shop-profit-control.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/shop-profit-control-test-entry.ts',
     loader: 'ts',
@@ -19,7 +19,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { projectShopProfitControl } = await import(
+const { formatHiddenShopProfitControlPriorities, formatShopProfitControlMetric, projectShopProfitControl } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -89,6 +89,19 @@ function check(condition, label) {
   check(board.priorities[0].id === 'close_ready', 'close-ready sales produce a close priority')
   check(board.priorities[0].metric.kind === 'money' && board.priorities[0].metric.value === 450_000, 'close-ready sales retain exact MMK value')
   check(board.priorities[0].target.includes('shop-close-controls'), 'close priority links to close controls')
+}
+
+{
+  const singularLowStock = projectShopProfitControl(baseline({ lowStockCount: 1 })).priorities[0].metric
+  const pluralLowStock = projectShopProfitControl(baseline({ lowStockCount: 2 })).priorities[0].metric
+  const singularRefund = projectShopProfitControl(baseline({ refundDueCount: 1 })).priorities[0].metric
+  const controlled = projectShopProfitControl(baseline()).priorities[0].metric
+  check(formatShopProfitControlMetric(singularLowStock) === '1 low-stock item', 'one low-stock item uses singular copy')
+  check(formatShopProfitControlMetric(pluralLowStock) === '2 low-stock items', 'multiple low-stock items use plural copy')
+  check(formatShopProfitControlMetric(singularRefund) === '1 due refund', 'one due refund uses singular copy')
+  check(formatShopProfitControlMetric(controlled) === '0 open priorities', 'zero count uses plural copy')
+  check(formatHiddenShopProfitControlPriorities(1).startsWith('1 lower-priority signal remains visible'), 'one hidden signal uses singular verb')
+  check(formatHiddenShopProfitControlPriorities(2).startsWith('2 lower-priority signals remain visible'), 'multiple hidden signals use plural verb')
 }
 
 for (const [field, value] of [

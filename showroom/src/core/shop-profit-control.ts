@@ -24,7 +24,12 @@ export type ShopProfitControlPriority = {
   target: string
   closureCondition: string
   metric: {
-    kind: 'count' | 'money'
+    kind: 'count'
+    label: string
+    singularLabel: string
+    value: number
+  } | {
+    kind: 'money'
     label: string
     value: number
   }
@@ -48,12 +53,23 @@ function assertSafeMoney(value: number, label: string) {
   if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000_000) throw new Error(`${label} must be safe non-negative whole MMK.`)
 }
 
-function countMetric(label: string, value: number): ShopProfitControlPriority['metric'] {
-  return { kind: 'count', label, value }
+function countMetric(label: string, singularLabel: string, value: number): ShopProfitControlPriority['metric'] {
+  return { kind: 'count', label, singularLabel, value }
 }
 
 function moneyMetric(label: string, value: number): ShopProfitControlPriority['metric'] {
   return { kind: 'money', label, value }
+}
+
+export function formatShopProfitControlMetric(metric: ShopProfitControlPriority['metric']) {
+  if (metric.kind === 'money') return `${metric.value.toLocaleString('en-US')} MMK`
+  return `${metric.value} ${metric.value === 1 ? metric.singularLabel : metric.label}`
+}
+
+export function formatHiddenShopProfitControlPriorities(count: number) {
+  assertSafeCount(count, 'Hidden priorities')
+  if (!count) return ''
+  return `${count} lower-priority signal${count === 1 ? '' : 's'} ${count === 1 ? 'remains' : 'remain'} visible in the linked Shop workspaces. This board shows the top three only.`
 }
 
 export function projectShopProfitControl(input: ShopProfitControlInput): ShopProfitControlBoard {
@@ -85,7 +101,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Open controls',
     target: '/settings/#controls',
     closureCondition: 'Shop write readiness is verified before another order is recorded.',
-    metric: countMetric('locked record path', 1),
+    metric: countMetric('locked record paths', 'locked record path', 1),
   })
 
   if (input.pendingAction) candidates.push({
@@ -98,7 +114,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Finish review',
     target: '/shop/?tab=orders',
     closureCondition: 'The pending action is explicitly confirmed or cancelled.',
-    metric: countMetric('pending review', 1),
+    metric: countMetric('pending reviews', 'pending review', 1),
   })
 
   if (!input.catalogItemCount) candidates.push({
@@ -111,7 +127,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Open catalog',
     target: '/shop/?tab=inventory#shop-catalog-import',
     closureCondition: 'At least one reviewed item exists with price, stock, and reorder evidence.',
-    metric: countMetric('catalog items', 0),
+    metric: countMetric('catalog items', 'catalog item', 0),
   })
 
   if (input.refundDueCount) candidates.push({
@@ -124,7 +140,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Review returns',
     target: '/shop/?tab=orders#shop-order-history',
     closureCondition: 'Every due refund has externally completed settlement evidence or an explicit refusal.',
-    metric: countMetric('due refunds', input.refundDueCount),
+    metric: countMetric('due refunds', 'due refund', input.refundDueCount),
   })
 
   if (input.overdueReceivableCount) candidates.push({
@@ -150,7 +166,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Open order queue',
     target: '/shop/?tab=orders#shop-order-queue',
     closureCondition: 'No active order remains past its promised time without reviewed exception evidence.',
-    metric: countMetric('late promises', input.latePromiseCount),
+    metric: countMetric('late promises', 'late promise', input.latePromiseCount),
   })
 
   if (input.paymentPendingCount && !input.overdueReceivableCount) candidates.push({
@@ -163,7 +179,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Review payments',
     target: '/shop/?tab=orders#shop-order-queue',
     closureCondition: 'Every pending payment has reviewed external evidence or an explicit unpaid state.',
-    metric: countMetric('pending payments', input.paymentPendingCount),
+    metric: countMetric('pending payments', 'pending payment', input.paymentPendingCount),
   })
 
   if (input.lowStockCount) candidates.push({
@@ -176,7 +192,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Open reorder queue',
     target: '/shop/?tab=inventory',
     closureCondition: 'Each low-stock item has reviewed replenishment evidence or an explicit no-buy decision.',
-    metric: countMetric('low-stock items', input.lowStockCount),
+    metric: countMetric('low-stock items', 'low-stock item', input.lowStockCount),
   })
 
   if (input.incomingRequestCount) candidates.push({
@@ -189,7 +205,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     actionLabel: 'Open intake',
     target: '/shop/?tab=orders#shop-order-queue',
     closureCondition: 'Every incoming request is accepted into Shop or explicitly declined.',
-    metric: countMetric('waiting requests', input.incomingRequestCount),
+    metric: countMetric('waiting requests', 'waiting request', input.incomingRequestCount),
   })
 
   if (input.closeReadyCount) candidates.push({
@@ -220,7 +236,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
       actionLabel: 'Open counter',
       target: '/shop/?tab=counter',
       closureCondition: 'Keep monitored leak metrics at zero through the next reviewed daily close.',
-      metric: countMetric('open priorities', 0),
+      metric: countMetric('open priorities', 'open priority', 0),
     }],
   }
 
