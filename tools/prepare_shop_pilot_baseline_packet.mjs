@@ -184,6 +184,16 @@ function normalizeRunSet(value, field) {
   return runs
 }
 
+function assertUniqueRunIdsAcrossBaselineStreams(streams) {
+  const ids = new Set()
+  for (const runs of streams) {
+    for (const run of runs) {
+      if (ids.has(run.runId)) fail('shop_pilot_baseline_run_id_duplicate_across_streams')
+      ids.add(run.runId)
+    }
+  }
+}
+
 function normalizeBaselineInput(input) {
   assertNoCredentialShape(input)
   if (!isRecord(input)) fail('shop_pilot_baseline_input_required')
@@ -196,6 +206,7 @@ function normalizeBaselineInput(input) {
   const observedOrderRuns = normalizeRunSet(input.observedOrderRuns, 'shop_pilot_baseline_order')
   const observedRedemptionRuns = normalizeRunSet(input.observedRedemptionRuns, 'shop_pilot_baseline_redemption')
   const observedCloseRuns = normalizeRunSet(input.observedCloseRuns, 'shop_pilot_baseline_close')
+  assertUniqueRunIdsAcrossBaselineStreams([observedOrderRuns, observedRedemptionRuns, observedCloseRuns])
   const normalized = {
     contract: SHOP_PILOT_BASELINE_INPUT_CONTRACT,
     product: PRODUCT,

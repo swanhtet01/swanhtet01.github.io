@@ -139,6 +139,25 @@ test('blocks same-day daily-close baseline evidence without leaking identity', (
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
 })
 
+test('rejects duplicate baseline run ids across streams without leaking private labels', () => {
+  const duplicateAcrossStreams = input({
+    observedRedemptionRuns: [
+      { ...input().observedRedemptionRuns[0], runId: 'order-run-001' },
+      ...input().observedRedemptionRuns.slice(1),
+    ],
+  })
+  assert.throws(
+    () => buildShopPilotBaselinePacket(duplicateAcrossStreams, { generatedAt: '2026-08-25T00:00:00.000Z' }),
+    /shop_pilot_baseline_run_id_duplicate_across_streams/,
+  )
+  const preflight = preflightShopPilotBaselineInput(duplicateAcrossStreams, { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(preflight.status, 'baseline_input_invalid')
+  assert.equal(preflight.safeToGeneratePublicBaselinePacket, false)
+  assert.deepEqual(preflight.failures, ['shop_pilot_baseline_run_id_duplicate_across_streams'])
+  assert.doesNotMatch(JSON.stringify(preflight), /order-run-001|Private Spa Sample|Private Operator/)
+  assert.equal(validateShopPilotBaselineInputPreflight(preflight), preflight)
+})
+
 test('blocks baseline evidence dated after packet day or on the pilot start date', () => {
   const futureDated = buildShopPilotBaselinePacket(input({
     observedAt: '2026-08-26T08:00:00.000Z',
