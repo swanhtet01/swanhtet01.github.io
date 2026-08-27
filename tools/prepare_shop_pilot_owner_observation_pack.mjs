@@ -388,7 +388,8 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || checklist.evidenceKind !== 'owner_observed_manual_operations_only'
     || checklist.minimumUninterruptedRunsPerFlow !== 3
     || !Array.isArray(checklist.flows)
-    || checklist.flows.length !== 2
+    || checklist.flows.length !== 3
+    || !sameArray(checklist.flows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
     || checklist.flows.some((flow) => flow.requiredUninterruptedRuns !== 3 || flow.acceptedNow !== false)
     || !Array.isArray(checklist.requiredMetrics)
     || !checklist.requiredMetrics.includes('weekly_orders')

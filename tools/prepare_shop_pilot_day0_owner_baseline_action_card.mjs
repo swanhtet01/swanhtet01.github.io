@@ -288,7 +288,8 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
   if (!isRecord(evidence)
     || evidence.evidenceKind !== 'owner_observed_manual_operations_only'
     || !Array.isArray(evidence.requiredFlows)
-    || evidence.requiredFlows.length !== 2
+    || evidence.requiredFlows.length !== 3
+    || !sameArray(evidence.requiredFlows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
     || evidence.requiredFlows.some((flow) => flow.requiredUninterruptedRuns !== 3 || flow.accepted !== false)
     || !Array.isArray(evidence.requiredMetrics)
     || !evidence.requiredMetrics.includes('daily_close_minutes')

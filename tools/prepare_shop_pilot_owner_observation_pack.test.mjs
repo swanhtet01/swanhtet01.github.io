@@ -166,7 +166,9 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.equal(pack.controls.githubWritesAllowed, false)
   assert.equal(pack.controls.customerContactAllowed, false)
   assert.equal(pack.observationChecklist.minimumUninterruptedRunsPerFlow, 3)
+  assert.deepEqual(pack.observationChecklist.flows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
   assert.ok(pack.observationChecklist.requiredMetrics.includes('daily_close_minutes'))
+  assert.ok(pack.observationChecklist.stopConditions.includes('fewer_than_three_uninterrupted_daily_close_runs'))
   assert.equal(pack.observationChecklist.promotionEvidenceRequirement.requiredAcceptedConsecutiveRuns, 20)
   assert.deepEqual(pack.observationChecklist.promotionEvidenceRequirement.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.equal(pack.observationChecklist.promotionEvidenceRequirement.pilotSequenceCoverageMet, false)
@@ -183,6 +185,7 @@ test('builds a privacy-safe owner observation pack bound to current release cont
 
   const markdown = renderShopPilotOwnerObservationPackMarkdown(pack)
   assert.match(markdown, /Observe real manual Shop work/)
+  assert.match(markdown, /Manual daily close/)
   assert.match(markdown, /Required accepted real runs: 20/)
   assert.match(markdown, /Required pilot days covered: 1, 2, 3, 4, 5/)
   assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)

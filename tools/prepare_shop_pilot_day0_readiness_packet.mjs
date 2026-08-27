@@ -107,6 +107,7 @@ const BASELINE_CAPTURE_REQUIRED_CONFIRMATIONS = [
 const BASELINE_CAPTURE_STOP_CONDITIONS = [
   'fewer_than_three_uninterrupted_manual_order_runs',
   'fewer_than_three_uninterrupted_package_redemption_runs',
+  'fewer_than_three_uninterrupted_daily_close_runs',
   'synthetic_or_supermega_demo_run_used_as_baseline',
   'raw_identity_or_private_note_would_enter_owner_safe_packet',
   'customer_message_payment_stock_or_hosted_write_needed',
@@ -456,10 +457,14 @@ function ownerPrivateBaselineChecklistFor(status, launchGateReport) {
   const metrics = launchGateReport.baselineEvidence?.metrics || {}
   const requiredOrderRuns = 3
   const requiredRedemptionRuns = 3
+  const requiredCloseRuns = 3
   const uninterruptedOrderRunCount = metrics.uninterruptedOrderRunCount ?? 0
   const uninterruptedRedemptionRunCount = metrics.uninterruptedRedemptionRunCount ?? 0
+  const uninterruptedCloseRunCount = metrics.uninterruptedCloseRunCount ?? 0
   const readyToGeneratePublicBaselinePacket = baselineAccepted
-    || (uninterruptedOrderRunCount >= requiredOrderRuns && uninterruptedRedemptionRunCount >= requiredRedemptionRuns)
+    || (uninterruptedOrderRunCount >= requiredOrderRuns
+      && uninterruptedRedemptionRunCount >= requiredRedemptionRuns
+      && uninterruptedCloseRunCount >= requiredCloseRuns)
   return {
     contract: SHOP_PILOT_BASELINE_CAPTURE_CHECKLIST_CONTRACT,
     state: baselineAccepted
@@ -488,6 +493,14 @@ function ownerPrivateBaselineChecklistFor(status, launchGateReport) {
         observedRuns: metrics.observedRedemptionRunCount ?? 0,
         uninterruptedRuns: uninterruptedRedemptionRunCount,
         accepted: uninterruptedRedemptionRunCount >= requiredRedemptionRuns,
+      },
+      {
+        id: 'daily_close',
+        label: 'Manual daily close',
+        requiredUninterruptedRuns: requiredCloseRuns,
+        observedRuns: metrics.observedCloseRunCount ?? 0,
+        uninterruptedRuns: uninterruptedCloseRunCount,
+        accepted: uninterruptedCloseRunCount >= requiredCloseRuns,
       },
     ],
     requiredMetrics: [...BASELINE_CAPTURE_REQUIRED_METRICS],
@@ -613,8 +626,11 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       uninterruptedOrderRunCount: launchGateReport.baselineEvidence?.metrics?.uninterruptedOrderRunCount ?? 0,
       observedRedemptionRunCount: launchGateReport.baselineEvidence?.metrics?.observedRedemptionRunCount ?? 0,
       uninterruptedRedemptionRunCount: launchGateReport.baselineEvidence?.metrics?.uninterruptedRedemptionRunCount ?? 0,
+      observedCloseRunCount: launchGateReport.baselineEvidence?.metrics?.observedCloseRunCount ?? 0,
+      uninterruptedCloseRunCount: launchGateReport.baselineEvidence?.metrics?.uninterruptedCloseRunCount ?? 0,
       medianMinutesPerOrder: launchGateReport.baselineEvidence?.metrics?.medianMinutesPerOrder ?? null,
       medianMinutesPerRedemption: launchGateReport.baselineEvidence?.metrics?.medianMinutesPerRedemption ?? null,
+      medianCloseMinutesPerDay: launchGateReport.baselineEvidence?.metrics?.medianCloseMinutesPerDay ?? null,
       weeklyExceptionCount: launchGateReport.baselineEvidence?.metrics?.weeklyExceptionCount ?? null,
       closeMinutesPerDay: launchGateReport.baselineEvidence?.metrics?.closeMinutesPerDay ?? null,
       readyForCustomerContact: false,
@@ -843,6 +859,8 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
         uninterruptedOrderRunCount: packet.day0Readiness.uninterruptedOrderRunCount,
         observedRedemptionRunCount: packet.day0Readiness.observedRedemptionRunCount,
         uninterruptedRedemptionRunCount: packet.day0Readiness.uninterruptedRedemptionRunCount,
+        observedCloseRunCount: packet.day0Readiness.observedCloseRunCount,
+        uninterruptedCloseRunCount: packet.day0Readiness.uninterruptedCloseRunCount,
       },
     },
   })
@@ -855,7 +873,7 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || checklist.readyToGeneratePublicBaselinePacket !== expectedChecklist.readyToGeneratePublicBaselinePacket
     || checklist.completionSignal !== expectedChecklist.completionSignal
     || !Array.isArray(checklist.requiredFlows)
-    || checklist.requiredFlows.length !== 2
+    || checklist.requiredFlows.length !== expectedChecklist.requiredFlows.length
     || checklist.requiredFlows.some((flow, index) => JSON.stringify(flow) !== JSON.stringify(expectedChecklist.requiredFlows[index]))
     || !Array.isArray(checklist.requiredMetrics)
     || checklist.requiredMetrics.length !== BASELINE_CAPTURE_REQUIRED_METRICS.length
@@ -1014,8 +1032,10 @@ ${checklistStopConditions}
 
 - Observed order runs: ${packet.day0Readiness.uninterruptedOrderRunCount}/${packet.day0Readiness.observedOrderRunCount}
 - Observed redemption runs: ${packet.day0Readiness.uninterruptedRedemptionRunCount}/${packet.day0Readiness.observedRedemptionRunCount}
+- Observed daily-close runs: ${packet.day0Readiness.uninterruptedCloseRunCount}/${packet.day0Readiness.observedCloseRunCount}
 - Median minutes per order: ${packet.day0Readiness.medianMinutesPerOrder ?? 'missing'}
 - Median minutes per redemption: ${packet.day0Readiness.medianMinutesPerRedemption ?? 'missing'}
+- Median close minutes per day: ${packet.day0Readiness.medianCloseMinutesPerDay ?? 'missing'}
 - Weekly exceptions: ${packet.day0Readiness.weeklyExceptionCount ?? 'missing'}
 - Daily close minutes: ${packet.day0Readiness.closeMinutesPerDay ?? 'missing'}
 
