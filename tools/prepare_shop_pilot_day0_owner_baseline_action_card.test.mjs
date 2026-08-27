@@ -125,6 +125,7 @@ test('renders an owner-baseline action card without local paths, identity, or au
   assert.equal(card.controls.customerContactAllowed, false)
   assert.equal(card.controls.paymentAllowed, false)
   assert.equal(card.controls.stockMovementAllowed, false)
+  assert.equal(card.action.expectedPreflightStatus, 'baseline_input_ready')
   assert.ok(card.commandPlan.commands.some((command) => command.includes('--lint-input "<private-baseline-input.json>"')))
   assert.ok(card.commandPlan.commands.some((command) => command.includes('--release-handoff "<release-handoff.json>"') && command.includes('--github-protection-snapshot "<github-protection-snapshot.json>"')))
   assert.equal(card.minimumEvidence.promotionEvidenceRequirement.requiredAcceptedConsecutiveRuns, 20)
@@ -136,6 +137,7 @@ test('renders an owner-baseline action card without local paths, identity, or au
 
   const markdown = renderShopPilotDay0OwnerBaselineActionCardMarkdown(card)
   assert.match(markdown, /Capture the owner-observed manual Shop baseline/)
+  assert.match(markdown, /preflight returns `baseline_input_ready`/)
   assert.match(markdown, /Required accepted real runs: 20/)
   assert.match(markdown, /Manual daily close/)
   assert.match(markdown, /Required pilot days covered: 1, 2, 3, 4, 5/)

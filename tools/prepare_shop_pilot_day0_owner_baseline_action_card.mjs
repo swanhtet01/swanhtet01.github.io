@@ -192,7 +192,7 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
       safeBeforeReleaseGate: day0Packet.nextOwnerPrivateStep?.safeBeforeReleaseGate === true,
       releaseGateStillRequiredBeforePilotActivation: true,
       nextRequiredDigest: 'baseline_packet_digest',
-      expectedPreflightStatus: 'ready',
+      expectedPreflightStatus: 'baseline_input_ready',
       completionSignal: 'public_safe_baseline_packet_digest',
     },
     ownerPrivatePrepArtifacts: {
@@ -266,7 +266,7 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || card.action.safeBeforeReleaseGate !== true
     || card.action.releaseGateStillRequiredBeforePilotActivation !== true
     || card.action.nextRequiredDigest !== 'baseline_packet_digest'
-    || card.action.expectedPreflightStatus !== 'ready'
+    || card.action.expectedPreflightStatus !== 'baseline_input_ready'
     || card.action.completionSignal !== 'public_safe_baseline_packet_digest') {
     fail('shop_pilot_day0_owner_baseline_card_action_invalid')
   }
