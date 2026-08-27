@@ -7,6 +7,7 @@ import {
   scanOwnerFacingText,
   verifyAdminTechnicalCoordinationBinding,
   verifyShopDay0ReleaseGateBinding,
+  verifyShopLaunchGateDay0Binding,
   verifyShopPrivateIntakeDay0Binding,
   verifyShopDay0ProductMatrixBinding,
   verifyReleaseArtifactFamily,
@@ -16,6 +17,10 @@ import {
   sampleCurrentReleaseControlIndexInput,
 } from './prepare_current_release_control_index.mjs'
 import { buildAdminTechnicalCoordinationPacket } from './prepare_admin_technical_coordination_packet.mjs'
+import {
+  assessShopPilotLaunchGate,
+  sampleShopPilotLaunchGateInput,
+} from './verify_shop_pilot_launch_gate.mjs'
 
 test('release artifact family verifier self-test remains fail-closed', () => {
   const result = runSelfTest()
@@ -176,6 +181,36 @@ test('private intake packet must be reflected in Day-0 readiness', () => {
     day0Readiness: { intakePacketAccepted: true },
     sourceDigests: {},
   }, ['shop_private_intake_packet']), /shop_private_intake_digest_missing/)
+})
+
+test('Shop launch-gate report must bind to Day-0 readiness and candidate commit', () => {
+  const launchGateReport = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput())
+  const controlIndex = { candidate: { commit: launchGateReport.candidate.head } }
+  const day0 = {
+    candidate: { head: launchGateReport.candidate.head },
+    day0Readiness: {
+      baselinePacketAccepted: launchGateReport.launchReadiness.baselinePacketAccepted,
+      intakePacketAccepted: launchGateReport.launchReadiness.intakePacketAccepted,
+    },
+    sourceDigests: {
+      launchGateDigest: launchGateReport.digest,
+      baselinePacketDigest: launchGateReport.launchReadiness.baselinePacketDigest,
+      baselinePrivateInputDigest: launchGateReport.launchReadiness.baselinePrivateInputDigest,
+      intakePacketDigest: launchGateReport.launchReadiness.intakePacketDigest,
+    },
+  }
+  assert.equal(verifyShopLaunchGateDay0Binding(launchGateReport, day0, controlIndex), true)
+  assert.throws(() => verifyShopLaunchGateDay0Binding(launchGateReport, {
+    ...day0,
+    sourceDigests: { ...day0.sourceDigests, launchGateDigest: `sha256:${'f'.repeat(64)}` },
+  }, controlIndex), /launch_gate_digest_not_bound_to_day0/)
+  assert.throws(() => verifyShopLaunchGateDay0Binding(launchGateReport, {
+    ...day0,
+    day0Readiness: { ...day0.day0Readiness, intakePacketAccepted: !day0.day0Readiness.intakePacketAccepted },
+  }, controlIndex), /launch_gate_readiness_mismatch/)
+  assert.throws(() => verifyShopLaunchGateDay0Binding(launchGateReport, day0, {
+    candidate: { commit: 'b'.repeat(40) },
+  }), /shop_launch_gate_candidate_mismatch/)
 })
 
 test('Shop Day-0 release gate must match the current release index', () => {

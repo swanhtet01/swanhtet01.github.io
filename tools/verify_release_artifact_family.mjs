@@ -22,6 +22,7 @@ import { validateShopPilotDay0OwnerBaselineActionCard } from './prepare_shop_pil
 import { validateShopPilotDay0ReadinessPacket } from './prepare_shop_pilot_day0_readiness_packet.mjs'
 import { validateShopPilotPrivateIntakePacket } from './prepare_shop_pilot_private_intake_packet.mjs'
 import { validateSuperMegaStatusBrief } from './prepare_supermega_status_brief.mjs'
+import { validateShopPilotLaunchGate } from './verify_shop_pilot_launch_gate.mjs'
 
 export const RELEASE_ARTIFACT_FAMILY_VERIFIER_CONTRACT = 'supermega.release-artifact-family-verifier.v1'
 
@@ -158,6 +159,33 @@ export function verifyShopPrivateIntakeDay0Binding(shopPilotDay0Readiness, extra
   return true
 }
 
+export function verifyShopLaunchGateDay0Binding(shopPilotLaunchGateReport, shopPilotDay0Readiness, controlIndex) {
+  const report = validateShopPilotLaunchGate(shopPilotLaunchGateReport)
+  if (report.candidate?.head !== controlIndex.candidate?.commit) {
+    fail('release_artifact_family_shop_launch_gate_candidate_mismatch')
+  }
+  if (shopPilotDay0Readiness.candidate?.head !== report.candidate?.head) {
+    fail('release_artifact_family_shop_day0_launch_gate_candidate_mismatch')
+  }
+  if (shopPilotDay0Readiness.sourceDigests?.launchGateDigest !== report.digest) {
+    fail('release_artifact_family_shop_launch_gate_digest_not_bound_to_day0')
+  }
+  if (shopPilotDay0Readiness.day0Readiness?.baselinePacketAccepted !== report.launchReadiness?.baselinePacketAccepted
+    || shopPilotDay0Readiness.day0Readiness?.intakePacketAccepted !== report.launchReadiness?.intakePacketAccepted) {
+    fail('release_artifact_family_shop_launch_gate_readiness_mismatch')
+  }
+  if (report.launchReadiness?.baselinePacketAccepted === true
+    && (shopPilotDay0Readiness.sourceDigests?.baselinePacketDigest !== report.launchReadiness?.baselinePacketDigest
+      || shopPilotDay0Readiness.sourceDigests?.baselinePrivateInputDigest !== report.launchReadiness?.baselinePrivateInputDigest)) {
+    fail('release_artifact_family_shop_launch_gate_baseline_digest_mismatch')
+  }
+  if (report.launchReadiness?.intakePacketAccepted === true
+    && shopPilotDay0Readiness.sourceDigests?.intakePacketDigest !== report.launchReadiness?.intakePacketDigest) {
+    fail('release_artifact_family_shop_launch_gate_intake_digest_mismatch')
+  }
+  return true
+}
+
 function releaseBlockerForGate(gateId) {
   if (gateId === 'github_main_protection') return 'github_main_protection_unverified'
   if (gateId === 'review_branch_push') return 'review_branch_push_missing'
@@ -228,6 +256,7 @@ function derivedFamilyFileNames({ suffix }) {
     `supermega.shop-pilot-private-intake-packet.${suffix}.md`,
     `supermega.shop-pilot-baseline-input.template.private.${suffix}.json`,
     `supermega.shop-pilot-baseline-worksheet.private.${suffix}.md`,
+    `supermega.shop-pilot-launch-gate-report.${suffix}.json`,
     `supermega.shop-pilot-day0-readiness.${suffix}.json`,
     `supermega.shop-pilot-day0-readiness.${suffix}.md`,
     `supermega.shop-pilot-day0-owner-baseline-action-card.${suffix}.json`,
@@ -251,6 +280,7 @@ function ownerFacingFamilyFileNames({ suffix }) {
     `supermega.shop-pilot-private-intake-packet.${suffix}.md`,
     `supermega.shop-pilot-baseline-input.template.private.${suffix}.json`,
     `supermega.shop-pilot-baseline-worksheet.private.${suffix}.md`,
+    `supermega.shop-pilot-launch-gate-report.${suffix}.json`,
     `supermega.shop-pilot-day0-readiness.${suffix}.json`,
     `supermega.shop-pilot-day0-readiness.${suffix}.md`,
     `supermega.shop-pilot-day0-owner-baseline-action-card.${suffix}.json`,
@@ -338,6 +368,10 @@ async function verifyExtraArtifact(artifactsDir, fileName) {
     validateShopPilotBaselinePacket(await readJson(path, 'release_artifact_family_baseline_packet_missing'))
     return 'shop_baseline_packet'
   }
+  if (fileName.includes('shop-pilot-launch-gate-report') && fileName.endsWith('.json')) {
+    validateShopPilotLaunchGate(await readJson(path, 'release_artifact_family_shop_launch_gate_report_missing'))
+    return 'shop_launch_gate_report'
+  }
   return null
 }
 
@@ -409,6 +443,14 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     },
   )
   verifyShopDay0ReleaseGateBinding(verifiedPackets.shopPilotDay0Readiness, controlIndex)
+  const launchGateFileName = `supermega.shop-pilot-launch-gate-report.${family.suffix}.json`
+  const launchGateReport = validateShopPilotLaunchGate(await readJson(
+    artifactPath(baseDir, launchGateFileName),
+    'release_artifact_family_shop_launch_gate_report_missing',
+  ))
+  verifyShopLaunchGateDay0Binding(launchGateReport, verifiedPackets.shopPilotDay0Readiness, controlIndex)
+  semanticArtifacts.push('shopPilotLaunchGateReport')
+  verifiedPackets.shopPilotLaunchGateReport = launchGateReport
   const adminTechnicalCoordination = await verifyRequiredAdminTechnicalCoordinationArtifact(
     baseDir,
     family,
@@ -454,6 +496,7 @@ export async function verifyReleaseArtifactFamily({ controlIndexPath, artifactsD
     markdownCounterpartName(artifacts.nextReleaseActionPreflight.fileName),
     artifacts.shopPilotDay0Readiness.fileName,
     markdownCounterpartName(artifacts.shopPilotDay0Readiness.fileName),
+    launchGateFileName,
     adminTechnicalCoordination.jsonFileName,
     adminTechnicalCoordination.markdownFileName,
     ...ownerFacingFamilyFileNames(family),
