@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import type { ShopProfitControlBoard, ShopProfitControlPriority } from './shop-profit-control'
 
 export type ShopTodayMetric = {
   label: string
@@ -21,6 +22,7 @@ type ShopTodayProps = {
   nextAction: string
   nextDetail: string
   nextTo: string
+  profitControl: ShopProfitControlBoard
 }
 
 const capabilityGroups = [
@@ -32,7 +34,12 @@ const capabilityGroups = [
   ['Control', 'Daily close, settlement review, accounting export, audit'],
 ] as const
 
-export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
+function profitMetric(priority: ShopProfitControlPriority) {
+  if (priority.metric.kind === 'money') return `${priority.metric.value.toLocaleString('en-US')} MMK`
+  return `${priority.metric.value} ${priority.metric.label}`
+}
+
+export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextTo, profitControl }: ShopTodayProps) {
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
       <div>
@@ -52,6 +59,23 @@ export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDeta
         <strong>{metric.value}</strong>
       </article>)}
     </section>
+
+    <details className="shop-today-workspaces shop-profit-control" open>
+      <summary><span><strong>Profit control</strong><small>Current leak → accountable owner → objective closure</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Controlled'}</b></summary>
+      <div className="shop-today-module-grid">
+        {profitControl.priorities.map((priority) => <Link data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
+          <span>
+            <strong>{priority.title}</strong>
+            <small>{priority.impact}</small>
+            <small>{priority.ownerRole} · {priority.dueLabel}</small>
+            <small>Closed when: {priority.closureCondition}</small>
+          </span>
+          <b>{profitMetric(priority)}</b>
+        </Link>)}
+      </div>
+      {profitControl.hiddenPriorityCount ? <p className="panel-note">{profitControl.hiddenPriorityCount} lower-priority signal{profitControl.hiddenPriorityCount === 1 ? '' : 's'} remain visible in the linked Shop workspaces. This board shows the top three only.</p> : null}
+      <p className="panel-note">Read-only projection from the current Shop record. A card clears only when its source metric changes; this panel does not contact anyone, move money or stock, or write a completion claim.</p>
+    </details>
 
     <details className="shop-today-workspaces">
       <summary><span><strong>More Shop tools</strong><small>Customers, finance, channels, and purchasing</small></span><b>{modules.length} connected areas</b></summary>

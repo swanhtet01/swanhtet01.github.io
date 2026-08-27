@@ -54,6 +54,7 @@ import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
 import { productImageScopeForWorkspace } from './product-image-store'
 import { SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyRedemptionAllowed, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
+import { projectShopProfitControl } from './shop-profit-control'
 import { managedPlantStarterPlan, plantIndustryPack, plantIndustryPackIdFromSearch, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -6578,6 +6579,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length ? 'attention' as const : 'ready' as const },
     { label: 'Online channels', detail: 'Website and Ecommerce requests enter one Shop authority', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
+  const shopProfitControl = projectShopProfitControl({
+    canWrite: commerceCanWrite,
+    pendingAction: Boolean(pendingAction),
+    catalogItemCount: commerce.items.length,
+    incomingRequestCount,
+    latePromiseCount: actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length,
+    paymentPendingCount: pendingPaymentOrders.length,
+    overdueReceivableCount: receivablesAging.overdueOrders,
+    overdueReceivableMmk: receivablesAging.overdueMmk,
+    refundDueCount: refundExposureOrders.length,
+    lowStockCount: lowStock.length,
+    closeReadyCount: closableOrders.length,
+    closeReadyMmk: closableOrders.reduce((sum, order) => sum + order.total, 0),
+  })
   const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
   const stockCatalogRows = stockRows.filter(({ item }) => item.onHand > item.reorderAt)
 
@@ -6607,7 +6622,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
-    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} /></Suspense>
+    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} profitControl={shopProfitControl} /></Suspense>
     {actionGate}
   </div>
 
