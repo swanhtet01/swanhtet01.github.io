@@ -25,6 +25,7 @@ const PUBLIC_RELEASE_URL = 'https://supermega.dev/__release.json'
 const LEGACY_RELEASE_BRANCH = 'agent/supermega-release-candidate'
 const MAX_OUTPUT_BYTES = 1_000_000
 const MAX_LIVE_BYTES = 65_536
+const GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS = 3
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const BRANCH_PATTERN = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
@@ -214,6 +215,37 @@ function githubMainProtectionState(value) {
   const evidence = githubMainProtectionEvidence(value)
   const { generatedAt, snapshotDigest, ...state } = evidence
   return state
+}
+
+function boundedFailureReason(error) {
+  return String(error?.message || 'unknown')
+    .replace(/[^A-Za-z0-9_:.-]+/g, '_')
+    .slice(0, 120)
+}
+
+export async function collectGitHubMainProtectionSnapshotForHandoff({
+  collect = collectGitHubMainProtectionSnapshot,
+  attempts = GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
+  delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+} = {}) {
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 5) {
+    fail('release_handoff_github_main_protection_snapshot_attempts_invalid')
+  }
+  let lastError = null
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await collect()
+      if (!isRecord(result) || !isRecord(result.packet)) {
+        fail('release_handoff_github_main_protection_snapshot_result_invalid')
+      }
+      return result
+    } catch (error) {
+      lastError = error
+      if (attempt >= attempts) break
+      await delay(250 * attempt)
+    }
+  }
+  fail(`release_handoff_github_main_protection_snapshot_unavailable:${boundedFailureReason(lastError)}`)
 }
 
 function reviewBranchPushAction({ remoteBranchState, branch, candidateCommit }) {
@@ -574,7 +606,7 @@ async function prepareReleaseHandoff(output) {
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
   if (git('rev-parse', 'HEAD') !== candidateCommit || git('status', '--porcelain=v1')) fail('release_handoff_candidate_changed_during_verify')
 
-  const { packet: githubMainProtection } = await collectGitHubMainProtectionSnapshot()
+  const { packet: githubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff()
   const legacyCounts = legacyCommit ? git('rev-list', '--left-right', '--count', `${legacyCommit}...${candidateCommit}`).split(/\s+/).map(Number) : [0, 0]
   const packet = buildReleaseHandoff({
     generatedAt: new Date().toISOString(),
@@ -641,7 +673,7 @@ export async function verifyCurrentReleaseHandoff(inputPath) {
     || JSON.stringify(publicIdentity) !== JSON.stringify(packet.live.identity)) {
     fail('release_handoff_live_state_changed')
   }
-  const { packet: currentGitHubMainProtection } = await collectGitHubMainProtectionSnapshot()
+  const { packet: currentGitHubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff()
   if (JSON.stringify(githubMainProtectionState(currentGitHubMainProtection))
     !== JSON.stringify(githubMainProtectionState(packet.githubMainProtection))) {
     fail('release_handoff_github_main_protection_state_changed')

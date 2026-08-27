@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { buildReleaseHandoff, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, withReleaseHandoffOutputLock, writeExclusiveJson } from './prepare_release_handoff.mjs'
+import { buildReleaseHandoff, collectGitHubMainProtectionSnapshotForHandoff, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, withReleaseHandoffOutputLock, writeExclusiveJson } from './prepare_release_handoff.mjs'
 import {
   buildGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
@@ -138,6 +138,30 @@ test('release handoff advances to branch push only after main protection is veri
   assert.equal(packet.githubMainProtection.assessment.ok, true)
   assert.equal(packet.nextAction.kind, 'owner_review_initial_branch_push')
   assert.equal(packet.nextAction.approvalTemplate, packet.actions.reviewBranchPush.approvalTemplate)
+})
+
+test('GitHub main protection snapshot collection retries transient read-only failures', async () => {
+  let calls = 0
+  const result = await collectGitHubMainProtectionSnapshotForHandoff({
+    delay: async () => {},
+    collect: async () => {
+      calls += 1
+      if (calls === 1) throw new Error('github_main_protection_snapshot_rulesets_invalid')
+      return { packet: protectedMainSnapshot() }
+    },
+  })
+  assert.equal(calls, 2)
+  assert.equal(result.packet.assessment.ok, true)
+  await assert.rejects(
+    collectGitHubMainProtectionSnapshotForHandoff({
+      attempts: 2,
+      delay: async () => {},
+      collect: async () => {
+        throw new Error('github_main_protection_snapshot_rulesets_invalid')
+      },
+    }),
+    /release_handoff_github_main_protection_snapshot_unavailable:github_main_protection_snapshot_rulesets_invalid/,
+  )
 })
 
 test('release handoff fails closed on drift, dirty state, weak ancestry, or invented verification', () => {
