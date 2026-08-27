@@ -67,8 +67,8 @@ function baselineInput() {
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     observedCloseRuns: [
-      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
-      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-001', observedAt: '2026-08-23T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-24T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     weeklyOrders: 120,
@@ -168,8 +168,11 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.equal(pack.controls.customerContactAllowed, false)
   assert.equal(pack.observationChecklist.minimumUninterruptedRunsPerFlow, 3)
   assert.deepEqual(pack.observationChecklist.flows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
+  assert.equal(pack.observationChecklist.flows[2].requiredDistinctCalendarDateCount, 3)
+  assert.equal(pack.observationChecklist.flows[2].observedDistinctCalendarDateCount, 0)
   assert.ok(pack.observationChecklist.requiredMetrics.includes('daily_close_minutes'))
   assert.ok(pack.observationChecklist.stopConditions.includes('fewer_than_three_uninterrupted_daily_close_runs'))
+  assert.ok(pack.observationChecklist.stopConditions.includes('fewer_than_three_distinct_daily_close_calendar_dates'))
   assert.equal(pack.observationChecklist.promotionEvidenceRequirement.requiredAcceptedConsecutiveRuns, 20)
   assert.deepEqual(pack.observationChecklist.promotionEvidenceRequirement.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.equal(pack.observationChecklist.promotionEvidenceRequirement.requiredPilotCalendarDates, 5)
@@ -192,6 +195,7 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   const markdown = renderShopPilotOwnerObservationPackMarkdown(pack)
   assert.match(markdown, /Observe real manual Shop work/)
   assert.match(markdown, /Manual daily close/)
+  assert.match(markdown, /required distinct close dates 3/)
   assert.match(markdown, /Required accepted real runs: 20/)
   assert.match(markdown, /Required pilot days covered: 1, 2, 3, 4, 5/)
   assert.match(markdown, /Required observed calendar dates: 5/)

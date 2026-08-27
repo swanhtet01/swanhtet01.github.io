@@ -129,8 +129,10 @@ function requiredFlowSummary(packet) {
     id: flow.id,
     label: flow.label,
     requiredUninterruptedRuns: flow.requiredUninterruptedRuns,
+    requiredDistinctCalendarDateCount: flow.requiredDistinctCalendarDateCount ?? null,
     observedRuns: flow.observedRuns,
     uninterruptedRuns: flow.uninterruptedRuns,
+    observedDistinctCalendarDateCount: flow.observedDistinctCalendarDateCount ?? null,
     accepted: flow.accepted === true,
   }))
 }
@@ -291,6 +293,10 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || evidence.requiredFlows.length !== 3
     || !sameArray(evidence.requiredFlows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
     || evidence.requiredFlows.some((flow) => flow.requiredUninterruptedRuns !== 3 || flow.accepted !== false)
+    || evidence.requiredFlows.some((flow) => flow.id === 'daily_close'
+      && (flow.requiredDistinctCalendarDateCount !== 3 || flow.observedDistinctCalendarDateCount !== 0))
+    || evidence.requiredFlows.some((flow) => flow.id !== 'daily_close'
+      && (flow.requiredDistinctCalendarDateCount !== null || flow.observedDistinctCalendarDateCount !== null))
     || !Array.isArray(evidence.requiredMetrics)
     || !evidence.requiredMetrics.includes('daily_close_minutes')
     || !Array.isArray(evidence.requiredConfirmations)
@@ -334,7 +340,12 @@ export function renderShopPilotDay0OwnerBaselineActionCardMarkdown(card) {
   validateShopPilotDay0OwnerBaselineActionCard(card)
   const artifact = card.ownerPrivatePrepArtifacts
   const evidence = card.minimumEvidence
-  const flows = evidence.requiredFlows.map((flow) => `- ${flow.label}: ${flow.uninterruptedRuns}/${flow.observedRuns} uninterrupted/observed now; required uninterrupted ${flow.requiredUninterruptedRuns}`).join('\n')
+  const flows = evidence.requiredFlows.map((flow) => {
+    const calendarDateText = Number.isInteger(flow.requiredDistinctCalendarDateCount)
+      ? `; required distinct close dates ${flow.requiredDistinctCalendarDateCount}; observed distinct close dates ${flow.observedDistinctCalendarDateCount}`
+      : ''
+    return `- ${flow.label}: ${flow.uninterruptedRuns}/${flow.observedRuns} uninterrupted/observed now; required uninterrupted ${flow.requiredUninterruptedRuns}${calendarDateText}`
+  }).join('\n')
   const metrics = evidence.requiredMetrics.map((metric) => `- ${metric}`).join('\n')
   const confirmations = evidence.requiredConfirmations.map((confirmation) => `- ${confirmation}`).join('\n')
   const promotion = evidence.promotionEvidenceRequirement

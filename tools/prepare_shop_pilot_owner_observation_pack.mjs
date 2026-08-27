@@ -150,8 +150,10 @@ function flowChecklist(flow) {
     id: String(flow.id || ''),
     label: String(flow.label || ''),
     requiredUninterruptedRuns: flow.requiredUninterruptedRuns,
+    requiredDistinctCalendarDateCount: flow.requiredDistinctCalendarDateCount ?? null,
     observedRunsNow: flow.observedRuns,
     uninterruptedRunsNow: flow.uninterruptedRuns,
+    observedDistinctCalendarDateCount: flow.observedDistinctCalendarDateCount ?? null,
     acceptedNow: flow.accepted === true,
   }
 }
@@ -401,6 +403,10 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || checklist.flows.length !== 3
     || !sameArray(checklist.flows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
     || checklist.flows.some((flow) => flow.requiredUninterruptedRuns !== 3 || flow.acceptedNow !== false)
+    || checklist.flows.some((flow) => flow.id === 'daily_close'
+      && (flow.requiredDistinctCalendarDateCount !== 3 || flow.observedDistinctCalendarDateCount !== 0))
+    || checklist.flows.some((flow) => flow.id !== 'daily_close'
+      && (flow.requiredDistinctCalendarDateCount !== null || flow.observedDistinctCalendarDateCount !== null))
     || !Array.isArray(checklist.requiredMetrics)
     || !checklist.requiredMetrics.includes('weekly_orders')
     || !checklist.requiredMetrics.includes('daily_close_minutes')
@@ -477,7 +483,12 @@ export function renderShopPilotOwnerObservationPackMarkdown(packet) {
   validateShopPilotOwnerObservationPack(packet)
   const releaseGate = packet.currentReleaseGate
   const flows = packet.observationChecklist.flows
-    .map((flow) => `- ${flow.label}: currently ${flow.uninterruptedRunsNow}/${flow.observedRunsNow}; required uninterrupted ${flow.requiredUninterruptedRuns}`)
+    .map((flow) => {
+      const calendarDateText = Number.isInteger(flow.requiredDistinctCalendarDateCount)
+        ? `; required distinct close dates ${flow.requiredDistinctCalendarDateCount}; observed distinct close dates ${flow.observedDistinctCalendarDateCount}`
+        : ''
+      return `- ${flow.label}: currently ${flow.uninterruptedRunsNow}/${flow.observedRunsNow}; required uninterrupted ${flow.requiredUninterruptedRuns}${calendarDateText}`
+    })
     .join('\n')
   const metrics = packet.observationChecklist.requiredMetrics.map((metric) => `- ${metric}`).join('\n')
   const confirmations = packet.observationChecklist.requiredConfirmations.map((confirmation) => `- ${confirmation}`).join('\n')
@@ -642,6 +653,8 @@ function runSelfTest() {
       pack_valid: true,
       current_release_gate_bound: pack.currentReleaseGate?.currentGateId === 'review_branch_push',
       expected_baseline_preflight_status_named: pack.ownerAction.expectedBaselinePreflightStatus === 'baseline_input_ready',
+      baseline_close_distinct_dates_named: pack.observationChecklist.flows.find((flow) => flow.id === 'daily_close')?.requiredDistinctCalendarDateCount === 3
+        && markdown.includes('required distinct close dates 3'),
       required_observed_calendar_dates_named: pack.observedRunEvidenceCommandPlan.requiredPilotCalendarDates === REQUIRED_PROMOTION_CALENDAR_DATES,
       lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
       private_run_template_before_record: markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),

@@ -47,8 +47,8 @@ function input(overrides = {}) {
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     observedCloseRuns: [
-      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
-      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-001', observedAt: '2026-08-23T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-24T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     weeklyOrders: 120,
@@ -86,6 +86,8 @@ test('builds a public-safe baseline packet from private owner-observed input', (
   assert.equal(packet.metrics.medianMinutesPerRedemption, 3)
   assert.equal(packet.metrics.observedRedemptionErrorRunCount, 0)
   assert.equal(packet.metrics.uninterruptedCloseRunCount, 3)
+  assert.equal(packet.metrics.requiredCloseCalendarDateCount, 3)
+  assert.equal(packet.metrics.uninterruptedCloseCalendarDateCount, 3)
   assert.equal(packet.metrics.medianCloseMinutesPerDay, 45)
   assert.equal(packet.metrics.observedCloseErrorRunCount, 0)
   assert.equal(packet.publicIdentityIncluded, false)
@@ -116,6 +118,23 @@ test('blocks mismatched medians, interrupted evidence, and wrong review window w
   assert.ok(packet.failures.includes('claimed_order_median_mismatch'))
   assert.ok(packet.failures.includes('claimed_close_median_mismatch'))
   assert.ok(packet.failures.includes('review_date_must_close_five_day_plan'))
+  assert.doesNotMatch(JSON.stringify(packet), /Private Spa Sample|Private Operator/)
+  assert.equal(validateShopPilotBaselinePacket(packet), packet)
+})
+
+test('blocks same-day daily-close baseline evidence without leaking identity', () => {
+  const packet = buildShopPilotBaselinePacket(input({
+    observedCloseRuns: input().observedCloseRuns.map((run, index) => ({
+      ...run,
+      observedAt: `2026-08-25T18:${String(index + 1).padStart(2, '0')}:00.000Z`,
+    })),
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  assert.equal(packet.ok, false)
+  assert.equal(packet.status, 'blocked_collect_more_private_baseline')
+  assert.equal(packet.metrics.uninterruptedCloseRunCount, 3)
+  assert.equal(packet.metrics.requiredCloseCalendarDateCount, 3)
+  assert.equal(packet.metrics.uninterruptedCloseCalendarDateCount, 1)
+  assert.ok(packet.failures.includes('close_observed_calendar_dates_below_three'))
   assert.doesNotMatch(JSON.stringify(packet), /Private Spa Sample|Private Operator/)
   assert.equal(validateShopPilotBaselinePacket(packet), packet)
 })
@@ -252,6 +271,7 @@ test('renders Markdown without private values or promotion claims', () => {
   assert.match(markdown, /Shop Pilot Baseline Packet/)
   assert.match(markdown, /Median minutes per order: 8/)
   assert.match(markdown, /Median close minutes per day: 45/)
+  assert.match(markdown, /Observed close calendar dates: 3\/3/)
   assert.match(markdown, /Total observed error runs: 1/)
   assert.match(markdown, /No business name, operator name/)
   assert.doesNotMatch(markdown, /Private Spa Sample|Private Operator|owner@example|ready for managed activation/i)
@@ -262,7 +282,7 @@ test('renders a local owner worksheet without private values or promotion claims
   assert.match(markdown, /Shop Pilot Owner-Observed Baseline Worksheet/)
   assert.match(markdown, new RegExp(SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT))
   assert.match(markdown, /At least 3 uninterrupted manual order runs/)
-  assert.match(markdown, /At least 3 uninterrupted manual daily-close runs/)
+  assert.match(markdown, /At least 3 uninterrupted manual daily-close runs on 3 distinct close calendar dates/)
   assert.match(markdown, /Total observed error-run count/)
   assert.match(markdown, /Generate the baseline packet before the proposed Day-1 pilot start date/)
   assert.match(markdown, /node tools\/prepare_shop_pilot_baseline_packet\.mjs --input/)

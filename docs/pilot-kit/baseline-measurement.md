@@ -7,7 +7,7 @@ Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness
 ## Rules of measurement
 
 - Measure the owner's current manual process as it runs today — notebook, phone, paper, memory. Do not measure the SuperMega demo; the demo is not a baseline.
-- Observe at least three uninterrupted runs in each required baseline stream: manual Shop order/package-sale runs, package-redemption/package-balance updates, and manual daily-close runs. A generic set of three observed timings is not enough. Numbers recalled from memory go in as estimates and are marked as estimates.
+- Observe at least three uninterrupted runs in each required baseline stream: manual Shop order/package-sale runs, package-redemption/package-balance updates, and manual daily-close runs. Daily-close evidence must cover three distinct close calendar dates; three repeated closes on one date are not enough. A generic set of three observed timings is not enough. Numbers recalled from memory go in as estimates and are marked as estimates.
 - The observer watches and times; the observer does not help. If a run is interrupted, discard it and observe another.
 - Privacy: this sheet names a real business and a real person. Keep it private. Per `docs/supermega-shop-sales-agent.md`, reporting outside the private workspace carries stage and hashes only — never the contact name, email, or company.
 
@@ -83,7 +83,7 @@ One row per observed package use after a matching treatment has completed, timed
 
 ### 3C. Manual daily-close runs
 
-One row per observed day close, timed from the last relevant transaction or treatment to the finished close record. The `close_minutes_per_day` field must match the median of these close runs.
+One row per observed day close, timed from the last relevant transaction or treatment to the finished close record. Record at least three uninterrupted closes on three distinct close calendar dates. The `close_minutes_per_day` field must match the median of these close runs.
 
 | Run | Date and time | Started when / ended when | Human minutes | Error in this run? | Cost of the error |
 | --- | --- | --- | --- | --- | --- |

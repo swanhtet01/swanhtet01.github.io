@@ -14,6 +14,7 @@ const PRODUCT = 'shop'
 const PILOT_MODE = 'owner_named'
 const VERTICAL_PACK = 'spa-services'
 const MIN_OBSERVED_RUNS = 3
+const MIN_CLOSE_CALENDAR_DATES = 3
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -142,6 +143,10 @@ function isoDate(value) {
   return String(value).slice(0, 10)
 }
 
+function uniqueSortedStrings(values) {
+  return [...new Set(values.map((value) => String(value || '')).filter(Boolean))].sort()
+}
+
 function median(values) {
   if (!values.length) return null
   const sorted = [...values].sort((a, b) => a - b)
@@ -239,6 +244,7 @@ function assessBaseline(normalized, generatedAt) {
   const orderRuns = normalized.observedOrderRuns.filter((run) => run.interrupted === false)
   const redemptionRuns = normalized.observedRedemptionRuns.filter((run) => run.interrupted === false)
   const closeRuns = normalized.observedCloseRuns.filter((run) => run.interrupted === false)
+  const closeCalendarDates = uniqueSortedStrings(closeRuns.map((run) => isoDate(run.observedAt)))
   const orderMedian = median(orderRuns.map((run) => run.durationMinutes))
   const redemptionMedian = median(redemptionRuns.map((run) => run.durationMinutes))
   const closeMedian = median(closeRuns.map((run) => run.durationMinutes))
@@ -260,6 +266,7 @@ function assessBaseline(normalized, generatedAt) {
   if (orderRuns.length < MIN_OBSERVED_RUNS) failures.push('order_observed_runs_below_three')
   if (redemptionRuns.length < MIN_OBSERVED_RUNS) failures.push('redemption_observed_runs_below_three')
   if (closeRuns.length < MIN_OBSERVED_RUNS) failures.push('close_observed_runs_below_three')
+  if (closeCalendarDates.length < MIN_CLOSE_CALENDAR_DATES) failures.push('close_observed_calendar_dates_below_three')
   if (!sameNumber(normalized.claimedMedianMinutesPerOrder, orderMedian)) failures.push('claimed_order_median_mismatch')
   if (!sameNumber(normalized.claimedMedianMinutesPerRedemption, redemptionMedian)) failures.push('claimed_redemption_median_mismatch')
   if (!sameNumber(normalized.closeMinutesPerDay, closeMedian)) failures.push('claimed_close_median_mismatch')
@@ -273,6 +280,7 @@ function assessBaseline(normalized, generatedAt) {
     orderRuns,
     redemptionRuns,
     closeRuns,
+    closeCalendarDateCount: closeCalendarDates.length,
     orderMedian,
     redemptionMedian,
     closeMedian,
@@ -320,6 +328,8 @@ export function buildShopPilotBaselinePacket(input, { generatedAt = new Date().t
       weeklyPackageCorrectionCount: normalized.weeklyPackageCorrectionCount,
       observedCloseRunCount: normalized.observedCloseRuns.length,
       uninterruptedCloseRunCount: assessment.closeRuns.length,
+      requiredCloseCalendarDateCount: MIN_CLOSE_CALENDAR_DATES,
+      uninterruptedCloseCalendarDateCount: assessment.closeCalendarDateCount,
       observedCloseErrorRunCount: assessment.observedCloseErrorRunCount,
       medianCloseMinutesPerDay: assessment.closeMedian,
     },
@@ -453,6 +463,10 @@ export function validateShopPilotBaselinePacket(packet) {
     || metrics.uninterruptedOrderRunCount > metrics.observedOrderRunCount
     || metrics.uninterruptedRedemptionRunCount > metrics.observedRedemptionRunCount
     || metrics.uninterruptedCloseRunCount > metrics.observedCloseRunCount
+    || metrics.requiredCloseCalendarDateCount !== MIN_CLOSE_CALENDAR_DATES
+    || !Number.isInteger(metrics.uninterruptedCloseCalendarDateCount)
+    || metrics.uninterruptedCloseCalendarDateCount < 0
+    || metrics.uninterruptedCloseCalendarDateCount > metrics.uninterruptedCloseRunCount
     || metrics.weeklyOrders < 1
     || metrics.observedOrderErrorRunCount < 0
     || metrics.observedRedemptionErrorRunCount < 0
@@ -466,6 +480,7 @@ export function validateShopPilotBaselinePacket(packet) {
   if (packet.ok === true && (metrics.uninterruptedOrderRunCount < MIN_OBSERVED_RUNS
     || metrics.uninterruptedRedemptionRunCount < MIN_OBSERVED_RUNS
     || metrics.uninterruptedCloseRunCount < MIN_OBSERVED_RUNS
+    || metrics.uninterruptedCloseCalendarDateCount < MIN_CLOSE_CALENDAR_DATES
     || !sameNumber(metrics.closeMinutesPerDay, metrics.medianCloseMinutesPerDay))) {
     fail('shop_pilot_baseline_packet_ready_metrics_invalid')
   }
@@ -585,7 +600,7 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '',
     '- At least 3 uninterrupted manual order runs.',
     '- At least 3 uninterrupted manual package-redemption runs.',
-    '- At least 3 uninterrupted manual daily-close runs.',
+    '- At least 3 uninterrupted manual daily-close runs on 3 distinct close calendar dates.',
     '- Claimed medians must match the durations recorded below.',
     '- Observed order error count must match the recorded order runs.',
     '- Daily close minutes must match the median of observed daily-close runs.',
@@ -677,6 +692,7 @@ export function renderShopPilotBaselinePacketMarkdown(packet) {
     `Weekly exceptions: ${packet.metrics.weeklyExceptionCount}`,
     `Daily close minutes: ${packet.metrics.closeMinutesPerDay}`,
     `Observed close runs: ${packet.metrics.uninterruptedCloseRunCount}/${packet.metrics.observedCloseRunCount}`,
+    `Observed close calendar dates: ${packet.metrics.uninterruptedCloseCalendarDateCount}/${packet.metrics.requiredCloseCalendarDateCount}`,
     `Observed close error runs: ${packet.metrics.observedCloseErrorRunCount}`,
     `Median close minutes per day: ${packet.metrics.medianCloseMinutesPerDay}`,
     `Client import rows: ${packet.metrics.clientImportRowCount}`,
@@ -753,8 +769,8 @@ function sampleInput(overrides = {}) {
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     observedCloseRuns: [
-      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
-      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-001', observedAt: '2026-08-23T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-24T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     weeklyOrders: 120,
@@ -787,6 +803,11 @@ function runSelfTest() {
   validateShopPilotBaselinePacket(packet)
   const preflight = validateShopPilotBaselineInputPreflight(preflightShopPilotBaselineInput(sampleInput(), { generatedAt: '2026-08-25T00:00:00.000Z' }))
   const markdown = renderShopPilotBaselinePacketMarkdown(packet)
+  if (packet.metrics.requiredCloseCalendarDateCount !== MIN_CLOSE_CALENDAR_DATES
+    || packet.metrics.uninterruptedCloseCalendarDateCount !== MIN_CLOSE_CALENDAR_DATES
+    || !markdown.includes('Observed close calendar dates: 3/3')) {
+    fail('shop_pilot_baseline_self_test_close_calendar_dates_invalid')
+  }
   if (JSON.stringify(packet).includes('Private Spa Sample') || markdown.includes('Private Operator')) {
     fail('shop_pilot_baseline_self_test_private_output')
   }
@@ -795,6 +816,17 @@ function runSelfTest() {
   }), { generatedAt: '2026-08-25T00:00:00.000Z' })
   if (blocked.ok !== false || !blocked.failures.includes('claimed_order_median_mismatch')) {
     fail('shop_pilot_baseline_self_test_blocked_invalid')
+  }
+  const repeatedCloseDate = buildShopPilotBaselinePacket(sampleInput({
+    observedCloseRuns: sampleInput().observedCloseRuns.map((run, index) => ({
+      ...run,
+      observedAt: `2026-08-25T18:${String(index + 1).padStart(2, '0')}:00.000Z`,
+    })),
+  }), { generatedAt: '2026-08-25T00:00:00.000Z' })
+  if (repeatedCloseDate.ok !== false
+    || repeatedCloseDate.metrics.uninterruptedCloseCalendarDateCount !== 1
+    || !repeatedCloseDate.failures.includes('close_observed_calendar_dates_below_three')) {
+    fail('shop_pilot_baseline_self_test_close_calendar_dates_blocked_invalid')
   }
   const invalid = validateShopPilotBaselineInputPreflight(preflightShopPilotBaselineInput({
     ...sampleInput(),
@@ -806,7 +838,7 @@ function runSelfTest() {
   return {
     ok: true,
     contract: SHOP_PILOT_BASELINE_PACKET_CONTRACT,
-    cases: 3,
+    cases: 4,
     externalWritesPerformed: false,
   }
 }

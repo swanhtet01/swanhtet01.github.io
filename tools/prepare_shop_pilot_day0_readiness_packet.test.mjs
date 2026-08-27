@@ -54,8 +54,8 @@ function baselineInput() {
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     observedCloseRuns: [
-      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
-      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-001', observedAt: '2026-08-23T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-24T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     weeklyOrders: 120,
@@ -102,8 +102,8 @@ test('reports missing Day-0 prerequisites without allowing external effects', ()
   assert.equal(packet.nextOwnerPrivateStep.id, 'capture-baseline-then-intake')
   assert.equal(packet.nextOwnerPrivateStep.safeBeforeReleaseGate, true)
   assert.equal(packet.nextOwnerPrivateStep.externalEffectsAllowed, false)
-  assert.deepEqual(packet.nextOwnerPrivateStep.requiredPrivateInputs, ['manual_order_runs', 'package_redemption_runs', 'daily_close_runs', 'daily_close_minutes', 'exception_count'])
-  assert.match(packet.ownerAction, /orders, package redemptions, and daily close/)
+  assert.deepEqual(packet.nextOwnerPrivateStep.requiredPrivateInputs, ['manual_order_runs', 'package_redemption_runs', 'daily_close_runs', 'daily_close_calendar_dates', 'daily_close_minutes', 'exception_count'])
+  assert.match(packet.ownerAction, /daily close across three distinct close dates/)
   assert.equal(packet.ownerPrivateObservationBridge.contract, 'supermega.shop-run001-private-observation-bridge.v1')
   assert.equal(packet.ownerPrivateObservationBridge.workspaceLabel, 'private-shop-pilots/run-001-private')
   assert.equal(packet.ownerPrivateObservationBridge.state, 'private_observation_incomplete')
@@ -137,6 +137,8 @@ test('reports missing Day-0 prerequisites without allowing external effects', ()
   assert.equal(packet.ownerPrivateBaselineChecklist.requiredFlows[0].requiredUninterruptedRuns, 3)
   assert.equal(packet.ownerPrivateBaselineChecklist.requiredFlows[0].accepted, false)
   assert.equal(packet.ownerPrivateBaselineChecklist.requiredFlows[2].requiredUninterruptedRuns, 3)
+  assert.equal(packet.ownerPrivateBaselineChecklist.requiredFlows[2].requiredDistinctCalendarDateCount, 3)
+  assert.equal(packet.ownerPrivateBaselineChecklist.requiredFlows[2].observedDistinctCalendarDateCount, 0)
   assert.equal(packet.ownerPrivateBaselineChecklist.requiredFlows[2].accepted, false)
   assert.ok(packet.ownerPrivateBaselineChecklist.requiredMetrics.includes('daily_close_minutes'))
   assert.ok(packet.ownerPrivateBaselineChecklist.requiredConfirmations.includes('no_external_effects'))
@@ -144,6 +146,7 @@ test('reports missing Day-0 prerequisites without allowing external effects', ()
   assert.deepEqual(packet.ownerPrivateBaselineChecklist.promotionEvidenceRequirement.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.equal(packet.ownerPrivateBaselineChecklist.promotionEvidenceRequirement.requiredPilotCalendarDates, 5)
   assert.ok(packet.ownerPrivateBaselineChecklist.stopConditions.includes('fewer_than_three_uninterrupted_daily_close_runs'))
+  assert.ok(packet.ownerPrivateBaselineChecklist.stopConditions.includes('fewer_than_three_distinct_daily_close_calendar_dates'))
   assert.ok(packet.ownerPrivateBaselineChecklist.stopConditions.includes('raw_identity_or_private_note_would_enter_owner_safe_packet'))
   assert.equal(packet.ownerPrivateBaselineChecklist.publicOutputAllowed.rawIdentity, false)
   assert.equal(packet.ownerPrivateBaselineChecklist.publicOutputAllowed.rawNotes, false)
@@ -168,8 +171,8 @@ test('accepts intake-only state while requiring owner-observed baseline', () => 
   assert.equal(packet.day0Readiness.baselinePacketAccepted, false)
   assert.equal(packet.nextOwnerPrivateStep.id, 'capture-owner-observed-baseline')
   assert.equal(packet.nextOwnerPrivateStep.completionSignal, 'public_safe_baseline_packet_digest')
-  assert.deepEqual(packet.nextOwnerPrivateStep.requiredPrivateInputs, ['manual_order_runs', 'package_redemption_runs', 'daily_close_runs', 'daily_close_minutes', 'exception_count'])
-  assert.match(packet.ownerAction, /three daily-close runs/)
+  assert.deepEqual(packet.nextOwnerPrivateStep.requiredPrivateInputs, ['manual_order_runs', 'package_redemption_runs', 'daily_close_runs', 'daily_close_calendar_dates', 'daily_close_minutes', 'exception_count'])
+  assert.match(packet.ownerAction, /three daily-close runs across three distinct close dates/)
   assert.equal(packet.ownerPrivateObservationBridge.expectedCurrentGate, 'private_observation_incomplete')
   assert.equal(packet.ownerPrivateObservationBridge.completionSignal, 'public_safe_baseline_packet_digest')
   assert.ok(packet.blockers.includes('owner_observed_baseline_packet_missing'))
@@ -198,6 +201,7 @@ test('carries owner-private preparation digests without paths or authority', () 
   const markdown = renderShopPilotDay0ReadinessMarkdown(packet)
   assert.match(markdown, /Artifact policy: digests_only_no_paths/)
   assert.match(markdown, /daily-close runs/)
+  assert.match(markdown, /Observed daily-close calendar dates: 0\/3/)
   assert.match(markdown, /Baseline input template digest: sha256:a{64}/)
   assert.match(markdown, /Required promotion evidence: 20 consecutive accepted real runs covering pilot days 1, 2, 3, 4, 5 and at least 5 distinct observed calendar dates/)
   assert.match(markdown, /Calendar-date coverage met: false/)

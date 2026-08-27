@@ -513,8 +513,8 @@ function sampleBaselinePacket() {
     weeklyExceptionCount: 8,
     closeMinutesPerDay: 20,
     observedCloseRuns: [
-      { runId: 'close-a', observedAt: '2026-08-25T01:10:00.000Z', startedWhen: 'manual close start', endedWhen: 'manual close end', durationMinutes: 18, interrupted: false, errorOccurred: false, errorCostLabel: null },
-      { runId: 'close-b', observedAt: '2026-08-25T01:20:00.000Z', startedWhen: 'manual close start', endedWhen: 'manual close end', durationMinutes: 20, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-a', observedAt: '2026-08-23T01:10:00.000Z', startedWhen: 'manual close start', endedWhen: 'manual close end', durationMinutes: 18, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-b', observedAt: '2026-08-24T01:20:00.000Z', startedWhen: 'manual close start', endedWhen: 'manual close end', durationMinutes: 20, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'close-c', observedAt: '2026-08-25T01:30:00.000Z', startedWhen: 'manual close start', endedWhen: 'manual close end', durationMinutes: 22, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     clientImportRowCount: 12,

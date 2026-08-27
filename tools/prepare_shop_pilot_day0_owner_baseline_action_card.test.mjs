@@ -55,8 +55,8 @@ function baselineInput() {
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     observedCloseRuns: [
-      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
-      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-001', observedAt: '2026-08-23T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-24T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     weeklyOrders: 120,
@@ -132,7 +132,10 @@ test('renders an owner-baseline action card without local paths, identity, or au
   assert.deepEqual(card.minimumEvidence.promotionEvidenceRequirement.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.equal(card.minimumEvidence.promotionEvidenceRequirement.pilotSequenceCoverageMet, false)
   assert.deepEqual(card.minimumEvidence.requiredFlows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
+  assert.equal(card.minimumEvidence.requiredFlows[2].requiredDistinctCalendarDateCount, 3)
+  assert.equal(card.minimumEvidence.requiredFlows[2].observedDistinctCalendarDateCount, 0)
   assert.ok(card.minimumEvidence.stopConditions.includes('fewer_than_three_uninterrupted_daily_close_runs'))
+  assert.ok(card.minimumEvidence.stopConditions.includes('fewer_than_three_distinct_daily_close_calendar_dates'))
   assert.ok(card.minimumEvidence.stopConditions.includes('raw_identity_or_private_note_would_enter_owner_safe_packet'))
 
   const markdown = renderShopPilotDay0OwnerBaselineActionCardMarkdown(card)
@@ -140,6 +143,7 @@ test('renders an owner-baseline action card without local paths, identity, or au
   assert.match(markdown, /preflight returns `baseline_input_ready`/)
   assert.match(markdown, /Required accepted real runs: 20/)
   assert.match(markdown, /Manual daily close/)
+  assert.match(markdown, /required distinct close dates 3/)
   assert.match(markdown, /Required pilot days covered: 1, 2, 3, 4, 5/)
   assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)
   assert.match(markdown, /--release-handoff "<release-handoff\.json>"/)

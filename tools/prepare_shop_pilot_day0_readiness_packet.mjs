@@ -108,6 +108,7 @@ const BASELINE_CAPTURE_STOP_CONDITIONS = [
   'fewer_than_three_uninterrupted_manual_order_runs',
   'fewer_than_three_uninterrupted_package_redemption_runs',
   'fewer_than_three_uninterrupted_daily_close_runs',
+  'fewer_than_three_distinct_daily_close_calendar_dates',
   'synthetic_or_supermega_demo_run_used_as_baseline',
   'raw_identity_or_private_note_would_enter_owner_safe_packet',
   'customer_message_payment_stock_or_hosted_write_needed',
@@ -118,12 +119,14 @@ const BASELINE_CAPTURE_PRIVATE_INPUTS = [
   'manual_order_runs',
   'package_redemption_runs',
   'daily_close_runs',
+  'daily_close_calendar_dates',
   'daily_close_minutes',
   'exception_count',
 ]
 const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
 const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 const REQUIRED_PROMOTION_PILOT_CALENDAR_DATES = 5
+const REQUIRED_BASELINE_CLOSE_CALENDAR_DATES = 3
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -282,13 +285,13 @@ function ownerActionFor(status) {
     return 'Prepare the owner-private Shop handoff using the accepted baseline and intake digests; still do not contact the participant or enable hosted writes.'
   }
   if (status === 'blocked_owner_observed_baseline_required') {
-    return 'Capture at least three owner-observed manual Shop order runs, three package-redemption runs, and three daily-close runs, then generate the owner-safe baseline packet.'
+    return 'Capture at least three owner-observed manual Shop order runs, three package-redemption runs, and three daily-close runs across three distinct close dates, then generate the owner-safe baseline packet.'
   }
   if (status === 'blocked_owner_private_intake_required') {
     return 'Generate and review the owner-private Shop intake packet before day-one handoff.'
   }
   if (status === 'blocked_owner_baseline_and_intake_required') {
-    return 'Complete both private prerequisites: owner-observed baseline packet for orders, package redemptions, and daily close, plus the owner-private intake packet.'
+    return 'Complete both private prerequisites: owner-observed baseline packet for orders, package redemptions, and daily close across three distinct close dates, plus the owner-private intake packet.'
   }
   return 'Fix the failing launch-gate evidence before day-zero pilot readiness can be assessed.'
 }
@@ -472,13 +475,16 @@ function ownerPrivateBaselineChecklistFor(status, launchGateReport) {
   const requiredOrderRuns = 3
   const requiredRedemptionRuns = 3
   const requiredCloseRuns = 3
+  const requiredCloseCalendarDateCount = REQUIRED_BASELINE_CLOSE_CALENDAR_DATES
   const uninterruptedOrderRunCount = metrics.uninterruptedOrderRunCount ?? 0
   const uninterruptedRedemptionRunCount = metrics.uninterruptedRedemptionRunCount ?? 0
   const uninterruptedCloseRunCount = metrics.uninterruptedCloseRunCount ?? 0
+  const uninterruptedCloseCalendarDateCount = metrics.uninterruptedCloseCalendarDateCount ?? 0
   const readyToGeneratePublicBaselinePacket = baselineAccepted
     || (uninterruptedOrderRunCount >= requiredOrderRuns
       && uninterruptedRedemptionRunCount >= requiredRedemptionRuns
-      && uninterruptedCloseRunCount >= requiredCloseRuns)
+      && uninterruptedCloseRunCount >= requiredCloseRuns
+      && uninterruptedCloseCalendarDateCount >= requiredCloseCalendarDateCount)
   return {
     contract: SHOP_PILOT_BASELINE_CAPTURE_CHECKLIST_CONTRACT,
     state: baselineAccepted
@@ -512,9 +518,12 @@ function ownerPrivateBaselineChecklistFor(status, launchGateReport) {
         id: 'daily_close',
         label: 'Manual daily close',
         requiredUninterruptedRuns: requiredCloseRuns,
+        requiredDistinctCalendarDateCount: requiredCloseCalendarDateCount,
         observedRuns: metrics.observedCloseRunCount ?? 0,
         uninterruptedRuns: uninterruptedCloseRunCount,
-        accepted: uninterruptedCloseRunCount >= requiredCloseRuns,
+        observedDistinctCalendarDateCount: uninterruptedCloseCalendarDateCount,
+        accepted: uninterruptedCloseRunCount >= requiredCloseRuns
+          && uninterruptedCloseCalendarDateCount >= requiredCloseCalendarDateCount,
       },
     ],
     requiredMetrics: [...BASELINE_CAPTURE_REQUIRED_METRICS],
@@ -570,8 +579,8 @@ function sampleBaselineInput() {
       { runId: 'redemption-run-003', observedAt: '2026-08-25T09:40:00.000Z', startedWhen: 'treatment completed', endedWhen: 'package balance updated', durationMinutes: 4, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     observedCloseRuns: [
-      { runId: 'close-run-001', observedAt: '2026-08-25T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
-      { runId: 'close-run-002', observedAt: '2026-08-25T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-001', observedAt: '2026-08-23T18:01:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 40, interrupted: false, errorOccurred: false, errorCostLabel: null },
+      { runId: 'close-run-002', observedAt: '2026-08-24T18:20:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 45, interrupted: false, errorOccurred: false, errorCostLabel: null },
       { runId: 'close-run-003', observedAt: '2026-08-25T18:40:00.000Z', startedWhen: 'last treatment finished', endedWhen: 'manual close completed', durationMinutes: 50, interrupted: false, errorOccurred: false, errorCostLabel: null },
     ],
     weeklyOrders: 120,
@@ -636,12 +645,14 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       intakePacketAccepted: intakeAccepted,
       ownerPrivateHandoffReady,
       measuredManualRunsRequiredPerFlow: 3,
+      measuredManualCloseCalendarDatesRequired: REQUIRED_BASELINE_CLOSE_CALENDAR_DATES,
       observedOrderRunCount: launchGateReport.baselineEvidence?.metrics?.observedOrderRunCount ?? 0,
       uninterruptedOrderRunCount: launchGateReport.baselineEvidence?.metrics?.uninterruptedOrderRunCount ?? 0,
       observedRedemptionRunCount: launchGateReport.baselineEvidence?.metrics?.observedRedemptionRunCount ?? 0,
       uninterruptedRedemptionRunCount: launchGateReport.baselineEvidence?.metrics?.uninterruptedRedemptionRunCount ?? 0,
       observedCloseRunCount: launchGateReport.baselineEvidence?.metrics?.observedCloseRunCount ?? 0,
       uninterruptedCloseRunCount: launchGateReport.baselineEvidence?.metrics?.uninterruptedCloseRunCount ?? 0,
+      uninterruptedCloseCalendarDateCount: launchGateReport.baselineEvidence?.metrics?.uninterruptedCloseCalendarDateCount ?? 0,
       medianMinutesPerOrder: launchGateReport.baselineEvidence?.metrics?.medianMinutesPerOrder ?? null,
       medianMinutesPerRedemption: launchGateReport.baselineEvidence?.metrics?.medianMinutesPerRedemption ?? null,
       medianCloseMinutesPerDay: launchGateReport.baselineEvidence?.metrics?.medianCloseMinutesPerDay ?? null,
@@ -738,7 +749,11 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || packet.day0Readiness?.readyForPayment !== false
     || packet.day0Readiness?.readyForDeployment !== false
     || packet.day0Readiness?.readyForManagedActivation !== false
-    || packet.day0Readiness?.readyForPromotionEvidence !== false) {
+    || packet.day0Readiness?.readyForPromotionEvidence !== false
+    || packet.day0Readiness?.measuredManualCloseCalendarDatesRequired !== REQUIRED_BASELINE_CLOSE_CALENDAR_DATES
+    || !Number.isInteger(packet.day0Readiness?.uninterruptedCloseCalendarDateCount)
+    || packet.day0Readiness.uninterruptedCloseCalendarDateCount < 0
+    || packet.day0Readiness.uninterruptedCloseCalendarDateCount > packet.day0Readiness.uninterruptedCloseRunCount) {
     fail('shop_pilot_day0_readiness_invalid')
   }
   if (!isRecord(promotion)
@@ -879,6 +894,7 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
         uninterruptedRedemptionRunCount: packet.day0Readiness.uninterruptedRedemptionRunCount,
         observedCloseRunCount: packet.day0Readiness.observedCloseRunCount,
         uninterruptedCloseRunCount: packet.day0Readiness.uninterruptedCloseRunCount,
+        uninterruptedCloseCalendarDateCount: packet.day0Readiness.uninterruptedCloseCalendarDateCount,
       },
     },
   })
@@ -948,7 +964,12 @@ export function renderShopPilotDay0ReadinessMarkdown(packet) {
   const bridge = packet.ownerPrivateObservationBridge
   const bridgeArtifacts = bridge.requiredPrivateArtifacts.map((artifact) => `- ${artifact}`).join('\n')
   const checklist = packet.ownerPrivateBaselineChecklist
-  const checklistFlows = checklist.requiredFlows.map((flow) => `- ${flow.label}: ${flow.uninterruptedRuns}/${flow.observedRuns} uninterrupted/observed; required uninterrupted ${flow.requiredUninterruptedRuns}; accepted ${flow.accepted}`).join('\n')
+  const checklistFlows = checklist.requiredFlows.map((flow) => {
+    const calendarDateText = Number.isInteger(flow.requiredDistinctCalendarDateCount)
+      ? `; observed distinct close dates ${flow.observedDistinctCalendarDateCount}/${flow.requiredDistinctCalendarDateCount}`
+      : ''
+    return `- ${flow.label}: ${flow.uninterruptedRuns}/${flow.observedRuns} uninterrupted/observed; required uninterrupted ${flow.requiredUninterruptedRuns}${calendarDateText}; accepted ${flow.accepted}`
+  }).join('\n')
   const checklistMetrics = checklist.requiredMetrics.map((metric) => `- ${metric}`).join('\n')
   const checklistConfirmations = checklist.requiredConfirmations.map((confirmation) => `- ${confirmation}`).join('\n')
   const promotion = packet.promotionEvidenceRequirement
@@ -1057,6 +1078,7 @@ ${checklistStopConditions}
 - Observed order runs: ${packet.day0Readiness.uninterruptedOrderRunCount}/${packet.day0Readiness.observedOrderRunCount}
 - Observed redemption runs: ${packet.day0Readiness.uninterruptedRedemptionRunCount}/${packet.day0Readiness.observedRedemptionRunCount}
 - Observed daily-close runs: ${packet.day0Readiness.uninterruptedCloseRunCount}/${packet.day0Readiness.observedCloseRunCount}
+- Observed daily-close calendar dates: ${packet.day0Readiness.uninterruptedCloseCalendarDateCount}/${packet.day0Readiness.measuredManualCloseCalendarDatesRequired}
 - Median minutes per order: ${packet.day0Readiness.medianMinutesPerOrder ?? 'missing'}
 - Median minutes per redemption: ${packet.day0Readiness.medianMinutesPerRedemption ?? 'missing'}
 - Median close minutes per day: ${packet.day0Readiness.medianCloseMinutesPerDay ?? 'missing'}
