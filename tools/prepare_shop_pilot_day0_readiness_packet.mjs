@@ -648,8 +648,9 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
       'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
       'npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"',
-      'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>"',
-      'npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
+      'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"',
+      'npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"',
+      'npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
     ],
     forbiddenActions: [
       'customer_contact',
@@ -1136,6 +1137,7 @@ function parseArgs(argv) {
     verify: null,
     baselinePacketPath: null,
     intakePacketPath: null,
+    launchGateReportPath: null,
     baselineTemplatePath: null,
     baselineWorksheetPath: null,
     releaseHandoffPath: null,
@@ -1149,6 +1151,7 @@ function parseArgs(argv) {
     else if (arg === '--verify') options.verify = argv[++index] || null
     else if (arg === '--baseline-packet') options.baselinePacketPath = argv[++index] || null
     else if (arg === '--intake-packet') options.intakePacketPath = argv[++index] || null
+    else if (arg === '--launch-gate-report') options.launchGateReportPath = argv[++index] || null
     else if (arg === '--baseline-template') options.baselineTemplatePath = argv[++index] || null
     else if (arg === '--baseline-worksheet') options.baselineWorksheetPath = argv[++index] || null
     else if (arg === '--release-handoff') options.releaseHandoffPath = argv[++index] || null
@@ -1201,6 +1204,19 @@ async function releaseGateEvidenceFromFiles(options) {
   })
 }
 
+async function launchGateReportFromFiles(options) {
+  if (!options.launchGateReportPath) {
+    return currentShopPilotLaunchGateReport({
+      baselinePacketPath: options.baselinePacketPath,
+      intakePacketPath: options.intakePacketPath,
+    })
+  }
+  if (options.baselinePacketPath || options.intakePacketPath) {
+    fail('shop_pilot_day0_launch_gate_report_exclusive')
+  }
+  return validateLaunchGateDigest(await readJson(options.launchGateReportPath))
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.selfTest) {
@@ -1221,10 +1237,7 @@ async function main() {
     return
   }
   const packet = validateShopPilotDay0ReadinessPacket(buildShopPilotDay0ReadinessPacket({
-    launchGateReport: await currentShopPilotLaunchGateReport({
-      baselinePacketPath: options.baselinePacketPath,
-      intakePacketPath: options.intakePacketPath,
-    }),
+    launchGateReport: await launchGateReportFromFiles(options),
     ownerPrivatePreparation: await ownerPrivatePreparationFromFiles(options),
     releaseGateEvidence: await releaseGateEvidenceFromFiles(options),
   }))

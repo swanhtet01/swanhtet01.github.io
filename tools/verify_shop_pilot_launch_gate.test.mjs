@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -259,4 +263,38 @@ test('rejects tampered reports', () => {
     () => validateShopPilotLaunchGate({ ...report, digest: `sha256:${'f'.repeat(64)}` }),
     /shop_pilot_launch_gate_digest_invalid/,
   )
+})
+
+test('verifies a saved full launch-gate report without exposing private details', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-launch-gate-'))
+  try {
+    const reportPath = join(parent, 'launch-gate-report.json')
+    const tamperedPath = join(parent, 'tampered-launch-gate-report.json')
+    const report = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput())
+    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`)
+    await writeFile(tamperedPath, `${JSON.stringify({ ...report, status: 'ready_to_contact' }, null, 2)}\n`)
+
+    const verified = spawnSync(process.execPath, [
+      resolve('tools/verify_shop_pilot_launch_gate.mjs'),
+      '--verify-report',
+      reportPath,
+    ], { encoding: 'utf8' })
+    assert.equal(verified.status, 0, verified.stderr)
+    const summary = JSON.parse(verified.stdout)
+    assert.equal(summary.ok, true)
+    assert.equal(summary.contract, SHOP_PILOT_LAUNCH_GATE_CONTRACT)
+    assert.equal(summary.digest, report.digest)
+    assert.equal(summary.externalWritesPerformed, false)
+
+    const rejected = spawnSync(process.execPath, [
+      resolve('tools/verify_shop_pilot_launch_gate.mjs'),
+      '--verify-report',
+      tamperedPath,
+    ], { encoding: 'utf8' })
+    assert.notEqual(rejected.status, 0)
+    assert.match(rejected.stderr, /shop_pilot_launch_gate_digest_invalid/)
+    assert.doesNotMatch(await readFile(reportPath, 'utf8'), /Private Spa Sample|Private Operator/)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
 })

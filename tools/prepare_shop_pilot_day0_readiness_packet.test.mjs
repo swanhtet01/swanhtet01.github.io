@@ -137,7 +137,9 @@ test('reports missing Day-0 prerequisites without allowing external effects', ()
   assert.equal(packet.ownerPrivateBaselineChecklist.forbiddenActions.customerContactAllowed, false)
   assert.ok(packet.privateCommands.some((command) => command.includes('--worksheet-output "<private-baseline-worksheet.md>"')))
   assert.ok(packet.privateCommands.some((command) => command.includes('--lint-input "<private-baseline-input.json>"')))
-  assert.ok(packet.privateCommands.some((command) => command.includes('--release-handoff "<release-handoff.json>"') && command.includes('--github-protection-snapshot "<github-protection-snapshot.json>"')))
+  assert.ok(packet.privateCommands.some((command) => command.includes('--output "<owner-safe-launch-gate-report.json>"')))
+  assert.ok(packet.privateCommands.some((command) => command.includes('--verify-report "<owner-safe-launch-gate-report.json>"')))
+  assert.ok(packet.privateCommands.some((command) => command.includes('--launch-gate-report "<owner-safe-launch-gate-report.json>"') && command.includes('--release-handoff "<release-handoff.json>"') && command.includes('--github-protection-snapshot "<github-protection-snapshot.json>"')))
   assert.equal(validateShopPilotDay0ReadinessPacket(packet), packet)
 })
 
@@ -287,13 +289,29 @@ test('renders Markdown and verifies CLI packet without private values', async ()
     const packetPath = join(parent, 'day0.json')
     const markdownPath = join(parent, 'day0.md')
     const filledWorksheetPath = join(parent, 'filled-baseline-worksheet.md')
+    const launchGateReportPath = join(parent, 'launch-gate-report.json')
+    const generatedFromReportPath = join(parent, 'day0-from-launch-gate.json')
     const packet = buildShopPilotDay0ReadinessPacket(sampleShopPilotDay0ReadinessInput())
+    const launchGateReport = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput())
     await writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`)
     await writeFile(markdownPath, `${renderShopPilotDay0ReadinessMarkdown(packet)}\n`)
     await writeFile(filledWorksheetPath, `${renderShopPilotBaselineWorksheetMarkdown().replace('| weeklyOrders | integer | Current weekly order volume. |', '| weeklyOrders | 120 | Current weekly order volume. |')}\n`)
+    await writeFile(launchGateReportPath, `${JSON.stringify(launchGateReport, null, 2)}\n`)
     const verified = spawnSync(process.execPath, [resolve('tools/prepare_shop_pilot_day0_readiness_packet.mjs'), '--verify', packetPath], { encoding: 'utf8' })
     assert.equal(verified.status, 0, verified.stderr)
     assert.equal(JSON.parse(verified.stdout).status, 'blocked_owner_baseline_and_intake_required')
+    const fromSavedLaunchGate = spawnSync(process.execPath, [
+      resolve('tools/prepare_shop_pilot_day0_readiness_packet.mjs'),
+      '--launch-gate-report',
+      launchGateReportPath,
+      '--output',
+      generatedFromReportPath,
+    ], { encoding: 'utf8' })
+    assert.equal(fromSavedLaunchGate.status, 0, fromSavedLaunchGate.stderr)
+    const generatedFromSavedReport = JSON.parse(await readFile(generatedFromReportPath, 'utf8'))
+    assert.equal(generatedFromSavedReport.sourceDigests.launchGateDigest, launchGateReport.digest)
+    assert.equal(generatedFromSavedReport.status, 'blocked_owner_baseline_and_intake_required')
+    assert.equal(validateShopPilotDay0ReadinessPacket(generatedFromSavedReport), generatedFromSavedReport)
     const rejected = spawnSync(process.execPath, [
       resolve('tools/prepare_shop_pilot_day0_readiness_packet.mjs'),
       '--baseline-worksheet',
@@ -316,6 +334,9 @@ test('renders Markdown and verifies CLI packet without private values', async ()
     assert.match(markdown, /private_observation_incomplete/)
     assert.match(markdown, /--worksheet-output "<private-baseline-worksheet\.md>"/)
     assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)
+    assert.match(markdown, /--output "<owner-safe-launch-gate-report\.json>"/)
+    assert.match(markdown, /--verify-report "<owner-safe-launch-gate-report\.json>"/)
+    assert.match(markdown, /--launch-gate-report "<owner-safe-launch-gate-report\.json>"/)
     assert.match(markdown, /--release-handoff "<release-handoff\.json>"/)
     assert.match(markdown, /--github-protection-snapshot "<github-protection-snapshot\.json>"/)
     assert.doesNotMatch(markdown, /Private Day Zero Spa|Private Day Zero Operator|owner@example|ready for managed activation|[A-Za-z]:\\/i)

@@ -2,8 +2,8 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
@@ -563,6 +563,13 @@ async function readJson(path) {
   return JSON.parse(await readFile(resolve(root, path), 'utf8'))
 }
 
+async function writeOutput(path, content) {
+  const absolute = resolve(path)
+  await mkdir(dirname(absolute), { recursive: true })
+  await writeFile(absolute, content, { encoding: 'utf8', flag: 'wx' })
+  return absolute
+}
+
 function runNoWriteVerifier(args) {
   const result = spawnSync(process.execPath, args, {
     cwd: root,
@@ -816,13 +823,15 @@ function runSelfTest() {
 
 async function main() {
   const args = process.argv.slice(2)
-  const options = { selfTest: false, baselinePacketPath: null, intakePacketPath: null }
+  const options = { selfTest: false, verifyReportPath: null, baselinePacketPath: null, intakePacketPath: null, output: null }
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === '--self-test') options.selfTest = true
     else if (arg === '--verify') {}
+    else if (arg === '--verify-report') options.verifyReportPath = args[++index] || null
     else if (arg === '--baseline-packet') options.baselinePacketPath = args[++index] || null
     else if (arg === '--intake-packet') options.intakePacketPath = args[++index] || null
+    else if (arg === '--output') options.output = args[++index] || null
     else throw new Error(`shop_pilot_launch_gate_usage_invalid:${arg}`)
   }
   if (options.selfTest) {
@@ -831,10 +840,25 @@ async function main() {
     if (!result.ok) process.exitCode = 1
     return
   }
+  if (options.verifyReportPath) {
+    const report = validateShopPilotLaunchGate(await readJson(options.verifyReportPath))
+    console.log(JSON.stringify({
+      ok: true,
+      contract: report.contract,
+      status: report.status,
+      digest: report.digest,
+      head: report.candidate.head,
+      externalWritesPerformed: false,
+    }))
+    return
+  }
   const report = await currentShopPilotLaunchGateReport({
     baselinePacketPath: options.baselinePacketPath,
     intakePacketPath: options.intakePacketPath,
   })
+  if (options.output) {
+    await writeOutput(options.output, `${JSON.stringify(report, null, 2)}\n`)
+  }
   console.log(JSON.stringify({
     ok: report.ok,
     contract: report.contract,
@@ -846,6 +870,7 @@ async function main() {
     intakePacketAccepted: report.launchReadiness.intakePacketAccepted,
     requiredNextGateIds: report.requiredNextGates.map((gate) => gate.id),
     failures: report.failures,
+    output: options.output ? resolve(options.output) : null,
   }, null, 2))
   if (!report.ok) process.exitCode = 1
 }
