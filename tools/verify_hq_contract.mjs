@@ -1211,6 +1211,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && packageText.includes('"release:artifact-family:self-test": "node --test tools/verify_release_artifact_family.test.mjs && node tools/verify_release_artifact_family.mjs --self-test"')
   && packageText.includes('"release:artifact-family:plan": "node tools/prepare_release_artifact_family_plan.mjs"')
   && packageText.includes('"release:artifact-family:plan:self-test": "node --test tools/prepare_release_artifact_family_plan.test.mjs && node tools/prepare_release_artifact_family_plan.mjs --self-test"')
+  && packageText.includes('"shop:pilot:launch-gate": "node tools/verify_shop_pilot_launch_gate.mjs"')
   && packageText.includes('"shop:pilot:launch-gate:verify": "node tools/verify_shop_pilot_launch_gate.mjs --verify"')
   && packageText.includes('"shop:pilot:launch-gate:self-test": "node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test"')
   && packageText.includes('"shop:pilot:intake-packet": "node tools/prepare_shop_pilot_private_intake_packet.mjs"')

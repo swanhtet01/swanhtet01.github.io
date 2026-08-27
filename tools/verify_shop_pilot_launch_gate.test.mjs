@@ -196,6 +196,12 @@ test('fails closed for dirty worktree and missing launch scripts', () => {
   assert.ok(dirty.failures.includes('shop_pilot_launch_gate_worktree_dirty'))
 
   const missingScriptInput = sampleShopPilotLaunchGateInput()
+  delete missingScriptInput.packageManifest.scripts['shop:pilot:launch-gate']
+  const missingGenerateScript = assessShopPilotLaunchGate(missingScriptInput)
+  assert.equal(missingGenerateScript.ok, false)
+  assert.ok(missingGenerateScript.failures.includes('shop_pilot_launch_gate_script_missing:shop:pilot:launch-gate'))
+
+  missingScriptInput.packageManifest.scripts['shop:pilot:launch-gate'] = 'node tools/verify_shop_pilot_launch_gate.mjs'
   delete missingScriptInput.packageManifest.scripts['shop:pilot:launch-gate:verify']
   const missingScript = assessShopPilotLaunchGate(missingScriptInput)
   assert.equal(missingScript.ok, false)

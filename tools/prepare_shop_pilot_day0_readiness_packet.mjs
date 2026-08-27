@@ -356,7 +356,7 @@ function nextOwnerPrivateStepFor(status) {
     safeBeforeReleaseGate: false,
     id: 'fix-launch-gate-evidence',
     label: 'Fix launch-gate evidence before any Day-0 handoff',
-    commandId: 'shop:pilot:launch-gate:verify',
+    commandId: 'shop:pilot:launch-gate',
     requiredPrivateInputs: ['clean_worktree', 'accepted_public_boundary', 'release_gate_evidence'],
     completionSignal: 'launch_gate_ok_digest',
   }
@@ -694,7 +694,7 @@ export function buildShopPilotDay0ReadinessPacket(input = {}) {
       'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
       'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
       'npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"',
-      'npm.cmd run shop:pilot:launch-gate:verify -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"',
+      'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"',
       'npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"',
       'npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
     ],

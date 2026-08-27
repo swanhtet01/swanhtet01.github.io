@@ -198,8 +198,11 @@ export function assessReleaseStackOwnerGates(input = {}) {
   if (scripts['product:readiness-matrix:self-test'] !== 'node --test tools/prepare_product_readiness_matrix.test.mjs && node tools/prepare_product_readiness_matrix.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_product_readiness_matrix_self_test_missing')
   }
-  if (scripts['shop:pilot:launch-gate:verify'] !== 'node tools/verify_shop_pilot_launch_gate.mjs --verify') {
+  if (scripts['shop:pilot:launch-gate'] !== 'node tools/verify_shop_pilot_launch_gate.mjs') {
     addFailure(failures, 'release_stack_owner_gate_shop_launch_gate_script_missing')
+  }
+  if (scripts['shop:pilot:launch-gate:verify'] !== 'node tools/verify_shop_pilot_launch_gate.mjs --verify') {
+    addFailure(failures, 'release_stack_owner_gate_shop_launch_gate_verify_script_missing')
   }
   if (scripts['shop:pilot:launch-gate:self-test'] !== 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_shop_launch_gate_self_test_script_missing')
@@ -616,6 +619,7 @@ function sampleInput(overrides = {}) {
       'shop:pilot:decision-packet:self-test': 'node --test tools/prepare_shop_pilot_decision_packet.test.mjs && node tools/prepare_shop_pilot_decision_packet.mjs --self-test',
       'shop:receipt:print-geometry:verify': 'node tools/verify_shop_receipt_print_geometry.mjs',
       'shop:receipt:print-geometry:self-test': 'node --test tools/verify_shop_receipt_print_geometry.test.mjs && node tools/verify_shop_receipt_print_geometry.mjs --self-test',
+      'shop:pilot:launch-gate': 'node tools/verify_shop_pilot_launch_gate.mjs',
       'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
       'shop:pilot:launch-gate:self-test': 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test',
       'hq:verify': HQ_VERIFY_RUNNER,

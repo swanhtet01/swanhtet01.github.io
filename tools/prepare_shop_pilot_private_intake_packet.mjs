@@ -48,6 +48,7 @@ const REQUIRED_SCRIPTS = {
   'client:pilot:observed-evidence:self-test': 'node --test tools/record_shop_pilot_observed_run.test.mjs',
   'client:pilot:public-boundary:verify': 'node tools/verify_shop_pilot_public_boundary.mjs --file hq/readiness/shop-pilot-public-boundary.json',
   'shop:run001:claims:verify': 'node tools/verify_shop_run001_claims_guard.mjs',
+  'shop:pilot:launch-gate': 'node tools/verify_shop_pilot_launch_gate.mjs',
   'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
   'shop:pilot:intake-packet': 'node tools/prepare_shop_pilot_private_intake_packet.mjs',
   'shop:pilot:intake-packet:self-test': 'node --test tools/prepare_shop_pilot_private_intake_packet.test.mjs && node tools/prepare_shop_pilot_private_intake_packet.mjs --self-test',
@@ -59,7 +60,7 @@ const SAFE_CHECK_COMMANDS = [
   'npm.cmd run client:pilot:handoff:self-test',
   'npm.cmd run client:pilot:observed-evidence:self-test',
   'npm.cmd run client:pilot:public-boundary:verify',
-  'npm.cmd run shop:pilot:launch-gate:verify',
+  'npm.cmd run shop:pilot:launch-gate',
 ]
 const OWNER_ONLY_COMMANDS = [
   'npm.cmd run client:pilot:workspace -- --start --workspace [private intake folder]',

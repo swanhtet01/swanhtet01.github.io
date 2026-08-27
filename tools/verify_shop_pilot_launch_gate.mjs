@@ -57,6 +57,7 @@ const REQUIRED_SCRIPTS = {
   'shop:pilot:decision-packet:self-test': 'node --test tools/prepare_shop_pilot_decision_packet.test.mjs && node tools/prepare_shop_pilot_decision_packet.mjs --self-test',
   'shop:receipt:print-geometry:verify': 'node tools/verify_shop_receipt_print_geometry.mjs',
   'shop:receipt:print-geometry:self-test': 'node --test tools/verify_shop_receipt_print_geometry.test.mjs && node tools/verify_shop_receipt_print_geometry.mjs --self-test',
+  'shop:pilot:launch-gate': 'node tools/verify_shop_pilot_launch_gate.mjs',
   'shop:pilot:launch-gate:verify': 'node tools/verify_shop_pilot_launch_gate.mjs --verify',
   'shop:pilot:launch-gate:self-test': 'node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test',
   'supermega:status:brief': 'node tools/prepare_supermega_status_brief.mjs',
