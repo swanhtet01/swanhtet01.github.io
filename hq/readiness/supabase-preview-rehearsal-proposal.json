@@ -210,7 +210,7 @@
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:9ab57d9e41e349348d46becf72173504ac38c23c4134d311b834b371307aa2bf"
+      "digest": "sha256:a2853f7a35b4da915554d0ab0b5ee23ba19abf25efe924ed65a84d0316201377"
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
@@ -234,7 +234,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:3e898c4683bc87eee3a4b33353b22e4957d93d20f727f5c577bb160495714956"
+      "digest": "sha256:636e581d63b20ccdefd6fa446b0050cba89d22e38d49a818c9e307fe801a0121"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -245,5 +245,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:70a9060ebafabb1bcf39238afcb51bf01af76b8b086ce005da4361fb9316f61b"
+  "digest": "sha256:aeab2a4c67c58bbb7aacb514a881171e0d321bb2ff75f426cb003b199ed94c75"
 }
