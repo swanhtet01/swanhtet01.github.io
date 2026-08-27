@@ -17,8 +17,10 @@ const repository = 'swanhtet01/swanhtet01.github.io'
 const origin = `https://github.com/${repository}.git`
 const branch = 'codex/release-stack-integration-rehearsal-20260825'
 const commit = 'a'.repeat(40)
+const remoteBase = 'd'.repeat(40)
 const remoteMain = 'b'.repeat(40)
 const approvalTemplate = `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
+const fastForwardApprovalTemplate = `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
 const approvalEnv = 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'
 
 function packet(overrides = {}) {
@@ -174,7 +176,7 @@ function gitState(overrides = {}) {
   }
 }
 
-function stubGit({ before = null, after = commit, pushStatus = 0 } = {}) {
+function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatus = 0 } = {}) {
   const calls = []
   let readCount = 0
   const git = (args) => {
@@ -195,6 +197,9 @@ function stubGit({ before = null, after = commit, pushStatus = 0 } = {}) {
     }
     if (command === `push origin ${commit}:refs/heads/${branch}`) {
       return { status: pushStatus, stdout: '', stderr: pushStatus === 0 ? '' : 'rejected' }
+    }
+    if (command === `merge-base --is-ancestor ${before} ${commit}`) {
+      return { status: mergeBaseStatus, stdout: '', stderr: '' }
     }
     throw new Error(`unexpected git call: ${command}`)
   }
@@ -219,10 +224,101 @@ test('plan is no-write, exact-commit-bound, and approval-aware', () => {
   assert.equal(plan.controls.branchMutated, false)
   assert.equal(plan.controls.pullRequestCreated, false)
   assert.equal(plan.controls.deploymentPerformed, false)
+  assert.equal(plan.fastForwardProof.required, false)
+  assert.equal(plan.fastForwardProof.ok, true)
+  assert.equal(plan.fastForwardProof.status, 'not_required_unpublished_branch')
   assert.deepEqual(plan.possibleWrite.command, ['git', 'push', 'origin', `${commit}:refs/heads/${branch}`])
   assert.equal(plan.possibleWrite.forcePushAllowed, false)
   assert.equal(plan.possibleWrite.deleteAllowed, false)
   assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+\w+/)
+})
+
+test('plan proves fast-forward ancestry when the review branch already exists', () => {
+  const existingBranch = packet({
+    remote: {
+      candidateCommit: remoteBase,
+      candidateBranchState: 'different',
+    },
+    actions: { reviewBranchPush: {
+      kind: 'owner_review_fast_forward_branch_push',
+      branch,
+      exactCommit: commit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+      approvalTemplate: fastForwardApprovalTemplate,
+    } },
+  })
+  const { git, calls } = stubGit({ before: remoteBase, mergeBaseStatus: 0 })
+  const plan = buildReviewBranchPushPlan({
+    handoffReceipt: receipt(existingBranch),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+    gitState: gitState(),
+    env: { [approvalEnv]: fastForwardApprovalTemplate },
+    git,
+  })
+  assert.equal(plan.possibleWrite.kind, 'fast_forward_branch_push')
+  assert.equal(plan.fastForwardProof.required, true)
+  assert.equal(plan.fastForwardProof.ok, true)
+  assert.equal(plan.fastForwardProof.status, 'proven_ancestor')
+  assert.deepEqual(plan.fastForwardProof.command, ['git', 'merge-base', '--is-ancestor', remoteBase, commit])
+  assert.equal(plan.readiness.executeReady, true)
+  assert.equal(validateReviewBranchPushReport(plan, { expectedMode: 'plan_only_no_git_remote_write' }), plan)
+  assert.deepEqual(
+    calls.filter((args) => args[0] === 'merge-base'),
+    [['merge-base', '--is-ancestor', remoteBase, commit]],
+  )
+})
+
+test('plan and execute fail closed when fast-forward ancestry is not proven', async () => {
+  const existingBranch = packet({
+    remote: {
+      candidateCommit: remoteBase,
+      candidateBranchState: 'different',
+    },
+    actions: { reviewBranchPush: {
+      kind: 'owner_review_fast_forward_branch_push',
+      branch,
+      exactCommit: commit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+      approvalTemplate: fastForwardApprovalTemplate,
+    } },
+  })
+  const { git } = stubGit({ before: remoteBase, mergeBaseStatus: 1 })
+  const plan = buildReviewBranchPushPlan({
+    handoffReceipt: receipt(existingBranch),
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+    gitState: gitState(),
+    env: { [approvalEnv]: fastForwardApprovalTemplate },
+    git,
+  })
+  assert.equal(plan.fastForwardProof.required, true)
+  assert.equal(plan.fastForwardProof.ok, false)
+  assert.equal(plan.fastForwardProof.status, 'not_fast_forward')
+  assert.equal(plan.readiness.executeReady, false)
+  assert.ok(plan.readiness.blockers.includes('fast_forward_proof_missing_or_failed'))
+  assert.equal(validateReviewBranchPushReport(plan, { expectedMode: 'plan_only_no_git_remote_write' }), plan)
+  await assert.rejects(
+    applyReviewBranchPushWithGit({
+      handoffReceipt: receipt(existingBranch),
+      mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+      env: { [approvalEnv]: fastForwardApprovalTemplate },
+      git,
+      verifyHandoff: async () => ({
+        ok: true,
+        candidate: { branch, commit, clean: true },
+        nextAction: {
+          exactCommit: commit,
+          forcePushAllowed: false,
+          mergeIncluded: false,
+          deploymentIncluded: false,
+        },
+      }),
+    }),
+    /review_branch_push_fast_forward_unproven/,
+  )
 })
 
 test('report validator rejects stale plan digests and wrong modes', () => {
@@ -288,6 +384,9 @@ test('execute performs one normal exact-commit branch push and verifies the remo
   assert.equal(result.controls.pullRequestCreated, false)
   assert.equal(result.controls.mergePerformed, false)
   assert.equal(result.controls.deploymentPerformed, false)
+  assert.equal(result.fastForwardProof.required, false)
+  assert.equal(result.fastForwardProof.ok, true)
+  assert.equal(result.verification.fastForwardProofOk, true)
   assert.deepEqual(
     calls.filter((args) => args[0] === 'push'),
     [['push', 'origin', `${commit}:refs/heads/${branch}`]],

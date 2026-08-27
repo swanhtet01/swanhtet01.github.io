@@ -252,6 +252,65 @@ export function validateOwnerApproval({ gate, env = process.env, execute = false
   }
 }
 
+function validateFastForwardProofRecord(packet) {
+  const proof = packet.fastForwardProof
+  const remoteState = String(packet.remoteBefore?.candidateBranchState || '')
+  const remoteCommit = packet.remoteBefore?.candidateCommit == null
+    ? null
+    : exactSha(packet.remoteBefore.candidateCommit, 'review_branch_push_report_fast_forward_proof_invalid')
+  if (!isRecord(proof)
+    || proof.branch !== packet.candidate.branch
+    || proof.candidateCommit !== packet.candidate.head
+    || proof.remoteCommit !== remoteCommit
+    || proof.localOnly !== true
+    || typeof proof.required !== 'boolean'
+    || typeof proof.ok !== 'boolean'
+    || !['not_required_unpublished_branch', 'already_published_exact', 'proven_ancestor', 'not_fast_forward', 'unavailable', 'unavailable_no_git'].includes(String(proof.status || ''))) {
+    fail('review_branch_push_report_fast_forward_proof_invalid')
+  }
+  if (remoteState === 'unpublished') {
+    if (proof.required !== false
+      || proof.ok !== true
+      || proof.status !== 'not_required_unpublished_branch'
+      || proof.remoteCommit !== null
+      || proof.command !== null
+      || proof.ancestorOfCandidate !== null) {
+      fail('review_branch_push_report_fast_forward_proof_invalid')
+    }
+    return proof
+  }
+  if (remoteState === 'exact') {
+    if (proof.required !== false
+      || proof.ok !== true
+      || proof.status !== 'already_published_exact'
+      || proof.remoteCommit !== packet.candidate.head
+      || proof.command !== null
+      || proof.ancestorOfCandidate !== true) {
+      fail('review_branch_push_report_fast_forward_proof_invalid')
+    }
+    return proof
+  }
+  if (remoteState !== 'different' || !remoteCommit) fail('review_branch_push_report_fast_forward_proof_invalid')
+  const expectedCommand = ['git', 'merge-base', '--is-ancestor', remoteCommit, packet.candidate.head]
+  if (proof.required !== true
+    || !Array.isArray(proof.command)
+    || proof.command.join('\n') !== expectedCommand.join('\n')) {
+    fail('review_branch_push_report_fast_forward_proof_invalid')
+  }
+  if (proof.ok === true) {
+    if (proof.status !== 'proven_ancestor' || proof.ancestorOfCandidate !== true) {
+      fail('review_branch_push_report_fast_forward_proof_invalid')
+    }
+  } else if (proof.status === 'not_fast_forward') {
+    if (proof.ancestorOfCandidate !== false) fail('review_branch_push_report_fast_forward_proof_invalid')
+  } else if (proof.status === 'unavailable' || proof.status === 'unavailable_no_git') {
+    if (proof.ancestorOfCandidate !== null) fail('review_branch_push_report_fast_forward_proof_invalid')
+  } else {
+    fail('review_branch_push_report_fast_forward_proof_invalid')
+  }
+  return proof
+}
+
 function validateLocalState({ gate, gitState, execute }) {
   if (!isRecord(gitState)) fail('review_branch_push_git_state_required')
   if (gitState.origin !== ORIGIN) fail('review_branch_push_repository_invalid')
@@ -260,23 +319,103 @@ function validateLocalState({ gate, gitState, execute }) {
   return true
 }
 
+export function buildFastForwardProof({ gate, git = gitDefault } = {}) {
+  if (!isRecord(gate)) fail('review_branch_push_gate_required')
+  const base = {
+    branch: gate.branch,
+    candidateCommit: gate.commit,
+    remoteCommit: gate.remoteCommit,
+    localOnly: true,
+    command: null,
+  }
+  if (gate.pushKind === 'initial_branch_push') {
+    return {
+      ...base,
+      required: false,
+      ok: true,
+      status: 'not_required_unpublished_branch',
+      ancestorOfCandidate: null,
+    }
+  }
+  if (gate.pushKind === 'already_published_no_push') {
+    return {
+      ...base,
+      required: false,
+      ok: true,
+      status: 'already_published_exact',
+      ancestorOfCandidate: true,
+    }
+  }
+  if (gate.pushKind !== 'fast_forward_branch_push' || !gate.remoteCommit) {
+    fail('review_branch_push_fast_forward_gate_invalid')
+  }
+  const command = ['git', 'merge-base', '--is-ancestor', gate.remoteCommit, gate.commit]
+  if (typeof git !== 'function') {
+    return {
+      ...base,
+      required: true,
+      ok: false,
+      status: 'unavailable_no_git',
+      command,
+      ancestorOfCandidate: null,
+    }
+  }
+  const result = git(['merge-base', '--is-ancestor', gate.remoteCommit, gate.commit], {
+    optional: true,
+    timeout: 120_000,
+  })
+  if (result.status === 0) {
+    return {
+      ...base,
+      required: true,
+      ok: true,
+      status: 'proven_ancestor',
+      command,
+      ancestorOfCandidate: true,
+    }
+  }
+  if (result.status === 1) {
+    return {
+      ...base,
+      required: true,
+      ok: false,
+      status: 'not_fast_forward',
+      command,
+      ancestorOfCandidate: false,
+    }
+  }
+  return {
+    ...base,
+    required: true,
+    ok: false,
+    status: 'unavailable',
+    command,
+    ancestorOfCandidate: null,
+  }
+}
+
 export function buildReviewBranchPushPlan({
   handoffReceipt,
   mainProtectionSnapshotReceipt = null,
-  gitState = currentGitState(),
+  gitState = null,
   env = process.env,
+  git = gitDefault,
+  fastForwardProof = null,
 } = {}) {
   const gate = validateReviewBranchPushHandoff(handoffReceipt?.packet)
-  validateLocalState({ gate, gitState, execute: false })
+  const resolvedGitState = gitState || currentGitState(git)
+  validateLocalState({ gate, gitState: resolvedGitState, execute: false })
   const approval = validateOwnerApproval({ gate, env, execute: false })
   const mainProtection = buildMainProtectionEvidence(mainProtectionSnapshotReceipt)
+  const fastForward = fastForwardProof || buildFastForwardProof({ gate, git })
   const alreadyPublished = gate.pushKind === 'already_published_no_push'
   const blockers = [
     ...(mainProtection.verifiedForBranchPush ? [] : [
       'github_main_protection_unverified',
       ...mainProtection.failures,
     ]),
-    ...(gitState.clean === true ? [] : ['local_worktree_dirty']),
+    ...(resolvedGitState.clean === true ? [] : ['local_worktree_dirty']),
+    ...(fastForward.ok === true ? [] : ['fast_forward_proof_missing_or_failed']),
     ...(alreadyPublished || approval.approved ? [] : ['owner_approval_missing']),
   ]
   const body = {
@@ -293,7 +432,7 @@ export function buildReviewBranchPushPlan({
     candidate: {
       branch: gate.branch,
       head: gate.commit,
-      clean: gitState.clean === true,
+      clean: resolvedGitState.clean === true,
     },
     remoteBefore: {
       origin: ORIGIN,
@@ -303,6 +442,7 @@ export function buildReviewBranchPushPlan({
     },
     approval,
     githubMainProtection: mainProtection,
+    fastForwardProof: fastForward,
     readiness: {
       executeReady: blockers.length === 0,
       blockers,
@@ -311,6 +451,9 @@ export function buildReviewBranchPushPlan({
       'verify release handoff current state',
       'verify signed GitHub main-protection snapshot assessment.ok is true',
       `git ls-remote --heads origin ${gate.branch}`,
+      ...(fastForward.required
+        ? [`git merge-base --is-ancestor ${gate.remoteCommit} ${gate.commit}`]
+        : []),
     ],
     possibleWrite: {
       kind: gate.pushKind,
@@ -335,6 +478,7 @@ export function buildReviewBranchPushPlan({
           `${APPROVAL_ENV} exactly equals the release handoff owner approval template`,
           'signed GitHub main-protection snapshot verifies assessment.ok:true',
           'release handoff re-verifies current remote/live state immediately before push',
+          'remote review branch is an ancestor of the exact candidate commit when branch already exists',
           'local worktree is clean',
           'post-push remote branch equals the exact approved commit',
         ],
@@ -395,6 +539,7 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
     }
   }
   if (packet.mode === 'plan_only_no_git_remote_write') {
+    const fastForwardProof = validateFastForwardProofRecord(packet)
     if (packet.ok !== true
       || packet.controls?.gitRemoteWritesPerformed !== false
       || packet.controls?.repositorySettingsMutated !== false
@@ -415,9 +560,20 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
       || !packet.plannedNetworkReadsBeforeExecute.includes(`git ls-remote --heads origin ${packet.candidate.branch}`)) {
       fail('review_branch_push_plan_reads_invalid')
     }
+    if (fastForwardProof.required === true
+      && !packet.plannedNetworkReadsBeforeExecute.includes(`git merge-base --is-ancestor ${fastForwardProof.remoteCommit} ${packet.candidate.head}`)) {
+      fail('review_branch_push_plan_reads_invalid')
+    }
     if (!isRecord(packet.readiness)
       || typeof packet.readiness.executeReady !== 'boolean'
       || !Array.isArray(packet.readiness.blockers)) {
+      fail('review_branch_push_plan_readiness_invalid')
+    }
+    if (fastForwardProof.ok === true) {
+      if (packet.readiness.blockers.includes('fast_forward_proof_missing_or_failed')) {
+        fail('review_branch_push_plan_readiness_invalid')
+      }
+    } else if (!packet.readiness.blockers.includes('fast_forward_proof_missing_or_failed')) {
       fail('review_branch_push_plan_readiness_invalid')
     }
     if (!isRecord(packet.possibleWrite)
@@ -439,11 +595,14 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
       || !packet.executionRequirements.includes('signed GitHub main-protection snapshot verifies assessment.ok:true')
       || !(packet.possibleWrite.command === null
         ? packet.executionRequirements.includes('remote branch equals the exact handoff commit')
-        : packet.executionRequirements.includes('post-push remote branch equals the exact approved commit'))) {
+        : packet.executionRequirements.includes('post-push remote branch equals the exact approved commit'))
+      || (fastForwardProof.required === true
+        && !packet.executionRequirements.includes('remote review branch is an ancestor of the exact candidate commit when branch already exists'))) {
       fail('review_branch_push_plan_requirements_invalid')
     }
   } else if (packet.mode === 'executed_owner_approved_git_remote_write'
     || packet.mode === 'executed_owner_approved_already_published_no_write') {
+    const fastForwardProof = validateFastForwardProofRecord(packet)
     if (packet.controls?.gitRemoteWritesApproved !== true
       || packet.controls?.repositorySettingsMutated !== false
       || packet.controls?.forcePushPerformed !== false
@@ -454,7 +613,9 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
       || packet.controls?.deploymentPerformed !== false
       || packet.controls?.supabaseMutated !== false
       || packet.controls?.credentialValueExposed !== false
-      || packet.verification?.remoteBranchExact !== true) {
+      || packet.verification?.remoteBranchExact !== true
+      || packet.verification?.fastForwardProofOk !== true
+      || fastForwardProof.ok !== true) {
       fail('review_branch_push_execute_controls_invalid')
     }
   } else {
@@ -476,6 +637,8 @@ export async function applyReviewBranchPushWithGit({
   validateLocalState({ gate, gitState, execute: true })
   const approval = validateOwnerApproval({ gate, env, execute: true })
   const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
+  const fastForward = buildFastForwardProof({ gate, git })
+  if (fastForward.ok !== true) fail('review_branch_push_fast_forward_unproven')
 
   const verification = await verifyHandoff(handoffReceipt.path)
   if (verification?.ok !== true
@@ -529,9 +692,11 @@ export async function applyReviewBranchPushWithGit({
     },
     approval,
     githubMainProtection: mainProtection,
+    fastForwardProof: fastForward,
     verification: {
       handoffCurrent: true,
       remoteBranchExact: true,
+      fastForwardProofOk: true,
     },
     controls: {
       gitRemoteWritesApproved: true,
