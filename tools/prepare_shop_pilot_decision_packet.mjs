@@ -145,7 +145,9 @@ function validateObservedEvidenceSummary(summary) {
   }
   const pilotSequenceCoverageMet = REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => summary.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
   if (summary.pilotSequenceCoverageMet !== pilotSequenceCoverageMet) fail('shop_pilot_decision_pilot_sequence_coverage_flag_invalid')
-  const requiredPromotionEvidenceMet = summary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && summary.pilotSequenceCoverageMet === true
+  const latestReloadRetryOutcome = isRecord(summary.metrics) ? summary.metrics.latestReloadRetryOutcome : null
+  const runAndDayCoverageMet = summary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && summary.pilotSequenceCoverageMet === true
+  const requiredPromotionEvidenceMet = runAndDayCoverageMet && latestReloadRetryOutcome === 'passed'
   if (summary.promotionEvidenceMet !== requiredPromotionEvidenceMet) fail('shop_pilot_decision_promotion_evidence_flag_invalid')
   const proofIntegrity = summary.proofIntegrity
   if (!isRecord(proofIntegrity)
@@ -180,7 +182,7 @@ function validateObservedEvidenceSummary(summary) {
   if (![null, 'passed', 'failed', 'not-tested'].includes(metrics.latestReloadRetryOutcome)) fail('shop_pilot_decision_latest_reload_retry_invalid')
   const expectedMissingPilotDayIndexes = REQUIRED_PILOT_DAY_INDEXES.filter((dayIndex) => !summary.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
   const expectedRunsRemaining = Math.max(0, REQUIRED_ACCEPTED_CONSECUTIVE_RUNS - summary.acceptedConsecutiveRuns)
-  const expectedReadyForOwnerDecisionReview = requiredPromotionEvidenceMet && metrics.latestReloadRetryOutcome === 'passed'
+  const expectedReadyForOwnerDecisionReview = requiredPromotionEvidenceMet
   const promotionProgress = summary.promotionProgress
   if (!isRecord(promotionProgress)
     || promotionProgress.requiredAcceptedConsecutiveRuns !== REQUIRED_ACCEPTED_CONSECUTIVE_RUNS
@@ -213,13 +215,21 @@ function buildBlockers(observedSummary) {
   const blockers = []
   if (observedSummary.acceptedConsecutiveRuns < REQUIRED_ACCEPTED_CONSECUTIVE_RUNS) blockers.push('accepted_consecutive_runs_below_20')
   if (observedSummary.pilotSequenceCoverageMet !== true) blockers.push('pilot_sequence_days_missing')
-  if (observedSummary.promotionEvidenceMet === true && observedSummary.metrics.latestReloadRetryOutcome !== 'passed') blockers.push('latest_reload_retry_not_passed')
+  if (observedSummary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS
+    && observedSummary.pilotSequenceCoverageMet === true
+    && observedSummary.metrics.latestReloadRetryOutcome !== 'passed') {
+    blockers.push('latest_reload_retry_not_passed')
+  }
   return blockers
 }
 
 function targetStatus(comparison, observedSummary) {
+  if (observedSummary.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS
+    && observedSummary.pilotSequenceCoverageMet === true
+    && observedSummary.metrics.latestReloadRetryOutcome !== 'passed') {
+    return 'blocked_reload_retry'
+  }
   if (observedSummary.promotionEvidenceMet !== true) return 'collecting'
-  if (observedSummary.metrics.latestReloadRetryOutcome !== 'passed') return 'blocked_reload_retry'
   const noRegression = comparison.orderTimeDeltaMinutes <= 0
     && comparison.exceptionRateDeltaPerRun <= 0
     && comparison.closeTimeDeltaMinutes <= 0
@@ -350,11 +360,12 @@ export function validateShopPilotDecisionPacket(packet) {
     || JSON.stringify(observed.requiredPilotDayIndexes) !== JSON.stringify(REQUIRED_PILOT_DAY_INDEXES)
     || !Array.isArray(observed.acceptedConsecutivePilotDayIndexes)
     || observed.pilotSequenceCoverageMet !== REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => observed.acceptedConsecutivePilotDayIndexes.includes(dayIndex))
-    || observed.promotionEvidenceMet !== (observed.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && observed.pilotSequenceCoverageMet === true)
+    || ![null, 'passed', 'failed', 'not-tested'].includes(observed.latestReloadRetryOutcome)
+    || observed.promotionEvidenceMet !== (observed.acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && observed.pilotSequenceCoverageMet === true && observed.latestReloadRetryOutcome === 'passed')
     || observed.acceptedRunCount > observed.runCount
     || observed.acceptedConsecutiveRunsRemaining !== Math.max(0, REQUIRED_ACCEPTED_CONSECUTIVE_RUNS - observed.acceptedConsecutiveRuns)
     || !sameNumberArray(observed.missingPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES.filter((dayIndex) => !observed.acceptedConsecutivePilotDayIndexes.includes(dayIndex)))
-    || observed.readyForOwnerDecisionReview !== (observed.promotionEvidenceMet === true && observed.latestReloadRetryOutcome === 'passed')
+    || observed.readyForOwnerDecisionReview !== observed.promotionEvidenceMet
     || !isRecord(observed.proofIntegrity)
     || observed.proofIntegrity.uniqueRunIds !== true
     || observed.proofIntegrity.uniqueEvidenceReferenceDigests !== true

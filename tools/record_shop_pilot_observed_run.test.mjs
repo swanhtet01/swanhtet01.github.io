@@ -218,7 +218,7 @@ test('twenty consecutive accepted runs still require five-day pilot sequence cov
   }
 })
 
-test('twenty accepted runs still block owner decision review until latest reload retry passes', async () => {
+test('twenty accepted runs do not set promotion evidence until latest reload retry passes', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-20-reload-failed-'))
   try {
     let summary
@@ -230,7 +230,7 @@ test('twenty accepted runs still block owner decision review until latest reload
     }
     assert.equal(summary.acceptedConsecutiveRuns, 20)
     assert.equal(summary.pilotSequenceCoverageMet, true)
-    assert.equal(summary.promotionEvidenceMet, true)
+    assert.equal(summary.promotionEvidenceMet, false)
     assert.equal(summary.promotionProgress.acceptedConsecutiveRunsRemaining, 0)
     assert.equal(summary.promotionProgress.latestReloadRetryOutcome, 'failed')
     assert.equal(summary.promotionProgress.readyForOwnerDecisionReview, false)

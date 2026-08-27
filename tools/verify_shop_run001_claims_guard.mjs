@@ -90,8 +90,9 @@ check(
   'preapp_verify_local_missing_shop_run001_claims_guard',
 )
 
-requireSnippet(recorderText, 'const promotionEvidenceMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet', files.recorder)
-requireSnippet(recorderText, "const readyForOwnerDecisionReview = promotionEvidenceMet && latestReloadRetryOutcome === 'passed'", files.recorder)
+requireSnippet(recorderText, 'const runAndDayCoverageMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet', files.recorder)
+requireSnippet(recorderText, "const promotionEvidenceMet = runAndDayCoverageMet && latestReloadRetryOutcome === 'passed'", files.recorder)
+requireSnippet(recorderText, 'const readyForOwnerDecisionReview = promotionEvidenceMet', files.recorder)
 requireSnippet(recorderText, 'acceptedConsecutiveRunsRemaining', files.recorder)
 requireSnippet(recorderText, 'missingPilotDayIndexes', files.recorder)
 requireSnippet(recorderText, 'promotionProgress', files.recorder)
@@ -116,7 +117,7 @@ requireSnippet(recorderTestText, 'nineteen accepted runs do not set promotionEvi
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs set promotionEvidenceMet', files.recorderTest)
 requireSnippet(recorderTestText, 'twenty consecutive accepted runs still require five-day pilot sequence coverage', files.recorderTest)
 requireSnippet(recorderTestText, 'replayed evidence and anchor digests cannot inflate accepted run count', files.recorderTest)
-requireSnippet(recorderTestText, 'twenty accepted runs still block owner decision review until latest reload retry passes', files.recorderTest)
+requireSnippet(recorderTestText, 'twenty accepted runs do not set promotion evidence until latest reload retry passes', files.recorderTest)
 requireSnippet(recorderTestText, 'private run input template is fillable but not recordable evidence', files.recorderTest)
 requireSnippet(recorderTestText, 'CLI writes private run template and validates filled run input with metadata-only stdout', files.recorderTest)
 requireSnippet(recorderTestText, 'assert.equal(summary.promotionEvidenceMet, false)', files.recorderTest)

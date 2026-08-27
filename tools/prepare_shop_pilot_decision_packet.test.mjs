@@ -252,6 +252,7 @@ test('requires reload retry pass before owner decision readiness', async () => {
       generatedAt: '2026-08-25T00:00:00.000Z',
     }))
     assert.equal(packet.ok, false)
+    assert.equal(packet.observedMetrics.promotionEvidenceMet, false)
     assert.equal(packet.observedMetrics.readyForOwnerDecisionReview, false)
     assert.equal(packet.pilotDecision.outcomeStatus, 'blocked_reload_retry')
     assert.deepEqual(packet.failures, ['latest_reload_retry_not_passed'])

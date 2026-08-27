@@ -456,9 +456,10 @@ function evidenceSummary(entries) {
   const acceptedConsecutivePilotDayIndexes = uniqueSortedNumbers(acceptedConsecutiveEntries.map((entry) => entry.dayIndex))
   const missingPilotDays = missingPilotDayIndexes(acceptedConsecutivePilotDayIndexes)
   const pilotSequenceCoverageMet = REQUIRED_PILOT_DAY_INDEXES.every((dayIndex) => acceptedConsecutivePilotDayIndexes.includes(dayIndex))
-  const promotionEvidenceMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet
   const latestReloadRetryOutcome = entries.at(-1)?.reloadRetryOutcome || null
-  const readyForOwnerDecisionReview = promotionEvidenceMet && latestReloadRetryOutcome === 'passed'
+  const runAndDayCoverageMet = acceptedConsecutiveRuns >= REQUIRED_ACCEPTED_CONSECUTIVE_RUNS && pilotSequenceCoverageMet
+  const promotionEvidenceMet = runAndDayCoverageMet && latestReloadRetryOutcome === 'passed'
+  const readyForOwnerDecisionReview = promotionEvidenceMet
   const acceptedConsecutiveRunsRemaining = Math.max(0, REQUIRED_ACCEPTED_CONSECUTIVE_RUNS - acceptedConsecutiveRuns)
   const summary = {
     contract: SHOP_OBSERVED_EVIDENCE_CONTRACT,
