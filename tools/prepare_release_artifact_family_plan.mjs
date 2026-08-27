@@ -222,7 +222,6 @@ export function buildReleaseArtifactFamilyPlan(input = {}) {
     command('shop_launch_gate_report', 'Verify the Shop launch gate from safe intake/baseline artifacts.', [
       'node', 'tools/verify_shop_pilot_launch_gate.mjs',
       '--intake-packet', paths.shopPrivateIntakeJson,
-      '--baseline-template', paths.shopBaselineTemplate,
       '--output', paths.shopLaunchGateReport,
     ]),
     command('shop_day0_readiness', 'Generate Day 0 readiness from launch-gate evidence without reopening raw intake input.', [
@@ -400,6 +399,11 @@ export function validateReleaseArtifactFamilyPlan(plan) {
     || !includesToken(byId.pull_request_create_plan, '--github-protection-snapshot')) {
     fail('release_artifact_family_plan_review_pr_snapshot_missing')
   }
+  if (!includesToken(byId.shop_launch_gate_report, '--intake-packet')
+    || includesToken(byId.shop_launch_gate_report, '--baseline-template')
+    || includesToken(byId.shop_launch_gate_report, '--baseline-worksheet')) {
+    fail('release_artifact_family_plan_launch_gate_input_invalid')
+  }
   if (!includesToken(byId.shop_day0_readiness, '--launch-gate-report')
     || includesToken(byId.shop_day0_readiness, '--intake-packet')) {
     fail('release_artifact_family_plan_day0_launch_gate_binding_invalid')
@@ -443,6 +447,8 @@ export function runSelfTest() {
     plan_validates: validateReleaseArtifactFamilyPlan(plan) === plan,
     expected_head_pinned: plan.commands.find((entry) => entry.id === 'github_main_protection_apply_plan').command.includes(candidateHead),
     operator_board_snapshot_required: plan.commands.find((entry) => entry.id === 'operator_board').command.includes('--github-protection-snapshot'),
+    launch_gate_uses_intake_without_private_baseline_template: plan.commands.find((entry) => entry.id === 'shop_launch_gate_report').command.includes('--intake-packet')
+      && !plan.commands.find((entry) => entry.id === 'shop_launch_gate_report').command.includes('--baseline-template'),
     day0_uses_launch_gate_without_intake: plan.commands.find((entry) => entry.id === 'shop_day0_readiness').command.includes('--launch-gate-report')
       && !plan.commands.find((entry) => entry.id === 'shop_day0_readiness').command.includes('--intake-packet'),
     control_index_uses_current_sources: plan.commands.find((entry) => entry.id === 'current_release_control_index').command.includes('--branch-push-plan')
@@ -485,6 +491,20 @@ export function runSelfTest() {
         return false
       } catch (error) {
         return String(error?.message || '').includes('release_artifact_family_plan_day0_launch_gate_binding_invalid')
+      }
+    })(),
+    private_baseline_template_in_launch_gate_rejected: (() => {
+      try {
+        const tampered = structuredClone(plan)
+        const launchGate = tampered.commands.find((entry) => entry.id === 'shop_launch_gate_report')
+        launchGate.command.splice(launchGate.command.indexOf('--output'), 0, '--baseline-template', plan.paths.shopBaselineTemplate)
+        const copy = { ...tampered }
+        delete copy.digest
+        tampered.digest = digest(JSON.stringify(copy))
+        validateReleaseArtifactFamilyPlan(tampered)
+        return false
+      } catch (error) {
+        return String(error?.message || '').includes('release_artifact_family_plan_launch_gate_input_invalid')
       }
     })(),
   }

@@ -59,6 +59,11 @@ test('pins operator board to the GitHub protection snapshot', () => {
 
 test('uses launch-gate evidence for Day 0 readiness without reopening intake packet input', () => {
   const packet = plan()
+  const launchGate = packet.commands.find((entry) => entry.id === 'shop_launch_gate_report')
+  assert.ok(launchGate.command.includes('--intake-packet'))
+  assert.equal(launchGate.command.includes('--baseline-template'), false)
+  assert.equal(launchGate.command.includes('--baseline-worksheet'), false)
+
   const day0 = packet.commands.find((entry) => entry.id === 'shop_day0_readiness')
   assert.ok(day0.command.includes('--launch-gate-report'))
   assert.equal(day0.command.includes('--intake-packet'), false)
@@ -70,6 +75,18 @@ test('uses launch-gate evidence for Day 0 readiness without reopening intake pac
   assert.throws(
     () => validateReleaseArtifactFamilyPlan(tampered),
     /release_artifact_family_plan_day0_launch_gate_binding_invalid/,
+  )
+})
+
+test('rejects private baseline template input on the launch-gate command', () => {
+  const packet = plan()
+  const tampered = structuredClone(packet)
+  const launchGate = tampered.commands.find((entry) => entry.id === 'shop_launch_gate_report')
+  launchGate.command.splice(launchGate.command.indexOf('--output'), 0, '--baseline-template', packet.paths.shopBaselineTemplate)
+  resign(tampered)
+  assert.throws(
+    () => validateReleaseArtifactFamilyPlan(tampered),
+    /release_artifact_family_plan_launch_gate_input_invalid/,
   )
 })
 
