@@ -285,7 +285,7 @@ function ownerActionFor(status) {
     return 'Prepare the owner-private Shop handoff using the accepted baseline and intake digests; still do not contact the participant or enable hosted writes.'
   }
   if (status === 'blocked_owner_observed_baseline_required') {
-    return 'Capture at least three owner-observed manual Shop order runs, three package-redemption runs, and three daily-close runs across three distinct close dates, then generate the owner-safe baseline packet.'
+    return 'Capture at least three owner-observed manual Shop order runs, three package-redemption runs, and three daily-close runs across three distinct close dates, then generate and verify the owner-safe baseline packet.'
   }
   if (status === 'blocked_owner_private_intake_required') {
     return 'Generate and review the owner-private Shop intake packet before day-one handoff.'
@@ -315,9 +315,10 @@ function nextOwnerPrivateStepFor(status) {
     return {
       ...base,
       id: 'capture-owner-observed-baseline',
-      label: 'Capture owner-observed order, redemption, and close baseline runs',
+      label: 'Capture owner-observed order, redemption, and close baseline runs, then generate and verify the baseline packet',
       commandId: 'shop:pilot:baseline-packet',
       requiredPrivateInputs: [...BASELINE_CAPTURE_PRIVATE_INPUTS],
+      baselinePacketVerificationRequired: true,
       completionSignal: 'public_safe_baseline_packet_digest',
     }
   }
@@ -496,6 +497,7 @@ function ownerPrivateBaselineChecklistFor(status, launchGateReport) {
     publicSafe: true,
     evidenceKind: 'owner_observed_manual_operations_only',
     readyToGeneratePublicBaselinePacket,
+    baselinePacketVerificationRequired: true,
     completionSignal: baselineAccepted ? 'accepted_baseline_packet_digest' : 'public_safe_baseline_packet_digest',
     requiredFlows: [
       {
@@ -906,6 +908,7 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || checklist.evidenceKind !== 'owner_observed_manual_operations_only'
     || checklist.state !== expectedChecklist.state
     || checklist.readyToGeneratePublicBaselinePacket !== expectedChecklist.readyToGeneratePublicBaselinePacket
+    || checklist.baselinePacketVerificationRequired !== true
     || checklist.completionSignal !== expectedChecklist.completionSignal
     || !Array.isArray(checklist.requiredFlows)
     || checklist.requiredFlows.length !== expectedChecklist.requiredFlows.length
@@ -1044,7 +1047,8 @@ ${bridgeArtifacts}
 - State: ${ownerFacingToken(checklist.state)}
 - Evidence kind: ${checklist.evidenceKind}
 - Completion signal: ${ownerFacingToken(checklist.completionSignal)}
-- Ready to generate owner-safe baseline packet: ${checklist.readyToGeneratePublicBaselinePacket}
+- Baseline packet verification required: true
+- Ready to generate and verify owner-safe baseline packet: ${checklist.readyToGeneratePublicBaselinePacket}
 - Owner-safe packet allows raw identity: false
 - Owner-safe packet allows raw notes: false
 - Owner-safe packet allows local paths: false
@@ -1070,7 +1074,7 @@ Promotion evidence threshold:
 - Accepted pilot days now: ${promotion.acceptedConsecutivePilotDayIndexes.length ? promotion.acceptedConsecutivePilotDayIndexes.join(', ') : 'none'}
 - Synthetic evidence accepted: false
 
-Stop and do not generate the owner-safe baseline packet if any condition occurs:
+Stop and do not generate or verify the owner-safe baseline packet if any condition occurs:
 
 ${checklistStopConditions}
 

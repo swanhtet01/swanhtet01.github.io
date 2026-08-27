@@ -189,11 +189,12 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
     },
     action: {
       id: 'capture-owner-observed-baseline',
-      label: 'Capture owner-observed manual Shop baseline, lint it locally, then generate an owner-safe baseline packet',
+      label: 'Capture owner-observed manual Shop baseline, lint it locally, then generate and verify an owner-safe baseline packet',
       allowedNow: day0Packet.ownerPrivateObservationBridge?.allowedNow || 'owner_private_local_observation_only',
       privateWorkspaceRequired: true,
       safeBeforeReleaseGate: day0Packet.nextOwnerPrivateStep?.safeBeforeReleaseGate === true,
       releaseGateStillRequiredBeforePilotActivation: true,
+      baselinePacketVerificationRequired: true,
       nextRequiredDigest: 'baseline_packet_digest',
       expectedPreflightStatus: 'baseline_input_ready',
       completionSignal: 'public_safe_baseline_packet_digest',
@@ -217,6 +218,7 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
     },
     minimumEvidence: {
       evidenceKind: checklist.evidenceKind || 'owner_observed_manual_operations_only',
+      baselinePacketVerificationRequired: checklist.baselinePacketVerificationRequired === true,
       requiredFlows: requiredFlowSummary(day0Packet),
       requiredMetrics: [...(checklist.requiredMetrics || [])],
       requiredConfirmations: [...(checklist.requiredConfirmations || [])],
@@ -268,6 +270,7 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || card.action.privateWorkspaceRequired !== true
     || card.action.safeBeforeReleaseGate !== true
     || card.action.releaseGateStillRequiredBeforePilotActivation !== true
+    || card.action.baselinePacketVerificationRequired !== true
     || card.action.nextRequiredDigest !== 'baseline_packet_digest'
     || card.action.expectedPreflightStatus !== 'baseline_input_ready'
     || card.action.completionSignal !== 'public_safe_baseline_packet_digest') {
@@ -290,6 +293,7 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
   const promotion = evidence.promotionEvidenceRequirement
   if (!isRecord(evidence)
     || evidence.evidenceKind !== 'owner_observed_manual_operations_only'
+    || evidence.baselinePacketVerificationRequired !== true
     || !Array.isArray(evidence.requiredFlows)
     || evidence.requiredFlows.length !== 3
     || !sameArray(evidence.requiredFlows.map((flow) => flow.id), ['manual_order', 'package_redemption', 'daily_close'])
@@ -364,12 +368,13 @@ Candidate: \`${card.candidate.branch || 'unknown'} @ ${card.candidate.head || 'u
 
 ## Owner action now
 
-Capture the owner-observed manual Shop baseline in the private workspace, run the local baseline input preflight, then generate only the owner-safe baseline packet if the preflight returns \`${card.action.expectedPreflightStatus}\`.
+Capture the owner-observed manual Shop baseline in the private workspace, run the local baseline input preflight, then generate and verify only the owner-safe baseline packet if the preflight returns \`${card.action.expectedPreflightStatus}\`.
 
 - Allowed now: ${card.action.allowedNow}
 - Private workspace required: true
 - Safe before release gate: true
 - Release gate still required before pilot activation: true
+- Baseline packet verification required: true
 - Next required digest: ${card.action.nextRequiredDigest}
 - External effects allowed: false
 
@@ -396,6 +401,8 @@ Required confirmations:
 
 ${confirmations}
 
+Baseline packet verification required: ${card.minimumEvidence.baselinePacketVerificationRequired}
+
 Promotion evidence threshold:
 
 - Required accepted real runs: ${promotion.requiredAcceptedConsecutiveRuns}
@@ -404,7 +411,7 @@ Promotion evidence threshold:
 - Accepted pilot days now: ${promotion.acceptedConsecutivePilotDayIndexes.length ? promotion.acceptedConsecutivePilotDayIndexes.join(', ') : 'none'}
 - Synthetic evidence accepted: false
 
-Stop and do not generate the owner-safe baseline packet if any condition occurs:
+Stop and do not generate or verify the owner-safe baseline packet if any condition occurs:
 
 ${stopConditions}
 
