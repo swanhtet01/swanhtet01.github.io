@@ -217,8 +217,13 @@ function assertSourceAlignment({ day0Packet, ownerBaselineActionCard, currentRel
 
 function assertCommandOrder(commands) {
   const lintIndex = commands.findIndex((command) => command.includes('--lint-input "<private-baseline-input.json>"'))
+  const verifyPreflightIndex = commands.findIndex((command) => command.includes('--verify-preflight "<owner-safe-baseline-preflight.json>"'))
   const generateIndex = commands.findIndex((command) => command.includes('--input "<private-baseline-input.json>"') && command.includes('--output "<owner-safe-baseline-packet.json>"'))
-  if (lintIndex < 0 || generateIndex < 0 || lintIndex > generateIndex) {
+  if (lintIndex < 0
+    || verifyPreflightIndex < 0
+    || generateIndex < 0
+    || lintIndex > verifyPreflightIndex
+    || verifyPreflightIndex > generateIndex) {
     fail('shop_pilot_owner_observation_pack_command_order_invalid')
   }
 }

@@ -188,6 +188,12 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.equal(pack.observedRunEvidenceCommandPlan.requiredAcceptedConsecutiveRuns, 20)
   assert.deepEqual(pack.observedRunEvidenceCommandPlan.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.equal(pack.observedRunEvidenceCommandPlan.requiredPilotCalendarDates, 5)
+  assert.ok(pack.commandPlan.commands.some((command) => command.includes('--lint-input "<private-baseline-input.json>"') && command.includes('--output "<owner-safe-baseline-preflight.json>"')))
+  assert.ok(pack.commandPlan.commands.some((command) => command.includes('--verify-preflight "<owner-safe-baseline-preflight.json>"')))
+  assert.ok(
+    pack.commandPlan.commands.findIndex((command) => command.includes('--verify-preflight "<owner-safe-baseline-preflight.json>"'))
+      < pack.commandPlan.commands.findIndex((command) => command.includes('--input "<private-baseline-input.json>"') && command.includes('--output "<owner-safe-baseline-packet.json>"')),
+  )
   assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('client:pilot:observed-evidence:template')))
   assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('client:pilot:observed-evidence:validate')))
   assert.ok(pack.observedRunEvidenceCommandPlan.commands.some((command) => command.includes('--record --workspace "<private-observed-workspace>"')))
@@ -201,6 +207,7 @@ test('builds a privacy-safe owner observation pack bound to current release cont
   assert.match(markdown, /Required observed calendar dates: 5/)
   assert.match(markdown, /Required baseline preflight status before generating the owner-safe baseline packet: `baseline_input_ready`/)
   assert.match(markdown, /--lint-input "<private-baseline-input\.json>"/)
+  assert.match(markdown, /--verify-preflight "<owner-safe-baseline-preflight\.json>"/)
   assert.match(markdown, /Commands during the five-day private pilot/)
   assert.match(markdown, /client:pilot:observed-evidence:template/)
   assert.match(markdown, /client:pilot:observed-evidence:validate/)

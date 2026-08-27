@@ -672,7 +672,8 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '',
     '```powershell',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --template "<private-baseline-input.json>"',
-    'node tools/prepare_shop_pilot_baseline_packet.mjs --lint-input "<private-baseline-input.json>"',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --lint-input "<private-baseline-input.json>" --output "<owner-safe-baseline-preflight.json>"',
+    'node tools/prepare_shop_pilot_baseline_packet.mjs --verify-preflight "<owner-safe-baseline-preflight.json>"',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
     'node tools/prepare_shop_pilot_baseline_packet.mjs --verify "<owner-safe-baseline-packet.json>"',
     '```',
@@ -861,6 +862,7 @@ function parseArgs(argv) {
     output: null,
     markdownOutput: null,
     verify: null,
+    verifyPreflight: null,
     lintInput: null,
     template: null,
     worksheetOutput: null,
@@ -872,6 +874,7 @@ function parseArgs(argv) {
     else if (arg === '--output') args.output = argv[++index]
     else if (arg === '--markdown-output') args.markdownOutput = argv[++index]
     else if (arg === '--verify') args.verify = argv[++index] || null
+    else if (arg === '--verify-preflight') args.verifyPreflight = argv[++index] || null
     else if (arg === '--lint-input') args.lintInput = argv[++index] || null
     else if (arg === '--template') args.template = argv[++index] || null
     else if (arg === '--worksheet-output') args.worksheetOutput = argv[++index] || null
@@ -926,8 +929,25 @@ async function main() {
     }))
     return
   }
+  if (args.verifyPreflight) {
+    const packet = validateShopPilotBaselineInputPreflight(await readJson(args.verifyPreflight))
+    console.log(JSON.stringify({
+      ok: true,
+      contract: packet.contract,
+      status: packet.status,
+      safeToGeneratePublicBaselinePacket: packet.safeToGeneratePublicBaselinePacket,
+      baselineInputReady: packet.status === 'baseline_input_ready',
+      digest: packet.digest,
+      privateIdentityIncluded: packet.publicIdentityIncluded,
+      externalWritesPerformed: false,
+    }))
+    return
+  }
   if (args.lintInput) {
     const packet = validateShopPilotBaselineInputPreflight(preflightShopPilotBaselineInput(await readJson(args.lintInput)))
+    if (args.output) {
+      await writeOutput(args.output, `${JSON.stringify(packet, null, 2)}\n`)
+    }
     console.log(JSON.stringify({
       ok: packet.ok,
       contract: packet.contract,
@@ -935,6 +955,7 @@ async function main() {
       safeToGeneratePublicBaselinePacket: packet.safeToGeneratePublicBaselinePacket,
       failures: packet.failures,
       privateInputDigest: packet.privateInputDigest,
+      preflightOutputWritten: Boolean(args.output),
       digest: packet.digest,
       externalWritesPerformed: false,
     }))

@@ -60,7 +60,8 @@ const REQUIRED_FALSE_CONTROLS = [
 ]
 const BASELINE_COMMANDS = [
   'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
-  'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>" --output "<owner-safe-baseline-preflight.json>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --verify-preflight "<owner-safe-baseline-preflight.json>"',
   'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
   'npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"',
   'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"',
@@ -152,6 +153,9 @@ function assertSafeDay0ForBaselineCard(packet) {
   }
   if (!packet.privateCommands?.some((command) => command.includes('--lint-input "<private-baseline-input.json>"'))) {
     fail('shop_pilot_day0_owner_baseline_card_day0_lint_command_missing')
+  }
+  if (!packet.privateCommands?.some((command) => command.includes('--verify-preflight "<owner-safe-baseline-preflight.json>"'))) {
+    fail('shop_pilot_day0_owner_baseline_card_day0_preflight_verify_command_missing')
   }
   assertNoPrivateOrSecretShape(packet)
   return packet
@@ -323,7 +327,8 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || card.commandPlan.mustRunLintBeforePublicPacket !== true
     || !Array.isArray(card.commandPlan.commands)
     || card.commandPlan.commands.length !== BASELINE_COMMANDS.length
-    || !card.commandPlan.commands.includes('npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"')
+    || !card.commandPlan.commands.includes('npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>" --output "<owner-safe-baseline-preflight.json>"')
+    || !card.commandPlan.commands.includes('npm.cmd run shop:pilot:baseline-packet -- --verify-preflight "<owner-safe-baseline-preflight.json>"')
     || card.commandPlan.commands.some((command) => !BASELINE_COMMANDS.includes(command))) {
     fail('shop_pilot_day0_owner_baseline_card_commands_invalid')
   }
