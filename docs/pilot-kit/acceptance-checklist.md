@@ -41,7 +41,7 @@ Each day's focus and proof line is verbatim from the generator's evidence plan.
 
 Proof: `Record the Shop baseline, then review the Spa services vertical pack client import and resolve every row before applying sample data.`
 
-- [ ] Generic Shop baseline numbers from the form re-confirmed with the owner on-site.
+- [ ] Shop baseline numbers from the form re-confirmed with the owner on-site: at least three manual order/package-sale runs, three package-redemption runs, and three daily-close runs.
 - [ ] Review the Spa services vertical pack client import preview with the owner. Resolve duplicates, missing identities, and invalid rows before applying sample data. No sample row counts as client evidence.
 - [ ] Evidence captured: baseline sheet finalized; walkthrough noted with date, time, and who was present.
 

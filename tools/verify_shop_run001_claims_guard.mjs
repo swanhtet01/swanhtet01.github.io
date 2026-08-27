@@ -15,6 +15,8 @@ const files = {
   recorderTest: 'tools/record_shop_pilot_observed_run.test.mjs',
   ownerObservationPack: 'tools/prepare_shop_pilot_owner_observation_pack.mjs',
   salesAgentGuide: 'docs/supermega-shop-sales-agent.md',
+  baselineMeasurement: 'docs/pilot-kit/baseline-measurement.md',
+  pilotKitReadme: 'docs/pilot-kit/README.md',
 }
 
 const errors = []
@@ -55,6 +57,8 @@ const recorderText = read(files.recorder)
 const recorderTestText = read(files.recorderTest)
 const ownerObservationPackText = read(files.ownerObservationPack)
 const salesAgentGuideText = read(files.salesAgentGuide)
+const baselineMeasurementText = read(files.baselineMeasurement)
+const pilotKitReadmeText = read(files.pilotKitReadme)
 
 let packageJson = {}
 try {
@@ -138,6 +142,13 @@ requireSnippet(salesAgentGuideText, 'independentAnchorDigest', files.salesAgentG
 requireSnippet(salesAgentGuideText, 'If either digest is missing, reused, or equal to the other digest, the run does not count.', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, '20 consecutive accepted real runs covering pilot days 1 through 5', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, 'synthetic or sample runs do not close the gate', files.salesAgentGuide)
+
+requireSnippet(baselineMeasurementText, 'Observe at least three uninterrupted runs in each required baseline stream', files.baselineMeasurement)
+requireSnippet(baselineMeasurementText, 'manual Shop order/package-sale runs', files.baselineMeasurement)
+requireSnippet(baselineMeasurementText, 'package-redemption/package-balance updates', files.baselineMeasurement)
+requireSnippet(baselineMeasurementText, 'manual daily-close runs', files.baselineMeasurement)
+requireSnippet(baselineMeasurementText, '`owner_private_intake_ready` and Day-0 readiness reports `blocked_owner_observed_baseline_required`', files.baselineMeasurement)
+requireSnippet(pilotKitReadmeText, 'at least three observed manual order runs, three package-redemption runs, three daily-close runs', files.pilotKitReadme)
 
 requireSnippet(onboardingText, 'Shop pilot proof rule', files.onboarding)
 requireSnippet(onboardingText, 'accepted order-to-close runs', files.onboarding)

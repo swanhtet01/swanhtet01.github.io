@@ -7,7 +7,7 @@ Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness
 ## Rules of measurement
 
 - Measure the owner's current manual process as it runs today — notebook, phone, paper, memory. Do not measure the SuperMega demo; the demo is not a baseline.
-- Observe at least three real runs end to end with a timer. The pilot measurement reference accepts a baseline only when it is owner-observed across three or more runs. Numbers recalled from memory go in as estimates and are marked as estimates.
+- Observe at least three uninterrupted runs in each required baseline stream: manual Shop order/package-sale runs, package-redemption/package-balance updates, and manual daily-close runs. A generic set of three observed timings is not enough. Numbers recalled from memory go in as estimates and are marked as estimates.
 - The observer watches and times; the observer does not help. If a run is interrupted, discard it and observe another.
 - Privacy: this sheet names a real business and a real person. Keep it private. Per `docs/supermega-shop-sales-agent.md`, reporting outside the private workspace carries stage and hashes only — never the contact name, email, or company.
 
@@ -31,7 +31,7 @@ npm.cmd run shop:pilot:day0-readiness -- --baseline-packet "<owner-safe-baseline
 
 The owner-safe packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation. Day-0 readiness must also be bound to the current local release handoff and GitHub protection snapshot, so it cannot accidentally treat a stale release gate as pilot-ready. Owner-safe does not mean public website, customer-facing, or publishable.
 
-If the launch gate reports `owner_private_handoff_ready` and the Day-0 packet reports `day0_owner_private_handoff_ready`, the baseline and intake digests are ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.
+If only the intake packet is ready but the baseline is missing, `shop:pilot:launch-gate:verify` reports `owner_private_intake_ready` and Day-0 readiness reports `blocked_owner_observed_baseline_required`. If the launch gate reports `owner_private_handoff_ready` and the Day-0 packet reports `day0_owner_private_handoff_ready`, the baseline and intake digests are ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.
 
 ## 1. Business and operator (who)
 
@@ -55,15 +55,41 @@ The Shop work order `shop-spa-owner-pilot` pins the process: import one client, 
 | How a wrong package, treatment, payment, or client record is corrected today | |
 | Where the record lives today (notebook, phone, nowhere) | |
 
-## 3. Observed runs (minimum three)
+## 3. Observed baseline runs
+
+The owner-safe baseline packet is accepted only after all three tables below have at least three uninterrupted owner-observed runs. If one run is interrupted, keep the note privately and add another run; do not count the interrupted run toward the ready baseline.
+
+### 3A. Manual Shop order/package-sale runs
 
 One row per observed run of the real process, timed start to end.
 
 | Run | Date and time | Started when / ended when | Human minutes | Error in this run? | Cost of the error |
 | --- | --- | --- | --- | --- | --- |
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
+| order 1 | | | | | |
+| order 2 | | | | | |
+| order 3 | | | | | |
+| more... | | | | | |
+
+### 3B. Package-redemption/package-balance updates
+
+One row per observed package use after a matching treatment has completed, timed until the current manual balance is updated.
+
+| Run | Date and time | Started when / ended when | Human minutes | Error in this run? | Cost of the error |
+| --- | --- | --- | --- | --- | --- |
+| redemption 1 | | | | | |
+| redemption 2 | | | | | |
+| redemption 3 | | | | | |
+| more... | | | | | |
+
+### 3C. Manual daily-close runs
+
+One row per observed day close, timed from the last relevant transaction or treatment to the finished close record. The `close_minutes_per_day` field must match the median of these close runs.
+
+| Run | Date and time | Started when / ended when | Human minutes | Error in this run? | Cost of the error |
+| --- | --- | --- | --- | --- | --- |
+| close 1 | | | | | |
+| close 2 | | | | | |
+| close 3 | | | | | |
 | more... | | | | | |
 
 ## 4. Derived baseline — operating and Spa-package measurements
@@ -71,9 +97,9 @@ One row per observed run of the real process, timed start to end.
 | Field | Contract name | How to derive it | Value |
 | --- | --- | --- | --- |
 | Weekly orders | `weekly_orders` | Owner's count, confirmed against last week's records, not memory alone | |
-| Median minutes per order | `median_minutes_per_order` | Middle value of the observed run timings in section 3 | |
+| Median minutes per order | `median_minutes_per_order` | Middle value of section 3A manual Shop order/package-sale timings | |
 | Weekly exception count | `weekly_exception_count` | Returns, wrong orders, and payment mismatches in a normal week | |
-| Daily close minutes | `close_minutes_per_day` | Minutes the owner spends closing the day (counting cash, updating the book) | |
+| Daily close minutes | `close_minutes_per_day` | Middle value of section 3C manual daily-close timings | |
 | Client rows prepared for import | `client_import_row_count` | Count the real client rows the owner has reviewed for the first import | |
 | Weekly prepaid package sales | `weekly_package_sales` | Count completed package sales from the current book or payment records | |
 | Weekly treatment redemptions | `weekly_treatment_redemptions` | Count package uses actually consumed by completed matching treatments | |
@@ -84,7 +110,7 @@ One row per observed run of the real process, timed start to end.
 
 | Field | Value |
 | --- | --- |
-| Observed runs that contained an error (of the runs in section 3) | |
+| Observed runs that contained an error (across sections 3A, 3B, and 3C) | |
 | Total observed error cost across those runs (money lost, goods written off, rework) | |
 | The most expensive error the owner remembers from the last month, and its cost (marked estimate) | |
 
@@ -103,8 +129,8 @@ Golden Lotus Spa is an entirely fictional example. Every person and number below
 
 - Business name: Golden Lotus Spa. Named operator: Ma Thiri (fictional), Spa manager. Founder observed on-site on 2026-08-12, morning shift.
 - Process in one sentence: a client buys a massage package, Ma Thiri records payment and remaining uses in a notebook, then manually reduces the balance after each completed treatment.
-- Observed runs: package-balance updates took 4, 3, and 2 minutes. One run initially used the wrong client row and required correction before the balance changed.
-- Derived baseline: weekly orders 120 (counted from last week's day book), median minutes per order 8 (middle of 7, 8, 9), weekly exception count 12, daily close minutes 45.
+- Observed runs: manual order/package-sale entries took 7, 8, and 9 minutes; package-balance updates took 4, 3, and 2 minutes; daily closes took 40, 45, and 50 minutes. One redemption run initially used the wrong client row and required correction before the balance changed.
+- Derived baseline: weekly orders 120 (counted from last week's day book), median minutes per order 8, weekly exception count 12, daily close minutes 45.
 - Spa services vertical pack baseline: 40 reviewed client rows, 12 weekly package sales, 24 weekly treatment redemptions, median 3 minutes per redemption, and 2 weekly package corrections.
 - Errors and cost: 1 of 3 observed balance updates needed correction; no invented financial saving is claimed.
 - Sign-off: owner confirmed; operator agreed; start Monday 2026-08-17, review Friday 2026-08-21 (start plus four days).
