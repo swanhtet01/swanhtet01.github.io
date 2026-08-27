@@ -825,6 +825,8 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || packet.nextOwnerPrivateStep.stockMovementAllowed !== false
     || packet.nextOwnerPrivateStep.hostedWritesAllowed !== false
     || packet.nextOwnerPrivateStep.managedActivationAllowed !== false
+    || (packet.status === 'blocked_owner_observed_baseline_required'
+      && packet.nextOwnerPrivateStep.baselinePacketVerificationRequired !== true)
     || !Array.isArray(packet.nextOwnerPrivateStep.requiredPrivateInputs)
     || packet.nextOwnerPrivateStep.requiredPrivateInputs.length < 1
     || typeof packet.nextOwnerPrivateStep.completionSignal !== 'string') {

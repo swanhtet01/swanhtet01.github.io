@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -25,6 +26,15 @@ import {
   sampleShopPilotDay0ReadinessInput,
   validateShopPilotDay0ReadinessPacket,
 } from './prepare_shop_pilot_day0_readiness_packet.mjs'
+
+function day0Digest(body) {
+  return `sha256:${createHash('sha256').update(JSON.stringify(body).replace(/\r\n?/g, '\n')).digest('hex')}`
+}
+
+function resignDay0Packet(packet) {
+  const { digest: _digest, ...body } = packet
+  return { ...body, digest: day0Digest(body) }
+}
 
 function baselineInput() {
   return {
@@ -285,6 +295,22 @@ test('rejects private identity and tampered packets', () => {
       },
     })),
     /shop_pilot_day0_private_or_secret_shape/,
+  )
+
+  const intakePacket = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
+  const baselineRequiredPacket = buildShopPilotDay0ReadinessPacket(sampleShopPilotDay0ReadinessInput({
+    launchGateReport: assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ intakePacket })),
+  }))
+  const malformedNextOwnerPrivateStep = {
+    ...baselineRequiredPacket,
+    nextOwnerPrivateStep: {
+      ...baselineRequiredPacket.nextOwnerPrivateStep,
+      baselinePacketVerificationRequired: false,
+    },
+  }
+  assert.throws(
+    () => validateShopPilotDay0ReadinessPacket(resignDay0Packet(malformedNextOwnerPrivateStep)),
+    /shop_pilot_day0_next_owner_private_step_invalid/,
   )
 
   assert.throws(
