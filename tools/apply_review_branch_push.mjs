@@ -471,13 +471,14 @@ export function buildReviewBranchPushPlan({
           'signed GitHub main-protection snapshot verifies assessment.ok:true',
           'release handoff re-verifies current remote/live state immediately before no-op confirmation',
           'local worktree is clean',
-          'remote branch equals the exact handoff commit',
+          'remote branch still equals the exact handoff commit immediately before no-op confirmation',
         ]
       : [
           '--execute flag',
           `${APPROVAL_ENV} exactly equals the release handoff owner approval template`,
           'signed GitHub main-protection snapshot verifies assessment.ok:true',
           'release handoff re-verifies current remote/live state immediately before push',
+          'remote review branch still equals the handoff remote commit immediately before push',
           'remote review branch is an ancestor of the exact candidate commit when branch already exists',
           'local worktree is clean',
           'post-push remote branch equals the exact approved commit',
@@ -594,8 +595,10 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
       || !packet.executionRequirements.includes('--execute flag')
       || !packet.executionRequirements.includes('signed GitHub main-protection snapshot verifies assessment.ok:true')
       || !(packet.possibleWrite.command === null
-        ? packet.executionRequirements.includes('remote branch equals the exact handoff commit')
+        ? packet.executionRequirements.includes('remote branch still equals the exact handoff commit immediately before no-op confirmation')
         : packet.executionRequirements.includes('post-push remote branch equals the exact approved commit'))
+      || (packet.possibleWrite.command !== null
+        && !packet.executionRequirements.includes('remote review branch still equals the handoff remote commit immediately before push'))
       || (fastForwardProof.required === true
         && !packet.executionRequirements.includes('remote review branch is an ancestor of the exact candidate commit when branch already exists'))) {
       fail('review_branch_push_plan_requirements_invalid')
@@ -613,6 +616,7 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
       || packet.controls?.deploymentPerformed !== false
       || packet.controls?.supabaseMutated !== false
       || packet.controls?.credentialValueExposed !== false
+      || packet.verification?.remoteStateUnchanged !== true
       || packet.verification?.remoteBranchExact !== true
       || packet.verification?.fastForwardProofOk !== true
       || fastForwardProof.ok !== true) {
@@ -695,6 +699,7 @@ export async function applyReviewBranchPushWithGit({
     fastForwardProof: fastForward,
     verification: {
       handoffCurrent: true,
+      remoteStateUnchanged: true,
       remoteBranchExact: true,
       fastForwardProofOk: true,
     },

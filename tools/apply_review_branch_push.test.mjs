@@ -176,7 +176,7 @@ function gitState(overrides = {}) {
   }
 }
 
-function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatus = 0 } = {}) {
+function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatus = 0, mergeBaseRemote = before } = {}) {
   const calls = []
   let readCount = 0
   const git = (args) => {
@@ -198,7 +198,7 @@ function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatu
     if (command === `push origin ${commit}:refs/heads/${branch}`) {
       return { status: pushStatus, stdout: '', stderr: pushStatus === 0 ? '' : 'rejected' }
     }
-    if (command === `merge-base --is-ancestor ${before} ${commit}`) {
+    if (command === `merge-base --is-ancestor ${mergeBaseRemote} ${commit}`) {
       return { status: mergeBaseStatus, stdout: '', stderr: '' }
     }
     throw new Error(`unexpected git call: ${command}`)
@@ -386,11 +386,57 @@ test('execute performs one normal exact-commit branch push and verifies the remo
   assert.equal(result.controls.deploymentPerformed, false)
   assert.equal(result.fastForwardProof.required, false)
   assert.equal(result.fastForwardProof.ok, true)
+  assert.equal(result.verification.remoteStateUnchanged, true)
   assert.equal(result.verification.fastForwardProofOk, true)
   assert.deepEqual(
     calls.filter((args) => args[0] === 'push'),
     [['push', 'origin', `${commit}:refs/heads/${branch}`]],
   )
+})
+
+test('execute rejects a changed remote branch before pushing', async () => {
+  const changedRemote = 'e'.repeat(40)
+  const existingBranch = packet({
+    remote: {
+      candidateCommit: remoteBase,
+      candidateBranchState: 'different',
+    },
+    actions: { reviewBranchPush: {
+      kind: 'owner_review_fast_forward_branch_push',
+      branch,
+      exactCommit: commit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+      approvalTemplate: fastForwardApprovalTemplate,
+    } },
+  })
+  const { git, calls } = stubGit({
+    before: changedRemote,
+    after: commit,
+    mergeBaseRemote: remoteBase,
+    mergeBaseStatus: 0,
+  })
+  await assert.rejects(
+    applyReviewBranchPushWithGit({
+      handoffReceipt: receipt(existingBranch),
+      mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+      env: { [approvalEnv]: fastForwardApprovalTemplate },
+      git,
+      verifyHandoff: async () => ({
+        ok: true,
+        candidate: { branch, commit, clean: true },
+        nextAction: {
+          exactCommit: commit,
+          forcePushAllowed: false,
+          mergeIncluded: false,
+          deploymentIncluded: false,
+        },
+      }),
+    }),
+    /review_branch_push_remote_state_changed/,
+  )
+  assert.equal(calls.some((args) => args[0] === 'push'), false)
 })
 
 test('execute no-ops when the remote branch already equals the candidate', async () => {
