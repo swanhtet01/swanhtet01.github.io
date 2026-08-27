@@ -612,6 +612,7 @@ export function renderShopPilotBaselineWorksheetMarkdown() {
     '- At least 3 uninterrupted manual order runs.',
     '- At least 3 uninterrupted manual package-redemption runs.',
     '- At least 3 uninterrupted manual daily-close runs on 3 distinct close calendar dates.',
+    '- Every runId must be unique across order, package-redemption, and daily-close runs.',
     '- Claimed medians must match the durations recorded below.',
     '- Observed order error count must match the recorded order runs.',
     '- Daily close minutes must match the median of observed daily-close runs.',

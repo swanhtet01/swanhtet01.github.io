@@ -302,6 +302,7 @@ test('renders a local owner worksheet without private values or promotion claims
   assert.match(markdown, new RegExp(SHOP_PILOT_BASELINE_WORKSHEET_CONTRACT))
   assert.match(markdown, /At least 3 uninterrupted manual order runs/)
   assert.match(markdown, /At least 3 uninterrupted manual daily-close runs on 3 distinct close calendar dates/)
+  assert.match(markdown, /Every runId must be unique across order, package-redemption, and daily-close runs/)
   assert.match(markdown, /Total observed error-run count/)
   assert.match(markdown, /Generate the baseline packet before the proposed Day-1 pilot start date/)
   assert.match(markdown, /node tools\/prepare_shop_pilot_baseline_packet\.mjs --input/)
