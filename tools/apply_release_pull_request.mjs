@@ -551,6 +551,33 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
       || !isRecord(packet.pullRequest)) {
       fail('release_pull_request_execute_controls_invalid')
     }
+    if (!Number.isSafeInteger(packet.pullRequest.number)
+      || packet.pullRequest.state !== 'open'
+      || packet.pullRequest.head !== packet.candidate.branch
+      || packet.pullRequest.base !== BASE_BRANCH) {
+      fail('release_pull_request_execute_pull_request_invalid')
+    }
+    if (!isRecord(packet.verification)
+      || packet.verification.releaseHandoffCurrent !== true
+      || packet.verification.remoteBranchObservedAtCreate !== packet.candidate.head
+      || packet.verification.remoteBranchExactAtCreate !== true
+      || packet.verification.existingPullRequestCheckedBeforeCreate !== true
+      || packet.verification.duplicatePullRequestCreated !== false) {
+      fail('release_pull_request_execute_verification_invalid')
+    }
+    if (packet.mode === 'executed_owner_approved_existing_pr_no_write') {
+      if (packet.controls.githubWritesPerformed !== false
+        || packet.controls.pullRequestCreated !== false
+        || packet.verification.existingPullRequestResult !== 'exact_open_pr_reused') {
+        fail('release_pull_request_existing_pr_controls_invalid')
+      }
+    } else if (packet.controls.githubWritesPerformed !== true
+      || packet.controls.pullRequestCreated !== true
+      || packet.verification.existingPullRequestResult !== 'none_before_create'
+      || packet.action?.method !== 'POST'
+      || packet.action?.path !== `/repos/${REPOSITORY}/pulls`) {
+      fail('release_pull_request_create_controls_invalid')
+    }
   } else {
     fail('release_pull_request_report_mode_invalid')
   }
@@ -659,10 +686,23 @@ export async function applyReleasePullRequestWithClient({
       digestScope: 'utf8_compact_json_without_digest',
       mode: 'executed_owner_approved_existing_pr_no_write',
       repository: REPOSITORY,
+      releaseHandoff: {
+        path: handoffReceipt.path || null,
+        digest: handoffReceipt.digest || null,
+        packetDigest: handoffReceipt.packet?.digest || null,
+      },
       candidate: { branch: gate.branch, head: gate.commit, clean: true },
       approval,
       githubMainProtection: mainProtection,
       token: { present: true, env: token.key, source: token.source || null, valueExposed: false },
+      verification: {
+        releaseHandoffCurrent: true,
+        remoteBranchObservedAtCreate: observedRemote,
+        remoteBranchExactAtCreate: true,
+        existingPullRequestCheckedBeforeCreate: true,
+        existingPullRequestResult: 'exact_open_pr_reused',
+        duplicatePullRequestCreated: false,
+      },
       pullRequest: {
         number: existing.number,
         state: existing.state,
@@ -712,10 +752,23 @@ export async function applyReleasePullRequestWithClient({
     digestScope: 'utf8_compact_json_without_digest',
     mode: 'executed_owner_approved_github_pr_write',
     repository: REPOSITORY,
+    releaseHandoff: {
+      path: handoffReceipt.path || null,
+      digest: handoffReceipt.digest || null,
+      packetDigest: handoffReceipt.packet?.digest || null,
+    },
     candidate: { branch: gate.branch, head: gate.commit, clean: true },
     approval,
     githubMainProtection: mainProtection,
     token: { present: true, env: token.key, source: token.source || null, valueExposed: false },
+    verification: {
+      releaseHandoffCurrent: true,
+      remoteBranchObservedAtCreate: observedRemote,
+      remoteBranchExactAtCreate: true,
+      existingPullRequestCheckedBeforeCreate: true,
+      existingPullRequestResult: 'none_before_create',
+      duplicatePullRequestCreated: false,
+    },
     action: {
       method: 'POST',
       path: `/repos/${REPOSITORY}/pulls`,

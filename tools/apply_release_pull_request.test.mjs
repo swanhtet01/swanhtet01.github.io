@@ -310,10 +310,17 @@ test('execute creates one pull request after handoff and remote branch verificat
   })
   assert.equal(result.ok, true)
   assert.equal(result.mode, 'executed_owner_approved_github_pr_write')
+  assert.equal(validatePullRequestReport(result, { expectedMode: 'executed_owner_approved_github_pr_write' }), result)
   assert.equal(result.controls.githubWritesPerformed, true)
   assert.equal(result.controls.pullRequestCreated, true)
   assert.equal(result.controls.mergePerformed, false)
   assert.equal(result.controls.deploymentPerformed, false)
+  assert.equal(result.verification.releaseHandoffCurrent, true)
+  assert.equal(result.verification.remoteBranchObservedAtCreate, commit)
+  assert.equal(result.verification.remoteBranchExactAtCreate, true)
+  assert.equal(result.verification.existingPullRequestCheckedBeforeCreate, true)
+  assert.equal(result.verification.existingPullRequestResult, 'none_before_create')
+  assert.equal(result.verification.duplicatePullRequestCreated, false)
   assert.deepEqual(calls.filter((args) => args[0] === 'ls-remote'), [['ls-remote', '--heads', 'origin', branch]])
   assert.equal(requests.length, 2)
   assert.ok(String(requests[0].url).includes('/pulls?'))
@@ -349,6 +356,7 @@ test('execute can use GitHub CLI keyring token without exposing it in the report
     },
   })
   assert.equal(result.mode, 'executed_owner_approved_github_pr_write')
+  assert.equal(validatePullRequestReport(result, { expectedMode: 'executed_owner_approved_github_pr_write' }), result)
   assert.equal(result.token.env, 'gh_cli')
   assert.equal(result.token.source, 'github_cli_keyring')
   assert.equal(result.token.valueExposed, false)
@@ -374,9 +382,38 @@ test('execute returns no-write when an exact open PR already exists', async () =
     }]),
   })
   assert.equal(result.mode, 'executed_owner_approved_existing_pr_no_write')
+  assert.equal(validatePullRequestReport(result, { expectedMode: 'executed_owner_approved_existing_pr_no_write' }), result)
   assert.equal(result.controls.githubWritesPerformed, false)
   assert.equal(result.controls.pullRequestCreated, false)
+  assert.equal(result.verification.remoteBranchObservedAtCreate, commit)
+  assert.equal(result.verification.remoteBranchExactAtCreate, true)
+  assert.equal(result.verification.existingPullRequestCheckedBeforeCreate, true)
+  assert.equal(result.verification.existingPullRequestResult, 'exact_open_pr_reused')
+  assert.equal(result.verification.duplicatePullRequestCreated, false)
   assert.equal(result.pullRequest.number, 41)
+})
+
+test('execute rejects stale remote branch before checking or creating a pull request', async () => {
+  const gate = validatePullRequestHandoff(packet())
+  const staleRemoteCommit = 'c'.repeat(40)
+  const { git, calls } = stubGit({ remote: staleRemoteCommit })
+  const requests = []
+  await assert.rejects(
+    applyReleasePullRequestWithClient({
+      handoffReceipt: receipt(),
+      mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+      env: { [approvalEnv]: gate.approvalTemplate, GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
+      git,
+      verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
+      request: async (url, options) => {
+        requests.push({ url, options })
+        return response(200, [])
+      },
+    }),
+    /release_pull_request_remote_branch_not_exact/,
+  )
+  assert.deepEqual(calls.filter((args) => args[0] === 'ls-remote'), [['ls-remote', '--heads', 'origin', branch]])
+  assert.equal(requests.length, 0)
 })
 
 test('fails closed for wrong branch, unsafe authority, stale local head, and missing remote branch', async () => {
