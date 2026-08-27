@@ -10,7 +10,7 @@ This kit is the paperwork for that preparation. It authorizes nothing: the found
 
 ## The documents, in order of use
 
-1. [baseline-measurement.md](baseline-measurement.md) — the form the founder fills in WITH the Spa owner before day 1: named business, named operator, the measured package-and-treatment process, at least three observed manual order runs, three package-redemption runs, three daily-close runs, error and cost counts, and the baseline numbers the handoff generator requires.
+1. [baseline-measurement.md](baseline-measurement.md) — the form the founder fills in WITH the Spa owner before day 1: named business, named operator, the measured package-and-treatment process, at least three observed manual order runs, three package-redemption runs, three daily-close runs, distinct private JSON run IDs across every baseline stream, error and cost counts, and the baseline numbers the handoff generator requires.
 2. [acceptance-checklist.md](acceptance-checklist.md) — the day-by-day five-day plan: the four start gates, what evidence gets captured daily, what an accepted run means, how the private receipt plus independent anchor are recorded, and how each day maps to the readiness contract's acceptance-evidence requirement.
 3. [pilot-agreement-outline.md](pilot-agreement-outline.md) — a plain-language outline of what the partner gets and gives. Outline only, marked NOT LEGAL ADVICE; it contains no invented commitments.
 

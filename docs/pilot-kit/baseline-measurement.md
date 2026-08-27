@@ -7,7 +7,7 @@ Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness
 ## Rules of measurement
 
 - Measure the owner's current manual process as it runs today — notebook, phone, paper, memory. Do not measure the SuperMega demo; the demo is not a baseline.
-- Observe at least three uninterrupted runs in each required baseline stream: manual Shop order/package-sale runs, package-redemption/package-balance updates, and manual daily-close runs. Daily-close evidence must cover three distinct close calendar dates; three repeated closes on one date are not enough. A generic set of three observed timings is not enough. Numbers recalled from memory go in as estimates and are marked as estimates.
+- Observe at least three uninterrupted runs in each required baseline stream: manual Shop order/package-sale runs, package-redemption/package-balance updates, and manual daily-close runs. Every private JSON `runId` must be unique across all three streams, so one underlying observation cannot be reused as separate baseline evidence. Daily-close evidence must cover three distinct close calendar dates; three repeated closes on one date are not enough. A generic set of three observed timings is not enough. Numbers recalled from memory go in as estimates and are marked as estimates.
 - The observer watches and times; the observer does not help. If a run is interrupted, discard it and observe another.
 - Privacy: this sheet names a real business and a real person. Keep it private. Per `docs/supermega-shop-sales-agent.md`, reporting outside the private workspace carries stage and hashes only — never the contact name, email, or company.
 
@@ -57,7 +57,7 @@ The Shop work order `shop-spa-owner-pilot` pins the process: import one client, 
 
 ## 3. Observed baseline runs
 
-The owner-safe baseline packet is accepted only after all three tables below have at least three uninterrupted owner-observed runs. If one run is interrupted, keep the note privately and add another run; do not count the interrupted run toward the ready baseline.
+The owner-safe baseline packet is accepted only after all three tables below have at least three uninterrupted owner-observed runs. Use a distinct private JSON `runId` for every row across all three tables. If one run is interrupted, keep the note privately and add another run; do not count the interrupted run toward the ready baseline.
 
 ### 3A. Manual Shop order/package-sale runs
 

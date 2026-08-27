@@ -152,8 +152,11 @@ requireSnippet(baselineMeasurementText, 'Observe at least three uninterrupted ru
 requireSnippet(baselineMeasurementText, 'manual Shop order/package-sale runs', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, 'package-redemption/package-balance updates', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, 'manual daily-close runs', files.baselineMeasurement)
+requireSnippet(baselineMeasurementText, 'Every private JSON `runId` must be unique across all three streams', files.baselineMeasurement)
+requireSnippet(baselineMeasurementText, 'Use a distinct private JSON `runId` for every row across all three tables', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, '`owner_private_intake_ready` and Day-0 readiness reports `blocked_owner_observed_baseline_required`', files.baselineMeasurement)
-requireSnippet(pilotKitReadmeText, 'at least three observed manual order runs, three package-redemption runs, three daily-close runs', files.pilotKitReadme)
+requireSnippet(pilotKitReadmeText, 'at least three observed manual order runs, three package-redemption runs, three daily-close runs, distinct private JSON run IDs across every baseline stream', files.pilotKitReadme)
+requireSnippet(salesAgentGuideText, 'The private baseline JSON must use distinct `runId` values across order, package-redemption, and daily-close streams', files.salesAgentGuide)
 
 requireSnippet(onboardingText, 'Shop pilot proof rule', files.onboarding)
 requireSnippet(onboardingText, 'accepted order-to-close runs', files.onboarding)

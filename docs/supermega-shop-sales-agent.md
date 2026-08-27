@@ -43,7 +43,7 @@ npm.cmd run client:pilot:workspace -- --verify --workspace "<private-workspace>"
 
 ## Day-0 baseline and observed pilot evidence
 
-After the owner has captured the private baseline, use the deterministic packet tools before any pilot-day recording. Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot; never treat a stale release gate as pilot-ready.
+After the owner has captured the private baseline, use the deterministic packet tools before any pilot-day recording. The private baseline JSON must use distinct `runId` values across order, package-redemption, and daily-close streams. Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot; never treat a stale release gate as pilot-ready.
 
 ```powershell
 npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"
