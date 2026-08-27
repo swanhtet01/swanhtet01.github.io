@@ -24,13 +24,14 @@ Run the local input lint before generating any owner-safe packet. If the lint re
 ```powershell
 npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"
 npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"
+npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"
 npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"
 npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"
 npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"
 npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"
 ```
 
-The owner-safe baseline packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation. The owner-safe launch-gate report must be written and verified before Day-0 readiness, and Day-0 readiness must be bound to the current local release handoff and GitHub protection snapshot, so it cannot accidentally treat a stale release gate as pilot-ready. Owner-safe does not mean public website, customer-facing, or publishable.
+The owner-safe baseline packet contains counts, derived medians, and a private-input digest only; it does not include the business name, operator name, raw notes, email, phone number, payment, stock movement, hosted write, or managed activation. The owner-safe baseline packet and launch-gate report must both be written and verified before Day-0 readiness, and Day-0 readiness must be bound to the current local release handoff and GitHub protection snapshot, so it cannot accidentally treat a stale release gate as pilot-ready. Owner-safe does not mean public website, customer-facing, or publishable.
 
 If only the intake packet is ready but the baseline is missing, `shop:pilot:launch-gate` reports `owner_private_intake_ready` and Day-0 readiness reports `blocked_owner_observed_baseline_required`. If the launch gate reports `owner_private_handoff_ready` and the Day-0 packet reports `day0_owner_private_handoff_ready`, the baseline and intake digests are ready for owner-private handoff. It still does not authorize customer contact, deployment, payment, stock movement, hosted writes, or managed activation.
 
