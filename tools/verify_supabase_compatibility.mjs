@@ -12,6 +12,7 @@ const MAX_FILES = 5_000
 const REMOVED_POSTGRES_17_EXTENSIONS = new Set(['timescaledb', 'plv8', 'pls', 'plcoffee', 'pgjwt'])
 const DEPRECATED_LOGS_ENDPOINT = ['logs', 'all'].join('.')
 const PUBLIC_TABLE_AUTO_EXPOSURE_CHANGE = '2026-10-30'
+const DROP_INDEX_REVIEW_REQUIREMENT = 'separate_reviewed_migration_with_query_evidence'
 const SQL_IDENTIFIER_PATTERN = String.raw`(?:"(?:[^"]|"")*"|[a-z_][a-z0-9_$]*)`
 const SELF_PATH = resolve(import.meta.filename)
 
@@ -67,6 +68,13 @@ export function compatibilityFindings(path, text) {
   if (extname(path).toLowerCase() !== '.sql') return findings
 
   for (const statement of sqlStatements(String(text))) {
+    if (/\bdrop\s+index\b/i.test(statement)) {
+      findings.push({
+        path: normalizedPath,
+        code: 'drop_index_requires_reviewed_query_evidence',
+        requiredEvidence: DROP_INDEX_REVIEW_REQUIREMENT,
+      })
+    }
     const match = /\b(?:create|alter)\s+extension(?:\s+if\s+not\s+exists)?\s+"?([a-z0-9_]+)"?/i.exec(statement)
     if (!match) continue
     const extension = match[1].toLowerCase()
@@ -139,7 +147,8 @@ function runSelfTest() {
   const pinned = compatibilityFindings('pinned.sql', ['create extension pgcrypto ', 'version \'1.3\';'].join(''))
   const removed = compatibilityFindings('removed.sql', ['create extension ', 'plv8;'].join(''))
   const deprecated = compatibilityFindings('client.ts', `const endpoint = '${['logs', 'all'].join('.')}'`)
-  const commentOnly = compatibilityFindings('comment.sql', '-- create extension plv8 version \'1\';\nselect 1;')
+  const dropIndex = compatibilityFindings('advisor-output.sql', 'drop index if exists public.idx_shop_orders_created_at;')
+  const commentOnly = compatibilityFindings('comment.sql', '-- create extension plv8 version \'1\';\n-- drop index public.idx_comment_only;\nselect 1;')
   const publicMissing = publicTableExposureFindings([
     { path: '202610_public_missing.sql', text: 'create table public.unreviewed_browser_surface (id uuid primary key);' },
   ])
@@ -167,6 +176,7 @@ function runSelfTest() {
     reject_extension_version_pin: pinned.some((item) => item.code === 'extension_version_pin_forbidden'),
     reject_removed_postgres17_extension: removed.some((item) => item.code === 'postgres17_removed_extension'),
     reject_deprecated_logs_endpoint: deprecated.some((item) => item.code === 'deprecated_management_logs_endpoint'),
+    reject_drop_index_without_reviewed_query_evidence: dropIndex.some((item) => item.code === 'drop_index_requires_reviewed_query_evidence' && item.requiredEvidence === DROP_INDEX_REVIEW_REQUIREMENT),
     ignore_sql_comments: commentOnly.length === 0,
     reject_public_table_without_explicit_posture: publicMissing.some((item) => item.code === 'public_table_exposure_posture_missing'),
     allow_public_table_with_explicit_revoke: publicRevoked.length === 0,
