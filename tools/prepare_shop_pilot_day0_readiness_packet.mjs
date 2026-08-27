@@ -123,6 +123,7 @@ const BASELINE_CAPTURE_PRIVATE_INPUTS = [
 ]
 const REQUIRED_PROMOTION_ACCEPTED_RUNS = 20
 const REQUIRED_PROMOTION_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
+const REQUIRED_PROMOTION_PILOT_CALENDAR_DATES = 5
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -163,6 +164,12 @@ function promotionEvidenceRequirementFor(launchGateReport) {
       ? [...readiness.promotionEvidenceAcceptedPilotDayIndexes]
       : [],
     pilotSequenceCoverageMet: readiness.promotionEvidencePilotSequenceCoverageMet === true,
+    requiredPilotCalendarDates: readiness.promotionEvidenceRequiredPilotCalendarDates ?? REQUIRED_PROMOTION_PILOT_CALENDAR_DATES,
+    acceptedConsecutiveObservedDateCount: readiness.promotionEvidenceAcceptedObservedDateCount ?? 0,
+    acceptedConsecutiveObservedDates: Array.isArray(readiness.promotionEvidenceAcceptedObservedDates)
+      ? [...readiness.promotionEvidenceAcceptedObservedDates]
+      : [],
+    pilotCalendarCoverageMet: readiness.promotionEvidencePilotCalendarCoverageMet === true,
     readyForPromotionEvidence: false,
     syntheticEvidenceAccepted: false,
   }
@@ -740,6 +747,10 @@ export function validateShopPilotDay0ReadinessPacket(packet) {
     || !sameArray(promotion.requiredPilotDayIndexes, REQUIRED_PROMOTION_PILOT_DAY_INDEXES)
     || !sameArray(promotion.acceptedConsecutivePilotDayIndexes, [])
     || promotion.pilotSequenceCoverageMet !== false
+    || promotion.requiredPilotCalendarDates !== REQUIRED_PROMOTION_PILOT_CALENDAR_DATES
+    || promotion.acceptedConsecutiveObservedDateCount !== 0
+    || !sameArray(promotion.acceptedConsecutiveObservedDates, [])
+    || promotion.pilotCalendarCoverageMet !== false
     || promotion.readyForPromotionEvidence !== false
     || promotion.syntheticEvidenceAccepted !== false) {
     fail('shop_pilot_day0_promotion_evidence_requirement_invalid')
@@ -957,9 +968,11 @@ Candidate: \`${packet.candidate.branch || 'unknown'} @ ${packet.candidate.head |
 - Ready for customer contact: false
 - Ready for deployment or managed activation: false
 - Ready for promotion evidence: false
-- Required promotion evidence: ${promotion.requiredAcceptedConsecutiveRuns} consecutive accepted real runs covering pilot days ${promotion.requiredPilotDayIndexes.join(', ')}
+- Required promotion evidence: ${promotion.requiredAcceptedConsecutiveRuns} consecutive accepted real runs covering pilot days ${promotion.requiredPilotDayIndexes.join(', ')} and at least ${promotion.requiredPilotCalendarDates} distinct observed calendar dates
 - Current promotion accepted run count: ${promotion.acceptedConsecutiveRuns}
 - Five-day pilot sequence covered: ${promotion.pilotSequenceCoverageMet}
+- Current accepted observed date count: ${promotion.acceptedConsecutiveObservedDateCount}
+- Calendar-date coverage met: ${promotion.pilotCalendarCoverageMet}
 
 ## Release gate
 
@@ -1118,6 +1131,10 @@ function runSelfTest() {
       && empty.promotionEvidenceRequirement.requiredAcceptedConsecutiveRuns === 20
       && JSON.stringify(empty.promotionEvidenceRequirement.requiredPilotDayIndexes) === JSON.stringify([1, 2, 3, 4, 5])
       && empty.promotionEvidenceRequirement.pilotSequenceCoverageMet === false
+      && empty.promotionEvidenceRequirement.requiredPilotCalendarDates === 5
+      && empty.promotionEvidenceRequirement.acceptedConsecutiveObservedDateCount === 0
+      && JSON.stringify(empty.promotionEvidenceRequirement.acceptedConsecutiveObservedDates) === JSON.stringify([])
+      && empty.promotionEvidenceRequirement.pilotCalendarCoverageMet === false
       && empty.ownerPrivateBaselineChecklist.promotionEvidenceRequirement.requiredAcceptedConsecutiveRuns === 20
       && empty.ownerPrivateBaselineChecklist.stopConditions.includes('synthetic_or_supermega_demo_run_used_as_baseline')
       && validateShopPilotDay0ReadinessPacket(empty) === empty,

@@ -943,7 +943,7 @@ requireContract('competitive execution cut preserves money-path focus and claim 
   && competitiveExecutionCutText.includes('OneDrive expert/audit exports are advisory inputs only.')
   && competitiveExecutionCutText.includes('AI is a shared capability, not a customer product.')
   && competitiveExecutionCutNormalized.includes('Do not claim SAP, Odoo, Shopify, or POS-SaaS replacement parity until managed tenant, support, observability, recovery, and commercial evidence gates pass.')
-  && competitiveExecutionCutNormalized.includes('Shop remains the money-path product until its owner-private pilot has at least 20 consecutive accepted observed runs covering pilot days 1 through 5.')
+  && competitiveExecutionCutNormalized.includes('Shop remains the money-path product until its owner-private pilot has at least 20 consecutive accepted observed runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates.')
   && competitiveExecutionCutNormalized.includes('GitHub `main` protection is verified. The current first external gate is the exact review-branch push.')
   && !competitiveExecutionCutText.includes('The current first external gate is GitHub `main` protection.')
   && competitiveExecutionCutNormalized.includes('The current first commercial evidence gate is the owner-private Shop baseline and pilot.')
@@ -1143,6 +1143,10 @@ requireContract('managed pilot readiness is derived and fail closed',
   && JSON.stringify(managedPilotReadiness.pilotEvidence?.requiredPilotDayIndexes) === JSON.stringify([1, 2, 3, 4, 5])
   && JSON.stringify(managedPilotReadiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes) === JSON.stringify([])
   && managedPilotReadiness.pilotEvidence?.pilotSequenceCoverageMet === false
+  && managedPilotReadiness.pilotEvidence?.requiredPilotCalendarDates === 5
+  && managedPilotReadiness.pilotEvidence?.acceptedConsecutiveObservedDateCount === 0
+  && JSON.stringify(managedPilotReadiness.pilotEvidence?.acceptedConsecutiveObservedDates) === JSON.stringify([])
+  && managedPilotReadiness.pilotEvidence?.pilotCalendarCoverageMet === false
   && managedPilotReadiness.pilotEvidence?.syntheticEvidenceAccepted === false
   && managedPilotReadiness.pilotEvidence?.publicIdentityAllowed === false
   && managedPilotReadiness.sourceReceipts?.length === 10

@@ -93,6 +93,10 @@ test('passes only as owner-private-intake readiness, not contact or activation r
   assert.deepEqual(report.launchReadiness.promotionEvidenceRequiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.deepEqual(report.launchReadiness.promotionEvidenceAcceptedPilotDayIndexes, [])
   assert.equal(report.launchReadiness.promotionEvidencePilotSequenceCoverageMet, false)
+  assert.equal(report.launchReadiness.promotionEvidenceRequiredPilotCalendarDates, 5)
+  assert.equal(report.launchReadiness.promotionEvidenceAcceptedObservedDateCount, 0)
+  assert.deepEqual(report.launchReadiness.promotionEvidenceAcceptedObservedDates, [])
+  assert.equal(report.launchReadiness.promotionEvidencePilotCalendarCoverageMet, false)
   assert.deepEqual(report.readiness.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.deepEqual(report.readiness.acceptedConsecutivePilotDayIndexes, [])
   assert.equal(report.readiness.pilotSequenceCoverageMet, false)
@@ -236,6 +240,20 @@ test('rejects synthetic, public-identity, and accepted-run promotion claims', ()
   }))
   assert.equal(prematureSequence.ok, false)
   assert.ok(prematureSequence.failures.includes('shop_pilot_launch_gate_pilot_evidence_state_invalid'))
+
+  const prematureCalendarCoverage = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({
+    readiness: {
+      ...sampleShopPilotLaunchGateInput().readiness,
+      pilotEvidence: {
+        ...sampleShopPilotLaunchGateInput().readiness.pilotEvidence,
+        acceptedConsecutiveObservedDateCount: 5,
+        acceptedConsecutiveObservedDates: ['2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29'],
+        pilotCalendarCoverageMet: true,
+      },
+    },
+  }))
+  assert.equal(prematureCalendarCoverage.ok, false)
+  assert.ok(prematureCalendarCoverage.failures.includes('shop_pilot_launch_gate_pilot_evidence_state_invalid'))
 })
 
 test('rejects unsafe public boundary controls and customer contact states', () => {

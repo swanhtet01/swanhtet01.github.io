@@ -123,6 +123,10 @@ function input(overrides = {}) {
       requiredPilotDayIndexes: [1, 2, 3, 4, 5],
       acceptedConsecutivePilotDayIndexes: [],
       pilotSequenceCoverageMet: false,
+      requiredPilotCalendarDates: 5,
+      acceptedConsecutiveObservedDateCount: 0,
+      acceptedConsecutiveObservedDates: [],
+      pilotCalendarCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       privateWorkspaceRequired: true,
@@ -225,6 +229,7 @@ test('passes only when all release-stack owner gates are closed and explicit', (
   assert.equal(report.products.firstPilotProduct, 'shop')
   assert.equal(report.products.aiIsSharedCapability, true)
   assert.match(report.requiredOwnerGates.find((gate) => gate.id === 'shop_pilot_evidence').evidence, /pilot days 1 through 5/)
+  assert.match(report.requiredOwnerGates.find((gate) => gate.id === 'shop_pilot_evidence').evidence, /5 distinct observed calendar dates/)
   assert.deepEqual(report.nextOwnerGateIds, [
     'github_main_protection',
     'push_and_pr',

@@ -132,6 +132,7 @@ test('removes the Shop private-intake blocker only when Day-0 intake is accepted
   assert.equal(shop.currentBlockers.includes('owner_private_intake'), false)
   assert.ok(shop.currentBlockers.includes('real_shop_pilot_evidence'))
   assert.match(shop.nextAction, /capture the owner-private baseline/)
+  assert.match(shop.nextAction, /at least 5 distinct observed calendar dates/)
   assert.doesNotMatch(shop.nextAction, /baseline and intake/)
   assert.equal(matrix.sourceDigests.shopPilotDay0ReadinessDigest, fixture().shopPilotDay0Readiness.digest)
 

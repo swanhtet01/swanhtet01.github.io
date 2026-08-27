@@ -77,7 +77,8 @@ gated.
 ## 4. One outcome that matters first
 
 Shop remains the money-path product until its owner-private pilot has at least
-20 consecutive accepted observed runs covering pilot days 1 through 5.
+20 consecutive accepted observed runs covering pilot days 1 through 5 and at
+least 5 distinct observed calendar dates.
 
 The next evidence chain is:
 

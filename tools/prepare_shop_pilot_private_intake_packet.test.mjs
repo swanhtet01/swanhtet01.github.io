@@ -28,8 +28,15 @@ test('builds a public-safe owner private intake packet only', () => {
   assert.deepEqual(packet.readiness.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.deepEqual(packet.readiness.acceptedConsecutivePilotDayIndexes, [])
   assert.equal(packet.readiness.pilotSequenceCoverageMet, false)
+  assert.equal(packet.readiness.requiredPilotCalendarDates, 5)
+  assert.equal(packet.readiness.acceptedConsecutiveObservedDateCount, 0)
+  assert.deepEqual(packet.readiness.acceptedConsecutiveObservedDates, [])
+  assert.equal(packet.readiness.pilotCalendarCoverageMet, false)
   assert.equal(packet.ownerPrivateIntake.promotionEvidenceRequiredAcceptedRuns, 20)
   assert.equal(packet.ownerPrivateIntake.promotionEvidenceRequiresFiveDaySequenceCoverage, true)
+  assert.equal(packet.ownerPrivateIntake.promotionEvidenceRequiredPilotCalendarDates, 5)
+  assert.equal(packet.ownerPrivateIntake.promotionEvidenceRequiresCalendarCoverage, true)
+  assert.equal(packet.ownerPrivateIntake.promotionEvidenceAcceptedObservedDateCount, 0)
   assert.equal(packet.ownerPrivateIntake.promotionEvidenceAcceptedRuns, 0)
   assert.equal(packet.controls.customerContactAllowed, false)
   assert.equal(packet.controls.paymentAllowed, false)
@@ -80,6 +87,20 @@ test('fails closed when public boundary or pilot proof claims become unsafe', ()
   }))
   assert.equal(missingPilotSequence.ok, false)
   assert.ok(missingPilotSequence.failures.includes('shop_pilot_private_intake_pilot_evidence_invalid'))
+
+  const claimedCalendarCoverage = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput({
+    readiness: {
+      ...sampleShopPilotPrivateIntakeInput().readiness,
+      pilotEvidence: {
+        ...sampleShopPilotPrivateIntakeInput().readiness.pilotEvidence,
+        acceptedConsecutiveObservedDateCount: 5,
+        acceptedConsecutiveObservedDates: ['2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29'],
+        pilotCalendarCoverageMet: true,
+      },
+    },
+  }))
+  assert.equal(claimedCalendarCoverage.ok, false)
+  assert.ok(claimedCalendarCoverage.failures.includes('shop_pilot_private_intake_pilot_evidence_invalid'))
 })
 
 test('rejects missing scripts and tampered packets', () => {
@@ -104,7 +125,8 @@ test('renders markdown without private identity or credential-shaped text', () =
   const packet = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
   const markdown = renderShopPilotPrivateIntakeMarkdown(packet)
   assert.match(markdown, /Owner-private intake preparation only/)
-  assert.match(markdown, /Promotion evidence still requires 20 consecutive accepted real runs whose accepted streak covers pilot days 1 through 5/)
+  assert.match(markdown, /Promotion evidence still requires 20 consecutive accepted real runs whose accepted streak covers pilot days 1 through 5 and at least 5 distinct observed calendar dates/)
+  assert.match(markdown, /current accepted observed date count is 0/)
   assert.doesNotMatch(markdown, /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu)
   assert.doesNotMatch(markdown, /(?:\+?95|09)[\s().-]*\d(?:[\s().-]*\d){6,12}/u)
   assert.doesNotMatch(markdown, /sk-[A-Za-z0-9_-]{20,}/)

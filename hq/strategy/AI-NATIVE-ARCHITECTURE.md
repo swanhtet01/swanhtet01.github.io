@@ -166,7 +166,8 @@ product expansion, not the active activation route. The immediate path is:
       -> owner-approved paired release while operating mode stays isolated_demo
       -> five-day private Shop pilot with operator-reviewed runs
       -> 20 consecutive accepted receipt-and-anchor-bound runs covering pilot
-         days 1 through 5 before any managed activation recommendation
+         days 1 through 5 and at least 5 distinct observed calendar dates
+         before any managed activation recommendation
 
 Design consequence: no public signup, claim-code provisioning, hosted tenant,
 customer acknowledgement, payment, stock movement, production database write,
@@ -277,8 +278,9 @@ Phase B -- owner-named Shop pilot (target: days 14-45)
   five-day owner-named Shop sequence without external messages, payments,
   stock movement, production writes, or managed activation.
 - Trigger: 20 consecutive accepted, operator-reviewed, receipt-and-anchor-bound
-  runs covering pilot days 1 through 5 -> prepare a pilot decision packet and
-  managed activation recommendation.
+  runs covering pilot days 1 through 5 and at least 5 distinct observed
+  calendar dates -> prepare a pilot decision packet and managed activation
+  recommendation.
 - Trigger: fewer or failed accepted runs -> keep Shop in learning mode and fix
   locally before any activation proposal.
 - Self-serve tenant provisioning, customer acknowledgement automation, and

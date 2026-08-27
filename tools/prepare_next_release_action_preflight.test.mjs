@@ -107,6 +107,10 @@ function readiness() {
       requiredPilotDayIndexes: [1, 2, 3, 4, 5],
       acceptedConsecutivePilotDayIndexes: [],
       pilotSequenceCoverageMet: false,
+      requiredPilotCalendarDates: 5,
+      acceptedConsecutiveObservedDateCount: 0,
+      acceptedConsecutiveObservedDates: [],
+      pilotCalendarCoverageMet: false,
     },
     products: products.map((productId) => ({
       productId,

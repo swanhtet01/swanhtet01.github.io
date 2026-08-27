@@ -62,7 +62,7 @@ npm.cmd run client:pilot:observed-evidence -- --record --workspace "<private-obs
 npm.cmd run client:pilot:observed-evidence -- --verify --workspace "<private-observed-workspace>"
 ```
 
-Every counted run requires `evidenceReferenceDigest` for the private evidence receipt and `independentAnchorDigest` for the independently sealed private anchor. If either digest is missing, reused, or equal to the other digest, the run does not count. Promotion evidence still requires 20 consecutive accepted real runs covering pilot days 1 through 5; synthetic or sample runs do not close the gate.
+Every counted run requires `evidenceReferenceDigest` for the private evidence receipt and `independentAnchorDigest` for the independently sealed private anchor. If either digest is missing, reused, or equal to the other digest, the run does not count. Promotion evidence still requires 20 consecutive accepted real runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates; synthetic or sample runs do not close the gate.
 
 Never overwrite existing outputs. On `stage_incomplete`, `stale_or_tampered`, `binding_mismatch`, or another validation error, stop the transition and preserve the files for owner review.
 

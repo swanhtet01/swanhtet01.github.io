@@ -145,7 +145,7 @@ requireSnippet(salesAgentGuideText, 'client:pilot:observed-evidence:validate', f
 requireSnippet(salesAgentGuideText, 'evidenceReferenceDigest', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, 'independentAnchorDigest', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, 'If either digest is missing, reused, or equal to the other digest, the run does not count.', files.salesAgentGuide)
-requireSnippet(salesAgentGuideText, '20 consecutive accepted real runs covering pilot days 1 through 5', files.salesAgentGuide)
+requireSnippet(salesAgentGuideText, '20 consecutive accepted real runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, 'synthetic or sample runs do not close the gate', files.salesAgentGuide)
 
 requireSnippet(baselineMeasurementText, 'Observe at least three uninterrupted runs in each required baseline stream', files.baselineMeasurement)

@@ -357,6 +357,7 @@ export function buildCurrentOperatorBoard({
       blockers: [
         ...(readiness.pilotEvidence?.acceptedConsecutiveRuns >= readiness.pilotEvidence?.requiredAcceptedConsecutiveRuns ? [] : ['accepted_runs_below_20']),
         ...(readiness.pilotEvidence?.pilotSequenceCoverageMet === true ? [] : ['pilot_sequence_days_missing']),
+        ...(readiness.pilotEvidence?.pilotCalendarCoverageMet === true ? [] : ['pilot_calendar_dates_missing']),
         ...(readiness.pilotEvidence?.proofComplete === true ? [] : ['real_observation_missing']),
       ],
       evidence: [],
@@ -686,10 +687,14 @@ function selfTestBoard() {
       proofComplete: false,
       acceptedConsecutiveRuns: 0,
       requiredAcceptedConsecutiveRuns: 20,
-      requiredPilotDayIndexes: [1, 2, 3, 4, 5],
-      acceptedConsecutivePilotDayIndexes: [],
-      pilotSequenceCoverageMet: false,
-    },
+        requiredPilotDayIndexes: [1, 2, 3, 4, 5],
+        acceptedConsecutivePilotDayIndexes: [],
+        pilotSequenceCoverageMet: false,
+        requiredPilotCalendarDates: 5,
+        acceptedConsecutiveObservedDateCount: 0,
+        acceptedConsecutiveObservedDates: [],
+        pilotCalendarCoverageMet: false,
+      },
   }
   const githubProposalReceipt = { path: 'github.json', digest: `sha256:${'1'.repeat(64)}`, packet: { digest: `sha256:${'2'.repeat(64)}` } }
   const supabaseProposalReceipt = {

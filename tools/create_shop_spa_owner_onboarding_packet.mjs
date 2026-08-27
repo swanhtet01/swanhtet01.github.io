@@ -291,7 +291,7 @@ Use this after the operator has completed the five-day proof plan. This is the c
 
 - 20 accepted order-to-close runs
 - 5 daily closes observed
-- accepted evidence covers pilot days 1 through 5
+- accepted evidence covers pilot days 1 through 5 and at least 5 distinct observed calendar dates
 - 0 unexplained payment or stock changes
 - every correction has an operator, reason, timestamp, and evidence reference
 - owner records a continue, revise, or stop decision

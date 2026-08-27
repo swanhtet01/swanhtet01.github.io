@@ -16,6 +16,7 @@ const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
 const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
 const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
+const REQUIRED_PILOT_CALENDAR_DATES = 5
 const REQUIRED_FALSE_CONTROLS = [
   'automaticSendAllowed',
   'paymentAllowed',
@@ -156,6 +157,10 @@ function assertCurrentSources(input, failures) {
     || !sameArray(readiness.pilotEvidence?.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
     || !sameArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes, [])
     || readiness.pilotEvidence?.pilotSequenceCoverageMet !== false
+    || readiness.pilotEvidence?.requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || readiness.pilotEvidence?.acceptedConsecutiveObservedDateCount !== 0
+    || !sameArray(readiness.pilotEvidence?.acceptedConsecutiveObservedDates, [])
+    || readiness.pilotEvidence?.pilotCalendarCoverageMet !== false
     || readiness.pilotEvidence?.syntheticEvidenceAccepted !== false
     || readiness.pilotEvidence?.publicIdentityAllowed !== false
     || readiness.pilotEvidence?.privateWorkspaceRequired !== true) {
@@ -242,6 +247,10 @@ export function buildShopPilotPrivateIntakePacket(input = {}) {
       requiredPilotDayIndexes: Array.isArray(readiness.pilotEvidence?.requiredPilotDayIndexes) ? [...readiness.pilotEvidence.requiredPilotDayIndexes] : [],
       acceptedConsecutivePilotDayIndexes: Array.isArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes) ? [...readiness.pilotEvidence.acceptedConsecutivePilotDayIndexes] : [],
       pilotSequenceCoverageMet: readiness.pilotEvidence?.pilotSequenceCoverageMet === true,
+      requiredPilotCalendarDates: readiness.pilotEvidence?.requiredPilotCalendarDates ?? null,
+      acceptedConsecutiveObservedDateCount: readiness.pilotEvidence?.acceptedConsecutiveObservedDateCount ?? null,
+      acceptedConsecutiveObservedDates: Array.isArray(readiness.pilotEvidence?.acceptedConsecutiveObservedDates) ? [...readiness.pilotEvidence.acceptedConsecutiveObservedDates] : [],
+      pilotCalendarCoverageMet: readiness.pilotEvidence?.pilotCalendarCoverageMet === true,
     },
     publicBoundary: {
       stage: publicBoundary.stage || null,
@@ -265,6 +274,9 @@ export function buildShopPilotPrivateIntakePacket(input = {}) {
       promotionEvidenceRequiredAcceptedRuns: 20,
       promotionEvidenceAcceptedRuns: readiness.pilotEvidence?.acceptedConsecutiveRuns ?? 0,
       promotionEvidenceRequiresFiveDaySequenceCoverage: true,
+      promotionEvidenceRequiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      promotionEvidenceAcceptedObservedDateCount: readiness.pilotEvidence?.acceptedConsecutiveObservedDateCount ?? 0,
+      promotionEvidenceRequiresCalendarCoverage: true,
       minimumManualRunsBeforeDayOne: 3,
       fiveDayPilotSequence: ['walkthrough', 'reviewed_orders', 'daily_close_exception', 'return_reload_retry', 'evidence_review_backup'],
     },
@@ -320,7 +332,11 @@ export function validateShopPilotPrivateIntakePacket(packet) {
     || packet.readiness?.acceptedConsecutiveRuns !== 0
     || !sameArray(packet.readiness?.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
     || !sameArray(packet.readiness?.acceptedConsecutivePilotDayIndexes, [])
-    || packet.readiness?.pilotSequenceCoverageMet !== false) {
+    || packet.readiness?.pilotSequenceCoverageMet !== false
+    || packet.readiness?.requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || packet.readiness?.acceptedConsecutiveObservedDateCount !== 0
+    || !sameArray(packet.readiness?.acceptedConsecutiveObservedDates, [])
+    || packet.readiness?.pilotCalendarCoverageMet !== false) {
     throw new Error('shop_pilot_private_intake_packet_readiness_invalid')
   }
   if (packet.publicBoundary?.participantIdentityPresent !== false
@@ -328,6 +344,14 @@ export function validateShopPilotPrivateIntakePacket(packet) {
     || packet.publicBoundary?.externalWritesPerformed !== false
     || packet.publicBoundary?.customerContactPerformed !== false) {
     throw new Error('shop_pilot_private_intake_packet_public_boundary_invalid')
+  }
+  if (packet.ownerPrivateIntake?.promotionEvidenceRequiredAcceptedRuns !== 20
+    || packet.ownerPrivateIntake?.promotionEvidenceAcceptedRuns !== 0
+    || packet.ownerPrivateIntake?.promotionEvidenceRequiresFiveDaySequenceCoverage !== true
+    || packet.ownerPrivateIntake?.promotionEvidenceRequiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || packet.ownerPrivateIntake?.promotionEvidenceAcceptedObservedDateCount !== 0
+    || packet.ownerPrivateIntake?.promotionEvidenceRequiresCalendarCoverage !== true) {
+    throw new Error('shop_pilot_private_intake_packet_promotion_requirement_invalid')
   }
   if (packet.controls?.noWritePacket !== true
     || packet.controls?.customerContactAllowed !== false
@@ -380,7 +404,7 @@ ${packet.nextGates.map((gate) => `- ${gate.id}: ${gate.status}; blocks: ${gate.b
 
 ## Evidence rule
 
-Promotion evidence still requires ${packet.ownerPrivateIntake.promotionEvidenceRequiredAcceptedRuns} consecutive accepted real runs whose accepted streak covers pilot days 1 through 5. Current accepted run count is ${packet.ownerPrivateIntake.promotionEvidenceAcceptedRuns}.
+Promotion evidence still requires ${packet.ownerPrivateIntake.promotionEvidenceRequiredAcceptedRuns} consecutive accepted real runs whose accepted streak covers pilot days 1 through 5 and at least ${packet.ownerPrivateIntake.promotionEvidenceRequiredPilotCalendarDates} distinct observed calendar dates. Current accepted run count is ${packet.ownerPrivateIntake.promotionEvidenceAcceptedRuns}; current accepted observed date count is ${packet.ownerPrivateIntake.promotionEvidenceAcceptedObservedDateCount}.
 `
 }
 
@@ -481,6 +505,10 @@ export function sampleShopPilotPrivateIntakeInput(overrides = {}) {
       requiredPilotDayIndexes: [...REQUIRED_PILOT_DAY_INDEXES],
       acceptedConsecutivePilotDayIndexes: [],
       pilotSequenceCoverageMet: false,
+      requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      acceptedConsecutiveObservedDateCount: 0,
+      acceptedConsecutiveObservedDates: [],
+      pilotCalendarCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       privateWorkspaceRequired: true,

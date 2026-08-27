@@ -17,6 +17,7 @@ const DEFAULT_PATHS = {
   orderIntakeEvalPlan: resolve(root, 'hq', 'strategy', 'AI-ORDER-INTAKE-EVAL-PLAN.md'),
 }
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
+const REQUIRED_PILOT_CALENDAR_DATES = 5
 const STALE_CLOUD_AI_RUNBOOK_FRAGMENTS = Object.freeze([
   'ANTHROPIC_API_KEY',
   'CLAUDE_API_KEY',
@@ -87,6 +88,8 @@ export function buildStrategyPostureReport(input = {}) {
   const requiredRuns = Number(readiness?.pilotEvidence?.requiredAcceptedConsecutiveRuns)
   const requiredPilotDayIndexes = readiness?.pilotEvidence?.requiredPilotDayIndexes
   const acceptedConsecutivePilotDayIndexes = readiness?.pilotEvidence?.acceptedConsecutivePilotDayIndexes
+  const requiredPilotCalendarDates = readiness?.pilotEvidence?.requiredPilotCalendarDates
+  const acceptedConsecutiveObservedDates = readiness?.pilotEvidence?.acceptedConsecutiveObservedDates
 
   addIf(readiness?.contract !== 'supermega.managed-pilot-readiness.v5', failures, 'strategy_posture_readiness_contract_invalid')
   addIf(readiness?.pilotMode !== 'owner_named', failures, 'strategy_posture_pilot_mode_not_owner_named')
@@ -102,6 +105,10 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(!sameArray(requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES), failures, 'strategy_posture_required_pilot_days_invalid')
   addIf(!sameArray(acceptedConsecutivePilotDayIndexes, []), failures, 'strategy_posture_accepted_pilot_days_should_be_empty')
   addIf(readiness?.pilotEvidence?.pilotSequenceCoverageMet !== false, failures, 'strategy_posture_pilot_sequence_coverage_claimed')
+  addIf(requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES, failures, 'strategy_posture_required_pilot_calendar_dates_invalid')
+  addIf(readiness?.pilotEvidence?.acceptedConsecutiveObservedDateCount !== 0, failures, 'strategy_posture_accepted_observed_date_count_should_be_zero')
+  addIf(!sameArray(acceptedConsecutiveObservedDates, []), failures, 'strategy_posture_accepted_observed_dates_should_be_empty')
+  addIf(readiness?.pilotEvidence?.pilotCalendarCoverageMet !== false, failures, 'strategy_posture_pilot_calendar_coverage_claimed')
   addIf(readiness?.pilotEvidence?.syntheticEvidenceAccepted !== false, failures, 'strategy_posture_synthetic_evidence_accepted')
   addIf(readiness?.pilotEvidence?.publicIdentityAllowed !== false, failures, 'strategy_posture_public_identity_allowed')
 
@@ -109,7 +116,7 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(!has(aiNative, `production schema v${liveSchemaVersion} observed with the public-browser quarantine`), failures, 'strategy_posture_ai_schema_line_stale')
   addIf(!has(aiNative, `current v${liveSchemaVersion} production parity`), failures, 'strategy_posture_ai_parity_line_stale')
   addIf(!(has(aiNative, 'Self-serve remains a later') && has(aiNative, 'not the active activation route')), failures, 'strategy_posture_ai_self_serve_deferred_missing')
-  addIf(!has(aiNative, '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5'), failures, 'strategy_posture_ai_20_run_gate_missing')
+  addIf(!has(aiNative, '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates'), failures, 'strategy_posture_ai_20_run_gate_missing')
   addIf(!has(aiNative, 'no public signup, claim-code provisioning, hosted tenant'), failures, 'strategy_posture_ai_no_signup_claim_missing')
   addIf(!has(aiNative, 'GitHub main protection verified, review-branch publication still owner-gated'), failures, 'strategy_posture_ai_review_branch_gate_missing')
   addIf(has(aiNative, 'Managed onboarding is SELF-SERVE'), failures, 'strategy_posture_ai_active_self_serve_claim')
@@ -122,7 +129,7 @@ export function buildStrategyPostureReport(input = {}) {
   }
   addIf(!has(competitiveCut, 'AI is a shared capability, not a customer product'), failures, 'strategy_posture_competitive_cut_ai_boundary_missing')
   addIf(!has(competitiveCut, 'Shop remains the money-path product'), failures, 'strategy_posture_competitive_cut_shop_first_missing')
-  addIf(!has(competitiveCut, `${requiredRuns} consecutive accepted observed runs covering pilot days 1 through 5`), failures, 'strategy_posture_competitive_cut_run_gate_missing')
+  addIf(!has(competitiveCut, `${requiredRuns} consecutive accepted observed runs covering pilot days 1 through 5 and at least ${REQUIRED_PILOT_CALENDAR_DATES} distinct observed calendar dates`), failures, 'strategy_posture_competitive_cut_run_gate_missing')
   addIf(!has(competitiveCut, 'GitHub `main` protection is verified. The current first external gate is the exact review-branch push'), failures, 'strategy_posture_competitive_cut_review_branch_gate_missing')
   addIf(has(competitiveCut, 'The current first external gate is GitHub `main` protection'), failures, 'strategy_posture_competitive_cut_stale_github_gate_claim')
   addIf(!(has(competitiveCut, 'Plant, Website, and Ecommerce keep security, dependency, regression, and') && has(competitiveCut, 'handoff maintenance until Shop produces a decision packet')), failures, 'strategy_posture_competitive_cut_non_shop_sequence_missing')
@@ -150,6 +157,10 @@ export function buildStrategyPostureReport(input = {}) {
     requiredPilotDayIndexes: Array.isArray(requiredPilotDayIndexes) ? [...requiredPilotDayIndexes] : [],
     acceptedConsecutivePilotDayIndexes: Array.isArray(acceptedConsecutivePilotDayIndexes) ? [...acceptedConsecutivePilotDayIndexes] : [],
     pilotSequenceCoverageMet: readiness?.pilotEvidence?.pilotSequenceCoverageMet === true,
+    requiredPilotCalendarDates,
+    acceptedConsecutiveObservedDateCount: readiness?.pilotEvidence?.acceptedConsecutiveObservedDateCount,
+    acceptedConsecutiveObservedDates: Array.isArray(acceptedConsecutiveObservedDates) ? [...acceptedConsecutiveObservedDates] : [],
+    pilotCalendarCoverageMet: readiness?.pilotEvidence?.pilotCalendarCoverageMet === true,
     checkedDocuments: [
       'hq/strategy/AI-NATIVE-ARCHITECTURE.md',
       'hq/strategy/COMPETITIVE-EXECUTION-CUT.md',
@@ -202,6 +213,10 @@ function runSelfTest() {
       requiredPilotDayIndexes: [...REQUIRED_PILOT_DAY_INDEXES],
       acceptedConsecutivePilotDayIndexes: [],
       pilotSequenceCoverageMet: false,
+      requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      acceptedConsecutiveObservedDateCount: 0,
+      acceptedConsecutiveObservedDates: [],
+      pilotCalendarCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
     },
@@ -211,7 +226,7 @@ function runSelfTest() {
     'production schema v11 observed with the public-browser quarantine',
     'current v11 production parity',
     'Self-serve remains a later product expansion, not the active activation route',
-    '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5',
+    '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates',
     'no public signup, claim-code provisioning, hosted tenant',
     'GitHub main protection verified, review-branch publication still owner-gated',
   ].join('\n')
@@ -223,7 +238,7 @@ function runSelfTest() {
     'Ecommerce',
     'AI is a shared capability, not a customer product',
     'Shop remains the money-path product',
-    '20 consecutive accepted observed runs covering pilot days 1 through 5',
+    '20 consecutive accepted observed runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates',
     'GitHub `main` protection is verified. The current first external gate is the exact review-branch push',
     'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
     'Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',

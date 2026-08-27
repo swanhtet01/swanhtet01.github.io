@@ -31,7 +31,7 @@ A pilot run counts as accepted only when all of the following hold, following th
 
 Each counted run also needs two distinct SHA-256 digests before it is recorded: `evidenceReferenceDigest` for the private evidence receipt, and `independentAnchorDigest` for the independently sealed private anchor. Create the private run input with `client:pilot:observed-evidence:template`, check it with `client:pilot:observed-evidence:validate`, then record and verify it with `client:pilot:observed-evidence`. If either digest is missing, reused, or equal to the other digest, the run does not count.
 
-Any run failing any condition is recorded as not accepted, with the correction minutes it cost. Missing evidence is recorded as missing — per the generator's evidence rule: `Record failures and operator interventions; do not convert missing evidence into a success claim.` The measurement reference promotes a workflow only after 20 consecutive accepted runs whose accepted streak also covers pilot days 1 through 5; the five-day pilot feeds that same counting discipline, and the count restarts on any non-accepted run.
+Any run failing any condition is recorded as not accepted, with the correction minutes it cost. Missing evidence is recorded as missing — per the generator's evidence rule: `Record failures and operator interventions; do not convert missing evidence into a success claim.` The measurement reference promotes a workflow only after 20 consecutive accepted runs whose accepted streak also covers pilot days 1 through 5 and at least 5 distinct observed calendar dates; the five-day pilot feeds that same counting discipline, and the count restarts on any non-accepted run.
 
 ## The five days
 

@@ -60,7 +60,7 @@ test('packet copy is practical, generic Shop first, and Spa only as the vertical
   assert.match(files['day-1-operator-script.md'], /Cash, KBZPay, WavePay, AYA Pay, or MMQR/)
   assert.match(files['day-1-operator-script.md'], /If any step needs explanation twice, mark it as a product issue/)
   assert.match(files['owner-roi-scorecard.md'], /20 accepted order-to-close runs/)
-  assert.match(files['owner-roi-scorecard.md'], /accepted evidence covers pilot days 1 through 5/)
+  assert.match(files['owner-roi-scorecard.md'], /accepted evidence covers pilot days 1 through 5 and at least 5 distinct observed calendar dates/)
   assert.match(files['owner-roi-scorecard.md'], /Paid decision rule/)
   assert.match(files['five-day-proof-plan.md'], /Package sale/)
   assert.match(files['five-day-proof-plan.md'], /Treatment redemption/)

@@ -26,6 +26,7 @@ const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
 const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
 const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
+const REQUIRED_PILOT_CALENDAR_DATES = 5
 const REQUIRED_FORBIDDEN_ACTIONS = [
   'deploy',
   'publish',
@@ -345,6 +346,10 @@ export function assessShopPilotLaunchGate(input = {}) {
     || !sameArray(readiness.pilotEvidence?.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
     || !sameArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes, [])
     || readiness.pilotEvidence?.pilotSequenceCoverageMet !== false
+    || readiness.pilotEvidence?.requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || readiness.pilotEvidence?.acceptedConsecutiveObservedDateCount !== 0
+    || !sameArray(readiness.pilotEvidence?.acceptedConsecutiveObservedDates, [])
+    || readiness.pilotEvidence?.pilotCalendarCoverageMet !== false
     || readiness.pilotEvidence?.syntheticEvidenceAccepted !== false
     || readiness.pilotEvidence?.publicIdentityAllowed !== false
     || readiness.pilotEvidence?.privateWorkspaceRequired !== true) {
@@ -426,6 +431,10 @@ export function assessShopPilotLaunchGate(input = {}) {
       requiredPilotDayIndexes: Array.isArray(readiness.pilotEvidence?.requiredPilotDayIndexes) ? [...readiness.pilotEvidence.requiredPilotDayIndexes] : [],
       acceptedConsecutivePilotDayIndexes: Array.isArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes) ? [...readiness.pilotEvidence.acceptedConsecutivePilotDayIndexes] : [],
       pilotSequenceCoverageMet: readiness.pilotEvidence?.pilotSequenceCoverageMet === true,
+      requiredPilotCalendarDates: readiness.pilotEvidence?.requiredPilotCalendarDates ?? null,
+      acceptedConsecutiveObservedDateCount: readiness.pilotEvidence?.acceptedConsecutiveObservedDateCount ?? null,
+      acceptedConsecutiveObservedDates: Array.isArray(readiness.pilotEvidence?.acceptedConsecutiveObservedDates) ? [...readiness.pilotEvidence.acceptedConsecutiveObservedDates] : [],
+      pilotCalendarCoverageMet: readiness.pilotEvidence?.pilotCalendarCoverageMet === true,
       syntheticEvidenceAccepted: readiness.pilotEvidence?.syntheticEvidenceAccepted === true,
       publicIdentityAllowed: readiness.pilotEvidence?.publicIdentityAllowed === true,
       privateWorkspaceRequired: readiness.pilotEvidence?.privateWorkspaceRequired === true,
@@ -462,12 +471,16 @@ export function assessShopPilotLaunchGate(input = {}) {
       promotionEvidenceRequiredPilotDayIndexes: [...REQUIRED_PILOT_DAY_INDEXES],
       promotionEvidenceAcceptedPilotDayIndexes: Array.isArray(readiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes) ? [...readiness.pilotEvidence.acceptedConsecutivePilotDayIndexes] : [],
       promotionEvidencePilotSequenceCoverageMet: readiness.pilotEvidence?.pilotSequenceCoverageMet === true,
+      promotionEvidenceRequiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      promotionEvidenceAcceptedObservedDateCount: readiness.pilotEvidence?.acceptedConsecutiveObservedDateCount ?? 0,
+      promotionEvidenceAcceptedObservedDates: Array.isArray(readiness.pilotEvidence?.acceptedConsecutiveObservedDates) ? [...readiness.pilotEvidence.acceptedConsecutiveObservedDates] : [],
+      promotionEvidencePilotCalendarCoverageMet: readiness.pilotEvidence?.pilotCalendarCoverageMet === true,
     },
     requiredNextGates: [
       gate('owner_private_baseline', 'Owner-observed manual Shop baseline packet', baselineReady ? 'satisfied_private_digest_only' : (failures.length ? 'blocked' : 'owner_action_required'), !baselineReady, 'At least three observed manual order and redemption runs must be captured privately before pilot day one.'),
       gate('owner_private_intake', 'Owner selects and reviews the private Shop pilot workspace input', intakeReady ? 'satisfied_private_digest_only' : (failures.length ? 'blocked' : 'owner_action_required'), !intakeReady, 'Only private intake preparation can proceed; participant identity remains outside Git, CI, HQ records, and reports.'),
       gate('exact_preview_rehearsal', 'Exact-candidate protected preview rehearsal', 'owner_approval_required', true, 'The preview rehearsal must be bound to the reviewed SHA and migration digests before release.'),
-      gate('real_shop_pilot_evidence', 'Real owner-reviewed Shop pilot evidence', 'blocked', true, '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 are required; synthetic runs remain excluded.'),
+      gate('real_shop_pilot_evidence', 'Real owner-reviewed Shop pilot evidence', 'blocked', true, '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates are required; synthetic runs remain excluded.'),
       gate('managed_activation', 'Managed production activation', 'owner_approval_required', true, 'Production remains isolated-demo until every hosted proof passes and the owner approves exact activation.'),
     ],
     controls: {
@@ -521,9 +534,17 @@ export function validateShopPilotLaunchGate(report) {
     || !sameArray(report.launchReadiness?.promotionEvidenceRequiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
     || !sameArray(report.launchReadiness?.promotionEvidenceAcceptedPilotDayIndexes, [])
     || report.launchReadiness?.promotionEvidencePilotSequenceCoverageMet !== false
+    || report.launchReadiness?.promotionEvidenceRequiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || report.launchReadiness?.promotionEvidenceAcceptedObservedDateCount !== 0
+    || !sameArray(report.launchReadiness?.promotionEvidenceAcceptedObservedDates, [])
+    || report.launchReadiness?.promotionEvidencePilotCalendarCoverageMet !== false
     || !sameArray(report.readiness?.requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES)
     || !sameArray(report.readiness?.acceptedConsecutivePilotDayIndexes, [])
-    || report.readiness?.pilotSequenceCoverageMet !== false) {
+    || report.readiness?.pilotSequenceCoverageMet !== false
+    || report.readiness?.requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || report.readiness?.acceptedConsecutiveObservedDateCount !== 0
+    || !sameArray(report.readiness?.acceptedConsecutiveObservedDates, [])
+    || report.readiness?.pilotCalendarCoverageMet !== false) {
     throw new Error('shop_pilot_launch_gate_launch_readiness_invalid')
   }
   if (report.controls?.noWriteVerification !== true
@@ -715,6 +736,10 @@ export function sampleShopPilotLaunchGateInput(overrides = {}) {
       requiredPilotDayIndexes: [...REQUIRED_PILOT_DAY_INDEXES],
       acceptedConsecutivePilotDayIndexes: [],
       pilotSequenceCoverageMet: false,
+      requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      acceptedConsecutiveObservedDateCount: 0,
+      acceptedConsecutiveObservedDates: [],
+      pilotCalendarCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       privateWorkspaceRequired: true,

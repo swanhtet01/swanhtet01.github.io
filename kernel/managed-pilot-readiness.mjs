@@ -43,6 +43,7 @@ const REQUIRED_DATABASE_CHECK_COUNT = 56
 const REQUIRED_SOURCE_RECEIPT_COUNT = 10
 const REQUIRED_ACCEPTED_PILOT_RUNS = 20
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
+const REQUIRED_PILOT_CALENDAR_DATES = 5
 export const STORAGE_PRIVACY_PROOF_CONTRACT = 'supermega.hosted-storage-privacy-proof.v1'
 export const MANAGED_PERSISTENCE_PROOF_CONTRACT = 'supermega.managed-persistence-proof.v1'
 export const SELF_SERVE_PILOT_PROOF_CONTRACT = 'supermega.self-serve-pilot-proof.v1'
@@ -127,7 +128,7 @@ function previewRehearsalEvidence(complete) {
 
 function pilotEvidence(complete, shopNextGate) {
   return complete
-    ? `Owner-named Shop pilot has ${REQUIRED_ACCEPTED_PILOT_RUNS} consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5, with private identity retained outside public source.`
+    ? `Owner-named Shop pilot has ${REQUIRED_ACCEPTED_PILOT_RUNS} consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 across at least ${REQUIRED_PILOT_CALENDAR_DATES} distinct observed calendar dates, with private identity retained outside public source.`
     : `Owner-named Shop pilot proof is absent. Required proof remains: ${shopNextGate}`
 }
 
@@ -426,6 +427,10 @@ export function buildManagedPilotReadiness(input = {}) {
       requiredPilotDayIndexes: REQUIRED_PILOT_DAY_INDEXES,
       acceptedConsecutivePilotDayIndexes: [],
       pilotSequenceCoverageMet: false,
+      requiredPilotCalendarDates: REQUIRED_PILOT_CALENDAR_DATES,
+      acceptedConsecutiveObservedDateCount: 0,
+      acceptedConsecutiveObservedDates: [],
+      pilotCalendarCoverageMet: false,
       syntheticEvidenceAccepted: false,
       publicIdentityAllowed: false,
       privateWorkspaceRequired: true,
@@ -577,6 +582,11 @@ export function validateManagedPilotReadiness(value) {
     || !Array.isArray(pilot.acceptedConsecutivePilotDayIndexes)
     || pilot.acceptedConsecutivePilotDayIndexes.length !== 0
     || pilot.pilotSequenceCoverageMet !== false
+    || pilot.requiredPilotCalendarDates !== REQUIRED_PILOT_CALENDAR_DATES
+    || pilot.acceptedConsecutiveObservedDateCount !== 0
+    || !Array.isArray(pilot.acceptedConsecutiveObservedDates)
+    || pilot.acceptedConsecutiveObservedDates.length !== 0
+    || pilot.pilotCalendarCoverageMet !== false
     || pilot.syntheticEvidenceAccepted !== false
     || pilot.publicIdentityAllowed !== false
     || pilot.privateWorkspaceRequired !== true) fail('managed_pilot_readiness_pilot_evidence_invalid')
