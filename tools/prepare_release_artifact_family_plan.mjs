@@ -128,8 +128,8 @@ function artifactPaths(options) {
     controlIndexMarkdown: artifactPath(artifactsDir, 'current-release-control-index', version, date, 'md'),
     shopOwnerObservationPackJson: join(artifactsDir, `supermega.shop-pilot-owner-observation-pack.${version}.generated-${date}.current-control.json`),
     shopOwnerObservationPackMarkdown: join(artifactsDir, `supermega.shop-pilot-owner-observation-pack.${version}.generated-${date}.current-control.md`),
-    adminTechnicalCoordinationJson: artifactPath(artifactsDir, 'admin-technical-v167-coordination-packet', version, date, 'json'),
-    adminTechnicalCoordinationMarkdown: artifactPath(artifactsDir, 'admin-technical-v167-coordination-packet', version, date, 'md'),
+    adminTechnicalCoordinationJson: artifactPath(artifactsDir, `admin-technical-${version}-coordination-packet`, version, date, 'json'),
+    adminTechnicalCoordinationMarkdown: artifactPath(artifactsDir, `admin-technical-${version}-coordination-packet`, version, date, 'md'),
   }
 }
 
