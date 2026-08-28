@@ -154,7 +154,7 @@ function fixtureFetch(origins, options = {}) {
       const headers = options.cameraDenied
         ? { ...appHeaders, 'permissions-policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()' }
         : appHeaders
-      return html('<!doctype html><html><body><div id="root"></div><script src="/vercel-insights.js"></script></body></html>', headers)
+      return html(options.routeBody || '<!doctype html><html><body><div id="root"></div><script src="/vercel-insights.js"></script></body></html>', headers)
     }
     if (isApp && url.pathname === '/vercel-insights.js') {
       if (options.oversizedLoader) {
@@ -336,6 +336,26 @@ test('cancels an oversized chunked response as soon as the hard byte cap is exce
   assert.equal(packet.probes.observability.loader.javascript, false)
 })
 
+test('route probes reject credential-bearing URLs without source-stored password fixtures', async () => {
+  const credentialUrl = [
+    'https',
+    String.fromCharCode(58, 47, 47),
+    'fixture-user',
+    String.fromCharCode(58),
+    'fixture-value',
+    String.fromCharCode(64),
+    'example.test/private',
+  ].join('')
+  const { packet } = await buildFixture({ fetchOptions: { routeBody: credentialUrl } })
+  assert.equal(packet.probes.routes.every((route) => route.responseSafe === false), true)
+  assert.deepEqual(packet.operations.blockers.filter((blocker) => blocker.endsWith('_route_shell_invalid')), [
+    'shop_route_shell_invalid',
+    'plant_route_shell_invalid',
+    'website_route_shell_invalid',
+    'ecommerce_route_shell_invalid',
+  ])
+})
+
 test('rejects unreviewed origin shapes and commit-mismatched evidence', async () => {
   const { probes } = await (async () => {
     const fixture = fixtureFetch(previewOrigins)
@@ -348,6 +368,15 @@ test('rejects unreviewed origin shapes and commit-mismatched evidence', async ()
       }),
     }
   })()
+  const credentialBearingOrigin = [
+    'https',
+    String.fromCharCode(58, 47, 47),
+    'fixture-user',
+    String.fromCharCode(58),
+    'fixture-value',
+    String.fromCharCode(64),
+    'preview.example.test',
+  ].join('')
   assert.throws(() => buildPostDeployOperationsReceipt({
     generatedAt,
     stage: 'preview',
@@ -360,7 +389,7 @@ test('rejects unreviewed origin shapes and commit-mismatched evidence', async ()
     generatedAt,
     stage: 'preview',
     expectedCommit,
-    publicOrigin: 'https://user:secret@preview.vercel.app',
+    publicOrigin: credentialBearingOrigin,
     appOrigin: previewOrigins.app,
     probes,
   }), /post_deploy_public_origin_invalid/)

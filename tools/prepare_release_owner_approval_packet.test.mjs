@@ -237,14 +237,24 @@ test('uses a validated owner-safe GitHub protection snapshot reference when prov
   const base = selfTestInput()
   const input = {
     ...base,
-    githubProtectionSnapshotPath: 'C:\\Users\\thesw\\OneDrive - BDA\\supermega.github-main-protection-snapshot.v82.generated-20260825.json',
+    githubProtectionSnapshotPath: 'C:\\Users\\fixture-owner\\Artifacts\\supermega.github-main-protection-snapshot.v82.generated-20260825.json',
   }
   const packet = buildReleaseOwnerApprovalPacket(input)
+  const forwardSlashPacket = buildReleaseOwnerApprovalPacket({
+    ...base,
+    githubProtectionSnapshotPath: 'C:/Users/fixture-owner/Artifacts/supermega.github-main-protection-snapshot.v82.generated-20260825.json',
+  })
 
   assert.ok(packet.markdown.includes('--github-protection-snapshot "<owner-artifact-dir>\\supermega.github-main-protection-snapshot.v82.generated-20260825.json"'))
-  assert.doesNotMatch(packet.markdown, /[A-Za-z]:\\/)
+  assert.ok(forwardSlashPacket.markdown.includes('--github-protection-snapshot "<owner-artifact-dir>\\supermega.github-main-protection-snapshot.v82.generated-20260825.json"'))
+  assert.doesNotMatch(packet.markdown, /[A-Za-z]:[\\/]/)
+  assert.doesNotMatch(forwardSlashPacket.markdown, /[A-Za-z]:[\\/]/)
   assert.equal(packet.markdown.includes('<github-main-protection-snapshot.json>'), false)
   assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
+  assert.equal(validateReleaseOwnerApprovalMarkdown(forwardSlashPacket.markdown, {
+    ...base,
+    githubProtectionSnapshotPath: 'C:/Users/fixture-owner/Artifacts/supermega.github-main-protection-snapshot.v82.generated-20260825.json',
+  }).ok, true)
 })
 
 test('binds GitHub main protection commands to the reviewed proposal path', () => {
@@ -304,11 +314,12 @@ test('rejects an unsafe GitHub protection snapshot before rendering exact comman
 
 test('rejects credential-shaped text before rendering owner packet', () => {
   const input = selfTestInput()
+  const tokenShapedFixture = ['g', 'hp', '_', 'a'.repeat(36)].join('')
   const unsafe = {
     ...input,
     supabaseProposal: {
       ...input.supabaseProposal,
-      ownerApprovalTemplate: `${input.supabaseProposal.ownerApprovalTemplate} ghp_abcdefghijklmnopqrstuvwxyz123456`,
+      ownerApprovalTemplate: `${input.supabaseProposal.ownerApprovalTemplate} ${tokenShapedFixture}`,
     },
   }
 

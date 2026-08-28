@@ -39,7 +39,7 @@ const PROJECTS = Object.freeze({
 })
 const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|vercel_[A-Za-z0-9]{20,}|sb_secret_[A-Za-z0-9_-]{20,}|sbp_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/
 const PRIVATE_PATH_PATTERN = /(?:[A-Z]:\\Users\\|\/Users\/|\/home\/|OneDrive - )/iu
-const CREDENTIAL_URL_PATTERN = /https?:\/\/[^/\s:@]+:[^/\s@]+@/iu
+const URL_CANDIDATE_PATTERN = /https?:\/\/[^\s"'<>]+/giu
 
 function fail(code) {
   throw new Error(code)
@@ -47,6 +47,18 @@ function fail(code) {
 
 function isRecord(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function containsCredentialUrl(value) {
+  const candidates = String(value || '').match(URL_CANDIDATE_PATTERN) || []
+  return candidates.some((candidate) => {
+    try {
+      const parsed = new URL(candidate)
+      return Boolean(parsed.username || parsed.password)
+    } catch {
+      return false
+    }
+  })
 }
 
 function exactKeys(value, keys, code) {
@@ -97,7 +109,7 @@ function boundedCount(value, code) {
 
 function assertNoPrivateOrSecretShape(value, code) {
   const text = typeof value === 'string' ? value : JSON.stringify(value)
-  if (SECRET_PATTERN.test(text) || PRIVATE_PATH_PATTERN.test(text) || CREDENTIAL_URL_PATTERN.test(text)) fail(code)
+  if (SECRET_PATTERN.test(text) || PRIVATE_PATH_PATTERN.test(text) || containsCredentialUrl(text)) fail(code)
 }
 
 function normalizeOrigin(value, surface, stage) {
@@ -259,7 +271,7 @@ function booleanHeaderEvidence(headers) {
 }
 
 function responseLooksPublicSafe(text) {
-  return !SECRET_PATTERN.test(text) && !PRIVATE_PATH_PATTERN.test(text) && !CREDENTIAL_URL_PATTERN.test(text)
+  return !SECRET_PATTERN.test(text) && !PRIVATE_PATH_PATTERN.test(text) && !containsCredentialUrl(text)
 }
 
 async function readBoundedResponseBody(response) {

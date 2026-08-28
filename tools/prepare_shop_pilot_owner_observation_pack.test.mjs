@@ -297,10 +297,16 @@ test('rejects stale release-control binding and redacts source paths to file nam
   const pack = buildShopPilotOwnerObservationPack({
     day0Packet: day0,
     ownerBaselineActionCard: card,
-    sourceFileNames: { day0Readiness: 'C:\\Users\\owner\\private-day0.json' },
+    sourceFileNames: {
+      day0Readiness: 'C:\\Users\\owner\\private-day0.json',
+      ownerBaselineActionCard: 'C:/Users/owner/private-card.json',
+      currentReleaseControlIndex: '/home/owner/private-control-index.json',
+    },
   })
   assert.equal(pack.source.day0FileName, 'private-day0.json')
-  assert.doesNotMatch(JSON.stringify(pack), /C:\\Users\\owner/)
+  assert.equal(pack.source.ownerBaselineActionCardFileName, 'private-card.json')
+  assert.equal(pack.source.currentReleaseControlIndexFileName, 'private-control-index.json')
+  assert.doesNotMatch(JSON.stringify(pack), /(?:C:[\\/]|\/home\/owner)/)
 })
 
 test('rejects non-observation Day-0 states', () => {

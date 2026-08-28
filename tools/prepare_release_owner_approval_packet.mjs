@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, relative, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
@@ -258,21 +258,25 @@ function validatedSnapshotReference(snapshotPath = null, snapshot = null) {
     || packet.controls?.credentialValueExposed !== false) {
     fail('release_owner_approval_snapshot_controls_invalid')
   }
-  const resolvedPath = resolve(snapshotPath)
-  if (hasSecretShape(resolvedPath)) fail('release_owner_approval_snapshot_path_secret_shape_detected')
-  return ownerSafePathReference(resolvedPath, 'github-main-protection-snapshot.json')
+  const sourcePath = String(snapshotPath)
+  if (hasSecretShape(sourcePath)) fail('release_owner_approval_snapshot_path_secret_shape_detected')
+  return ownerSafePathReference(sourcePath, 'github-main-protection-snapshot.json')
 }
 
 function validatedGitHubProposalReference(proposalPath = GITHUB_PROPOSAL_PATH, proposal = null) {
   const packet = validateGitHubMainProtectionPacket(proposal)
   if (packet.repository !== REPOSITORY) fail('release_owner_approval_github_proposal_repository_invalid')
-  const resolvedPath = resolve(proposalPath || GITHUB_PROPOSAL_PATH)
-  if (hasSecretShape(resolvedPath)) fail('release_owner_approval_github_proposal_path_secret_shape_detected')
-  return ownerSafePathReference(resolvedPath, 'github-main-protection-proposal.json')
+  const sourcePath = String(proposalPath || GITHUB_PROPOSAL_PATH)
+  if (hasSecretShape(sourcePath)) fail('release_owner_approval_github_proposal_path_secret_shape_detected')
+  return ownerSafePathReference(sourcePath, 'github-main-protection-proposal.json')
 }
 
 function ownerSafePathReference(path, fallbackName) {
-  const resolvedPath = resolve(path || fallbackName || '')
+  const sourcePath = String(path || fallbackName || '')
+  if (!isAbsolute(sourcePath) && win32.isAbsolute(sourcePath)) {
+    return `<owner-artifact-dir>\\${win32.basename(sourcePath) || fallbackName}`
+  }
+  const resolvedPath = resolve(sourcePath)
   const relativePath = relative(root, resolvedPath)
   if (relativePath && !relativePath.startsWith('..') && !isAbsolute(relativePath)) {
     return relativePath.replace(/\\/g, '/')

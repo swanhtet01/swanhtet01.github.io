@@ -139,7 +139,7 @@ function assertSha(value, code) {
 
 function safeFileName(path) {
   if (!path) return null
-  const name = basename(String(path))
+  const name = basename(String(path).replace(/\\/g, '/'))
   if (!name || name.includes('\\') || name.includes('/') || hasPrivateOrSecretShape(name)) {
     fail('shop_pilot_owner_observation_pack_source_file_name_invalid')
   }
