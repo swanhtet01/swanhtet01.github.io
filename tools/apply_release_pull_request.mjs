@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -15,7 +16,10 @@ import {
   validateGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
 
-export const RELEASE_PULL_REQUEST_APPLY_CONTRACT = 'supermega.release-pull-request-apply.v1'
+export const RELEASE_PULL_REQUEST_APPLY_CONTRACT = 'supermega.release-pull-request-apply.v2'
+export const RELEASE_PULL_REQUEST_OWNER_RECEIPT_CONTRACT = 'supermega.release-pull-request-owner-receipt.v1'
+export const RELEASE_PULL_REQUEST_OWNER_RECEIPT_TTL_MS = 10 * 60 * 1000
+export const RELEASE_PULL_REQUEST_OWNER_DIALOG_TIMEOUT_MS = RELEASE_PULL_REQUEST_OWNER_RECEIPT_TTL_MS
 
 const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
@@ -23,7 +27,6 @@ const OWNER = 'swanhtet01'
 const REPO = 'swanhtet01.github.io'
 const ORIGIN = `https://github.com/${REPOSITORY}.git`
 const BASE_BRANCH = 'main'
-const APPROVAL_ENV = 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'
 const TOKEN_ENVS = ['GITHUB_TOKEN', 'GH_TOKEN']
 const GH_CLI_TOKEN_KEY = 'gh_cli'
 const API_BASE = `https://api.github.com/repos/${REPOSITORY}`
@@ -31,6 +34,11 @@ const API_VERSION = '2026-03-10'
 const MAX_FILE_BYTES = 1_000_000
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const BRANCH_PATTERN = /^codex\/[a-z0-9][a-z0-9._/-]{0,119}$/
+const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
+const NONCE_PATTERN = /^[0-9a-f]{64}$/
+const EXECUTION_CHALLENGE_PATTERN = /^[0-9a-f]{64}$/
+const EXECUTION_SEAL_PATTERN = /^hmac-sha256:[0-9a-f]{64}$/
+const consumedOwnerReceiptDigests = new Set()
 
 function fail(code) {
   throw new Error(code)
@@ -255,6 +263,317 @@ function publicPullRequestBody({ branch, commit, handoffDigest, packetDigest }) 
   ].join('\n')
 }
 
+function exactExecutionChallenge(value) {
+  const challenge = String(value || '')
+  if (!EXECUTION_CHALLENGE_PATTERN.test(challenge)) {
+    fail('release_pull_request_owner_receipt_execution_challenge_required')
+  }
+  return challenge
+}
+
+function executionSeal(body, executionChallenge) {
+  const challenge = exactExecutionChallenge(executionChallenge)
+  return `hmac-sha256:${createHmac('sha256', Buffer.from(challenge, 'hex')).update(JSON.stringify(body)).digest('hex')}`
+}
+
+function sameExecutionSeal(actual, expected) {
+  if (!EXECUTION_SEAL_PATTERN.test(String(actual || ''))
+    || !EXECUTION_SEAL_PATTERN.test(String(expected || ''))) return false
+  return timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
+}
+
+function exactIso(value, code) {
+  const text = String(value || '')
+  const timestamp = Date.parse(text)
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== text) fail(code)
+  return { text, timestamp }
+}
+
+function exactOwnerReceiptContext({ gate, handoffReceipt, mainProtectionSnapshotReceipt } = {}) {
+  if (!isRecord(gate) || !isRecord(handoffReceipt?.packet)) {
+    fail('release_pull_request_owner_receipt_context_required')
+  }
+  const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
+  const payload = buildCreatePullRequestPayload({ gate, handoffReceipt })
+  const context = {
+    repository: String(handoffReceipt.packet.repository || ''),
+    origin: String(handoffReceipt.packet.remote?.origin || ''),
+    branch: String(gate.branch || ''),
+    commit: String(gate.commit || '').toLowerCase(),
+    base: BASE_BRANCH,
+    handoffFileDigest: String(handoffReceipt.digest || ''),
+    handoffPacketDigest: String(handoffReceipt.packet.digest || ''),
+    protectionFileDigest: String(mainProtection.digest || ''),
+    protectionPacketDigest: String(mainProtection.packetDigest || ''),
+    approvalTemplateDigest: digest(String(gate.approvalTemplate || '')),
+    payloadDigest: digest(JSON.stringify(payload)),
+  }
+  if (context.repository !== REPOSITORY
+    || context.origin !== ORIGIN
+    || !BRANCH_PATTERN.test(context.branch)
+    || !SHA_PATTERN.test(context.commit)
+    || !DIGEST_PATTERN.test(context.handoffFileDigest)
+    || !DIGEST_PATTERN.test(context.handoffPacketDigest)
+    || !DIGEST_PATTERN.test(context.protectionFileDigest)
+    || !DIGEST_PATTERN.test(context.protectionPacketDigest)
+    || !DIGEST_PATTERN.test(context.approvalTemplateDigest)
+    || !DIGEST_PATTERN.test(context.payloadDigest)) {
+    fail('release_pull_request_owner_receipt_context_invalid')
+  }
+  return context
+}
+
+export function renderPullRequestOwnerConfirmation({
+  gate,
+  handoffReceipt,
+  mainProtectionSnapshotReceipt,
+} = {}) {
+  const context = exactOwnerReceiptContext({ gate, handoffReceipt, mainProtectionSnapshotReceipt })
+  return [
+    'SuperMega owner gate',
+    '',
+    'Approve creation of exactly one review-only GitHub pull request?',
+    '',
+    `Repository: ${context.repository}`,
+    `From branch: ${context.branch}`,
+    `Exact commit: ${context.commit}`,
+    `Into branch: ${context.base}`,
+    '',
+    'This can create only the exact SuperMega release-stack review PR shown above.',
+    'It cannot push, merge, dispatch a workflow, deploy, change a domain or environment, mutate a database, change credentials, contact a customer, take payment, or move stock.',
+    '',
+    'This dialog expires after 10 minutes and fails closed if you do not choose Yes.',
+    'A Yes receipt is valid only in this process for 10 minutes and is consumed before any PR write attempt.',
+    'No is the default. Choose Yes only if you want this exact review-only PR created now.',
+  ].join('\n')
+}
+
+export function buildPullRequestOwnerReceipt({
+  gate,
+  handoffReceipt,
+  mainProtectionSnapshotReceipt,
+  executionChallenge,
+  confirmedAt = new Date(),
+  nonce = randomBytes(32).toString('hex'),
+} = {}) {
+  const context = exactOwnerReceiptContext({ gate, handoffReceipt, mainProtectionSnapshotReceipt })
+  const confirmedAtDate = confirmedAt instanceof Date ? confirmedAt : new Date(confirmedAt)
+  if (!Number.isFinite(confirmedAtDate.getTime()) || !NONCE_PATTERN.test(String(nonce || ''))) {
+    fail('release_pull_request_owner_receipt_confirmation_invalid')
+  }
+  const confirmedAtIso = confirmedAtDate.toISOString()
+  const body = {
+    ok: true,
+    contract: RELEASE_PULL_REQUEST_OWNER_RECEIPT_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
+    decision: 'approved',
+    action: {
+      id: 'github_pull_request_create',
+      repository: context.repository,
+      origin: context.origin,
+      branch: context.branch,
+      commit: context.commit,
+      base: context.base,
+      method: 'POST',
+      path: `/repos/${REPOSITORY}/pulls`,
+      payloadDigest: context.payloadDigest,
+      draft: false,
+      maintainerCanModify: false,
+      pushIncluded: false,
+      mergeIncluded: false,
+      workflowDispatchIncluded: false,
+      deploymentIncluded: false,
+    },
+    binding: {
+      releaseHandoffFileDigest: context.handoffFileDigest,
+      releaseHandoffPacketDigest: context.handoffPacketDigest,
+      githubMainProtectionFileDigest: context.protectionFileDigest,
+      githubMainProtectionPacketDigest: context.protectionPacketDigest,
+      approvalTemplateDigest: context.approvalTemplateDigest,
+    },
+    confirmation: {
+      method: 'windows_local_owner_click',
+      defaultDecision: 'decline',
+      confirmedAt: confirmedAtIso,
+      expiresAt: new Date(confirmedAtDate.getTime() + RELEASE_PULL_REQUEST_OWNER_RECEIPT_TTL_MS).toISOString(),
+      ttlSeconds: RELEASE_PULL_REQUEST_OWNER_RECEIPT_TTL_MS / 1000,
+      nonce,
+    },
+    authority: {
+      pullRequestCreationApproved: true,
+      pushApproved: false,
+      mergeApproved: false,
+      workflowDispatchApproved: false,
+      deploymentApproved: false,
+      domainChangeApproved: false,
+      environmentChangeApproved: false,
+      databaseMutationApproved: false,
+      credentialChangeApproved: false,
+      customerContactApproved: false,
+      paymentApproved: false,
+      stockMovementApproved: false,
+      managedActivationApproved: false,
+    },
+    controls: {
+      interactiveOwnerClickRequired: true,
+      externalWritePerformed: false,
+      reusable: false,
+      identityRecorded: false,
+    },
+  }
+  return signed({ ...body, executionSeal: executionSeal(body, executionChallenge) })
+}
+
+export function validatePullRequestOwnerReceipt(packet, {
+  gate,
+  handoffReceipt,
+  mainProtectionSnapshotReceipt,
+  executionChallenge,
+  now = new Date(),
+} = {}) {
+  if (!isRecord(packet)) fail('release_pull_request_owner_receipt_invalid')
+  const { digest: actualDigest, ...sealedBody } = packet
+  if (actualDigest !== digest(JSON.stringify(sealedBody))) {
+    fail('release_pull_request_owner_receipt_digest_invalid')
+  }
+  const { executionSeal: actualExecutionSeal, ...body } = sealedBody
+  if (!sameExecutionSeal(actualExecutionSeal, executionSeal(body, executionChallenge))) {
+    fail('release_pull_request_owner_receipt_execution_seal_invalid')
+  }
+  const context = exactOwnerReceiptContext({ gate, handoffReceipt, mainProtectionSnapshotReceipt })
+  if (packet.ok !== true
+    || packet.contract !== RELEASE_PULL_REQUEST_OWNER_RECEIPT_CONTRACT
+    || packet.digestScope !== 'utf8_compact_json_without_digest'
+    || packet.decision !== 'approved'
+    || packet.action?.id !== 'github_pull_request_create'
+    || packet.action?.repository !== context.repository
+    || packet.action?.origin !== context.origin
+    || packet.action?.branch !== context.branch
+    || packet.action?.commit !== context.commit
+    || packet.action?.base !== context.base
+    || packet.action?.method !== 'POST'
+    || packet.action?.path !== `/repos/${REPOSITORY}/pulls`
+    || packet.action?.payloadDigest !== context.payloadDigest
+    || packet.action?.draft !== false
+    || packet.action?.maintainerCanModify !== false
+    || packet.action?.pushIncluded !== false
+    || packet.action?.mergeIncluded !== false
+    || packet.action?.workflowDispatchIncluded !== false
+    || packet.action?.deploymentIncluded !== false) {
+    fail('release_pull_request_owner_receipt_action_mismatch')
+  }
+  if (packet.binding?.releaseHandoffFileDigest !== context.handoffFileDigest
+    || packet.binding?.releaseHandoffPacketDigest !== context.handoffPacketDigest
+    || packet.binding?.githubMainProtectionFileDigest !== context.protectionFileDigest
+    || packet.binding?.githubMainProtectionPacketDigest !== context.protectionPacketDigest
+    || packet.binding?.approvalTemplateDigest !== context.approvalTemplateDigest) {
+    fail('release_pull_request_owner_receipt_binding_mismatch')
+  }
+  if (packet.confirmation?.method !== 'windows_local_owner_click'
+    || packet.confirmation?.defaultDecision !== 'decline'
+    || packet.confirmation?.ttlSeconds !== RELEASE_PULL_REQUEST_OWNER_RECEIPT_TTL_MS / 1000
+    || !NONCE_PATTERN.test(String(packet.confirmation?.nonce || ''))) {
+    fail('release_pull_request_owner_receipt_confirmation_invalid')
+  }
+  const confirmed = exactIso(packet.confirmation.confirmedAt, 'release_pull_request_owner_receipt_confirmation_invalid')
+  const expires = exactIso(packet.confirmation.expiresAt, 'release_pull_request_owner_receipt_confirmation_invalid')
+  const current = now instanceof Date ? now.getTime() : new Date(now).getTime()
+  if (!Number.isFinite(current)
+    || expires.timestamp - confirmed.timestamp !== RELEASE_PULL_REQUEST_OWNER_RECEIPT_TTL_MS
+    || current < confirmed.timestamp
+    || current >= expires.timestamp) {
+    fail('release_pull_request_owner_receipt_expired_or_not_current')
+  }
+  const authority = packet.authority
+  if (!isRecord(authority)
+    || authority.pullRequestCreationApproved !== true
+    || authority.pushApproved !== false
+    || authority.mergeApproved !== false
+    || authority.workflowDispatchApproved !== false
+    || authority.deploymentApproved !== false
+    || authority.domainChangeApproved !== false
+    || authority.environmentChangeApproved !== false
+    || authority.databaseMutationApproved !== false
+    || authority.credentialChangeApproved !== false
+    || authority.customerContactApproved !== false
+    || authority.paymentApproved !== false
+    || authority.stockMovementApproved !== false
+    || authority.managedActivationApproved !== false
+    || Object.keys(authority).length !== 13
+    || packet.controls?.interactiveOwnerClickRequired !== true
+    || packet.controls?.externalWritePerformed !== false
+    || packet.controls?.reusable !== false
+    || packet.controls?.identityRecorded !== false) {
+    fail('release_pull_request_owner_receipt_authority_invalid')
+  }
+  return packet
+}
+
+export function confirmPullRequestOwnerClick(message, {
+  platform = process.platform,
+  spawn = spawnSync,
+} = {}) {
+  if (platform !== 'win32') fail('release_pull_request_owner_receipt_windows_required')
+  const windowsRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
+  const tempDir = process.env.TEMP || process.env.TMP || tmpdir()
+  const script = [
+    'Add-Type -AssemblyName System.Windows.Forms',
+    '$result = [System.Windows.Forms.MessageBox]::Show($env:SUPERMEGA_OWNER_GATE_MESSAGE, $env:SUPERMEGA_OWNER_GATE_TITLE, [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning, [System.Windows.Forms.MessageBoxDefaultButton]::Button2)',
+    'if ($result -eq [System.Windows.Forms.DialogResult]::Yes) { Write-Output "APPROVED" } else { Write-Output "DECLINED" }',
+  ].join('; ')
+  const result = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-Sta', '-Command', script], {
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH || `${windowsRoot}\\System32;${windowsRoot}`,
+      SystemRoot: windowsRoot,
+      WINDIR: windowsRoot,
+      TEMP: tempDir,
+      TMP: tempDir,
+      SUPERMEGA_OWNER_GATE_TITLE: 'SuperMega exact review pull request',
+      SUPERMEGA_OWNER_GATE_MESSAGE: String(message || ''),
+    },
+    timeout: RELEASE_PULL_REQUEST_OWNER_DIALOG_TIMEOUT_MS,
+    windowsHide: false,
+  })
+  if (result?.error?.code === 'ETIMEDOUT') fail('release_pull_request_owner_receipt_confirmation_timed_out')
+  if (result?.error || result?.signal || result?.status !== 0) {
+    fail('release_pull_request_owner_receipt_confirmation_failed')
+  }
+  return String(result.stdout || '').trim() === 'APPROVED'
+}
+
+export async function requestPullRequestOwnerReceipt({
+  gate,
+  handoffReceipt,
+  mainProtectionSnapshotReceipt,
+  executionChallenge,
+  confirmer = confirmPullRequestOwnerClick,
+  now = () => new Date(),
+  nonce = () => randomBytes(32).toString('hex'),
+} = {}) {
+  exactExecutionChallenge(executionChallenge)
+  const message = renderPullRequestOwnerConfirmation({ gate, handoffReceipt, mainProtectionSnapshotReceipt })
+  if (await confirmer(message) !== true) fail('release_pull_request_owner_receipt_declined')
+  return {
+    packet: buildPullRequestOwnerReceipt({
+      gate,
+      handoffReceipt,
+      mainProtectionSnapshotReceipt,
+      executionChallenge,
+      confirmedAt: now(),
+      nonce: nonce(),
+    }),
+  }
+}
+
+export async function consumePullRequestOwnerReceipt(receipt) {
+  const packetDigest = String(receipt?.packet?.digest || '')
+  if (!DIGEST_PATTERN.test(packetDigest)) fail('release_pull_request_owner_receipt_read_required')
+  if (consumedOwnerReceiptDigests.has(packetDigest)) fail('release_pull_request_owner_receipt_already_consumed')
+  consumedOwnerReceiptDigests.add(packetDigest)
+  return { ok: true, packetDigest }
+}
+
 export function validatePullRequestHandoff(packet) {
   if (!isRecord(packet)) fail('release_pull_request_handoff_required')
   const branch = String(packet.candidate?.branch || '')
@@ -303,20 +622,45 @@ function validateLocalState({ gate, gitState, execute }) {
   return true
 }
 
-export function validateOwnerApproval({ gate, env = process.env, execute = false } = {}) {
+export function validateOwnerApproval({
+  gate,
+  handoffReceipt = null,
+  mainProtectionSnapshotReceipt = null,
+  ownerApprovalReceipt = null,
+  ownerApprovalChallenge = null,
+  execute = false,
+  now = new Date(),
+} = {}) {
   if (!isRecord(gate)) fail('release_pull_request_gate_required')
   const expected = String(gate.approvalTemplate || '')
   if (!expected.includes('I approve one GitHub pull request creation') || !expected.includes('for SuperMega review only')) {
     fail('release_pull_request_approval_template_invalid')
   }
-  const actual = String(env[APPROVAL_ENV] || '')
-  const approved = actual === expected
+  const receiptPacket = ownerApprovalReceipt?.packet
+    ? validatePullRequestOwnerReceipt(ownerApprovalReceipt.packet, {
+        gate,
+        handoffReceipt,
+        mainProtectionSnapshotReceipt,
+        executionChallenge: ownerApprovalChallenge,
+        now,
+      })
+    : null
+  const approved = receiptPacket !== null
   if (execute && !approved) fail('release_pull_request_owner_approval_required')
   return {
-    env: APPROVAL_ENV,
+    env: null,
+    method: approved ? 'in_process_owner_click_receipt' : 'none',
     approved,
     expectedDigest: digest(expected),
-    actualDigest: actual ? digest(actual) : null,
+    actualDigest: receiptPacket?.digest || null,
+    receipt: receiptPacket
+      ? {
+          contract: receiptPacket.contract,
+          digest: receiptPacket.digest,
+          expiresAt: receiptPacket.confirmation.expiresAt,
+          consumed: false,
+        }
+      : null,
   }
 }
 
@@ -346,7 +690,7 @@ export function buildPullRequestPlan({
 } = {}) {
   const gate = validatePullRequestHandoff(handoffReceipt?.packet)
   validateLocalState({ gate, gitState, execute: false })
-  const approval = validateOwnerApproval({ gate, env, execute: false })
+  const approval = validateOwnerApproval({ gate, execute: false })
   const token = tokenForPlan({ env, gh, useGitHubCliAuth })
   const payload = buildCreatePullRequestPayload({ gate, handoffReceipt })
   const mainProtection = buildMainProtectionEvidence(mainProtectionSnapshotReceipt)
@@ -417,7 +761,7 @@ export function buildPullRequestPlan({
     existingPullRequestPolicy: existingPullRequestPolicy(gate.branch),
     executionRequirements: [
       '--execute flag',
-      `${APPROVAL_ENV} exactly equals the owner approval template`,
+      'same-process Windows owner click sealed by an executor-generated challenge and consumed before any PR write attempt',
       'GITHUB_TOKEN, GH_TOKEN, or authenticated GitHub CLI keyring is available',
       'signed GitHub main-protection snapshot verifies assessment.ok:true',
       'release handoff re-verifies current remote/live state immediately before PR creation',
@@ -430,6 +774,7 @@ export function buildPullRequestPlan({
       githubWritesApproved: approval.approved,
       githubWritesPerformed: false,
       pullRequestCreated: false,
+      ownerApprovalReceiptConsumed: false,
       repositorySettingsMutated: false,
       branchMutated: false,
       forcePushPerformed: false,
@@ -465,10 +810,25 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
     fail('release_pull_request_report_candidate_invalid')
   }
   if (!isRecord(packet.approval)
-    || packet.approval.env !== APPROVAL_ENV
+    || packet.approval.env !== null
     || typeof packet.approval.approved !== 'boolean'
+    || !['none', 'in_process_owner_click_receipt'].includes(String(packet.approval.method || ''))
     || !/^sha256:[0-9a-f]{64}$/.test(String(packet.approval.expectedDigest || ''))) {
     fail('release_pull_request_report_approval_invalid')
+  }
+  if (packet.approval.method === 'in_process_owner_click_receipt') {
+    if (packet.approval.approved !== true
+      || packet.approval.receipt?.contract !== RELEASE_PULL_REQUEST_OWNER_RECEIPT_CONTRACT
+      || !DIGEST_PATTERN.test(String(packet.approval.receipt?.digest || ''))
+      || packet.approval.actualDigest !== packet.approval.receipt.digest
+      || !Number.isFinite(Date.parse(String(packet.approval.receipt?.expiresAt || '')))
+      || typeof packet.approval.receipt?.consumed !== 'boolean') {
+      fail('release_pull_request_report_approval_receipt_invalid')
+    }
+  } else if (packet.approval.approved !== false
+    || packet.approval.actualDigest !== null
+    || packet.approval.receipt !== null) {
+    fail('release_pull_request_report_approval_receipt_invalid')
   }
   if (!isRecord(packet.token) || packet.token.valueExposed !== false) {
     fail('release_pull_request_report_token_invalid')
@@ -489,6 +849,7 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
     if (packet.ok !== true
       || packet.controls?.githubWritesPerformed !== false
       || packet.controls?.pullRequestCreated !== false
+      || packet.controls?.ownerApprovalReceiptConsumed !== false
       || packet.controls?.repositorySettingsMutated !== false
       || packet.controls?.branchMutated !== false
       || packet.controls?.forcePushPerformed !== false
@@ -531,6 +892,7 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
     }
     if (!Array.isArray(packet.executionRequirements)
       || !packet.executionRequirements.includes('--execute flag')
+      || !packet.executionRequirements.includes('same-process Windows owner click sealed by an executor-generated challenge and consumed before any PR write attempt')
       || !packet.executionRequirements.includes('signed GitHub main-protection snapshot verifies assessment.ok:true')
       || !packet.executionRequirements.includes('remote review branch equals the exact approved commit')
       || !packet.executionRequirements.includes('existing exact open PR returns no-write instead of duplicate creation')) {
@@ -538,7 +900,11 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
     }
   } else if (packet.mode === 'executed_owner_approved_existing_pr_no_write'
     || packet.mode === 'executed_owner_approved_github_pr_write') {
-    if (packet.controls?.githubWritesApproved !== true
+    if (packet.approval.method !== 'in_process_owner_click_receipt'
+      || packet.approval.approved !== true
+      || packet.approval.receipt?.consumed !== true
+      || packet.controls?.ownerApprovalReceiptConsumed !== true
+      || packet.controls?.githubWritesApproved !== true
       || packet.controls?.repositorySettingsMutated !== false
       || packet.controls?.branchMutated !== false
       || packet.controls?.forcePushPerformed !== false
@@ -646,17 +1012,29 @@ function classifyExistingPulls(pulls, gate) {
 export async function applyReleasePullRequestWithClient({
   handoffReceipt,
   mainProtectionSnapshotReceipt = null,
+  ownerApprovalReceipt = null,
+  ownerApprovalChallenge = null,
   env = process.env,
   git = gitDefault,
   gh = ghDefault,
   useGitHubCliAuth = false,
   request = fetch,
   verifyHandoff = verifyCurrentReleaseHandoff,
+  consumeApprovalReceipt = consumePullRequestOwnerReceipt,
+  now = () => new Date(),
 } = {}) {
   const gate = validatePullRequestHandoff(handoffReceipt?.packet)
   const gitState = currentGitState(git)
   validateLocalState({ gate, gitState, execute: true })
-  const approval = validateOwnerApproval({ gate, env, execute: true })
+  let approval = validateOwnerApproval({
+    gate,
+    handoffReceipt,
+    mainProtectionSnapshotReceipt,
+    ownerApprovalReceipt,
+    ownerApprovalChallenge,
+    execute: true,
+    now: now(),
+  })
   const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
   const token = tokenForExecute({ env, gh, useGitHubCliAuth })
   if (!token) fail('release_pull_request_token_required')
@@ -671,6 +1049,24 @@ export async function applyReleasePullRequestWithClient({
 
   const observedRemote = remoteHead(git, gate.branch)
   if (observedRemote !== gate.commit) fail('release_pull_request_remote_branch_not_exact')
+
+  approval = validateOwnerApproval({
+    gate,
+    handoffReceipt,
+    mainProtectionSnapshotReceipt,
+    ownerApprovalReceipt,
+    ownerApprovalChallenge,
+    execute: true,
+    now: now(),
+  })
+  const consumed = await consumeApprovalReceipt(ownerApprovalReceipt)
+  if (consumed?.ok !== true || consumed.packetDigest !== approval.receipt.digest) {
+    fail('release_pull_request_owner_receipt_consume_verify_failed')
+  }
+  approval = {
+    ...approval,
+    receipt: { ...approval.receipt, consumed: true },
+  }
 
   const existingResponse = await githubRequest({
     path: pullsQueryPath(gate.branch),
@@ -714,6 +1110,7 @@ export async function applyReleasePullRequestWithClient({
         githubWritesApproved: true,
         githubWritesPerformed: false,
         pullRequestCreated: false,
+        ownerApprovalReceiptConsumed: true,
         repositorySettingsMutated: false,
         branchMutated: false,
         forcePushPerformed: false,
@@ -785,6 +1182,7 @@ export async function applyReleasePullRequestWithClient({
       githubWritesApproved: true,
       githubWritesPerformed: true,
       pullRequestCreated: true,
+      ownerApprovalReceiptConsumed: true,
       repositorySettingsMutated: false,
       branchMutated: false,
       forcePushPerformed: false,
@@ -1007,7 +1405,7 @@ async function runSelfTest() {
       && plan.controls.pullRequestCreated === false,
     approval_required_for_execute: (() => {
       try {
-        validateOwnerApproval({ gate, env: {}, execute: true })
+        validateOwnerApproval({ gate, execute: true })
         return false
       } catch (error) {
         return String(error?.message || '') === 'release_pull_request_owner_approval_required'
@@ -1031,7 +1429,7 @@ async function runSelfTest() {
     main_protection_required_for_execute: buildPullRequestPlan({
       handoffReceipt: receipt,
       gitState: { branch, head: commit, clean: true, origin: ORIGIN },
-      env: { [APPROVAL_ENV]: gate.approvalTemplate, GITHUB_TOKEN: 'placeholder' },
+      env: { GITHUB_TOKEN: 'placeholder' },
     }).readiness.blockers.includes('github_main_protection_snapshot_missing'),
     plan_digest_verifies: validatePullRequestReport(plan, { expectedMode: 'plan_only_no_github_write' }) === plan,
     no_secret_echo: plan.token.valueExposed === false,
@@ -1074,9 +1472,26 @@ async function main() {
   const mainProtectionSnapshotReceipt = options.githubProtectionSnapshot
     ? await readGitHubMainProtectionSnapshotReceipt(options.githubProtectionSnapshot)
     : null
-  const result = options.mode === 'execute'
-    ? await applyReleasePullRequestWithClient({ handoffReceipt, mainProtectionSnapshotReceipt, useGitHubCliAuth: true })
-    : buildPullRequestPlan({ handoffReceipt, mainProtectionSnapshotReceipt, useGitHubCliAuth: true })
+  let result
+  if (options.mode === 'execute') {
+    const gate = validatePullRequestHandoff(handoffReceipt.packet)
+    const ownerApprovalChallenge = randomBytes(32).toString('hex')
+    const ownerApprovalReceipt = await requestPullRequestOwnerReceipt({
+      gate,
+      handoffReceipt,
+      mainProtectionSnapshotReceipt,
+      executionChallenge: ownerApprovalChallenge,
+    })
+    result = await applyReleasePullRequestWithClient({
+      handoffReceipt,
+      mainProtectionSnapshotReceipt,
+      ownerApprovalReceipt,
+      ownerApprovalChallenge,
+      useGitHubCliAuth: true,
+    })
+  } else {
+    result = buildPullRequestPlan({ handoffReceipt, mainProtectionSnapshotReceipt, useGitHubCliAuth: true })
+  }
   if (options.output) {
     const output = await writeExclusive(options.output, `${JSON.stringify(validatePullRequestReport(result, { expectedMode: 'plan_only_no_github_write' }), null, 2)}\n`)
     console.log(JSON.stringify({

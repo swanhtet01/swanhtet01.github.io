@@ -238,7 +238,8 @@ function approvalDigestSet({ handoff, githubProposal, supabaseProposal }) {
           digest: null,
         },
     pullRequestCreation: {
-      env: 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL',
+      env: null,
+      method: 'in_process_windows_owner_click',
       digest: digest(pullRequestApprovalTemplate(handoff)),
     },
     supabasePreviewRehearsal: {
@@ -398,15 +399,11 @@ export function buildReleaseOwnerApprovalMarkdown({
     '',
     '## 3. Pull request creation',
     '',
-    'Required env: `SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL`',
+    'Only approval path: the execute command opens a local Windows owner-click dialog in the same process. The executor creates an ephemeral challenge, seals a short-lived one-use receipt to the exact handoff, protection snapshot, PR payload, branch, and commit, consumes it before any PR write attempt, and never accepts a receipt path or plaintext environment fallback.',
     '',
-    'Safety behavior: execute rechecks open pull requests first. If an exact open PR already exists for this branch and commit, it returns a no-write existing-PR report instead of creating a duplicate. Mismatched or ambiguous open PRs fail closed.',
+    `Dialog action digest: \`${digest(prApproval)}\``,
     '',
-    'Exact approval text:',
-    '',
-    '```text',
-    prApproval,
-    '```',
+    'Safety behavior: the dialog defaults to No and expires after 10 minutes. Execute rechecks open pull requests first. If an exact open PR already exists for this branch and commit, it returns a no-write existing-PR report instead of creating a duplicate. Mismatched or ambiguous open PRs fail closed.',
     '',
     'Review command, no-write:',
     '',
@@ -414,7 +411,7 @@ export function buildReleaseOwnerApprovalMarkdown({
     `npm.cmd run release:pull-request:create -- --plan --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
     '```',
     '',
-    'Execute command, only after branch push and approval. Authentication may come from `GITHUB_TOKEN`, `GH_TOKEN`, or an authenticated GitHub CLI keyring; token values must not be pasted into this packet or terminal output.',
+    'Execute command, only after the branch is exact and the owner personally clicks Yes. Authentication may come from `GITHUB_TOKEN`, `GH_TOKEN`, or an authenticated GitHub CLI keyring; token values must not be pasted into this packet or terminal output.',
     '',
     '```powershell',
     `npm.cmd run release:pull-request:create -- --execute --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
@@ -734,7 +731,10 @@ function runSelfTest() {
     branch_fast_forward_proof_visible: packet.markdown.includes('fastForwardProof.ok: true')
       && packet.markdown.includes('fastForwardProof.status: "proven_ancestor"')
       && packet.markdown.includes('do not approve or execute the branch push'),
-    pr_owner_env_present: packet.markdown.includes('SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'),
+    pr_owner_env_absent: !packet.markdown.includes('SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'),
+    pr_owner_click_only: packet.markdown.includes('seals a short-lived one-use receipt to the exact handoff, protection snapshot, PR payload, branch, and commit')
+      && packet.markdown.includes('consumes it before any PR write attempt')
+      && packet.markdown.includes('never accepts a receipt path or plaintext environment fallback'),
     verifier_accepts_exact_markdown: verified.ok === true && verified.digest === packet.digest,
     stale_markdown_rejected: (() => {
       try {
