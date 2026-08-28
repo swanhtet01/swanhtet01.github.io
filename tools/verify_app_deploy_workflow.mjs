@@ -262,7 +262,8 @@ requireContract('app is served with a security header floor',
   appSecurityHeaders['X-Frame-Options'] === 'DENY'
   && appSecurityHeaders['X-Content-Type-Options'] === 'nosniff'
   && appSecurityHeaders['Referrer-Policy'] === 'no-referrer'
-  && String(appSecurityHeaders['Permissions-Policy'] || '').includes('camera=()')
+  && appSecurityHeaders['Permissions-Policy'] === 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()'
+  && generator.includes("'Permissions-Policy': 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()'")
   && generator.includes('appContentSecurityPolicy'))
 requireContract('app content policy refuses framing, injection and unexpected egress',
   [
