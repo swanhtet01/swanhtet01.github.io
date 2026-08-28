@@ -15,6 +15,7 @@ declare global {
 }
 
 export const OUTCOME_TELEMETRY_EVENT_NAME = 'supermega_local_outcome' as const
+export const OUTCOME_TELEMETRY_REDACTED_PATH = '/__telemetry/local-outcome' as const
 export const OUTCOME_TELEMETRY_STAGES = [
   'workflow_started',
   'workflow_completed',
@@ -32,11 +33,26 @@ const PILOT_PRODUCT_MAP = {
   ecommerce: 'ecommerce',
 } as const satisfies Record<string, Exclude<MetricProduct, 'hq'>>
 
-const OUTCOME_TELEMETRY_SESSION_KEY = 'supermega.outcome-telemetry.sent.v1'
+const OUTCOME_TELEMETRY_SESSION_SCHEMA = 'supermega.outcome-telemetry.session.v2'
+const OUTCOME_TELEMETRY_SESSION_KEY = OUTCOME_TELEMETRY_SESSION_SCHEMA
+const OUTCOME_TELEMETRY_LEGACY_SESSION_KEY = 'supermega.outcome-telemetry.sent.v1'
 const RECEIPT_DIGEST = /^sha256:[a-f0-9]{64}$/
 const memoryReceipts = new Set<string>()
-let sessionReceiptsLoaded = false
-let outboundQueued = 0
+let sessionStateLoaded = false
+let memoryOutboundQueued = 0
+let sessionStorageAvailable = true
+let vercelPrivacyBoundaryConfigured = false
+
+type OutcomeTelemetrySessionState = {
+  receipts: Set<string>
+  outboundQueued: number
+  storageAvailable: boolean
+}
+
+type VercelBeforeSendEvent = {
+  type: 'pageview' | 'event'
+  url: string
+}
 
 export type PilotOutcomeProduct = keyof typeof PILOT_PRODUCT_MAP
 export type OutcomeTelemetryStage = (typeof OUTCOME_TELEMETRY_STAGES)[number]
@@ -74,37 +90,80 @@ function receiptKey(transition: OutcomeTelemetryTransition): string {
   return `${PILOT_PRODUCT_MAP[transition.pilotProduct]}:${transition.stage}:${transition.evidenceDigest}`
 }
 
-function readSessionReceipts(target: Window): Set<string> {
-  if (!sessionReceiptsLoaded) {
-    sessionReceiptsLoaded = true
-    try {
-      const raw = target.sessionStorage.getItem(OUTCOME_TELEMETRY_SESSION_KEY)
-      const parsed: unknown = raw ? JSON.parse(raw) : []
-      if (Array.isArray(parsed)) {
-        for (const value of parsed.slice(-OUTCOME_TELEMETRY_MAX_RECEIPTS_PER_SESSION)) {
-          if (typeof value === 'string' && value.length <= 120) memoryReceipts.add(value)
-        }
-      }
-    } catch {
-      // Private mode or blocked storage must not affect the product. The in-memory set remains.
-    }
+function addStoredReceipts(values: unknown[]): void {
+  for (const value of values.slice(-OUTCOME_TELEMETRY_MAX_RECEIPTS_PER_SESSION)) {
+    if (typeof value === 'string' && value.length <= 120) memoryReceipts.add(value)
   }
-  return new Set(memoryReceipts)
 }
 
-function rememberReceipt(target: Window, key: string, receipts: Set<string>): void {
-  receipts.add(key)
-  memoryReceipts.add(key)
-  while (receipts.size > OUTCOME_TELEMETRY_MAX_RECEIPTS_PER_SESSION) receipts.delete(receipts.values().next().value as string)
-  while (memoryReceipts.size > OUTCOME_TELEMETRY_MAX_RECEIPTS_PER_SESSION) memoryReceipts.delete(memoryReceipts.values().next().value as string)
+function readSessionState(target: Window): OutcomeTelemetrySessionState {
+  if (!sessionStateLoaded) {
+    sessionStateLoaded = true
+    try {
+      const raw = target.sessionStorage.getItem(OUTCOME_TELEMETRY_SESSION_KEY)
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          const candidate = parsed as Partial<{ schema: string, receipts: unknown, outboundQueued: unknown }>
+          if (candidate.schema === OUTCOME_TELEMETRY_SESSION_SCHEMA && Array.isArray(candidate.receipts)) {
+            addStoredReceipts(candidate.receipts)
+            memoryOutboundQueued = Number.isInteger(candidate.outboundQueued)
+              && Number(candidate.outboundQueued) >= 0
+              && Number(candidate.outboundQueued) <= OUTCOME_TELEMETRY_MAX_PER_SESSION
+              ? Number(candidate.outboundQueued)
+              : OUTCOME_TELEMETRY_MAX_PER_SESSION
+          }
+        }
+      } else {
+        const legacyRaw = target.sessionStorage.getItem(OUTCOME_TELEMETRY_LEGACY_SESSION_KEY)
+        const legacyParsed: unknown = legacyRaw ? JSON.parse(legacyRaw) : []
+        if (Array.isArray(legacyParsed)) addStoredReceipts(legacyParsed)
+      }
+    } catch {
+      // If session storage is unavailable, keep local evidence working but fail closed on the
+      // optional outbound lane: a reload-safe per-session cap could not be guaranteed.
+      sessionStorageAvailable = false
+    }
+  }
+  return {
+    receipts: new Set(memoryReceipts),
+    outboundQueued: memoryOutboundQueued,
+    storageAvailable: sessionStorageAvailable,
+  }
+}
+
+function persistSessionState(target: Window, state: OutcomeTelemetrySessionState): boolean {
+  if (!state.storageAvailable) return false
   try {
     target.sessionStorage.setItem(
       OUTCOME_TELEMETRY_SESSION_KEY,
-      JSON.stringify([...receipts]),
+      JSON.stringify({
+        schema: OUTCOME_TELEMETRY_SESSION_SCHEMA,
+        receipts: [...state.receipts],
+        outboundQueued: state.outboundQueued,
+      }),
     )
+    return true
   } catch {
-    // Optional telemetry never blocks a Shop action.
+    sessionStorageAvailable = false
+    state.storageAvailable = false
+    return false
   }
+}
+
+function rememberReceipt(target: Window, key: string, state: OutcomeTelemetrySessionState): void {
+  state.receipts.add(key)
+  memoryReceipts.add(key)
+  while (state.receipts.size > OUTCOME_TELEMETRY_MAX_RECEIPTS_PER_SESSION) state.receipts.delete(state.receipts.values().next().value as string)
+  while (memoryReceipts.size > OUTCOME_TELEMETRY_MAX_RECEIPTS_PER_SESSION) memoryReceipts.delete(memoryReceipts.values().next().value as string)
+  persistSessionState(target, state)
+}
+
+function reserveOutboundSlot(target: Window, state: OutcomeTelemetrySessionState): boolean {
+  if (!state.storageAvailable || state.outboundQueued >= OUTCOME_TELEMETRY_MAX_PER_SESSION) return false
+  state.outboundQueued += 1
+  memoryOutboundQueued = state.outboundQueued
+  return persistSessionState(target, state)
 }
 
 function ensureVercelQueue(target: Window): void {
@@ -115,6 +174,24 @@ function ensureVercelQueue(target: Window): void {
   }
 }
 
+function configureVercelPrivacyBoundary(target: Window): void {
+  if (vercelPrivacyBoundaryConfigured) return
+  ensureVercelQueue(target)
+  const redactedUrl = `https://${target.location.hostname}${OUTCOME_TELEMETRY_REDACTED_PATH}`
+  const beforeSend = (value: unknown): VercelBeforeSendEvent | null => {
+    if (!value || typeof value !== 'object') return null
+    const event = value as Partial<VercelBeforeSendEvent>
+    if ((event.type !== 'pageview' && event.type !== 'event') || typeof event.url !== 'string') return null
+    if (event.type === 'pageview') return { type: 'pageview', url: event.url }
+    // Vercel's documented beforeSend event exposes only type and URL. Every custom event after
+    // this boundary uses one coarse URL, so the source route, query, and hash do not leave through
+    // that field. Provider-generated time/session/device/referrer metadata remains provider-owned.
+    return { type: 'event', url: redactedUrl }
+  }
+  target.va?.('beforeSend', beforeSend)
+  vercelPrivacyBoundaryConfigured = true
+}
+
 export function emitOutcomeTelemetry(transition: OutcomeTelemetryTransition): OutcomeTelemetryResult {
   try {
     if (!validOutcomeTelemetryTransition(transition) || typeof window === 'undefined') {
@@ -123,11 +200,11 @@ export function emitOutcomeTelemetry(transition: OutcomeTelemetryTransition): Ou
 
     const target = window
     const key = receiptKey(transition)
-    const receipts = readSessionReceipts(target)
-    if (receipts.has(key)) {
+    const sessionState = readSessionState(target)
+    if (sessionState.receipts.has(key)) {
       return { handled: false, localDispatched: false, outboundQueued: false, reason: 'duplicate' }
     }
-    rememberReceipt(target, key, receipts)
+    rememberReceipt(target, key, sessionState)
 
     const product = PILOT_PRODUCT_MAP[transition.pilotProduct]
     let localDispatched = false
@@ -146,17 +223,19 @@ export function emitOutcomeTelemetry(transition: OutcomeTelemetryTransition): Ou
     if (!isOutcomeTelemetryHost(target.location.hostname)) {
       return { handled: true, localDispatched, outboundQueued: false, reason: 'non_production' }
     }
-    if (outboundQueued >= OUTCOME_TELEMETRY_MAX_PER_SESSION) {
+    if (sessionState.outboundQueued >= OUTCOME_TELEMETRY_MAX_PER_SESSION) {
       return { handled: true, localDispatched, outboundQueued: false, reason: 'session_cap' }
+    }
+    if (!reserveOutboundSlot(target, sessionState)) {
+      return { handled: true, localDispatched, outboundQueued: false, reason: 'unavailable' }
     }
 
     // Exactly two low-cardinality primitive data properties. The evidence digest is used only
     // for local session deduplication and is deliberately absent from the provider payload.
     const data = { product, stage: transition.stage } satisfies Record<string, string>
     try {
-      ensureVercelQueue(target)
+      configureVercelPrivacyBoundary(target)
       target.va?.('event', { name: OUTCOME_TELEMETRY_EVENT_NAME, data })
-      outboundQueued += 1
       return { handled: true, localDispatched, outboundQueued: true, reason: 'queued' }
     } catch {
       return { handled: true, localDispatched, outboundQueued: false, reason: 'unavailable' }
