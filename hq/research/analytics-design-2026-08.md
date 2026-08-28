@@ -1,7 +1,7 @@
 # Local analytics design — SuperMega
 
-Date: 2026-08-11
-Status: design-ready
+Date: 2026-08-11; implementation boundary revised 2026-08-28
+Status: local recorder implemented; narrow production outcome bridge is a release candidate
 Author: HQ R&D
 Related: `hq/research/opentelemetry-implementation-plan-2026-08.md`
 Portfolio gate: not yet registered (register after go/no-go section passes)
@@ -10,11 +10,13 @@ Portfolio gate: not yet registered (register after go/no-go section passes)
 
 ## Context
 
-SuperMega runs four browser-local products (Shop, Plant, Website, Ecommerce) on the owner's device. No managed persistence is active. No external tracking, CDN scripts, or third-party analytics may run until managed mode is proven on an isolated tenant with owner approval.
+SuperMega runs four browser-local products (Shop, Plant, Website, Ecommerce) on the owner's device. No managed persistence is active. The device-local metric recorder remains the authoritative free evidence layer and does not depend on a provider.
 
-This document designs a local-only analytics layer that runs entirely in the browser, emits no outbound calls, and complements the existing OpenTelemetry plan. OTel handles server-side correlation when managed mode is proven. Local analytics is the pre-managed complement — evidence that the product is being used before a server ever sees a request.
+The original 2026-08-11 design prohibited all outbound analytics. The 2026-08-28 implementation boundary supersedes only that prohibition: on a production `supermega.dev` hostname, an explicit outcome-proof transition may also queue one `supermega_outcome` event through the already-present Vercel Web Analytics script. Its data is exactly two low-cardinality strings, `product` and `stage`. Localhost and preview hosts queue nothing. Names, contacts, amounts, paths, URLs, record IDs, timestamps, hashes, free text, and private evidence are excluded structurally.
 
-The operating constraint is written in `capability-tiers.ts`: every capability that works locally today is free forever. Anything local analytics does must be consistent with that promise. The analytics layer measures usage of free-forever features; it does not gate them, report them outward, or touch premium or enterprise machinery.
+The production bridge is optional, receipt-deduplicated, session-capped, and fail-open. Vercel custom events are plan-dependent (Pro or Enterprise as of 2026-08-28), so a queued event is not proof of provider ingestion. External visibility remains `not_observed` until a commit-bound production operations receipt verifies the exact event. The existing `client_error` event is a separate prior implementation whose four-property payload exceeds the standard Pro two-property limit; that compatibility gap is not copied into or widened by the outcome bridge.
+
+The operating constraint is written in `capability-tiers.ts`: every capability that works locally today is free forever. Anything local analytics does must be consistent with that promise. Metrics never gate a capability or affect action success. The optional production bridge reports only the closed outcome stage; the full device-local record stays local and remains available even when Vercel custom events are unsupported.
 
 ---
 
@@ -136,7 +138,7 @@ export function getSessionEvents(): readonly MetricEvent[] {
 }
 ```
 
-`startMetricsCollector()` is called once in the app root, after the React tree mounts. It keeps `SESSION_EVENTS` in module scope — not on `window`, not in React state, not in `localStorage`. The array is garbage-collected when the tab closes.
+`startMetricsCollector()` is called once in the app root. The implemented collector keeps a bounded session array and a bounded device-local record under `supermega.hq.local-metrics.v1`; this supersedes the earlier in-memory-only sketch. That local record is independent from the optional outcome bridge.
 
 ### Where to add emit calls
 
@@ -170,7 +172,7 @@ Priority emit sites by product:
 
 ## 3. Local aggregation
 
-Raw events stay in memory during the session. Derived aggregates are what get computed and, if retention is authorized, stored.
+The implemented collector keeps the newest 500 closed-shape `MetricEvent` records in device-local storage so evidence survives a reload. This differs from the historical aggregate-only proposal below; the record remains non-portable, bounded, and independent from Vercel.
 
 ### On-demand computation
 
@@ -232,7 +234,7 @@ The last 30 days of derived aggregates (not raw events) are the retention target
 
 The aggregate is written at end-of-day (triggered by a daily close event or by a page visibility change when the date crosses midnight). Entries older than 30 days are dropped before writing. The write is idempotent — re-running the computation for the same date replaces the row.
 
-No raw events are written. No order IDs, customer contact details, product names, amounts, or operator names appear in the aggregate.
+Only the four-field closed local event shape is retained; no order IDs, customer contact details, item names, amounts, operator names, or free text are written. The aggregate schema below remains a future reporting target rather than the current storage shape.
 
 ---
 
@@ -422,9 +424,9 @@ The taxonomy is a closed list. Any error that does not match a known pattern is 
 
 ---
 
-## 8. Go/no-go for persistence and CEO brief integration
+## 8. Historical go/no-go for persistence and CEO brief integration
 
-The in-memory collector (steps 1–5) can run immediately — no condition gates it. Events live only in the current tab's JavaScript heap. When the tab closes, they are gone.
+This section records the original pre-implementation gate. The subsequently reviewed collector now uses the bounded device-local record described above; these conditions remain privacy rationale, not a current claim that events disappear when the tab closes. CEO-brief and provider ingestion still require their own current evidence gates.
 
 The following conditions must be true before any metric is written to `localStorage` or read by the CEO brief:
 
@@ -443,15 +445,15 @@ The `supermega.hq.local-metrics.v1` schema (section 3) is reviewed and the found
 **Condition 5: A reset path exists.**
 The device reset capability (`device-reset`) must clear the `supermega.hq.local-metrics.v1` key from `localStorage` as part of its scope. Confirm this is wired before step 6 ships.
 
-Until all five conditions are met, the collector runs in memory only. The CEO brief reads a static placeholder: `local-metrics: collector-active, persistence-pending-go-no-go`.
+The old in-memory-only placeholder is superseded by the implemented bounded local recorder. Nothing in that local implementation establishes managed, customer, commercial, or provider proof.
 
 ---
 
 ## What this does not do
 
-- Does not send any data outbound. No fetch, no beacon, no image pixel, no WebSocket.
+- The local `MetricEvent` recorder sends nothing outbound. The only outcome exception is the production-host Vercel queue described in the 2026-08-28 boundary above; it carries exactly `product` and `stage` and makes no ingestion or commercial-proof claim.
 - Does not identify the owner. No device fingerprint, no install ID, no email.
 - Does not measure customer behavior. The products are used by business owners, not their customers. Local analytics measures owner/operator actions.
 - Does not replace OTel. When managed mode is proven, OTel provides server-side correlation and aggregate metrics at the workspace level. Local analytics provides the browser-local session view that OTel cannot see.
-- Does not add a tracking library. No GA, Mixpanel, Amplitude, PostHog, or equivalent is introduced. The implementation is ~120 lines of TypeScript and one `localStorage` key.
+- Does not add a tracking library. No GA, Mixpanel, Amplitude, PostHog, or equivalent is introduced. The existing Vercel script queue is reused, and the outcome dedupe ledger is bounded to one session-storage key.
 - Does not affect the free-forever guarantee. Capabilities in `FREE_FOREVER` are not gated, counted against a quota, or changed by this layer. Analytics is observational.

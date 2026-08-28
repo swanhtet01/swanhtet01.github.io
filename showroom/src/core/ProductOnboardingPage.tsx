@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
+import { emitOutcomeTelemetry } from '../analytics/outcome-telemetry'
 import { PageHeading, type RuntimeHealth } from './CoreShell'
 import {
   buildPlantGuidedShiftCloseOutcomeMetric,
@@ -403,12 +404,17 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           ? buildShopGuidedSaleOutcomeMetric(actions, startedAt)
           : buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], startedAt)
         if (metric) {
-          startPilotOutcome(window.localStorage, {
-          product,
-          workspace: setup.workspace,
-          owner: workspaceOwner,
-          templateId: onboardingTemplate.id,
+          const checkpoint = startPilotOutcome(window.localStorage, {
+            product,
+            workspace: setup.workspace,
+            owner: workspaceOwner,
+            templateId: onboardingTemplate.id,
           }, metric, new Date(startedAt))
+          emitOutcomeTelemetry({
+            pilotProduct: product,
+            stage: 'workflow_started',
+            evidenceDigest: checkpoint.checkpointDigest,
+          })
         }
       }
       recordBehaviorSignal(window.localStorage, {
