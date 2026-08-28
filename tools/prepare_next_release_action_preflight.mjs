@@ -606,7 +606,7 @@ function selfTestPacket() {
     gates: [
       gateStatus({ id: 'github_main_protection', label: 'GitHub main protection', status: 'owner_approval_or_token_required', blockers: ['main_unprotected'], approvalEnv: 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL', digest: fakeDigest('1') }),
       gateStatus({ id: 'review_branch_push', label: 'Review branch push', status: 'blocked', blockers: ['github_main_protection_unverified'], approvalEnv: null, digest: fakeDigest('2') }),
-      gateStatus({ id: 'pull_request_creation', label: 'Pull request creation', status: 'blocked', blockers: ['remote_review_branch_not_exact'], approvalEnv: 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL', digest: fakeDigest('3') }),
+      gateStatus({ id: 'pull_request_creation', label: 'Pull request creation', status: 'blocked', blockers: ['remote_review_branch_not_exact'], approvalEnv: null, digest: fakeDigest('3') }),
       gateStatus({ id: 'supabase_preview_rehearsal', label: 'Supabase preview rehearsal', status: 'blocked', blockers: ['separate_supabase_preview_rehearsal_approval_required'] }),
       gateStatus({ id: 'paired_vercel_preview_release', label: 'Paired Vercel preview release', status: 'blocked', blockers: ['separate_owner_release_approval_required'] }),
       gateStatus({ id: 'shop_pilot_evidence', label: 'Shop pilot evidence', status: 'blocked', blockers: ['owner_private_baseline', 'real_shop_pilot_evidence'] }),

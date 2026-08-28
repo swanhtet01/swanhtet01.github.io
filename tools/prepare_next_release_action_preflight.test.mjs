@@ -24,7 +24,6 @@ const products = ['shop', 'plant', 'website', 'ecommerce']
 const commit = 'a'.repeat(40)
 const main = 'b'.repeat(40)
 const live = 'c'.repeat(40)
-const prApprovalEnv = 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL'
 
 function digestOf(char) {
   return `sha256:${char.repeat(64)}`
@@ -295,26 +294,23 @@ test('advances to pull request creation after the review branch is already exact
   assert.ok(packet.currentAction.blockers.includes('github_token_missing'))
 })
 
-test('rejects an executable PR plan when the review branch push gate is not satisfied', () => {
-  const unpublished = fixture({ protectedMain: true })
-  const approvalTemplate = `I approve one GitHub pull request creation from ${unpublished.handoff.candidate.branch} at ${commit} into main for SuperMega review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
-  const publishedReady = fixture({
+test('plaintext PR approval cannot make the preflight executable', () => {
+  const published = fixture({
     protectedMain: true,
     branchPublished: true,
     env: {
-      [prApprovalEnv]: approvalTemplate,
+      SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL: 'plaintext must never approve',
       GITHUB_TOKEN: 'placeholder-token',
     },
   })
-  assert.equal(publishedReady.pullRequestPlan.readiness.executeReady, true)
-  assert.throws(
-    () => buildNextReleaseActionPreflight({
-      ...unpublished,
-      pullRequestPlan: publishedReady.pullRequestPlan,
-      pullRequestPlanReceipt: { ...unpublished.pullRequestPlanReceipt, packet: publishedReady.pullRequestPlan },
-    }),
-    /next_release_action_preflight_pr_ready_without_review_branch/,
-  )
+  assert.equal(published.pullRequestPlan.approval.env, null)
+  assert.equal(published.pullRequestPlan.approval.method, 'none')
+  assert.equal(published.pullRequestPlan.readiness.executeReady, false)
+  assert.deepEqual(published.pullRequestPlan.readiness.blockers, ['owner_approval_missing'])
+  const preflight = buildNextReleaseActionPreflight(published)
+  assert.equal(preflight.currentAction.gateId, 'pull_request_creation')
+  assert.equal(preflight.currentAction.executeReady, false)
+  assert.deepEqual(preflight.currentAction.blockers, ['owner_approval_missing'])
 })
 
 test('rejects ambiguous packets with multiple execute-ready gates', () => {
