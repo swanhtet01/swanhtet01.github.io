@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-export const OUTCOME_TELEMETRY_EVENT_NAME = 'supermega_outcome' as const
+export const OUTCOME_TELEMETRY_EVENT_NAME = 'supermega_local_outcome' as const
 export const OUTCOME_TELEMETRY_STAGES = [
   'workflow_started',
   'workflow_completed',

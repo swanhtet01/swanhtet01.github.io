@@ -109,6 +109,7 @@ for (const [label, hostname] of [['localhost', 'localhost'], ['preview', 'candid
   check(target.vaq.length === 1, 'production creates one provider queue entry')
   const [command, envelope] = target.vaq[0]
   check(command === 'event' && envelope.name === telemetry.OUTCOME_TELEMETRY_EVENT_NAME, 'event command and name are exact')
+  check(envelope.name === 'supermega_local_outcome', 'event name structurally marks the evidence as local only')
   check(Object.keys(envelope.data).sort().join(',') === 'product,stage', 'provider data has exactly two keys')
   check(Object.values(envelope.data).every((value) => ['string', 'number', 'boolean'].includes(typeof value) && String(value).length <= 255), 'provider values are primitive and bounded')
   check(envelope.data.product === 'shop' && envelope.data.stage === 'proof_accepted', 'provider values are low-cardinality allowlist members')
