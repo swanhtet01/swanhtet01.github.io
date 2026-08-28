@@ -1764,7 +1764,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .commerce-screen .product-task-tabs button { min-width: 96px; }
 .shop-counter-module { gap: 0.625rem; }
 .shop-counter-module .commerce-mode-banner { flex: 0 0 auto; }
-.shop-trade-demo-notice { flex: 0 0 auto; min-height: 42px; padding-block: 5px; }
+.shop-trade-demo-notice { flex: 0 0 auto; min-height: 2.625rem; padding-block: 0.3125rem; }
 .shop-trade-demo-notice[data-status="preserved"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
 .shop-trade-demo-notice[data-status="error"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
 .shop-counter-surface { min-height: 0; flex: 1; }
@@ -1841,9 +1841,9 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-payment-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 5px; }
 .shop-payment-options button { min-width: 0; min-height: 38px; border: 1px solid var(--core-line); border-radius: 9px; background: var(--core-panel-raised); color: var(--core-muted); font-size: 0.625rem; font-weight: var(--font-weight-bold); cursor: pointer; }
 .shop-payment-options button[aria-pressed="true"] { border-color: var(--core-green); background: var(--core-green-soft); color: var(--core-green); }
-.shop-sale-details .shop-open-order-choice { min-height: 44px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--core-line); border-radius: 10px; padding: 7px 9px; background: var(--core-surface-soft); font-size: 0.625rem; text-transform: none; cursor: pointer; }
-.shop-sale-details .shop-open-order-choice input { grid-column: auto; flex: 0 0 auto; width: 18px; min-height: 18px; margin: 1px 0 0; accent-color: var(--core-green); }
-.shop-open-order-choice span { min-width: 0; display: grid; gap: 2px; }
+.shop-sale-details .shop-open-order-choice { min-height: 2.75rem; display: flex; align-items: flex-start; gap: 0.5625rem; border: 0.0625rem solid var(--core-line); border-radius: 0.625rem; padding: 0.4375rem 0.5625rem; background: var(--core-surface-soft); font-size: 0.625rem; text-transform: none; cursor: pointer; }
+.shop-sale-details .shop-open-order-choice input { grid-column: auto; flex: 0 0 auto; width: 1.125rem; min-height: 1.125rem; margin: 0.0625rem 0 0; accent-color: var(--core-green); }
+.shop-open-order-choice span { min-width: 0; display: grid; gap: 0.125rem; }
 .shop-open-order-choice strong { color: var(--core-ink); font-size: 0.6875rem; }
 .shop-sale-details .shop-open-order-choice small { color: var(--core-muted); font-size: 0.5625rem; line-height: 1.35; }
 .shop-current-sale > footer { display: grid; gap: 7px; border-top: 1px solid var(--core-line); margin-top: 6px; padding-top: 6px; }

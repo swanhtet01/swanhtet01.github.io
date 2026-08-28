@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from 'node:http'
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +17,8 @@ function argValue(name, fallback = '') {
 }
 
 const outFile = argValue('--out')
+const screenshotDir = argValue('--screenshot-dir')
+const shopOnly = args.includes('--shop-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 
 const mime = {
@@ -208,11 +210,17 @@ async function launchBrowser(browserBin, userDataDir) {
 }
 
 async function evalInPage(cdp, sessionId, expression) {
-  const { result, exceptionDetails } = await cdp.send('Runtime.evaluate', {
-    expression,
-    returnByValue: true,
-    awaitPromise: true,
-  }, sessionId)
+  let timeout
+  const { result, exceptionDetails } = await Promise.race([
+    cdp.send('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    }, sessionId),
+    new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error('timeout evaluating rendered page state')), 10_000)
+    }),
+  ]).finally(() => clearTimeout(timeout))
   if (exceptionDetails) throw new Error(`page eval failed: ${exceptionDetails.text}`)
   return result.value
 }
@@ -220,22 +228,28 @@ async function evalInPage(cdp, sessionId, expression) {
 function seedScript(seed) {
   return `
 try {
-  localStorage.clear();
-  ${seed.lastProduct ? `localStorage.setItem('supermega.last-product.v1', ${JSON.stringify(seed.lastProduct)});` : ''}
-  ${seed.productSetups ? `localStorage.setItem('supermega.product_setups.v1', ${JSON.stringify(JSON.stringify(seed.productSetups))});` : ''}
+  if (!sessionStorage.getItem('supermega.entry-rendered.seeded.v1')) {
+    localStorage.clear();
+    ${seed.lastProduct ? `localStorage.setItem('supermega.last-product.v1', ${JSON.stringify(seed.lastProduct)});` : ''}
+    ${seed.productSetups ? `localStorage.setItem('supermega.product_setups.v1', ${JSON.stringify(JSON.stringify(seed.productSetups))});` : ''}
+    sessionStorage.setItem('supermega.entry-rendered.seeded.v1', 'true');
+  }
 } catch (error) {
   window.__supermegaSeedError = String(error && error.message ? error.message : error);
 }`
 }
 
-async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText) {
-  const deadline = Date.now() + 15_000
+async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs
   let latest = null
   while (Date.now() < deadline) {
     latest = await evalInPage(cdp, sessionId, `(() => ({
       path: location.pathname + location.search,
       text: document.body ? document.body.innerText : '',
       bodyLength: document.body ? document.body.innerText.trim().length : 0,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentScrollWidth: document.documentElement ? document.documentElement.scrollWidth : 0,
       overlay: Boolean(document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')),
       seedError: window.__supermegaSeedError || '',
     }))()`)
@@ -247,6 +261,71 @@ async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText) 
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   }
   return latest
+}
+
+async function exerciseShopCounter(cdp, sessionId, mobile) {
+  const added = await evalInPage(cdp, sessionId, `(() => {
+    const tile = [...document.querySelectorAll('.shop-product-tile')]
+      .find((candidate) => candidate.textContent.includes('Premium rice 25kg'));
+    if (!tile || tile.disabled) return false;
+    tile.click();
+    return true;
+  })()`)
+  if (!added) return { ok: false, error: 'mini-mart product tile was not actionable' }
+
+  const deadline = Date.now() + 5_000
+  if (mobile) {
+    let opened = false
+    while (Date.now() < deadline && !opened) {
+      opened = await evalInPage(cdp, sessionId, `(() => {
+        const button = document.querySelector('.shop-mobile-cart');
+        if (!button) return false;
+        button.click();
+        return true;
+      })()`)
+      if (!opened) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+    }
+    if (!opened) return { ok: false, error: 'mobile current-sale drawer did not open' }
+  }
+
+  const expectedText = ['PAYMENT', 'Keep as open order', 'Total', 'Review & complete sale']
+  let state = null
+  while (Date.now() < deadline) {
+    state = await evalInPage(cdp, sessionId, `(() => {
+      const rect = (selector) => {
+        const element = document.querySelector(selector);
+        if (!element) return null;
+        const box = element.getBoundingClientRect();
+        return { top: box.top, right: box.right, bottom: box.bottom, left: box.left, width: box.width, height: box.height };
+      };
+      const text = document.body ? document.body.innerText : '';
+      return {
+        text,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement ? document.documentElement.scrollWidth : 0,
+        payment: rect('.shop-sale-details fieldset'),
+        openOrderChoice: rect('.shop-open-order-choice'),
+        total: rect('.shop-current-sale > footer'),
+        reviewButton: rect('.shop-review-sale'),
+      };
+    })()`)
+    if (expectedText.every((needle) => (state?.text || '').includes(needle))
+      && state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  const missingText = expectedText.filter((needle) => !(state?.text || '').includes(needle))
+  const aboveFold = ['payment', 'openOrderChoice', 'total', 'reviewButton'].every((key) => {
+    const box = state?.[key]
+    return box && box.top >= -1 && box.bottom <= state.viewportHeight + 1
+  })
+  return {
+    ok: missingText.length === 0 && Boolean(state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton),
+    error: missingText.length ? `counter checkout missing text: ${missingText.join(', ')}` : '',
+    aboveFold,
+    ...state,
+    text: undefined,
+  }
 }
 
 async function verifyCase(cdp, origin, testCase) {
@@ -282,27 +361,53 @@ async function verifyCase(cdp, origin, testCase) {
     )
 
     const load = new Promise((resolveLoad, reject) => {
+      let timer
       const off = cdp.on(sessionId, 'Page.loadEventFired', () => {
         off()
+        clearTimeout(timer)
         resolveLoad()
       })
-      setTimeout(() => {
+      timer = setTimeout(() => {
         off()
         reject(new Error(`timeout loading ${testCase.route}`))
       }, 30_000)
     })
     await cdp.send('Page.navigate', { url: origin + testCase.route }, sessionId)
     await load
-    const rendered = await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText)
+    const rendered = await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
+    const shopCounter = testCase.exerciseShopCounter
+      ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
+      : null
+    let screenshot = ''
+    if (screenshotDir && testCase.screenshotName) {
+      const capture = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)
+      screenshot = resolve(screenshotDir, `${testCase.screenshotName}.png`)
+      await writeFile(screenshot, Buffer.from(capture.data, 'base64'))
+    }
     const pathMatches = typeof testCase.expectedPath === 'function'
       ? testCase.expectedPath(rendered?.path || '')
       : rendered?.path === testCase.expectedPath
     const missingText = testCase.expectedText.filter((needle) => !(rendered?.text || '').includes(needle))
+    const renderedViewportMatches = Math.abs((rendered?.viewportWidth ?? 0) - testCase.width) <= 1
+      && Math.abs((rendered?.viewportHeight ?? 0) - testCase.height) <= 1
+    const counterViewportMatches = !shopCounter
+      || Math.abs((shopCounter.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((shopCounter.viewportHeight ?? 0) - testCase.height) <= 1
     const failures = [
       ...(pathMatches ? [] : [`expected path ${testCase.expectedPathLabel || testCase.expectedPath}, got ${rendered?.path || 'unknown'}`]),
       ...(rendered?.bodyLength > 0 ? [] : ['blank page']),
       ...(rendered?.overlay ? ['framework error overlay present'] : []),
       ...(rendered?.seedError ? [`seed error: ${rendered.seedError}`] : []),
+      ...(renderedViewportMatches ? [] : [`expected ${testCase.width}x${testCase.height} viewport, got ${rendered?.viewportWidth ?? 'unknown'}x${rendered?.viewportHeight ?? 'unknown'}`]),
+      ...(testCase.noHorizontalOverflow && rendered?.documentScrollWidth > rendered?.viewportWidth + 1
+        ? [`horizontal overflow: ${rendered.documentScrollWidth}px document in ${rendered.viewportWidth}px viewport`]
+        : []),
+      ...(shopCounter && !shopCounter.ok ? [shopCounter.error || 'counter checkout exercise failed'] : []),
+      ...(shopCounter && !shopCounter.aboveFold ? ['counter payment, open-order choice, total, and review control are not all above fold'] : []),
+      ...(shopCounter && shopCounter.documentScrollWidth > shopCounter.viewportWidth + 1
+        ? [`counter horizontal overflow: ${shopCounter.documentScrollWidth}px document in ${shopCounter.viewportWidth}px viewport`]
+        : []),
+      ...(counterViewportMatches ? [] : [`counter viewport changed from ${testCase.width}x${testCase.height} to ${shopCounter?.viewportWidth ?? 'unknown'}x${shopCounter?.viewportHeight ?? 'unknown'}`]),
       ...missingText.map((needle) => `missing text: ${needle}`),
       ...errors,
     ]
@@ -312,6 +417,8 @@ async function verifyCase(cdp, origin, testCase) {
       viewport: `${testCase.width}x${testCase.height}${testCase.mobile ? ' mobile' : ''}`,
       path: rendered?.path || '',
       bodyLength: rendered?.bodyLength || 0,
+      layout: shopCounter,
+      screenshot,
       ok: failures.length === 0,
       failures,
     }
@@ -396,6 +503,35 @@ const tests = [
     seed: {},
   },
   {
+    name: 'desktop trade link opens a complete mini-mart counter',
+    route: '/shop/?template=mini-mart',
+    width: 1280,
+    height: 900,
+    expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
+    expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
+    expectedText: ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL DEMO'],
+    exerciseShopCounter: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'shop-counter-mini-mart-desktop-1280x900',
+    timeoutMs: 60_000,
+    seed: {},
+  },
+  {
+    name: 'mobile trade link keeps the complete mini-mart checkout in view',
+    route: '/shop/?template=mini-mart',
+    width: 390,
+    height: 844,
+    mobile: true,
+    expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
+    expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
+    expectedText: ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL DEMO'],
+    exerciseShopCounter: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'shop-counter-mini-mart-mobile-390x844',
+    timeoutMs: 60_000,
+    seed: {},
+  },
+  {
     name: 'demo plant opens explicit plant route',
     route: '/?demo=plant',
     width: 1280,
@@ -429,6 +565,7 @@ const tests = [
 
 async function main() {
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
+  if (screenshotDir) await mkdir(resolve(screenshotDir), { recursive: true })
   const browserBin = findBrowser()
   const userDataDir = await mkdtemp(join(tmpdir(), 'supermega-entry-rendered-'))
   const server = await startServer()
@@ -438,11 +575,13 @@ async function main() {
   try {
     const version = await cdp.send('Browser.getVersion')
     const cases = []
-    for (const testCase of tests) cases.push(await verifyCase(cdp, origin, testCase))
+    const selectedTests = shopOnly ? tests.filter((testCase) => testCase.exerciseShopCounter) : tests
+    for (const testCase of selectedTests) cases.push(await verifyCase(cdp, origin, testCase))
     const failures = cases.flatMap((entry) => entry.failures.map((failure) => `${entry.name}: ${failure}`))
     const report = {
       ok: failures.length === 0,
       contract: 'supermega.app-entry-rendered.v1',
+      scope: shopOnly ? 'shop-counter' : 'full',
       head: gitHead(),
       browser: version.product,
       origin,
@@ -471,6 +610,7 @@ main().catch((error) => {
   const report = {
     ok: false,
     contract: 'supermega.app-entry-rendered.v1',
+    scope: shopOnly ? 'shop-counter' : 'full',
     head: gitHead(),
     failures: [error.message],
   }
