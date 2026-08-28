@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 
 export const REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT = 'supermega.review-branch-push-owner-receipt.v2'
 export const REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS = 10 * 60 * 1000
+export const REVIEW_BRANCH_PUSH_OWNER_DIALOG_TIMEOUT_MS = REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
@@ -135,7 +136,8 @@ export function renderReviewBranchPushOwnerConfirmation({ gate, handoffReceipt }
     'This can push only that exact commit to that review branch.',
     'It cannot merge, force-push, delete, dispatch a workflow, deploy, change a domain or environment, mutate a database, change credentials, contact a customer, take payment, or move stock.',
     '',
-    'Your approval expires in 10 minutes and is consumed before the push attempt.',
+    'This dialog expires after 10 minutes and fails closed if you do not choose Yes.',
+    'A Yes receipt is also valid for only 10 minutes and is consumed before the push attempt.',
     'No is the default. Choose Yes only if you want this exact review-only push now.',
   ].join('\n')
 }
@@ -374,7 +376,7 @@ export function confirmReviewBranchPushOwnerClick(message, {
       SUPERMEGA_OWNER_GATE_TITLE: 'SuperMega exact review-branch push',
       SUPERMEGA_OWNER_GATE_MESSAGE: String(message || ''),
     },
-    timeout: 55_000,
+    timeout: REVIEW_BRANCH_PUSH_OWNER_DIALOG_TIMEOUT_MS,
     windowsHide: false,
   })
   if (result?.error?.code === 'ETIMEDOUT') fail('review_branch_push_owner_receipt_confirmation_timed_out')

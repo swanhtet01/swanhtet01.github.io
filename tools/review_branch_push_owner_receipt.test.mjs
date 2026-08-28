@@ -6,6 +6,7 @@ import test from 'node:test'
 
 import {
   REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT,
+  REVIEW_BRANCH_PUSH_OWNER_DIALOG_TIMEOUT_MS,
   REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS,
   buildReviewBranchPushOwnerReceipt,
   confirmReviewBranchPushOwnerClick,
@@ -92,6 +93,7 @@ test('confirmation copy is explicit and defaults to decline', () => {
   assert.match(message, new RegExp(commit))
   assert.match(message, /fast-forward-only/)
   assert.match(message, /cannot merge, force-push, delete/)
+  assert.match(message, /dialog expires after 10 minutes/)
   assert.match(message, /No is the default/)
 
   let invocation
@@ -107,10 +109,29 @@ test('confirmation copy is explicit and defaults to decline', () => {
   assert.ok(invocation.args.includes('-Sta'))
   assert.match(invocation.options.env.SUPERMEGA_OWNER_GATE_MESSAGE, new RegExp(commit))
   assert.equal(invocation.options.windowsHide, false)
-  assert.equal(invocation.options.timeout, 55_000)
+  assert.equal(REVIEW_BRANCH_PUSH_OWNER_DIALOG_TIMEOUT_MS, 600_000)
+  assert.equal(REVIEW_BRANCH_PUSH_OWNER_DIALOG_TIMEOUT_MS, REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS)
+  assert.equal(invocation.options.timeout, REVIEW_BRANCH_PUSH_OWNER_DIALOG_TIMEOUT_MS)
   assert.equal(invocation.options.env.GITHUB_TOKEN, undefined)
   assert.equal(invocation.options.env.GH_TOKEN, undefined)
   assert.equal(invocation.options.env.SUPABASE_ACCESS_TOKEN, undefined)
+})
+
+test('dialog timeout uses the advertised ten-minute window and fails closed', () => {
+  const { gate, handoffReceipt } = context()
+  const message = renderReviewBranchPushOwnerConfirmation({ gate, handoffReceipt })
+  let timeout
+  assert.throws(
+    () => confirmReviewBranchPushOwnerClick(message, {
+      platform: 'win32',
+      spawn: (_command, _args, options) => {
+        timeout = options.timeout
+        return { status: null, signal: 'SIGTERM', error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }
+      },
+    }),
+    /review_branch_push_owner_receipt_confirmation_timed_out/,
+  )
+  assert.equal(timeout, 600_000)
 })
 
 test('rejects tampering, rebinding, expiry, and receipts from the future', () => {
