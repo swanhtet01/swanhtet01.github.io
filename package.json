@@ -639,6 +639,8 @@
     "app:verify:live:current": "node tools/verify_app_release_live.mjs --current-head",
     "observability:floor:verify": "node tools/verify_observability_floor.mjs",
     "observability:floor:self-test": "node --test tools/verify_observability_floor.test.mjs && node tools/verify_observability_floor.mjs --self-test",
+    "observability:post-deploy:collect": "node tools/collect_post_deploy_operations_receipt.mjs",
+    "observability:post-deploy:self-test": "node --test tools/collect_post_deploy_operations_receipt.test.mjs",
     "github:main-protection:self-test": "node --test tools/verify_github_main_protection.test.mjs && node tools/verify_github_main_protection.mjs --self-test",
     "github:main-protection:proposal": "node tools/prepare_github_main_protection_packet.mjs",
     "github:main-protection:proposal:verify": "node tools/prepare_github_main_protection_packet.mjs --verify",
