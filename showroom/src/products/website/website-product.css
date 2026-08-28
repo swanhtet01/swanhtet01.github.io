@@ -3626,3 +3626,42 @@
      --website-sans itself is undisputed: it is declared only at :1716. */
   --website-mono: var(--website-sans);
 }
+
+.website-restored-draft-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--website-warn);
+  border-radius: 14px;
+  background: var(--website-panel);
+  padding: 16px 18px;
+}
+
+.website-restored-draft-choice h2 {
+  margin: 3px 0 5px;
+  font-size: 1rem;
+}
+
+.website-restored-draft-choice p,
+.website-restored-draft-choice small {
+  display: block;
+  margin: 0;
+  color: var(--website-muted);
+  line-height: 1.45;
+}
+
+.website-restored-draft-choice small { margin-top: 4px; }
+
+.website-restored-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .website-restored-draft-choice { grid-template-columns: 1fr; }
+  .website-restored-draft-actions { display: grid; justify-content: stretch; }
+  .website-restored-draft-actions .website-button { width: 100%; }
+}

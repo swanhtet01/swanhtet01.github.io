@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -50,6 +51,7 @@ import {
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
 const CONTENT_CHECK_IDS = ['ready-pages', 'home-path', 'navigation']
+const websiteProductSource = await readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
 
 function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
@@ -67,6 +69,34 @@ test('a fresh Website workspace opens on a complete, previewable site', () => {
   }
   assert.ok(workspace.pages.some((page) => page.navigation.visible), 'navigation must show at least one page')
   assert.ok(isUntouchedWebsiteStarter(workspace))
+})
+
+test('a recovered tab draft waits for an explicit provenance choice', () => {
+  assert.match(
+    websiteProductSource,
+    /setEditSessionState\(null\)\s+setRestoredDraftState\(next\)/,
+    'restoration must hold the candidate aside instead of silently activating it',
+  )
+  assert.match(websiteProductSource, /Unsaved tab draft found/)
+  assert.match(websiteProductSource, /Current \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'saved Website'\}/)
+  assert.match(websiteProductSource, /Continue saved draft/)
+  assert.match(websiteProductSource, /Start from this \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'Website'\}/)
+  assert.match(websiteProductSource, /Nothing was overwritten, deployed, published, or sent\./)
+  assert.match(
+    websiteProductSource,
+    /window\.sessionStorage\.removeItem\(websiteEditSessionStorageKey\(pendingRestoredDraft\.scope\)\)/,
+    'choosing the current Website must remove the older tab draft',
+  )
+  assert.match(
+    websiteProductSource,
+    /The older tab draft could not be discarded safely[\s\S]*?focusRestoredDraftChoice\(\)[\s\S]*?return/,
+    'a storage failure must keep the provenance choice unresolved',
+  )
+  assert.match(
+    websiteProductSource,
+    /if \(pendingRestoredDraft\) \{\s+focusRestoredDraftChoice\(\)\s+return\s+\}/,
+    'the primary action must return to the unresolved choice instead of bypassing it',
+  )
 })
 
 test('the seeded site passes every content readiness check', () => {
