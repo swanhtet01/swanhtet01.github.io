@@ -31,7 +31,7 @@ export function verifyCurrentReleaseAssets({
     ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Working samples. Add data when ready.', 'supermega.last-product.v1', 'First action', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Complete a sample sale', 'Run a sample production job', 'Preview a business website', 'Send a sample order to Shop', 'Sales, orders, stock, close.', 'Jobs, materials, quality.', 'Pages, leads, preview.', 'Storefront to Shop handoff.', 'Samples stay separate.', 'Open', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Complete a sample sale', 'Create Shop and start selling', 'Run a sample production job', 'Create Plant and open the job', 'Preview a business website', 'Create Website and preview it', 'Open a working online store', 'Create Ecommerce and open the store']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'We will add realistic sample records now; replace them with your data whenever you are ready.', 'First useful result:', 'Creates local sample records, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
-    ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
+    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'It does not charge a wallet or card', 'No payment is captured']],
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose another working flow, use your data, or make this sample yours.', 'Make ', ' mine', 'Your data', 'Upload a CSV or try a sample.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'Only ', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
@@ -50,7 +50,7 @@ export function verifyCurrentReleaseAssets({
       if (!corpus.includes(required)) throw new Error(`missing_current_release_asset:${group}:${required}`)
     }
   }
-  for (const forbidden of ['Complete sale', 'Stock updated. Receipt saved.']) {
+  for (const forbidden of ['Confirming creates a sample order and reserves sample stock in this browser.', 'Stock updated. Receipt saved.']) {
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
@@ -542,7 +542,13 @@ if (!operationsChunk.includes('Other products')
   || !assetCorpus.includes('.stock-catalog-content')
   || !assetCorpus.includes('.stock-record-content')
   || !assetCorpus.includes('.data-row.stock-empty-row')) throw new Error('missing_live_shop_stock_worklist_contract')
-for (const required of ['Browser-local sample only.', 'sample order and sample stock change in this browser', 'No payment is captured', 'no customer is contacted', 'no server or managed workspace is written', 'no real stock is moved']) {
+for (const required of [
+  'Browser-local sample only.',
+  'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
+  'It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.',
+  'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
+  'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
+]) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }
 const shopLiveCopyUpdates = new Map([
