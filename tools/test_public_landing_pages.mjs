@@ -87,6 +87,12 @@ for (const page of landingPages) {
   check(home.includes(product.firstOperatingLoop[0]), `home_shows_first_loop:${product.id}`)
 }
 
+const shopLanding = readStatic('shop/index.html')
+for (const templateId of ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa']) {
+  check(shopLanding.includes(`href="https://app.supermega.dev/shop/?template=${templateId}"`), `shop_trade_opens_sell:${templateId}`)
+  check(!shopLanding.includes(`href="https://app.supermega.dev/settings/?product=shop&amp;template=${templateId}"`), `shop_trade_skips_setup_detour:${templateId}`)
+}
+
 // Homepage carries exactly one Organization JSON-LD block sourced from the manifest.
 const homeSchemaBlocks = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
 check(homeSchemaBlocks.length === 1, 'home_structured_data_count')

@@ -4,6 +4,7 @@ import {
   shopBusinessTemplateCommerceItems,
   shopBusinessTemplateFromQuery,
   shopBusinessTemplates,
+  type ShopBusinessTemplate,
 } from '../products/shop/business-templates'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
@@ -983,6 +984,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
 
   if (!action) return null
   const isCounterConfirmation = action.presentation === 'counter'
+  const isCounterSettlement = isCounterConfirmation && action.kind === 'order_settle'
   // A frozen command proof normally blocks Cancel and Escape on purpose: the managed write may
   // already have landed, so walking away could leave the operator believing nothing happened.
   // That reasoning only holds while the outcome is unknown. Once a submit has come back with an
@@ -1017,7 +1019,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   }
 
   return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !confirmationLocked) onCancel() }} ref={dialogRef}>
-    <div className="action-change"><span className="core-eyebrow">{isCounterConfirmation ? 'Review counter order' : 'Confirm change'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
+    <div className="action-change"><span className="core-eyebrow">{isCounterConfirmation ? 'Review counter sale' : 'Confirm change'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
         ? <label>Your account<input readOnly value={authenticatedActor.label} /></label>
@@ -1025,8 +1027,10 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
       {isCounterConfirmation
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
-      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : bi(action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
+      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{isCounterSettlement
+        ? 'Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.'
+        : 'Browser-local sample only. Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
+      <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? bi('Retry same confirmation') : isCounterSettlement ? 'Complete sale' : bi(isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
       {error
         ? <div className="form-notice" data-action-gate="error" data-tone="error" role="alert">
           <p>{ownerFacingActionError(error)}</p>
@@ -1074,23 +1078,34 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const requestedRequestId = searchParams.get('request')
   const view = product
   const requestedTab = searchParams.get('tab')
-  const commerceTab = activeCommerceTab(requestedTab)
+  const requestedShopTemplateId = view === 'commerce' ? shopBusinessTemplateFromQuery(searchParams.get('template')) : null
+  const requestedShopTemplate = requestedShopTemplateId ? shopBusinessTemplate(requestedShopTemplateId) : null
+  // A trade link is a counter door, not a setup detour. An explicit tab still wins so an
+  // operator can move through Today, Orders, and Stock without losing the trade context.
+  const commerceTab = requestedShopTemplateId && requestedTab === null ? 'counter' : activeCommerceTab(requestedTab)
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
   const requestedTabIsCanonical = requestedTab === activeTab
+  const canonicalPath = productCanonicalPath(view)
+  const canonicalParams = new URLSearchParams({ tab: activeTab })
+  if (view === 'commerce' && requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)
+  const canonicalTabPath = `${canonicalPath}?${canonicalParams}`
 
   useEffect(() => {
-    const canonicalPath = productCanonicalPath(view)
-    if (location.pathname !== canonicalPath || !requestedTabIsCanonical) navigate(`${canonicalPath}?tab=${activeTab}`, { replace: true })
-  }, [activeTab, location.pathname, navigate, requestedTabIsCanonical, view])
+    if (location.pathname !== canonicalPath || !requestedTabIsCanonical) navigate(canonicalTabPath, { replace: true })
+  }, [canonicalPath, canonicalTabPath, location.pathname, navigate, requestedTabIsCanonical])
 
   function setTab(tab: CommerceTab | ProductionTab) {
-    navigate(`${productCanonicalPath(view)}?tab=${tab}`, { replace: true })
+    const params = new URLSearchParams({ tab })
+    if (view === 'commerce' && requestedShopTemplateId) params.set('template', requestedShopTemplateId)
+    navigate(`${productCanonicalPath(view)}?${params}`, { replace: true })
   }
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const productCopy = view === 'commerce'
-    ? {
+    ? requestedShopTemplate && commerceTab === 'counter'
+      ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
+      : {
         today: 'See today’s next job and key numbers.',
         counter: 'Tap an item, choose payment, and confirm the sale.',
         orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
@@ -1105,7 +1120,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} confirmedLocalShop={confirmedLocalShop} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} confirmedLocalShop={confirmedLocalShop} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1114,6 +1129,7 @@ type ShopCounterReview = {
   lines: Array<{ sku: string; quantity: number }>
   customer: string
   payment: string
+  outcome: 'paid_handoff' | 'open_order'
   onCommitted: () => void
 }
 
@@ -1150,12 +1166,15 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, productImageScope, sampleCatalogActive }: {
+function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, productImageScope, sampleCatalogActive }: {
+  businessTemplate: ShopBusinessTemplate | null
+  canCompleteInOneReview: boolean
   disabled: boolean
   industryPack: ShopIndustryPack | null
   initialCustomer: string
   initialQuery: string
   items: CommerceItem[]
+  localDemoStatus: 'local' | 'records-at-risk' | null
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
@@ -1168,6 +1187,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
   const [cart, setCart] = useState<Record<string, number>>(() => restoredDraft?.cart ?? {})
   const [customer, setCustomer] = useState(() => restoredDraft?.customer || initialCustomer)
   const [payment, setPayment] = useState(() => restoredDraft?.payment ?? 'Cash')
+  const [outcome, setOutcome] = useState<'paid_handoff' | 'open_order'>(() => restoredDraft?.outcome ?? 'paid_handoff')
   const [query, setQuery] = useState(initialQuery)
   const [cartOpen, setCartOpen] = useState(false)
 
@@ -1181,6 +1201,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
   })
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
+  const effectiveOutcome = canCompleteInOneReview ? outcome : 'open_order'
 
   // Persist what the counter can actually act on, not the raw cart. `lines` is the same
   // derived value the UI uses: catalog SKUs only, clamped to live stock. Judging emptiness
@@ -1192,12 +1213,12 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
   useEffect(() => {
     try {
       if (liveCartJson === '{}') window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
-      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart: JSON.parse(liveCartJson), customer, payment }))
+      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart: JSON.parse(liveCartJson), customer, payment, outcome }))
     } catch {
       // Storage full or blocked. The counter keeps working in memory; losing persistence
       // must never cost the operator the sale they are ringing up right now.
     }
-  }, [liveCartJson, customer, payment])
+  }, [liveCartJson, customer, payment, outcome])
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
@@ -1249,6 +1270,7 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
     setCart({})
     setCustomer('')
     setPayment('Cash')
+    setOutcome('paid_handoff')
     setCartOpen(false)
   }
 
@@ -1258,18 +1280,23 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
       lines: lines.map((line) => ({ sku: line.item.sku, quantity: line.quantity })),
       customer: customer.trim(),
       payment,
+      outcome: effectiveOutcome,
       onCommitted: () => {
         clearSale()
       },
     }, event.currentTarget)
   }
 
-  const counterContextLabel = industryPack && sampleCatalogActive
+  const counterContextLabel = businessTemplate && sampleCatalogActive
+    ? `${businessTemplate.name.en} · Shop Counter`
+    : industryPack && sampleCatalogActive
     ? `${industryPack.name} working sample`
     : industryPack
       ? 'Existing Shop catalog'
       : bi('Counter open')
-  const packContext = industryPack
+  const packContext = businessTemplate && sampleCatalogActive
+    ? `${businessTemplate.description} This sample stays on this device; Cash, KBZPay, WavePay, AYA Pay, and MMQR stay manual until the sale is reviewed.`
+    : industryPack
     ? sampleCatalogActive
       ? `${industryPack.firstWorkflow} ${industryPack.name} sample items are loaded.`
       : `Your existing items were kept. The ${industryPack.name} appointment schedule is separate.`
@@ -1283,8 +1310,10 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
           <div>
             <span className="core-eyebrow">{counterContextLabel}</span>
             <h2>{bi('Tap an item to add it')}</h2>
-            {industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
-            <nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav>
+            {businessTemplate && sampleCatalogActive
+              ? <p className="shop-pack-context"><span>{packContext}</span></p>
+              : industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
+            <nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link>{localDemoStatus ? <Link className="shop-counter-local-link" data-risk={localDemoStatus === 'records-at-risk' ? 'true' : undefined} to="/settings/#controls">{localDemoStatus === 'records-at-risk' ? 'Local demo · records at risk' : 'Local demo · on this device'}</Link> : null}</nav>
             {spaPilotActive ? <div aria-label="Spa pilot first sale path" className="shop-spa-pilot-strip">
               <span><strong>Sell package</strong><small>Cash, KBZPay, WavePay, AYA Pay, or MMQR</small></span>
               <span><strong>Book treatment</strong><small>Use the schedule before the guest arrives</small></span>
@@ -1367,10 +1396,11 @@ function ShopCounter({ disabled, industryPack, initialCustomer, initialQuery, it
               counter the customer pays a non-cash sale by scanning the owner's static
               merchant QR and typing the amount, so the affordance lives exactly here —
               non-cash method chosen, amount due on screen. No payment API, no status
-              write; confirming money arrived stays the manual flow in Orders. */}
+              write; the cashier still confirms money received in the reviewed sale. */}
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
+          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
         </div>
-        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : bi('Review order')}<span aria-hidden="true">→</span></button><small>Confirm to create the order. Finish payment and handoff in Orders.</small></footer></> : null}
+        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}<span aria-hidden="true">→</span></button><small>{effectiveOutcome === 'paid_handoff' ? 'One review records payment, handoff, stock, and the order record.' : 'Creates an open order; payment and handoff stay for Orders.'}</small></footer></> : null}
       </aside>
     </div>
     {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
@@ -1415,7 +1445,12 @@ function rememberLastOperator(name: string) {
   }
 }
 
-type ShopCounterDraft = { cart: Record<string, number>; customer: string; payment: string }
+type ShopCounterDraft = {
+  cart: Record<string, number>
+  customer: string
+  payment: string
+  outcome: 'paid_handoff' | 'open_order'
+}
 
 // Validates field by field rather than trusting the parse: this value survives upgrades and
 // hand-edited storage, and a malformed draft must degrade to an empty counter, never throw
@@ -1438,6 +1473,7 @@ function readShopCounterDraft(): ShopCounterDraft | null {
       cart,
       customer: typeof draft.customer === 'string' ? draft.customer.slice(0, 120) : '',
       payment: typeof draft.payment === 'string' && draft.payment ? draft.payment : 'Cash',
+      outcome: draft.outcome === 'open_order' ? 'open_order' : 'paid_handoff',
     }
   } catch {
     return null
@@ -1505,7 +1541,7 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, confirmedLocalShop, managedIdentity, requestedRequestId, requestedSource, shopCounterCustomer, shopCounterSearch, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterCustomer, shopCounterSearch, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
@@ -1516,6 +1552,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
+  requestedShopTemplate: ShopBusinessTemplate | null
   requestedSource: string | null
   shopCounterCustomer: string
   shopCounterSearch: string
@@ -1551,10 +1588,58 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   // The installed sample id is either an industry pack id or a business template id;
   // comparing only the pack id reported a successful template install as "preserved".
   const installedShopSampleId = commerceWorkingSampleCatalogId(commerce)
-  const shopSampleCatalogActive = Boolean(shopPack && installedShopSampleId && (
+  const activeShopBusinessTemplate = requestedShopTemplate?.id === installedShopSampleId ? requestedShopTemplate : null
+  const shopSampleCatalogActive = Boolean(activeShopBusinessTemplate || (shopPack && installedShopSampleId && (
     installedShopSampleId === shopPack.id
     || shopBusinessTemplates.some((template) => template.id === installedShopSampleId && template.industryPackId === shopPack.id)
-  ))
+  )))
+  const [shopTradeDemoResult, setShopTradeDemoResult] = useState<{
+    templateId: string
+    status: 'preserved' | 'error'
+    error: string
+  } | null>(null)
+  const shopTradeDemoAttempt = useRef('')
+  const requestedShopTemplateId = requestedShopTemplate?.id ?? ''
+  const requestedShopTemplateName = requestedShopTemplate?.name.en ?? ''
+  const shopTradeDemoStatus = activeShopBusinessTemplate
+    ? 'ready'
+    : shopTradeDemoResult?.templateId === requestedShopTemplateId
+      ? shopTradeDemoResult.status
+      : 'loading'
+  const shopTradeDemoError = shopTradeDemoResult?.templateId === requestedShopTemplateId ? shopTradeDemoResult.error : ''
+  const shopTradeDemoCheckoutBlocked = !managedIdentity
+    && Boolean(requestedShopTemplate)
+    && (shopTradeDemoStatus === 'loading' || shopTradeDemoStatus === 'error')
+  useEffect(() => {
+    if (!requestedShopTemplateId) {
+      shopTradeDemoAttempt.current = ''
+      return
+    }
+    if (installedShopSampleId === requestedShopTemplateId) return
+    // Never mistake the first identity frame for a signed-out visitor. The guarded installer
+    // runs only after the server and identity probe confirm this is a local browser workspace,
+    // and only after recovery says writes are safe. The installer itself replaces only the exact
+    // untouched seed (or another guided sample); any operator-edited workspace is preserved.
+    if (!confirmedLocalShop || managedIdentity || !commerceCanWrite || commerceSync.status !== 'ready'
+      || shopTradeDemoAttempt.current === requestedShopTemplateId) return
+    shopTradeDemoAttempt.current = requestedShopTemplateId
+    void import('./product-onboarding-runtime')
+      .then(({ provisionLocalShopBusinessTemplateSample }) => provisionLocalShopBusinessTemplateSample(requestedShopTemplateId))
+      .then((disposition) => {
+        if (disposition === 'installed' || disposition === 'current') {
+          window.location.reload()
+          return
+        }
+        setShopTradeDemoResult({ templateId: requestedShopTemplateId, status: 'preserved', error: '' })
+      })
+      .catch((error: unknown) => {
+        setShopTradeDemoResult({
+          templateId: requestedShopTemplateId,
+          status: 'error',
+          error: error instanceof Error ? error.message : `The ${requestedShopTemplateName} sample could not be loaded.`,
+        })
+      })
+  }, [commerceCanWrite, commerceSync.status, confirmedLocalShop, installedShopSampleId, managedIdentity, requestedShopTemplateId, requestedShopTemplateName])
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
@@ -1850,6 +1935,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   // (137.0, 137.6, 170.3); the rest of the win is not doing the work.
   const orderAcknowledgementDownloads = useMemo(() => orderAcknowledgementLookup(commerce), [commerce])
   const [receiptAck, setReceiptAck] = useState<CommerceOrderAcknowledgement | null>(null)
+  const [counterReceiptOrderId, setCounterReceiptOrderId] = useState('')
+  const counterReceiptAck = tab === 'counter' && counterReceiptOrderId
+    ? orderAcknowledgementDownloads.get(counterReceiptOrderId)?.artifact ?? null
+    : null
+  const activeReceiptAck = receiptAck ?? counterReceiptAck
   const latestClose = commerce.closes.find((close) => close.operator)
   // Roadmap §2 item 5 — anomaly flags on the close. A pure projection over
   // closes already saved (shop-close-anomaly-flags.ts): nothing is stored, no
@@ -2047,14 +2137,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   // redeemed against this order. Display-only — the printed artifact text stays
   // byte-identical to what the settle recorded.
   const receiptLoyalty = useMemo(() => {
-    if (!receiptAck || !shopLoyaltySettings?.enabled || !shopLoyaltyPoints) return null
-    const customer = receiptAck.customer.trim()
+    if (!activeReceiptAck || !shopLoyaltySettings?.enabled || !shopLoyaltyPoints) return null
+    const customer = activeReceiptAck.customer.trim()
     if (!customer || customer === 'Guest') return null
     return {
       balancePoints: shopLoyaltyDisplayPoints(shopLoyaltyPoints.get(customer) ?? 0),
-      redeemedPoints: shopLoyaltyRedeemedPointsForOrder(commerce.orders.find((order) => order.id === receiptAck.orderId)),
+      redeemedPoints: shopLoyaltyRedeemedPointsForOrder(commerce.orders.find((order) => order.id === activeReceiptAck.orderId)),
     }
-  }, [commerce.orders, receiptAck, shopLoyaltyPoints, shopLoyaltySettings])
+  }, [activeReceiptAck, commerce.orders, shopLoyaltyPoints, shopLoyaltySettings])
   const purchaseOrderDraftOrder = purchaseOrderDraft?.mode === 'receive'
     ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderDraft.purchaseOrderId)
     : undefined
@@ -3137,6 +3227,28 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
   </>
+  const compactCounterStatus = confirmedLocalShop
+    && !managedIdentity
+    && commerceCanWrite
+    && commerceSync.status === 'ready'
+    && !commerceStorageError
+    && !storageDurability.quotaExceeded
+    && (!commerceHeadroom || commerceHeadroom.level === 'clear')
+  const counterLocalDemoStatus = compactCounterStatus
+    ? storageDurability.state === 'denied' ? 'records-at-risk' as const : 'local' as const
+    : null
+  const counterBoundary = compactCounterStatus && !notice ? null : commerceBoundary
+  const shopTradeDemoNotice = !managedIdentity && requestedShopTemplate && shopTradeDemoStatus !== 'ready'
+    ? <div className="production-mode-banner shop-trade-demo-notice" data-status={shopTradeDemoStatus} role={shopTradeDemoStatus === 'error' ? 'alert' : 'status'}>
+      <span className={`status-pill ${shopTradeDemoStatus === 'error' ? 'danger' : shopTradeDemoStatus === 'preserved' ? 'pending' : 'bounded'}`}>{shopTradeDemoStatus === 'loading' ? 'Loading trade' : shopTradeDemoStatus === 'preserved' ? 'Existing Shop kept' : 'Trade unavailable'}</span>
+      <p>{shopTradeDemoStatus === 'loading'
+        ? `Preparing the ${requestedShopTemplate.name.en} sample without replacing operator data.`
+        : shopTradeDemoStatus === 'preserved'
+          ? `The ${requestedShopTemplate.name.en} sample was not loaded because this device already has Shop activity. Nothing was overwritten.`
+          : shopTradeDemoError}</p>
+      {shopTradeDemoStatus === 'preserved' ? <Link to={`/settings/?product=shop&template=${encodeURIComponent(requestedShopTemplate.id)}`}>Review setup</Link> : null}
+    </div>
+    : null
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
   // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage
@@ -3675,6 +3787,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   async function confirmAction(details: ActionDetails) {
     if (!pendingAction) return
+    const counterSettlement = pendingAction.presentation === 'counter' && pendingAction.kind === 'order_settle'
     if (pendingAction.evidenceReferenceLocked
       && details.evidenceReference.trim() !== pendingAction.evidenceReferenceSuggestion) {
       throw new Error('Source-backed evidence is fixed to the reviewed message mapping. Cancel and review the source again to change it.')
@@ -3702,15 +3815,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       event: 'first_value_completed',
       product: 'commerce',
       route: commerceLocation.pathname + commerceLocation.search,
-      detail: 'Created a reviewed Shop order and reserved its stock.',
+      detail: counterSettlement
+        ? 'Completed a reviewed Shop sale with payment, handoff, stock, and its order record ready.'
+        : 'Created a reviewed Shop order and reserved its stock.',
     })
-    if (pendingAction.presentation === 'counter') emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })
+    if (counterSettlement) emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })
+    else if (pendingAction.presentation === 'counter') emitMetric({ product: 'shop', capability: 'shop-counter', action: 'order.created', ts: Date.now() })
     if (pendingAction.kind === 'daily_close') emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })
     setNotice(pendingAction.presentation === 'counter'
-      ? `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
+      ? counterSettlement
+        ? `Sale ${commerceOrderDisplayReference(pendingAction.subjectId)} completed. Payment and handoff recorded; order record ready.`
+        : `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
-    if (pendingAction.presentation === 'counter') navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
+    if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
   }
 
   function useChannelDraft(draft: ChannelOrderDraft) {
@@ -3893,21 +4011,50 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return `${line.sku} ${item?.onHand ?? 0} → ${(item?.onHand ?? 0) - line.quantity}`
     }).join(', ')
     const displayReference = commerceOrderDisplayReference(order.id)
+    const completesSale = review.outcome === 'paid_handoff'
     queueAction({
-      kind: 'order_create',
+      kind: completesSale ? 'order_settle' : 'order_create',
       subjectId: order.id,
-      summary: `Create ${formatMoney(order.total)} counter order`,
+      summary: completesSale ? `Complete ${formatMoney(order.total)} counter sale` : `Create ${formatMoney(order.total)} counter order`,
       before: `${lineReview} · ${review.payment}`,
-      after: `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
+      after: completesSale
+        ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}`
+        : `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
       presentation: 'counter',
       actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
       evidenceReferenceSuggestion: `Counter order ${displayReference}`,
       evidenceReferenceLocked: true,
-      reasonSuggestion: 'Walk-in counter order reviewed.',
+      reasonSuggestion: completesSale ? `${review.payment} received and the customer took the order.` : 'Walk-in counter order reviewed.',
       apply: async (action) => {
+        const proof = commerceActionProof(action)
         const ownedOrder = { ...order, owner: action.actor }
-        await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, ownedOrder, commerceActionProof(action)))
+        // Browser-local counter settlement is one crash-safe workspace write. The same
+        // pure lifecycle transitions used by Orders are composed inside one recovery
+        // intent, with a unique proof id per recorded step. Managed workspaces stay on
+        // the server-supported open-order intent until a compound command exists there.
+        await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
+          let state = reserveCommerceOrder(current, ownedOrder, proof)
+          if (!state || !completesSale) return state
+          if (managedIdentity) return null
+          state = reconcileCommercePayment(state, order.id, { ...proof, actionId: `${proof.actionId}:payment` })
+          if (!state) return null
+          for (let step = 0; step < 3; step += 1) {
+            const live = state.orders.find((candidate) => candidate.id === order.id)
+            if (!live || live.status === 'cancelled') return null
+            if (live.status === 'completed') break
+            const stepStatus = live.status
+            const advanced = advanceCommerceOrder(state, order.id, stepStatus, { ...proof, actionId: `${proof.actionId}:advance-${stepStatus}` }, 'client')
+            if (!advanced) return null
+            state = advanced
+          }
+          const settled = state.orders.find((candidate) => candidate.id === order.id)
+          return settled?.status === 'completed' && settled.paymentStatus === 'reconciled' ? state : null
+        })
         review.onCommitted()
+        if (completesSale) {
+          setReceiptAck(null)
+          setCounterReceiptOrderId(order.id)
+        }
       },
     }, returnFocus)
   }
@@ -6627,8 +6774,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   </div>
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
-    {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
+    {counterBoundary}
+    {shopTradeDemoNotice}
+    <ShopCounter businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || shopTradeDemoCheckoutBlocked} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
+    <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
 
@@ -7126,7 +7275,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </div> : null}
     </details> : null}
   </section>
-  <Suspense fallback={null}><ReceiptDialog ack={receiptAck} loyalty={receiptLoyalty} onClose={() => setReceiptAck(null)} paymentQrScope={paymentQrScope} /></Suspense>
+  <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
   {actionGate}</div>
 
   if (tab === 'inventory') return <div className="operation-module">

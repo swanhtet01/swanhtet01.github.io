@@ -7,10 +7,12 @@ const root = resolve(import.meta.dirname, '..')
 const componentPath = resolve(root, 'showroom', 'src', 'core', 'BarcodeScanButton.tsx')
 const coreAppPath = resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx')
 const cssPath = resolve(root, 'showroom', 'src', 'core', 'core-app.css')
+const vercelPath = resolve(root, 'vercel.json')
 
 const component = readFileSync(componentPath, 'utf8')
 const coreApp = readFileSync(coreAppPath, 'utf8')
 const css = readFileSync(cssPath, 'utf8')
+const vercel = JSON.parse(readFileSync(vercelPath, 'utf8'))
 
 let checks = 0
 
@@ -53,6 +55,8 @@ check(component.includes('const DETECT_INTERVAL_MS = 400'), 'barcode_detect_inte
 check(component.includes("typeof window === 'undefined' || typeof window.BarcodeDetector !== 'function') return null"), 'barcode_unsupported_browser_must_render_nothing')
 check(component.includes("!navigator.mediaDevices?.getUserMedia"), 'barcode_get_user_media_feature_detect_missing')
 check(component.includes("getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' } } })"), 'barcode_camera_constraints_changed')
+const permissionsPolicy = vercel.routes?.find((route) => route.src === '/(.*)')?.headers?.['Permissions-Policy'] ?? ''
+check(permissionsPolicy === 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()', 'barcode_camera_blocked_by_deployment_policy')
 check(component.includes('if (detecting || cancelled || video.readyState < 2) return'), 'barcode_in_flight_or_not_ready_guard_missing')
 check(component.includes('barcodes.map((barcode) => barcode.rawValue.trim()).find(Boolean)'), 'barcode_raw_value_trim_missing')
 check(component.includes('onDetectedRef.current(value)') && component.includes('setOpen(false)'), 'barcode_detected_value_must_close_dialog')

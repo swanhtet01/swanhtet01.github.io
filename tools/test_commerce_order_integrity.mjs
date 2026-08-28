@@ -252,6 +252,56 @@ check(reusedId === null, 'reusing one actionId across composed transitions is re
 const baseOrderAfter = settleBase.orders.find((candidate) => candidate.id === 'ORD-TEST-1')
 check(baseOrderAfter.status === 'confirmed' && baseOrderAfter.paymentStatus === 'pending', 'the composition does not mutate the state it was given')
 
+// --- direct counter review: default completion versus explicit open order ----
+// The counter now creates and settles a routine walk-in inside one local recovery
+// intent. This mirrors the exact branch in CoreApp: reserve uses the reviewed action
+// id, payment and fulfilment use derived ids, while the opt-in pay-later branch stops
+// immediately after reserve. Both begin from the same untouched workspace fixture.
+function composeCounterReview(startState, outcome, reviewedOrder, baseProof) {
+  let composed = reserveCommerceOrder(startState, reviewedOrder, baseProof)
+  if (!composed || outcome === 'open_order') return composed
+  composed = reconcileCommercePayment(composed, reviewedOrder.id, { ...baseProof, actionId: `${baseProof.actionId}:payment` })
+  if (!composed) return null
+  for (let step = 0; step < 3; step += 1) {
+    const live = composed.orders.find((candidate) => candidate.id === reviewedOrder.id)
+    if (!live || live.status === 'cancelled') return null
+    if (live.status === 'completed') break
+    const advanced = advanceCommerceOrder(
+      composed,
+      reviewedOrder.id,
+      live.status,
+      { ...baseProof, actionId: `${baseProof.actionId}:advance-${live.status}` },
+      'client',
+    )
+    if (!advanced) return null
+    composed = advanced
+  }
+  const completed = composed.orders.find((candidate) => candidate.id === reviewedOrder.id)
+  return completed?.status === 'completed' && completed.paymentStatus === 'reconciled' ? composed : null
+}
+
+const counterStart = createSeedCommerce()
+const counterItem = counterStart.items.find((candidate) => candidate.onHand > 0)
+assert.ok(counterItem, 'direct counter review needs one sellable catalog item')
+const counterLines = [{ sku: counterItem.sku, name: counterItem.name, variant: counterItem.variant, quantity: 1, unitPriceMmk: counterItem.price }]
+const counterOrder = orderFor(counterLines, { id: 'ORD-DIRECT-1', fulfilmentReference: 'Counter ORD-DIRECT-1' })
+const counterProof = { ...settleProof, actionId: 'ACT-DIRECT-1', evidenceReference: 'Counter order DIRECT-1' }
+
+const openCounter = composeCounterReview(counterStart, 'open_order', counterOrder, counterProof)
+check(openCounter !== null, 'explicit open-order counter review is accepted')
+const openCounterOrder = openCounter.orders.find((candidate) => candidate.id === counterOrder.id)
+check(openCounterOrder.status === 'confirmed' && openCounterOrder.paymentStatus === 'pending', 'open-order review stops at reserved and payment-pending')
+check(openCounterOrder.paymentReconciliationActionId === undefined, 'open-order review records no payment proof')
+
+const paidCounter = composeCounterReview(counterStart, 'paid_handoff', counterOrder, counterProof)
+check(paidCounter !== null, 'default paid-and-handoff counter review is accepted')
+const paidCounterOrder = paidCounter.orders.find((candidate) => candidate.id === counterOrder.id)
+check(paidCounterOrder.status === 'completed' && paidCounterOrder.paymentStatus === 'reconciled', 'default counter review reaches completed and reconciled')
+check(paidCounterOrder.paymentReconciliationActionId === 'ACT-DIRECT-1:payment', 'direct counter payment has its own derived proof id')
+check(paidCounterOrder.completion?.actionId === 'ACT-DIRECT-1:advance-ready', 'direct counter handoff completion has its own derived proof id')
+check(Boolean(commerceOrderAcknowledgement(paidCounter, counterOrder.id)), 'completed direct counter review produces a sealed receipt')
+check(counterStart.orders.every((candidate) => candidate.id !== counterOrder.id), 'neither direct counter outcome mutates the starting workspace')
+
 // --- READ: the sealed document, and how many times a workspace is checked to make one ----
 //
 // commerceOrderAcknowledgement validated the ENTIRE workspace once per order. The Shop screen

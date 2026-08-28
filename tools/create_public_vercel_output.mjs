@@ -456,7 +456,7 @@ const SHOP_TRADES = [
 ]
 
 function tradeTemplatesHtml() {
-  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one loads a real catalog, sample sales and a live order in your browser. Nothing to install, no account, free.</p></div><div class="trade-grid">${SHOP_TRADES.map(([id, name, note]) => `<a class="trade-card" href="https://app.supermega.dev/settings/?product=shop&amp;template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one opens Sell with a real catalog, sample sales and a live order in your browser. Nothing to install and no account required.</p></div><div class="trade-grid">${SHOP_TRADES.map(([id, name, note]) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
 }
 
 function productLandingHtml(product, page) {
