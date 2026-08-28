@@ -161,8 +161,35 @@ test('names pull request creation as current safest next step once review branch
   }
   const packet = buildReleaseOwnerApprovalPacket(input)
 
+  assert.equal(handoff.actions.pullRequestCreation.kind, 'owner_review_pull_request_creation')
+  assert.equal(handoff.actions.reviewBranchPush, undefined)
+  assert.equal(packet.approvals.reviewBranchPush.method, 'not_applicable_remote_branch_exact')
+  assert.equal(packet.approvals.reviewBranchPush.digest, null)
+  assert.match(packet.markdown, /The completed push is historical evidence only; no review-branch push is pending or authorized/)
+  assert.doesNotMatch(packet.markdown, /release:branch-push:owner-click/)
   assert.match(packet.markdown, /GitHub main protection and the review branch are verified\. Next approve one review-only pull request creation only\./)
   assert.doesNotMatch(packet.markdown, /Next approve the exact initial review-branch push only/)
+  assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
+})
+
+test('never repeats branch-push authority for an exact branch awaiting main protection', () => {
+  const base = selfTestInput()
+  const handoff = buildReleaseHandoff({
+    generatedAt: base.handoff.generatedAt,
+    repository: base.handoff.repository,
+    candidate: base.handoff.candidate,
+    remote: { ...base.handoff.remote, candidateCommit: base.handoff.candidate.commit },
+    live: { app: base.handoff.live.identity, public: base.handoff.live.identity },
+    githubMainProtection: base.handoff.githubMainProtection,
+    relations: base.handoff.relations,
+    legacyReleaseBranch: { ...base.handoff.legacyReleaseBranch, isAncestorOfCandidate: false },
+    verification: base.handoff.verification,
+  })
+  const input = { ...base, handoff, githubProtectionSnapshot: null }
+  const packet = buildReleaseOwnerApprovalPacket(input)
+
+  assert.match(packet.markdown, /The review branch already equals the exact candidate commit; do not repeat the branch push\./)
+  assert.doesNotMatch(packet.markdown, /release:branch-push:owner-click/)
   assert.equal(validateReleaseOwnerApprovalMarkdown(packet.markdown, input).ok, true)
 })
 

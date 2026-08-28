@@ -249,9 +249,13 @@ export async function collectGitHubMainProtectionSnapshotForHandoff({
 }
 
 function reviewBranchPushAction({ remoteBranchState, branch, candidateCommit }) {
-  const action = remoteBranchState === 'unpublished' ? 'initial' : 'fast-forward-only'
+  if (!['unpublished', 'different'].includes(remoteBranchState)) {
+    fail('release_handoff_remote_candidate_state_invalid')
+  }
+  const initial = remoteBranchState === 'unpublished'
+  const action = initial ? 'initial' : 'fast-forward-only'
   return {
-    kind: remoteBranchState === 'unpublished'
+    kind: initial
       ? 'owner_review_initial_branch_push'
       : 'owner_review_fast_forward_branch_push',
     branch,
@@ -261,6 +265,31 @@ function reviewBranchPushAction({ remoteBranchState, branch, candidateCommit }) 
     deploymentIncluded: false,
     approvalTemplate: `I approve one normal ${action} push of ${candidateCommit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
   }
+}
+
+function pullRequestCreationAction({ branch, candidateCommit }) {
+  return {
+    kind: 'owner_review_pull_request_creation',
+    branch,
+    exactCommit: candidateCommit,
+    baseBranch: 'main',
+    forcePushAllowed: false,
+    mergeIncluded: false,
+    deploymentIncluded: false,
+    gitRemoteWriteIncluded: false,
+    pullRequestIncluded: true,
+    approvalTemplate: `I approve one GitHub pull request creation from ${branch} at ${candidateCommit} into main for SuperMega review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
+  }
+}
+
+function candidateReviewAction({ remoteBranchState, branch, candidateCommit }) {
+  if (remoteBranchState === 'exact') {
+    return pullRequestCreationAction({ branch, candidateCommit })
+  }
+  if (remoteBranchState === 'unpublished' || remoteBranchState === 'different') {
+    return reviewBranchPushAction({ remoteBranchState, branch, candidateCommit })
+  }
+  fail('release_handoff_remote_candidate_state_invalid')
 }
 
 function githubMainProtectionAction({ branch, candidateCommit }) {
@@ -317,10 +346,13 @@ export function buildReleaseHandoff(input) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(generatedAt)
     || new Date(generatedAt).toISOString() !== generatedAt) fail('release_handoff_time_invalid')
 
-  const branchPushAction = reviewBranchPushAction({ remoteBranchState, branch, candidateCommit })
+  const candidateAction = candidateReviewAction({ remoteBranchState, branch, candidateCommit })
   const nextAction = githubMainProtection.assessment.ok === true
-    ? branchPushAction
+    ? candidateAction
     : githubMainProtectionAction({ branch, candidateCommit })
+  const actions = remoteBranchState === 'exact'
+    ? { pullRequestCreation: candidateAction }
+    : { reviewBranchPush: candidateAction }
   const body = {
     contract: RELEASE_HANDOFF_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -372,9 +404,7 @@ export function buildReleaseHandoff(input) {
       credentialValuesInspected: false,
     },
     nextAction,
-    actions: {
-      reviewBranchPush: branchPushAction,
-    },
+    actions,
   }
   return { ...body, digest: `sha256:${sha256(JSON.stringify(body))}` }
 }

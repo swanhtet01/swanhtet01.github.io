@@ -140,6 +140,39 @@ test('release handoff advances to branch push only after main protection is veri
   assert.equal(packet.nextAction.approvalTemplate, packet.actions.reviewBranchPush.approvalTemplate)
 })
 
+test('release handoff advances an exact remote branch to owner-gated pull request creation', () => {
+  const packet = buildReleaseHandoff(valid({
+    remote: { ...valid().remote, candidateCommit: candidate },
+    githubMainProtection: protectedMainSnapshot(),
+  }))
+  assert.equal(packet.remote.candidateBranchState, 'exact')
+  assert.equal(packet.nextAction.kind, 'owner_review_pull_request_creation')
+  assert.equal(packet.nextAction.branch, packet.candidate.branch)
+  assert.equal(packet.nextAction.exactCommit, candidate)
+  assert.equal(packet.nextAction.baseBranch, 'main')
+  assert.equal(packet.nextAction.pullRequestIncluded, true)
+  assert.equal(packet.nextAction.forcePushAllowed, false)
+  assert.equal(packet.nextAction.mergeIncluded, false)
+  assert.equal(packet.nextAction.deploymentIncluded, false)
+  assert.equal(packet.actions.reviewBranchPush, undefined)
+  assert.deepEqual(packet.actions.pullRequestCreation, packet.nextAction)
+  assert.match(packet.nextAction.approvalTemplate, /pull request creation/)
+  assert.match(packet.nextAction.approvalTemplate, /I do not approve merge/)
+  assert.deepEqual(validateReleaseHandoffPacket(packet), packet)
+})
+
+test('release handoff preserves fast-forward-only push for a different ancestor tip', () => {
+  const packet = buildReleaseHandoff(valid({
+    remote: { ...valid().remote, candidateCommit: legacy },
+    relations: { ...valid().relations, remoteCandidateIsAncestor: true },
+    githubMainProtection: protectedMainSnapshot(),
+  }))
+  assert.equal(packet.remote.candidateBranchState, 'different')
+  assert.equal(packet.nextAction.kind, 'owner_review_fast_forward_branch_push')
+  assert.equal(packet.actions.pullRequestCreation, undefined)
+  assert.deepEqual(packet.actions.reviewBranchPush, packet.nextAction)
+})
+
 test('GitHub main protection snapshot collection retries transient read-only failures', async () => {
   let calls = 0
   const result = await collectGitHubMainProtectionSnapshotForHandoff({
@@ -171,6 +204,7 @@ test('release handoff fails closed on drift, dirty state, weak ancestry, or inve
   assert.throws(() => buildReleaseHandoff(valid({ relations: { ...valid().relations, liveIsAncestor: false } })), /release_handoff_candidate_diverged_from_live/)
   assert.throws(() => buildReleaseHandoff(valid({ verification: { ...valid().verification, verifiedCommit: main } })), /release_handoff_verification_invalid/)
   assert.throws(() => buildReleaseHandoff(valid({ live: { app: identity, public: { ...identity, commit: main } } })), /release_handoff_live_pair_mismatch/)
+  assert.throws(() => buildReleaseHandoff(valid({ remote: { ...valid().remote, candidateCommit: 'malformed' } })), /release_handoff_remote_candidate_invalid/)
   assert.throws(() => buildReleaseHandoff(valid({ remote: { ...valid().remote, candidateCommit: legacy }, relations: { ...valid().relations, remoteCandidateIsAncestor: false } })), /release_handoff_candidate_push_not_fast_forward/)
   assert.throws(() => buildReleaseHandoff(valid({ verification: { ...valid().verification, workflowAuthority: { ...valid().verification.workflowAuthority, appProjectId: 'prj_forged' } } })), /release_handoff_workflow_authority_invalid/)
   const tampered = buildReleaseHandoff(valid())

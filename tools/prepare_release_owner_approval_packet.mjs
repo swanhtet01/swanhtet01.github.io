@@ -130,7 +130,24 @@ function validateReleaseHandoffForApproval(packet) {
     fail('release_owner_approval_next_action_controls_invalid')
   }
   const branchPushAction = handoff.actions?.reviewBranchPush
-  if (!branchPushAction
+  const pullRequestAction = handoff.actions?.pullRequestCreation
+  if (handoff.remote?.candidateBranchState === 'exact') {
+    if (branchPushAction !== undefined
+      || !pullRequestAction
+      || pullRequestAction.kind !== 'owner_review_pull_request_creation'
+      || pullRequestAction.branch !== branch
+      || pullRequestAction.exactCommit !== commit
+      || pullRequestAction.baseBranch !== 'main'
+      || pullRequestAction.forcePushAllowed !== false
+      || pullRequestAction.mergeIncluded !== false
+      || pullRequestAction.deploymentIncluded !== false
+      || pullRequestAction.gitRemoteWriteIncluded !== false
+      || pullRequestAction.pullRequestIncluded !== true
+      || pullRequestAction.approvalTemplate !== pullRequestApprovalTemplate(handoff)) {
+      fail('release_owner_approval_pull_request_template_invalid')
+    }
+  } else if (pullRequestAction !== undefined
+    || !branchPushAction
     || branchPushAction.branch !== branch
     || branchPushAction.exactCommit !== commit
     || branchPushAction.forcePushAllowed !== false
@@ -203,16 +220,23 @@ function pullRequestApprovalTemplate(handoff) {
 }
 
 function approvalDigestSet({ handoff, githubProposal, supabaseProposal }) {
+  const branchPushAction = handoff.actions?.reviewBranchPush
   return {
     githubMainProtection: {
       env: 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL',
       digest: digest(githubProposal.ownerApprovalTemplate),
     },
-    reviewBranchPush: {
-      env: null,
-      method: 'in_process_windows_owner_click',
-      digest: digest(handoff.actions.reviewBranchPush.approvalTemplate),
-    },
+    reviewBranchPush: branchPushAction
+      ? {
+          env: null,
+          method: 'in_process_windows_owner_click',
+          digest: digest(branchPushAction.approvalTemplate),
+        }
+      : {
+          env: null,
+          method: 'not_applicable_remote_branch_exact',
+          digest: null,
+        },
     pullRequestCreation: {
       env: 'SUPERMEGA_PULL_REQUEST_CREATION_APPROVAL',
       digest: digest(pullRequestApprovalTemplate(handoff)),
@@ -267,11 +291,49 @@ function branchPushActionLabel(handoff) {
     : 'initial review-branch push'
 }
 
+function reviewBranchApprovalLines({ handoff, handoffPathReference, snapshotReference }) {
+  const action = handoff?.actions?.reviewBranchPush
+  if (!action) {
+    return [
+      '## 2. Review branch status',
+      '',
+      `The remote review branch already equals exact candidate \`${handoff.candidate.commit}\`. The completed push is historical evidence only; no review-branch push is pending or authorized by this packet.`,
+      '',
+      'Do not run the review-branch push executor for this handoff. Continue only to the separately owner-gated pull request step below.',
+    ]
+  }
+  const heading = branchPushActionLabel(handoff)
+  return [
+    `## 2. ${heading[0].toUpperCase()}${heading.slice(1)}`,
+    '',
+    'Only approval path: the execute command opens a local Windows owner-click dialog in the same process. The executor creates an ephemeral challenge, seals a short-lived one-use receipt to it, consumes the receipt before the push, and never accepts a receipt path or plaintext environment fallback.',
+    '',
+    `Dialog action digest: \`${digest(action.approvalTemplate)}\``,
+    '',
+    'Review command, no-write:',
+    '',
+    '```powershell',
+    `npm.cmd run release:branch-push:apply -- --plan --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
+    '```',
+    '',
+    'Fast-forward proof: when the review branch already exists, the no-write plan must show `fastForwardProof.ok: true` and `fastForwardProof.status: "proven_ancestor"` before execution. If that proof is missing, unavailable, or not-fast-forward, do not approve or execute the branch push.',
+    '',
+    'Execute command, only after owner click:',
+    '',
+    '```powershell',
+    `npm.cmd run release:branch-push:owner-click -- --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
+    '```',
+  ]
+}
+
 function currentSafestNextStep({ handoff, githubProtectionSnapshot, commitLabel }) {
   const mainProtectionVerified = githubProtectionSnapshot?.assessmentOk === true
     || githubProtectionSnapshot?.assessment?.ok === true
-  if (mainProtectionVerified && handoff?.remote?.candidateBranchState === 'exact') {
-    return `GitHub main protection and the review branch are verified. Next approve one review-only pull request creation only. Only after that PR exists, required checks pass, conversations are resolved, and the owner separately approves merge should merge be considered.`
+  if (handoff?.remote?.candidateBranchState === 'exact') {
+    if (mainProtectionVerified) {
+      return `GitHub main protection and the review branch are verified. Next approve one review-only pull request creation only. Only after that PR exists, required checks pass, conversations are resolved, and the owner separately approves merge should merge be considered.`
+    }
+    return `First approve and apply the GitHub main protection ruleset. The review branch already equals the exact ${commitLabel}; do not repeat the branch push. After protection is verified, approve one review-only pull request creation only.`
   }
   if (mainProtectionVerified) {
     return `GitHub main protection is verified. Next approve the exact ${branchPushActionLabel(handoff)} only. Only after the remote branch equals the exact ${commitLabel} should PR creation be considered.`
@@ -299,9 +361,8 @@ export function buildReleaseOwnerApprovalMarkdown({
   const commitLabel = inferHandoffVersion({ handoff: handoffPacket, handoffVersion })
     ? `${inferHandoffVersion({ handoff: handoffPacket, handoffVersion })} commit`
     : 'candidate commit'
-  const branchApproval = handoffPacket.actions.reviewBranchPush.approvalTemplate
-  const prApproval = pullRequestApprovalTemplate(handoffPacket)
-  const branchPushHeading = branchPushActionLabel(handoffPacket)
+  const prApproval = handoffPacket.actions?.pullRequestCreation?.approvalTemplate
+    || pullRequestApprovalTemplate(handoffPacket)
   const lines = [
     `# SuperMega Release Handoff Owner Approval Packet ${normalizedVersion}`,
     '',
@@ -333,25 +394,7 @@ export function buildReleaseOwnerApprovalMarkdown({
     `node tools/apply_github_main_protection.mjs --execute --proposal "${githubProposalReference}" --expected-head "${handoffPacket.candidate.commit}"`,
     '```',
     '',
-    `## 2. ${branchPushHeading[0].toUpperCase()}${branchPushHeading.slice(1)}`,
-    '',
-    'Only approval path: the execute command opens a local Windows owner-click dialog in the same process. The executor creates an ephemeral challenge, seals a short-lived one-use receipt to it, consumes the receipt before the push, and never accepts a receipt path or plaintext environment fallback.',
-    '',
-    `Dialog action digest: \`${digest(branchApproval)}\``,
-    '',
-    'Review command, no-write:',
-    '',
-    '```powershell',
-    `npm.cmd run release:branch-push:apply -- --plan --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
-    '```',
-    '',
-    'Fast-forward proof: when the review branch already exists, the no-write plan must show `fastForwardProof.ok: true` and `fastForwardProof.status: "proven_ancestor"` before execution. If that proof is missing, unavailable, or not-fast-forward, do not approve or execute the branch push.',
-    '',
-    'Execute command, only after owner click:',
-    '',
-    '```powershell',
-    `npm.cmd run release:branch-push:owner-click -- --handoff "${handoffPathReference}" --github-protection-snapshot "${snapshotReference}"`,
-    '```',
+    ...reviewBranchApprovalLines({ handoff: handoffPacket, handoffPathReference, snapshotReference }),
     '',
     '## 3. Pull request creation',
     '',
