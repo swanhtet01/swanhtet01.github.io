@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   REVIEW_BRANCH_PUSH_APPLY_CONTRACT,
@@ -25,8 +30,8 @@ const remoteBase = 'd'.repeat(40)
 const remoteMain = 'b'.repeat(40)
 const approvalTemplate = `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
 const fastForwardApprovalTemplate = `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
-const approvalEnv = 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'
 const ownerApprovalTime = new Date('2026-08-28T03:00:00.000Z')
+const ownerApprovalChallenge = '6'.repeat(64)
 
 function packet(overrides = {}) {
   return {
@@ -142,6 +147,7 @@ function ownerClickReceipt(handoffReceipt = receipt(), gate = validateReviewBran
     packet: buildReviewBranchPushOwnerReceipt({
       gate,
       handoffReceipt,
+      executionChallenge: ownerApprovalChallenge,
       confirmedAt: ownerApprovalTime,
       nonce: '5'.repeat(64),
     }),
@@ -215,7 +221,7 @@ function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatu
         stderr: '',
       }
     }
-    if (command === `push origin ${commit}:refs/heads/${branch}`) {
+    if (command === `push --force-with-lease=refs/heads/${branch}:${before || ''} origin ${commit}:refs/heads/${branch}`) {
       return { status: pushStatus, stdout: '', stderr: pushStatus === 0 ? '' : 'rejected' }
     }
     if (command === `merge-base --is-ancestor ${mergeBaseRemote} ${commit}`) {
@@ -226,11 +232,24 @@ function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatu
   return { git, calls }
 }
 
+function runLocalGit(cwd, args, { optional = false } = {}) {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
+    timeout: 30_000,
+    windowsHide: true,
+  })
+  if (!optional && (result.error || result.signal || result.status !== 0)) {
+    throw new Error(`local_git_test_failed:${args[0]}:${String(result.stderr || result.error?.message || '').trim()}`)
+  }
+  return result
+}
+
 test('plan is no-write, exact-commit-bound, and approval-aware', () => {
   const plan = buildReviewBranchPushPlan({
     handoffReceipt: receipt(),
     gitState: gitState(),
-    env: {},
   })
   assert.equal(plan.contract, REVIEW_BRANCH_PUSH_APPLY_CONTRACT)
   assert.equal(validateReviewBranchPushReport(plan, { expectedMode: 'plan_only_no_git_remote_write' }), plan)
@@ -247,7 +266,13 @@ test('plan is no-write, exact-commit-bound, and approval-aware', () => {
   assert.equal(plan.fastForwardProof.required, false)
   assert.equal(plan.fastForwardProof.ok, true)
   assert.equal(plan.fastForwardProof.status, 'not_required_unpublished_branch')
-  assert.deepEqual(plan.possibleWrite.command, ['git', 'push', 'origin', `${commit}:refs/heads/${branch}`])
+  assert.deepEqual(plan.possibleWrite.command, [
+    'git',
+    'push',
+    `--force-with-lease=refs/heads/${branch}:`,
+    'origin',
+    `${commit}:refs/heads/${branch}`,
+  ])
   assert.equal(plan.possibleWrite.forcePushAllowed, false)
   assert.equal(plan.possibleWrite.deleteAllowed, false)
   assert.doesNotMatch(JSON.stringify(plan), /ghp_|github_pat_|Bearer\s+\w+/)
@@ -274,7 +299,6 @@ test('plan proves fast-forward ancestry when the review branch already exists', 
     handoffReceipt: receipt(existingBranch),
     mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     gitState: gitState(),
-    env: { [approvalEnv]: fastForwardApprovalTemplate },
     git,
   })
   assert.equal(plan.possibleWrite.kind, 'fast_forward_branch_push')
@@ -282,7 +306,8 @@ test('plan proves fast-forward ancestry when the review branch already exists', 
   assert.equal(plan.fastForwardProof.ok, true)
   assert.equal(plan.fastForwardProof.status, 'proven_ancestor')
   assert.deepEqual(plan.fastForwardProof.command, ['git', 'merge-base', '--is-ancestor', remoteBase, commit])
-  assert.equal(plan.readiness.executeReady, true)
+  assert.equal(plan.readiness.executeReady, false)
+  assert.deepEqual(plan.readiness.blockers, ['owner_approval_missing'])
   assert.equal(validateReviewBranchPushReport(plan, { expectedMode: 'plan_only_no_git_remote_write' }), plan)
   assert.deepEqual(
     calls.filter((args) => args[0] === 'merge-base'),
@@ -311,7 +336,6 @@ test('plan and execute fail closed when fast-forward ancestry is not proven', as
     handoffReceipt: receipt(existingBranch),
     mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     gitState: gitState(),
-    env: { [approvalEnv]: fastForwardApprovalTemplate },
     git,
   })
   assert.equal(plan.fastForwardProof.required, true)
@@ -320,11 +344,14 @@ test('plan and execute fail closed when fast-forward ancestry is not proven', as
   assert.equal(plan.readiness.executeReady, false)
   assert.ok(plan.readiness.blockers.includes('fast_forward_proof_missing_or_failed'))
   assert.equal(validateReviewBranchPushReport(plan, { expectedMode: 'plan_only_no_git_remote_write' }), plan)
+  const existingHandoffReceipt = receipt(existingBranch)
+  const existingGate = validateReviewBranchPushHandoff(existingHandoffReceipt.packet)
   await assert.rejects(
     applyReviewBranchPushWithGit({
-      handoffReceipt: receipt(existingBranch),
+      handoffReceipt: existingHandoffReceipt,
       mainProtectionSnapshotReceipt: mainProtectionReceipt(),
-      env: { [approvalEnv]: fastForwardApprovalTemplate },
+      ownerApprovalReceipt: ownerClickReceipt(existingHandoffReceipt, existingGate),
+      ownerApprovalChallenge,
       git,
       verifyHandoff: async () => ({
         ok: true,
@@ -336,6 +363,7 @@ test('plan and execute fail closed when fast-forward ancestry is not proven', as
           deploymentIncluded: false,
         },
       }),
+      now: () => ownerApprovalTime,
     }),
     /review_branch_push_fast_forward_unproven/,
   )
@@ -345,7 +373,6 @@ test('report validator rejects stale plan digests and wrong modes', () => {
   const plan = buildReviewBranchPushPlan({
     handoffReceipt: receipt(),
     gitState: gitState(),
-    env: {},
   })
   assert.throws(
     () => validateReviewBranchPushReport({ ...plan, mode: 'executed_owner_approved_git_remote_write' }, { expectedMode: 'plan_only_no_git_remote_write' }),
@@ -360,18 +387,21 @@ test('report validator rejects stale plan digests and wrong modes', () => {
 test('execution requires exact owner approval and matching local state', () => {
   const gate = validateReviewBranchPushHandoff(packet())
   assert.throws(
-    () => validateOwnerApproval({ gate, env: {}, execute: true }),
+    () => validateOwnerApproval({ gate, execute: true }),
     /review_branch_push_owner_approval_required/,
   )
-  assert.equal(
-    validateOwnerApproval({ gate, env: { [approvalEnv]: approvalTemplate }, execute: true }).approved,
-    true,
+  assert.throws(
+    () => validateOwnerApproval({
+      gate,
+      env: { SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL: approvalTemplate },
+      execute: true,
+    }),
+    /review_branch_push_owner_approval_required/,
   )
   assert.throws(
     () => buildReviewBranchPushPlan({
       handoffReceipt: receipt(),
       gitState: gitState({ head: 'c'.repeat(40) }),
-      env: {},
     }),
     /review_branch_push_local_state_mismatch/,
   )
@@ -385,12 +415,12 @@ test('local owner-click receipt replaces plaintext approval and expires fail clo
     gate,
     handoffReceipt,
     ownerApprovalReceipt,
-    env: {},
+    ownerApprovalChallenge,
     execute: true,
     now: ownerApprovalTime,
   })
   assert.equal(approval.approved, true)
-  assert.equal(approval.method, 'local_owner_click_receipt')
+  assert.equal(approval.method, 'in_process_owner_click_receipt')
   assert.equal(approval.receipt.digest, ownerApprovalReceipt.packet.digest)
   assert.equal(approval.receipt.consumed, false)
   assert.throws(
@@ -398,7 +428,7 @@ test('local owner-click receipt replaces plaintext approval and expires fail clo
       gate,
       handoffReceipt,
       ownerApprovalReceipt,
-      env: {},
+      ownerApprovalChallenge,
       execute: true,
       now: new Date(ownerApprovalTime.getTime() + REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS),
     }),
@@ -421,7 +451,7 @@ test('execute consumes the owner-click receipt exactly once before the push', as
     handoffReceipt,
     mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     ownerApprovalReceipt,
-    env: {},
+    ownerApprovalChallenge,
     git,
     verifyHandoff: async () => ({
       ok: true,
@@ -442,18 +472,22 @@ test('execute consumes the owner-click receipt exactly once before the push', as
   })
   assert.equal(consumeCount, 1)
   assert.deepEqual(sequence, ['consume', 'push'])
-  assert.equal(result.approval.method, 'local_owner_click_receipt')
+  assert.equal(result.approval.method, 'in_process_owner_click_receipt')
   assert.equal(result.approval.receipt.consumed, true)
   assert.equal(result.controls.ownerApprovalReceiptConsumed, true)
   assert.equal(validateReviewBranchPushReport(result), result)
 })
 
 test('execute performs one normal exact-commit branch push and verifies the remote head', async () => {
+  const handoffReceipt = receipt()
+  const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
+  const ownerApprovalReceipt = ownerClickReceipt(handoffReceipt, gate)
   const { git, calls } = stubGit()
   const result = await applyReviewBranchPushWithGit({
-    handoffReceipt: receipt(),
+    handoffReceipt,
     mainProtectionSnapshotReceipt: mainProtectionReceipt(),
-    env: { [approvalEnv]: approvalTemplate },
+    ownerApprovalReceipt,
+    ownerApprovalChallenge,
     git,
     verifyHandoff: async () => ({
       ok: true,
@@ -465,10 +499,16 @@ test('execute performs one normal exact-commit branch push and verifies the remo
         deploymentIncluded: false,
       },
     }),
+    consumeApprovalReceipt: async (received) => ({
+      ok: true,
+      packetDigest: received.packet.digest,
+    }),
+    now: () => ownerApprovalTime,
   })
   assert.equal(result.ok, true)
   assert.equal(result.mode, 'executed_owner_approved_git_remote_write')
   assert.equal(result.controls.gitRemoteWritesPerformed, true)
+  assert.equal(result.controls.remoteHeadLeaseEnforced, true)
   assert.equal(result.controls.branchMutated, true)
   assert.equal(result.controls.forcePushPerformed, false)
   assert.equal(result.controls.branchDeletionPerformed, false)
@@ -481,7 +521,12 @@ test('execute performs one normal exact-commit branch push and verifies the remo
   assert.equal(result.verification.fastForwardProofOk, true)
   assert.deepEqual(
     calls.filter((args) => args[0] === 'push'),
-    [['push', 'origin', `${commit}:refs/heads/${branch}`]],
+    [[
+      'push',
+      `--force-with-lease=refs/heads/${branch}:`,
+      'origin',
+      `${commit}:refs/heads/${branch}`,
+    ]],
   )
 })
 
@@ -508,11 +553,14 @@ test('execute rejects a changed remote branch before pushing', async () => {
     mergeBaseRemote: remoteBase,
     mergeBaseStatus: 0,
   })
+  const handoffReceipt = receipt(existingBranch)
+  const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
   await assert.rejects(
     applyReviewBranchPushWithGit({
-      handoffReceipt: receipt(existingBranch),
+      handoffReceipt,
       mainProtectionSnapshotReceipt: mainProtectionReceipt(),
-      env: { [approvalEnv]: fastForwardApprovalTemplate },
+      ownerApprovalReceipt: ownerClickReceipt(handoffReceipt, gate),
+      ownerApprovalChallenge,
       git,
       verifyHandoff: async () => ({
         ok: true,
@@ -524,6 +572,7 @@ test('execute rejects a changed remote branch before pushing', async () => {
           deploymentIncluded: false,
         },
       }),
+      now: () => ownerApprovalTime,
     }),
     /review_branch_push_remote_state_changed/,
   )
@@ -550,7 +599,6 @@ test('execute no-ops when the remote branch already equals the candidate', async
   const result = await applyReviewBranchPushWithGit({
     handoffReceipt: receipt(alreadyPublished),
     mainProtectionSnapshotReceipt: mainProtectionReceipt(),
-    env: { [approvalEnv]: alreadyPublished.actions.reviewBranchPush.approvalTemplate },
     git,
     verifyHandoff: async () => ({
       ok: true,
@@ -563,10 +611,129 @@ test('execute no-ops when the remote branch already equals the candidate', async
       },
     }),
   })
-  assert.equal(result.mode, 'executed_owner_approved_already_published_no_write')
+  assert.equal(result.mode, 'executed_already_published_no_write')
   assert.equal(result.controls.gitRemoteWritesPerformed, false)
+  assert.equal(result.controls.gitRemoteWritesApproved, false)
+  assert.equal(result.controls.ownerApprovalReceiptConsumed, false)
+  assert.equal(result.controls.remoteHeadLeaseEnforced, false)
   assert.equal(result.controls.branchMutated, false)
+  assert.equal(result.approval.method, 'none')
   assert.equal(calls.some((args) => args[0] === 'push'), false)
+})
+
+test('exact remote-head lease rejects a race after approval instead of overwriting the branch', async () => {
+  const existingBranch = packet({
+    remote: {
+      candidateCommit: remoteBase,
+      candidateBranchState: 'different',
+    },
+    actions: { reviewBranchPush: {
+      kind: 'owner_review_fast_forward_branch_push',
+      branch,
+      exactCommit: commit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+      approvalTemplate: fastForwardApprovalTemplate,
+    } },
+  })
+  const handoffReceipt = receipt(existingBranch)
+  const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
+  const ownerApprovalReceipt = ownerClickReceipt(handoffReceipt, gate)
+  const { git, calls } = stubGit({
+    before: remoteBase,
+    after: commit,
+    mergeBaseRemote: remoteBase,
+    mergeBaseStatus: 0,
+    pushStatus: 1,
+  })
+  let consumeCount = 0
+  await assert.rejects(
+    applyReviewBranchPushWithGit({
+      handoffReceipt,
+      mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+      ownerApprovalReceipt,
+      ownerApprovalChallenge,
+      git,
+      verifyHandoff: async () => ({
+        ok: true,
+        candidate: { branch, commit, clean: true },
+        nextAction: {
+          exactCommit: commit,
+          forcePushAllowed: false,
+          mergeIncluded: false,
+          deploymentIncluded: false,
+        },
+      }),
+      consumeApprovalReceipt: async (received) => {
+        consumeCount += 1
+        return { ok: true, packetDigest: received.packet.digest }
+      },
+      now: () => ownerApprovalTime,
+    }),
+    /review_branch_push_push_failed/,
+  )
+  assert.equal(consumeCount, 1)
+  assert.deepEqual(
+    calls.filter((args) => args[0] === 'push'),
+    [[
+      'push',
+      `--force-with-lease=refs/heads/${branch}:${remoteBase}`,
+      'origin',
+      `${commit}:refs/heads/${branch}`,
+    ]],
+  )
+})
+
+test('real Git exact leases create an absent ref, allow the approved fast-forward, and reject a raced head', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-review-lease-'))
+  const remote = join(directory, 'remote.git')
+  const work = join(directory, 'work')
+  const successRef = 'refs/heads/codex/lease-success'
+  const raceRef = 'refs/heads/codex/lease-race'
+  try {
+    runLocalGit(directory, ['init', '--bare', remote])
+    runLocalGit(directory, ['init', work])
+    runLocalGit(work, ['config', 'user.name', 'SuperMega focused test'])
+    runLocalGit(work, ['config', 'user.email', 'focused-test@localhost'])
+    runLocalGit(work, ['commit', '--allow-empty', '-m', 'base'])
+    const base = runLocalGit(work, ['rev-parse', 'HEAD']).stdout.trim()
+    runLocalGit(work, ['remote', 'add', 'origin', remote])
+
+    runLocalGit(work, ['push', `--force-with-lease=${successRef}:`, 'origin', `${base}:${successRef}`])
+    runLocalGit(work, ['push', `--force-with-lease=${raceRef}:`, 'origin', `${base}:${raceRef}`])
+
+    runLocalGit(work, ['commit', '--allow-empty', '-m', 'approved candidate'])
+    const approvedCandidate = runLocalGit(work, ['rev-parse', 'HEAD']).stdout.trim()
+    runLocalGit(work, ['push', `--force-with-lease=${successRef}:${base}`, 'origin', `${approvedCandidate}:${successRef}`])
+    assert.equal(runLocalGit(work, ['ls-remote', '--heads', 'origin', successRef]).stdout.split(/\s+/)[0], approvedCandidate)
+
+    runLocalGit(work, ['switch', '--detach', base])
+    runLocalGit(work, ['commit', '--allow-empty', '-m', 'racing writer'])
+    const racedHead = runLocalGit(work, ['rev-parse', 'HEAD']).stdout.trim()
+    runLocalGit(work, ['push', `--force-with-lease=${raceRef}:${base}`, 'origin', `${racedHead}:${raceRef}`])
+    const staleAttempt = runLocalGit(
+      work,
+      ['push', `--force-with-lease=${raceRef}:${base}`, 'origin', `${approvedCandidate}:${raceRef}`],
+      { optional: true },
+    )
+    assert.notEqual(staleAttempt.status, 0)
+    assert.equal(runLocalGit(work, ['ls-remote', '--heads', 'origin', raceRef]).stdout.split(/\s+/)[0], racedHead)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('supported CLI rejects caller-supplied approval receipt paths', () => {
+  const cli = fileURLToPath(new URL('./apply_review_branch_push.mjs', import.meta.url))
+  const result = spawnSync(process.execPath, [cli, '--self-test', '--approval-receipt', 'caller-authored.json'], {
+    encoding: 'utf8',
+    timeout: 30_000,
+    windowsHide: true,
+  })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /review_branch_push_usage_invalid/)
+  assert.match(result.stderr, /"gitRemoteWritesPerformed": false/)
 })
 
 test('plan treats an already-published branch as satisfied without a second push approval', () => {
@@ -589,7 +756,6 @@ test('plan treats an already-published branch as satisfied without a second push
     handoffReceipt: receipt(alreadyPublished),
     mainProtectionSnapshotReceipt: mainProtectionReceipt(),
     gitState: { branch, head: commit, clean: true, origin },
-    env: {},
   })
   assert.equal(plan.possibleWrite.kind, 'already_published_no_push')
   assert.equal(plan.possibleWrite.command, null)

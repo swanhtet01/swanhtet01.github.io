@@ -727,10 +727,10 @@ function selfTestBoard() {
     controls: { githubWritesPerformed: false },
   }
   const branchPushPlan = {
-    contract: 'supermega.review-branch-push-apply.v1',
+    contract: 'supermega.review-branch-push-apply.v2',
     mode: 'plan_only_no_git_remote_write',
     candidate: { clean: true },
-    approval: { env: 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL', approved: false, expectedDigest: `sha256:${'7'.repeat(64)}` },
+    approval: { env: null, method: 'none', approved: false, expectedDigest: `sha256:${'7'.repeat(64)}` },
     possibleWrite: { kind: 'initial_branch_push' },
     controls: { gitRemoteWritesPerformed: false },
   }

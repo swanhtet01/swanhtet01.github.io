@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
 import { access, copyFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT = 'supermega.review-branch-push-owner-receipt.v1'
+export const REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT = 'supermega.review-branch-push-owner-receipt.v2'
 export const REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS = 10 * 60 * 1000
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
 const NONCE_PATTERN = /^[0-9a-f]{64}$/
+const EXECUTION_CHALLENGE_PATTERN = /^[0-9a-f]{64}$/
+const EXECUTION_SEAL_PATTERN = /^hmac-sha256:[0-9a-f]{64}$/
 const MAX_FILE_BYTES = 128_000
 const OWNER_AUTHORITY_FALSE_KEYS = [
   'pullRequestCreationApproved',
@@ -46,6 +48,24 @@ export function reviewBranchPushOwnerReceiptDigest(value) {
 
 function signed(body) {
   return { ...body, digest: reviewBranchPushOwnerReceiptDigest(JSON.stringify(body)) }
+}
+
+function exactExecutionChallenge(value) {
+  const challenge = String(value || '')
+  if (!EXECUTION_CHALLENGE_PATTERN.test(challenge)) {
+    fail('review_branch_push_owner_receipt_execution_challenge_required')
+  }
+  return challenge
+}
+
+function executionSeal(body, executionChallenge) {
+  const challenge = exactExecutionChallenge(executionChallenge)
+  return `hmac-sha256:${createHmac('sha256', Buffer.from(challenge, 'hex')).update(JSON.stringify(body)).digest('hex')}`
+}
+
+function sameSeal(actual, expected) {
+  if (!EXECUTION_SEAL_PATTERN.test(String(actual || '')) || !EXECUTION_SEAL_PATTERN.test(String(expected || ''))) return false
+  return timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
 }
 
 function exactIso(value, code) {
@@ -123,6 +143,7 @@ export function renderReviewBranchPushOwnerConfirmation({ gate, handoffReceipt }
 export function buildReviewBranchPushOwnerReceipt({
   gate,
   handoffReceipt,
+  executionChallenge,
   confirmedAt = new Date(),
   nonce = randomBytes(32).toString('hex'),
 } = {}) {
@@ -133,7 +154,7 @@ export function buildReviewBranchPushOwnerReceipt({
   }
   const confirmedAtIso = confirmedAtDate.toISOString()
   const expiresAt = new Date(confirmedAtDate.getTime() + REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS).toISOString()
-  return signed({
+  const body = {
     ok: true,
     contract: REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -187,18 +208,27 @@ export function buildReviewBranchPushOwnerReceipt({
       reusable: false,
       identityRecorded: false,
     },
+  }
+  return signed({
+    ...body,
+    executionSeal: executionSeal(body, executionChallenge),
   })
 }
 
 export function validateReviewBranchPushOwnerReceipt(packet, {
   gate,
   handoffReceipt,
+  executionChallenge,
   now = new Date(),
 } = {}) {
   if (!isRecord(packet)) fail('review_branch_push_owner_receipt_invalid')
-  const { digest: actualDigest, ...body } = packet
-  if (actualDigest !== reviewBranchPushOwnerReceiptDigest(JSON.stringify(body))) {
+  const { digest: actualDigest, ...sealedBody } = packet
+  if (actualDigest !== reviewBranchPushOwnerReceiptDigest(JSON.stringify(sealedBody))) {
     fail('review_branch_push_owner_receipt_digest_invalid')
+  }
+  const { executionSeal: actualExecutionSeal, ...body } = sealedBody
+  if (!sameSeal(actualExecutionSeal, executionSeal(body, executionChallenge))) {
+    fail('review_branch_push_owner_receipt_execution_seal_invalid')
   }
   const context = exactContext({ gate, handoffReceipt })
   if (packet.ok !== true
@@ -357,17 +387,20 @@ export function confirmReviewBranchPushOwnerClick(message, {
 export async function requestReviewBranchPushOwnerReceipt({
   gate,
   handoffReceipt,
+  executionChallenge,
   output,
   confirmer = confirmReviewBranchPushOwnerClick,
   now = () => new Date(),
   nonce = () => randomBytes(32).toString('hex'),
 } = {}) {
+  exactExecutionChallenge(executionChallenge)
   const message = renderReviewBranchPushOwnerConfirmation({ gate, handoffReceipt })
   const approved = await confirmer(message)
   if (approved !== true) fail('review_branch_push_owner_receipt_declined')
   const packet = buildReviewBranchPushOwnerReceipt({
     gate,
     handoffReceipt,
+    executionChallenge,
     confirmedAt: now(),
     nonce: nonce(),
   })
@@ -397,14 +430,16 @@ async function runSelfTest() {
     },
   }
   const now = new Date('2026-08-28T00:00:00.000Z')
+  const executionChallenge = '4'.repeat(64)
   const packet = buildReviewBranchPushOwnerReceipt({
     gate,
     handoffReceipt,
+    executionChallenge,
     confirmedAt: now,
     nonce: '3'.repeat(64),
   })
   return {
-    ok: validateReviewBranchPushOwnerReceipt(packet, { gate, handoffReceipt, now }) === packet,
+    ok: validateReviewBranchPushOwnerReceipt(packet, { gate, handoffReceipt, executionChallenge, now }) === packet,
     contract: `${REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT}.self-test`,
     exactActionBound: packet.action.commit === commit && packet.action.branch === branch,
     shortLived: Date.parse(packet.confirmation.expiresAt) - Date.parse(packet.confirmation.confirmedAt) === REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS,

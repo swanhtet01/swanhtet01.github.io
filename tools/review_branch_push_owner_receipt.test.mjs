@@ -22,6 +22,7 @@ const remoteCommit = 'b'.repeat(40)
 const branch = 'codex/release-stack-integration-rehearsal-20260825'
 const confirmedAt = new Date('2026-08-28T03:00:00.000Z')
 const nonce = 'c'.repeat(64)
+const executionChallenge = 'f'.repeat(64)
 
 function context(overrides = {}) {
   const gate = {
@@ -50,8 +51,10 @@ function receipt(overrides = {}) {
   const values = context(overrides)
   return {
     ...values,
+    executionChallenge,
     packet: buildReviewBranchPushOwnerReceipt({
       ...values,
+      executionChallenge,
       confirmedAt,
       nonce,
     }),
@@ -65,6 +68,7 @@ test('builds a short-lived receipt bound to the exact review-only push', () => {
     validateReviewBranchPushOwnerReceipt(built.packet, {
       gate: built.gate,
       handoffReceipt: built.handoffReceipt,
+      executionChallenge: built.executionChallenge,
       now: confirmedAt,
     }),
     built.packet,
@@ -114,7 +118,7 @@ test('rejects tampering, rebinding, expiry, and receipts from the future', () =>
   assert.throws(
     () => validateReviewBranchPushOwnerReceipt(
       { ...built.packet, action: { ...built.packet.action, commit: 'd'.repeat(40) } },
-      { gate: built.gate, handoffReceipt: built.handoffReceipt, now: confirmedAt },
+      { gate: built.gate, handoffReceipt: built.handoffReceipt, executionChallenge, now: confirmedAt },
     ),
     /review_branch_push_owner_receipt_digest_invalid/,
   )
@@ -122,6 +126,7 @@ test('rejects tampering, rebinding, expiry, and receipts from the future', () =>
     () => validateReviewBranchPushOwnerReceipt(built.packet, {
       gate: { ...built.gate, commit: 'd'.repeat(40) },
       handoffReceipt: built.handoffReceipt,
+      executionChallenge,
       now: confirmedAt,
     }),
     /review_branch_push_owner_receipt_context_invalid|review_branch_push_owner_receipt_action_mismatch/,
@@ -130,6 +135,7 @@ test('rejects tampering, rebinding, expiry, and receipts from the future', () =>
     () => validateReviewBranchPushOwnerReceipt(built.packet, {
       gate: built.gate,
       handoffReceipt: built.handoffReceipt,
+      executionChallenge,
       now: new Date(confirmedAt.getTime() + REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS),
     }),
     /review_branch_push_owner_receipt_expired_or_not_current/,
@@ -138,11 +144,29 @@ test('rejects tampering, rebinding, expiry, and receipts from the future', () =>
     () => validateReviewBranchPushOwnerReceipt(built.packet, {
       gate: built.gate,
       handoffReceipt: built.handoffReceipt,
+      executionChallenge,
       now: new Date(confirmedAt.getTime() - 1),
     }),
     /review_branch_push_owner_receipt_expired_or_not_current/,
   )
-  const { digest: _digest, ...body } = built.packet
+  assert.throws(
+    () => validateReviewBranchPushOwnerReceipt(built.packet, {
+      gate: built.gate,
+      handoffReceipt: built.handoffReceipt,
+      executionChallenge: 'e'.repeat(64),
+      now: confirmedAt,
+    }),
+    /review_branch_push_owner_receipt_execution_seal_invalid/,
+  )
+  assert.throws(
+    () => validateReviewBranchPushOwnerReceipt(built.packet, {
+      gate: built.gate,
+      handoffReceipt: built.handoffReceipt,
+      now: confirmedAt,
+    }),
+    /review_branch_push_owner_receipt_execution_challenge_required/,
+  )
+  const { digest: _digest, executionSeal: originalSeal, ...body } = built.packet
   const { managedActivationApproved, ...authorityMissingManagedActivation } = body.authority
   const unsignedAuthoritySwap = {
     ...body,
@@ -151,17 +175,22 @@ test('rejects tampering, rebinding, expiry, and receipts from the future', () =>
       madeUpApproval: false,
     },
   }
-  const authoritySwap = {
+  const sealedAuthoritySwap = {
     ...unsignedAuthoritySwap,
-    digest: reviewBranchPushOwnerReceiptDigest(JSON.stringify(unsignedAuthoritySwap)),
+    executionSeal: originalSeal,
+  }
+  const authoritySwap = {
+    ...sealedAuthoritySwap,
+    digest: reviewBranchPushOwnerReceiptDigest(JSON.stringify(sealedAuthoritySwap)),
   }
   assert.throws(
     () => validateReviewBranchPushOwnerReceipt(authoritySwap, {
       gate: built.gate,
       handoffReceipt: built.handoffReceipt,
+      executionChallenge,
       now: confirmedAt,
     }),
-    /review_branch_push_owner_receipt_authority_invalid/,
+    /review_branch_push_owner_receipt_execution_seal_invalid/,
   )
 })
 
@@ -175,6 +204,7 @@ test('request writes nothing after decline and writes one verified file after cl
       requestReviewBranchPushOwnerReceipt({
         gate,
         handoffReceipt,
+        executionChallenge,
         output: declinedPath,
         confirmer: async () => false,
         now: () => confirmedAt,
@@ -187,6 +217,7 @@ test('request writes nothing after decline and writes one verified file after cl
     const created = await requestReviewBranchPushOwnerReceipt({
       gate,
       handoffReceipt,
+      executionChallenge,
       output: approvedPath,
       confirmer: async (message) => message.includes(commit),
       now: () => confirmedAt,
@@ -198,6 +229,7 @@ test('request writes nothing after decline and writes one verified file after cl
       validateReviewBranchPushOwnerReceipt(created.packet, {
         gate,
         handoffReceipt,
+        executionChallenge,
         now: confirmedAt,
       }),
       created.packet,
@@ -206,6 +238,7 @@ test('request writes nothing after decline and writes one verified file after cl
       requestReviewBranchPushOwnerReceipt({
         gate,
         handoffReceipt,
+        executionChallenge,
         output: approvedPath,
         confirmer: async () => true,
         now: () => confirmedAt,
@@ -226,6 +259,7 @@ test('consumption leaves a verified tombstone and blocks replay', async () => {
     const created = await requestReviewBranchPushOwnerReceipt({
       gate,
       handoffReceipt,
+      executionChallenge,
       output,
       confirmer: async () => true,
       now: () => confirmedAt,

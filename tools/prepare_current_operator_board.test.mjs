@@ -93,10 +93,10 @@ function fixture(overrides = {}) {
       controls: { githubWritesPerformed: false },
     },
     branchPushPlan: {
-      contract: 'supermega.review-branch-push-apply.v1',
+      contract: 'supermega.review-branch-push-apply.v2',
       mode: 'plan_only_no_git_remote_write',
       candidate: { clean: true },
-      approval: { env: 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL', approved: false, expectedDigest: digestOf('7') },
+      approval: { env: null, method: 'none', approved: false, expectedDigest: digestOf('7') },
       possibleWrite: { kind: 'initial_branch_push' },
       controls: { gitRemoteWritesPerformed: false },
     },

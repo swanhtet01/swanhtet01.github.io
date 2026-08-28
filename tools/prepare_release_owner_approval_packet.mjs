@@ -209,7 +209,8 @@ function approvalDigestSet({ handoff, githubProposal, supabaseProposal }) {
       digest: digest(githubProposal.ownerApprovalTemplate),
     },
     reviewBranchPush: {
-      env: 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL',
+      env: null,
+      method: 'in_process_windows_owner_click',
       digest: digest(handoff.actions.reviewBranchPush.approvalTemplate),
     },
     pullRequestCreation: {
@@ -334,15 +335,9 @@ export function buildReleaseOwnerApprovalMarkdown({
     '',
     `## 2. ${branchPushHeading[0].toUpperCase()}${branchPushHeading.slice(1)}`,
     '',
-    'Preferred approval: local Windows owner click. This writes a short-lived one-use local receipt and consumes it before the push attempt.',
+    'Only approval path: the execute command opens a local Windows owner-click dialog in the same process. The executor creates an ephemeral challenge, seals a short-lived one-use receipt to it, consumes the receipt before the push, and never accepts a receipt path or plaintext environment fallback.',
     '',
-    'Legacy fallback env, only if the local owner-click dialog is unavailable: `SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL`',
-    '',
-    'Exact approval text:',
-    '',
-    '```text',
-    branchApproval,
-    '```',
+    `Dialog action digest: \`${digest(branchApproval)}\``,
     '',
     'Review command, no-write:',
     '',
@@ -690,7 +685,9 @@ function runSelfTest() {
     packet_contract_valid: packet.contract === RELEASE_OWNER_APPROVAL_PACKET_CONTRACT,
     exact_commit_bound: packet.markdown.includes(input.handoff.candidate.commit),
     github_owner_env_present: packet.markdown.includes('SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'),
-    branch_owner_env_present: packet.markdown.includes('SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'),
+    branch_owner_env_absent: !packet.markdown.includes('SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'),
+    branch_owner_click_only: packet.markdown.includes('Only approval path: the execute command opens a local Windows owner-click dialog in the same process.')
+      && packet.markdown.includes('never accepts a receipt path or plaintext environment fallback'),
     branch_fast_forward_proof_visible: packet.markdown.includes('fastForwardProof.ok: true')
       && packet.markdown.includes('fastForwardProof.status: "proven_ancestor"')
       && packet.markdown.includes('do not approve or execute the branch push'),
