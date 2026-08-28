@@ -96,7 +96,7 @@ The handoff contract requires exactly these, and the daily records above produce
 
 ## Boundary for all five days
 
-Nothing on the readiness contract's does-not-authorize list ever happens during these five days: `customer_message`, `payment`, `stock_move`, `hosted_scheduler_activation`, `additional_tenant_activation`, `billing_activation`, or `autonomous_external_write`. The app's own gate states the same boundary: `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
+Nothing on the readiness contract's does-not-authorize list ever happens during these five days: `customer_message`, `payment`, `stock_move`, `hosted_scheduler_activation`, `additional_tenant_activation`, `billing_activation`, or `autonomous_external_write`. The app's own routine-sale gate states the same boundary: `Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.`
 
 **These five days do not, by themselves, close the Shop work order's gate.** That gate requires `shop-spa-owner-pilot` to run with a real named Spa owner on an isolated hosted tenant. Sample client or package evidence is explicitly rejected. The founder decision `managed-production-activation` creates only the first named-owner Shop workspace on production and authorizes none of the additional external effects listed above.
 

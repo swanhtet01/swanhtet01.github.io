@@ -27,12 +27,12 @@ Shop trade links may include a reviewed `template` query parameter, such as ?pro
 4. Add two or three items. The `Current sale` panel fills; on a phone the cart sits at the bottom so the cashier never leaves the counter flow.
 5. In the sale panel, use a named customer if you are demonstrating points; otherwise leave Customer as `Guest`. If loyalty is enabled and the customer has a projected balance, point at the points chip only as a reviewed balance — do not call it a campaign, membership, or automated promotion.
 6. Pick `Cash`, `KBZPay`, or `WavePay`. If a non-sensitive test merchant QR is already saved on this device, open the amount-due QR affordance and read `Scan to pay`; otherwise state the boundary: the QR feature is display-only and the owner must add their own provider-issued image.
-7. Tap `Review order`. The accountable gate opens (`Review counter order`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
-8. Tap `Create order`. The order is created and sample stock is reserved. The footer already told the client: `Confirm to create the order. Finish payment and handoff in Orders.`
-9. Open `Orders` (`/shop/?tab=orders`). Use the current primary path: `Start preparing`, `Mark ready`, then `Paid & handed over` when it is offered. If payment review is still separate for that order, use the visible payment-review action before completion; never say the QR captured money.
+7. Leave `Keep as open order` off for the routine walk-in path, then tap `Review & complete sale`. The accountable gate opens (`Review counter sale`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
+8. Tap `Complete sale`. One reviewed browser-local write creates the order record, reconciles the selected payment as operator evidence, records handoff, and updates sample stock. It does not charge a wallet or card; show the resulting receipt/order acknowledgement as the completed sample outcome.
+9. To demonstrate pay-later or later handoff, start a second sample basket, enable `Keep as open order`, tap `Review order`, and then `Create order`; the app opens `Orders` (`/shop/?tab=orders`) automatically. If payment and handoff happen together, use the immediate `Paid & handed over` action. If payment is recorded separately, open `More`, choose `Record payment only`, then use `Start preparing`, `Mark ready`, and `Complete`. Never say the QR captured money.
 10. Finish on `Today`: show `Open next step`, `New sale`, `Open orders`, `Today's sales`, `Stock alerts`, `Outstanding`, `More Shop tools`, and `Shop safeguards`. For an owner-focused client, open `/shop/?tab=orders#shop-close-controls`, show the settlement count, and use `Review and save close` or `Save daily close` only after the day's numbers have been checked.
 
-Android phone smoke pass, before using this with a real owner: first load the sample while online, then turn off connectivity and repeat steps 1, 2, 4, 7, 8, 9, and 10. Record whether the camera prompt appears, whether the bottom bar remains usable with one thumb, whether the QR dialog opens or shows the no-saved-QR fallback, and whether reload keeps the order/close path. This is still rehearsal evidence only; it is not hosted pilot proof.
+Android phone smoke pass, before using this with a real owner: first load the sample while online, then turn off connectivity and repeat steps 1, 2, 4, 7, 8, 9, and 10. Record whether the camera prompt appears, whether the bottom bar remains usable with one thumb, whether the QR dialog opens or shows the no-saved-QR fallback, whether the completed-sale receipt survives reload, and whether the open-order/close path remains usable. This is still rehearsal evidence only; it is not hosted pilot proof.
 
 For a recorded founder rehearsal, run the local `shop:android-smoke:packet` script and fill the private evidence fields it lists. Keep names, screenshots, and device notes in the private workspace; public reports get only pass/fail, counts, and digest.
 
@@ -40,7 +40,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 "Is this touching my real money or messaging my customers?" — read the gate's own line:
 
-- `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
+- `Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.`
 
 "Where does my data go?" — setup says `Stays on this device. Nothing is sent or published.` Nothing in the demo requires an account.
 
