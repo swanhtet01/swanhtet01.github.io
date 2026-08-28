@@ -31,8 +31,10 @@ const outFile = argValue('--out')
 const screenshotDir = argValue('--screenshot-dir')
 const expectedHead = argValue('--expected-head')
 const shopOnly = args.includes('--shop-only')
+const ecommerceClaimOnly = args.includes('--ecommerce-claim-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
+const proofScope = shopOnly ? 'shop-counter' : ecommerceClaimOnly ? 'ecommerce-claim' : 'full'
 
 const mime = {
   '.css': 'text/css; charset=utf-8',
@@ -395,15 +397,109 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
   }
 }
 
+async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
+  const started = await evalInPage(cdp, sessionId, `(() => {
+    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Start sample order');
+    if (!button || button.disabled) return false;
+    button.click();
+    return true;
+  })()`)
+  if (!started) return { ok: false, error: 'Ecommerce sample-order action was not available' }
+
+  const readyDeadline = Date.now() + 10_000
+  let formReady = false
+  while (Date.now() < readyDeadline && !formReady) {
+    formReady = await evalInPage(cdp, sessionId, `(() => {
+      const workspace = document.querySelector('#ecommerce-buying-workspace');
+      const form = workspace?.querySelector('form');
+      const submit = [...(form?.querySelectorAll('button') || [])].find((candidate) => candidate.textContent.trim() === 'Send order request');
+      return Boolean(workspace?.open && form && submit && !submit.disabled);
+    })()`)
+    if (!formReady) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!formReady) return { ok: false, error: 'Ecommerce local checkout did not become ready' }
+
+  const submitted = await evalInPage(cdp, sessionId, `(() => {
+    const form = document.querySelector('#ecommerce-buying-workspace form');
+    const name = form?.querySelector('input[autocomplete="name"]');
+    const phone = form?.querySelector('input[autocomplete="tel"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (!form || !name || !phone || !setter) return false;
+    setter.call(name, 'Demo Customer');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    setter.call(phone, '09123456789');
+    phone.dispatchEvent(new Event('input', { bubbles: true }));
+    form.requestSubmit();
+    return true;
+  })()`)
+  if (!submitted) return { ok: false, error: 'Ecommerce local checkout could not be submitted' }
+
+  const resultDeadline = Date.now() + 15_000
+  let state = null
+  while (Date.now() < resultDeadline) {
+    state = await evalInPage(cdp, sessionId, `(() => {
+      const receipt = document.querySelector('.ecommerce-request-receipt[data-current="true"]');
+      const receiptBoundary = receipt ? [...receipt.querySelectorAll('p')]
+        .find((candidate) => candidate.textContent.includes('This browser demo retained the request.')) : null;
+      const box = receiptBoundary?.getBoundingClientRect();
+      const todayTitle = document.querySelector('#ecommerce-today-title')?.textContent.trim() || '';
+      const todaySummary = document.querySelector('.ecommerce-today-priority > p')?.textContent.trim() || '';
+      const notice = document.querySelector('.ecommerce-buying-notice')?.textContent.trim() || '';
+      const receiptText = receipt?.textContent || '';
+      const bodyText = document.body?.innerText || '';
+      return {
+        todayTitle,
+        todaySummary,
+        notice,
+        receiptPresent: Boolean(receipt),
+        receiptBoundary: receiptBoundary?.textContent.trim() || '',
+        boundaryVisible: Boolean(box && box.top >= -1 && box.bottom <= window.innerHeight + 1),
+        oldManagedHeadlineVisible: bodyText.includes('Request sent to Shop'),
+        companyReceiptClaimVisible: receiptText.includes('Company Shop received this request.'),
+        localStorageKeyCount: localStorage.length,
+        localBuyingStatePresent: Object.keys(localStorage).some((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.')),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+      };
+    })()`)
+    if (state?.todayTitle === 'Sample request saved locally' && state?.receiptBoundary && state?.boundaryVisible) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+
+  const checks = {
+    localHeadline: state?.todayTitle === 'Sample request saved locally',
+    localSummary: state?.todaySummary.includes('saved on this device for Shop review')
+      && state?.todaySummary.includes('No Shop inbox write, charge, stock, delivery, or customer message happened.'),
+    localNotice: state?.notice.includes('saved on this device for Shop review')
+      && state?.notice.includes('No order, stock, message, or charge changed.'),
+    localReceipt: state?.receiptBoundary.includes('This browser demo retained the request.')
+      && state?.receiptBoundary.includes('Shop still confirms stock, promise, payment, and delivery.'),
+    boundaryVisible: Boolean(state?.boundaryVisible),
+    managedHeadlineAbsent: !state?.oldManagedHeadlineVisible,
+    companyReceiptClaimAbsent: !state?.companyReceiptClaimVisible,
+    browserPersistencePresent: Boolean(state?.localBuyingStatePresent),
+    noHorizontalOverflow: Number(state?.documentScrollWidth || 0) <= Number(state?.viewportWidth || 0) + 1,
+  }
+  return {
+    ok: Object.values(checks).every(Boolean),
+    error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
+    checks,
+    ...state,
+  }
+}
+
 async function verifyCase(cdp, origin, testCase) {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
   const errors = []
+  const networkRequests = []
   const disposers = []
   try {
     await cdp.send('Page.enable', {}, sessionId)
     await cdp.send('Runtime.enable', {}, sessionId)
     await cdp.send('Log.enable', {}, sessionId)
+    await cdp.send('Network.enable', {}, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: testCase.width,
       height: testCase.height,
@@ -425,6 +521,9 @@ async function verifyCase(cdp, origin, testCase) {
         const text = event.entry.text || ''
         if (!/favicon/i.test(text)) errors.push(`log: ${text}`.trim())
       }),
+      cdp.on(sessionId, 'Network.requestWillBeSent', (event) => {
+        networkRequests.push({ method: String(event.request?.method || ''), url: String(event.request?.url || '') })
+      }),
     )
 
     const load = new Promise((resolveLoad, reject) => {
@@ -445,6 +544,9 @@ async function verifyCase(cdp, origin, testCase) {
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
+    const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
+      ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
+      : null
     let screenshot = null
     if (screenshotDir && testCase.screenshotName) {
       const capture = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)
@@ -462,6 +564,14 @@ async function verifyCase(cdp, origin, testCase) {
     const counterViewportMatches = !shopCounter
       || Math.abs((shopCounter.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((shopCounter.viewportHeight ?? 0) - testCase.height) <= 1
+    const ecommerceViewportMatches = !ecommerceClaimBoundary
+      || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
+    const mutatingRequests = networkRequests.filter((entry) => !['GET', 'HEAD', 'OPTIONS'].includes(entry.method)).map((entry) => {
+      let path = entry.url
+      try { path = new URL(entry.url).pathname } catch {}
+      return { method: entry.method, path }
+    })
     const failures = [
       ...(pathMatches ? [] : [`expected path ${testCase.expectedPathLabel || testCase.expectedPath}, got ${rendered?.path || 'unknown'}`]),
       ...(rendered?.bodyLength > 0 ? [] : ['blank page']),
@@ -478,6 +588,9 @@ async function verifyCase(cdp, origin, testCase) {
         ? [`counter horizontal overflow: ${shopCounter.documentScrollWidth}px document in ${shopCounter.viewportWidth}px viewport`]
         : []),
       ...(counterViewportMatches ? [] : [`counter viewport changed from ${testCase.width}x${testCase.height} to ${shopCounter?.viewportWidth ?? 'unknown'}x${shopCounter?.viewportHeight ?? 'unknown'}`]),
+      ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
+      ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
+      ...(mutatingRequests.length ? [`unexpected browser network writes: ${mutatingRequests.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`] : []),
       ...missingText.map((needle) => `missing text: ${needle}`),
       ...errors,
     ]
@@ -488,7 +601,9 @@ async function verifyCase(cdp, origin, testCase) {
       path: rendered?.path || '',
       bodyLength: rendered?.bodyLength || 0,
       layout: shopCounter,
+      claimBoundary: ecommerceClaimBoundary,
       screenshot,
+      network: { mutatingRequestCount: mutatingRequests.length, mutatingRequests },
       runtime: { clean: errors.length === 0, errors: [...errors] },
       ok: failures.length === 0,
       failures,
@@ -632,9 +747,39 @@ const tests = [
     expectedText: ['Ecommerce'],
     seed: {},
   },
+  {
+    name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
+    route: '/ecommerce/',
+    width: 1280,
+    height: 900,
+    expectedPath: (path) => path.startsWith('/ecommerce/'),
+    expectedPathLabel: '/ecommerce/',
+    expectedText: ['Ecommerce', 'Try one customer order', 'Start sample order'],
+    exerciseEcommerceClaimBoundary: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'ecommerce-local-request-desktop-1280x900',
+    timeoutMs: 60_000,
+    seed: {},
+  },
+  {
+    name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+    route: '/ecommerce/',
+    width: 390,
+    height: 844,
+    mobile: true,
+    expectedPath: (path) => path.startsWith('/ecommerce/'),
+    expectedPathLabel: '/ecommerce/',
+    expectedText: ['Ecommerce', 'Try one customer order', 'Start sample order'],
+    exerciseEcommerceClaimBoundary: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'ecommerce-local-request-mobile-390x844',
+    timeoutMs: 60_000,
+    seed: {},
+  },
 ]
 
 async function main() {
+  if (shopOnly && ecommerceClaimOnly) throw new Error('app_entry_rendered_scope_conflict')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })
@@ -651,7 +796,11 @@ async function main() {
   try {
     const version = await cdp.send('Browser.getVersion')
     const cases = []
-    const selectedTests = shopOnly ? tests.filter((testCase) => testCase.exerciseShopCounter) : tests
+    const selectedTests = shopOnly
+      ? tests.filter((testCase) => testCase.exerciseShopCounter)
+      : ecommerceClaimOnly
+        ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
+        : tests
     for (const testCase of selectedTests) cases.push(await verifyCase(cdp, origin, testCase))
     const failures = cases.flatMap((entry) => entry.failures.map((failure) => `${entry.name}: ${failure}`))
     const provenanceAfter = await collectRenderedProofProvenance({ root, distDir, verifierPath })
@@ -660,7 +809,7 @@ async function main() {
       ok: failures.length === 0,
       contract: APP_ENTRY_RENDERED_CONTRACT,
       generatedAt: new Date().toISOString(),
-      scope: shopOnly ? 'shop-counter' : 'full',
+      scope: proofScope,
       evidence,
       ...provenanceBefore,
       sourceSha: provenanceBefore.source.commit,
@@ -698,7 +847,7 @@ main().catch((error) => {
   const report = {
     ok: false,
     contract: APP_ENTRY_RENDERED_CONTRACT,
-    scope: shopOnly ? 'shop-counter' : 'full',
+    scope: proofScope,
     sourceCommit: gitHead(),
     failures: [error.message],
   }
