@@ -7,6 +7,17 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 
+import {
+  APP_ENTRY_RENDERED_CONTRACT,
+  assertEvidenceDirectoryReady,
+  assertExpectedHead,
+  assertRenderedProofProvenanceStable,
+  buildEvidenceDescriptor,
+  buildScreenshotEvidence,
+  collectRenderedProofProvenance,
+  signedRenderedProof,
+} from './rendered_proof_provenance.mjs'
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const distDir = resolve(root, 'showroom', 'dist')
 const args = process.argv.slice(2)
@@ -18,8 +29,10 @@ function argValue(name, fallback = '') {
 
 const outFile = argValue('--out')
 const screenshotDir = argValue('--screenshot-dir')
+const expectedHead = argValue('--expected-head')
 const shopOnly = args.includes('--shop-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
+const verifierPath = fileURLToPath(import.meta.url)
 
 const mime = {
   '.css': 'text/css; charset=utf-8',
@@ -221,7 +234,13 @@ async function evalInPage(cdp, sessionId, expression) {
       timeout = setTimeout(() => reject(new Error('timeout evaluating rendered page state')), 10_000)
     }),
   ]).finally(() => clearTimeout(timeout))
-  if (exceptionDetails) throw new Error(`page eval failed: ${exceptionDetails.text}`)
+  if (exceptionDetails) {
+    const detail = exceptionDetails.exception?.description || exceptionDetails.exception?.value || exceptionDetails.text || 'unknown page exception'
+    const location = Number.isInteger(exceptionDetails.lineNumber) && Number.isInteger(exceptionDetails.columnNumber)
+      ? ` at ${exceptionDetails.lineNumber + 1}:${exceptionDetails.columnNumber + 1}`
+      : ''
+    throw new Error(`page eval failed: ${String(detail).replace(/\s+/g, ' ').trim()}${location}`)
+  }
   return result.value
 }
 
@@ -292,6 +311,7 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
   let state = null
   while (Date.now() < deadline) {
     state = await evalInPage(cdp, sessionId, `(() => {
+      const isMobile = ${mobile ? 'true' : 'false'};
       const rect = (selector) => {
         const element = document.querySelector(selector);
         if (!element) return null;
@@ -299,6 +319,52 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
         return { top: box.top, right: box.right, bottom: box.bottom, left: box.left, width: box.width, height: box.height };
       };
       const text = document.body ? document.body.innerText : '';
+      const target = (element) => {
+        if (!element) return null;
+        const box = element.getBoundingClientRect();
+        const name = String(element.getAttribute('aria-label') || element.innerText || element.textContent || '').trim();
+        return { namePresent: Boolean(name), focusable: !element.disabled && element.tabIndex >= 0, width: box.width, height: box.height };
+      };
+      const productTile = [...document.querySelectorAll('.shop-product-tile')]
+        .find((candidate) => candidate.textContent.includes('Premium rice 25kg'));
+      const paymentButtons = [...document.querySelectorAll('.shop-payment-options button')].map(target);
+      const openOrderInput = document.querySelector('.shop-open-order-choice input[type="checkbox"]');
+      const openOrderLabel = document.querySelector('.shop-open-order-choice');
+      const reviewControl = document.querySelector('.shop-review-sale');
+      const quantityButtons = [...document.querySelectorAll('.shop-quantity-stepper button')].map(target);
+      const touchTargets = isMobile
+        ? [target(productTile), ...paymentButtons, target(openOrderLabel), target(reviewControl), ...quantityButtons].filter(Boolean)
+        : [];
+      const semanticChecks = {
+        productTileLabelled: Boolean(productTile?.getAttribute('aria-labelledby') && productTile?.getAttribute('aria-describedby')),
+        paymentButtonCount: paymentButtons.length,
+        paymentButtonsNamed: paymentButtons.every((entry) => entry?.namePresent),
+        paymentPressedStatePresent: [...document.querySelectorAll('.shop-payment-options button')]
+          .every((button) => button.hasAttribute('aria-pressed')),
+        openOrderCheckboxLabelled: Boolean(openOrderInput && openOrderLabel?.textContent?.trim()),
+        reviewButtonNamed: Boolean(target(reviewControl)?.namePresent),
+        criticalControlsFocusable: [...paymentButtons, target(openOrderInput), target(reviewControl)]
+          .filter(Boolean)
+          .every((entry) => entry.focusable),
+      };
+      const accessibility = {
+        ok: semanticChecks.productTileLabelled
+          && semanticChecks.paymentButtonCount === 5
+          && semanticChecks.paymentButtonsNamed
+          && semanticChecks.paymentPressedStatePresent
+          && semanticChecks.openOrderCheckboxLabelled
+          && semanticChecks.reviewButtonNamed
+          && semanticChecks.criticalControlsFocusable
+          && (!isMobile || touchTargets.every((entry) => entry.height + 0.25 >= 44)),
+        semantics: semanticChecks,
+        touchTargets: {
+          required: isMobile,
+          minimumHeightPx: isMobile ? 44 : null,
+          roundingTolerancePx: isMobile ? 0.25 : null,
+          checked: touchTargets.length,
+          minimumObservedHeightPx: touchTargets.length ? Math.min(...touchTargets.map((entry) => entry.height)) : null,
+        },
+      };
       return {
         text,
         viewportWidth: window.innerWidth,
@@ -308,6 +374,7 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
         openOrderChoice: rect('.shop-open-order-choice'),
         total: rect('.shop-current-sale > footer'),
         reviewButton: rect('.shop-review-sale'),
+        accessibility,
       };
     })()`)
     if (expectedText.every((needle) => (state?.text || '').includes(needle))
@@ -378,11 +445,13 @@ async function verifyCase(cdp, origin, testCase) {
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
-    let screenshot = ''
+    let screenshot = null
     if (screenshotDir && testCase.screenshotName) {
       const capture = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)
-      screenshot = resolve(screenshotDir, `${testCase.screenshotName}.png`)
-      await writeFile(screenshot, Buffer.from(capture.data, 'base64'))
+      const screenshotPath = resolve(screenshotDir, `${testCase.screenshotName}.png`)
+      const screenshotPayload = Buffer.from(capture.data, 'base64')
+      screenshot = buildScreenshotEvidence({ payload: screenshotPayload, path: screenshotPath, evidenceDir: screenshotDir })
+      await writeFile(screenshotPath, screenshotPayload, { flag: 'wx' })
     }
     const pathMatches = typeof testCase.expectedPath === 'function'
       ? testCase.expectedPath(rendered?.path || '')
@@ -403,6 +472,7 @@ async function verifyCase(cdp, origin, testCase) {
         ? [`horizontal overflow: ${rendered.documentScrollWidth}px document in ${rendered.viewportWidth}px viewport`]
         : []),
       ...(shopCounter && !shopCounter.ok ? [shopCounter.error || 'counter checkout exercise failed'] : []),
+      ...(shopCounter && !shopCounter.accessibility?.ok ? ['counter accessibility or mobile touch-target contract failed'] : []),
       ...(shopCounter && !shopCounter.aboveFold ? ['counter payment, open-order choice, total, and review control are not all above fold'] : []),
       ...(shopCounter && shopCounter.documentScrollWidth > shopCounter.viewportWidth + 1
         ? [`counter horizontal overflow: ${shopCounter.documentScrollWidth}px document in ${shopCounter.viewportWidth}px viewport`]
@@ -419,6 +489,7 @@ async function verifyCase(cdp, origin, testCase) {
       bodyLength: rendered?.bodyLength || 0,
       layout: shopCounter,
       screenshot,
+      runtime: { clean: errors.length === 0, errors: [...errors] },
       ok: failures.length === 0,
       failures,
     }
@@ -565,6 +636,11 @@ const tests = [
 
 async function main() {
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
+  if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
+  const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })
+  await assertEvidenceDirectoryReady(screenshotDir)
+  const provenanceBefore = await collectRenderedProofProvenance({ root, distDir, verifierPath })
+  assertExpectedHead(provenanceBefore, expectedHead)
   if (screenshotDir) await mkdir(resolve(screenshotDir), { recursive: true })
   const browserBin = findBrowser()
   const userDataDir = await mkdtemp(join(tmpdir(), 'supermega-entry-rendered-'))
@@ -578,20 +654,32 @@ async function main() {
     const selectedTests = shopOnly ? tests.filter((testCase) => testCase.exerciseShopCounter) : tests
     for (const testCase of selectedTests) cases.push(await verifyCase(cdp, origin, testCase))
     const failures = cases.flatMap((entry) => entry.failures.map((failure) => `${entry.name}: ${failure}`))
-    const report = {
+    const provenanceAfter = await collectRenderedProofProvenance({ root, distDir, verifierPath })
+    assertRenderedProofProvenanceStable(provenanceBefore, provenanceAfter)
+    const body = {
       ok: failures.length === 0,
-      contract: 'supermega.app-entry-rendered.v1',
+      contract: APP_ENTRY_RENDERED_CONTRACT,
+      generatedAt: new Date().toISOString(),
       scope: shopOnly ? 'shop-counter' : 'full',
-      head: gitHead(),
+      evidence,
+      ...provenanceBefore,
+      sourceSha: provenanceBefore.source.commit,
+      sourceTreeSha: provenanceBefore.source.tree,
+      sourceTreeClean: provenanceBefore.source.clean,
+      distManifestSha256: provenanceBefore.artifact.digest,
+      verifierSha256: provenanceBefore.verifier.digest,
       browser: version.product,
-      origin,
-      dist: distDir,
       cases,
       checks: cases.length,
+      runtime: {
+        clean: cases.every((entry) => entry.runtime.clean),
+        errorCount: cases.reduce((total, entry) => total + entry.runtime.errors.length, 0),
+      },
       failures,
     }
+    const report = signedRenderedProof(body)
     const serialized = JSON.stringify(report, null, 2)
-    if (outFile) await writeFile(outFile, `${serialized}\n`)
+    await writeFile(outFile, `${serialized}\n`, { flag: 'wx' })
     if (report.ok) console.log(serialized)
     else {
       console.error(serialized)
@@ -609,9 +697,9 @@ async function main() {
 main().catch((error) => {
   const report = {
     ok: false,
-    contract: 'supermega.app-entry-rendered.v1',
+    contract: APP_ENTRY_RENDERED_CONTRACT,
     scope: shopOnly ? 'shop-counter' : 'full',
-    head: gitHead(),
+    sourceCommit: gitHead(),
     failures: [error.message],
   }
   console.error(JSON.stringify(report, null, 2))
