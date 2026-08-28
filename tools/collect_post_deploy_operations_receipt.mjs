@@ -262,6 +262,48 @@ function responseLooksPublicSafe(text) {
   return !SECRET_PATTERN.test(text) && !PRIVATE_PATH_PATTERN.test(text) && !CREDENTIAL_URL_PATTERN.test(text)
 }
 
+async function readBoundedResponseBody(response) {
+  const declared = String(response.headers.get('content-length') || '').trim()
+  if (/^\d+$/.test(declared) && Number(declared) > MAX_RESPONSE_BYTES) {
+    if (typeof response.body?.cancel === 'function') {
+      await response.body.cancel().catch(() => {})
+    }
+    return { text: '', tooLarge: true }
+  }
+  if (!response.body) return { text: '', tooLarge: false }
+  if (typeof response.body.getReader !== 'function') {
+    if (typeof response.body.cancel === 'function') {
+      await response.body.cancel().catch(() => {})
+    }
+    return { text: '', tooLarge: true }
+  }
+  const reader = response.body.getReader()
+  const chunks = []
+  let totalBytes = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!(value instanceof Uint8Array)) fail('post_deploy_response_chunk_invalid')
+      totalBytes += value.byteLength
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => {})
+        return { text: '', tooLarge: true }
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const payload = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    payload.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return { text: new TextDecoder().decode(payload), tooLarge: false }
+}
+
 async function getText(fetchImpl, url, accept) {
   try {
     const response = await fetchImpl(url, {
@@ -276,15 +318,8 @@ async function getText(fetchImpl, url, accept) {
       },
       signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     })
-    const declaredLength = Number(response.headers.get('content-length') || 0)
-    if (declaredLength > MAX_RESPONSE_BYTES) {
-      return { statusCode: response.status, headers: response.headers, text: '', tooLarge: true }
-    }
-    const text = await response.text()
-    if (Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) {
-      return { statusCode: response.status, headers: response.headers, text: '', tooLarge: true }
-    }
-    return { statusCode: response.status, headers: response.headers, text, tooLarge: false }
+    const body = await readBoundedResponseBody(response)
+    return { statusCode: response.status, headers: response.headers, ...body }
   } catch {
     return { statusCode: null, headers: new Headers(), text: '', tooLarge: false }
   }
@@ -325,6 +360,11 @@ async function probeHealth(fetchImpl, origin, surface) {
   const status = body?.status === 'ready' ? 'ready' : null
   const commit = typeof body?.commit === 'string' && SHA_PATTERN.test(body.commit.toLowerCase()) ? body.commit.toLowerCase() : null
   const operatingMode = ['isolated_demo', 'managed_trial'].includes(body?.operating_mode) ? body.operating_mode : null
+  const secretValuesExposed = typeof body?.secret_values_exposed === 'boolean'
+    ? body.secret_values_exposed
+    : typeof body?.enterprise_activation?.secret_values_exposed === 'boolean'
+      ? body.enterprise_activation.secret_values_exposed
+      : null
   return {
     statusCode: response.statusCode,
     jsonValid: Boolean(body) && !response.tooLarge,
@@ -343,7 +383,7 @@ async function probeHealth(fetchImpl, origin, surface) {
     activationEvidenceReady: typeof body?.enterprise_activation?.evidence_ready === 'boolean'
       ? body.enterprise_activation.evidence_ready
       : null,
-    secretValuesExposed: typeof body?.secret_values_exposed === 'boolean' ? body.secret_values_exposed : null,
+    secretValuesExposed,
   }
 }
 
@@ -367,7 +407,7 @@ async function probeLoader(fetchImpl, appOrigin) {
   const source = response.text
   return {
     statusCode: response.statusCode,
-    javascript: /(?:javascript|ecmascript)/i.test(String(response.headers.get('content-type') || '')) || source.length > 0,
+    javascript: /(?:javascript|ecmascript)/i.test(String(response.headers.get('content-type') || '')) && source.length > 0,
     responseSafe: responseLooksPublicSafe(source),
     productionHostGuard: source.includes("/(^|\\.)supermega\\.dev$/.test(location.hostname)"),
     analyticsQueue: source.includes('window.va = window.va || function ()') && source.includes('window.vaq'),
@@ -378,14 +418,17 @@ async function probeLoader(fetchImpl, appOrigin) {
   }
 }
 
-async function probeProviderScript(fetchImpl, origin, path) {
+async function probeProviderScript(fetchImpl, origin, path, kind) {
   const response = await getText(fetchImpl, new URL(path, origin), 'text/javascript, application/javascript')
+  const contentType = String(response.headers.get('content-type') || '')
+  const source = response.text
+  const signature = kind === 'web-analytics'
+    ? /(?:\bvaq\b|window\.va\b|\/_vercel\/insights\/(?:view|event))/i.test(source)
+    : /(?:\bsiq\b|window\.si\b)/i.test(source) && /(?:web.?vitals?|\bvitals\b)/i.test(source)
   return {
     statusCode: response.statusCode,
-    // Provider source is never retained. Requiring a non-empty response avoids a
-    // false secret-shape match against minified third-party identifiers while still
-    // refusing an absent/empty edge route.
-    javascript: response.text.length > 0,
+    javascript: /(?:javascript|ecmascript)/i.test(contentType) && source.length > 0,
+    signature,
   }
 }
 
@@ -405,8 +448,8 @@ export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, 
   const providerRuntime = stage === 'production'
     ? {
         expected: true,
-        webAnalytics: await probeProviderScript(fetchImpl, appOrigin, '/_vercel/insights/script.js'),
-        speedInsights: await probeProviderScript(fetchImpl, appOrigin, '/_vercel/speed-insights/script.js'),
+        webAnalytics: await probeProviderScript(fetchImpl, appOrigin, '/_vercel/insights/script.js', 'web-analytics'),
+        speedInsights: await probeProviderScript(fetchImpl, appOrigin, '/_vercel/speed-insights/script.js', 'speed-insights'),
       }
     : { expected: false, webAnalytics: null, speedInsights: null }
   return { release, health, publicHome, routes, observability: { loader, providerRuntime } }
@@ -493,10 +536,11 @@ function normalizeProbes(value, stage) {
   if (expected !== (stage === 'production')) fail('post_deploy_provider_runtime_stage_mismatch')
   const normalizeProvider = (item, code) => {
     if (item === null) return null
-    exactKeys(item, ['statusCode', 'javascript'], code)
+    exactKeys(item, ['statusCode', 'javascript', 'signature'], code)
     return {
       statusCode: nullableStatusCode(item.statusCode, `${code}_status`),
       javascript: exactBoolean(item.javascript, `${code}_javascript`),
+      signature: exactBoolean(item.signature, `${code}_signature`),
     }
   }
   const normalized = {
@@ -556,6 +600,8 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
     || publicHealth.commit !== context.expectedCommit) healthBlockers.push('public_health_contract_mismatch')
   const appHealth = probes.health.app
   if (appHealth.statusCode !== 200 || !appHealth.jsonValid || !appHealth.responseSafe) healthBlockers.push('app_health_response_invalid')
+  if (!appHealth.commit) healthBlockers.push('app_health_commit_missing')
+  else if (appHealth.commit !== context.expectedCommit) healthBlockers.push('app_health_commit_mismatch')
   if (appHealth.service !== 'supermega-service' || appHealth.status !== 'ready'
     || appHealth.operatingMode !== 'isolated_demo' || appHealth.enterpriseDbReady !== false
     || appHealth.securityReady !== true || appHealth.writeEnabled !== false
@@ -586,7 +632,9 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
   }
   if (context.stage === 'production') {
     const runtime = probes.observability.providerRuntime.webAnalytics
-    if (runtime?.statusCode !== 200 || runtime.javascript !== true) webAnalyticsBlockers.push('web_analytics_runtime_not_observed')
+    if (runtime?.statusCode !== 200 || runtime.javascript !== true || runtime.signature !== true) {
+      webAnalyticsBlockers.push('web_analytics_runtime_not_observed')
+    }
   }
   const speedInsightsBlockers = []
   if (loader.statusCode !== 200 || !loader.javascript || !loader.responseSafe || !loader.productionHostGuard
@@ -595,7 +643,9 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
   }
   if (context.stage === 'production') {
     const runtime = probes.observability.providerRuntime.speedInsights
-    if (runtime?.statusCode !== 200 || runtime.javascript !== true) speedInsightsBlockers.push('speed_insights_runtime_not_observed')
+    if (runtime?.statusCode !== 200 || runtime.javascript !== true || runtime.signature !== true) {
+      speedInsightsBlockers.push('speed_insights_runtime_not_observed')
+    }
   }
 
   const runtimeLogBlockers = []
@@ -617,7 +667,9 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
     if (!evidenceFresh(rollback.capturedAt, context.generatedAt)) rollbackBlockers.push('rollback_receipt_stale')
     for (const target of rollback.targets) {
       if (target.readyState !== 'READY' || target.target !== 'production') rollbackBlockers.push(`${target.surface}_rollback_target_not_ready`)
+      if (target.commit === context.expectedCommit) rollbackBlockers.push(`${target.surface}_rollback_points_to_candidate`)
     }
+    if (rollback.targets[0].commit !== rollback.targets[1].commit) rollbackBlockers.push('paired_rollback_commit_mismatch')
   }
 
   const gates = [

@@ -40,6 +40,7 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "VITE_SUPABASE_PUBLISHABLE_KEY": "",
             "VITE_SUPABASE_ANON_KEY": "",
             "SUPERMEGA_CORS_ORIGINS": "",
+            "VERCEL_GIT_COMMIT_SHA": "",
             **environment,
         }
         with patch.dict(os.environ, controlled, clear=False):
@@ -75,6 +76,18 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertIn("postgres17_rehearsal", manifest["proof_commands"])
         self.assertFalse(manifest["secret_values_exposed"])
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+
+    def test_health_binds_only_an_immutable_vercel_release_commit(self) -> None:
+        exact_commit = "a" * 40
+        with self._client(VERCEL_GIT_COMMIT_SHA=exact_commit.upper()) as client:
+            bound = client.get("/api/health").json()
+        self.assertEqual(bound["commit"], exact_commit)
+
+        for invalid_commit in ("", "candidate", "a" * 39, "a" * 41, "g" * 40):
+            with self.subTest(commit=invalid_commit):
+                with self._client(VERCEL_GIT_COMMIT_SHA=invalid_commit) as client:
+                    unbound = client.get("/api/health").json()
+                self.assertIsNone(unbound["commit"])
 
     def test_cors_accepts_only_exact_https_or_explicit_loopback_origins(self) -> None:
         configured = "https://tenant.example.com,http://127.0.0.1:5173"

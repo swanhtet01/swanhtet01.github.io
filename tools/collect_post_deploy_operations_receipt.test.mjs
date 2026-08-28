@@ -119,6 +119,7 @@ function rollbackEvidence(overrides = {}) {
 
 function fixtureFetch(origins, options = {}) {
   const calls = []
+  const state = { oversizedBodyCancelled: false }
   const fetchImpl = async (input, request = {}) => {
     const url = new URL(input)
     calls.push({ url: url.href, request })
@@ -131,18 +132,18 @@ function fixtureFetch(origins, options = {}) {
         : { service: 'supermega-app', canonicalDomain: 'https://app.supermega.dev', commit: options.appCommit || expectedCommit })
     }
     if (url.pathname === '/api/health') {
-      return json(isPublic
-        ? { ok: true, status: 'ready', service: 'supermega-public-site', commit: expectedCommit }
-        : {
+      if (isPublic) return json({ ok: true, status: 'ready', service: 'supermega-public-site', commit: expectedCommit })
+      const appHealth = {
             status: 'ready',
             service: 'supermega-service',
+            ...(!options.omitAppHealthCommit ? { commit: options.appHealthCommit || expectedCommit } : {}),
             operating_mode: 'isolated_demo',
             enterprise_db_ready: false,
             security_ready: true,
             trial_backend: { write_enabled: false, browser_service_role_exposed: false },
-            enterprise_activation: { evidence_ready: false },
-            secret_values_exposed: false,
-          })
+            enterprise_activation: { evidence_ready: false, secret_values_exposed: false },
+          }
+      return json(appHealth)
     }
     if (isPublic && url.pathname === '/') {
       return html('<!doctype html><html><body>SuperMega</body></html>', options.publicHeadersMissing
@@ -156,23 +157,42 @@ function fixtureFetch(origins, options = {}) {
       return html('<!doctype html><html><body><div id="root"></div><script src="/vercel-insights.js"></script></body></html>', headers)
     }
     if (isApp && url.pathname === '/vercel-insights.js') {
+      if (options.oversizedLoader) {
+        let chunksSent = 0
+        const body = new ReadableStream({
+          pull(controller) {
+            if (chunksSent >= 3) return controller.close()
+            chunksSent += 1
+            controller.enqueue(new Uint8Array(600 * 1024).fill(65))
+          },
+          cancel() {
+            state.oversizedBodyCancelled = true
+          },
+        })
+        return new Response(body, { status: 200, headers: { 'content-type': 'text/javascript' } })
+      }
       const source = options.loaderWithoutSpeed
         ? loaderSource.replace("'/_vercel/speed-insights/script.js'", "'/disabled-speed-insights.js'")
         : loaderSource
       return new Response(source, { status: 200, headers: { 'content-type': 'text/javascript' } })
     }
     if (isApp && url.pathname === '/_vercel/insights/script.js') {
-      return new Response('self.webAnalytics=true', { status: 200, headers: { 'content-type': 'text/javascript' } })
+      if (options.providerHtmlFallback) return html('<!doctype html><html><body><div id="root"></div></body></html>')
+      return new Response("window.va=function(){};window.vaq=[];fetch('/_vercel/insights/view')", {
+        status: 200,
+        headers: { 'content-type': 'text/javascript' },
+      })
     }
     if (isApp && url.pathname === '/_vercel/speed-insights/script.js') {
-      return new Response(options.speedRuntimeMissing ? '' : 'self.speedInsights=true', {
+      if (options.providerHtmlFallback) return html('<!doctype html><html><body><div id="root"></div></body></html>')
+      return new Response(options.speedRuntimeMissing ? '' : "window.si=function(){};window.siq=[];const source='web-vitals'", {
         status: options.speedRuntimeMissing ? 404 : 200,
         headers: { 'content-type': 'text/javascript' },
       })
     }
     return new Response('not found', { status: 404 })
   }
-  return { fetchImpl, calls }
+  return { fetchImpl, calls, state }
 }
 
 async function buildFixture({
@@ -252,6 +272,27 @@ test('keeps nonzero runtime findings and stale evidence visible as derived block
   assert.ok(packet.operations.blockers.includes('material_runtime_warnings_observed'))
 })
 
+test('requires app health to carry the exact candidate commit', async () => {
+  const missing = await buildFixture({ fetchOptions: { omitAppHealthCommit: true } })
+  assert.ok(missing.packet.operations.blockers.includes('app_health_commit_missing'))
+  const stale = await buildFixture({ fetchOptions: { appHealthCommit: 'd'.repeat(40) } })
+  assert.ok(stale.packet.operations.blockers.includes('app_health_commit_mismatch'))
+})
+
+test('rejects rollback targets that point to the candidate instead of a prior release', async () => {
+  const rollback = rollbackEvidence()
+  rollback.targets = rollback.targets.map((target) => ({ ...target, commit: expectedCommit }))
+  const { packet } = await buildFixture({ rollback })
+  assert.ok(packet.operations.blockers.includes('public_rollback_points_to_candidate'))
+  assert.ok(packet.operations.blockers.includes('app_rollback_points_to_candidate'))
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'paired_rollback_readiness').status, 'blocked')
+
+  const mismatchedPair = rollbackEvidence()
+  mismatchedPair.targets[1] = { ...mismatchedPair.targets[1], commit: 'c'.repeat(40) }
+  const mismatch = await buildFixture({ rollback: mismatchedPair })
+  assert.ok(mismatch.packet.operations.blockers.includes('paired_rollback_commit_mismatch'))
+})
+
 test('production receipt additionally probes both live Vercel observability scripts', async () => {
   const { packet, calls } = await buildFixture({
     stage: 'production',
@@ -272,6 +313,27 @@ test('production receipt blocks when the Speed Insights runtime endpoint is abse
     fetchOptions: { speedRuntimeMissing: true },
   })
   assert.ok(packet.operations.blockers.includes('speed_insights_runtime_not_observed'))
+})
+
+test('a 200 HTML app-shell fallback cannot satisfy either provider-script gate', async () => {
+  const { packet } = await buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    fetchOptions: { providerHtmlFallback: true },
+  })
+  assert.ok(packet.operations.blockers.includes('web_analytics_runtime_not_observed'))
+  assert.ok(packet.operations.blockers.includes('speed_insights_runtime_not_observed'))
+  assert.equal(packet.probes.observability.providerRuntime.webAnalytics.javascript, false)
+  assert.equal(packet.probes.observability.providerRuntime.speedInsights.javascript, false)
+})
+
+test('cancels an oversized chunked response as soon as the hard byte cap is exceeded', async () => {
+  const { packet, state } = await buildFixture({ fetchOptions: { oversizedLoader: true } })
+  assert.equal(state.oversizedBodyCancelled, true)
+  assert.ok(packet.operations.blockers.includes('web_analytics_bootstrap_invalid'))
+  assert.ok(packet.operations.blockers.includes('speed_insights_bootstrap_invalid'))
+  assert.equal(packet.probes.observability.loader.javascript, false)
 })
 
 test('rejects unreviewed origin shapes and commit-mismatched evidence', async () => {

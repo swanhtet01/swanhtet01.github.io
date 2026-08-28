@@ -1062,6 +1062,8 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
+        release_commit_value = str(os.getenv("VERCEL_GIT_COMMIT_SHA") or "").strip().lower()
+        release_commit = release_commit_value if re.fullmatch(r"[0-9a-f]{40}", release_commit_value) else None
         readiness = store.readiness(None)
         enterprise_db_ready = readiness.database_ready and readiness.role_ready and readiness.schema_ready and readiness.audit_ready
         gateway_ready = _identity_secret_ready(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
@@ -1112,6 +1114,7 @@ def create_app() -> FastAPI:
             "status": "ready",
             "service": SERVICE_NAME,
             "version": SERVICE_VERSION,
+            "commit": release_commit,
             "operating_mode": operating_mode,
             "enterprise_db_ready": enterprise_db_ready,
             "security_ready": security_ready,
