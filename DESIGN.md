@@ -121,7 +121,7 @@ any third-party code or connection, require an owner-reviewed record covering:
 - failure and offline behavior;
 - maintenance owner and exit path.
 
-The founder-provided Instagram source was checked against the first-party
+The OpenDesign pattern was checked directly against the first-party
 `https://github.com/nexu-io/open-design` repository on 2026-08-28. SuperMega
 adopted only the repository-owned design contract and critique-loop pattern.
 It does not install, fork, or connect that package, desktop runtime, MCP
