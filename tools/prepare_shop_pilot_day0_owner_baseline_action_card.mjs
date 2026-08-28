@@ -21,7 +21,7 @@ import {
   sampleShopPilotLaunchGateInput,
 } from './verify_shop_pilot_launch_gate.mjs'
 
-export const SHOP_PILOT_DAY0_OWNER_BASELINE_ACTION_CARD_CONTRACT = 'supermega.shop-pilot-day0-owner-baseline-action-card.v1'
+export const SHOP_PILOT_DAY0_OWNER_BASELINE_ACTION_CARD_CONTRACT = 'supermega.shop-pilot-day0-owner-baseline-action-card.v2'
 
 const BASELINE_REQUIRED_STATUSES = [
   'blocked_owner_baseline_and_intake_required',
@@ -59,12 +59,8 @@ const REQUIRED_FALSE_CONTROLS = [
   'managedActivationAllowed',
 ]
 const BASELINE_COMMANDS = [
-  'npm.cmd run shop:pilot:baseline-packet -- --template "<private-baseline-input.json>" --worksheet-output "<private-baseline-worksheet.md>"',
-  'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>" --output "<owner-safe-baseline-preflight.json>"',
-  'npm.cmd run shop:pilot:baseline-packet -- --verify-preflight "<owner-safe-baseline-preflight.json>"',
-  'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
-  'npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"',
-  'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"',
+  'npm.cmd run shop:pilot:baseline-complete -- --input "<private-baseline-input.json>" --output-dir "<private-baseline-completion-directory>"',
+  'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<private-baseline-completion-directory>/owner-safe-baseline-packet.json" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"',
   'npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"',
   'npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"',
 ]
@@ -193,7 +189,7 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
     },
     action: {
       id: 'capture-owner-observed-baseline',
-      label: 'Capture owner-observed manual Shop baseline, lint it locally, then generate and verify an owner-safe baseline packet',
+      label: 'Capture the owner-observed manual Shop baseline, then complete it atomically into verified owner-safe artifacts',
       allowedNow: day0Packet.ownerPrivateObservationBridge?.allowedNow || 'owner_private_local_observation_only',
       privateWorkspaceRequired: true,
       safeBeforeReleaseGate: day0Packet.nextOwnerPrivateStep?.safeBeforeReleaseGate === true,
@@ -201,7 +197,7 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
       baselinePacketVerificationRequired: true,
       nextRequiredDigest: 'baseline_packet_digest',
       expectedPreflightStatus: 'baseline_input_ready',
-      completionSignal: 'public_safe_baseline_packet_digest',
+      completionSignal: 'owner_safe_baseline_completion_receipt_digest',
     },
     ownerPrivatePrepArtifacts: {
       artifactPolicy: 'digests_only_no_paths',
@@ -232,6 +228,10 @@ export function buildShopPilotDay0OwnerBaselineActionCard(input = {}) {
     commandPlan: {
       placeholdersOnly: true,
       mustRunLintBeforePublicPacket: true,
+      lintPerformedInsideAtomicCommand: true,
+      atomicBaselineCompletion: true,
+      writesNothingOnValidationFailure: true,
+      completionReceiptRequired: true,
       commands: [...BASELINE_COMMANDS],
     },
     blockersStillActive: [...(day0Packet.blockers || [])],
@@ -277,7 +277,7 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
     || card.action.baselinePacketVerificationRequired !== true
     || card.action.nextRequiredDigest !== 'baseline_packet_digest'
     || card.action.expectedPreflightStatus !== 'baseline_input_ready'
-    || card.action.completionSignal !== 'public_safe_baseline_packet_digest') {
+    || card.action.completionSignal !== 'owner_safe_baseline_completion_receipt_digest') {
     fail('shop_pilot_day0_owner_baseline_card_action_invalid')
   }
   const artifacts = card.ownerPrivatePrepArtifacts
@@ -325,10 +325,13 @@ export function validateShopPilotDay0OwnerBaselineActionCard(card) {
   if (!isRecord(card.commandPlan)
     || card.commandPlan.placeholdersOnly !== true
     || card.commandPlan.mustRunLintBeforePublicPacket !== true
+    || card.commandPlan.lintPerformedInsideAtomicCommand !== true
+    || card.commandPlan.atomicBaselineCompletion !== true
+    || card.commandPlan.writesNothingOnValidationFailure !== true
+    || card.commandPlan.completionReceiptRequired !== true
     || !Array.isArray(card.commandPlan.commands)
     || card.commandPlan.commands.length !== BASELINE_COMMANDS.length
-    || !card.commandPlan.commands.includes('npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>" --output "<owner-safe-baseline-preflight.json>"')
-    || !card.commandPlan.commands.includes('npm.cmd run shop:pilot:baseline-packet -- --verify-preflight "<owner-safe-baseline-preflight.json>"')
+    || !card.commandPlan.commands.includes('npm.cmd run shop:pilot:baseline-complete -- --input "<private-baseline-input.json>" --output-dir "<private-baseline-completion-directory>"')
     || card.commandPlan.commands.some((command) => !BASELINE_COMMANDS.includes(command))) {
     fail('shop_pilot_day0_owner_baseline_card_commands_invalid')
   }
@@ -373,7 +376,7 @@ Candidate: \`${card.candidate.branch || 'unknown'} @ ${card.candidate.head || 'u
 
 ## Owner action now
 
-Capture the owner-observed manual Shop baseline in the private workspace, run the local baseline input preflight, then generate and verify only the owner-safe baseline packet if the preflight returns \`${card.action.expectedPreflightStatus}\`.
+Capture the owner-observed manual Shop baseline in the private workspace, then run the one-command atomic completion. It preflights the private input, requires \`${card.action.expectedPreflightStatus}\`, verifies every owner-safe artifact, and writes nothing if validation fails.
 
 - Allowed now: ${card.action.allowedNow}
 - Private workspace required: true
@@ -381,6 +384,7 @@ Capture the owner-observed manual Shop baseline in the private workspace, run th
 - Release gate still required before pilot activation: true
 - Baseline packet verification required: true
 - Next required digest: ${card.action.nextRequiredDigest}
+- Completion signal: ${card.action.completionSignal}
 - External effects allowed: false
 
 ## Prep artifacts
@@ -422,7 +426,7 @@ ${stopConditions}
 
 ## Commands
 
-Use placeholder filenames in the private workspace. Do not paste local paths, names, contacts, raw notes, credentials, payment, or stock details into any owner-safe packet. Owner-safe does not mean public website, customer-facing, or publishable.
+Use placeholder filenames in the private workspace. The first command creates a new directory containing a verified preflight, baseline packet, Markdown packet, and sealed completion receipt; it refuses to overwrite an existing directory. Do not paste local paths, names, contacts, raw notes, credentials, payment, or stock details into any owner-safe packet. Owner-safe does not mean public website, customer-facing, or publishable.
 
 ${commands}
 
@@ -464,7 +468,7 @@ function runSelfTest() {
   }
   return {
     ok: validateShopPilotDay0OwnerBaselineActionCard(card) === card
-      && markdown.includes('--lint-input "<private-baseline-input.json>"')
+      && markdown.includes('shop:pilot:baseline-complete')
       && !hasPrivateOrSecretShape(markdown)
       && !/ready for managed activation|production release ready|pilot proof/i.test(markdown)
       && tamperDetected,
@@ -472,7 +476,8 @@ function runSelfTest() {
     checks: {
       card_valid: true,
       markdown_safe: !hasPrivateOrSecretShape(markdown),
-      lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
+      atomic_completion_command: markdown.includes('shop:pilot:baseline-complete'),
+      writes_nothing_on_validation_failure: card.commandPlan.writesNothingOnValidationFailure,
       tamper_detected: tamperDetected,
     },
     externalWritesPerformed: false,

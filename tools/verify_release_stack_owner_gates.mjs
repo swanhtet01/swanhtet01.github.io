@@ -48,7 +48,7 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   'hosted_scheduler_activation',
 ]
 const HQ_VERIFY_RUNNER = 'node tools/run_hq_verify.mjs'
-const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:owner-action-card:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operational:action-packet:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run product:readiness-matrix:self-test && npm run release:next-action-preflight:self-test && npm run release:owner-approval:packet:self-test && npm run release:control-index:self-test && npm run admin:technical-coordination:self-test && npm run release:artifact-family:self-test && npm run release:artifact-family:plan:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:day0-owner-baseline-card:self-test && npm run shop:pilot:owner-observation-pack:self-test && npm run shop:pilot:decision-packet:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && npm run strategy:posture:verify && node tools/verify_hq_contract.mjs'
+const EXPECTED_HQ_VERIFY_CHAIN = 'node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:owner-action-card:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operational:action-packet:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run product:readiness-matrix:self-test && npm run release:next-action-preflight:self-test && npm run release:owner-approval:packet:self-test && npm run release:control-index:self-test && npm run admin:technical-coordination:self-test && npm run release:artifact-family:self-test && npm run release:artifact-family:plan:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:baseline-complete:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:day0-owner-baseline-card:self-test && npm run shop:pilot:owner-observation-pack:self-test && npm run shop:pilot:decision-packet:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && npm run strategy:posture:verify && node tools/verify_hq_contract.mjs'
 const SECRET_PATTERNS = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /sk-proj-[A-Za-z0-9_-]{20,}/,
@@ -218,6 +218,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
   }
   if (scripts['shop:pilot:baseline-packet:self-test'] !== 'node --test tools/prepare_shop_pilot_baseline_packet.test.mjs && node tools/prepare_shop_pilot_baseline_packet.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_shop_baseline_packet_self_test_script_missing')
+  }
+  if (scripts['shop:pilot:baseline-complete'] !== 'node tools/complete_shop_pilot_baseline.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_shop_baseline_complete_script_missing')
+  }
+  if (scripts['shop:pilot:baseline-complete:self-test'] !== 'node --test tools/complete_shop_pilot_baseline.test.mjs') {
+    addFailure(failures, 'release_stack_owner_gate_shop_baseline_complete_self_test_script_missing')
   }
   if (scripts['shop:pilot:day0-readiness'] !== 'node tools/prepare_shop_pilot_day0_readiness_packet.mjs') {
     addFailure(failures, 'release_stack_owner_gate_shop_day0_readiness_script_missing')
@@ -617,6 +623,8 @@ function sampleInput(overrides = {}) {
       'shop:pilot:owner-observation-pack:self-test': 'node --test tools/prepare_shop_pilot_owner_observation_pack.test.mjs && node tools/prepare_shop_pilot_owner_observation_pack.mjs --self-test',
       'shop:pilot:decision-packet': 'node tools/prepare_shop_pilot_decision_packet.mjs',
       'shop:pilot:decision-packet:self-test': 'node --test tools/prepare_shop_pilot_decision_packet.test.mjs && node tools/prepare_shop_pilot_decision_packet.mjs --self-test',
+      'shop:pilot:baseline-complete': 'node tools/complete_shop_pilot_baseline.mjs',
+      'shop:pilot:baseline-complete:self-test': 'node --test tools/complete_shop_pilot_baseline.test.mjs',
       'shop:receipt:print-geometry:verify': 'node tools/verify_shop_receipt_print_geometry.mjs',
       'shop:receipt:print-geometry:self-test': 'node --test tools/verify_shop_receipt_print_geometry.test.mjs && node tools/verify_shop_receipt_print_geometry.mjs --self-test',
       'shop:pilot:launch-gate': 'node tools/verify_shop_pilot_launch_gate.mjs',

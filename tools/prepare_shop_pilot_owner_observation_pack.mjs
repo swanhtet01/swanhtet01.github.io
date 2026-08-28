@@ -31,7 +31,7 @@ import {
   sampleShopPilotLaunchGateInput,
 } from './verify_shop_pilot_launch_gate.mjs'
 
-export const SHOP_PILOT_OWNER_OBSERVATION_PACK_CONTRACT = 'supermega.shop-pilot-owner-observation-pack.v1'
+export const SHOP_PILOT_OWNER_OBSERVATION_PACK_CONTRACT = 'supermega.shop-pilot-owner-observation-pack.v2'
 
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const SHA_PATTERN = /^[a-f0-9]{40}$/
@@ -217,14 +217,12 @@ function assertSourceAlignment({ day0Packet, ownerBaselineActionCard, currentRel
 }
 
 function assertCommandOrder(commands) {
-  const lintIndex = commands.findIndex((command) => command.includes('--lint-input "<private-baseline-input.json>"'))
-  const verifyPreflightIndex = commands.findIndex((command) => command.includes('--verify-preflight "<owner-safe-baseline-preflight.json>"'))
-  const generateIndex = commands.findIndex((command) => command.includes('--input "<private-baseline-input.json>"') && command.includes('--output "<owner-safe-baseline-packet.json>"'))
-  if (lintIndex < 0
-    || verifyPreflightIndex < 0
-    || generateIndex < 0
-    || lintIndex > verifyPreflightIndex
-    || verifyPreflightIndex > generateIndex) {
+  const completeIndex = commands.findIndex((command) => command.includes('shop:pilot:baseline-complete')
+    && command.includes('--input "<private-baseline-input.json>"')
+    && command.includes('--output-dir "<private-baseline-completion-directory>"'))
+  const launchGateIndex = commands.findIndex((command) => command.includes('shop:pilot:launch-gate')
+    && command.includes('<private-baseline-completion-directory>/owner-safe-baseline-packet.json'))
+  if (completeIndex < 0 || launchGateIndex < 0 || completeIndex > launchGateIndex) {
     fail('shop_pilot_owner_observation_pack_command_order_invalid')
   }
 }
@@ -289,13 +287,13 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
     currentReleaseGate: controlIndexSummary(currentReleaseControlIndex),
     ownerAction: {
       id: 'observe-manual-shop-baseline',
-      label: 'Observe real manual Shop work, fill the private baseline input, lint it, then generate only owner-safe digests/counts',
+      label: 'Observe real manual Shop work, fill the private baseline input, then complete verified owner-safe artifacts atomically',
       allowedNow: 'owner_private_local_observation_only',
       privateWorkspaceRequired: true,
       safeBeforeReleaseGate: true,
       releaseGateStillRequiredBeforePilotActivation: true,
       expectedBaselinePreflightStatus: ownerBaselineActionCard.action.expectedPreflightStatus,
-      completionSignal: 'owner_safe_baseline_packet_digest',
+      completionSignal: ownerBaselineActionCard.action.completionSignal,
     },
     observationChecklist: {
       evidenceKind: evidence.evidenceKind,
@@ -325,6 +323,10 @@ export function buildShopPilotOwnerObservationPack(input = {}) {
       placeholdersOnly: true,
       mustGenerateBlankTemplateFirst: true,
       mustRunLintBeforeOwnerSafePacket: true,
+      lintPerformedInsideAtomicCommand: ownerBaselineActionCard.commandPlan.lintPerformedInsideAtomicCommand,
+      atomicBaselineCompletion: ownerBaselineActionCard.commandPlan.atomicBaselineCompletion,
+      writesNothingOnValidationFailure: ownerBaselineActionCard.commandPlan.writesNothingOnValidationFailure,
+      completionReceiptRequired: ownerBaselineActionCard.commandPlan.completionReceiptRequired,
       commands,
     },
     observedRunEvidenceCommandPlan: {
@@ -401,7 +403,7 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || action.safeBeforeReleaseGate !== true
     || action.releaseGateStillRequiredBeforePilotActivation !== true
     || action.expectedBaselinePreflightStatus !== 'baseline_input_ready'
-    || action.completionSignal !== 'owner_safe_baseline_packet_digest') {
+    || action.completionSignal !== 'owner_safe_baseline_completion_receipt_digest') {
     fail('shop_pilot_owner_observation_pack_owner_action_invalid')
   }
   const checklist = packet.observationChecklist
@@ -456,6 +458,10 @@ export function validateShopPilotOwnerObservationPack(packet) {
     || packet.commandPlan.placeholdersOnly !== true
     || packet.commandPlan.mustGenerateBlankTemplateFirst !== true
     || packet.commandPlan.mustRunLintBeforeOwnerSafePacket !== true
+    || packet.commandPlan.lintPerformedInsideAtomicCommand !== true
+    || packet.commandPlan.atomicBaselineCompletion !== true
+    || packet.commandPlan.writesNothingOnValidationFailure !== true
+    || packet.commandPlan.completionReceiptRequired !== true
     || !Array.isArray(packet.commandPlan.commands)) {
     fail('shop_pilot_owner_observation_pack_command_plan_invalid')
   }
@@ -526,9 +532,11 @@ External writes allowed now: false` : 'No current release-control index was atta
 
 ## Owner observation task
 
-Observe real manual Shop work in the private workspace, then create only an owner-safe baseline packet. This pack does not authorize a branch push, PR, merge, deployment, database write, customer contact, payment, stock movement, or managed activation.
+Observe real manual Shop work in the private workspace, then use the atomic completion command to create and verify the owner-safe baseline artifacts. It writes nothing when validation fails and refuses to overwrite an earlier completion directory. This pack does not authorize a branch push, PR, merge, deployment, database write, customer contact, payment, stock movement, or managed activation.
 
 Required baseline preflight status before generating the owner-safe baseline packet: \`${packet.ownerAction.expectedBaselinePreflightStatus}\`
+
+Required completion signal: \`${packet.ownerAction.completionSignal}\`
 
 Required flows:
 
@@ -654,7 +662,8 @@ function runSelfTest() {
     ok: validateShopPilotOwnerObservationPack(pack) === pack
       && markdown.includes('Observe real manual Shop work')
       && markdown.includes('Required baseline preflight status before generating the owner-safe baseline packet: `baseline_input_ready`')
-      && markdown.includes('--lint-input "<private-baseline-input.json>"')
+      && markdown.includes('shop:pilot:baseline-complete')
+      && markdown.includes('owner_safe_baseline_completion_receipt_digest')
       && markdown.includes('client:pilot:observed-evidence:template')
       && markdown.includes('client:pilot:observed-evidence:validate')
       && markdown.includes('--verify-run-input-validation "<owner-safe-observed-run-validation.json>"')
@@ -668,7 +677,8 @@ function runSelfTest() {
       baseline_close_distinct_dates_named: pack.observationChecklist.flows.find((flow) => flow.id === 'daily_close')?.requiredDistinctCalendarDateCount === 3
         && markdown.includes('required distinct close dates 3'),
       required_observed_calendar_dates_named: pack.observedRunEvidenceCommandPlan.requiredPilotCalendarDates === REQUIRED_PROMOTION_CALENDAR_DATES,
-      lint_before_owner_safe_packet: markdown.includes('--lint-input "<private-baseline-input.json>"'),
+      atomic_baseline_completion: markdown.includes('shop:pilot:baseline-complete'),
+      completion_receipt_required: pack.commandPlan.completionReceiptRequired,
       private_run_template_before_record: markdown.indexOf('client:pilot:observed-evidence:template') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
       metadata_validation_before_record: markdown.indexOf('client:pilot:observed-evidence:validate') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),
       owner_safe_validation_artifact_before_record: markdown.indexOf('--verify-run-input-validation "<owner-safe-observed-run-validation.json>"') < markdown.indexOf('--record --workspace "<private-observed-workspace>"'),

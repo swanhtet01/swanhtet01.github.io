@@ -206,6 +206,12 @@ test('fails closed for dirty worktree and missing launch scripts', () => {
   const missingScript = assessShopPilotLaunchGate(missingScriptInput)
   assert.equal(missingScript.ok, false)
   assert.ok(missingScript.failures.includes('shop_pilot_launch_gate_script_missing:shop:pilot:launch-gate:verify'))
+
+  const missingAtomicBaseline = sampleShopPilotLaunchGateInput()
+  delete missingAtomicBaseline.packageManifest.scripts['shop:pilot:baseline-complete:self-test']
+  const missingAtomicBaselineReport = assessShopPilotLaunchGate(missingAtomicBaseline)
+  assert.equal(missingAtomicBaselineReport.ok, false)
+  assert.ok(missingAtomicBaselineReport.failures.includes('shop_pilot_launch_gate_script_missing:shop:pilot:baseline-complete:self-test'))
 })
 
 test('rejects synthetic, public-identity, and accepted-run promotion claims', () => {
