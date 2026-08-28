@@ -12,6 +12,10 @@ import {
 import {
   buildGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
+import {
+  REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS,
+  buildReviewBranchPushOwnerReceipt,
+} from './review_branch_push_owner_receipt.mjs'
 
 const repository = 'swanhtet01/swanhtet01.github.io'
 const origin = `https://github.com/${repository}.git`
@@ -22,6 +26,7 @@ const remoteMain = 'b'.repeat(40)
 const approvalTemplate = `I approve one normal initial push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
 const fastForwardApprovalTemplate = `I approve one normal fast-forward-only push of ${commit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`
 const approvalEnv = 'SUPERMEGA_REVIEW_BRANCH_PUSH_APPROVAL'
+const ownerApprovalTime = new Date('2026-08-28T03:00:00.000Z')
 
 function packet(overrides = {}) {
   return {
@@ -125,6 +130,21 @@ function receipt(packetValue = packet()) {
       digest: `sha256:${'2'.repeat(64)}`,
       ...packetValue,
     },
+  }
+}
+
+function ownerClickReceipt(handoffReceipt = receipt(), gate = validateReviewBranchPushHandoff(handoffReceipt.packet)) {
+  return {
+    path: 'C:\\private\\review-branch-push-owner-receipt.json',
+    payload: '{}\n',
+    fileDigest: `sha256:${'4'.repeat(64)}`,
+    consumedPath: 'C:\\private\\review-branch-push-owner-receipt.used.json',
+    packet: buildReviewBranchPushOwnerReceipt({
+      gate,
+      handoffReceipt,
+      confirmedAt: ownerApprovalTime,
+      nonce: '5'.repeat(64),
+    }),
   }
 }
 
@@ -355,6 +375,77 @@ test('execution requires exact owner approval and matching local state', () => {
     }),
     /review_branch_push_local_state_mismatch/,
   )
+})
+
+test('local owner-click receipt replaces plaintext approval and expires fail closed', () => {
+  const handoffReceipt = receipt()
+  const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
+  const ownerApprovalReceipt = ownerClickReceipt(handoffReceipt, gate)
+  const approval = validateOwnerApproval({
+    gate,
+    handoffReceipt,
+    ownerApprovalReceipt,
+    env: {},
+    execute: true,
+    now: ownerApprovalTime,
+  })
+  assert.equal(approval.approved, true)
+  assert.equal(approval.method, 'local_owner_click_receipt')
+  assert.equal(approval.receipt.digest, ownerApprovalReceipt.packet.digest)
+  assert.equal(approval.receipt.consumed, false)
+  assert.throws(
+    () => validateOwnerApproval({
+      gate,
+      handoffReceipt,
+      ownerApprovalReceipt,
+      env: {},
+      execute: true,
+      now: new Date(ownerApprovalTime.getTime() + REVIEW_BRANCH_PUSH_OWNER_RECEIPT_TTL_MS),
+    }),
+    /review_branch_push_owner_receipt_expired_or_not_current/,
+  )
+})
+
+test('execute consumes the owner-click receipt exactly once before the push', async () => {
+  const handoffReceipt = receipt()
+  const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
+  const ownerApprovalReceipt = ownerClickReceipt(handoffReceipt, gate)
+  const base = stubGit()
+  const sequence = []
+  let consumeCount = 0
+  const git = (args, options) => {
+    if (args[0] === 'push') sequence.push('push')
+    return base.git(args, options)
+  }
+  const result = await applyReviewBranchPushWithGit({
+    handoffReceipt,
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+    ownerApprovalReceipt,
+    env: {},
+    git,
+    verifyHandoff: async () => ({
+      ok: true,
+      candidate: { branch, commit, clean: true },
+      nextAction: {
+        exactCommit: commit,
+        forcePushAllowed: false,
+        mergeIncluded: false,
+        deploymentIncluded: false,
+      },
+    }),
+    consumeApprovalReceipt: async (received) => {
+      consumeCount += 1
+      sequence.push('consume')
+      return { ok: true, packetDigest: received.packet.digest }
+    },
+    now: () => ownerApprovalTime,
+  })
+  assert.equal(consumeCount, 1)
+  assert.deepEqual(sequence, ['consume', 'push'])
+  assert.equal(result.approval.method, 'local_owner_click_receipt')
+  assert.equal(result.approval.receipt.consumed, true)
+  assert.equal(result.controls.ownerApprovalReceiptConsumed, true)
+  assert.equal(validateReviewBranchPushReport(result), result)
 })
 
 test('execute performs one normal exact-commit branch push and verifies the remote head', async () => {

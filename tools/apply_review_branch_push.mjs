@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
@@ -14,6 +15,13 @@ import {
   buildGitHubMainProtectionSnapshot,
   validateGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
+import {
+  REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT,
+  consumeReviewBranchPushOwnerReceipt,
+  readReviewBranchPushOwnerReceipt,
+  requestReviewBranchPushOwnerReceipt,
+  validateReviewBranchPushOwnerReceipt,
+} from './review_branch_push_owner_receipt.mjs'
 
 export const REVIEW_BRANCH_PUSH_APPLY_CONTRACT = 'supermega.review-branch-push-apply.v1'
 
@@ -235,20 +243,48 @@ export function validateReviewBranchPushHandoff(packet) {
   }
 }
 
-export function validateOwnerApproval({ gate, env = process.env, execute = false } = {}) {
+export function validateOwnerApproval({
+  gate,
+  handoffReceipt = null,
+  ownerApprovalReceipt = null,
+  env = process.env,
+  execute = false,
+  now = new Date(),
+} = {}) {
   if (!isRecord(gate)) fail('review_branch_push_gate_required')
   const expected = String(gate.approvalTemplate || '')
   if (!expected.includes('I approve one normal') || !expected.includes('for review only')) {
     fail('review_branch_push_approval_template_invalid')
   }
   const actual = String(env[APPROVAL_ENV] || '')
-  const approved = actual === expected
+  const receiptPacket = ownerApprovalReceipt?.packet
+    ? validateReviewBranchPushOwnerReceipt(ownerApprovalReceipt.packet, {
+        gate,
+        handoffReceipt,
+        now,
+      })
+    : null
+  const legacyExactTextApproved = actual === expected
+  const approved = receiptPacket !== null || legacyExactTextApproved
   if (execute && !approved) fail('review_branch_push_owner_approval_required')
   return {
     env: APPROVAL_ENV,
     approved,
+    method: receiptPacket
+      ? 'local_owner_click_receipt'
+      : legacyExactTextApproved
+        ? 'legacy_exact_text_env'
+        : 'none',
     expectedDigest: digest(expected),
-    actualDigest: actual ? digest(actual) : null,
+    actualDigest: receiptPacket?.digest || (actual ? digest(actual) : null),
+    receipt: receiptPacket
+      ? {
+          contract: receiptPacket.contract,
+          digest: receiptPacket.digest,
+          expiresAt: receiptPacket.confirmation.expiresAt,
+          consumed: false,
+        }
+      : null,
   }
 }
 
@@ -397,15 +433,24 @@ export function buildFastForwardProof({ gate, git = gitDefault } = {}) {
 export function buildReviewBranchPushPlan({
   handoffReceipt,
   mainProtectionSnapshotReceipt = null,
+  ownerApprovalReceipt = null,
   gitState = null,
   env = process.env,
   git = gitDefault,
   fastForwardProof = null,
+  now = new Date(),
 } = {}) {
   const gate = validateReviewBranchPushHandoff(handoffReceipt?.packet)
   const resolvedGitState = gitState || currentGitState(git)
   validateLocalState({ gate, gitState: resolvedGitState, execute: false })
-  const approval = validateOwnerApproval({ gate, env, execute: false })
+  const approval = validateOwnerApproval({
+    gate,
+    handoffReceipt,
+    ownerApprovalReceipt,
+    env,
+    execute: false,
+    now,
+  })
   const mainProtection = buildMainProtectionEvidence(mainProtectionSnapshotReceipt)
   const fastForward = fastForwardProof || buildFastForwardProof({ gate, git })
   const alreadyPublished = gate.pushKind === 'already_published_no_push'
@@ -475,7 +520,7 @@ export function buildReviewBranchPushPlan({
         ]
       : [
           '--execute flag',
-          `${APPROVAL_ENV} exactly equals the release handoff owner approval template`,
+          'unexpired one-use local owner-click receipt bound to this handoff, or the legacy exact-text approval environment value',
           'signed GitHub main-protection snapshot verifies assessment.ok:true',
           'release handoff re-verifies current remote/live state immediately before push',
           'remote review branch still equals the handoff remote commit immediately before push',
@@ -486,6 +531,7 @@ export function buildReviewBranchPushPlan({
     controls: {
       gitRemoteWritesApproved: approval.approved,
       gitRemoteWritesPerformed: false,
+      ownerApprovalReceiptConsumed: false,
       repositorySettingsMutated: false,
       branchMutated: false,
       forcePushPerformed: false,
@@ -524,8 +570,25 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
   if (!isRecord(packet.approval)
     || packet.approval.env !== APPROVAL_ENV
     || typeof packet.approval.approved !== 'boolean'
+    || !['none', 'legacy_exact_text_env', 'local_owner_click_receipt'].includes(String(packet.approval.method || ''))
     || !/^sha256:[0-9a-f]{64}$/.test(String(packet.approval.expectedDigest || ''))) {
     fail('review_branch_push_report_approval_invalid')
+  }
+  if (packet.approval.method === 'local_owner_click_receipt') {
+    if (packet.approval.approved !== true
+      || packet.approval.receipt?.contract !== REVIEW_BRANCH_PUSH_OWNER_RECEIPT_CONTRACT
+      || !/^sha256:[0-9a-f]{64}$/.test(String(packet.approval.receipt?.digest || ''))
+      || packet.approval.actualDigest !== packet.approval.receipt.digest
+      || !Number.isFinite(Date.parse(String(packet.approval.receipt?.expiresAt || '')))
+      || typeof packet.approval.receipt?.consumed !== 'boolean') {
+      fail('review_branch_push_report_approval_receipt_invalid')
+    }
+  } else if (packet.approval.receipt !== null
+    || (packet.approval.method === 'legacy_exact_text_env'
+      && (packet.approval.approved !== true || packet.approval.actualDigest !== packet.approval.expectedDigest))
+    || (packet.approval.method === 'none'
+      && (packet.approval.approved !== false || packet.approval.actualDigest !== null))) {
+    fail('review_branch_push_report_approval_receipt_invalid')
   }
   if (!isRecord(packet.githubMainProtection)
     || typeof packet.githubMainProtection.assessmentOk !== 'boolean'
@@ -543,6 +606,8 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
     const fastForwardProof = validateFastForwardProofRecord(packet)
     if (packet.ok !== true
       || packet.controls?.gitRemoteWritesPerformed !== false
+      || packet.controls?.ownerApprovalReceiptConsumed !== false
+      || packet.controls?.gitRemoteWritesApproved !== packet.approval.approved
       || packet.controls?.repositorySettingsMutated !== false
       || packet.controls?.branchMutated !== false
       || packet.controls?.forcePushPerformed !== false
@@ -568,6 +633,10 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
     if (!isRecord(packet.readiness)
       || typeof packet.readiness.executeReady !== 'boolean'
       || !Array.isArray(packet.readiness.blockers)) {
+      fail('review_branch_push_plan_readiness_invalid')
+    }
+    if (packet.possibleWrite?.command !== null
+      && packet.readiness.blockers.includes('owner_approval_missing') === packet.approval.approved) {
       fail('review_branch_push_plan_readiness_invalid')
     }
     if (fastForwardProof.ok === true) {
@@ -606,7 +675,8 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
   } else if (packet.mode === 'executed_owner_approved_git_remote_write'
     || packet.mode === 'executed_owner_approved_already_published_no_write') {
     const fastForwardProof = validateFastForwardProofRecord(packet)
-    if (packet.controls?.gitRemoteWritesApproved !== true
+    if (packet.approval.approved !== true
+      || packet.controls?.gitRemoteWritesApproved !== true
       || packet.controls?.repositorySettingsMutated !== false
       || packet.controls?.forcePushPerformed !== false
       || packet.controls?.branchDeletionPerformed !== false
@@ -622,6 +692,12 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
       || fastForwardProof.ok !== true) {
       fail('review_branch_push_execute_controls_invalid')
     }
+    if (packet.mode === 'executed_owner_approved_git_remote_write'
+      && packet.approval.method === 'local_owner_click_receipt'
+      && (packet.approval.receipt?.consumed !== true
+        || packet.controls?.ownerApprovalReceiptConsumed !== true)) {
+      fail('review_branch_push_execute_approval_receipt_not_consumed')
+    }
   } else {
     fail('review_branch_push_report_mode_invalid')
   }
@@ -632,14 +708,24 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
 export async function applyReviewBranchPushWithGit({
   handoffReceipt,
   mainProtectionSnapshotReceipt = null,
+  ownerApprovalReceipt = null,
   env = process.env,
   git = gitDefault,
   verifyHandoff = verifyCurrentReleaseHandoff,
+  consumeApprovalReceipt = consumeReviewBranchPushOwnerReceipt,
+  now = () => new Date(),
 } = {}) {
   const gate = validateReviewBranchPushHandoff(handoffReceipt?.packet)
   const gitState = currentGitState(git)
   validateLocalState({ gate, gitState, execute: true })
-  const approval = validateOwnerApproval({ gate, env, execute: true })
+  let approval = validateOwnerApproval({
+    gate,
+    handoffReceipt,
+    ownerApprovalReceipt,
+    env,
+    execute: true,
+    now: now(),
+  })
   const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
   const fastForward = buildFastForwardProof({ gate, git })
   if (fastForward.ok !== true) fail('review_branch_push_fast_forward_unproven')
@@ -661,7 +747,27 @@ export async function applyReviewBranchPushWithGit({
 
   let pushStatus = null
   let branchMutated = false
+  let ownerApprovalReceiptConsumed = false
   if (before !== gate.commit) {
+    approval = validateOwnerApproval({
+      gate,
+      handoffReceipt,
+      ownerApprovalReceipt,
+      env,
+      execute: true,
+      now: now(),
+    })
+    if (approval.method === 'local_owner_click_receipt') {
+      const consumed = await consumeApprovalReceipt(ownerApprovalReceipt)
+      if (consumed?.ok !== true || consumed.packetDigest !== approval.receipt.digest) {
+        fail('review_branch_push_owner_receipt_consume_verify_failed')
+      }
+      approval = {
+        ...approval,
+        receipt: { ...approval.receipt, consumed: true },
+      }
+      ownerApprovalReceiptConsumed = true
+    }
     const push = git(['push', 'origin', `${gate.commit}:refs/heads/${gate.branch}`], { optional: true, timeout: 180_000 })
     pushStatus = push.status
     if (push.status !== 0) fail('review_branch_push_push_failed')
@@ -687,6 +793,12 @@ export async function applyReviewBranchPushWithGit({
       head: gate.commit,
       clean: true,
     },
+    remoteBefore: {
+      origin: ORIGIN,
+      candidateBranchState: gate.remoteState,
+      candidateCommit: gate.remoteCommit,
+      mainCommit: handoffReceipt.packet?.remote?.mainCommit || null,
+    },
     action: {
       kind: gate.pushKind,
       command: branchMutated ? ['git', 'push', 'origin', `${gate.commit}:refs/heads/${gate.branch}`] : null,
@@ -706,6 +818,7 @@ export async function applyReviewBranchPushWithGit({
     controls: {
       gitRemoteWritesApproved: true,
       gitRemoteWritesPerformed: branchMutated,
+      ownerApprovalReceiptConsumed,
       repositorySettingsMutated: false,
       branchMutated,
       forcePushPerformed: false,
@@ -724,7 +837,15 @@ export async function applyReviewBranchPushWithGit({
 
 function parseArgs(argv) {
   const args = [...argv]
-  const options = { mode: 'plan', handoff: null, githubProtectionSnapshot: null, output: null, verify: null }
+  const options = {
+    mode: 'plan',
+    handoff: null,
+    githubProtectionSnapshot: null,
+    ownerClick: false,
+    approvalReceipt: null,
+    output: null,
+    verify: null,
+  }
   while (args.length) {
     const arg = args.shift()
     if (arg === '--plan') {
@@ -737,6 +858,10 @@ function parseArgs(argv) {
       options.handoff = args.shift()
     } else if ((arg === '--github-protection-snapshot' || arg === '--main-protection-snapshot') && args[0]) {
       options.githubProtectionSnapshot = args.shift()
+    } else if (arg === '--owner-click') {
+      options.ownerClick = true
+    } else if (arg === '--approval-receipt' && args[0]) {
+      options.approvalReceipt = args.shift()
     } else if (arg === '--output' && args[0]) {
       options.output = args.shift()
     } else if (arg === '--verify' && args[0]) {
@@ -747,6 +872,11 @@ function parseArgs(argv) {
     }
   }
   if (options.output && options.mode !== 'plan') fail('review_branch_push_output_plan_only')
+  if (options.ownerClick && options.mode !== 'execute') fail('review_branch_push_owner_click_execute_only')
+  if (options.ownerClick && options.approvalReceipt) fail('review_branch_push_owner_approval_ambiguous')
+  if ((options.ownerClick || options.approvalReceipt) && ['self-test', 'verify'].includes(options.mode)) {
+    fail('review_branch_push_owner_approval_mode_invalid')
+  }
   if (options.mode !== 'self-test' && options.mode !== 'verify' && !options.handoff) fail('review_branch_push_handoff_required')
   return options
 }
@@ -756,6 +886,15 @@ async function writeExclusive(path, content) {
   await mkdir(dirname(absolute), { recursive: true })
   await writeFile(absolute, content, { encoding: 'utf8', flag: 'wx' })
   return absolute
+}
+
+function temporaryOwnerReceiptPath(gate) {
+  const safeBranch = gate.branch.replace(/[^a-z0-9.-]+/g, '-')
+  return join(
+    tmpdir(),
+    'supermega-owner-receipts',
+    `${safeBranch}-${gate.commit}-${randomBytes(8).toString('hex')}.json`,
+  )
 }
 
 async function runSelfTest() {
@@ -999,9 +1138,35 @@ async function main() {
   const mainProtectionSnapshotReceipt = options.githubProtectionSnapshot
     ? await readGitHubMainProtectionSnapshotReceipt(options.githubProtectionSnapshot)
     : null
+  const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
+  let ownerApprovalReceipt = options.approvalReceipt
+    ? await readReviewBranchPushOwnerReceipt(options.approvalReceipt)
+    : null
+  if (options.ownerClick) {
+    const preflight = buildReviewBranchPushPlan({
+      handoffReceipt,
+      mainProtectionSnapshotReceipt,
+      env: {},
+    })
+    const nonApprovalBlockers = preflight.readiness.blockers.filter((blocker) => blocker !== 'owner_approval_missing')
+    if (nonApprovalBlockers.length > 0) fail(`review_branch_push_owner_click_preflight_blocked:${nonApprovalBlockers[0]}`)
+    ownerApprovalReceipt = await requestReviewBranchPushOwnerReceipt({
+      gate,
+      handoffReceipt,
+      output: temporaryOwnerReceiptPath(gate),
+    })
+  }
   const result = options.mode === 'execute'
-    ? await applyReviewBranchPushWithGit({ handoffReceipt, mainProtectionSnapshotReceipt })
-    : buildReviewBranchPushPlan({ handoffReceipt, mainProtectionSnapshotReceipt })
+    ? await applyReviewBranchPushWithGit({
+        handoffReceipt,
+        mainProtectionSnapshotReceipt,
+        ownerApprovalReceipt,
+      })
+    : buildReviewBranchPushPlan({
+        handoffReceipt,
+        mainProtectionSnapshotReceipt,
+        ownerApprovalReceipt,
+      })
   if (options.output) {
     const output = await writeExclusive(options.output, `${JSON.stringify(validateReviewBranchPushReport(result, { expectedMode: 'plan_only_no_git_remote_write' }), null, 2)}\n`)
     console.log(JSON.stringify({

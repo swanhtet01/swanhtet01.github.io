@@ -117,7 +117,13 @@ export function assessReleaseStackOwnerGates(input = {}) {
   if (scripts['release:branch-push:apply'] !== 'node tools/apply_review_branch_push.mjs') {
     addFailure(failures, 'release_stack_owner_gate_branch_push_apply_script_missing')
   }
-  if (scripts['release:branch-push:apply:self-test'] !== 'node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test') {
+  if (scripts['release:branch-push:owner-click'] !== 'node tools/apply_review_branch_push.mjs --execute --owner-click') {
+    addFailure(failures, 'release_stack_owner_gate_branch_push_owner_click_script_missing')
+  }
+  if (scripts['release:branch-push:owner-receipt:self-test'] !== 'node --test tools/review_branch_push_owner_receipt.test.mjs && node tools/review_branch_push_owner_receipt.mjs --self-test') {
+    addFailure(failures, 'release_stack_owner_gate_branch_push_owner_receipt_self_test_missing')
+  }
+  if (scripts['release:branch-push:apply:self-test'] !== 'npm run release:branch-push:owner-receipt:self-test && node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test') {
     addFailure(failures, 'release_stack_owner_gate_branch_push_apply_self_test_missing')
   }
   if (scripts['release:pull-request:create'] !== 'node tools/apply_release_pull_request.mjs') {
@@ -586,7 +592,9 @@ function sampleInput(overrides = {}) {
       'release:artifact-family:plan': 'node tools/prepare_release_artifact_family_plan.mjs',
       'release:artifact-family:plan:self-test': 'node --test tools/prepare_release_artifact_family_plan.test.mjs && node tools/prepare_release_artifact_family_plan.mjs --self-test',
       'release:branch-push:apply': 'node tools/apply_review_branch_push.mjs',
-      'release:branch-push:apply:self-test': 'node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test',
+      'release:branch-push:owner-click': 'node tools/apply_review_branch_push.mjs --execute --owner-click',
+      'release:branch-push:owner-receipt:self-test': 'node --test tools/review_branch_push_owner_receipt.test.mjs && node tools/review_branch_push_owner_receipt.mjs --self-test',
+      'release:branch-push:apply:self-test': 'npm run release:branch-push:owner-receipt:self-test && node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test',
       'release:pull-request:create': 'node tools/apply_release_pull_request.mjs',
       'release:pull-request:create:self-test': 'node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test',
       'release:owner-approval:packet': 'node tools/prepare_release_owner_approval_packet.mjs',
