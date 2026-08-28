@@ -219,6 +219,7 @@ import {
   productionMaterialUnits,
   productionQualityCauseCategories,
   productionMachineStates,
+  productionSeedAnchor,
   productionShopDemandSource,
   productionShiftOutput,
   productionStateCanonical,
@@ -255,6 +256,7 @@ import {
   type ProductionQualityCorrectiveAction,
   type ProductionShiftHandoff,
   type ProductionCertificateOfConformance,
+  type ProductionState,
 } from './production-workspace'
 import {
   projectShopProductionDemand,
@@ -780,6 +782,25 @@ function compareCommerceOrderPromise(left: CommerceOrder, right: CommerceOrder) 
 function shiftReferencePlaceholder() {
   const businessDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   return `${businessDate} Day`
+}
+
+function productionSampleScenarioDate(state: ProductionState) {
+  for (const event of state.events) {
+    const shiftDate = /^(\d{4}-\d{2}-\d{2})(?:\s|$)/.exec(event.shiftRef?.trim() ?? '')?.[1]
+    if (shiftDate && Number.isFinite(Date.parse(`${shiftDate}T00:00:00.000Z`))) return shiftDate
+  }
+  const recordedTimes = state.events
+    .map((event) => Date.parse(event.createdAt))
+    .filter(Number.isFinite)
+  if (recordedTimes.length) return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date(Math.max(...recordedTimes)))
+  const seedAnchor = productionSeedAnchor(state)
+  if (seedAnchor !== null) return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date(seedAnchor))
+  const issueTimes = state.issues
+    .map((issue) => issue.createdAt)
+    .map((value) => Date.parse(value))
+    .filter(Number.isFinite)
+  if (!issueTimes.length) return ''
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date(Math.max(...issueTimes)))
 }
 
 function formatIssueDue(value: string) {
@@ -8152,6 +8173,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [containment, setContainment] = useState('')
   const [summary, setSummary] = useState('')
   const [issueClock, setIssueClock] = useState(Date.now)
+  const plantSampleScenarioDate = managedIdentity ? '' : productionSampleScenarioDate(production)
+  const plantBusinessDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date(issueClock))
+  const plantSampleScenarioIsHistorical = Boolean(plantSampleScenarioDate && plantSampleScenarioDate < plantBusinessDate)
+  const plantSampleTimelineLabel = plantSampleScenarioDate
+    ? `${plantSampleScenarioIsHistorical ? 'Historical sample date' : 'Local sample date'} · ${plantSampleScenarioDate}`
+    : 'Saved local sample timeline'
   const [issueDialogOpen, setIssueDialogOpen] = useState(false)
   const [issueMaintenanceFindingSource, setIssueMaintenanceFindingSource] = useState<ProductionMaintenanceFindingSource | null>(null)
   const [maintenanceCorrectiveDraft, setMaintenanceCorrectiveDraft] = useState<{
@@ -8685,12 +8712,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Shift output', currentShiftHasOutput ? `${currentShiftOutput.goodUnits.toLocaleString()} good` : currentShiftClose ? `${(currentShiftClose.goodUnits ?? 0).toLocaleString()} closed` : 'Not started'],
     ['Problems & quality', openIssues.length + heldJobs.length ? `${openIssues.length + heldJobs.length} open` : 'Clear'],
     ['Maintenance', openWcmCount ? `${openWcmCount} open` : overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : 'Clear'],
-    ['Materials used', currentShiftMaterialEntries.length ? `${currentShiftMaterialEntries.length} records` : currentShiftClose ? `${currentShiftClose.materialEntryCount ?? 0} closed` : currentShiftHasOutput ? 'Next step' : 'Not started'],
+    ['Materials used', currentShiftMaterialEntries.length ? `${currentShiftMaterialEntries.length} ${currentShiftMaterialEntries.length === 1 ? 'record' : 'records'}` : currentShiftClose ? `${currentShiftClose.materialEntryCount ?? 0} closed` : currentShiftHasOutput ? 'Next step' : 'Not started'],
     ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Not closed'],
   ] as const
   const plantTodaySource = managedIdentity
     ? `Company Plant · revision ${managedVersion ?? production.revision}`
-    : 'Local sample records on this device'
+    : plantSampleScenarioDate
+      ? `Local sample records · ${plantSampleScenarioIsHistorical ? 'historical scenario' : 'scenario'} ${plantSampleScenarioDate}`
+      : 'Local sample records on this device'
   const plantTodayNotice = productionStorageError
     ? `Writes paused: ${productionStorageError}`
     : notice || (productionCanWrite
@@ -9999,8 +10028,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState} data-step={plantTodayStep}>
-    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{loadedPlantSamplePack?.name ?? activePlantIndustryPack.name} working sample</strong><span>{plantSampleWorkflow}. {plantSampleContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
-    <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{loadedPlantSamplePack?.name ?? activePlantIndustryPack.name} working sample</strong>{!managedIdentity ? <span className="plant-sample-timeline"><b>{plantSampleTimelineLabel}</b> These dates belong to this browser-local sample, not today's production.</span> : null}<span>{plantSampleWorkflow}. {plantSampleContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
+    <div aria-label={managedIdentity ? 'Plant today status' : 'Plant sample status'} className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">
