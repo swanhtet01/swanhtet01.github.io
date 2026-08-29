@@ -23,6 +23,10 @@ function readStatic(path) {
   return readFileSync(fullPath, 'utf8')
 }
 
+function countOccurrences(value, token) {
+  return value.split(token).length - 1
+}
+
 function walkFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const fullPath = join(directory, entry.name)
@@ -39,6 +43,7 @@ if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 
 const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
 const publicProducts = manifest.customerProducts || []
+const shop = publicProducts.find((product) => product.id === 'shop')
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
 if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:available-in-app,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
 const website = manifest.customerProducts?.find((product) => product.id === 'website')
@@ -240,22 +245,27 @@ if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event
 
 const home = pages.get('/')?.html || ''
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
+if (shop?.primaryCta?.label !== 'Open Shop Profit Control'
+  || shop?.primaryCta?.url !== 'https://app.supermega.dev/shop/?tab=today') fail('shop_profit_control_action_drift')
+const shopProfitControlAnchor = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
 for (const token of [
+  manifest.company.positioning,
   manifest.company.headline,
   manifest.company.supporting,
-  'Four focused products',
-  'Working samples',
-  'Mobile-ready workflows',
+  'POS-independent',
+  'Read-only local record',
+  'No payment or stock write',
+  shopProfitControlAnchor,
   'role="group" aria-label="Core capabilities"',
   '--quiet: #5f6c64;',
   '@media (max-width: 520px)',
   '.compact-solution .module-tags { display: none; }',
   'min-height: 44px',
-  'href="#products">Choose a product</a>',
+  'href="#products">Explore all products</a>',
   'id="products"',
   '>Products<',
-  'Choose one product to try.',
-  'Name the business, choose its type, and start with one guided job. Real client data stays optional until the workflow makes sense.',
+  'Start with Shop Profit Control, then choose a connected workflow.',
+  'Shop surfaces the first accountable operating action. Plant, Website, and Ecommerce remain focused local products with guided samples of their own.',
   'id="model" aria-label="Free and managed SuperMega"',
   'Free product. Managed intelligence.',
   'Run the products free. Add managed company intelligence when the workflow proves value.',
@@ -272,26 +282,33 @@ for (const token of [
   'id="trust"',
   'aria-label="Security boundary"',
   'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
-  'https://app.supermega.dev/settings/?product=shop',
-  'https://app.supermega.dev/settings/?product=plant',
-  'id="website"',
-  'https://app.supermega.dev/settings/?product=website',
-  'id="ecommerce"',
-  'Create a Shop-connected ordering page.',
-  'https://app.supermega.dev/settings/?product=ecommerce',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
+if (countOccurrences(home, shopProfitControlAnchor) !== 1) fail('homepage_shop_profit_control_action_count_wrong')
 for (const product of publicProducts) {
   const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  if (!home.includes(guidedSampleRoute)) fail('guided_product_route_missing', { product: product.id })
+  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
+  const guidedSampleAnchor = `href="${guidedSampleRoute}">${guidedSampleLabel}</a>`
+  if (countOccurrences(home, guidedSampleAnchor) !== 1) fail('guided_product_action_count_wrong', { product: product.id })
+  if (!home.includes(product.headline)) fail('product_headline_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
 }
-if ((home.match(/>Start free sample<\/a>/g) || []).length !== 4) fail('guided_product_cta_count_wrong')
+if (countOccurrences(home, '>Start free sample</a>') !== publicProducts.filter((product) => product.id !== 'shop').length) fail('guided_product_cta_count_wrong')
 if ((home.match(/>Request managed pilot<\/a>/g) || []).length !== 1) fail('managed_pilot_cta_count_wrong')
 if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
+for (const retiredToken of [
+  'Four focused products',
+  'Pick one product and try the working sample.',
+  'Choose one product to try.',
+  'Name the business, choose its type, and start with one guided job.',
+  'Create a Shop-connected ordering page.',
+  'Storefront from real stock',
+]) {
+  if (home.includes(retiredToken)) fail('superseded_home_offer_copy_present', { token: retiredToken })
+}
 for (const product of publicProducts) {
   if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
   if (!home.includes(`href="/${product.id}/">${product.name} overview</a>`)) fail('landing_route_link_missing', { product: product.id })
@@ -303,22 +320,27 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// 13 content links plus the shared skip-to-content link on every page.
-if ((home.match(/<a\b/g) || []).length > 14) fail('homepage_link_surface_too_large')
+// Four shared-shell links, two hero actions, two links per product card, and one
+// managed-pilot action form the complete homepage navigation surface.
+const expectedHomeLinkCount = 4 + 2 + (publicProducts.length * 2) + 1
+if ((home.match(/<a\b/g) || []).length !== expectedHomeLinkCount) fail('homepage_link_surface_drift', { expected: expectedHomeLinkCount })
 
 for (const product of publicProducts) {
   const landingRoute = `/${product.id}/`
   const landing = pages.get(landingRoute)?.html || ''
   const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
+  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
+  const guidedSampleAnchor = `href="${guidedSampleRoute}">${guidedSampleLabel}</a>`
+  const assistedSetupRoute = `/contact/?product=${encodeURIComponent(product.id)}`
+  if (product.secondaryCta?.label !== 'Request assisted setup' || product.secondaryCta?.url !== assistedSetupRoute) fail('assisted_setup_manifest_drift', { product: product.id })
+  const assistedSetupAnchor = `href="${assistedSetupRoute}">Request assisted setup</a>`
   const allModules = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
   const launchModules = allModules.slice(0, manifest.templatePackPolicy.maxEnabledModulesAtLaunch)
   for (const token of [
     product.eyebrow,
     `<h1>${product.headline}</h1>`,
-    `href="${guidedSampleRoute}"`,
-    '>Start free sample</a>',
-    `href="/contact/?product=${product.id}">${setupLabel}</a>`,
+    guidedSampleAnchor,
+    assistedSetupAnchor,
     'Free browser sample',
     'Mobile-ready workflows',
     'Start here',
@@ -335,6 +357,27 @@ for (const product of publicProducts) {
     'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.',
   ]) {
     if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
+  }
+  const expectedGuidedSampleCount = product.id === 'shop' ? 1 : 2
+  if (countOccurrences(landing, guidedSampleAnchor) !== expectedGuidedSampleCount) fail('landing_guided_sample_action_count_wrong', { route: landingRoute })
+  if (countOccurrences(landing, assistedSetupAnchor) !== 1) fail('landing_assisted_setup_action_count_wrong', { route: landingRoute })
+  if (landing.includes(`>Set up ${product.name} data</a>`)) fail('superseded_setup_cta_present', { route: landingRoute })
+  if (product.id === 'shop') {
+    if (countOccurrences(landing, shopProfitControlAnchor) !== 2) fail('shop_profit_control_action_count_wrong')
+    for (const token of ['POS-independent Shop Profit Control', 'read-only first job', 'current local Shop record', 'operating money leak or risk', 'accountable owner', 'objective closure', 'next action']) {
+      if (!landing.includes(token)) fail('shop_profit_control_truth_missing', { token })
+    }
+    for (const token of ['margin at risk', 'margin-at-risk', 'cost coverage', '49,000 MMK', '59,000 MMK']) {
+      if (`${home}\n${landing}`.toLowerCase().includes(token.toLowerCase())) fail('unproven_shop_claim_present', { token })
+    }
+  }
+  if (product.id === 'ecommerce') {
+    for (const token of ['current local Shop workspace', 'browser-local catalog', 'request, not an order', 'no payment is taken', 'no stock is reserved or moved', 'Shop remains the price and stock record']) {
+      if (!landing.toLowerCase().includes(token.toLowerCase())) fail('ecommerce_local_boundary_missing', { token })
+    }
+    for (const token of ['Storefront from real stock', 'Create a Shop-connected ordering page.', 'Send the reviewed request into Shop.']) {
+      if (`${JSON.stringify(manifest)}\n${landing}`.includes(token)) fail('superseded_ecommerce_claim_present', { token })
+    }
   }
   if (landing.includes(`href="${product.appRoute}"`)) fail('landing_direct_product_route_present', { route: landingRoute })
   for (const capability of launchModules) {
