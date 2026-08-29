@@ -19,6 +19,10 @@ function check(condition, label) {
   assert.ok(condition, label)
 }
 
+function countOccurrences(source, token) {
+  return source.split(token).length - 1
+}
+
 const landingPages = manifest.pages.filter((page) => page.productId)
 check(landingPages.map((page) => page.route).join(',') === '/shop/,/plant/,/website/,/ecommerce/', 'landing_route_set')
 
@@ -73,7 +77,9 @@ for (const page of landingPages) {
   for (const item of product.firstOperatingLoop) {
     check(html.includes(item), `landing_first_loop_item:${page.route}:${item}`)
   }
-  check(html.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `landing_primary_cta:${page.route}`)
+  const guidedSampleHref = `https://app.supermega.dev/settings/?product=${product.id}`
+  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
+  check(html.includes(`href="${guidedSampleHref}">${guidedSampleLabel}</a>`), `landing_primary_cta:${page.route}`)
   check(html.includes(`href="/contact/?product=${product.id}"`), `landing_secondary_cta:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
@@ -139,12 +145,20 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 const home = readStatic('index.html')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
+  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
   check(home.includes(`href="${page.route}">${product.name} overview</a>`), `home_links_landing:${page.route}`)
-  check(home.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `home_keeps_guided_cta:${product.id}`)
+  check(home.includes(`href="https://app.supermega.dev/settings/?product=${product.id}">${guidedSampleLabel}</a>`), `home_keeps_guided_cta:${product.id}`)
   check(home.includes(product.firstOperatingLoop[0]), `home_shows_first_loop:${product.id}`)
 }
 
 const shopLanding = readStatic('shop/index.html')
+const shopGenericSetupHref = 'https://app.supermega.dev/settings/?product=shop'
+const shopGenericSetupLabel = 'Choose Shop type or continue saved'
+const shopGenericSetupAnchor = `href="${shopGenericSetupHref}">${shopGenericSetupLabel}</a>`
+check(countOccurrences(home, shopGenericSetupAnchor) === 1, 'home_shop_generic_cta_truthful_once')
+check(countOccurrences(shopLanding, shopGenericSetupAnchor) === 2, 'shop_landing_generic_cta_truthful_twice')
+check(!`${home}\n${shopLanding}`.includes(`href="${shopGenericSetupHref}">Start free sample</a>`), 'shop_generic_cta_does_not_promise_new_sample')
+check(!shopGenericSetupHref.includes('template='), 'shop_generic_cta_does_not_silently_choose_trade')
 const shopTemplateIds = validateShopBusinessTemplates().map((template) => template.id)
 const publicShopTemplateIds = [...shopLanding.matchAll(/<a class="trade-card" href="https:\/\/app\.supermega\.dev\/shop\/\?template=([a-z0-9-]+)">/g)]
   .map((match) => match[1])
@@ -220,6 +234,9 @@ for (const productId of ['plant', 'website', 'ecommerce']) {
 
 const productOnboardingSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
 for (const token of [
+  "const [businessTypeOpen, setBusinessTypeOpen] = useState(() => product === 'commerce')",
+  '<optgroup label="Service businesses">',
+  'Continue your saved ${onboardingProduct.name} workspace.',
   'resolveSetupTemplateDoor(product, setup, requestedTemplateId)',
   'Saved setup protected',
   'Continue saved {onboardingTemplate.name}',
@@ -229,6 +246,14 @@ for (const token of [
 ]) {
   check(productOnboardingSource.includes(token), `public_template_door_saved_setup_guard:${token}`)
 }
+
+const coreCssSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8')
+const mobileStepperColumns = '.shop-quantity-stepper { grid-template-columns: 44px 30px 44px; }'
+const mobileStepperButtons = '.shop-quantity-stepper button { width: 44px; min-height: 44px; }'
+check(countOccurrences(coreCssSource, mobileStepperColumns) === 2, 'shop_mobile_quantity_stepper_columns_44px_both_ranges')
+check(countOccurrences(coreCssSource, mobileStepperButtons) === 2, 'shop_mobile_quantity_stepper_buttons_44_by_44_both_ranges')
+check(!coreCssSource.includes('grid-template-columns: 40px 30px 40px'), 'shop_mobile_quantity_stepper_legacy_columns_absent')
+check(!coreCssSource.includes('.shop-quantity-stepper button { width: 40px;'), 'shop_mobile_quantity_stepper_legacy_button_width_absent')
 
 // Homepage carries exactly one Organization JSON-LD block sourced from the manifest.
 const homeSchemaBlocks = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]

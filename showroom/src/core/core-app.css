@@ -2305,8 +2305,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-payment-options button { min-height: 44px; font-size: 0.75rem; }
   .shop-pack-context a { min-height: 44px; font-size: 0.75rem; }
   .shop-counter-summary a { font-size: 0.75rem; }
-  .shop-quantity-stepper { grid-template-columns: 40px 30px 40px; }
-  .shop-quantity-stepper button { width: 40px; min-height: 44px; }
+  .shop-quantity-stepper { grid-template-columns: 44px 30px 44px; }
+  .shop-quantity-stepper button { width: 44px; min-height: 44px; }
   .production-mode-banner > a { min-height: 44px; }
   .evidence-disclosure .inline-evidence input, .evidence-disclosure .inline-evidence select, .evidence-disclosure .inline-evidence .core-button, .evidence-verification-form input, .evidence-verification-form .core-button { min-height: 44px; }
 }
@@ -2566,8 +2566,8 @@ body { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, Blink
 
   /* Close the 561-840px touch-target hole: the <=560px floors exist but this
      band is the cheap 7-8" Android tablet propped at a counter. */
-  .shop-quantity-stepper { grid-template-columns: 40px 30px 40px; }
-  .shop-quantity-stepper button { width: 40px; min-height: 44px; }
+  .shop-quantity-stepper { grid-template-columns: 44px 30px 44px; }
+  .shop-quantity-stepper button { width: 44px; min-height: 44px; }
   .shop-payment-options button { min-height: 44px; }
   .segmented-control button, .segmented-control a, .view-tabs button,
   .channel-field-nav button, .text-link { min-height: 44px; }
