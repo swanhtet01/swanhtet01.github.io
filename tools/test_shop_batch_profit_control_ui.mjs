@@ -13,7 +13,8 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8')
 const css = readFileSync(`${root}/showroom/src/core/core-app.css`, 'utf8')
 const packageJson = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'))
-const start = today.indexOf('<section aria-label="Shop Batch Profit Control"')
+const panelStart = today.indexOf('export function ShopBatchProfitControlPanel')
+const start = today.indexOf('return <section aria-label={panelAriaLabel}', panelStart)
 const end = today.indexOf('export function ShopToday', start)
 
 let checks = 0
@@ -36,6 +37,8 @@ check(Object.values(noBatch.authority).every((value) => value === false), 'No-ba
 
 check(today.includes('batchProfitControl = projectNoBatchProfitControl()'), 'Shop Today must default through the accepted no-batch projector')
 check(today.includes('batchProfitControl?: ShopBatchProfitControlView'), 'A future source-owned projection may be supplied without inventing UI state')
+check(today.includes("panelAriaLabel = 'Shop Batch Profit Control'"), 'The primary Batch panel retains its exact accessible label')
+check(today.includes("panelId = 'shop-batch-profit-control'"), 'The primary Batch panel retains its exact route anchor')
 check(today.includes('batchProfitControl.contract === SHOP_BATCH_PROFIT_CONTROL_CONTRACT'), 'UI must bind the exact projection contract')
 check(today.includes('batchProfitControl.contractSourceSha256 === SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256'), 'UI must bind the accepted R&D contract digest')
 check(today.includes('Object.values(batchProfitControl.authority).every((value) => value === false)'), 'UI must fail closed if any authority flag is true')
@@ -94,6 +97,20 @@ check(css.includes('.shop-batch-priorities { display: grid; grid-template-column
 check(css.includes('.shop-batch-evidence { grid-template-columns: 1fr; }'), 'Mobile evidence must stack to one column')
 check(css.includes('.shop-batch-priorities { grid-template-columns: 1fr; }'), 'Mobile priorities must stack to one column')
 check(css.includes('overflow-wrap: anywhere'), 'Long safe IDs and labels must not force horizontal overflow')
+
+check(today.includes("import type { ShopBakeryBatchDemoResult } from './shop-bakery-demo-loader'"), 'Batch demo keeps only a type-level static loader dependency')
+check(today.includes("const { loadShopBakeryBatchProfitDemo } = await import('./shop-bakery-demo-loader')"), 'Batch demo implementation loads only after the explicit action')
+check(!today.includes("import { loadShopBakeryBatchProfitDemo } from './shop-bakery-demo-loader'"), 'Batch demo has no eager value import')
+check(today.includes("const [bakeryBatchDemo, setBakeryBatchDemo] = useState<ShopBakeryBatchDemoState>({ status: 'idle' })"), 'Batch demo begins inert')
+check(today.includes("if (attempt === bakeryBatchDemoAttempt.current) setBakeryBatchDemo({ status: 'ready', result })"), 'Batch demo ignores stale asynchronous completion')
+check(today.includes('<ShopBatchProfitControlPanel batchProfitControl={batchProfitControl} />'), 'current source-owned Batch view remains independently rendered and authoritative')
+check(today.includes("{bakeryBatchDemo.status === 'ready' ? <ShopBatchProfitControlPanel"), 'synthetic projection renders only after exact loader success')
+check(today.includes('batchProfitControl={bakeryBatchDemo.result.projection}'), 'successful synthetic result is passed through the existing guarded projection panel')
+check(today.includes('panelId="shop-batch-profit-control-synthetic-demo"'), 'synthetic view uses a distinct DOM anchor')
+check(today.includes('Synthetic local Batch calculation only — never baseline, pilot, customer, commercial, or accounting proof.'), 'synthetic Batch classification is permanent before load')
+check(today.includes('never replaces, merges with, or writes to your current Shop workspace'), 'synthetic Batch action visibly refuses workspace mutation')
+check(today.includes('The current Shop Batch panel above remains authoritative and unchanged.'), 'current Batch view remains visibly authoritative')
+check(today.includes('Batch demo binding check failed closed.'), 'binding failure exposes no synthetic projection')
 
 assert.equal(
   packageJson.scripts['shop:batch-profit-control:verify'],
@@ -162,6 +179,30 @@ try {
       authority: { ...allFalseAuthority, [authorityKey]: true },
     }), `true authority ${authorityKey}`)
   }
+
+  const { loadShopBakeryBatchProfitDemo } = await vite.ssrLoadModule('/src/core/shop-bakery-demo-loader.ts')
+  const syntheticBatchDemo = await loadShopBakeryBatchProfitDemo()
+  const syntheticMarkup = renderToStaticMarkup(createElement(ShopBatchProfitControlPanel, {
+    batchProfitControl: syntheticBatchDemo.projection,
+    panelAriaLabel: 'Verified synthetic bakery Batch Profit Control projection',
+    panelId: 'shop-batch-profit-control-synthetic-demo',
+  }))
+  for (const expected of [
+    'aria-label="Verified synthetic bakery Batch Profit Control projection"',
+    'id="shop-batch-profit-control-synthetic-demo"',
+    '<b data-state="batch_margin_at_risk">Margin at risk</b>',
+    'Synthetic calculation only — never evidence',
+    'Operating decision status: withheld',
+    '63,000 MMK',
+    '77,550 MMK',
+    '-14,550 MMK',
+    '24,000 MMK',
+    'BAK-CROISSANT',
+    'BAK-MILK-BREAD',
+    'BAK-TEA-BUN',
+    'never counts as baseline, pilot, customer, or commercial proof',
+  ]) check(syntheticMarkup.includes(expected), `verified synthetic Batch render must include: ${expected}`)
+  check(!syntheticMarkup.includes('Batch projection blocked.'), 'exact synthetic projection must pass the guarded renderer')
 } finally {
   await vite.close()
 }

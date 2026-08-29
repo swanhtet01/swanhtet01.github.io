@@ -3,10 +3,20 @@ import {
   projectShopCostCoverageAndMarginAtRisk,
   type ShopCostCoverageAndMarginAtRisk,
 } from './shop-cost-coverage-and-margin-at-risk'
+import {
+  SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
+  SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
+  projectShopBatchProfitControl,
+  type ShopBatchProfitControlInput,
+  type ShopBatchProfitControlProjection,
+} from './shop-batch-profit-control'
 
 export const SHOP_BAKERY_DEMO_CLASSIFICATION = 'synthetic local demo only — never pilot, customer, or commercial proof' as const
 export const SHOP_BAKERY_DEMO_FIXTURE_DIGEST = 'sha256:60f90d6e79e0a6048cc6b1d49a02ea18ae990f5e4aca72ae03a8fb6a3292c006' as const
 export const SHOP_BAKERY_DEMO_EXPECTED_PROJECTION_DIGEST = 'sha256:fca4dfe3030dd8f6445ac364c50205b8501f248b3372be213ce4d028cda2517d' as const
+export const SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION = 'synthetic local Batch calculation only — never baseline, pilot, customer, commercial, or accounting proof' as const
+export const SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST = 'sha256:1d2e0cad93a3b30f9b496ce6598432e07b7a41b2ed42c43a9fc83653f3ea2d37' as const
+export const SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST = 'sha256:62f01c3210bd819c4ef3cc7c7565b5a9dd440e41c991a89a675d76d0513c9a9a' as const
 
 export const SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS = Object.freeze({
   scenarioFileSha256: 'sha256:d0f94e8a709f541d4ca59045f7af23cf51789176d74aaf92962c0956b56eaf8b',
@@ -286,6 +296,35 @@ export type ShopBakeryMarginDemoResult = Readonly<{
   controls: typeof SHOP_BAKERY_DEMO_SOURCE.controls
 }>
 
+const SHOP_BAKERY_BATCH_DEMO_CONTROLS = Object.freeze({
+  baselineEvidenceAllowed: false,
+  pilotEvidenceAllowed: false,
+  customerEvidenceAllowed: false,
+  commercialProofAllowed: false,
+  localWorkspaceWrite: false,
+  managedWorkspaceWrite: false,
+  paymentWrite: false,
+  stockWrite: false,
+  supplierWrite: false,
+  accountingWrite: false,
+  customerWrite: false,
+  hostedWrite: false,
+  providerWrite: false,
+  productionWrite: false,
+  modelUsed: false,
+})
+
+export type ShopBakeryBatchDemoResult = Readonly<{
+  contract: 'supermega.shop-bakery-batch-profit-demo.v1'
+  classification: typeof SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION
+  businessLabel: 'Synthetic Yangon bakery batch demo'
+  acceptedArtifacts: typeof SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS
+  inputDigest: string
+  expectedProjectionDigest: string
+  projection: Readonly<ShopBatchProfitControlProjection>
+  controls: typeof SHOP_BAKERY_BATCH_DEMO_CONTROLS
+}>
+
 function deepFreeze<T>(value: T): Readonly<T> {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value)
@@ -314,6 +353,404 @@ async function sha256(value: string) {
   if (typeof crypto === 'undefined' || !crypto.subtle) throw new Error('shop_bakery_demo_digest_unavailable')
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return 'sha256:' + Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function withoutField(value: Record<string, unknown>, field: string) {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== field))
+}
+
+async function canonicalDigest(value: unknown) {
+  return sha256(canonicalJson(value))
+}
+
+function batchSaleLine({ sku, order, completion, adjustment, units, value }: {
+  sku: string
+  order: string
+  completion: string
+  adjustment: string
+  units: number
+  value: number
+}): ShopBatchProfitControlInput['sourceRecordSet']['saleLines'][number] {
+  return {
+    sku,
+    orderLineBindingDigest: `sha256:${order.repeat(64)}`,
+    completionBindingDigest: `sha256:${completion.repeat(64)}`,
+    completedAt: '2026-08-29T11:00:00.000Z',
+    sourceBusinessDate: '2026-08-29',
+    netUnits: units,
+    netValueMmk: value,
+    nonSample: false,
+    paymentReconciled: true,
+    completionPresent: true,
+    returnCount: 0,
+    refundCount: 0,
+    correctionCount: 0,
+    discountCount: 0,
+    adjustmentBindingDigest: `sha256:${adjustment.repeat(64)}`,
+  }
+}
+
+function batchCostSource({ sku, recipe, basis, production, cost, units }: {
+  sku: string
+  recipe: string
+  basis: string
+  production: string
+  cost: number
+  units: number
+}): ShopBatchProfitControlInput['sourceRecordSet']['standardUnitCostEstimateSources'][number] {
+  return {
+    sku,
+    recipeRevisionDigest: `sha256:${recipe.repeat(64 / recipe.length)}`,
+    estimateBasisDigest: `sha256:${basis.repeat(64 / basis.length)}`,
+    productionRunBindingDigest: `sha256:${production.repeat(64 / production.length)}`,
+    ownerReviewedStandardUnitCostEstimateMmk: cost,
+    standardOutputUnits: units,
+    batchProducedUnits: units,
+    reviewedAt: '2026-08-29T09:10:00.000Z',
+    effectiveFrom: '2026-08-29',
+    effectiveTo: null,
+    method: 'owner_reviewed_standard_unit_cost_estimate',
+    reviewedByRole: 'Shop owner',
+    estimateReasonCode: 'owner_standard_cost',
+    reviewStatus: 'accepted',
+    sourceState: 'accepted',
+  }
+}
+
+function batchAllocation({ id, line }: {
+  id: string
+  line: ShopBatchProfitControlInput['sourceRecordSet']['saleLines'][number]
+}): ShopBatchProfitControlInput['saleAllocationLedger']['allocations'][number] {
+  return {
+    allocationId: id,
+    batchId: 'SYNTHETIC-BAKERY-BATCH-001',
+    orderLineBindingDigest: line.orderLineBindingDigest,
+    completionBindingDigest: line.completionBindingDigest,
+    allocationMode: 'whole_net_line_only',
+    assignmentReason: 'same_business_date',
+    completedAt: line.completedAt,
+    sourceBusinessDate: line.sourceBusinessDate,
+    batchBusinessDate: '2026-08-29',
+    retainedNetUnits: line.netUnits,
+    retainedNetValueMmk: line.netValueMmk,
+    allocatedNetUnits: line.netUnits,
+    allocatedNetValueMmk: line.netValueMmk,
+    priorAllocatedUnits: 0,
+    priorAllocatedValueMmk: 0,
+    remainingUnitsBefore: line.netUnits,
+    remainingValueBefore: line.netValueMmk,
+    preorderBatchBindingDigest: null,
+    envelopeRevision: 1,
+    supersedesAllocationId: null,
+  }
+}
+
+async function buildShopBakeryBatchDemoInput(): Promise<ShopBatchProfitControlInput> {
+  const dispositionCore: ShopBatchProfitControlInput['dispositionCore'] = {
+    contract: 'supermega.shop.batch_profit_control.disposition_core.v1',
+    batchId: 'SYNTHETIC-BAKERY-BATCH-001',
+    businessDate: '2026-08-29',
+    projectionAt: '2026-08-29T12:00:00.000Z',
+    status: 'closed',
+    classification: 'synthetic_local_fixture_never_evidence',
+    items: [
+      { sku: 'BAK-CROISSANT', itemName: 'Butter Croissant', producedUnits: 15, leftoverUnits: 2, wastedUnits: 1, remakeUnits: 1, preorderUnits: 12 },
+      { sku: 'BAK-MILK-BREAD', itemName: 'Milk Bread', producedUnits: 9, leftoverUnits: 1, wastedUnits: 0, remakeUnits: 0, preorderUnits: 8 },
+      { sku: 'BAK-TEA-BUN', itemName: 'Tea Bun', producedUnits: 12, leftoverUnits: 1, wastedUnits: 1, remakeUnits: 0, preorderUnits: 10 },
+    ],
+    revision: 1,
+  }
+  const saleLines: ShopBatchProfitControlInput['sourceRecordSet']['saleLines'] = [
+    batchSaleLine({ sku: 'BAK-CROISSANT', order: 'a', completion: 'd', adjustment: '1', units: 12, value: 24_000 }),
+    batchSaleLine({ sku: 'BAK-MILK-BREAD', order: 'b', completion: 'e', adjustment: '2', units: 8, value: 24_000 }),
+    batchSaleLine({ sku: 'BAK-TEA-BUN', order: 'c', completion: 'f', adjustment: '3', units: 10, value: 15_000 }),
+  ]
+  const standardUnitCostEstimateSources: ShopBatchProfitControlInput['sourceRecordSet']['standardUnitCostEstimateSources'] = [
+    batchCostSource({ sku: 'BAK-CROISSANT', recipe: '4', basis: '5', production: '6', cost: 2_150, units: 15 }),
+    batchCostSource({ sku: 'BAK-MILK-BREAD', recipe: '7', basis: '8', production: '9', cost: 2_700, units: 9 }),
+    batchCostSource({ sku: 'BAK-TEA-BUN', recipe: 'ab', basis: 'bc', production: 'cd', cost: 1_000, units: 12 }),
+  ]
+  const sourceRecordSet: ShopBatchProfitControlInput['sourceRecordSet'] = {
+    contract: 'supermega.shop.batch_profit_control.source_record_set.v1',
+    projectionAt: dispositionCore.projectionAt,
+    saleLines,
+    standardUnitCostEstimateSources,
+    overheadSource: {
+      batchId: dispositionCore.batchId,
+      reviewedAt: '2026-08-29T11:30:00.000Z',
+      packagingCostMmk: 3_000,
+      deliveryCostMmk: 6_000,
+      otherReviewedBatchCostMmk: 0,
+      otherReviewedBatchCostReason: 'none',
+      evidenceBindingDigest: `sha256:${'de'.repeat(32)}`,
+      ownerReviewBindingDigest: `sha256:${'ef'.repeat(32)}`,
+      revision: 1,
+    },
+    generatedReceiptsExcluded: true,
+    batchId: dispositionCore.batchId,
+    revision: 1,
+  }
+  const allocations = [
+    batchAllocation({ id: 'ALLOC-CROISSANT-001', line: saleLines[0] }),
+    batchAllocation({ id: 'ALLOC-MILK-001', line: saleLines[1] }),
+    batchAllocation({ id: 'ALLOC-TEA-001', line: saleLines[2] }),
+  ]
+  const saleAllocationLedger: ShopBatchProfitControlInput['saleAllocationLedger'] = {
+    contract: 'supermega.shop.batch_profit_control.sale_allocation_ledger.v1',
+    generatedAt: dispositionCore.projectionAt,
+    projectionAt: dispositionCore.projectionAt,
+    dispositionCoreDigest: '',
+    sourceRecordSetDigest: '',
+    allocations,
+    controls: {
+      sourceDerived: true,
+      partialAllocationAllowed: false,
+      crossBatchReuseAllowed: false,
+      automaticDateOrSkuInference: false,
+      customerIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+      sameBatchCorrectionReplacementAllowed: true,
+    },
+    ledgerDigest: '',
+    batchId: dispositionCore.batchId,
+    revision: 1,
+  }
+  const productionCostReceipt: ShopBatchProfitControlInput['productionCostReceipt'] = {
+    contract: 'supermega.shop.batch_profit_control.production_cost_receipt.v1',
+    generatedAt: dispositionCore.projectionAt,
+    projectionAt: dispositionCore.projectionAt,
+    batchId: dispositionCore.batchId,
+    businessDate: dispositionCore.businessDate,
+    dispositionCoreDigest: '',
+    sourceRecordSetDigest: '',
+    method: 'owner_reviewed_standard_unit_cost_estimate',
+    skuBindings: standardUnitCostEstimateSources.map((source) => ({ ...source, coveredProducedUnits: source.batchProducedUnits })),
+    summary: {
+      coveredSkuCount: 3,
+      totalSkuCount: 3,
+      coveredProducedUnits: 36,
+      totalProducedUnits: 36,
+      quantityCoverageComplete: true,
+      partialCoverageCount: 0,
+      ambiguousMethodCount: 0,
+    },
+    controls: {
+      sourceDerived: false,
+      finishedSkuPurchaseReceiptAloneAccepted: false,
+      quantityCoverageRequired: true,
+      supplierIdentityExported: false,
+      accountingWrite: false,
+      supplierWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+      ownerReviewedEstimateReceiptRequired: true,
+      manualProjectionUnitCostEntryAccepted: false,
+    },
+    receiptDigest: '',
+    revision: 1,
+  }
+  const overheadReceipt: ShopBatchProfitControlInput['overheadReceipt'] = {
+    contract: 'supermega.shop.batch_profit_control.overhead_receipt.v1',
+    batchId: dispositionCore.batchId,
+    projectionAt: dispositionCore.projectionAt,
+    dispositionCoreDigest: '',
+    sourceRecordSetDigest: '',
+    reviewedAt: sourceRecordSet.overheadSource.reviewedAt,
+    packagingCostMmk: sourceRecordSet.overheadSource.packagingCostMmk,
+    deliveryCostMmk: sourceRecordSet.overheadSource.deliveryCostMmk,
+    otherReviewedBatchCostMmk: sourceRecordSet.overheadSource.otherReviewedBatchCostMmk,
+    otherReviewedBatchCostReason: sourceRecordSet.overheadSource.otherReviewedBatchCostReason,
+    evidenceBindingDigest: sourceRecordSet.overheadSource.evidenceBindingDigest,
+    ownerReviewBindingDigest: sourceRecordSet.overheadSource.ownerReviewBindingDigest,
+    controls: {
+      sourceDerived: true,
+      customerIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    receiptDigest: '',
+    revision: 1,
+  }
+  const retainedEvidenceReceipt: ShopBatchProfitControlInput['retainedEvidenceReceipt'] = {
+    contract: 'supermega.shop.batch_profit_control.retained_evidence_receipt.v1',
+    generatedAt: dispositionCore.projectionAt,
+    projectionAt: dispositionCore.projectionAt,
+    batchId: dispositionCore.batchId,
+    businessDate: dispositionCore.businessDate,
+    dispositionCoreDigest: '',
+    sourceRecordSetDigest: '',
+    saleAllocationLedgerDigest: '',
+    productionCostReceiptDigest: '',
+    ownerReviewedOverheadReceiptDigest: '',
+    saleLineBindings: [],
+    productionCostSummary: {
+      method: 'owner_reviewed_standard_unit_cost_estimate',
+      productionCostReceiptDigest: '',
+      coveredSkuCount: 3,
+      coveredProducedUnits: 36,
+      totalProducedUnits: 36,
+      quantityCoverageComplete: true,
+      ambiguousMethodCount: 0,
+      partialCoverageCount: 0,
+    },
+    adjustmentSummary: {
+      returnCount: 0,
+      refundCount: 0,
+      correctionCount: 0,
+      discountCount: 0,
+      unresolvedAdjustmentCount: 0,
+      allAdjustmentsLinked: true,
+    },
+    controls: {
+      sourceDerived: true,
+      manualEvidenceAssertionAccepted: false,
+      privateIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    receiptDigest: '',
+    revision: 1,
+  }
+  const batchEnvelope: ShopBatchProfitControlInput['batchEnvelope'] = {
+    contract: 'supermega.shop.batch_profit_control.batch_envelope.v1',
+    batchId: dispositionCore.batchId,
+    businessDate: dispositionCore.businessDate,
+    projectionAt: dispositionCore.projectionAt,
+    classification: dispositionCore.classification,
+    dispositionCoreDigest: '',
+    sourceRecordSetDigest: '',
+    retainedEvidenceReceiptDigest: '',
+    ownerReviewedOverheadReceiptDigest: '',
+    envelopeDigest: '',
+    revision: 1,
+    priorEnvelopeDigest: null,
+    revisionReasonCode: 'initial',
+    logicalStatus: 'closed',
+  }
+  const workspaceHistorySnapshot: ShopBatchProfitControlInput['workspaceHistorySnapshot'] = {
+    contract: 'supermega.shop.batch_profit_control.workspace_history_snapshot.v1',
+    capturedAt: dispositionCore.projectionAt,
+    projectionAt: dispositionCore.projectionAt,
+    candidateBatchId: dispositionCore.batchId,
+    candidateRevision: dispositionCore.revision,
+    scope: 'all_active_closed_voided_batch_lineages',
+    recordCount: 0,
+    records: [],
+    controls: {
+      sourceOwnedWorkspaceScan: true,
+      callerProvidedSubsetAccepted: false,
+      completeWorkspaceScan: true,
+      activeClosedVoidedIncluded: true,
+      privateIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    recordSetDigest: '',
+    snapshotDigest: '',
+  }
+  const workspaceHistoryReceipt: ShopBatchProfitControlInput['workspaceHistoryReceipt'] = {
+    contract: 'supermega.shop.batch_profit_control.workspace_history_receipt.v1',
+    generatedAt: dispositionCore.projectionAt,
+    projectionAt: dispositionCore.projectionAt,
+    candidateBatchId: dispositionCore.batchId,
+    candidateRevision: dispositionCore.revision,
+    scope: 'all_active_closed_voided_batch_lineages',
+    sourceWorkspaceRecordSetDigest: '',
+    sourceWorkspaceSnapshotDigest: '',
+    recordCount: 0,
+    controls: {
+      sourceDerived: true,
+      completeWorkspaceScan: true,
+      activeClosedVoidedIncluded: true,
+      manualHistoryAssertionAccepted: false,
+      omittedHistoryAllowed: false,
+      privateIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    receiptDigest: '',
+  }
+
+  const dispositionCoreDigest = await canonicalDigest(dispositionCore)
+  const sourceRecordSetDigest = await canonicalDigest(sourceRecordSet)
+  saleAllocationLedger.dispositionCoreDigest = dispositionCoreDigest
+  saleAllocationLedger.sourceRecordSetDigest = sourceRecordSetDigest
+  saleAllocationLedger.ledgerDigest = await canonicalDigest(withoutField(saleAllocationLedger as unknown as Record<string, unknown>, 'ledgerDigest'))
+  productionCostReceipt.dispositionCoreDigest = dispositionCoreDigest
+  productionCostReceipt.sourceRecordSetDigest = sourceRecordSetDigest
+  productionCostReceipt.receiptDigest = await canonicalDigest(withoutField(productionCostReceipt as unknown as Record<string, unknown>, 'receiptDigest'))
+  overheadReceipt.dispositionCoreDigest = dispositionCoreDigest
+  overheadReceipt.sourceRecordSetDigest = sourceRecordSetDigest
+  overheadReceipt.receiptDigest = await canonicalDigest(withoutField(overheadReceipt as unknown as Record<string, unknown>, 'receiptDigest'))
+  retainedEvidenceReceipt.dispositionCoreDigest = dispositionCoreDigest
+  retainedEvidenceReceipt.sourceRecordSetDigest = sourceRecordSetDigest
+  retainedEvidenceReceipt.saleAllocationLedgerDigest = saleAllocationLedger.ledgerDigest
+  retainedEvidenceReceipt.productionCostReceiptDigest = productionCostReceipt.receiptDigest
+  retainedEvidenceReceipt.ownerReviewedOverheadReceiptDigest = overheadReceipt.receiptDigest
+  retainedEvidenceReceipt.productionCostSummary.productionCostReceiptDigest = productionCostReceipt.receiptDigest
+  const saleLinesByDigest = new Map(saleLines.map((line) => [line.orderLineBindingDigest, line]))
+  retainedEvidenceReceipt.saleLineBindings = allocations.map((entry) => {
+    const line = saleLinesByDigest.get(entry.orderLineBindingDigest)
+    if (!line) throw new Error('shop_bakery_batch_demo_sale_line_unlinked')
+    return {
+      ...entry,
+      sku: line.sku,
+      saleAllocationLedgerDigest: saleAllocationLedger.ledgerDigest,
+      completedUnits: line.netUnits,
+      completedSaleValueMmk: line.netValueMmk,
+      nonSample: line.nonSample,
+      paymentReconciled: line.paymentReconciled,
+      completionPresent: line.completionPresent,
+      returnCount: line.returnCount,
+      refundCount: line.refundCount,
+      correctionCount: line.correctionCount,
+      discountCount: line.discountCount,
+      adjustmentState: 'complete',
+      adjustmentBindingDigest: line.adjustmentBindingDigest,
+    }
+  })
+  retainedEvidenceReceipt.receiptDigest = await canonicalDigest(withoutField(retainedEvidenceReceipt as unknown as Record<string, unknown>, 'receiptDigest'))
+  batchEnvelope.dispositionCoreDigest = dispositionCoreDigest
+  batchEnvelope.sourceRecordSetDigest = sourceRecordSetDigest
+  batchEnvelope.retainedEvidenceReceiptDigest = retainedEvidenceReceipt.receiptDigest
+  batchEnvelope.ownerReviewedOverheadReceiptDigest = overheadReceipt.receiptDigest
+  batchEnvelope.envelopeDigest = await canonicalDigest(withoutField(batchEnvelope as unknown as Record<string, unknown>, 'envelopeDigest'))
+  workspaceHistorySnapshot.recordSetDigest = await canonicalDigest({
+    contract: 'supermega.shop.batch_profit_control.workspace_history_record_set.v1',
+    capturedAt: workspaceHistorySnapshot.capturedAt,
+    projectionAt: workspaceHistorySnapshot.projectionAt,
+    candidateBatchId: workspaceHistorySnapshot.candidateBatchId,
+    candidateRevision: workspaceHistorySnapshot.candidateRevision,
+    scope: workspaceHistorySnapshot.scope,
+    records: workspaceHistorySnapshot.records,
+  })
+  workspaceHistorySnapshot.snapshotDigest = await canonicalDigest(withoutField(workspaceHistorySnapshot as unknown as Record<string, unknown>, 'snapshotDigest'))
+  workspaceHistoryReceipt.sourceWorkspaceRecordSetDigest = workspaceHistorySnapshot.recordSetDigest
+  workspaceHistoryReceipt.sourceWorkspaceSnapshotDigest = workspaceHistorySnapshot.snapshotDigest
+  workspaceHistoryReceipt.receiptDigest = await canonicalDigest(withoutField(workspaceHistoryReceipt as unknown as Record<string, unknown>, 'receiptDigest'))
+
+  return {
+    dispositionCore,
+    sourceRecordSet,
+    saleAllocationLedger,
+    productionCostReceipt,
+    overheadReceipt,
+    retainedEvidenceReceipt,
+    batchEnvelope,
+    workspaceHistorySnapshot,
+    workspaceHistoryReceipt,
+  }
 }
 
 function projectionEvidence(projection: ShopCostCoverageAndMarginAtRisk) {
@@ -394,5 +831,99 @@ export async function loadShopBakeryMarginDemo(): Promise<ShopBakeryMarginDemoRe
     expectedProjectionDigest,
     projection,
     controls: source.controls,
+  })
+}
+
+export async function shopBakeryBatchDemoInputForVerification() {
+  return structuredClone(await buildShopBakeryBatchDemoInput())
+}
+
+export async function computeShopBakeryBatchDemoInputDigest() {
+  return canonicalDigest(await buildShopBakeryBatchDemoInput())
+}
+
+export async function computeShopBakeryBatchDemoExpectedProjectionDigest() {
+  const input = await buildShopBakeryBatchDemoInput()
+  const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
+  return canonicalDigest(projection)
+}
+
+export async function verifyShopBakeryBatchDemoInput(candidate: ShopBatchProfitControlInput) {
+  const digest = await canonicalDigest(candidate)
+  if (digest !== SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST) throw new Error('shop_bakery_batch_demo_input_binding_mismatch')
+  return digest
+}
+
+export async function verifyShopBakeryBatchDemoProjection(candidate: ShopBatchProfitControlProjection) {
+  const digest = await canonicalDigest(candidate)
+  if (digest !== SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST) throw new Error('shop_bakery_batch_demo_projection_binding_mismatch')
+  return digest
+}
+
+function assertShopBakeryBatchDemoProjection(projection: ShopBatchProfitControlProjection) {
+  const estimate = projection.estimatePreview
+  if (
+    projection.contract !== SHOP_BATCH_PROFIT_CONTROL_CONTRACT
+    || projection.contractSourceSha256 !== SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256
+    || projection.state !== 'batch_margin_at_risk'
+    || projection.batchIdentity.classification !== 'synthetic_local_fixture_never_evidence'
+    || projection.totals.producedUnits !== 36
+    || projection.totals.completedSaleUnits !== 30
+    || projection.totals.leftoverUnits !== 4
+    || projection.totals.wastedUnits !== 2
+    || projection.totals.remakeUnits !== 1
+    || projection.totals.totalCompletedSaleValueMmk !== 63_000
+    || projection.totals.totalReviewedProductionCostEstimateMmk !== 68_550
+    || projection.totals.totalBatchOverheadMmk !== 9_000
+    || projection.totals.totalBatchCostEstimateMmk !== 77_550
+    || !estimate
+    || estimate.batchContributionEstimateMmk !== -14_550
+    || estimate.aggregateContributionEstimateBasisPoints !== -2_310
+    || estimate.estimatedBreakEvenSoldValueMmk !== 77_550
+    || estimate.remainingToEstimatedBreakEvenMmk !== 14_550
+    || estimate.observedAverageNetSalePerUnitMmk !== 2_100
+    || estimate.breakEvenEquivalentCompletedUnits !== 37
+    || estimate.estimatedMarginAtRiskMmk !== 24_000
+    || canonicalJson(estimate.overheadAllocationMmkBySku) !== canonicalJson({ 'BAK-CROISSANT': 3_429, 'BAK-MILK-BREAD': 3_428, 'BAK-TEA-BUN': 2_143 })
+    || projection.priorities.map((priority) => priority.sku).join(',') !== 'BAK-CROISSANT,BAK-MILK-BREAD,BAK-TEA-BUN'
+    || projection.evidenceStatus.profitStatus !== 'withheld'
+    || projection.evidenceStatus.withheldReasonCodes.join(',') !== 'synthetic_or_sample_evidence_excluded'
+    || projection.evidenceStatus.retainedSalesEvidenceComplete !== false
+    || projection.truthBoundary.costLabel !== 'Owner-reviewed production-cost estimate'
+    || !/never actual accounting cost/i.test(projection.truthBoundary.boundary)
+    || Object.values(projection.authority).some((value) => value !== false)
+    || [
+      projection.truthBoundary.mayCountAsBaseline,
+      projection.truthBoundary.mayCountAsPilotRun,
+      projection.truthBoundary.mayCountAsCustomerEvidence,
+      projection.truthBoundary.mayCountAsCommercialProof,
+    ].some((value) => value !== false)
+  ) throw new Error('shop_bakery_batch_demo_projection_invariant_mismatch')
+}
+
+export async function loadShopBakeryBatchProfitDemo(): Promise<ShopBakeryBatchDemoResult> {
+  if (SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256 !== 'd2968009e5eb18c44420e2fbbe6b40072e59b9bac0cda1e9ff531a4cae7b5910') {
+    throw new Error('shop_bakery_batch_demo_contract_binding_mismatch')
+  }
+  const input = await buildShopBakeryBatchDemoInput()
+  const inputBefore = canonicalJson(input)
+  const inputDigest = await verifyShopBakeryBatchDemoInput(input)
+  const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
+  if (canonicalJson(input) !== inputBefore) throw new Error('shop_bakery_batch_demo_input_mutated')
+  assertShopBakeryBatchDemoProjection(projection)
+  const expectedProjectionDigest = await verifyShopBakeryBatchDemoProjection(projection)
+  if (Object.values(SHOP_BAKERY_BATCH_DEMO_CONTROLS).some((value) => value !== false)) {
+    throw new Error('shop_bakery_batch_demo_authority_not_closed')
+  }
+
+  return deepFreeze({
+    contract: 'supermega.shop-bakery-batch-profit-demo.v1',
+    classification: SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION,
+    businessLabel: 'Synthetic Yangon bakery batch demo',
+    acceptedArtifacts: SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS,
+    inputDigest,
+    expectedProjectionDigest,
+    projection,
+    controls: SHOP_BAKERY_BATCH_DEMO_CONTROLS,
   })
 }

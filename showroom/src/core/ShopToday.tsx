@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { CommerceState } from './commerce-workspace'
+import type { ShopBakeryBatchDemoResult } from './shop-bakery-demo-loader'
 import type { ShopBakeryMarginDemoResult } from './shop-bakery-demo-loader'
 import { SHOP_BATCH_PROFIT_CONTROL_CONTRACT, SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256, projectNoBatchProfitControl, type ShopBatchProfitControlNoBatchProjection, type ShopBatchProfitControlProjection } from './shop-batch-profit-control'
 import { formatShopCostCoverage, formatShopMarginRate, projectShopCostCoverageAndMarginAtRisk } from './shop-cost-coverage-and-margin-at-risk'
@@ -39,6 +40,12 @@ type ShopBakeryDemoState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; result: ShopBakeryMarginDemoResult }
+  | { status: 'error' }
+
+type ShopBakeryBatchDemoState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; result: ShopBakeryBatchDemoResult }
   | { status: 'error' }
 
 const capabilityGroups = [
@@ -81,12 +88,20 @@ function batchPriorityLabel(priority: ShopBatchProfitControlProjection['prioriti
   return 'Below contribution-estimate floor'
 }
 
-export function ShopBatchProfitControlPanel({ batchProfitControl = projectNoBatchProfitControl() }: { batchProfitControl?: ShopBatchProfitControlView }) {
+export function ShopBatchProfitControlPanel({
+  batchProfitControl = projectNoBatchProfitControl(),
+  panelAriaLabel = 'Shop Batch Profit Control',
+  panelId = 'shop-batch-profit-control',
+}: {
+  batchProfitControl?: ShopBatchProfitControlView
+  panelAriaLabel?: string
+  panelId?: string
+}) {
   const batchProjectionBound = batchProfitControl.contract === SHOP_BATCH_PROFIT_CONTROL_CONTRACT
     && batchProfitControl.contractSourceSha256 === SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256
     && Object.values(batchProfitControl.authority).every((value) => value === false)
 
-  return <section aria-label="Shop Batch Profit Control" className="shop-margin-control shop-batch-profit-control" id="shop-batch-profit-control">
+  return <section aria-label={panelAriaLabel} className="shop-margin-control shop-batch-profit-control" id={panelId}>
     <header>
       <div>
         <span className="core-eyebrow">Batch Profit Control</span>
@@ -177,8 +192,13 @@ export function ShopBatchProfitControlPanel({ batchProfitControl = projectNoBatc
 export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, metrics, modules, nextAction, nextDetail, nextTo, profitControl }: ShopTodayProps) {
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [bakeryDemo, setBakeryDemo] = useState<ShopBakeryDemoState>({ status: 'idle' })
+  const [bakeryBatchDemo, setBakeryBatchDemo] = useState<ShopBakeryBatchDemoState>({ status: 'idle' })
   const bakeryDemoAttempt = useRef(0)
-  useEffect(() => () => { bakeryDemoAttempt.current += 1 }, [])
+  const bakeryBatchDemoAttempt = useRef(0)
+  useEffect(() => () => {
+    bakeryDemoAttempt.current += 1
+    bakeryBatchDemoAttempt.current += 1
+  }, [])
 
   const openBakeryDemo = async () => {
     const attempt = ++bakeryDemoAttempt.current
@@ -189,6 +209,18 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       if (attempt === bakeryDemoAttempt.current) setBakeryDemo({ status: 'ready', result })
     } catch {
       if (attempt === bakeryDemoAttempt.current) setBakeryDemo({ status: 'error' })
+    }
+  }
+
+  const openBakeryBatchDemo = async () => {
+    const attempt = ++bakeryBatchDemoAttempt.current
+    setBakeryBatchDemo({ status: 'loading' })
+    try {
+      const { loadShopBakeryBatchProfitDemo } = await import('./shop-bakery-demo-loader')
+      const result = await loadShopBakeryBatchProfitDemo()
+      if (attempt === bakeryBatchDemoAttempt.current) setBakeryBatchDemo({ status: 'ready', result })
+    } catch {
+      if (attempt === bakeryBatchDemoAttempt.current) setBakeryBatchDemo({ status: 'error' })
     }
   }
 
@@ -278,6 +310,30 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     </section>
 
     <ShopBatchProfitControlPanel batchProfitControl={batchProfitControl} />
+
+    <section aria-label="Synthetic bakery Batch Profit Control demo" className="shop-margin-control">
+      <header>
+        <div>
+          <span className="core-eyebrow">Optional batch walkthrough</span>
+          <h3>Synthetic bakery Batch Profit Control demo</h3>
+          <p>Synthetic local Batch calculation only — never baseline, pilot, customer, commercial, or accounting proof. It opens a separate in-memory view and never replaces, merges with, or writes to your current Shop workspace.</p>
+          <div>
+            <button className="core-button" disabled={bakeryBatchDemo.status === 'loading'} onClick={() => { void openBakeryBatchDemo() }} type="button">
+              {bakeryBatchDemo.status === 'loading' ? 'Checking exact Batch demo…' : bakeryBatchDemo.status === 'ready' ? 'Reload exact synthetic Batch demo' : 'Open exact synthetic Batch demo'}
+            </button>
+          </div>
+        </div>
+        <b>Synthetic calculation only</b>
+      </header>
+      {bakeryBatchDemo.status === 'loading' ? <p className="shop-margin-gaps" role="status">Verifying the immutable source receipts, workspace snapshot anchor, and exact expected projection before anything is shown.</p> : null}
+      {bakeryBatchDemo.status === 'error' ? <p className="shop-margin-gaps" role="alert">Batch demo binding check failed closed. No synthetic estimate is shown and your current Shop workspace stayed unchanged.</p> : null}
+      {bakeryBatchDemo.status === 'ready' ? <ShopBatchProfitControlPanel
+        batchProfitControl={bakeryBatchDemo.result.projection}
+        panelAriaLabel="Verified synthetic bakery Batch Profit Control projection"
+        panelId="shop-batch-profit-control-synthetic-demo"
+      /> : null}
+      <p className="panel-note">The current Shop Batch panel above remains authoritative and unchanged. This isolated demo performs no payment, stock, supplier, accounting, customer, hosted, model, provider, or production action.</p>
+    </section>
 
     <section aria-label="Synthetic bakery margin demo" className="shop-margin-control">
       <header>
