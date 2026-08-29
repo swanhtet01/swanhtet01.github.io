@@ -11,6 +11,7 @@ const {
   normalizeSetup,
   readProductSetup,
   rememberProductSetup,
+  resolveSetupTemplateDoor,
   seedSetupForProduct,
 } = await import(moduleUrl)
 
@@ -54,6 +55,39 @@ test('each product keeps its own setup without clobbering the others', () => {
   assert.equal(readProductSetup(storage, 'commerce').workspace, 'Nine Yards Bakery')
   assert.equal(readProductSetup(storage, 'production').workspace, 'Nine Yards Kitchen')
   assert.equal(readProductSetup(storage, 'website'), null)
+})
+
+test('a template door starts a new product on the exact requested template', () => {
+  const current = completeSetup('commerce')
+  const selection = resolveSetupTemplateDoor('website', current, 'catalog-showcase')
+  assert.equal(selection.activeTemplate.id, 'catalog-showcase')
+  assert.equal(selection.requestedTemplate?.id, 'catalog-showcase')
+  assert.equal(selection.choiceRequired, false)
+})
+
+test('a different template door protects a returning product behind an explicit choice', () => {
+  const current = completeSetup('website', { templateId: 'business-presence' })
+  const selection = resolveSetupTemplateDoor('website', current, 'lead-generation')
+  assert.equal(selection.activeTemplate.id, 'business-presence')
+  assert.equal(selection.requestedTemplate?.id, 'lead-generation')
+  assert.equal(selection.choiceRequired, true)
+  assert.equal(current.templateId, 'business-presence')
+})
+
+test('the same saved template needs no redundant template-door choice', () => {
+  const current = completeSetup('ecommerce', { templateId: 'pickup-preorder' })
+  const selection = resolveSetupTemplateDoor('ecommerce', current, 'pickup-preorder')
+  assert.equal(selection.activeTemplate.id, 'pickup-preorder')
+  assert.equal(selection.requestedTemplate?.id, 'pickup-preorder')
+  assert.equal(selection.choiceRequired, false)
+})
+
+test('an invalid template-door id never replaces or challenges saved setup', () => {
+  const current = completeSetup('production', { templateId: 'quality-traceability' })
+  const selection = resolveSetupTemplateDoor('production', current, 'not-a-template')
+  assert.equal(selection.activeTemplate.id, 'quality-traceability')
+  assert.equal(selection.requestedTemplate, null)
+  assert.equal(selection.choiceRequired, false)
 })
 
 test('the company identity of one product is readable from another', () => {

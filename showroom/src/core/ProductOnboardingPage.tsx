@@ -16,6 +16,7 @@ import {
   managedTrialRequestUrl,
   readProductSetup,
   rememberProductSetup,
+  resolveSetupTemplateDoor,
   seedSetupForProduct,
   templateFor,
   type SetupProductId,
@@ -182,9 +183,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [businessTypeOpen, setBusinessTypeOpen] = useState(() => product === 'commerce')
 
   const onboardingProduct = productContracts[product]
-  const requestedWorkflowTemplate = product === 'commerce'
-    ? templateFor(product, '')
-    : templateFor(product, new URLSearchParams(location.search).get('template') ?? '')
+  const requestedTemplateId = product === 'commerce' ? null : new URLSearchParams(location.search).get('template')
+  const templateDoorSelection = resolveSetupTemplateDoor(product, setup, requestedTemplateId)
+  const requestedWorkflowTemplate = templateDoorSelection.requestedTemplate ?? templateFor(product, '')
+  const pendingRequestedWorkflowTemplate = product !== 'commerce' && templateDoorSelection.choiceRequired
+    ? templateDoorSelection.requestedTemplate
+    : null
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
   // Shop and Plant setup for a signed-in company account. Plant packs and generic Shop packs are
   // still device-only. A named Shop trade now has a separate reviewed server activation path;
@@ -209,11 +213,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           ? { ...onboardingJourneys[product], ...MANAGED_ECOMMERCE_ONBOARDING_JOURNEY }
       : onboardingJourneys[product]
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
-  const onboardingTemplate = setup.product === product
-    ? templateFor(product, setup.templateId)
-    : product === 'commerce'
-      ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
-      : requestedWorkflowTemplate
+  const onboardingTemplate = product === 'commerce'
+    ? setup.product === product
+      ? templateFor(product, setup.templateId)
+      : templateFor(product, selectedShopIndustryPack.workflowTemplateId)
+    : templateDoorSelection.activeTemplate
   // The trade, or the plant type, she actually picked -- named the way each picker names it, so
   // the notice can carry her choice forward instead of dropping it.
   const managedShopBusinessTypeName = selectedBusinessTemplate?.name.en ?? selectedShopIndustryPack.name
@@ -249,7 +253,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         ? 'Example: Mandalay Clinic'
         : 'Example: Yangon Home Store'
   const workspaceOwner = setup.owner.trim() || 'Business owner'
-  const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
+  const workflowReady = setup.product === product && Boolean(setup.workspace.trim()) && !pendingRequestedWorkflowTemplate
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
   // A schedule that predates the current integrity contract is protected, so provisioning must
   // fail closed. The error used to be rendered as one sentence with no action, leaving a new owner
@@ -323,8 +327,39 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     })
   }
 
+  function clearTemplateDoorQuery() {
+    navigate(`/settings/?product=${encodeURIComponent(onboardingProduct.slug)}`, { replace: true })
+  }
+
+  function continueSavedTemplate() {
+    if (!pendingRequestedWorkflowTemplate) return
+    if (product === 'production') {
+      setPlantIndustryPackId(readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+    }
+    clearTemplateDoorQuery()
+    setNotice(`Continuing the saved ${onboardingTemplate.name} setup. The requested ${pendingRequestedWorkflowTemplate.name} starting point was not applied.`)
+  }
+
+  function useRequestedTemplate() {
+    if (!pendingRequestedWorkflowTemplate) return
+    const requested = pendingRequestedWorkflowTemplate
+    setSetup((current) => current.product !== product ? current : {
+      ...current,
+      templateId: requested.id,
+      entryPoint: requested.entryPoints[0] ?? '',
+      startedAt: undefined,
+      savedAt: undefined,
+    })
+    clearTemplateDoorQuery()
+    setNotice(`${requested.name} is selected for reviewed setup. Existing ${onboardingProduct.name} records were not overwritten; setup will run only after you submit this form.`)
+  }
+
   async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (pendingRequestedWorkflowTemplate) {
+      setNotice('Choose the saved setup or the requested starting point before continuing.')
+      return
+    }
     if (accountCheckPending) {
       setNotice('Checking whether this workspace uses a company account.')
       return
@@ -508,6 +543,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
               </li>
             ))}
           </ol>
+          {pendingRequestedWorkflowTemplate ? (
+            <section aria-label="Template starting-point choice" className="product-onboarding-proof">
+              <div>
+                <span className="core-eyebrow">Saved setup protected</span>
+                <h3>Choose which starting point to continue</h3>
+                <p>This device has {onboardingTemplate.name} saved. The public door requested {pendingRequestedWorkflowTemplate.name}. Nothing has changed yet.</p>
+              </div>
+              <div className="actions">
+                <button className="core-button" onClick={continueSavedTemplate} type="button">Continue saved {onboardingTemplate.name}</button>
+                <button className="core-button primary" onClick={useRequestedTemplate} type="button">Use {pendingRequestedWorkflowTemplate.name} for reviewed setup</button>
+              </div>
+              <p>Both choices preserve existing product records. Loading different sample data still requires the reviewed setup action below and may fail closed when existing records cannot be replaced safely.</p>
+            </section>
+          ) : null}
           {product === 'commerce' ? (
             <section aria-label="Shop pilot proof rule" className="product-onboarding-proof">
               <div>
@@ -573,7 +622,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 so a screen reader landing on the disabled control hears "Enter a business name
                 to continue" instead of an unexplained dead end. */}
             <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy || accountCheckPending} type="submit">{accountCheckPending ? 'Checking company account...' : workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small id="product-onboarding-submit-hint">{accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            <small id="product-onboarding-submit-hint">{pendingRequestedWorkflowTemplate ? 'Choose the saved setup or requested starting point first.' : accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>

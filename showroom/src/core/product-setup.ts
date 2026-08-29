@@ -100,6 +100,30 @@ export function templateFor(product: SetupProductId, name: string) {
   return templates.find((template) => template.id === name || template.name === name) ?? fallback
 }
 
+export type SetupTemplateDoorSelection = {
+  activeTemplate: WorkflowTemplate
+  requestedTemplate: WorkflowTemplate | null
+  choiceRequired: boolean
+}
+
+// A public template door is a request, never permission to replace saved setup state. New
+// product setup starts on the requested canonical id; a returning product stays on its saved
+// template until the owner explicitly resolves the mismatch in ProductOnboardingPage.
+export function resolveSetupTemplateDoor(
+  product: SetupProductId,
+  setup: SetupState,
+  requestedTemplateId: string | null | undefined,
+): SetupTemplateDoorSelection {
+  const templates = templatesFor(product)
+  const requestedTemplate = templates.find((template) => template.id === requestedTemplateId) ?? null
+  const savedTemplate = setup.product === product ? templateFor(product, setup.templateId) : null
+  return {
+    activeTemplate: savedTemplate ?? requestedTemplate ?? templateFor(product, ''),
+    requestedTemplate,
+    choiceRequired: Boolean(savedTemplate && requestedTemplate && savedTemplate.id !== requestedTemplate.id),
+  }
+}
+
 export function seedSetupForProduct(product: SetupProductId, templateId = ''): SetupState {
   const template = templateFor(product, templateId)
   return {

@@ -178,12 +178,14 @@ function publicFirstJobDoors(html) {
 }
 
 const plantProduct = productContract('plant')
+const plantPrimaryWorkflow = plantProduct.templates.find((template) => template.id === 'production-control')
+check(Boolean(plantPrimaryWorkflow), 'plant_primary_workflow_template_present')
 const plantTemplates = validatePlantBusinessTemplates()
 const plantLanding = readStatic('plant/index.html')
 const plantDoors = publicFirstJobDoors(plantLanding)
 const plantExpectedDoors = plantTemplates.map((template) => ({
   id: template.id,
-  href: escapedHtml(`https://app.supermega.dev/settings/?product=plant&template=${plantProduct.templates[0].id}&pack=${template.industryPackId}`),
+  href: escapedHtml(`https://app.supermega.dev/settings/?product=plant&template=${plantPrimaryWorkflow.id}&pack=${template.industryPackId}`),
 }))
 check(plantTemplates.length === 2, 'plant_shipped_template_registry_count')
 check(JSON.stringify(plantDoors) === JSON.stringify(plantExpectedDoors), 'plant_first_job_doors_match_validated_registry_exactly')
@@ -214,6 +216,18 @@ for (const productId of ['plant', 'website', 'ecommerce']) {
   check(html.includes('Browser-local setup only'), `${productId}_first_job_local_boundary`)
   check(html.includes('does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue'), `${productId}_first_job_external_effect_boundary`)
   check(html.includes('@media (max-width: 560px) { .trade-grid { grid-template-columns: 1fr; }'), `${productId}_first_job_mobile_single_column`)
+}
+
+const productOnboardingSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
+for (const token of [
+  'resolveSetupTemplateDoor(product, setup, requestedTemplateId)',
+  'Saved setup protected',
+  'Continue saved {onboardingTemplate.name}',
+  'Use {pendingRequestedWorkflowTemplate.name} for reviewed setup',
+  'Existing ${onboardingProduct.name} records were not overwritten',
+  "if (pendingRequestedWorkflowTemplate) {",
+]) {
+  check(productOnboardingSource.includes(token), `public_template_door_saved_setup_guard:${token}`)
 }
 
 // Homepage carries exactly one Organization JSON-LD block sourced from the manifest.

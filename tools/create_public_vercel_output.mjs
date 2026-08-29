@@ -511,7 +511,8 @@ function guidedTemplateRoute(productId, templateId, extra = {}) {
   return `https://app.supermega.dev/settings/?${query.toString()}`
 }
 
-const plantWorkflowTemplate = validatedProductTemplates('plant', 3)[0]
+const plantWorkflowTemplate = validatedProductTemplates('plant', 3).find((template) => template.id === 'production-control')
+assert(plantWorkflowTemplate, 'plant_primary_workflow_template_missing')
 const FIRST_JOB_TEMPLATE_SECTIONS = {
   plant: {
     title: 'Choose a shipped production sample.',
