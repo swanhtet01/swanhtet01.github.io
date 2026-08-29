@@ -107,8 +107,14 @@ test('redacts credential-shaped command failure snippets', () => {
   }, { required: true })
   assert.equal(result.ok, false)
   assert.equal(result.status, 'fail')
-  assert.doesNotMatch(result.reason, /postgresql:\/\/user|ghp_|Bearer abc|eyJhbGci|sk-proj-1234|user:pass/)
-  assert.match(result.reason, /\[redacted/)
+  for (const sensitiveValue of [databaseUrl, 'fixture-user', 'fixture-value', githubToken, bearerToken, jwt, providerToken]) {
+    assert.equal(result.reason.includes(sensitiveValue), false)
+  }
+  assert.match(result.reason, /DATABASE_URL=\[redacted\]/)
+  assert.match(result.reason, /\[redacted-github-token\]/)
+  assert.match(result.reason, /Bearer \[redacted\]/)
+  assert.match(result.reason, /\[redacted-jwt\]/)
+  assert.match(result.reason, /\[redacted-key\]/)
 })
 
 test('classifies HQ live drift as advisory when explicitly allowed', () => {

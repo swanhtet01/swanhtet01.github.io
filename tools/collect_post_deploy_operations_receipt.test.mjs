@@ -346,14 +346,21 @@ test('route probes reject credential-bearing URLs without source-stored password
     String.fromCharCode(64),
     'example.test/private',
   ].join('')
-  const { packet } = await buildFixture({ fetchOptions: { routeBody: credentialUrl } })
-  assert.equal(packet.probes.routes.every((route) => route.responseSafe === false), true)
-  assert.deepEqual(packet.operations.blockers.filter((blocker) => blocker.endsWith('_route_shell_invalid')), [
-    'shop_route_shell_invalid',
-    'plant_route_shell_invalid',
-    'website_route_shell_invalid',
-    'ecommerce_route_shell_invalid',
-  ])
+  const routeBodies = [
+    credentialUrl,
+    `[${credentialUrl}]`,
+    `(${credentialUrl}).`,
+  ]
+  for (const routeBody of routeBodies) {
+    const { packet } = await buildFixture({ fetchOptions: { routeBody } })
+    assert.equal(packet.probes.routes.every((route) => route.responseSafe === false), true)
+    assert.deepEqual(packet.operations.blockers.filter((blocker) => blocker.endsWith('_route_shell_invalid')), [
+      'shop_route_shell_invalid',
+      'plant_route_shell_invalid',
+      'website_route_shell_invalid',
+      'ecommerce_route_shell_invalid',
+    ])
+  }
 })
 
 test('rejects unreviewed origin shapes and commit-mismatched evidence', async () => {
