@@ -50,6 +50,7 @@ const publicHeaders = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
 }
+const validPublicScriptDirective = `script-src 'self' 'sha256-${'A'.repeat(43)}='`
 
 const loaderSource = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) {
   window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
@@ -228,8 +229,8 @@ function fixtureFetch(origins, options = {}) {
     if (isPublic && url.pathname === '/') {
       return html('<!doctype html><html><body>SuperMega<script src="/vercel-insights.js"></script></body></html>', options.publicHeadersMissing
         ? { 'content-type': 'text/html' }
-        : options.publicHeadersUnsafeScript
-          ? { ...publicHeaders, 'content-security-policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'" }
+        : options.publicScriptDirective
+          ? { ...publicHeaders, 'content-security-policy': `base-uri 'self'; frame-ancestors 'none'; object-src 'none'; ${options.publicScriptDirective}` }
           : publicHeaders)
     }
     if (isApp && ['/shop/', '/plant/', '/website/', '/ecommerce/'].includes(url.pathname)) {
@@ -360,9 +361,15 @@ test('blocks release drift, missing public headers, denied camera access, and a 
   assert.ok(packet.operations.blockers.includes('app_speed_insights_bootstrap_invalid'))
   assert.equal(packet.operations.status, 'blocked')
 
-  const unsafeScript = await buildFixture({ fetchOptions: { publicHeadersUnsafeScript: true } })
-  assert.ok(unsafeScript.packet.operations.blockers.includes('public_home_security_headers_invalid'))
-  assert.equal(unsafeScript.packet.probes.publicHome.headers.scriptSourcesRestricted, false)
+  for (const publicScriptDirective of [
+    "script-src 'self' 'unsafe-inline'",
+    `script-src 'self' 'unsafe-inline'; ${validPublicScriptDirective}`,
+    `script-src https://scripts.example.test; ${validPublicScriptDirective}`,
+  ]) {
+    const unsafeScript = await buildFixture({ fetchOptions: { publicScriptDirective } })
+    assert.ok(unsafeScript.packet.operations.blockers.includes('public_home_security_headers_invalid'))
+    assert.equal(unsafeScript.packet.probes.publicHome.headers.scriptSourcesRestricted, false)
+  }
 })
 
 test('keeps nonzero runtime findings and stale evidence visible as derived blockers', async () => {

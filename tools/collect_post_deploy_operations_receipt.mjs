@@ -387,12 +387,23 @@ function evidenceEnvelope(value, sourceDigest, normalizer, context, code) {
   }
 }
 
+function hasRestrictedScriptSources(csp) {
+  const scriptDirectives = String(csp || '')
+    .split(';')
+    .map((directive) => directive.trim())
+    .filter((directive) => /^script-src(?:\s|$)/iu.test(directive))
+  if (scriptDirectives.length !== 1) return false
+  const tokens = scriptDirectives[0].split(/\s+/u)
+  if (tokens.shift()?.toLowerCase() !== 'script-src' || tokens.shift()?.toLowerCase() !== "'self'") return false
+  return tokens.every((token) => /^'sha256-[A-Za-z0-9+/]{43}='$/u.test(token))
+}
+
 function booleanHeaderEvidence(headers) {
   const csp = String(headers.get('content-security-policy') || '')
   const permissions = String(headers.get('permissions-policy') || '')
   return {
     contentSecurityPolicyPresent: Boolean(csp),
-    scriptSourcesRestricted: /(?:^|;)\s*script-src\s+'self'(?:\s+'sha256-[A-Za-z0-9+/]{43}=')*\s*(?:;|$)/i.test(csp),
+    scriptSourcesRestricted: hasRestrictedScriptSources(csp),
     frameAncestorsNone: /(?:^|;)\s*frame-ancestors\s+'none'\s*(?:;|$)/i.test(csp),
     cameraSelf: /(?:^|,)\s*camera=\(self\)\s*(?:,|$)/i.test(permissions),
     sensitiveCapabilitiesDenied: ['geolocation=()', 'microphone=()', 'payment=()', 'usb=()'].every((token) => permissions.includes(token)),
