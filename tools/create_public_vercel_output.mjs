@@ -378,6 +378,39 @@ function structuredDataHtml(schema) {
   return `\n    <script type="application/ld+json">${json}</script>`
 }
 
+const publicObservabilityHosts = Object.freeze(['supermega.dev', 'www.supermega.dev'])
+const publicObservabilityPaths = Object.freeze(manifest.pages.map((page) => page.route))
+assert(publicObservabilityPaths.join(',') === '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/', 'public_observability_path_surface_changed')
+
+// Source presence is only delivery readiness. Provider-visible pageviews and
+// vitals remain unobserved until a separate read-only provider receipt proves
+// them after deployment.
+const publicObservabilityScript = `(function () {
+  var hosts = ${JSON.stringify(publicObservabilityHosts)}
+  var paths = new Set(${JSON.stringify(publicObservabilityPaths)})
+  if (location.protocol !== 'https:' || !hosts.includes(location.hostname)) return
+  function safeEvent(event, expectedType) {
+    if (!event || event.type !== expectedType || typeof event.url !== 'string') return null
+    var url
+    try { url = new URL(event.url, location.origin) } catch { return null }
+    if (url.origin !== location.origin || !paths.has(url.pathname)) return null
+    var safe = { type: expectedType, url: url.origin + url.pathname }
+    if (expectedType === 'vital') safe.route = url.pathname
+    return safe
+  }
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  window.va('beforeSend', function (event) { return safeEvent(event, 'pageview') })
+  window.si('beforeSend', function (event) { return safeEvent(event, 'vital') })
+  for (var src of ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']) {
+    var script = document.createElement('script')
+    script.defer = true
+    script.src = src
+    document.head.append(script)
+  }
+})()
+`
+
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
@@ -410,6 +443,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="shell">${headerHtml(route)}${content}${footerHtml(route)}</div>
+    <script src="/vercel-insights.js"></script>
   </body>
 </html>`
 }
@@ -564,7 +598,7 @@ const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the seven public page paths and removes query strings and fragments from the URL. No custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof is sent by this measurement code. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -1091,6 +1125,7 @@ const vercelConfig = {
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
+    { src: '^/vercel-insights\\.js$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
     { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
@@ -1117,6 +1152,7 @@ await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 await writeStatic('favicon.svg', faviconSvg)
+await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)

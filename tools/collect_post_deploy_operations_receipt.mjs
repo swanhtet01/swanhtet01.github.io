@@ -5,9 +5,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const POST_DEPLOY_OPERATIONS_CONTRACT = 'supermega.post-deploy-operations-receipt.v1'
+export const POST_DEPLOY_OPERATIONS_CONTRACT = 'supermega.post-deploy-operations-receipt.v2'
 export const RUNTIME_LOG_EVIDENCE_CONTRACT = 'supermega.vercel-runtime-log-scan.v1'
 export const ROLLBACK_EVIDENCE_CONTRACT = 'supermega.paired-rollback-target.v1'
+export const PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT = 'supermega.public-observability-provider-visibility.v1'
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
@@ -245,6 +246,57 @@ function normalizeRollbackEvidence(value, context) {
   }
 }
 
+function normalizePublicObservabilityVisibilityEvidence(value, context) {
+  if (value === null || value === undefined) return null
+  if (context.stage !== 'production') fail('post_deploy_public_observability_preview_evidence_forbidden')
+  exactKeys(value, [
+    'contract', 'expectedCommit', 'projectId', 'environment', 'capturedAt', 'window', 'queryMode',
+    'webAnalytics', 'speedInsights', 'rawEventsRetained', 'personalDataRetained',
+    'credentialValuesExposed', 'sourcePresenceUsedAsTelemetryEvidence', 'providerMutations',
+  ], 'post_deploy_public_observability_evidence_shape_invalid')
+  if (value.contract !== PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT) fail('post_deploy_public_observability_evidence_contract_invalid')
+  const expectedCommit = exactSha(value.expectedCommit, 'post_deploy_public_observability_commit_invalid')
+  if (expectedCommit !== context.expectedCommit) fail('post_deploy_public_observability_commit_mismatch')
+  if (value.projectId !== PROJECTS.public || value.environment !== 'production') fail('post_deploy_public_observability_target_invalid')
+  const capturedAt = exactTimestamp(value.capturedAt, 'post_deploy_public_observability_captured_at_invalid')
+  if (Date.parse(capturedAt) > Date.parse(context.generatedAt) + 60_000) fail('post_deploy_public_observability_captured_in_future')
+  exactKeys(value.window, ['startedAt', 'endedAt'], 'post_deploy_public_observability_window_invalid')
+  const startedAt = exactTimestamp(value.window.startedAt, 'post_deploy_public_observability_window_start_invalid')
+  const endedAt = exactTimestamp(value.window.endedAt, 'post_deploy_public_observability_window_end_invalid')
+  if (Date.parse(endedAt) < Date.parse(startedAt) || Date.parse(endedAt) > Date.parse(capturedAt)
+    || Date.parse(endedAt) - Date.parse(startedAt) > MAX_RUNTIME_WINDOW_MS) {
+    fail('post_deploy_public_observability_window_order_invalid')
+  }
+  if (value.queryMode !== 'read_only' || value.rawEventsRetained !== false
+    || value.personalDataRetained !== false || value.credentialValuesExposed !== false
+    || value.sourcePresenceUsedAsTelemetryEvidence !== false || value.providerMutations !== 0) {
+    fail('post_deploy_public_observability_controls_invalid')
+  }
+  const normalizeSignal = (signal, code) => {
+    exactKeys(signal, ['status', 'dataPointCount'], code)
+    if (!['observed', 'not_observed'].includes(signal.status)) fail(`${code}_status_invalid`)
+    const dataPointCount = boundedCount(signal.dataPointCount, `${code}_count_invalid`)
+    if ((signal.status === 'observed') !== (dataPointCount > 0)) fail(`${code}_status_count_mismatch`)
+    return { status: signal.status, dataPointCount }
+  }
+  return {
+    contract: PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT,
+    expectedCommit,
+    projectId: PROJECTS.public,
+    environment: 'production',
+    capturedAt,
+    window: { startedAt, endedAt },
+    queryMode: 'read_only',
+    webAnalytics: normalizeSignal(value.webAnalytics, 'post_deploy_public_web_analytics_evidence_invalid'),
+    speedInsights: normalizeSignal(value.speedInsights, 'post_deploy_public_speed_insights_evidence_invalid'),
+    rawEventsRetained: false,
+    personalDataRetained: false,
+    credentialValuesExposed: false,
+    sourcePresenceUsedAsTelemetryEvidence: false,
+    providerMutations: 0,
+  }
+}
+
 function evidenceEnvelope(value, sourceDigest, normalizer, context, code) {
   if (value === null || value === undefined) {
     if (sourceDigest !== null && sourceDigest !== undefined) fail(`${code}_digest_without_evidence`)
@@ -431,6 +483,36 @@ async function probeLoader(fetchImpl, appOrigin) {
   }
 }
 
+async function probePublicLoader(fetchImpl, publicOrigin) {
+  const response = await getText(fetchImpl, new URL('/vercel-insights.js', publicOrigin), 'text/javascript, application/javascript')
+  const source = response.text
+  const analyticsBeforeSendIndex = source.indexOf("window.va('beforeSend'")
+  const speedBeforeSendIndex = source.indexOf("window.si('beforeSend'")
+  const analyticsScriptIndex = source.indexOf("'/_vercel/insights/script.js'")
+  const speedScriptIndex = source.indexOf("'/_vercel/speed-insights/script.js'")
+  return {
+    statusCode: response.statusCode,
+    javascript: /(?:javascript|ecmascript)/i.test(String(response.headers.get('content-type') || '')) && source.length > 0,
+    responseSafe: responseLooksPublicSafe(source),
+    exactProductionHosts: source.includes('["supermega.dev","www.supermega.dev"]')
+      && source.includes("location.protocol !== 'https:'")
+      && source.includes('!hosts.includes(location.hostname)'),
+    canonicalPathAllowlist: source.includes('["/","/shop/","/plant/","/website/","/ecommerce/","/contact/","/privacy/"]')
+      && source.includes('!paths.has(url.pathname)'),
+    analyticsQueue: source.includes('window.va = window.va || function ()') && source.includes('window.vaq'),
+    speedInsightsQueue: source.includes('window.si = window.si || function ()') && source.includes('window.siq'),
+    analyticsBeforeSendFirst: analyticsBeforeSendIndex !== -1 && analyticsScriptIndex !== -1 && analyticsBeforeSendIndex < analyticsScriptIndex,
+    speedInsightsBeforeSendFirst: speedBeforeSendIndex !== -1 && speedScriptIndex !== -1 && speedBeforeSendIndex < speedScriptIndex,
+    pageviewsOnly: source.includes("safeEvent(event, 'pageview')") && source.includes('event.type !== expectedType'),
+    coreWebVitalsOnly: source.includes("safeEvent(event, 'vital')") && source.includes("expectedType === 'vital'"),
+    queryAndHashStripped: source.includes('url.origin + url.pathname') && !source.includes('url.search') && !source.includes('url.hash'),
+    webAnalyticsBootstrap: analyticsScriptIndex !== -1,
+    speedInsightsBootstrap: speedScriptIndex !== -1,
+    sameOriginOnly: !/https?:\/\//i.test(source),
+    sourcePresenceObservedTelemetry: false,
+  }
+}
+
 async function probeProviderScript(fetchImpl, origin, path, kind) {
   const response = await getText(fetchImpl, new URL(path, origin), 'text/javascript, application/javascript')
   const contentType = String(response.headers.get('content-type') || '')
@@ -458,6 +540,7 @@ export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, 
   const routes = []
   for (const [id, path] of PRODUCT_ROUTES) routes.push(await probeHtml(fetchImpl, appOrigin, id, path))
   const loader = await probeLoader(fetchImpl, appOrigin)
+  const publicLoader = await probePublicLoader(fetchImpl, publicOrigin)
   const providerRuntime = stage === 'production'
     ? {
         expected: true,
@@ -465,7 +548,14 @@ export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, 
         speedInsights: await probeProviderScript(fetchImpl, appOrigin, '/_vercel/speed-insights/script.js', 'speed-insights'),
       }
     : { expected: false, webAnalytics: null, speedInsights: null }
-  return { release, health, publicHome, routes, observability: { loader, providerRuntime } }
+  const publicProviderRuntime = stage === 'production'
+    ? {
+        expected: true,
+        webAnalytics: await probeProviderScript(fetchImpl, publicOrigin, '/_vercel/insights/script.js', 'web-analytics'),
+        speedInsights: await probeProviderScript(fetchImpl, publicOrigin, '/_vercel/speed-insights/script.js', 'speed-insights'),
+      }
+    : { expected: false, webAnalytics: null, speedInsights: null }
+  return { release, health, publicHome, routes, observability: { loader, publicLoader, providerRuntime, publicProviderRuntime } }
 }
 
 function normalizeReleaseProbe(value, code) {
@@ -532,7 +622,7 @@ function normalizeProbes(value, stage) {
   exactKeys(value.release, ['public', 'app'], 'post_deploy_release_probes_invalid')
   exactKeys(value.health, ['public', 'app'], 'post_deploy_health_probes_invalid')
   if (!Array.isArray(value.routes) || value.routes.length !== PRODUCT_ROUTES.length) fail('post_deploy_route_probes_invalid')
-  exactKeys(value.observability, ['loader', 'providerRuntime'], 'post_deploy_observability_probes_invalid')
+  exactKeys(value.observability, ['loader', 'publicLoader', 'providerRuntime', 'publicProviderRuntime'], 'post_deploy_observability_probes_invalid')
   const loader = value.observability.loader
   exactKeys(loader, [
     'statusCode', 'javascript', 'responseSafe', 'productionHostGuard', 'analyticsQueue',
@@ -543,10 +633,18 @@ function normalizeProbes(value, stage) {
     ...Object.fromEntries(Object.entries(loader).filter(([key]) => key !== 'statusCode')
       .map(([key, item]) => [key, exactBoolean(item, `post_deploy_loader_${key}_invalid`)])),
   }
-  const providerRuntime = value.observability.providerRuntime
-  exactKeys(providerRuntime, ['expected', 'webAnalytics', 'speedInsights'], 'post_deploy_provider_runtime_invalid')
-  const expected = exactBoolean(providerRuntime.expected, 'post_deploy_provider_runtime_expected_invalid')
-  if (expected !== (stage === 'production')) fail('post_deploy_provider_runtime_stage_mismatch')
+  const publicLoader = value.observability.publicLoader
+  exactKeys(publicLoader, [
+    'statusCode', 'javascript', 'responseSafe', 'exactProductionHosts', 'canonicalPathAllowlist',
+    'analyticsQueue', 'speedInsightsQueue', 'analyticsBeforeSendFirst', 'speedInsightsBeforeSendFirst',
+    'pageviewsOnly', 'coreWebVitalsOnly', 'queryAndHashStripped', 'webAnalyticsBootstrap',
+    'speedInsightsBootstrap', 'sameOriginOnly', 'sourcePresenceObservedTelemetry',
+  ], 'post_deploy_public_loader_probe_invalid')
+  const normalizedPublicLoader = {
+    statusCode: nullableStatusCode(publicLoader.statusCode, 'post_deploy_public_loader_status_invalid'),
+    ...Object.fromEntries(Object.entries(publicLoader).filter(([key]) => key !== 'statusCode')
+      .map(([key, item]) => [key, exactBoolean(item, `post_deploy_public_loader_${key}_invalid`)])),
+  }
   const normalizeProvider = (item, code) => {
     if (item === null) return null
     exactKeys(item, ['statusCode', 'javascript', 'signature'], code)
@@ -555,6 +653,23 @@ function normalizeProbes(value, stage) {
       javascript: exactBoolean(item.javascript, `${code}_javascript`),
       signature: exactBoolean(item.signature, `${code}_signature`),
     }
+  }
+  const normalizeProviderRuntime = (providerRuntime, surface) => {
+    exactKeys(providerRuntime, ['expected', 'webAnalytics', 'speedInsights'], `post_deploy_${surface}_provider_runtime_invalid`)
+    const expected = exactBoolean(providerRuntime.expected, `post_deploy_${surface}_provider_runtime_expected_invalid`)
+    if (expected !== (stage === 'production')) fail(`post_deploy_${surface}_provider_runtime_stage_mismatch`)
+    const normalized = {
+      expected,
+      webAnalytics: normalizeProvider(providerRuntime.webAnalytics, `post_deploy_${surface}_web_analytics_runtime_invalid`),
+      speedInsights: normalizeProvider(providerRuntime.speedInsights, `post_deploy_${surface}_speed_insights_runtime_invalid`),
+    }
+    if (stage === 'preview' && (normalized.webAnalytics !== null || normalized.speedInsights !== null)) {
+      fail(`post_deploy_${surface}_preview_provider_runtime_unexpected`)
+    }
+    if (stage === 'production' && (!normalized.webAnalytics || !normalized.speedInsights)) {
+      fail(`post_deploy_${surface}_production_provider_runtime_missing`)
+    }
+    return normalized
   }
   const normalized = {
     release: {
@@ -569,17 +684,11 @@ function normalizeProbes(value, stage) {
     routes: PRODUCT_ROUTES.map(([id, path], index) => normalizeHtmlProbe(value.routes[index], id, path, `post_deploy_${id}_route_probe_invalid`)),
     observability: {
       loader: normalizedLoader,
-      providerRuntime: {
-        expected,
-        webAnalytics: normalizeProvider(providerRuntime.webAnalytics, 'post_deploy_web_analytics_runtime_invalid'),
-        speedInsights: normalizeProvider(providerRuntime.speedInsights, 'post_deploy_speed_insights_runtime_invalid'),
-      },
+      publicLoader: normalizedPublicLoader,
+      providerRuntime: normalizeProviderRuntime(value.observability.providerRuntime, 'app'),
+      publicProviderRuntime: normalizeProviderRuntime(value.observability.publicProviderRuntime, 'public'),
     },
   }
-  if (stage === 'preview' && (normalized.observability.providerRuntime.webAnalytics !== null
-    || normalized.observability.providerRuntime.speedInsights !== null)) fail('post_deploy_preview_provider_runtime_unexpected')
-  if (stage === 'production' && (!normalized.observability.providerRuntime.webAnalytics
-    || !normalized.observability.providerRuntime.speedInsights)) fail('post_deploy_production_provider_runtime_missing')
   return normalized
 }
 
@@ -592,7 +701,7 @@ function evidenceFresh(timestamp, generatedAt) {
   return age >= -60_000 && age <= MAX_EVIDENCE_AGE_MS
 }
 
-function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
+function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope, publicObservabilityEnvelope) {
   const releaseBlockers = []
   const expectedRelease = [
     ['public', probes.release.public, 'supermega-public-site'],
@@ -622,9 +731,10 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
     || appHealth.secretValuesExposed !== false) healthBlockers.push('app_health_isolated_demo_contract_mismatch')
 
   const routeBlockers = []
-  if (probes.publicHome.statusCode !== 200 || !probes.publicHome.html || !probes.publicHome.responseSafe) routeBlockers.push('public_home_invalid')
+  if (probes.publicHome.statusCode !== 200 || !probes.publicHome.html || !probes.publicHome.observabilityBootstrap
+    || !probes.publicHome.responseSafe) routeBlockers.push('public_home_invalid')
   const requiredPublicHeaders = [
-    'contentSecurityPolicyPresent', 'frameAncestorsNone', 'sensitiveCapabilitiesDenied',
+    'contentSecurityPolicyPresent', 'scriptSelfOnly', 'frameAncestorsNone', 'sensitiveCapabilitiesDenied',
     'referrerNoReferrer', 'noSniff', 'frameDenied',
   ]
   if (requiredPublicHeaders.some((key) => probes.publicHome.headers[key] !== true)) {
@@ -638,26 +748,54 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
   }
 
   const loader = probes.observability.loader
-  const webAnalyticsBlockers = []
+  const appWebAnalyticsDeliveryBlockers = []
   if (loader.statusCode !== 200 || !loader.javascript || !loader.responseSafe || !loader.productionHostGuard
     || !loader.analyticsQueue || !loader.webAnalyticsBootstrap || !loader.sameOriginOnly) {
-    webAnalyticsBlockers.push('web_analytics_bootstrap_invalid')
+    appWebAnalyticsDeliveryBlockers.push('app_web_analytics_bootstrap_invalid')
   }
   if (context.stage === 'production') {
     const runtime = probes.observability.providerRuntime.webAnalytics
     if (runtime?.statusCode !== 200 || runtime.javascript !== true || runtime.signature !== true) {
-      webAnalyticsBlockers.push('web_analytics_runtime_not_observed')
+      appWebAnalyticsDeliveryBlockers.push('app_web_analytics_provider_script_unavailable')
     }
   }
-  const speedInsightsBlockers = []
+  const appSpeedInsightsDeliveryBlockers = []
   if (loader.statusCode !== 200 || !loader.javascript || !loader.responseSafe || !loader.productionHostGuard
     || !loader.speedInsightsQueue || !loader.speedInsightsBootstrap || !loader.sameOriginOnly) {
-    speedInsightsBlockers.push('speed_insights_bootstrap_invalid')
+    appSpeedInsightsDeliveryBlockers.push('app_speed_insights_bootstrap_invalid')
   }
   if (context.stage === 'production') {
     const runtime = probes.observability.providerRuntime.speedInsights
     if (runtime?.statusCode !== 200 || runtime.javascript !== true || runtime.signature !== true) {
-      speedInsightsBlockers.push('speed_insights_runtime_not_observed')
+      appSpeedInsightsDeliveryBlockers.push('app_speed_insights_provider_script_unavailable')
+    }
+  }
+
+  const publicLoader = probes.observability.publicLoader
+  const publicWebAnalyticsDeliveryBlockers = []
+  if (publicLoader.statusCode !== 200 || !publicLoader.javascript || !publicLoader.responseSafe
+    || !publicLoader.exactProductionHosts || !publicLoader.canonicalPathAllowlist
+    || !publicLoader.analyticsQueue || !publicLoader.analyticsBeforeSendFirst || !publicLoader.pageviewsOnly
+    || !publicLoader.queryAndHashStripped || !publicLoader.webAnalyticsBootstrap || !publicLoader.sameOriginOnly
+    || publicLoader.sourcePresenceObservedTelemetry !== false) {
+    publicWebAnalyticsDeliveryBlockers.push('public_web_analytics_source_contract_invalid')
+  }
+  const publicSpeedInsightsDeliveryBlockers = []
+  if (publicLoader.statusCode !== 200 || !publicLoader.javascript || !publicLoader.responseSafe
+    || !publicLoader.exactProductionHosts || !publicLoader.canonicalPathAllowlist
+    || !publicLoader.speedInsightsQueue || !publicLoader.speedInsightsBeforeSendFirst || !publicLoader.coreWebVitalsOnly
+    || !publicLoader.queryAndHashStripped || !publicLoader.speedInsightsBootstrap || !publicLoader.sameOriginOnly
+    || publicLoader.sourcePresenceObservedTelemetry !== false) {
+    publicSpeedInsightsDeliveryBlockers.push('public_speed_insights_source_contract_invalid')
+  }
+  if (context.stage === 'production') {
+    const analyticsRuntime = probes.observability.publicProviderRuntime.webAnalytics
+    if (analyticsRuntime?.statusCode !== 200 || analyticsRuntime.javascript !== true || analyticsRuntime.signature !== true) {
+      publicWebAnalyticsDeliveryBlockers.push('public_web_analytics_provider_script_unavailable')
+    }
+    const speedRuntime = probes.observability.publicProviderRuntime.speedInsights
+    if (speedRuntime?.statusCode !== 200 || speedRuntime.javascript !== true || speedRuntime.signature !== true) {
+      publicSpeedInsightsDeliveryBlockers.push('public_speed_insights_provider_script_unavailable')
     }
   }
 
@@ -689,11 +827,32 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope) {
     gate('paired_release_identity', releaseBlockers),
     gate('truthful_isolated_demo_health', healthBlockers),
     gate('four_route_security_headers', routeBlockers),
-    gate('web_analytics_visibility', webAnalyticsBlockers),
-    gate('speed_insights_visibility', speedInsightsBlockers),
+    gate('app_web_analytics_delivery_ready', appWebAnalyticsDeliveryBlockers),
+    gate('app_speed_insights_delivery_ready', appSpeedInsightsDeliveryBlockers),
+    gate('public_web_analytics_delivery_ready', publicWebAnalyticsDeliveryBlockers),
+    gate('public_speed_insights_delivery_ready', publicSpeedInsightsDeliveryBlockers),
     gate('runtime_error_scan', runtimeLogBlockers),
     gate('paired_rollback_readiness', rollbackBlockers),
   ]
+  if (context.stage === 'production') {
+    const publicWebAnalyticsVisibilityBlockers = []
+    const publicSpeedInsightsVisibilityBlockers = []
+    if (!publicObservabilityEnvelope) {
+      publicWebAnalyticsVisibilityBlockers.push('public_observability_visibility_receipt_missing')
+      publicSpeedInsightsVisibilityBlockers.push('public_observability_visibility_receipt_missing')
+    } else {
+      const visibility = publicObservabilityEnvelope.receipt
+      if (!evidenceFresh(visibility.capturedAt, context.generatedAt)
+        || !evidenceFresh(visibility.window.endedAt, context.generatedAt)) {
+        publicWebAnalyticsVisibilityBlockers.push('public_observability_visibility_receipt_stale')
+        publicSpeedInsightsVisibilityBlockers.push('public_observability_visibility_receipt_stale')
+      }
+      if (visibility.webAnalytics.status !== 'observed') publicWebAnalyticsVisibilityBlockers.push('public_web_analytics_not_observed')
+      if (visibility.speedInsights.status !== 'observed') publicSpeedInsightsVisibilityBlockers.push('public_speed_insights_not_observed')
+    }
+    gates.push(gate('public_web_analytics_provider_visibility', publicWebAnalyticsVisibilityBlockers))
+    gates.push(gate('public_speed_insights_provider_visibility', publicSpeedInsightsVisibilityBlockers))
+  }
   const blockers = [...new Set(gates.flatMap((item) => item.blockers))]
   return {
     status: blockers.length ? 'blocked' : 'pass',
@@ -730,12 +889,21 @@ export function buildPostDeployOperationsReceipt({
   runtimeLogSourceDigest = null,
   rollbackEvidence = null,
   rollbackSourceDigest = null,
+  publicObservabilityVisibilityEvidence = null,
+  publicObservabilityVisibilitySourceDigest = null,
 }) {
   const context = normalizeContext({ generatedAt, stage, expectedCommit, publicOrigin, appOrigin })
   const normalizedProbes = normalizeProbes(probes, context.stage)
   const runtimeLogs = evidenceEnvelope(runtimeLogEvidence, runtimeLogSourceDigest, normalizeRuntimeLogEvidence, context, 'post_deploy_runtime_logs')
   const rollback = evidenceEnvelope(rollbackEvidence, rollbackSourceDigest, normalizeRollbackEvidence, context, 'post_deploy_rollback')
-  const operations = deriveOperations(context, normalizedProbes, runtimeLogs, rollback)
+  const publicObservability = evidenceEnvelope(
+    publicObservabilityVisibilityEvidence,
+    publicObservabilityVisibilitySourceDigest,
+    normalizePublicObservabilityVisibilityEvidence,
+    context,
+    'post_deploy_public_observability',
+  )
+  const operations = deriveOperations(context, normalizedProbes, runtimeLogs, rollback, publicObservability)
   const body = {
     contract: POST_DEPLOY_OPERATIONS_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -745,7 +913,7 @@ export function buildPostDeployOperationsReceipt({
     expectedCommit: context.expectedCommit,
     deploymentOrigins: { public: context.publicOrigin, app: context.appOrigin },
     probes: normalizedProbes,
-    evidence: { runtimeLogs, rollback },
+    evidence: { runtimeLogs, rollback, publicObservability },
     operations,
     externalReleaseGates: externalReleaseGates(),
     releaseAuthorized: false,
@@ -796,7 +964,7 @@ export function validatePostDeployOperationsReceipt(packet) {
   })
   exactKeys(packet.deploymentOrigins, ['public', 'app'], 'post_deploy_receipt_origins_shape_invalid')
   const probes = normalizeProbes(packet.probes, context.stage)
-  exactKeys(packet.evidence, ['runtimeLogs', 'rollback'], 'post_deploy_receipt_evidence_shape_invalid')
+  exactKeys(packet.evidence, ['runtimeLogs', 'rollback', 'publicObservability'], 'post_deploy_receipt_evidence_shape_invalid')
   const normalizeStoredEnvelope = (value, normalizer, code) => {
     if (value === null) return null
     exactKeys(value, ['sourceDigest', 'receipt'], `${code}_shape_invalid`)
@@ -807,7 +975,12 @@ export function validatePostDeployOperationsReceipt(packet) {
   }
   const runtimeLogs = normalizeStoredEnvelope(packet.evidence.runtimeLogs, normalizeRuntimeLogEvidence, 'post_deploy_stored_runtime_logs')
   const rollback = normalizeStoredEnvelope(packet.evidence.rollback, normalizeRollbackEvidence, 'post_deploy_stored_rollback')
-  const operations = deriveOperations(context, probes, runtimeLogs, rollback)
+  const publicObservability = normalizeStoredEnvelope(
+    packet.evidence.publicObservability,
+    normalizePublicObservabilityVisibilityEvidence,
+    'post_deploy_stored_public_observability',
+  )
+  const operations = deriveOperations(context, probes, runtimeLogs, rollback, publicObservability)
   if (JSON.stringify(packet.operations) !== JSON.stringify(operations)) fail('post_deploy_operations_derived_state_mismatch')
   const external = externalReleaseGates()
   if (JSON.stringify(packet.externalReleaseGates) !== JSON.stringify(external)) fail('post_deploy_external_gates_mismatch')
@@ -859,6 +1032,7 @@ function parseArgs(argv) {
     appOrigin: null,
     runtimeLogReceipt: null,
     rollbackReceipt: null,
+    publicObservabilityVisibilityReceipt: null,
     outputPath: null,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -870,6 +1044,7 @@ function parseArgs(argv) {
     else if (arg === '--app-origin') options.appOrigin = argv[++index] || null
     else if (arg === '--runtime-log-receipt') options.runtimeLogReceipt = argv[++index] || null
     else if (arg === '--rollback-receipt') options.rollbackReceipt = argv[++index] || null
+    else if (arg === '--public-observability-visibility-receipt') options.publicObservabilityVisibilityReceipt = argv[++index] || null
     else if (arg === '--output') options.outputPath = argv[++index] || null
     else fail(`post_deploy_usage_invalid:${arg}`)
   }
@@ -909,6 +1084,7 @@ async function main() {
   })
   const runtime = await readEvidence(options.runtimeLogReceipt, 'post_deploy_runtime_log_receipt')
   const rollback = await readEvidence(options.rollbackReceipt, 'post_deploy_rollback_receipt')
+  const publicObservability = await readEvidence(options.publicObservabilityVisibilityReceipt, 'post_deploy_public_observability_visibility_receipt')
   const probes = await collectPostDeployProbes({
     stage: context.stage,
     publicOrigin: context.publicOrigin,
@@ -921,6 +1097,8 @@ async function main() {
     runtimeLogSourceDigest: runtime.sourceDigest,
     rollbackEvidence: rollback.value,
     rollbackSourceDigest: rollback.sourceDigest,
+    publicObservabilityVisibilityEvidence: publicObservability.value,
+    publicObservabilityVisibilitySourceDigest: publicObservability.sourceDigest,
   })
   validatePostDeployOperationsReceipt(packet)
   const output = await writeExclusive(options.outputPath, `${JSON.stringify(packet, null, 2)}\n`)

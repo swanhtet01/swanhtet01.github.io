@@ -81,6 +81,7 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
+  'vercel-insights.js',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -107,6 +108,7 @@ const sharedRequired = [
   '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
   '<span class="brand-name">SUPERMEGA</span>',
   '<a class="button compact header-cta" href="https://app.supermega.dev/login">Company sign in</a>',
+  '<script src="/vercel-insights.js"></script>',
   'href="/privacy/">Privacy</a>',
   'Accountable company software.',
 ]
@@ -191,7 +193,7 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' ? 1 : 0
+  const expectedExecutable = route === '/contact/' ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
@@ -215,6 +217,26 @@ for (const [route, page] of pages) {
       || schema.description !== (pageEntry.description || landingProduct.description)) fail('product_schema_drift', { route, schema })
   }
 }
+const publicObservability = readStatic('vercel-insights.js')
+for (const token of [
+  '["supermega.dev","www.supermega.dev"]',
+  '["/","/shop/","/plant/","/website/","/ecommerce/","/contact/","/privacy/"]',
+  "window.va('beforeSend'",
+  "window.si('beforeSend'",
+  "event.type !== expectedType",
+  "url.origin !== location.origin",
+  "url.origin + url.pathname",
+  "'pageview'",
+  "'vital'",
+  "'/_vercel/insights/script.js'",
+  "'/_vercel/speed-insights/script.js'",
+]) {
+  if (!publicObservability.includes(token)) fail('public_observability_contract_missing', { token })
+}
+if (/https?:\/\//i.test(publicObservability)) fail('public_observability_not_same_origin')
+if (publicObservability.indexOf("window.va('beforeSend'") > publicObservability.indexOf("'/_vercel/insights/script.js'")) fail('public_analytics_before_send_order_invalid')
+if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.indexOf("'/_vercel/speed-insights/script.js'")) fail('public_speed_before_send_order_invalid')
+if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
@@ -417,6 +439,7 @@ for (const route of [
 ]) {
   if (!config.routes.some((entry) => entry.src === route[0] && entry.dest === route[1])) fail('public_api_route_missing', { route })
 }
+if (!config.routes.some((entry) => entry.src === '^/vercel-insights\\.js$' && entry.continue === true && entry.headers?.['cache-control'] === 'no-store, max-age=0')) fail('public_observability_no_store_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
 if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(.*)$' && entry.status === 404 && entry.dest === '/404.html')) fail('not_found_route_missing')

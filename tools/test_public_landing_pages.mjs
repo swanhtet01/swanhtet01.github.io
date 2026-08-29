@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
 
 import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 
@@ -9,6 +10,7 @@ const staticDir = resolve(root, '.vercel', 'output', 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 const config = JSON.parse(readFileSync(resolve(root, '.vercel', 'output', 'config.json'), 'utf8'))
 const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
+const publicObservabilitySource = readStatic('vercel-insights.js')
 
 let checks = 0
 function check(condition, label) {
@@ -79,6 +81,58 @@ for (const page of landingPages) {
 check(new Set(descriptions).size === descriptions.length, 'landing_descriptions_unique')
 const titles = manifest.pages.map((page) => page.title)
 check(new Set(titles).size === titles.length, 'page_titles_unique')
+
+// The generated public bootstrap is inert everywhere except the two exact
+// production hosts. Both provider queues receive their privacy boundary before
+// either same-origin provider script is appended.
+function executePublicObservability(hostname, protocol = 'https:') {
+  const appended = []
+  const window = {}
+  const location = { protocol, hostname, origin: `${protocol}//${hostname}` }
+  const document = {
+    createElement: (type) => ({ type, defer: false, src: '' }),
+    head: { append: (script) => appended.push(script) },
+  }
+  runInNewContext(publicObservabilitySource, { URL, Set, window, location, document })
+  return { appended, window }
+}
+
+for (const page of manifest.pages) {
+  const html = readStatic(page.file)
+  check((html.match(/<script src="\/vercel-insights\.js"><\/script>/g) || []).length === 1, `public_observability_bootstrap_once:${page.route}`)
+}
+const securityRoute = config.routes.find((route) => route.src === '^/(.*)$' && route.continue === true)
+check(securityRoute?.headers?.['content-security-policy']?.includes("script-src 'self'"), 'public_observability_csp_allows_same_origin_script_only')
+const observabilityCacheRoute = config.routes.find((route) => route.src === '^/vercel-insights\\.js$')
+check(observabilityCacheRoute?.continue === true && observabilityCacheRoute.headers?.['cache-control'] === 'no-store, max-age=0', 'public_observability_bootstrap_not_stale_cached')
+check(!/https?:\/\//i.test(publicObservabilitySource), 'public_observability_provider_scripts_same_origin')
+for (const forbidden of ['conversion', 'contact-form', 'customer', 'email', 'payment', 'proof_', "window.va('event'"]) {
+  check(!publicObservabilitySource.includes(forbidden), `public_observability_private_or_custom_field_absent:${forbidden}`)
+}
+
+for (const hostname of ['supermega.dev', 'www.supermega.dev']) {
+  const execution = executePublicObservability(hostname)
+  check(execution.appended.map((script) => script.src).join(',') === '/_vercel/insights/script.js,/_vercel/speed-insights/script.js', `public_observability_provider_order:${hostname}`)
+  check(execution.appended.every((script) => script.defer === true), `public_observability_provider_scripts_deferred:${hostname}`)
+  check(execution.window.vaq?.[0]?.[0] === 'beforeSend' && typeof execution.window.vaq[0][1] === 'function', `public_analytics_before_send_registered:${hostname}`)
+  check(execution.window.siq?.[0]?.[0] === 'beforeSend' && typeof execution.window.siq[0][1] === 'function', `public_speed_before_send_registered:${hostname}`)
+  const analyticsBeforeSend = execution.window.vaq[0][1]
+  const speedBeforeSend = execution.window.siq[0][1]
+  check(JSON.stringify(analyticsBeforeSend({ type: 'pageview', url: `https://${hostname}/shop/?campaign=private#fragment` })) === JSON.stringify({ type: 'pageview', url: `https://${hostname}/shop/` }), `public_analytics_strips_query_and_hash:${hostname}`)
+  check(analyticsBeforeSend({ type: 'event', url: `https://${hostname}/shop/` }) === null, `public_analytics_custom_event_rejected:${hostname}`)
+  check(analyticsBeforeSend({ type: 'pageview', url: `https://${hostname}/private/` }) === null, `public_analytics_unknown_path_rejected:${hostname}`)
+  check(analyticsBeforeSend({ type: 'pageview', url: 'https://example.test/shop/' }) === null, `public_analytics_cross_origin_rejected:${hostname}`)
+  check(JSON.stringify(speedBeforeSend({ type: 'vital', url: `https://${hostname}/contact/?email=private#fragment`, route: '/unsafe' })) === JSON.stringify({ type: 'vital', url: `https://${hostname}/contact/`, route: '/contact/' }), `public_speed_strips_query_hash_and_route:${hostname}`)
+  check(speedBeforeSend({ type: 'custom', url: `https://${hostname}/` }) === null, `public_speed_non_vital_rejected:${hostname}`)
+}
+for (const [hostname, protocol] of [['preview.vercel.app', 'https:'], ['supermega.dev', 'http:']]) {
+  const execution = executePublicObservability(hostname, protocol)
+  check(execution.appended.length === 0 && execution.window.vaq === undefined && execution.window.siq === undefined, `public_observability_non_production_inert:${protocol}//${hostname}`)
+}
+const privacy = readStatic('privacy/index.html')
+for (const token of ['Site measurement', 'seven public page paths', 'removes query strings and fragments', 'No custom or conversion event', 'Source code or a reachable script does not prove that provider telemetry was observed.']) {
+  check(privacy.includes(token), `public_observability_privacy_disclosure:${token}`)
+}
 
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')

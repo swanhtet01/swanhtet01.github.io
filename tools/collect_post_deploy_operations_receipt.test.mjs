@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   POST_DEPLOY_OPERATIONS_CONTRACT,
+  PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT,
   ROLLBACK_EVIDENCE_CONTRACT,
   RUNTIME_LOG_EVIDENCE_CONTRACT,
   buildPostDeployOperationsReceipt,
@@ -24,6 +25,7 @@ const productionOrigins = {
 const sourceDigests = {
   runtime: `sha256:${'1'.repeat(64)}`,
   rollback: `sha256:${'2'.repeat(64)}`,
+  publicObservability: `sha256:${'3'.repeat(64)}`,
 }
 
 const appHeaders = {
@@ -37,7 +39,7 @@ const appHeaders = {
 
 const publicHeaders = {
   'content-type': 'text/html; charset=utf-8',
-  'content-security-policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+  'content-security-policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'",
   'permissions-policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
@@ -53,6 +55,25 @@ const loaderSource = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) {
     document.head.append(script)
   }
 }`
+
+const publicLoaderSource = `(function () {
+  var hosts = ["supermega.dev","www.supermega.dev"]
+  var paths = new Set(["/","/shop/","/plant/","/website/","/ecommerce/","/contact/","/privacy/"])
+  if (location.protocol !== 'https:' || !hosts.includes(location.hostname)) return
+  function safeEvent(event, expectedType) {
+    if (!event || event.type !== expectedType || typeof event.url !== 'string') return null
+    var url = new URL(event.url, location.origin)
+    if (url.origin !== location.origin || !paths.has(url.pathname)) return null
+    var safe = { type: expectedType, url: url.origin + url.pathname }
+    if (expectedType === 'vital') safe.route = url.pathname
+    return safe
+  }
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  window.va('beforeSend', function (event) { return safeEvent(event, 'pageview') })
+  window.si('beforeSend', function (event) { return safeEvent(event, 'vital') })
+  for (var src of ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']) {}
+})()`
 
 function json(value, status = 200) {
   return new Response(JSON.stringify(value), {
@@ -117,6 +138,29 @@ function rollbackEvidence(overrides = {}) {
   }
 }
 
+function publicObservabilityEvidence(overrides = {}) {
+  return {
+    contract: PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT,
+    expectedCommit,
+    projectId: 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
+    environment: 'production',
+    capturedAt: '2026-08-28T11:58:00.000Z',
+    window: {
+      startedAt: '2026-08-28T11:35:00.000Z',
+      endedAt: '2026-08-28T11:55:00.000Z',
+    },
+    queryMode: 'read_only',
+    webAnalytics: { status: 'observed', dataPointCount: 1 },
+    speedInsights: { status: 'observed', dataPointCount: 1 },
+    rawEventsRetained: false,
+    personalDataRetained: false,
+    credentialValuesExposed: false,
+    sourcePresenceUsedAsTelemetryEvidence: false,
+    providerMutations: 0,
+    ...overrides,
+  }
+}
+
 function fixtureFetch(origins, options = {}) {
   const calls = []
   const state = { oversizedBodyCancelled: false }
@@ -146,7 +190,7 @@ function fixtureFetch(origins, options = {}) {
       return json(appHealth)
     }
     if (isPublic && url.pathname === '/') {
-      return html('<!doctype html><html><body>SuperMega</body></html>', options.publicHeadersMissing
+      return html('<!doctype html><html><body>SuperMega<script src="/vercel-insights.js"></script></body></html>', options.publicHeadersMissing
         ? { 'content-type': 'text/html' }
         : publicHeaders)
     }
@@ -176,17 +220,28 @@ function fixtureFetch(origins, options = {}) {
         : loaderSource
       return new Response(source, { status: 200, headers: { 'content-type': 'text/javascript' } })
     }
-    if (isApp && url.pathname === '/_vercel/insights/script.js') {
-      if (options.providerHtmlFallback) return html('<!doctype html><html><body><div id="root"></div></body></html>')
+    if (isPublic && url.pathname === '/vercel-insights.js') {
+      const source = options.publicLoaderInvalid
+        ? publicLoaderSource.replace("safeEvent(event, 'vital')", "safeEvent(event, 'custom')")
+        : publicLoaderSource
+      return new Response(source, { status: 200, headers: { 'content-type': 'text/javascript' } })
+    }
+    if (url.pathname === '/_vercel/insights/script.js') {
+      if (options.providerHtmlFallback || (isPublic && options.publicProviderHtmlFallback)) {
+        return html('<!doctype html><html><body><div id="root"></div></body></html>')
+      }
       return new Response("window.va=function(){};window.vaq=[];fetch('/_vercel/insights/view')", {
         status: 200,
         headers: { 'content-type': 'text/javascript' },
       })
     }
-    if (isApp && url.pathname === '/_vercel/speed-insights/script.js') {
-      if (options.providerHtmlFallback) return html('<!doctype html><html><body><div id="root"></div></body></html>')
-      return new Response(options.speedRuntimeMissing ? '' : "window.si=function(){};window.siq=[];const source='web-vitals'", {
-        status: options.speedRuntimeMissing ? 404 : 200,
+    if (url.pathname === '/_vercel/speed-insights/script.js') {
+      if (options.providerHtmlFallback || (isPublic && options.publicProviderHtmlFallback)) {
+        return html('<!doctype html><html><body><div id="root"></div></body></html>')
+      }
+      const missing = options.speedRuntimeMissing || (isPublic && options.publicSpeedRuntimeMissing)
+      return new Response(missing ? '' : "window.si=function(){};window.siq=[];const source='web-vitals'", {
+        status: missing ? 404 : 200,
         headers: { 'content-type': 'text/javascript' },
       })
     }
@@ -201,6 +256,7 @@ async function buildFixture({
   fetchOptions = {},
   runtime = runtimeEvidence(origins),
   rollback = rollbackEvidence(),
+  publicObservability = stage === 'production' ? publicObservabilityEvidence() : null,
 } = {}) {
   const fixture = fixtureFetch(origins, fetchOptions)
   const probes = await collectPostDeployProbes({
@@ -220,6 +276,8 @@ async function buildFixture({
     runtimeLogSourceDigest: runtime ? sourceDigests.runtime : null,
     rollbackEvidence: rollback,
     rollbackSourceDigest: rollback ? sourceDigests.rollback : null,
+    publicObservabilityVisibilityEvidence: publicObservability,
+    publicObservabilityVisibilitySourceDigest: publicObservability ? sourceDigests.publicObservability : null,
   })
   return { packet, ...fixture }
 }
@@ -231,7 +289,7 @@ test('builds a passing preview operations receipt using GET only while release a
   assert.equal(packet.operations.blockingCount, 0)
   assert.equal(packet.externalReleaseGates.status, 'blocked')
   assert.equal(packet.releaseAuthorized, false)
-  assert.equal(calls.length, 10)
+  assert.equal(calls.length, 11)
   assert.equal(calls.every(({ request }) => request.method === 'GET'
     && request.redirect === 'manual'
     && request.credentials === 'omit'
@@ -244,7 +302,8 @@ test('derives missing runtime and rollback evidence as blockers without weakenin
   const { packet } = await buildFixture({ runtime: null, rollback: null })
   assert.equal(packet.operations.status, 'blocked')
   assert.deepEqual(packet.operations.blockers, ['runtime_log_receipt_missing', 'rollback_receipt_missing'])
-  assert.equal(packet.operations.gates.slice(0, 5).every((gate) => gate.status === 'pass'), true)
+  assert.equal(packet.operations.gates.filter((gate) => !['runtime_error_scan', 'paired_rollback_readiness'].includes(gate.id))
+    .every((gate) => gate.status === 'pass'), true)
   validatePostDeployOperationsReceipt(packet)
 })
 
@@ -255,7 +314,7 @@ test('blocks release drift, missing public headers, denied camera access, and a 
   assert.ok(packet.operations.blockers.includes('app_release_commit_mismatch'))
   assert.ok(packet.operations.blockers.includes('public_home_security_headers_invalid'))
   assert.ok(packet.operations.blockers.includes('shop_security_headers_invalid'))
-  assert.ok(packet.operations.blockers.includes('speed_insights_bootstrap_invalid'))
+  assert.ok(packet.operations.blockers.includes('app_speed_insights_bootstrap_invalid'))
   assert.equal(packet.operations.status, 'blocked')
 })
 
@@ -300,9 +359,75 @@ test('production receipt additionally probes both live Vercel observability scri
     runtime: runtimeEvidence(productionOrigins),
   })
   assert.equal(packet.operations.status, 'pass')
-  assert.equal(calls.length, 12)
+  assert.equal(calls.length, 15)
   assert.ok(calls.some(({ url }) => url === `${productionOrigins.app}/_vercel/insights/script.js`))
   assert.ok(calls.some(({ url }) => url === `${productionOrigins.app}/_vercel/speed-insights/script.js`))
+  assert.ok(calls.some(({ url }) => url === `${productionOrigins.public}/_vercel/insights/script.js`))
+  assert.ok(calls.some(({ url }) => url === `${productionOrigins.public}/_vercel/speed-insights/script.js`))
+})
+
+test('production source delivery cannot self-assert provider-visible public telemetry', async () => {
+  const { packet } = await buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability: null,
+  })
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_delivery_ready').status, 'pass')
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_delivery_ready').status, 'pass')
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_provider_visibility').status, 'blocked')
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_provider_visibility').status, 'blocked')
+  assert.deepEqual(packet.operations.blockers.filter((blocker) => blocker === 'public_observability_visibility_receipt_missing'), [
+    'public_observability_visibility_receipt_missing',
+  ])
+})
+
+test('production provider visibility stays blocked until each read-only signal is observed', async () => {
+  const { packet } = await buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability: publicObservabilityEvidence({
+      webAnalytics: { status: 'observed', dataPointCount: 2 },
+      speedInsights: { status: 'not_observed', dataPointCount: 0 },
+    }),
+  })
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_provider_visibility').status, 'pass')
+  assert.deepEqual(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_provider_visibility').blockers, [
+    'public_speed_insights_not_observed',
+  ])
+  assert.equal(packet.evidence.publicObservability.receipt.sourcePresenceUsedAsTelemetryEvidence, false)
+})
+
+test('rejects visibility evidence that treats source presence as observed telemetry or is commit-mismatched', async () => {
+  await assert.rejects(() => buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability: publicObservabilityEvidence({ sourcePresenceUsedAsTelemetryEvidence: true }),
+  }), /post_deploy_public_observability_controls_invalid/)
+  await assert.rejects(() => buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability: publicObservabilityEvidence({ expectedCommit: 'c'.repeat(40) }),
+  }), /post_deploy_public_observability_commit_mismatch/)
+})
+
+test('blocks a stale provider-visibility receipt and an invalid public bootstrap independently', async () => {
+  const stale = await buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability: publicObservabilityEvidence({
+      window: { startedAt: '2026-08-28T07:30:00.000Z', endedAt: '2026-08-28T07:55:00.000Z' },
+    }),
+  })
+  assert.ok(stale.packet.operations.blockers.includes('public_observability_visibility_receipt_stale'))
+
+  const invalidSource = await buildFixture({ fetchOptions: { publicLoaderInvalid: true } })
+  assert.ok(invalidSource.packet.operations.blockers.includes('public_speed_insights_source_contract_invalid'))
+  assert.equal(invalidSource.packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_delivery_ready').status, 'pass')
 })
 
 test('production receipt blocks when the Speed Insights runtime endpoint is absent', async () => {
@@ -312,7 +437,8 @@ test('production receipt blocks when the Speed Insights runtime endpoint is abse
     runtime: runtimeEvidence(productionOrigins),
     fetchOptions: { speedRuntimeMissing: true },
   })
-  assert.ok(packet.operations.blockers.includes('speed_insights_runtime_not_observed'))
+  assert.ok(packet.operations.blockers.includes('app_speed_insights_provider_script_unavailable'))
+  assert.ok(packet.operations.blockers.includes('public_speed_insights_provider_script_unavailable'))
 })
 
 test('a 200 HTML app-shell fallback cannot satisfy either provider-script gate', async () => {
@@ -322,8 +448,10 @@ test('a 200 HTML app-shell fallback cannot satisfy either provider-script gate',
     runtime: runtimeEvidence(productionOrigins),
     fetchOptions: { providerHtmlFallback: true },
   })
-  assert.ok(packet.operations.blockers.includes('web_analytics_runtime_not_observed'))
-  assert.ok(packet.operations.blockers.includes('speed_insights_runtime_not_observed'))
+  assert.ok(packet.operations.blockers.includes('app_web_analytics_provider_script_unavailable'))
+  assert.ok(packet.operations.blockers.includes('app_speed_insights_provider_script_unavailable'))
+  assert.ok(packet.operations.blockers.includes('public_web_analytics_provider_script_unavailable'))
+  assert.ok(packet.operations.blockers.includes('public_speed_insights_provider_script_unavailable'))
   assert.equal(packet.probes.observability.providerRuntime.webAnalytics.javascript, false)
   assert.equal(packet.probes.observability.providerRuntime.speedInsights.javascript, false)
 })
@@ -331,8 +459,8 @@ test('a 200 HTML app-shell fallback cannot satisfy either provider-script gate',
 test('cancels an oversized chunked response as soon as the hard byte cap is exceeded', async () => {
   const { packet, state } = await buildFixture({ fetchOptions: { oversizedLoader: true } })
   assert.equal(state.oversizedBodyCancelled, true)
-  assert.ok(packet.operations.blockers.includes('web_analytics_bootstrap_invalid'))
-  assert.ok(packet.operations.blockers.includes('speed_insights_bootstrap_invalid'))
+  assert.ok(packet.operations.blockers.includes('app_web_analytics_bootstrap_invalid'))
+  assert.ok(packet.operations.blockers.includes('app_speed_insights_bootstrap_invalid'))
   assert.equal(packet.probes.observability.loader.javascript, false)
 })
 
