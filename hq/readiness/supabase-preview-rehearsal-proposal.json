@@ -238,12 +238,12 @@
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
-      "digest": "sha256:e07b1ee66a2a301feb82102e7dfd6be4b8def7b05cabb20dfef17d72aa110cf3"
+      "digest": "sha256:a8c39c626634e3c0ee47d80b5cfb3b0c43e67278f76f38a1fa5eb1d7d63ea8ab"
     },
     {
       "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:c0fcb2a6f9071a1aeacda73e62687566fff9e026d770d79348ba44cefabfc89e"
+  "digest": "sha256:3bb630b80f893c787b7448719ecb4ea4b9cb6fa7c6c0ebef5a16c2f19730ae9b"
 }
