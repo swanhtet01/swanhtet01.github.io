@@ -259,6 +259,32 @@ function check(condition, label) {
 }
 
 {
+  const order = sale({
+    id: 'FULL-DISCOUNT-MIX',
+    lines: [
+      { sku: 'SKU-ZERO-SALE', name: 'Fully discounted item', quantity: 1, unitPriceMmk: 1 },
+      { sku: 'SKU-PAID', name: 'Positive sold-value item', quantity: 1, unitPriceMmk: 2 },
+    ],
+    discountMmk: 2,
+  })
+  const current = withEvidence([order], [
+    costEvidence({ sku: 'SKU-ZERO-SALE', unitCostMmk: 4, id: 'ZERO-SALE' }),
+    costEvidence({ sku: 'SKU-PAID', unitCostMmk: 2, id: 'PAID' }),
+  ])
+  const before = JSON.stringify(current)
+  const first = projectShopCostCoverageAndMarginAtRisk(current)
+  const reloaded = projectShopCostCoverageAndMarginAtRisk(structuredClone(current))
+  const zeroSale = first.priorities[0]
+  check(first.costCoverage.soldValueMmk === 1 && first.profit.status === 'available', 'a mixed completed order retains its positive aggregate sold value after one line is fully discounted')
+  check(first.priorities.map((priority) => priority.sku).join(',') === 'SKU-ZERO-SALE,SKU-PAID', 'zero-sale cost exposure ranks ahead of an ordinary negative-rate row')
+  check(zeroSale.severity === 'critical' && zeroSale.marginBasisPoints === null, 'zero-sale cost exposure has a critical unavailable margin rate instead of a fabricated percentage')
+  check(zeroSale.marginMmk === -4 && zeroSale.exposureMmk === 4, 'zero-sale cost exposure preserves exact negative margin and risk amount')
+  check(first.priorities[1].marginBasisPoints === -10_000 && first.marginAtRiskMmk === 6, 'ordinary negative-rate math and total exposure remain exact')
+  check(JSON.stringify(first) === JSON.stringify(reloaded), 'mixed full-discount projection is deterministic across reload-equivalent retained state')
+  check(JSON.stringify(current) === before, 'mixed full-discount projection leaves retained Shop state unchanged')
+}
+
+{
   const projection = projectShopCostCoverageAndMarginAtRisk(withEvidence([sale()], [
     costEvidence({ unitCostMmk: 500, id: 'METHOD-A' }),
     costEvidence({ unitCostMmk: 600, id: 'METHOD-B' }),
@@ -319,6 +345,8 @@ for (const badOrder of [
   check(!source.includes('owner-observed'), 'UI does not infer owner observation from an absent sample marker')
   check(source.includes('useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])'), 'Today memoizes the projection by retained Commerce state')
   check(!coreSource.includes('projectShopCostCoverageAndMarginAtRisk'), 'non-Today Commerce renders do not derive the margin projection')
+  check((source.match(/Margin rate unavailable — no sold value/g) ?? []).length === 2, 'Today renders an explicit unavailable rate for zero-sale priorities in real and synthetic views')
+  check((source.match(/Critical cost with no sold value/g) ?? []).length === 2, 'Today names zero-sale cost exposure as critical without fabricating a percentage')
   check(source.includes('No payment, stock, supplier, accounting, customer, or hosted write runs from this panel.'), 'UI repeats the external-write boundary')
 }
 

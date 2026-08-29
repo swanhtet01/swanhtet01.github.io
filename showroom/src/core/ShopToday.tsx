@@ -137,13 +137,13 @@ export function ShopToday({ catalogReady, commerce, metrics, modules, nextAction
       {marginControl.priorities.length ? <div aria-label="Margin at risk priorities" className="shop-margin-priorities">
         {marginControl.priorities.map((priority) => <Link data-tone={priority.severity} key={priority.id} to={priority.target}>
           <div>
-            <span>{priority.severity === 'critical' ? 'Negative margin' : 'Below margin floor'}</span>
+            <span>{priority.marginBasisPoints === null ? 'Critical cost with no sold value' : priority.severity === 'critical' ? 'Negative margin' : 'Below margin floor'}</span>
             <strong>{priority.itemName}</strong>
             <small>{priority.ownerRole} · {priority.dueLabel}</small>
           </div>
           <div>
             <b>{formatMmk(priority.exposureMmk)} at risk</b>
-            <small>{formatShopMarginRate(priority.marginBasisPoints)} margin</small>
+            <small>{priority.marginBasisPoints === null ? 'Margin rate unavailable — no sold value' : `${formatShopMarginRate(priority.marginBasisPoints)} margin`}</small>
           </div>
           <p><strong>Next:</strong> {priority.actionLabel}. <strong>Closed when:</strong> {priority.closureCondition}</p>
         </Link>)}
@@ -187,9 +187,9 @@ export function ShopToday({ catalogReady, commerce, metrics, modules, nextAction
         </div>
         <div aria-label="Synthetic bakery priorities" className="shop-margin-summary">
           {bakeryDemo.result.projection.priorities.map((priority, index) => <article key={priority.id}>
-            <small>Priority {index + 1} · {priority.severity === 'critical' ? 'Negative margin' : 'Below margin floor'}</small>
+            <small>Priority {index + 1} · {priority.marginBasisPoints === null ? 'Critical cost with no sold value' : priority.severity === 'critical' ? 'Negative margin' : 'Below margin floor'}</small>
             <strong>{priority.itemName}</strong>
-            <span>{formatMmk(priority.marginMmk)} · {formatShopMarginRate(priority.marginBasisPoints)}</span>
+            <span>{formatMmk(priority.marginMmk)} · {priority.marginBasisPoints === null ? 'Margin rate unavailable — no sold value' : formatShopMarginRate(priority.marginBasisPoints)}</span>
             <span>{formatMmk(priority.exposureMmk)} at risk · {priority.ownerRole} · {priority.dueLabel}</span>
           </article>)}
           <article>

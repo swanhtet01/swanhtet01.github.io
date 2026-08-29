@@ -17,7 +17,7 @@ export type ShopMarginAtRiskPriority = {
   sku: string
   itemName: string
   severity: 'critical' | 'attention'
-  marginBasisPoints: number
+  marginBasisPoints: number | null
   marginMmk: number
   exposureMmk: number
   ownerRole: 'Shop owner'
@@ -159,7 +159,7 @@ function safeMultiply(left: number, right: number, label: string) {
 }
 
 function basisPoints(numerator: number, denominator: number) {
-  if (!denominator) return 0
+  if (!denominator) throw new Error('Basis-point denominator must be positive.')
   const scaled = BigInt(numerator) * 10_000n
   const divisor = BigInt(denominator)
   const quotient = scaled >= 0n ? scaled / divisor : -((-scaled + divisor - 1n) / divisor)
@@ -539,8 +539,8 @@ export function projectShopCostCoverageAndMarginAtRisk(
   const priorities: ShopMarginAtRiskPriority[] = profitAvailable
     ? [...marginGroups.entries()].flatMap(([sku, group]) => {
       const marginMmk = safeNumber(BigInt(group.saleValueMmk) - BigInt(group.costMmk), `${sku} margin`)
-      const rate = basisPoints(marginMmk, group.saleValueMmk)
-      if (rate >= marginFloorBasisPoints) return []
+      const rate = group.saleValueMmk === 0 ? null : basisPoints(marginMmk, group.saleValueMmk)
+      if (rate === null ? marginMmk >= 0 : rate >= marginFloorBasisPoints) return []
       const targetMarginMmk = ceilBasisPointAmount(group.saleValueMmk, marginFloorBasisPoints)
       const exposureMmk = safeNumber(BigInt(targetMarginMmk) - BigInt(marginMmk), `${sku} margin exposure`)
       return [{
@@ -559,7 +559,10 @@ export function projectShopCostCoverageAndMarginAtRisk(
       }]
     }).sort((left, right) => {
       const severity = (left.severity === 'critical' ? 0 : 1) - (right.severity === 'critical' ? 0 : 1)
-      return severity || left.marginBasisPoints - right.marginBasisPoints || right.exposureMmk - left.exposureMmk || left.sku.localeCompare(right.sku)
+      const rateAvailability = left.marginBasisPoints === null
+        ? right.marginBasisPoints === null ? 0 : -1
+        : right.marginBasisPoints === null ? 1 : left.marginBasisPoints - right.marginBasisPoints
+      return severity || rateAvailability || right.exposureMmk - left.exposureMmk || left.sku.localeCompare(right.sku)
     })
     : []
   const marginAtRiskMmk = profitAvailable
@@ -592,7 +595,7 @@ export function projectShopCostCoverageAndMarginAtRisk(
       method: 'single_reviewed_unit_cost_per_sku_fifo_by_receipt',
       soldValueMmk,
       coveredSoldValueMmk,
-      coverageBasisPoints: basisPoints(coveredSoldValueMmk, soldValueMmk),
+      coverageBasisPoints: soldValueMmk ? basisPoints(coveredSoldValueMmk, soldValueMmk) : 0,
       retainedNonSampleCompletedSaleCount: completed.length,
       countedLineCount,
       fullyCostedLineCount,
