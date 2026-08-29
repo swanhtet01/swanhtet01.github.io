@@ -12,6 +12,7 @@ import {
 const root = fileURLToPath(new URL('..', import.meta.url))
 const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8')
 const css = readFileSync(`${root}/showroom/src/core/core-app.css`, 'utf8')
+const firstUseSource = readFileSync(`${root}/showroom/src/core/shop-batch-profit-control-first-use.tsx`, 'utf8')
 const packageJson = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'))
 const panelStart = today.indexOf('export function ShopBatchProfitControlPanel')
 const start = today.indexOf('return <section aria-label={panelAriaLabel}', panelStart)
@@ -103,7 +104,7 @@ check(today.includes("const { loadShopBakeryBatchProfitDemo } = await import('./
 check(!today.includes("import { loadShopBakeryBatchProfitDemo } from './shop-bakery-demo-loader'"), 'Batch demo has no eager value import')
 check(today.includes("const [bakeryBatchDemo, setBakeryBatchDemo] = useState<ShopBakeryBatchDemoState>({ status: 'idle' })"), 'Batch demo begins inert')
 check(today.includes("if (attempt === bakeryBatchDemoAttempt.current) setBakeryBatchDemo({ status: 'ready', result })"), 'Batch demo ignores stale asynchronous completion')
-check(today.includes('<ShopBatchProfitControlPanel batchProfitControl={batchProfitControl} />'), 'current source-owned Batch view remains independently rendered and authoritative')
+check(today.includes('<ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />'), 'current or exactly revalidated local Batch view renders through the guarded authoritative panel')
 check(today.includes("{bakeryBatchDemo.status === 'ready' ? <ShopBatchProfitControlPanel"), 'synthetic projection renders only after exact loader success')
 check(today.includes('batchProfitControl={bakeryBatchDemo.result.projection}'), 'successful synthetic result is passed through the existing guarded projection panel')
 check(today.includes('panelId="shop-batch-profit-control-synthetic-demo"'), 'synthetic view uses a distinct DOM anchor')
@@ -111,6 +112,24 @@ check(today.includes('Synthetic local Batch calculation only — never baseline,
 check(today.includes('never replaces, merges with, or writes to your current Shop workspace'), 'synthetic Batch action visibly refuses workspace mutation')
 check(today.includes('The current Shop Batch panel above remains authoritative and unchanged.'), 'current Batch view remains visibly authoritative')
 check(today.includes('Batch demo binding check failed closed.'), 'binding failure exposes no synthetic projection')
+
+check(today.includes("await import('./shop-batch-profit-control-first-use')"), 'real local Batch workflow is loaded only after the explicit action')
+check(!today.includes("import { ShopBatchProfitControlFirstUse } from './shop-batch-profit-control-first-use'"), 'real local Batch workflow has no eager value import')
+check(today.includes('setLocalBatchProjection(null)\n    setBatchFirstUse({ status: \'loading\' })'), 'reopening the local workflow clears any prior projection before asynchronous validation')
+check(today.includes('Existing Batch records and the current Shop workspace are never overwritten.'), 'launcher states the no-overwrite boundary')
+check(today.includes('Not pilot, customer, commercial, or accounting proof.'), 'launcher permanently excludes commercial evidence claims')
+check(firstUseSource.includes("SHOP_BATCH_FIRST_USE_STORAGE_KEY = 'supermega.shop.batch-profit-control.local-workspace.v1'"), 'local Batch storage must be explicitly versioned')
+check(firstUseSource.includes('projectShopBatchProfitControl(structuredClone(input)'), 'local Batch workflow must project through the accepted engine')
+check(!firstUseSource.includes('estimatedBreakEvenSoldValueMmk:'), 'local Batch workflow must not implement a second decision-arithmetic projector')
+check(firstUseSource.includes('if (currentCommerceEvidence) for (const record of store.records) await validateCurrentCommerceSource(record, currentCommerceEvidence)'), 'every stored Batch source snapshot must be current before any projection or append')
+for (const forbidden of ['fetch(', 'XMLHttpRequest', 'indexedDB', 'saveCommerce', 'mutateCommerce', 'sessionStorage']) {
+  check(!firstUseSource.includes(forbidden), `local Batch workflow must not gain a network/workspace write primitive: ${forbidden}`)
+}
+for (const expected of [
+  '.shop-batch-first-use-form input[type="checkbox"] { width: 2.75rem; height: 2.75rem;',
+  'min-inline-size: 2.75rem; min-block-size: 2.75rem;',
+  '.shop-batch-first-use-lines, .shop-batch-first-use-items { grid-template-columns: 1fr; }',
+]) check(css.includes(expected), `local Batch workflow must retain its mobile/touch contract: ${expected}`)
 
 assert.equal(
   packageJson.scripts['shop:batch-profit-control:verify'],
@@ -136,6 +155,7 @@ const vite = await createServer({
 
 try {
   const { ShopBatchProfitControlPanel } = await vite.ssrLoadModule('/src/core/ShopToday.tsx')
+  const firstUse = await vite.ssrLoadModule('/src/core/shop-batch-profit-control-first-use.tsx')
   const allFalseAuthority = {
     paymentWrite: false,
     stockWrite: false,
@@ -203,6 +223,201 @@ try {
     'never counts as baseline, pilot, customer, or commercial proof',
   ]) check(syntheticMarkup.includes(expected), `verified synthetic Batch render must include: ${expected}`)
   check(!syntheticMarkup.includes('Batch projection blocked.'), 'exact synthetic projection must pass the guarded renderer')
+
+  const retainedCommerce = {
+    schema: 'supermega.commerce.workspace.v2',
+    items: [{ sku: 'BAK-BREAD', name: 'Daily Bread', onHand: 10, reorderAt: 2, price: 3_000 }],
+    movements: [],
+    closes: [],
+    orders: [{
+      id: 'ORDER-OWNER-001',
+      createdAt: '2026-08-30T01:00:00.000Z',
+      customer: 'PRIVATE CUSTOMER MUST NOT PERSIST',
+      channel: 'counter',
+      item: 'Daily Bread',
+      quantity: 2,
+      payment: 'cash',
+      paymentStatus: 'reconciled',
+      refundStatus: 'none',
+      paymentReconciledAt: '2026-08-30T02:00:00.000Z',
+      paymentReconciliationActionId: 'PAY-OWNER-001',
+      lines: [{ sku: 'BAK-BREAD', name: 'Daily Bread', quantity: 2, unitPriceMmk: 3_000 }],
+      completion: { actionId: 'COMPLETE-OWNER-001', capturedAt: '2026-08-30T02:05:00.000Z', actor: 'Shop owner', reason: 'Local counter close', evidenceReference: 'LOCAL-SALE-001' },
+      total: 6_000,
+      status: 'completed',
+    }],
+  }
+  const evidence = await firstUse.deriveShopBatchEligibleSaleLines(retainedCommerce)
+  assert.equal(evidence.lines.length, 1); checks += 1
+  assert.deepEqual(evidence.blocked, { incompleteEvidence: 0, invalidAdjustments: 0, missingLines: 0, sampleOrSynthetic: 0 }); checks += 1
+  const line = evidence.lines[0]
+  const draft = {
+    batchId: 'OWNER-BATCH-001',
+    businessDate: '2026-08-30',
+    selectedLineDigests: [line.selectionId],
+    itemInputs: {
+      'BAK-BREAD': { producedUnits: 2, leftoverUnits: 0, wastedUnits: 0, remakeUnits: 0, preorderUnits: 0, reviewedUnitCostEstimateMmk: 2_000, ownerReviewed: true },
+    },
+    packagingCostMmk: 200,
+    deliveryCostMmk: 0,
+    otherReviewedBatchCostMmk: 0,
+    otherReviewedBatchCostReason: 'none',
+    overheadOwnerReviewed: true,
+  }
+  class MemoryStorage {
+    value = null
+    getItem(key) { assert.equal(key, firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY); return this.value }
+    setItem(key, value) { assert.equal(key, firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY); this.value = value }
+  }
+  const storage = new MemoryStorage()
+  const commerceBeforeSave = structuredClone(retainedCommerce)
+  const saved = await firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, storage, '2026-08-30T03:00:00.000Z')
+  assert.equal(saved.recordCount, 1); checks += 1
+  assert.equal(saved.projection.batchIdentity.batchId, 'OWNER-BATCH-001'); checks += 1
+  assert.equal(saved.projection.truthBoundary.classification, 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof'); checks += 1
+  assert.equal(saved.projection.estimatePreview.batchContributionEstimateMmk, 1_800); checks += 1
+  check(Object.values(saved.projection.authority).every((value) => value === false), 'real local Batch projection must retain all-false authority')
+  check(!storage.value.includes('PRIVATE CUSTOMER MUST NOT PERSIST'), 'local Batch receipt must not persist customer identity')
+  assert.deepEqual(retainedCommerce, commerceBeforeSave); checks += 1
+  const loaded = await firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, storage)
+  assert.equal(loaded.recordCount, 1); checks += 1
+  assert.deepEqual(loaded.projection, saved.projection); checks += 1
+
+  const beforeRejectedSave = storage.value
+  await assert.rejects(
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, { ...draft, batchId: 'OWNER-BATCH-002' }, storage, '2026-08-30T03:05:00.000Z'),
+    /shop_batch_first_use_duplicate_line_reuse/,
+  ); checks += 1
+  assert.equal(storage.value, beforeRejectedSave); checks += 1
+
+  await assert.rejects(
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, { ...draft, batchId: 'OWNER-BATCH-003', itemInputs: {} }, new MemoryStorage(), '2026-08-30T03:05:00.000Z'),
+    /shop_batch_first_use_cost_coverage_incomplete/,
+  ); checks += 1
+
+  const staleCommerce = structuredClone(retainedCommerce)
+  staleCommerce.orders[0].lines[0].unitPriceMmk = 3_001
+  staleCommerce.orders[0].total = 6_002
+  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(staleCommerce, storage), /shop_batch_first_use_source_snapshot_stale/); checks += 1
+  const changedDuringSaveStorage = new MemoryStorage()
+  await assert.rejects(
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, changedDuringSaveStorage, '2026-08-30T03:00:00.000Z', () => staleCommerce),
+    /shop_batch_first_use_source_snapshot_stale/,
+  ); checks += 1
+  assert.equal(changedDuringSaveStorage.value, null); checks += 1
+
+  const adjustedCommerce = structuredClone(retainedCommerce)
+  adjustedCommerce.orders[0].returns = [{ actionId: 'RETURN-001', createdAt: '2026-08-30T02:06:00.000Z', actor: 'Shop owner', reason: 'Reviewed return', evidenceReference: 'RETURN-EVIDENCE-001', sku: 'BAK-BREAD', quantity: 1, disposition: 'restock' }]
+  const adjustedEvidence = await firstUse.deriveShopBatchEligibleSaleLines(adjustedCommerce)
+  assert.equal(adjustedEvidence.lines.length, 0); checks += 1
+  assert.equal(adjustedEvidence.blocked.invalidAdjustments, 1); checks += 1
+  await assert.rejects(
+    firstUse.saveShopBatchProfitControlLocalReview(adjustedCommerce, { ...draft, batchId: 'OWNER-BATCH-004' }, new MemoryStorage(), '2026-08-30T03:05:00.000Z'),
+    /shop_batch_first_use_sale_allocation_missing/,
+  ); checks += 1
+
+  const malformedPromotionCommerce = structuredClone(retainedCommerce)
+  malformedPromotionCommerce.orders[0].promotionDecision = {
+    schema: 'supermega.commerce.promotion-decision.v1',
+    status: 'approved',
+    code: 'OWNER-REVIEW',
+    policyRevision: 1,
+    policyActionId: 'PROMO-001',
+    discountBasisPoints: 100,
+    grossSubtotalMmk: 6_000,
+    discountMmk: 100,
+    netSubtotalMmk: 6_000,
+    reviewedAt: '2026-08-30T02:01:00.000Z',
+    reason: 'approved',
+  }
+  const malformedPromotionEvidence = await firstUse.deriveShopBatchEligibleSaleLines(malformedPromotionCommerce)
+  assert.equal(malformedPromotionEvidence.lines.length, 0); checks += 1
+  assert.equal(malformedPromotionEvidence.blocked.invalidAdjustments, 1); checks += 1
+
+  const mixedDiscountCommerce = structuredClone(retainedCommerce)
+  mixedDiscountCommerce.orders[0].lines = [
+    { sku: 'BAK-ZERO', name: 'Zero-value Bun', quantity: 1, unitPriceMmk: 1 },
+    { sku: 'BAK-ONE', name: 'Retained-value Loaf', quantity: 1, unitPriceMmk: 999 },
+  ]
+  mixedDiscountCommerce.orders[0].total = 1
+  mixedDiscountCommerce.orders[0].promotionDecision = {
+    schema: 'supermega.commerce.promotion-decision.v1',
+    status: 'approved',
+    code: 'OWNER-REVIEW',
+    policyRevision: 1,
+    policyActionId: 'PROMO-002',
+    discountBasisPoints: 9_990,
+    grossSubtotalMmk: 1_000,
+    discountMmk: 999,
+    netSubtotalMmk: 1,
+    reviewedAt: '2026-08-30T02:01:00.000Z',
+    reason: 'approved',
+  }
+  const mixedDiscountEvidence = await firstUse.deriveShopBatchEligibleSaleLines(mixedDiscountCommerce)
+  assert.deepEqual(mixedDiscountEvidence.lines.map((candidate) => candidate.netValueMmk).sort((left, right) => left - right), [0, 1]); checks += 1
+  const mixedDiscountProjection = await firstUse.saveShopBatchProfitControlLocalReview(mixedDiscountCommerce, {
+    ...draft,
+    batchId: 'OWNER-BATCH-DISCOUNT',
+    selectedLineDigests: mixedDiscountEvidence.lines.map((candidate) => candidate.selectionId),
+    itemInputs: {
+      'BAK-ZERO': { producedUnits: 1, leftoverUnits: 0, wastedUnits: 0, remakeUnits: 0, preorderUnits: 0, reviewedUnitCostEstimateMmk: 1, ownerReviewed: true },
+      'BAK-ONE': { producedUnits: 1, leftoverUnits: 0, wastedUnits: 0, remakeUnits: 0, preorderUnits: 0, reviewedUnitCostEstimateMmk: 1, ownerReviewed: true },
+    },
+    packagingCostMmk: 0,
+  }, new MemoryStorage(), '2026-08-30T03:05:00.000Z')
+  assert.equal(mixedDiscountProjection.projection.priorities[0].sku, 'BAK-ZERO'); checks += 1
+  assert.equal(mixedDiscountProjection.projection.priorities[0].contributionEstimateBasisPoints, null); checks += 1
+
+  const ambiguousCommerce = structuredClone(retainedCommerce)
+  ambiguousCommerce.orders.push(structuredClone(ambiguousCommerce.orders[0]))
+  await assert.rejects(firstUse.deriveShopBatchEligibleSaleLines(ambiguousCommerce), /shop_batch_first_use_sale_allocation_ambiguous/); checks += 1
+
+  const failedStorage = new MemoryStorage()
+  failedStorage.setItem = () => { throw new Error('quota') }
+  await assert.rejects(
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, failedStorage, '2026-08-30T03:00:00.000Z'),
+    /shop_batch_first_use_storage_write_failed/,
+  ); checks += 1
+  assert.equal(failedStorage.value, null); checks += 1
+
+  const secondCommerce = structuredClone(retainedCommerce)
+  secondCommerce.orders.push({
+    ...structuredClone(secondCommerce.orders[0]),
+    id: 'ORDER-OWNER-002',
+    paymentReconciliationActionId: 'PAY-OWNER-002',
+    completion: { ...structuredClone(secondCommerce.orders[0].completion), actionId: 'COMPLETE-OWNER-002', evidenceReference: 'LOCAL-SALE-002' },
+  })
+  const secondEvidence = await firstUse.deriveShopBatchEligibleSaleLines(secondCommerce)
+  const secondLine = secondEvidence.lines.find((candidate) => candidate.selectionId !== line.selectionId)
+  assert.ok(secondLine); checks += 1
+  const appended = await firstUse.saveShopBatchProfitControlLocalReview(secondCommerce, {
+    ...draft,
+    batchId: 'OWNER-BATCH-002',
+    selectedLineDigests: [secondLine.selectionId],
+  }, storage, '2026-08-30T03:10:00.000Z')
+  assert.equal(appended.recordCount, 2); checks += 1
+  assert.equal(appended.projection.evidenceStatus.crossBatchReuseAbsent, true); checks += 1
+
+  const stalePriorCommerce = structuredClone(secondCommerce)
+  stalePriorCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').lines[0].unitPriceMmk = 3_001
+  stalePriorCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').total = 6_002
+  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(stalePriorCommerce, storage), /shop_batch_first_use_source_snapshot_stale/); checks += 1
+
+  const sampleCommerce = structuredClone(retainedCommerce)
+  sampleCommerce.orders[0].completion.actionId = 'SETUP-SAMPLE-COMPLETE'
+  const sampleEvidence = await firstUse.deriveShopBatchEligibleSaleLines(sampleCommerce)
+  assert.equal(sampleEvidence.lines.length, 0); checks += 1
+  assert.equal(sampleEvidence.blocked.sampleOrSynthetic, 1); checks += 1
+
+  const incompleteCommerce = structuredClone(retainedCommerce)
+  delete incompleteCommerce.orders[0].paymentReconciledAt
+  const incompleteEvidence = await firstUse.deriveShopBatchEligibleSaleLines(incompleteCommerce)
+  assert.equal(incompleteEvidence.lines.length, 0); checks += 1
+  assert.equal(incompleteEvidence.blocked.incompleteEvidence, 1); checks += 1
+
+  const tamperedStorage = new MemoryStorage()
+  tamperedStorage.value = storage.value.replace('OWNER-BATCH-002', 'OWNER-BATCH-009')
+  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(secondCommerce, tamperedStorage)); checks += 1
 } finally {
   await vite.close()
 }

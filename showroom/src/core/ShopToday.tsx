@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { CommerceState } from './commerce-workspace'
 import type { ShopBakeryBatchDemoResult } from './shop-bakery-demo-loader'
@@ -47,6 +47,12 @@ type ShopBakeryBatchDemoState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; result: ShopBakeryBatchDemoResult }
+  | { status: 'error' }
+
+type ShopBatchFirstUseModuleState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; Component: typeof import('./shop-batch-profit-control-first-use')['ShopBatchProfitControlFirstUse'] }
   | { status: 'error' }
 
 const capabilityGroups = [
@@ -194,11 +200,19 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [bakeryDemo, setBakeryDemo] = useState<ShopBakeryDemoState>({ status: 'idle' })
   const [bakeryBatchDemo, setBakeryBatchDemo] = useState<ShopBakeryBatchDemoState>({ status: 'idle' })
+  const [batchFirstUse, setBatchFirstUse] = useState<ShopBatchFirstUseModuleState>({ status: 'idle' })
+  const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchProfitControlProjection | null>(null)
   const bakeryDemoAttempt = useRef(0)
   const bakeryBatchDemoAttempt = useRef(0)
+  const batchFirstUseAttempt = useRef(0)
   useEffect(() => () => {
     bakeryDemoAttempt.current += 1
     bakeryBatchDemoAttempt.current += 1
+    batchFirstUseAttempt.current += 1
+  }, [])
+
+  const acceptLocalBatchProjection = useCallback((projection: ShopBatchProfitControlProjection | null) => {
+    setLocalBatchProjection(projection)
   }, [])
 
   const openBakeryDemo = async () => {
@@ -224,6 +238,22 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       if (attempt === bakeryBatchDemoAttempt.current) setBakeryBatchDemo({ status: 'error' })
     }
   }
+
+  const openBatchFirstUse = async () => {
+    const attempt = ++batchFirstUseAttempt.current
+    setLocalBatchProjection(null)
+    setBatchFirstUse({ status: 'loading' })
+    try {
+      const { ShopBatchProfitControlFirstUse } = await import('./shop-batch-profit-control-first-use')
+      if (attempt === batchFirstUseAttempt.current) setBatchFirstUse({ status: 'ready', Component: ShopBatchProfitControlFirstUse })
+    } catch {
+      if (attempt === batchFirstUseAttempt.current) setBatchFirstUse({ status: 'error' })
+    }
+  }
+
+  const activeBatchProfitControl = batchProfitControl.state === 'no_batch' && localBatchProjection
+    ? localBatchProjection
+    : batchProfitControl
 
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
@@ -310,7 +340,24 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       <p className="panel-note">No payment, stock, supplier, accounting, customer, or hosted write runs from this panel.</p>
     </section>
 
-    <ShopBatchProfitControlPanel batchProfitControl={batchProfitControl} />
+    <section aria-label="Open local Batch Profit Control workflow" className="shop-margin-control shop-batch-first-use-launcher">
+      <header>
+        <div>
+          <span className="core-eyebrow">Real local Batch review</span>
+          <h3>Create one Batch estimate from current retained Shop sales</h3>
+          <p>Open an explicit local workflow to select eligible completed-sale lines, review production-cost estimates and disposition, and save a versioned immutable Batch receipt. Existing Batch records and the current Shop workspace are never overwritten.</p>
+          <button className="core-button" disabled={batchFirstUse.status === 'loading'} onClick={() => { void openBatchFirstUse() }} type="button">
+            {batchFirstUse.status === 'loading' ? 'Opening local Batch review…' : batchFirstUse.status === 'ready' ? 'Reload local Batch workflow' : 'Open local Batch review'}
+          </button>
+        </div>
+        <b>Owner-reviewed local estimate</b>
+      </header>
+      {batchFirstUse.status === 'error' ? <p className="shop-margin-gaps" role="alert">Local Batch workflow failed to load. No estimate was shown or saved and the Shop workspace stayed unchanged.</p> : null}
+      {batchFirstUse.status === 'ready' ? <batchFirstUse.Component commerce={commerce} onProjection={acceptLocalBatchProjection} /> : null}
+      <p className="panel-note">Not pilot, customer, commercial, or accounting proof. No payment, stock, supplier, customer, hosted, provider, model, or production write is authorized.</p>
+    </section>
+
+    <ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />
 
     <section aria-label="Synthetic bakery Batch Profit Control demo" className="shop-margin-control">
       <header>
