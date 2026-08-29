@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
@@ -14,7 +14,7 @@ import {
   resolveManagedProductRoute,
 } from './managed-product-access'
 import { currentManagedWorkspace } from './managed-workspace-selection'
-import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
+import type { SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
@@ -24,6 +24,10 @@ function signupProductSlug(product: SetupProductId) {
   if (product === 'commerce') return 'shop'
   if (product === 'production') return 'plant'
   return product
+}
+
+function clientSetupPath(product: SetupProductId) {
+  return `/settings/?product=${encodeURIComponent(signupProductSlug(product))}`
 }
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -659,16 +663,25 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 export function ProductHomePage() {
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
-  const productSetups = useMemo(() => {
-    if (managedPortal) return null
-    if (typeof window === 'undefined') return null
-    return {
-      commerce: readProductSetup(window.localStorage, 'commerce'),
-      production: readProductSetup(window.localStorage, 'production'),
-      website: readProductSetup(window.localStorage, 'website'),
-      ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
-    }
+  const [localProductSetups, setLocalProductSetups] = useState<Record<SetupProductId, { startedAt?: string; workspace: string } | null> | null>(null)
+  useEffect(() => {
+    let active = true
+    if (managedPortal || typeof window === 'undefined') return () => { active = false }
+    void import('./product-setup').then(({ readProductSetup }) => {
+      if (!active) return
+      setLocalProductSetups({
+        commerce: readProductSetup(window.localStorage, 'commerce'),
+        production: readProductSetup(window.localStorage, 'production'),
+        website: readProductSetup(window.localStorage, 'website'),
+        ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
+      })
+    }).catch(() => {
+      // A missing setup chunk must not invent first-run or saved-workspace state.
+      if (active) setLocalProductSetups(null)
+    })
+    return () => { active = false }
   }, [managedPortal])
+  const productSetups = managedPortal ? null : localProductSetups
   const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
   const nextSetupStep = (() => {
     if (!productSetups) return null
@@ -693,7 +706,7 @@ export function ProductHomePage() {
       {managedPortal && portalAccess.products.length === 0
         ? <PortalAccessPanel copy="No active product. Ask the owner to assign one." title="No products" />
         : null}
-      {!managedPortal && !anyStarted ? (
+      {!managedPortal && productSetups && !anyStarted ? (
         <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — one catalog and order flow connects the rest.</p>
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
