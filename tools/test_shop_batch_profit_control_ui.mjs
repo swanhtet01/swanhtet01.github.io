@@ -1,0 +1,103 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+import {
+  SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
+  SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
+  projectNoBatchProfitControl,
+} from '../showroom/src/core/shop-batch-profit-control.ts'
+
+const root = fileURLToPath(new URL('..', import.meta.url))
+const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8')
+const css = readFileSync(`${root}/showroom/src/core/core-app.css`, 'utf8')
+const packageJson = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'))
+const start = today.indexOf('<section aria-label="Shop Batch Profit Control"')
+const end = today.indexOf('<section aria-label="Synthetic bakery margin demo"', start)
+
+let checks = 0
+const check = (condition, message) => {
+  checks += 1
+  assert.ok(condition, message)
+}
+
+check(start >= 0 && end > start, 'Batch Profit Control must be a bounded Shop Today section')
+const section = today.slice(start, end)
+const noBatch = projectNoBatchProfitControl()
+
+assert.equal(noBatch.contract, SHOP_BATCH_PROFIT_CONTROL_CONTRACT); checks += 1
+assert.equal(noBatch.contractSourceSha256, SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256); checks += 1
+assert.equal(noBatch.state, 'no_batch'); checks += 1
+assert.equal(noBatch.estimatePreview, null); checks += 1
+assert.deepEqual(noBatch.priorities, []); checks += 1
+assert.deepEqual(noBatch.evidenceStatus.withheldReasonCodes, ['no_batch']); checks += 1
+check(Object.values(noBatch.authority).every((value) => value === false), 'No-batch authority must stay all false')
+
+check(today.includes('batchProfitControl = projectNoBatchProfitControl()'), 'Shop Today must default through the accepted no-batch projector')
+check(today.includes('batchProfitControl?: ShopBatchProfitControlView'), 'A future source-owned projection may be supplied without inventing UI state')
+check(today.includes('batchProfitControl.contract === SHOP_BATCH_PROFIT_CONTROL_CONTRACT'), 'UI must bind the exact projection contract')
+check(today.includes('batchProfitControl.contractSourceSha256 === SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256'), 'UI must bind the accepted R&D contract digest')
+check(today.includes('Object.values(batchProfitControl.authority).every((value) => value === false)'), 'UI must fail closed if any authority flag is true')
+check(section.includes('role="alert"') && section.includes('Batch projection blocked.'), 'Contract or authority mismatch must render a blocking alert')
+
+for (const [state, label] of Object.entries({
+  no_batch: 'No batch selected',
+  collecting_batch_evidence: 'Collecting evidence',
+  review_adjustments: 'Review adjustments',
+  batch_margin_at_risk: 'Margin at risk',
+  batch_controlled: 'Controlled',
+})) {
+  check(today.includes(`${state}: '${label}'`), `State ${state} must have exact owner-facing copy`)
+}
+
+for (const label of [
+  'Canonical revision lineage',
+  'Whole-line batch allocation',
+  'Production-cost estimate coverage',
+  'Retained completed sales',
+  'Packaging and delivery review',
+  'Adjustments and unit reconciliation',
+]) check(section.includes(label), `Evidence gate must be visible: ${label}`)
+
+for (const label of [
+  'Completed sold value',
+  'Total batch cost estimate',
+  'Batch contribution estimate',
+  'Estimated break-even sold value',
+  'Estimated margin at risk',
+  'Batch disposition',
+]) check(section.includes(label), `Batch output must use exact estimate-safe label: ${label}`)
+
+check(section.includes('batchProfitControl.truthBoundary.boundary'), 'The engine truth boundary must render verbatim')
+check(today.includes('Synthetic calculation only — never evidence'), 'Synthetic classification must remain permanent and explicit')
+check(today.includes('Retained local operating evidence — not pilot, customer, or commercial proof'), 'Local operating evidence must not become commercial proof')
+check(section.includes('Decision estimates withheld.'), 'No-batch state must withhold every decision estimate')
+check(section.includes('Unknown is never replaced with zero'), 'Incomplete break-even must not false-green to zero')
+check(section.includes('No ranking while decision evidence is incomplete'), 'Incomplete evidence must not expose priorities')
+check(section.includes('Rate unavailable — no sold value'), 'Zero-sale contribution rate must remain unavailable')
+check(section.includes('<strong>Next:</strong>') && section.includes('<strong>Closed when:</strong>'), 'Every rendered priority must retain action and objective closure')
+check(section.includes('payment, stock, supplier, accounting, customer, hosted, provider, model, or production action'), 'The complete no-write boundary must remain visible')
+
+for (const forbidden of ['<button', '<Link', 'onClick=', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest']) {
+  check(!section.includes(forbidden), `Batch projection surface must remain read-only: ${forbidden}`)
+}
+
+check(css.includes('.shop-batch-evidence { display: grid; grid-template-columns: repeat(3,minmax(0,1fr));'), 'Desktop evidence layout must use bounded columns')
+check(css.includes('.shop-batch-priorities { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));'), 'Desktop priorities must use bounded columns')
+check(css.includes('.shop-batch-evidence { grid-template-columns: 1fr; }'), 'Mobile evidence must stack to one column')
+check(css.includes('.shop-batch-priorities { grid-template-columns: 1fr; }'), 'Mobile priorities must stack to one column')
+check(css.includes('overflow-wrap: anywhere'), 'Long safe IDs and labels must not force horizontal overflow')
+
+assert.equal(
+  packageJson.scripts['shop:batch-profit-control:verify'],
+  'node tools/test_shop_batch_profit_control.mjs && node tools/test_shop_batch_profit_control_ui.mjs',
+)
+checks += 1
+
+console.log(JSON.stringify({
+  ok: true,
+  contract: 'supermega.shop.batch_profit_control.ui_contract.v1',
+  checks,
+  defaultState: noBatch.state,
+  authorityAllFalse: true,
+}))

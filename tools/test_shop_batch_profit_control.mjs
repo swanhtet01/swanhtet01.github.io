@@ -885,7 +885,7 @@ check(!/actual (?:accounting )?(?:cost|profit)|customer proof|commercial proof/i
 check((sourceText.match(/paymentWrite: false/g) ?? []).length >= 2 && (sourceText.match(/stockWrite: false/g) ?? []).length >= 2, 'source and output controls keep payment and stock writes false')
 
 const packageSource = await readFile('package.json', 'utf8')
-check(packageSource.includes('"shop:batch-profit-control:verify": "node tools/test_shop_batch_profit_control.mjs"'), 'package registers the focused Batch verifier')
+check(packageSource.includes('"shop:batch-profit-control:verify": "node tools/test_shop_batch_profit_control.mjs && node tools/test_shop_batch_profit_control_ui.mjs"'), 'package registers the focused Batch engine and UI verifiers in order')
 check(packageSource.includes('"postshop:profit-control:verify": "npm run shop:batch-profit-control:verify"'), 'the existing serial Profit Control gate invokes the Batch verifier')
 
 console.log(JSON.stringify({ contract: SHOP_BATCH_PROFIT_CONTROL_CONTRACT, checks, acceptedContractSha256: ACCEPTED_CONTRACT_SHA256, authority: 'local_read_only_no_external_write' }))

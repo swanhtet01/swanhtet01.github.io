@@ -50,7 +50,7 @@
     "shop:spa:membership:verify": "node tools/test_shop_spa_membership.mjs",
     "shop:next-action:verify": "node tools/test_shop_next_action.mjs",
     "shop:profit-control:verify": "node tools/test_shop_profit_control.mjs && node tools/test_shop_bakery_demo_loader.mjs",
-    "shop:batch-profit-control:verify": "node tools/test_shop_batch_profit_control.mjs",
+    "shop:batch-profit-control:verify": "node tools/test_shop_batch_profit_control.mjs && node tools/test_shop_batch_profit_control_ui.mjs",
     "postshop:profit-control:verify": "npm run shop:batch-profit-control:verify",
     "shop:bakery-demo:verify": "node tools/test_shop_bakery_demo_loader.mjs",
     "shop:packs:depth:verify": "node tools/test_shop_industry_pack_depth.mjs",
