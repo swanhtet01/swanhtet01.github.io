@@ -22,11 +22,15 @@ const bundle = await build({
 })
 
 const {
-  projectShopBatchProfitControl,
+  projectShopBatchProfitControl: projectShopBatchProfitControlWithSourceAnchor,
   projectNoBatchProfitControl,
   SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
   SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
+
+function projectShopBatchProfitControl(input, sourceOwnedWorkspaceSnapshotDigest = input.workspaceHistorySnapshot.snapshotDigest) {
+  return projectShopBatchProfitControlWithSourceAnchor(input, sourceOwnedWorkspaceSnapshotDigest)
+}
 
 const ACCEPTED_CONTRACT_SHA256 = 'd2968009e5eb18c44420e2fbbe6b40072e59b9bac0cda1e9ff531a4cae7b5910'
 const EXPECTED_DIGESTS = {
@@ -318,6 +322,29 @@ function buildFixture() {
     revisionReasonCode: 'initial',
     logicalStatus: 'closed',
   }
+  const workspaceHistorySnapshot = {
+    contract: 'supermega.shop.batch_profit_control.workspace_history_snapshot.v1',
+    capturedAt: dispositionCore.projectionAt,
+    projectionAt: dispositionCore.projectionAt,
+    candidateBatchId: dispositionCore.batchId,
+    candidateRevision: dispositionCore.revision,
+    scope: 'all_active_closed_voided_batch_lineages',
+    recordCount: 0,
+    records: [],
+    controls: {
+      sourceOwnedWorkspaceScan: true,
+      callerProvidedSubsetAccepted: false,
+      completeWorkspaceScan: true,
+      activeClosedVoidedIncluded: true,
+      privateIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    recordSetDigest: '',
+    snapshotDigest: '',
+  }
   const workspaceHistoryReceipt = {
     contract: 'supermega.shop.batch_profit_control.workspace_history_receipt.v1',
     generatedAt: dispositionCore.projectionAt,
@@ -325,10 +352,9 @@ function buildFixture() {
     candidateBatchId: dispositionCore.batchId,
     candidateRevision: dispositionCore.revision,
     scope: 'all_active_closed_voided_batch_lineages',
-    envelopeCount: 0,
-    saleAllocationLedgerCount: 0,
-    envelopes: [],
-    saleAllocationLedgers: [],
+    sourceWorkspaceRecordSetDigest: '',
+    sourceWorkspaceSnapshotDigest: '',
+    recordCount: 0,
     controls: {
       sourceDerived: true,
       completeWorkspaceScan: true,
@@ -351,6 +377,7 @@ function buildFixture() {
     overheadReceipt,
     retainedEvidenceReceipt,
     batchEnvelope,
+    workspaceHistorySnapshot,
     workspaceHistoryReceipt,
   })
 }
@@ -378,6 +405,42 @@ function rebuildRetainedBindings(input) {
   })
 }
 
+function resealWorkspaceHistory(input) {
+  const snapshot = input.workspaceHistorySnapshot
+  snapshot.capturedAt = input.dispositionCore.projectionAt
+  snapshot.projectionAt = input.dispositionCore.projectionAt
+  snapshot.candidateBatchId = input.dispositionCore.batchId
+  snapshot.candidateRevision = input.dispositionCore.revision
+  snapshot.recordCount = snapshot.records.length
+  snapshot.recordSetDigest = digest({
+    contract: 'supermega.shop.batch_profit_control.workspace_history_record_set.v1',
+    capturedAt: snapshot.capturedAt,
+    projectionAt: snapshot.projectionAt,
+    candidateBatchId: snapshot.candidateBatchId,
+    candidateRevision: snapshot.candidateRevision,
+    scope: snapshot.scope,
+    records: snapshot.records,
+  })
+  snapshot.snapshotDigest = digest(without(snapshot, 'snapshotDigest'))
+  input.workspaceHistoryReceipt.generatedAt = input.dispositionCore.projectionAt
+  input.workspaceHistoryReceipt.projectionAt = input.dispositionCore.projectionAt
+  input.workspaceHistoryReceipt.candidateBatchId = input.dispositionCore.batchId
+  input.workspaceHistoryReceipt.candidateRevision = input.dispositionCore.revision
+  input.workspaceHistoryReceipt.sourceWorkspaceRecordSetDigest = snapshot.recordSetDigest
+  input.workspaceHistoryReceipt.sourceWorkspaceSnapshotDigest = snapshot.snapshotDigest
+  input.workspaceHistoryReceipt.recordCount = snapshot.recordCount
+  input.workspaceHistoryReceipt.receiptDigest = digest(without(input.workspaceHistoryReceipt, 'receiptDigest'))
+}
+
+function resealHistoricalRecord(record) {
+  record.saleAllocationLedger.ledgerDigest = digest(without(record.saleAllocationLedger, 'ledgerDigest'))
+  record.retainedEvidenceReceipt.saleAllocationLedgerDigest = record.saleAllocationLedger.ledgerDigest
+  for (const binding of record.retainedEvidenceReceipt.saleLineBindings) binding.saleAllocationLedgerDigest = record.saleAllocationLedger.ledgerDigest
+  record.retainedEvidenceReceipt.receiptDigest = digest(without(record.retainedEvidenceReceipt, 'receiptDigest'))
+  record.envelope.retainedEvidenceReceiptDigest = record.retainedEvidenceReceipt.receiptDigest
+  record.envelope.envelopeDigest = digest(without(record.envelope, 'envelopeDigest'))
+}
+
 function reseal(input) {
   const dispositionDigest = digest(input.dispositionCore)
   const sourceDigest = digest(input.sourceRecordSet)
@@ -403,20 +466,17 @@ function reseal(input) {
   input.batchEnvelope.retainedEvidenceReceiptDigest = input.retainedEvidenceReceipt.receiptDigest
   input.batchEnvelope.ownerReviewedOverheadReceiptDigest = input.overheadReceipt.receiptDigest
   input.batchEnvelope.envelopeDigest = digest(without(input.batchEnvelope, 'envelopeDigest'))
-  input.workspaceHistoryReceipt.generatedAt = input.dispositionCore.projectionAt
-  input.workspaceHistoryReceipt.projectionAt = input.dispositionCore.projectionAt
-  input.workspaceHistoryReceipt.candidateBatchId = input.dispositionCore.batchId
-  input.workspaceHistoryReceipt.candidateRevision = input.dispositionCore.revision
-  input.workspaceHistoryReceipt.envelopeCount = input.workspaceHistoryReceipt.envelopes.length
-  input.workspaceHistoryReceipt.saleAllocationLedgerCount = input.workspaceHistoryReceipt.saleAllocationLedgers.length
-  input.workspaceHistoryReceipt.receiptDigest = digest(without(input.workspaceHistoryReceipt, 'receiptDigest'))
+  resealWorkspaceHistory(input)
   return input
 }
 
 function makeRevisionTwo(first) {
   const next = clone(first)
-  next.workspaceHistoryReceipt.envelopes = [clone(first.batchEnvelope)]
-  next.workspaceHistoryReceipt.saleAllocationLedgers = [clone(first.saleAllocationLedger)]
+  next.workspaceHistorySnapshot.records = [{
+    envelope: clone(first.batchEnvelope),
+    saleAllocationLedger: clone(first.saleAllocationLedger),
+    retainedEvidenceReceipt: clone(first.retainedEvidenceReceipt),
+  }]
   next.dispositionCore.revision = 2
   next.sourceRecordSet.revision = 2
   next.sourceRecordSet.overheadSource.revision = 2
@@ -508,15 +568,30 @@ function moveToLeapDay(input) {
   return reseal(next)
 }
 
+function moveCurrentProjection(input, projectionAt) {
+  const next = clone(input)
+  next.dispositionCore.projectionAt = projectionAt
+  next.sourceRecordSet.projectionAt = projectionAt
+  next.saleAllocationLedger.generatedAt = projectionAt
+  next.saleAllocationLedger.projectionAt = projectionAt
+  next.productionCostReceipt.generatedAt = projectionAt
+  next.productionCostReceipt.projectionAt = projectionAt
+  next.overheadReceipt.projectionAt = projectionAt
+  next.retainedEvidenceReceipt.generatedAt = projectionAt
+  next.retainedEvidenceReceipt.projectionAt = projectionAt
+  next.batchEnvelope.projectionAt = projectionAt
+  return reseal(next)
+}
+
 let checks = 0
 function check(condition, label) {
   checks += 1
   assert.ok(condition, label)
 }
 
-async function rejects(input, code, label) {
+async function rejects(input, code, label, sourceOwnedWorkspaceSnapshotDigest = input.workspaceHistorySnapshot.snapshotDigest) {
   checks += 1
-  await assert.rejects(() => projectShopBatchProfitControl(input), (error) => error instanceof Error && error.message === code, label)
+  await assert.rejects(() => projectShopBatchProfitControl(input, sourceOwnedWorkspaceSnapshotDigest), (error) => error instanceof Error && error.message === code, label)
 }
 
 check(SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256 === ACCEPTED_CONTRACT_SHA256, 'implementation binds the exact accepted R&D contract digest')
@@ -553,6 +628,13 @@ check(projection.evidenceStatus.retainedSalesEvidenceComplete === false, 'synthe
 check(projection.truthBoundary.costLabel === 'Owner-reviewed production-cost estimate' && /never actual accounting cost/i.test(projection.truthBoundary.boundary), 'reviewed-estimate wording is permanent')
 check(Object.values(projection.authority).every((value) => value === false), 'all external authority flags are false')
 check([projection.truthBoundary.mayCountAsBaseline, projection.truthBoundary.mayCountAsPilotRun, projection.truthBoundary.mayCountAsCustomerEvidence, projection.truthBoundary.mayCountAsCommercialProof].every((value) => value === false), 'synthetic output cannot become baseline, pilot, customer, or commercial proof')
+
+checks += 1
+await assert.rejects(
+  () => projectShopBatchProfitControlWithSourceAnchor(fixture),
+  (error) => error instanceof Error && error.message === 'shop_batch_profit_workspace_snapshot_anchor_invalid',
+  'projection cannot infer or self-assert the source-owned workspace snapshot anchor',
+)
 
 const reloaded = await projectShopBatchProfitControl(JSON.parse(JSON.stringify(fixture)))
 check(JSON.stringify(reloaded) === JSON.stringify(projection), 'reload reproduces exact digests, estimates, nullable fields, and priority order')
@@ -658,28 +740,36 @@ wrongPrior.batchEnvelope.envelopeDigest = digest(without(wrongPrior.batchEnvelop
 await rejects(wrongPrior, 'shop_batch_profit_revision_prior_mismatch', 'wrong prior envelope digest fails closed')
 
 const gap = clone(revisionTwo)
-gap.workspaceHistoryReceipt.envelopes = []
-gap.workspaceHistoryReceipt.saleAllocationLedgers = []
+gap.workspaceHistorySnapshot.records = []
 reseal(gap)
 await rejects(gap, 'shop_batch_profit_revision_lineage_gap', 'revision gap fails closed')
 
 const otherBatch = rebindBatchId(buildFixture(), 'OTHER-BATCH')
 const crossBatch = clone(fixture)
-crossBatch.workspaceHistoryReceipt.envelopes = [clone(otherBatch.batchEnvelope)]
-crossBatch.workspaceHistoryReceipt.saleAllocationLedgers = [clone(otherBatch.saleAllocationLedger)]
+crossBatch.workspaceHistorySnapshot.records = [{
+  envelope: clone(otherBatch.batchEnvelope),
+  saleAllocationLedger: clone(otherBatch.saleAllocationLedger),
+  retainedEvidenceReceipt: clone(otherBatch.retainedEvidenceReceipt),
+}]
 reseal(crossBatch)
 await rejects(crossBatch, 'shop_batch_profit_cross_batch_sale_reuse', 'cross-batch retained sale reuse fails closed')
 
 const omittedHistory = clone(crossBatch)
-omittedHistory.workspaceHistoryReceipt.envelopes = []
-omittedHistory.workspaceHistoryReceipt.saleAllocationLedgers = []
-omittedHistory.workspaceHistoryReceipt.envelopeCount = 0
-omittedHistory.workspaceHistoryReceipt.saleAllocationLedgerCount = 0
-await rejects(omittedHistory, 'shop_batch_profit_workspace_history_digest_mismatch', 'omitting source-scanned history breaks the bound workspace receipt')
+const sourceOwnedCompleteWorkspaceDigest = omittedHistory.workspaceHistorySnapshot.snapshotDigest
+omittedHistory.workspaceHistorySnapshot.records = []
+resealWorkspaceHistory(omittedHistory)
+await rejects(omittedHistory, 'shop_batch_profit_workspace_snapshot_anchor_mismatch', 'rehashed omission cannot replace the independently supplied source-workspace snapshot anchor', sourceOwnedCompleteWorkspaceDigest)
 
 const forgedPrior = clone(revisionTwo)
-forgedPrior.workspaceHistoryReceipt.saleAllocationLedgers[0].allocations[0].allocationId = 'FORGED-PRIOR'
-await rejects(forgedPrior, 'shop_batch_profit_workspace_ledger_digest_mismatch', 'forged prior allocation body cannot satisfy supersession')
+const forgedRecord = forgedPrior.workspaceHistorySnapshot.records[0]
+forgedRecord.saleAllocationLedger.allocations[0].allocationId = 'FORGED-PRIOR'
+forgedRecord.saleAllocationLedger.ledgerDigest = digest(without(forgedRecord.saleAllocationLedger, 'ledgerDigest'))
+forgedRecord.retainedEvidenceReceipt.saleAllocationLedgerDigest = forgedRecord.saleAllocationLedger.ledgerDigest
+forgedRecord.retainedEvidenceReceipt.saleLineBindings[0].allocationId = 'FORGED-PRIOR'
+for (const binding of forgedRecord.retainedEvidenceReceipt.saleLineBindings) binding.saleAllocationLedgerDigest = forgedRecord.saleAllocationLedger.ledgerDigest
+forgedRecord.retainedEvidenceReceipt.receiptDigest = digest(without(forgedRecord.retainedEvidenceReceipt, 'receiptDigest'))
+resealWorkspaceHistory(forgedPrior)
+await rejects(forgedPrior, 'shop_batch_profit_workspace_retained_envelope_mismatch', 'rehashed forged prior ledger and retained receipt cannot replace the immutable envelope-linked receipt')
 
 const reusedAllocationId = clone(revisionTwo)
 reusedAllocationId.saleAllocationLedger.allocations[0].allocationId = fixture.saleAllocationLedger.allocations[0].allocationId
@@ -688,6 +778,39 @@ await rejects(reusedAllocationId, 'shop_batch_profit_allocation_id_reused', 'cur
 const selfAssertedHistory = clone(fixture)
 selfAssertedHistory.workspaceHistoryReceipt.controls.manualHistoryAssertionAccepted = true
 await rejects(selfAssertedHistory, 'shop_batch_profit_workspace_history_controls_invalid', 'self-asserted workspace completeness cannot satisfy the source-owned history gate')
+
+const callerSubsetSnapshot = clone(fixture)
+callerSubsetSnapshot.workspaceHistorySnapshot.controls.callerProvidedSubsetAccepted = true
+await rejects(callerSubsetSnapshot, 'shop_batch_profit_workspace_snapshot_controls_invalid', 'caller-provided subset cannot satisfy the source-owned workspace snapshot boundary')
+
+const historicalLedgerAfterEnvelope = moveCurrentProjection(revisionTwo, '2026-08-30T12:00:00.000Z')
+const lateLedgerRecord = historicalLedgerAfterEnvelope.workspaceHistorySnapshot.records[0]
+lateLedgerRecord.saleAllocationLedger.generatedAt = '2026-08-29T12:00:01.000Z'
+resealHistoricalRecord(lateLedgerRecord)
+historicalLedgerAfterEnvelope.batchEnvelope.priorEnvelopeDigest = lateLedgerRecord.envelope.envelopeDigest
+historicalLedgerAfterEnvelope.batchEnvelope.envelopeDigest = digest(without(historicalLedgerAfterEnvelope.batchEnvelope, 'envelopeDigest'))
+resealWorkspaceHistory(historicalLedgerAfterEnvelope)
+await rejects(historicalLedgerAfterEnvelope, 'shop_batch_profit_workspace_ledger_time_invalid', 'historical ledger generation cannot occur after its immutable envelope projection')
+
+const historicalCompletionAfterEnvelope = moveCurrentProjection(revisionTwo, '2026-08-30T12:00:00.000Z')
+const lateCompletionRecord = historicalCompletionAfterEnvelope.workspaceHistorySnapshot.records[0]
+lateCompletionRecord.saleAllocationLedger.allocations[0].completedAt = '2026-08-29T12:00:01.000Z'
+lateCompletionRecord.retainedEvidenceReceipt.saleLineBindings[0].completedAt = '2026-08-29T12:00:01.000Z'
+resealHistoricalRecord(lateCompletionRecord)
+historicalCompletionAfterEnvelope.batchEnvelope.priorEnvelopeDigest = lateCompletionRecord.envelope.envelopeDigest
+historicalCompletionAfterEnvelope.batchEnvelope.envelopeDigest = digest(without(historicalCompletionAfterEnvelope.batchEnvelope, 'envelopeDigest'))
+resealWorkspaceHistory(historicalCompletionAfterEnvelope)
+await rejects(historicalCompletionAfterEnvelope, 'shop_batch_profit_allocation_time_invalid', 'historical allocation completion cannot occur after its immutable envelope projection')
+
+const invalidHistoricalVoid = clone(revisionTwo)
+const invalidVoidRecord = invalidHistoricalVoid.workspaceHistorySnapshot.records[0]
+invalidVoidRecord.envelope.revisionReasonCode = 'voided'
+invalidVoidRecord.envelope.logicalStatus = 'closed'
+invalidVoidRecord.envelope.envelopeDigest = digest(without(invalidVoidRecord.envelope, 'envelopeDigest'))
+invalidHistoricalVoid.batchEnvelope.priorEnvelopeDigest = invalidVoidRecord.envelope.envelopeDigest
+invalidHistoricalVoid.batchEnvelope.envelopeDigest = digest(without(invalidHistoricalVoid.batchEnvelope, 'envelopeDigest'))
+resealWorkspaceHistory(invalidHistoricalVoid)
+await rejects(invalidHistoricalVoid, 'shop_batch_profit_void_lineage_invalid', 'historical void reason requires an immutable voided logical status')
 
 const partialCost = clone(fixture)
 partialCost.productionCostReceipt.skuBindings[0].coveredProducedUnits = 14

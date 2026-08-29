@@ -11,6 +11,8 @@ const OVERHEAD_CONTRACT = 'supermega.shop.batch_profit_control.overhead_receipt.
 const RETAINED_EVIDENCE_CONTRACT = 'supermega.shop.batch_profit_control.retained_evidence_receipt.v1'
 const ENVELOPE_CONTRACT = 'supermega.shop.batch_profit_control.batch_envelope.v1'
 const WORKSPACE_HISTORY_CONTRACT = 'supermega.shop.batch_profit_control.workspace_history_receipt.v1'
+const WORKSPACE_HISTORY_SNAPSHOT_CONTRACT = 'supermega.shop.batch_profit_control.workspace_history_snapshot.v1'
+const WORKSPACE_HISTORY_RECORD_SET_CONTRACT = 'supermega.shop.batch_profit_control.workspace_history_record_set.v1'
 const COST_METHOD = 'owner_reviewed_standard_unit_cost_estimate'
 const SYNTHETIC_CLASSIFICATION = 'synthetic_local_fixture_never_evidence'
 const LOCAL_OPERATING_CLASSIFICATION = 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof'
@@ -307,6 +309,38 @@ type WorkspaceHistoryControls = {
   hostedWrite: false
 }
 
+type WorkspaceHistorySnapshotControls = {
+  sourceOwnedWorkspaceScan: true
+  callerProvidedSubsetAccepted: false
+  completeWorkspaceScan: true
+  activeClosedVoidedIncluded: true
+  privateIdentityExported: false
+  customerWrite: false
+  paymentWrite: false
+  stockWrite: false
+  hostedWrite: false
+}
+
+export type ShopBatchWorkspaceHistoryRecord = {
+  envelope: ShopBatchEnvelope
+  saleAllocationLedger: ShopBatchSaleAllocationLedger
+  retainedEvidenceReceipt: ShopBatchRetainedEvidenceReceipt
+}
+
+export type ShopBatchWorkspaceHistorySnapshot = {
+  contract: typeof WORKSPACE_HISTORY_SNAPSHOT_CONTRACT
+  capturedAt: string
+  projectionAt: string
+  candidateBatchId: string
+  candidateRevision: number
+  scope: 'all_active_closed_voided_batch_lineages'
+  recordCount: number
+  records: ShopBatchWorkspaceHistoryRecord[]
+  controls: WorkspaceHistorySnapshotControls
+  recordSetDigest: string
+  snapshotDigest: string
+}
+
 export type ShopBatchWorkspaceHistoryReceipt = {
   contract: typeof WORKSPACE_HISTORY_CONTRACT
   generatedAt: string
@@ -314,10 +348,9 @@ export type ShopBatchWorkspaceHistoryReceipt = {
   candidateBatchId: string
   candidateRevision: number
   scope: 'all_active_closed_voided_batch_lineages'
-  envelopeCount: number
-  saleAllocationLedgerCount: number
-  envelopes: ShopBatchEnvelope[]
-  saleAllocationLedgers: ShopBatchSaleAllocationLedger[]
+  sourceWorkspaceRecordSetDigest: string
+  sourceWorkspaceSnapshotDigest: string
+  recordCount: number
   controls: WorkspaceHistoryControls
   receiptDigest: string
 }
@@ -330,6 +363,7 @@ export type ShopBatchProfitControlInput = {
   overheadReceipt: ShopBatchOverheadReceipt
   retainedEvidenceReceipt: ShopBatchRetainedEvidenceReceipt
   batchEnvelope: ShopBatchEnvelope
+  workspaceHistorySnapshot: ShopBatchWorkspaceHistorySnapshot
   workspaceHistoryReceipt: ShopBatchWorkspaceHistoryReceipt
   marginFloorBasisPoints?: number
 }
@@ -1013,7 +1047,7 @@ function validateRetainedEvidenceReceipt(input: ShopBatchProfitControlInput, pro
     || receipt.adjustmentSummary.allAdjustmentsLinked !== true) fail('shop_batch_profit_adjustment_linkage_incomplete')
 }
 
-async function validateEnvelopeDigest(envelope: ShopBatchEnvelope) {
+async function validateEnvelopeDigest(envelope: ShopBatchEnvelope, maximumProjectionAtMs: number | null = null) {
   exactKeys(envelope, ['contract', 'batchId', 'revision', 'priorEnvelopeDigest', 'revisionReasonCode', 'logicalStatus', 'businessDate', 'projectionAt', 'classification', 'dispositionCoreDigest', 'sourceRecordSetDigest', 'retainedEvidenceReceiptDigest', 'ownerReviewedOverheadReceiptDigest', 'envelopeDigest'], 'shop_batch_profit_envelope_shape_invalid')
   exactValue(envelope.contract, ENVELOPE_CONTRACT, 'shop_batch_profit_envelope_contract_invalid')
   safeId(envelope.batchId, 'shop_batch_profit_envelope_batch_id_invalid')
@@ -1023,13 +1057,14 @@ async function validateEnvelopeDigest(envelope: ShopBatchEnvelope) {
   if (!['initial', 'source_correction', 'adjustment_correction', 'owner_review_correction', 'voided'].includes(envelope.revisionReasonCode)) fail('shop_batch_profit_envelope_reason_invalid')
   if (!['draft', 'ready_for_review', 'closed', 'voided'].includes(envelope.logicalStatus)) fail('shop_batch_profit_envelope_status_invalid')
   safeDate(envelope.businessDate, 'shop_batch_profit_envelope_business_date_invalid')
-  safeTimestamp(envelope.projectionAt, null, 'shop_batch_profit_envelope_projection_time_invalid')
+  safeTimestamp(envelope.projectionAt, maximumProjectionAtMs, 'shop_batch_profit_envelope_projection_time_invalid')
   if (![SYNTHETIC_CLASSIFICATION, LOCAL_OPERATING_CLASSIFICATION].includes(envelope.classification)) fail('shop_batch_profit_envelope_classification_invalid')
   safeDigest(envelope.dispositionCoreDigest, 'shop_batch_profit_envelope_disposition_digest_invalid')
   safeDigest(envelope.sourceRecordSetDigest, 'shop_batch_profit_envelope_source_digest_invalid')
   safeDigest(envelope.retainedEvidenceReceiptDigest, 'shop_batch_profit_envelope_retained_digest_invalid')
   safeDigest(envelope.ownerReviewedOverheadReceiptDigest, 'shop_batch_profit_envelope_overhead_digest_invalid')
   safeDigest(envelope.envelopeDigest, 'shop_batch_profit_envelope_digest_invalid')
+  if (envelope.revisionReasonCode === 'voided' && envelope.logicalStatus !== 'voided') fail('shop_batch_profit_void_lineage_invalid')
   if (await canonicalDigest(withoutField(envelope, 'envelopeDigest')) !== envelope.envelopeDigest) fail('shop_batch_profit_envelope_digest_mismatch')
 }
 
@@ -1048,12 +1083,26 @@ function validateWorkspaceHistoryControls(controls: WorkspaceHistoryControls) {
   }, 'shop_batch_profit_workspace_history_controls_invalid')
 }
 
-async function validateHistoricalLedger(ledger: ShopBatchSaleAllocationLedger, envelope: ShopBatchEnvelope, projectionAtMs: number) {
+function validateWorkspaceHistorySnapshotControls(controls: WorkspaceHistorySnapshotControls) {
+  validateFalseControls(controls, {
+    sourceOwnedWorkspaceScan: true,
+    callerProvidedSubsetAccepted: false,
+    completeWorkspaceScan: true,
+    activeClosedVoidedIncluded: true,
+    privateIdentityExported: false,
+    customerWrite: false,
+    paymentWrite: false,
+    stockWrite: false,
+    hostedWrite: false,
+  }, 'shop_batch_profit_workspace_snapshot_controls_invalid')
+}
+
+async function validateHistoricalLedger(ledger: ShopBatchSaleAllocationLedger, envelope: ShopBatchEnvelope, envelopeProjectionAtMs: number) {
   exactKeys(ledger, ['contract', 'generatedAt', 'projectionAt', 'batchId', 'revision', 'dispositionCoreDigest', 'sourceRecordSetDigest', 'allocations', 'controls', 'ledgerDigest'], 'shop_batch_profit_workspace_ledger_shape_invalid')
   exactValue(ledger.contract, SALE_LEDGER_CONTRACT, 'shop_batch_profit_workspace_ledger_contract_invalid')
   if (ledger.batchId !== envelope.batchId || ledger.revision !== envelope.revision || ledger.projectionAt !== envelope.projectionAt) fail('shop_batch_profit_workspace_ledger_envelope_mismatch')
-  safeTimestamp(ledger.generatedAt, projectionAtMs, 'shop_batch_profit_workspace_ledger_time_invalid')
-  safeTimestamp(ledger.projectionAt, projectionAtMs, 'shop_batch_profit_workspace_ledger_projection_time_invalid')
+  safeTimestamp(ledger.generatedAt, envelopeProjectionAtMs, 'shop_batch_profit_workspace_ledger_time_invalid')
+  safeTimestamp(ledger.projectionAt, envelopeProjectionAtMs, 'shop_batch_profit_workspace_ledger_projection_time_invalid')
   if (ledger.dispositionCoreDigest !== envelope.dispositionCoreDigest || ledger.sourceRecordSetDigest !== envelope.sourceRecordSetDigest) fail('shop_batch_profit_workspace_ledger_envelope_mismatch')
   safeDigest(ledger.ledgerDigest, 'shop_batch_profit_workspace_ledger_digest_invalid')
   validateLedgerControls(ledger.controls)
@@ -1061,11 +1110,104 @@ async function validateHistoricalLedger(ledger: ShopBatchSaleAllocationLedger, e
   exactOrder(allocations, (allocation) => `${allocation.batchId}\u0000${String(allocation.envelopeRevision).padStart(6, '0')}\u0000${allocation.orderLineBindingDigest}`, 'shop_batch_profit_workspace_allocation_order_invalid')
   const allocationIds = new Set<string>()
   for (const allocation of allocations) {
-    validateAllocationShape(allocation, envelope, projectionAtMs)
+    validateAllocationShape(allocation, envelope, envelopeProjectionAtMs)
     if (allocationIds.has(allocation.allocationId)) fail('shop_batch_profit_workspace_allocation_duplicate')
     allocationIds.add(allocation.allocationId)
   }
   if (await canonicalDigest(withoutField(ledger, 'ledgerDigest')) !== ledger.ledgerDigest) fail('shop_batch_profit_workspace_ledger_digest_mismatch')
+}
+
+async function validateHistoricalRetainedEvidenceReceipt(
+  receipt: ShopBatchRetainedEvidenceReceipt,
+  ledger: ShopBatchSaleAllocationLedger,
+  envelope: ShopBatchEnvelope,
+  envelopeProjectionAtMs: number,
+) {
+  exactKeys(receipt, ['contract', 'generatedAt', 'projectionAt', 'batchId', 'revision', 'businessDate', 'dispositionCoreDigest', 'sourceRecordSetDigest', 'saleAllocationLedgerDigest', 'productionCostReceiptDigest', 'ownerReviewedOverheadReceiptDigest', 'saleLineBindings', 'productionCostSummary', 'adjustmentSummary', 'controls', 'receiptDigest'], 'shop_batch_profit_workspace_retained_shape_invalid')
+  exactValue(receipt.contract, RETAINED_EVIDENCE_CONTRACT, 'shop_batch_profit_workspace_retained_contract_invalid')
+  if (receipt.batchId !== envelope.batchId
+    || receipt.revision !== envelope.revision
+    || receipt.businessDate !== envelope.businessDate
+    || receipt.projectionAt !== envelope.projectionAt
+    || receipt.dispositionCoreDigest !== envelope.dispositionCoreDigest
+    || receipt.sourceRecordSetDigest !== envelope.sourceRecordSetDigest
+    || receipt.saleAllocationLedgerDigest !== ledger.ledgerDigest
+    || receipt.ownerReviewedOverheadReceiptDigest !== envelope.ownerReviewedOverheadReceiptDigest) fail('shop_batch_profit_workspace_retained_envelope_mismatch')
+  safeTimestamp(receipt.generatedAt, envelopeProjectionAtMs, 'shop_batch_profit_workspace_retained_time_invalid')
+  safeTimestamp(receipt.projectionAt, envelopeProjectionAtMs, 'shop_batch_profit_workspace_retained_projection_time_invalid')
+  safeDate(receipt.businessDate, 'shop_batch_profit_workspace_retained_business_date_invalid')
+  for (const [value, code] of [
+    [receipt.dispositionCoreDigest, 'shop_batch_profit_workspace_retained_disposition_digest_invalid'],
+    [receipt.sourceRecordSetDigest, 'shop_batch_profit_workspace_retained_source_digest_invalid'],
+    [receipt.saleAllocationLedgerDigest, 'shop_batch_profit_workspace_retained_ledger_digest_invalid'],
+    [receipt.productionCostReceiptDigest, 'shop_batch_profit_workspace_retained_production_digest_invalid'],
+    [receipt.ownerReviewedOverheadReceiptDigest, 'shop_batch_profit_workspace_retained_overhead_digest_invalid'],
+    [receipt.receiptDigest, 'shop_batch_profit_workspace_retained_receipt_digest_invalid'],
+  ] as const) safeDigest(value, code)
+  validateRetainedControls(receipt.controls)
+
+  const bindings = safeArray(receipt.saleLineBindings, 'shop_batch_profit_workspace_retained_bindings_invalid') as ShopBatchRetainedSaleBinding[]
+  exactOrder(bindings, (binding) => binding.orderLineBindingDigest, 'shop_batch_profit_workspace_retained_binding_order_invalid')
+  const allocations = new Map(ledger.allocations.map((allocation) => [allocation.orderLineBindingDigest, allocation]))
+  const adjustmentTotals = { returnCount: 0, refundCount: 0, correctionCount: 0, discountCount: 0 }
+  for (const binding of bindings) {
+    exactKeys(binding, ['allocationId', 'batchId', 'envelopeRevision', 'supersedesAllocationId', 'orderLineBindingDigest', 'completionBindingDigest', 'allocationMode', 'assignmentReason', 'completedAt', 'sourceBusinessDate', 'batchBusinessDate', 'retainedNetUnits', 'retainedNetValueMmk', 'allocatedNetUnits', 'allocatedNetValueMmk', 'priorAllocatedUnits', 'priorAllocatedValueMmk', 'remainingUnitsBefore', 'remainingValueBefore', 'preorderBatchBindingDigest', 'sku', 'saleAllocationLedgerDigest', 'completedUnits', 'completedSaleValueMmk', 'nonSample', 'paymentReconciled', 'completionPresent', 'returnCount', 'refundCount', 'correctionCount', 'discountCount', 'adjustmentState', 'adjustmentBindingDigest'], 'shop_batch_profit_workspace_retained_binding_shape_invalid')
+    const allocation = allocations.get(binding.orderLineBindingDigest)
+    if (!allocation) fail('shop_batch_profit_workspace_retained_allocation_missing')
+    const allocationProjection = Object.fromEntries(Object.keys(allocation).map((key) => [key, binding[key as keyof ShopBatchRetainedSaleBinding]]))
+    if (JSON.stringify(normalizeCanonical(allocationProjection)) !== JSON.stringify(normalizeCanonical(allocation))) fail('shop_batch_profit_workspace_retained_allocation_mismatch')
+    safeId(binding.sku, 'shop_batch_profit_workspace_retained_sku_invalid')
+    safeDigest(binding.saleAllocationLedgerDigest, 'shop_batch_profit_workspace_retained_ledger_digest_invalid')
+    safeDigest(binding.adjustmentBindingDigest, 'shop_batch_profit_workspace_retained_adjustment_digest_invalid')
+    safeWhole(binding.completedUnits, 'shop_batch_profit_workspace_retained_units_invalid', MAX_INDIVIDUAL_COUNT)
+    safeWhole(binding.completedSaleValueMmk, 'shop_batch_profit_workspace_retained_value_invalid', MAX_INDIVIDUAL_MMK)
+    safeBoolean(binding.nonSample, 'shop_batch_profit_workspace_retained_classification_invalid')
+    safeBoolean(binding.paymentReconciled, 'shop_batch_profit_workspace_retained_payment_invalid')
+    safeBoolean(binding.completionPresent, 'shop_batch_profit_workspace_retained_completion_invalid')
+    for (const [label, value] of [
+      ['return', binding.returnCount],
+      ['refund', binding.refundCount],
+      ['correction', binding.correctionCount],
+      ['discount', binding.discountCount],
+    ] as const) safeWhole(value, `shop_batch_profit_workspace_retained_${label}_count_invalid`, MAX_INDIVIDUAL_COUNT)
+    if (binding.saleAllocationLedgerDigest !== ledger.ledgerDigest
+      || binding.completedUnits !== allocation.retainedNetUnits
+      || binding.completedSaleValueMmk !== allocation.retainedNetValueMmk
+      || binding.adjustmentState !== 'complete') fail('shop_batch_profit_workspace_retained_allocation_mismatch')
+    const expectedNonSample = envelope.classification === LOCAL_OPERATING_CLASSIFICATION
+    if (binding.nonSample !== expectedNonSample) fail('shop_batch_profit_workspace_retained_classification_mismatch')
+    adjustmentTotals.returnCount += binding.returnCount
+    adjustmentTotals.refundCount += binding.refundCount
+    adjustmentTotals.correctionCount += binding.correctionCount
+    adjustmentTotals.discountCount += binding.discountCount
+  }
+  if (bindings.length !== ledger.allocations.length) fail('shop_batch_profit_workspace_retained_allocation_incomplete')
+
+  exactKeys(receipt.productionCostSummary, ['method', 'productionCostReceiptDigest', 'coveredSkuCount', 'coveredProducedUnits', 'totalProducedUnits', 'quantityCoverageComplete', 'ambiguousMethodCount', 'partialCoverageCount'], 'shop_batch_profit_workspace_retained_production_summary_shape_invalid')
+  safeDigest(receipt.productionCostSummary.productionCostReceiptDigest, 'shop_batch_profit_workspace_retained_production_digest_invalid')
+  for (const [label, value] of [
+    ['covered_sku', receipt.productionCostSummary.coveredSkuCount],
+    ['covered_units', receipt.productionCostSummary.coveredProducedUnits],
+    ['total_units', receipt.productionCostSummary.totalProducedUnits],
+    ['ambiguous_method', receipt.productionCostSummary.ambiguousMethodCount],
+    ['partial_coverage', receipt.productionCostSummary.partialCoverageCount],
+  ] as const) safeWhole(value, `shop_batch_profit_workspace_retained_${label}_invalid`, MAX_RECORD_COUNT)
+  if (receipt.productionCostSummary.method !== COST_METHOD
+    || receipt.productionCostSummary.productionCostReceiptDigest !== receipt.productionCostReceiptDigest
+    || receipt.productionCostSummary.quantityCoverageComplete !== true
+    || receipt.productionCostSummary.coveredProducedUnits !== receipt.productionCostSummary.totalProducedUnits
+    || receipt.productionCostSummary.ambiguousMethodCount !== 0
+    || receipt.productionCostSummary.partialCoverageCount !== 0) fail('shop_batch_profit_workspace_retained_production_summary_invalid')
+
+  exactKeys(receipt.adjustmentSummary, ['returnCount', 'refundCount', 'correctionCount', 'discountCount', 'unresolvedAdjustmentCount', 'allAdjustmentsLinked'], 'shop_batch_profit_workspace_retained_adjustment_summary_shape_invalid')
+  if (receipt.adjustmentSummary.returnCount !== adjustmentTotals.returnCount
+    || receipt.adjustmentSummary.refundCount !== adjustmentTotals.refundCount
+    || receipt.adjustmentSummary.correctionCount !== adjustmentTotals.correctionCount
+    || receipt.adjustmentSummary.discountCount !== adjustmentTotals.discountCount
+    || receipt.adjustmentSummary.unresolvedAdjustmentCount !== 0
+    || receipt.adjustmentSummary.allAdjustmentsLinked !== true) fail('shop_batch_profit_workspace_retained_adjustment_summary_invalid')
+  if (await canonicalDigest(withoutField(receipt, 'receiptDigest')) !== receipt.receiptDigest) fail('shop_batch_profit_workspace_retained_digest_mismatch')
+  if (receipt.receiptDigest !== envelope.retainedEvidenceReceiptDigest) fail('shop_batch_profit_workspace_retained_envelope_mismatch')
 }
 
 function validateHistoricalAllocationLineage(allocations: readonly ShopBatchSaleAllocation[]) {
@@ -1094,27 +1236,34 @@ function validateHistoricalAllocationLineage(allocations: readonly ShopBatchSale
   return { allocationIds, allocationsByLine: byLine }
 }
 
-async function validateWorkspaceHistoryReceipt(input: ShopBatchProfitControlInput, projectionAtMs: number) {
-  const { workspaceHistoryReceipt: receipt, dispositionCore: core } = input
-  exactKeys(receipt, ['contract', 'generatedAt', 'projectionAt', 'candidateBatchId', 'candidateRevision', 'scope', 'envelopeCount', 'saleAllocationLedgerCount', 'envelopes', 'saleAllocationLedgers', 'controls', 'receiptDigest'], 'shop_batch_profit_workspace_history_shape_invalid')
-  exactValue(receipt.contract, WORKSPACE_HISTORY_CONTRACT, 'shop_batch_profit_workspace_history_contract_invalid')
-  safeTimestamp(receipt.generatedAt, projectionAtMs, 'shop_batch_profit_workspace_history_time_invalid')
-  if (receipt.projectionAt !== core.projectionAt || receipt.candidateBatchId !== core.batchId || receipt.candidateRevision !== core.revision) fail('shop_batch_profit_workspace_history_candidate_mismatch')
-  exactValue(receipt.scope, 'all_active_closed_voided_batch_lineages', 'shop_batch_profit_workspace_history_scope_invalid')
-  const envelopes = safeArray(receipt.envelopes, 'shop_batch_profit_workspace_envelopes_invalid') as ShopBatchEnvelope[]
-  const ledgers = safeArray(receipt.saleAllocationLedgers, 'shop_batch_profit_workspace_ledgers_invalid') as ShopBatchSaleAllocationLedger[]
-  safeWhole(receipt.envelopeCount, 'shop_batch_profit_workspace_envelope_count_invalid', MAX_RECORD_COUNT)
-  safeWhole(receipt.saleAllocationLedgerCount, 'shop_batch_profit_workspace_ledger_count_invalid', MAX_RECORD_COUNT)
-  if (receipt.envelopeCount !== envelopes.length || receipt.saleAllocationLedgerCount !== ledgers.length || envelopes.length !== ledgers.length) fail('shop_batch_profit_workspace_history_count_mismatch')
-  exactOrder(envelopes, (envelope) => `${envelope.batchId}\u0000${String(envelope.revision).padStart(6, '0')}`, 'shop_batch_profit_workspace_envelope_order_invalid')
-  exactOrder(ledgers, (ledger) => `${ledger.batchId}\u0000${String(ledger.revision).padStart(6, '0')}`, 'shop_batch_profit_workspace_ledger_order_invalid')
-  validateWorkspaceHistoryControls(receipt.controls)
-  safeDigest(receipt.receiptDigest, 'shop_batch_profit_workspace_history_digest_invalid')
+async function validateWorkspaceHistorySnapshot(
+  input: ShopBatchProfitControlInput,
+  projectionAtMs: number,
+  sourceOwnedWorkspaceSnapshotDigest: string,
+) {
+  const { workspaceHistorySnapshot: snapshot, dispositionCore: core } = input
+  exactKeys(snapshot, ['contract', 'capturedAt', 'projectionAt', 'candidateBatchId', 'candidateRevision', 'scope', 'recordCount', 'records', 'controls', 'recordSetDigest', 'snapshotDigest'], 'shop_batch_profit_workspace_snapshot_shape_invalid')
+  exactValue(snapshot.contract, WORKSPACE_HISTORY_SNAPSHOT_CONTRACT, 'shop_batch_profit_workspace_snapshot_contract_invalid')
+  safeTimestamp(snapshot.capturedAt, projectionAtMs, 'shop_batch_profit_workspace_snapshot_time_invalid')
+  if (snapshot.projectionAt !== core.projectionAt || snapshot.candidateBatchId !== core.batchId || snapshot.candidateRevision !== core.revision) fail('shop_batch_profit_workspace_snapshot_candidate_mismatch')
+  exactValue(snapshot.scope, 'all_active_closed_voided_batch_lineages', 'shop_batch_profit_workspace_snapshot_scope_invalid')
+  const records = safeArray(snapshot.records, 'shop_batch_profit_workspace_snapshot_records_invalid') as ShopBatchWorkspaceHistoryRecord[]
+  safeWhole(snapshot.recordCount, 'shop_batch_profit_workspace_snapshot_count_invalid', MAX_RECORD_COUNT)
+  if (snapshot.recordCount !== records.length) fail('shop_batch_profit_workspace_snapshot_count_mismatch')
+  validateWorkspaceHistorySnapshotControls(snapshot.controls)
+  safeDigest(snapshot.recordSetDigest, 'shop_batch_profit_workspace_record_set_digest_invalid')
+  safeDigest(snapshot.snapshotDigest, 'shop_batch_profit_workspace_snapshot_digest_invalid')
+  safeDigest(sourceOwnedWorkspaceSnapshotDigest, 'shop_batch_profit_workspace_snapshot_anchor_invalid')
+  if (snapshot.snapshotDigest !== sourceOwnedWorkspaceSnapshotDigest) fail('shop_batch_profit_workspace_snapshot_anchor_mismatch')
+  exactOrder(records, (record) => `${record.envelope.batchId}\u0000${String(record.envelope.revision).padStart(6, '0')}`, 'shop_batch_profit_workspace_snapshot_record_order_invalid')
 
   const envelopeByRevision = new Map<string, ShopBatchEnvelope>()
   const envelopesByBatch = new Map<string, ShopBatchEnvelope[]>()
-  for (const envelope of envelopes) {
-    await validateEnvelopeDigest(envelope)
+  const workspaceAllocations: ShopBatchSaleAllocation[] = []
+  for (const record of records) {
+    exactKeys(record, ['envelope', 'saleAllocationLedger', 'retainedEvidenceReceipt'], 'shop_batch_profit_workspace_snapshot_record_shape_invalid')
+    const { envelope, saleAllocationLedger, retainedEvidenceReceipt } = record
+    await validateEnvelopeDigest(envelope, projectionAtMs)
     if (envelope.batchId === core.batchId && envelope.revision >= core.revision) fail('shop_batch_profit_workspace_history_future')
     const key = `${envelope.batchId}\u0000${envelope.revision}`
     if (envelopeByRevision.has(key)) fail('shop_batch_profit_workspace_envelope_duplicate')
@@ -1122,6 +1271,11 @@ async function validateWorkspaceHistoryReceipt(input: ShopBatchProfitControlInpu
     const rows = envelopesByBatch.get(envelope.batchId) ?? []
     rows.push(envelope)
     envelopesByBatch.set(envelope.batchId, rows)
+    const envelopeProjectionAtMs = safeTimestamp(envelope.projectionAt, projectionAtMs, 'shop_batch_profit_workspace_envelope_projection_time_invalid')
+    await validateHistoricalLedger(saleAllocationLedger, envelope, envelopeProjectionAtMs)
+    await validateHistoricalRetainedEvidenceReceipt(retainedEvidenceReceipt, saleAllocationLedger, envelope, envelopeProjectionAtMs)
+    workspaceAllocations.push(...saleAllocationLedger.allocations)
+    if (workspaceAllocations.length > MAX_RECORD_COUNT) fail('shop_batch_profit_workspace_allocation_count_invalid')
   }
   for (const rows of envelopesByBatch.values()) {
     let priorDigest: string | null = null
@@ -1132,26 +1286,44 @@ async function validateWorkspaceHistoryReceipt(input: ShopBatchProfitControlInpu
       priorDigest = envelope.envelopeDigest
     }
   }
-
-  const workspaceAllocations: ShopBatchSaleAllocation[] = []
-  for (const ledger of ledgers) {
-    const envelope = envelopeByRevision.get(`${ledger.batchId}\u0000${ledger.revision}`)
-    if (!envelope) fail('shop_batch_profit_workspace_ledger_envelope_missing')
-    await validateHistoricalLedger(ledger, envelope, projectionAtMs)
-    workspaceAllocations.push(...ledger.allocations)
-    if (workspaceAllocations.length > MAX_RECORD_COUNT) fail('shop_batch_profit_workspace_allocation_count_invalid')
-  }
   const allocationHistory = validateHistoricalAllocationLineage(workspaceAllocations)
+  const recordSetBody = {
+    contract: WORKSPACE_HISTORY_RECORD_SET_CONTRACT,
+    capturedAt: snapshot.capturedAt,
+    projectionAt: snapshot.projectionAt,
+    candidateBatchId: snapshot.candidateBatchId,
+    candidateRevision: snapshot.candidateRevision,
+    scope: snapshot.scope,
+    records: snapshot.records,
+  }
+  if (await canonicalDigest(recordSetBody) !== snapshot.recordSetDigest) fail('shop_batch_profit_workspace_record_set_digest_mismatch')
+  if (await canonicalDigest(withoutField(snapshot, 'snapshotDigest')) !== snapshot.snapshotDigest) fail('shop_batch_profit_workspace_snapshot_digest_mismatch')
+  return { records, envelopes: records.map((record) => record.envelope), ...allocationHistory }
+}
+
+async function validateWorkspaceHistoryReceipt(input: ShopBatchProfitControlInput, snapshot: ShopBatchWorkspaceHistorySnapshot, projectionAtMs: number) {
+  const { workspaceHistoryReceipt: receipt, dispositionCore: core } = input
+  exactKeys(receipt, ['contract', 'generatedAt', 'projectionAt', 'candidateBatchId', 'candidateRevision', 'scope', 'sourceWorkspaceRecordSetDigest', 'sourceWorkspaceSnapshotDigest', 'recordCount', 'controls', 'receiptDigest'], 'shop_batch_profit_workspace_history_shape_invalid')
+  exactValue(receipt.contract, WORKSPACE_HISTORY_CONTRACT, 'shop_batch_profit_workspace_history_contract_invalid')
+  safeTimestamp(receipt.generatedAt, projectionAtMs, 'shop_batch_profit_workspace_history_time_invalid')
+  if (receipt.projectionAt !== core.projectionAt || receipt.candidateBatchId !== core.batchId || receipt.candidateRevision !== core.revision) fail('shop_batch_profit_workspace_history_candidate_mismatch')
+  exactValue(receipt.scope, 'all_active_closed_voided_batch_lineages', 'shop_batch_profit_workspace_history_scope_invalid')
+  safeDigest(receipt.sourceWorkspaceRecordSetDigest, 'shop_batch_profit_workspace_history_record_set_digest_invalid')
+  safeDigest(receipt.sourceWorkspaceSnapshotDigest, 'shop_batch_profit_workspace_history_snapshot_digest_invalid')
+  safeWhole(receipt.recordCount, 'shop_batch_profit_workspace_history_count_invalid', MAX_RECORD_COUNT)
+  if (receipt.sourceWorkspaceRecordSetDigest !== snapshot.recordSetDigest
+    || receipt.sourceWorkspaceSnapshotDigest !== snapshot.snapshotDigest
+    || receipt.recordCount !== snapshot.recordCount) fail('shop_batch_profit_workspace_history_snapshot_binding_invalid')
+  validateWorkspaceHistoryControls(receipt.controls)
+  safeDigest(receipt.receiptDigest, 'shop_batch_profit_workspace_history_digest_invalid')
   if (await canonicalDigest(withoutField(receipt, 'receiptDigest')) !== receipt.receiptDigest) fail('shop_batch_profit_workspace_history_digest_mismatch')
-  return { envelopes, ...allocationHistory }
 }
 
 async function validateEnvelopeLineage(input: ShopBatchProfitControlInput, workspaceBatchEnvelopes: readonly ShopBatchEnvelope[]) {
   const { batchEnvelope: current, dispositionCore: core } = input
-  await validateEnvelopeDigest(current)
+  await validateEnvelopeDigest(current, Date.parse(core.projectionAt))
   assertSharedBinding(current, core, 'shop_batch_profit_envelope_binding_invalid')
   if (current.businessDate !== core.businessDate || current.classification !== core.classification || current.logicalStatus !== core.status) fail('shop_batch_profit_envelope_core_mismatch')
-  if (current.revisionReasonCode === 'voided' && current.logicalStatus !== 'voided') fail('shop_batch_profit_void_lineage_invalid')
   const byRevision = workspaceBatchEnvelopes.filter((envelope) => envelope.batchId === current.batchId)
   if (current.revision === 1) {
     if (current.priorEnvelopeDigest !== null || current.revisionReasonCode !== 'initial' || byRevision.length !== 0) fail('shop_batch_profit_initial_lineage_invalid')
@@ -1161,7 +1333,7 @@ async function validateEnvelopeLineage(input: ShopBatchProfitControlInput, works
   let previousDigest: string | null = null
   for (let index = 0; index < byRevision.length; index += 1) {
     const envelope = byRevision[index]
-    await validateEnvelopeDigest(envelope)
+    await validateEnvelopeDigest(envelope, Date.parse(core.projectionAt))
     if (envelope.batchId !== current.batchId || envelope.revision !== index + 1 || envelope.priorEnvelopeDigest !== previousDigest || envelope.classification !== current.classification || envelope.businessDate !== current.businessDate) fail('shop_batch_profit_revision_lineage_invalid')
     if (envelope.revision === 1 && envelope.revisionReasonCode !== 'initial') fail('shop_batch_profit_revision_lineage_invalid')
     if (envelope.revision > 1 && envelope.revisionReasonCode === 'initial') fail('shop_batch_profit_revision_lineage_invalid')
@@ -1286,11 +1458,15 @@ export function projectNoBatchProfitControl(): ShopBatchProfitControlNoBatchProj
   }
 }
 
-export async function projectShopBatchProfitControl(input: ShopBatchProfitControlInput): Promise<ShopBatchProfitControlProjection> {
-  exactKeys(input, ['dispositionCore', 'sourceRecordSet', 'saleAllocationLedger', 'productionCostReceipt', 'overheadReceipt', 'retainedEvidenceReceipt', 'batchEnvelope', 'workspaceHistoryReceipt', ...(input.marginFloorBasisPoints === undefined ? [] : ['marginFloorBasisPoints'])], 'shop_batch_profit_input_shape_invalid')
+export async function projectShopBatchProfitControl(
+  input: ShopBatchProfitControlInput,
+  sourceOwnedWorkspaceSnapshotDigest: string,
+): Promise<ShopBatchProfitControlProjection> {
+  exactKeys(input, ['dispositionCore', 'sourceRecordSet', 'saleAllocationLedger', 'productionCostReceipt', 'overheadReceipt', 'retainedEvidenceReceipt', 'batchEnvelope', 'workspaceHistorySnapshot', 'workspaceHistoryReceipt', ...(input.marginFloorBasisPoints === undefined ? [] : ['marginFloorBasisPoints'])], 'shop_batch_profit_input_shape_invalid')
   const projectionAtMs = validateDisposition(input.dispositionCore)
   validateSourceRecordSet(input.sourceRecordSet, input.dispositionCore, projectionAtMs)
-  const workspaceHistory = await validateWorkspaceHistoryReceipt(input, projectionAtMs)
+  const workspaceHistory = await validateWorkspaceHistorySnapshot(input, projectionAtMs, sourceOwnedWorkspaceSnapshotDigest)
+  await validateWorkspaceHistoryReceipt(input, input.workspaceHistorySnapshot, projectionAtMs)
   await validateEnvelopeLineage(input, workspaceHistory.envelopes)
   validateSaleAllocationLedger(input, projectionAtMs, workspaceHistory)
   validateProductionCostReceipt(input, projectionAtMs)
