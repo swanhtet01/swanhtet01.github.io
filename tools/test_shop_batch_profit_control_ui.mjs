@@ -122,6 +122,15 @@ check(firstUseSource.includes("SHOP_BATCH_FIRST_USE_STORAGE_KEY = 'supermega.sho
 check(firstUseSource.includes('projectShopBatchProfitControl(structuredClone(input)'), 'local Batch workflow must project through the accepted engine')
 check(!firstUseSource.includes('estimatedBreakEvenSoldValueMmk:'), 'local Batch workflow must not implement a second decision-arithmetic projector')
 check(firstUseSource.includes('if (currentCommerceEvidence) for (const record of store.records) await validateCurrentCommerceSource(record, currentCommerceEvidence)'), 'every stored Batch source snapshot must be current before any projection or append')
+check(firstUseSource.includes("lockManager.request(STORAGE_LOCK_NAME, { mode: 'exclusive' }"), 'the full local save transaction must run under the same-origin exclusive lock')
+check(firstUseSource.includes("if (!lockManager) fail('shop_batch_first_use_storage_lock_unavailable')"), 'saving must fail closed when Web Locks are unavailable')
+check(firstUseSource.includes("inputLeaves: persistedInputLeaves(input)"), 'persisted records must normalize immutable input leaves')
+check(!firstUseSource.includes('input: ShopBatchProfitControlInput\n  projectionDigest'), 'persisted records must not embed complete inputs with prior history')
+const validateStoreSource = firstUseSource.slice(firstUseSource.indexOf('async function validateStore'), firstUseSource.indexOf('async function readValidatedStore'))
+assert.equal(validateStoreSource.match(/projectShopBatchProfitControl\(/g)?.length, 1, 'store validation must project only the latest record once'); checks += 1
+check(firstUseSource.includes('SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES = 2_000_000'), 'storage must have an exact measured UTF-8 byte ceiling')
+check(!firstUseSource.includes('MODULE_LOAD_YANGON_DATE'), 'business-date defaults must not freeze at module import')
+check(firstUseSource.includes('shopBatchFirstUseReviewDefaults(Date.now(), recordCount + 1)'), 'every separate local review must derive its Yangon date when the action starts')
 for (const forbidden of ['fetch(', 'XMLHttpRequest', 'indexedDB', 'saveCommerce', 'mutateCommerce', 'sessionStorage']) {
   check(!firstUseSource.includes(forbidden), `local Batch workflow must not gain a network/workspace write primitive: ${forbidden}`)
 }
@@ -152,10 +161,19 @@ const vite = await createServer({
   root: `${root}/showroom`,
   server: { hmr: false, middlewareMode: true },
 })
+let firstUseStorageEvidence = null
 
 try {
   const { ShopBatchProfitControlPanel } = await vite.ssrLoadModule('/src/core/ShopToday.tsx')
   const firstUse = await vite.ssrLoadModule('/src/core/shop-batch-profit-control-first-use.tsx')
+  assert.deepEqual(
+    firstUse.shopBatchFirstUseReviewDefaults(Date.parse('2026-08-30T17:29:59.999Z'), 7),
+    { businessDate: '2026-08-30', batchId: 'BATCH-20260830-07' },
+  ); checks += 1
+  assert.deepEqual(
+    firstUse.shopBatchFirstUseReviewDefaults(Date.parse('2026-08-30T17:30:00.000Z'), 8),
+    { businessDate: '2026-08-31', batchId: 'BATCH-20260831-08' },
+  ); checks += 1
   const allFalseAuthority = {
     paymentWrite: false,
     stockWrite: false,
@@ -269,15 +287,60 @@ try {
     getItem(key) { assert.equal(key, firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY); return this.value }
     setItem(key, value) { assert.equal(key, firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY); this.value = value }
   }
+  class ExclusiveLockManager {
+    tail = Promise.resolve()
+    requests = 0
+    active = 0
+    maxActive = 0
+    request(name, options, callback) {
+      assert.equal(name, `${firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`)
+      assert.deepEqual(options, { mode: 'exclusive' })
+      this.requests += 1
+      const prior = this.tail
+      let release
+      this.tail = new Promise((resolve) => { release = resolve })
+      return prior.then(async () => {
+        this.active += 1
+        this.maxActive = Math.max(this.maxActive, this.active)
+        try { return await callback({ name, mode: 'exclusive' }) } finally {
+          this.active -= 1
+          release()
+        }
+      })
+    }
+  }
+  class LockGuardedStorage extends MemoryStorage {
+    enforceLock = true
+    constructor(lockManager) { super(); this.lockManager = lockManager }
+    getItem(key) {
+      if (this.enforceLock) assert.equal(this.lockManager.active, 1, 'every transactional read must hold the exclusive lock')
+      return super.getItem(key)
+    }
+    setItem(key, value) {
+      if (this.enforceLock) assert.equal(this.lockManager.active, 1, 'the transactional write must hold the exclusive lock')
+      super.setItem(key, value)
+    }
+  }
+  const lockManager = new ExclusiveLockManager()
+  const saveReview = (currentCommerce, currentDraft, currentStorage, projectionAt, readCurrentCommerce = () => currentCommerce, currentLockManager = lockManager) => (
+    firstUse.saveShopBatchProfitControlLocalReview(currentCommerce, currentDraft, currentStorage, projectionAt, readCurrentCommerce, currentLockManager)
+  )
   const storage = new MemoryStorage()
   const commerceBeforeSave = structuredClone(retainedCommerce)
-  const saved = await firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, storage, '2026-08-30T03:00:00.000Z')
+  await assert.rejects(
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, new MemoryStorage(), '2026-08-30T03:00:00.000Z', () => retainedCommerce, null),
+    /shop_batch_first_use_storage_lock_unavailable/,
+  ); checks += 1
+  const saved = await saveReview(retainedCommerce, draft, storage, '2026-08-30T03:00:00.000Z')
   assert.equal(saved.recordCount, 1); checks += 1
   assert.equal(saved.projection.batchIdentity.batchId, 'OWNER-BATCH-001'); checks += 1
   assert.equal(saved.projection.truthBoundary.classification, 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof'); checks += 1
   assert.equal(saved.projection.estimatePreview.batchContributionEstimateMmk, 1_800); checks += 1
   check(Object.values(saved.projection.authority).every((value) => value === false), 'real local Batch projection must retain all-false authority')
   check(!storage.value.includes('PRIVATE CUSTOMER MUST NOT PERSIST'), 'local Batch receipt must not persist customer identity')
+  check(!storage.value.includes('workspaceHistorySnapshot') && !storage.value.includes('workspaceHistoryReceipt'), 'normalized local records must not embed prior workspace history')
+  const firstPersistedRecord = JSON.parse(storage.value).records[0]
+  assert.ok(firstPersistedRecord.inputLeaves && !('input' in firstPersistedRecord)); checks += 1
   assert.deepEqual(retainedCommerce, commerceBeforeSave); checks += 1
   const loaded = await firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, storage)
   assert.equal(loaded.recordCount, 1); checks += 1
@@ -285,13 +348,13 @@ try {
 
   const beforeRejectedSave = storage.value
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, { ...draft, batchId: 'OWNER-BATCH-002' }, storage, '2026-08-30T03:05:00.000Z'),
+    saveReview(retainedCommerce, { ...draft, batchId: 'OWNER-BATCH-002' }, storage, '2026-08-30T03:05:00.000Z'),
     /shop_batch_first_use_duplicate_line_reuse/,
   ); checks += 1
   assert.equal(storage.value, beforeRejectedSave); checks += 1
 
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, { ...draft, batchId: 'OWNER-BATCH-003', itemInputs: {} }, new MemoryStorage(), '2026-08-30T03:05:00.000Z'),
+    saveReview(retainedCommerce, { ...draft, batchId: 'OWNER-BATCH-003', itemInputs: {} }, new MemoryStorage(), '2026-08-30T03:05:00.000Z'),
     /shop_batch_first_use_cost_coverage_incomplete/,
   ); checks += 1
 
@@ -301,7 +364,7 @@ try {
   await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(staleCommerce, storage), /shop_batch_first_use_source_snapshot_stale/); checks += 1
   const changedDuringSaveStorage = new MemoryStorage()
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, changedDuringSaveStorage, '2026-08-30T03:00:00.000Z', () => staleCommerce),
+    saveReview(retainedCommerce, draft, changedDuringSaveStorage, '2026-08-30T03:00:00.000Z', () => staleCommerce),
     /shop_batch_first_use_source_snapshot_stale/,
   ); checks += 1
   assert.equal(changedDuringSaveStorage.value, null); checks += 1
@@ -312,7 +375,7 @@ try {
   assert.equal(adjustedEvidence.lines.length, 0); checks += 1
   assert.equal(adjustedEvidence.blocked.invalidAdjustments, 1); checks += 1
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(adjustedCommerce, { ...draft, batchId: 'OWNER-BATCH-004' }, new MemoryStorage(), '2026-08-30T03:05:00.000Z'),
+    saveReview(adjustedCommerce, { ...draft, batchId: 'OWNER-BATCH-004' }, new MemoryStorage(), '2026-08-30T03:05:00.000Z'),
     /shop_batch_first_use_sale_allocation_missing/,
   ); checks += 1
 
@@ -355,7 +418,7 @@ try {
   }
   const mixedDiscountEvidence = await firstUse.deriveShopBatchEligibleSaleLines(mixedDiscountCommerce)
   assert.deepEqual(mixedDiscountEvidence.lines.map((candidate) => candidate.netValueMmk).sort((left, right) => left - right), [0, 1]); checks += 1
-  const mixedDiscountProjection = await firstUse.saveShopBatchProfitControlLocalReview(mixedDiscountCommerce, {
+  const mixedDiscountProjection = await saveReview(mixedDiscountCommerce, {
     ...draft,
     batchId: 'OWNER-BATCH-DISCOUNT',
     selectedLineDigests: mixedDiscountEvidence.lines.map((candidate) => candidate.selectionId),
@@ -375,10 +438,17 @@ try {
   const failedStorage = new MemoryStorage()
   failedStorage.setItem = () => { throw new Error('quota') }
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, failedStorage, '2026-08-30T03:00:00.000Z'),
+    saveReview(retainedCommerce, draft, failedStorage, '2026-08-30T03:00:00.000Z'),
     /shop_batch_first_use_storage_write_failed/,
   ); checks += 1
   assert.equal(failedStorage.value, null); checks += 1
+
+  const oversizedStorage = new MemoryStorage()
+  oversizedStorage.value = 'x'.repeat(firstUse.SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES + 1)
+  await assert.rejects(
+    firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, oversizedStorage),
+    /shop_batch_first_use_storage_size_exceeded/,
+  ); checks += 1
 
   const secondCommerce = structuredClone(retainedCommerce)
   secondCommerce.orders.push({
@@ -390,13 +460,74 @@ try {
   const secondEvidence = await firstUse.deriveShopBatchEligibleSaleLines(secondCommerce)
   const secondLine = secondEvidence.lines.find((candidate) => candidate.selectionId !== line.selectionId)
   assert.ok(secondLine); checks += 1
-  const appended = await firstUse.saveShopBatchProfitControlLocalReview(secondCommerce, {
+
+  const concurrentLock = new ExclusiveLockManager()
+  const concurrentStorage = new LockGuardedStorage(concurrentLock)
+  const concurrentSaves = await Promise.all([
+    saveReview(secondCommerce, { ...draft, batchId: 'CONCURRENT-BATCH-001' }, concurrentStorage, '2026-08-30T03:08:00.000Z', () => secondCommerce, concurrentLock),
+    saveReview(secondCommerce, { ...draft, batchId: 'CONCURRENT-BATCH-002', selectedLineDigests: [secondLine.selectionId] }, concurrentStorage, '2026-08-30T03:09:00.000Z', () => secondCommerce, concurrentLock),
+  ])
+  assert.deepEqual(concurrentSaves.map((result) => result.recordCount).sort((left, right) => left - right), [1, 2]); checks += 1
+  assert.equal(concurrentLock.requests, 2); checks += 1
+  assert.equal(concurrentLock.maxActive, 1); checks += 1
+  concurrentStorage.enforceLock = false
+  const concurrentLoaded = await firstUse.loadShopBatchProfitControlLocalReview(secondCommerce, concurrentStorage)
+  assert.equal(concurrentLoaded.recordCount, 2); checks += 1
+
+  const conflictingStorage = new MemoryStorage()
+  const conflictingLock = new ExclusiveLockManager()
+  const conflictingSaves = await Promise.allSettled([
+    saveReview(retainedCommerce, { ...draft, batchId: 'CONFLICT-BATCH-001' }, conflictingStorage, '2026-08-30T03:08:00.000Z', () => retainedCommerce, conflictingLock),
+    saveReview(retainedCommerce, { ...draft, batchId: 'CONFLICT-BATCH-002' }, conflictingStorage, '2026-08-30T03:09:00.000Z', () => retainedCommerce, conflictingLock),
+  ])
+  assert.equal(conflictingSaves.filter((result) => result.status === 'fulfilled').length, 1); checks += 1
+  assert.equal(conflictingSaves.filter((result) => result.status === 'rejected' && /shop_batch_first_use_duplicate_line_reuse/.test(String(result.reason))).length, 1); checks += 1
+  assert.equal((await firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, conflictingStorage)).recordCount, 1); checks += 1
+
+  const appended = await saveReview(secondCommerce, {
     ...draft,
     batchId: 'OWNER-BATCH-002',
     selectedLineDigests: [secondLine.selectionId],
   }, storage, '2026-08-30T03:10:00.000Z')
   assert.equal(appended.recordCount, 2); checks += 1
   assert.equal(appended.projection.evidenceStatus.crossBatchReuseAbsent, true); checks += 1
+
+  const scaleCommerce = structuredClone(retainedCommerce)
+  scaleCommerce.orders = Array.from({ length: 12 }, (_, index) => ({
+    ...structuredClone(retainedCommerce.orders[0]),
+    id: `ORDER-SCALE-${String(index + 1).padStart(3, '0')}`,
+    paymentReconciliationActionId: `PAY-SCALE-${String(index + 1).padStart(3, '0')}`,
+    completion: {
+      ...structuredClone(retainedCommerce.orders[0].completion),
+      actionId: `COMPLETE-SCALE-${String(index + 1).padStart(3, '0')}`,
+      evidenceReference: `LOCAL-SCALE-${String(index + 1).padStart(3, '0')}`,
+    },
+  }))
+  const scaleEvidence = await firstUse.deriveShopBatchEligibleSaleLines(scaleCommerce)
+  assert.equal(scaleEvidence.lines.length, 12); checks += 1
+  const scaleStorage = new MemoryStorage()
+  const scaleLock = new ExclusiveLockManager()
+  let sixRecordBytes = 0
+  for (const [index, scaleLine] of scaleEvidence.lines.entries()) {
+    await saveReview(scaleCommerce, {
+      ...draft,
+      batchId: `SCALE-BATCH-${String(index + 1).padStart(3, '0')}`,
+      selectedLineDigests: [scaleLine.selectionId],
+    }, scaleStorage, `2026-08-30T04:${String(index).padStart(2, '0')}:00.000Z`, () => scaleCommerce, scaleLock)
+    if (index === 5) sixRecordBytes = new TextEncoder().encode(scaleStorage.value).byteLength
+  }
+  const twelveRecordBytes = new TextEncoder().encode(scaleStorage.value).byteLength
+  assert.ok(twelveRecordBytes < sixRecordBytes * 2.2, `normalized 12-record bytes ${twelveRecordBytes} must remain linear from 6-record bytes ${sixRecordBytes}`); checks += 1
+  assert.ok(twelveRecordBytes < firstUse.SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES); checks += 1
+  assert.equal((await firstUse.loadShopBatchProfitControlLocalReview(scaleCommerce, scaleStorage)).recordCount, 12); checks += 1
+  check(!scaleStorage.value.includes('workspaceHistorySnapshot') && !scaleStorage.value.includes('workspaceHistoryReceipt'), 'multi-record storage must keep reconstructed history out of persisted bytes')
+  firstUseStorageEvidence = {
+    exclusiveWriters: concurrentLock.requests,
+    maximumConcurrentTransactions: concurrentLock.maxActive,
+    sixRecordBytes,
+    twelveRecordBytes,
+    storageCeilingBytes: firstUse.SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES,
+  }
 
   const stalePriorCommerce = structuredClone(secondCommerce)
   stalePriorCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').lines[0].unitPriceMmk = 3_001
@@ -428,4 +559,5 @@ console.log(JSON.stringify({
   checks,
   defaultState: noBatch.state,
   authorityAllFalse: true,
+  firstUseStorageEvidence,
 }))

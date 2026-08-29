@@ -9,9 +9,11 @@ import {
 
 export const SHOP_BATCH_FIRST_USE_STORAGE_KEY = 'supermega.shop.batch-profit-control.local-workspace.v1'
 export const SHOP_BATCH_FIRST_USE_STORAGE_CONTRACT = 'supermega.shop.batch_profit_control.local_workspace.v1'
+export const SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES = 2_000_000
 
 const LOCAL_RECORD_CONTRACT = 'supermega.shop.batch_profit_control.local_record.v1'
 const COMMERCE_SOURCE_SNAPSHOT_CONTRACT = 'supermega.shop.batch_profit_control.commerce_source_snapshot.v1'
+const STORAGE_LOCK_NAME = `${SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`
 const LOCAL_OPERATING_CLASSIFICATION = 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof'
 const MAX_RECORDS = 100
 const MAX_COUNT = 100_000
@@ -22,6 +24,7 @@ const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 type JsonObject = Record<string, unknown>
 
 export type ShopBatchFirstUseStorage = Pick<Storage, 'getItem' | 'setItem'>
+export type ShopBatchFirstUseLockManager = Pick<LockManager, 'request'>
 
 export type ShopBatchEligibleSaleLine = {
   selectionId: string
@@ -67,6 +70,8 @@ export type ShopBatchFirstUseDraft = {
   overheadOwnerReviewed: boolean
 }
 
+type ShopBatchPersistedInputLeaves = Omit<ShopBatchProfitControlInput, 'workspaceHistorySnapshot' | 'workspaceHistoryReceipt'>
+
 type ShopBatchLocalRecord = {
   contract: typeof LOCAL_RECORD_CONTRACT
   recordRevision: number
@@ -75,7 +80,7 @@ type ShopBatchLocalRecord = {
   batchId: string
   commerceSourceSnapshotDigest: string
   workspaceSnapshotDigest: string
-  input: ShopBatchProfitControlInput
+  inputLeaves: ShopBatchPersistedInputLeaves
   projectionDigest: string
   recordDigest: string
 }
@@ -419,6 +424,7 @@ function readRaw(storage: ShopBatchFirstUseStorage) {
 
 function parseStore(raw: string | null): ShopBatchLocalStore {
   if (raw === null) return emptyStore()
+  if (new TextEncoder().encode(raw).byteLength > SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES) fail('shop_batch_first_use_storage_size_exceeded')
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { fail('shop_batch_first_use_storage_invalid') }
   exactKeys(parsed, ['contract', 'version', 'records', 'headRecordDigest', 'controls'], 'shop_batch_first_use_storage_shape_invalid')
@@ -433,9 +439,86 @@ function parseStore(raw: string | null): ShopBatchLocalStore {
 
 function historyRecord(record: ShopBatchLocalRecord): ShopBatchProfitControlInput['workspaceHistorySnapshot']['records'][number] {
   return {
-    envelope: structuredClone(record.input.batchEnvelope),
-    saleAllocationLedger: structuredClone(record.input.saleAllocationLedger),
-    retainedEvidenceReceipt: structuredClone(record.input.retainedEvidenceReceipt),
+    envelope: structuredClone(record.inputLeaves.batchEnvelope),
+    saleAllocationLedger: structuredClone(record.inputLeaves.saleAllocationLedger),
+    retainedEvidenceReceipt: structuredClone(record.inputLeaves.retainedEvidenceReceipt),
+  }
+}
+
+async function hydrateInput(
+  inputLeaves: ShopBatchPersistedInputLeaves,
+  priorRecords: ShopBatchLocalRecord[],
+): Promise<ShopBatchProfitControlInput> {
+  const projectionAt = inputLeaves.dispositionCore.projectionAt
+  const candidateBatchId = inputLeaves.batchEnvelope.batchId
+  const candidateRevision = inputLeaves.batchEnvelope.revision
+  const records = priorRecords.map(historyRecord).sort((left, right) => {
+    const leftKey = `${left.envelope.batchId}\u0000${String(left.envelope.revision).padStart(6, '0')}`
+    const rightKey = `${right.envelope.batchId}\u0000${String(right.envelope.revision).padStart(6, '0')}`
+    return leftKey.localeCompare(rightKey)
+  })
+  const workspaceHistorySnapshot: ShopBatchProfitControlInput['workspaceHistorySnapshot'] = {
+    contract: 'supermega.shop.batch_profit_control.workspace_history_snapshot.v1',
+    capturedAt: projectionAt,
+    projectionAt,
+    candidateBatchId,
+    candidateRevision,
+    scope: 'all_active_closed_voided_batch_lineages',
+    recordCount: records.length,
+    records,
+    controls: {
+      sourceOwnedWorkspaceScan: true,
+      callerProvidedSubsetAccepted: false,
+      completeWorkspaceScan: true,
+      activeClosedVoidedIncluded: true,
+      privateIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    recordSetDigest: '',
+    snapshotDigest: '',
+  }
+  workspaceHistorySnapshot.recordSetDigest = await canonicalDigest({
+    contract: 'supermega.shop.batch_profit_control.workspace_history_record_set.v1',
+    capturedAt: projectionAt,
+    projectionAt,
+    candidateBatchId,
+    candidateRevision,
+    scope: workspaceHistorySnapshot.scope,
+    records,
+  })
+  workspaceHistorySnapshot.snapshotDigest = await canonicalDigest(withoutField(workspaceHistorySnapshot, 'snapshotDigest'))
+  const workspaceHistoryReceipt: ShopBatchProfitControlInput['workspaceHistoryReceipt'] = {
+    contract: 'supermega.shop.batch_profit_control.workspace_history_receipt.v1',
+    generatedAt: projectionAt,
+    projectionAt,
+    candidateBatchId,
+    candidateRevision,
+    scope: 'all_active_closed_voided_batch_lineages',
+    sourceWorkspaceRecordSetDigest: workspaceHistorySnapshot.recordSetDigest,
+    sourceWorkspaceSnapshotDigest: workspaceHistorySnapshot.snapshotDigest,
+    recordCount: records.length,
+    controls: {
+      sourceDerived: true,
+      completeWorkspaceScan: true,
+      activeClosedVoidedIncluded: true,
+      manualHistoryAssertionAccepted: false,
+      omittedHistoryAllowed: false,
+      privateIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    receiptDigest: '',
+  }
+  workspaceHistoryReceipt.receiptDigest = await canonicalDigest(withoutField(workspaceHistoryReceipt, 'receiptDigest'))
+  return {
+    ...structuredClone(inputLeaves),
+    workspaceHistorySnapshot,
+    workspaceHistoryReceipt,
   }
 }
 
@@ -447,7 +530,7 @@ async function currentSourceSnapshotDigest(
 
 async function validateCurrentCommerceSource(record: ShopBatchLocalRecord, current: ShopBatchEligibleSaleEvidence) {
   const byDigest = new Map(current.lines.map((line) => [line.sourceLine.orderLineBindingDigest, line.sourceLine]))
-  const retained = record.input.sourceRecordSet.saleLines.map((line) => {
+  const retained = record.inputLeaves.sourceRecordSet.saleLines.map((line) => {
     const candidate = byDigest.get(line.orderLineBindingDigest)
     if (!candidate || canonicalJson(candidate) !== canonicalJson(line)) fail('shop_batch_first_use_source_snapshot_stale')
     return candidate
@@ -456,11 +539,12 @@ async function validateCurrentCommerceSource(record: ShopBatchLocalRecord, curre
 }
 
 async function validateStore(store: ShopBatchLocalStore, commerce: CommerceState | null) {
+  if (store.records.length > MAX_RECORDS) fail('shop_batch_first_use_storage_record_count_invalid')
   const currentCommerceEvidence = commerce ? await deriveShopBatchEligibleSaleLines(commerce) : null
   let priorRecordDigest: string | null = null
   const seenBatchIds = new Set<string>()
   for (const [index, record] of store.records.entries()) {
-    exactKeys(record, ['contract', 'recordRevision', 'priorRecordDigest', 'createdAt', 'batchId', 'commerceSourceSnapshotDigest', 'workspaceSnapshotDigest', 'input', 'projectionDigest', 'recordDigest'], 'shop_batch_first_use_record_shape_invalid')
+    exactKeys(record, ['contract', 'recordRevision', 'priorRecordDigest', 'createdAt', 'batchId', 'commerceSourceSnapshotDigest', 'workspaceSnapshotDigest', 'inputLeaves', 'projectionDigest', 'recordDigest'], 'shop_batch_first_use_record_shape_invalid')
     if (record.contract !== LOCAL_RECORD_CONTRACT || record.recordRevision !== index + 1 || record.priorRecordDigest !== priorRecordDigest) fail('shop_batch_first_use_record_lineage_invalid')
     safeTimestamp(record.createdAt, 'shop_batch_first_use_record_time_invalid')
     if (!SAFE_ID_PATTERN.test(record.batchId) || seenBatchIds.has(record.batchId)) fail('shop_batch_first_use_batch_id_reused')
@@ -469,28 +553,36 @@ async function validateStore(store: ShopBatchLocalStore, commerce: CommerceState
     safeDigest(record.workspaceSnapshotDigest, 'shop_batch_first_use_workspace_snapshot_digest_invalid')
     safeDigest(record.projectionDigest, 'shop_batch_first_use_projection_digest_invalid')
     safeDigest(record.recordDigest, 'shop_batch_first_use_record_digest_invalid')
-    const expectedHistory = store.records.slice(0, index).map(historyRecord).sort((left, right) => {
-      const leftKey = `${left.envelope.batchId}\u0000${String(left.envelope.revision).padStart(6, '0')}`
-      const rightKey = `${right.envelope.batchId}\u0000${String(right.envelope.revision).padStart(6, '0')}`
-      return leftKey.localeCompare(rightKey)
-    })
-    if (canonicalJson(record.input.workspaceHistorySnapshot.records) !== canonicalJson(expectedHistory)) fail('shop_batch_first_use_workspace_history_omitted')
-    if (record.input.workspaceHistorySnapshot.snapshotDigest !== record.workspaceSnapshotDigest) fail('shop_batch_first_use_workspace_snapshot_digest_mismatch')
-    const projection = await projectShopBatchProfitControl(structuredClone(record.input), record.workspaceSnapshotDigest)
-    if (await canonicalDigest(projection) !== record.projectionDigest) fail('shop_batch_first_use_projection_digest_mismatch')
+    exactKeys(record.inputLeaves, [
+      'dispositionCore',
+      'sourceRecordSet',
+      'saleAllocationLedger',
+      'productionCostReceipt',
+      'overheadReceipt',
+      'retainedEvidenceReceipt',
+      'batchEnvelope',
+      ...(record.inputLeaves.marginFloorBasisPoints === undefined ? [] : ['marginFloorBasisPoints']),
+    ], 'shop_batch_first_use_record_input_shape_invalid')
+    if (record.inputLeaves.batchEnvelope.batchId !== record.batchId || record.inputLeaves.dispositionCore.projectionAt !== record.createdAt) fail('shop_batch_first_use_record_binding_invalid')
     if (await canonicalDigest(withoutField(record, 'recordDigest')) !== record.recordDigest) fail('shop_batch_first_use_record_digest_mismatch')
     priorRecordDigest = record.recordDigest
   }
   if (store.headRecordDigest !== priorRecordDigest) fail('shop_batch_first_use_storage_head_mismatch')
   if (currentCommerceEvidence) for (const record of store.records) await validateCurrentCommerceSource(record, currentCommerceEvidence)
-  return store
+  const latest = store.records.at(-1)
+  if (!latest) return { store, projection: null as ShopBatchProfitControlProjection | null }
+  const input = await hydrateInput(latest.inputLeaves, store.records.slice(0, -1))
+  if (input.workspaceHistorySnapshot.snapshotDigest !== latest.workspaceSnapshotDigest) fail('shop_batch_first_use_workspace_snapshot_digest_mismatch')
+  const projection = await projectShopBatchProfitControl(input, latest.workspaceSnapshotDigest)
+  if (await canonicalDigest(projection) !== latest.projectionDigest) fail('shop_batch_first_use_projection_digest_mismatch')
+  return { store, projection }
 }
 
 async function readValidatedStore(storage: ShopBatchFirstUseStorage, commerce: CommerceState | null) {
   const raw = readRaw(storage)
   const store = parseStore(raw)
-  await validateStore(store, commerce)
-  return { raw, store }
+  const validated = await validateStore(store, commerce)
+  return { raw, ...validated }
 }
 
 function assertDraft(draft: ShopBatchFirstUseDraft, projectionAt: string) {
@@ -523,7 +615,7 @@ async function buildInput(
     if (!line) fail('shop_batch_first_use_sale_allocation_missing')
     return line
   })
-  const priorLineDigests = new Set(store.records.flatMap((record) => record.input.sourceRecordSet.saleLines.map((line) => line.orderLineBindingDigest)))
+  const priorLineDigests = new Set(store.records.flatMap((record) => record.inputLeaves.sourceRecordSet.saleLines.map((line) => line.orderLineBindingDigest)))
   if (selected.some((line) => priorLineDigests.has(line.selectionId))) fail('shop_batch_first_use_duplicate_line_reuse')
   if (selected.some((line) => line.sourceBusinessDate !== draft.businessDate)) fail('shop_batch_first_use_cross_date_requires_preorder_binding')
   const grouped = new Map<string, { itemName: string; variant: string | null; soldUnits: number }>()
@@ -812,70 +904,7 @@ async function buildInput(
     envelopeDigest: '',
   }
   batchEnvelope.envelopeDigest = await canonicalDigest(withoutField(batchEnvelope, 'envelopeDigest'))
-  const records = store.records.map(historyRecord).sort((left, right) => {
-    const leftKey = `${left.envelope.batchId}\u0000${String(left.envelope.revision).padStart(6, '0')}`
-    const rightKey = `${right.envelope.batchId}\u0000${String(right.envelope.revision).padStart(6, '0')}`
-    return leftKey.localeCompare(rightKey)
-  })
-  const workspaceHistorySnapshot: ShopBatchProfitControlInput['workspaceHistorySnapshot'] = {
-    contract: 'supermega.shop.batch_profit_control.workspace_history_snapshot.v1',
-    capturedAt: projectionAt,
-    projectionAt,
-    candidateBatchId: draft.batchId,
-    candidateRevision: 1,
-    scope: 'all_active_closed_voided_batch_lineages',
-    recordCount: records.length,
-    records,
-    controls: {
-      sourceOwnedWorkspaceScan: true,
-      callerProvidedSubsetAccepted: false,
-      completeWorkspaceScan: true,
-      activeClosedVoidedIncluded: true,
-      privateIdentityExported: false,
-      customerWrite: false,
-      paymentWrite: false,
-      stockWrite: false,
-      hostedWrite: false,
-    },
-    recordSetDigest: '',
-    snapshotDigest: '',
-  }
-  workspaceHistorySnapshot.recordSetDigest = await canonicalDigest({
-    contract: 'supermega.shop.batch_profit_control.workspace_history_record_set.v1',
-    capturedAt: projectionAt,
-    projectionAt,
-    candidateBatchId: draft.batchId,
-    candidateRevision: 1,
-    scope: workspaceHistorySnapshot.scope,
-    records,
-  })
-  workspaceHistorySnapshot.snapshotDigest = await canonicalDigest(withoutField(workspaceHistorySnapshot, 'snapshotDigest'))
-  const workspaceHistoryReceipt: ShopBatchProfitControlInput['workspaceHistoryReceipt'] = {
-    contract: 'supermega.shop.batch_profit_control.workspace_history_receipt.v1',
-    generatedAt: projectionAt,
-    projectionAt,
-    candidateBatchId: draft.batchId,
-    candidateRevision: 1,
-    scope: 'all_active_closed_voided_batch_lineages',
-    sourceWorkspaceRecordSetDigest: workspaceHistorySnapshot.recordSetDigest,
-    sourceWorkspaceSnapshotDigest: workspaceHistorySnapshot.snapshotDigest,
-    recordCount: records.length,
-    controls: {
-      sourceDerived: true,
-      completeWorkspaceScan: true,
-      activeClosedVoidedIncluded: true,
-      manualHistoryAssertionAccepted: false,
-      omittedHistoryAllowed: false,
-      privateIdentityExported: false,
-      customerWrite: false,
-      paymentWrite: false,
-      stockWrite: false,
-      hostedWrite: false,
-    },
-    receiptDigest: '',
-  }
-  workspaceHistoryReceipt.receiptDigest = await canonicalDigest(withoutField(workspaceHistoryReceipt, 'receiptDigest'))
-  const input: ShopBatchProfitControlInput = {
+  const inputLeaves: ShopBatchPersistedInputLeaves = {
     dispositionCore,
     sourceRecordSet,
     saleAllocationLedger,
@@ -883,9 +912,8 @@ async function buildInput(
     overheadReceipt,
     retainedEvidenceReceipt,
     batchEnvelope,
-    workspaceHistorySnapshot,
-    workspaceHistoryReceipt,
   }
+  const input = await hydrateInput(inputLeaves, store.records)
   return {
     input,
     commerceSourceSnapshotDigest: await currentSourceSnapshotDigest(saleLines),
@@ -896,15 +924,29 @@ function keyIsCount(label: string) {
   return label !== 'reviewedUnitCostEstimateMmk'
 }
 
+function browserLockManager(): ShopBatchFirstUseLockManager | null {
+  return typeof navigator !== 'undefined' && navigator.locks ? navigator.locks : null
+}
+
+function persistedInputLeaves(input: ShopBatchProfitControlInput): ShopBatchPersistedInputLeaves {
+  return {
+    dispositionCore: structuredClone(input.dispositionCore),
+    sourceRecordSet: structuredClone(input.sourceRecordSet),
+    saleAllocationLedger: structuredClone(input.saleAllocationLedger),
+    productionCostReceipt: structuredClone(input.productionCostReceipt),
+    overheadReceipt: structuredClone(input.overheadReceipt),
+    retainedEvidenceReceipt: structuredClone(input.retainedEvidenceReceipt),
+    batchEnvelope: structuredClone(input.batchEnvelope),
+    ...(input.marginFloorBasisPoints === undefined ? {} : { marginFloorBasisPoints: input.marginFloorBasisPoints }),
+  }
+}
+
 // eslint-disable-next-line react-refresh/only-export-components -- source-owned receipt loading is tested through this action-loaded boundary
 export async function loadShopBatchProfitControlLocalReview(
   commerce: CommerceState,
   storage: ShopBatchFirstUseStorage,
 ) {
-  const { store } = await readValidatedStore(storage, commerce)
-  const latest = store.records.at(-1)
-  if (!latest) return { recordCount: 0, projection: null as ShopBatchProfitControlProjection | null }
-  const projection = await projectShopBatchProfitControl(structuredClone(latest.input), latest.workspaceSnapshotDigest)
+  const { store, projection } = await readValidatedStore(storage, commerce)
   return { recordCount: store.records.length, projection }
 }
 
@@ -915,36 +957,42 @@ export async function saveShopBatchProfitControlLocalReview(
   storage: ShopBatchFirstUseStorage,
   projectionAt = new Date().toISOString(),
   readCurrentCommerce: () => CommerceState = () => commerce,
+  lockManager: ShopBatchFirstUseLockManager | null = browserLockManager(),
 ) {
-  const { raw: beforeRaw, store } = await readValidatedStore(storage, commerce)
-  const { input, commerceSourceSnapshotDigest } = await buildInput(commerce, draft, store, projectionAt)
-  const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
-  const record: ShopBatchLocalRecord = {
-    contract: LOCAL_RECORD_CONTRACT,
-    recordRevision: store.records.length + 1,
-    priorRecordDigest: store.headRecordDigest,
-    createdAt: projectionAt,
-    batchId: draft.batchId,
-    commerceSourceSnapshotDigest,
-    workspaceSnapshotDigest: input.workspaceHistorySnapshot.snapshotDigest,
-    input,
-    projectionDigest: await canonicalDigest(projection),
-    recordDigest: '',
-  }
-  record.recordDigest = await canonicalDigest(withoutField(record, 'recordDigest'))
-  const nextStore: ShopBatchLocalStore = {
-    ...store,
-    records: [...store.records, record],
-    headRecordDigest: record.recordDigest,
-  }
-  await validateStore(nextStore, readCurrentCommerce())
-  if (readRaw(storage) !== beforeRaw) fail('shop_batch_first_use_storage_race')
-  const serialized = canonicalJson(nextStore)
-  try { storage.setItem(SHOP_BATCH_FIRST_USE_STORAGE_KEY, serialized) } catch { fail('shop_batch_first_use_storage_write_failed') }
-  if (readRaw(storage) !== serialized) fail('shop_batch_first_use_storage_readback_failed')
-  const verified = await readValidatedStore(storage, commerce)
-  if (verified.store.headRecordDigest !== record.recordDigest) fail('shop_batch_first_use_storage_readback_failed')
-  return { recordCount: nextStore.records.length, projection }
+  if (!lockManager) fail('shop_batch_first_use_storage_lock_unavailable')
+  return lockManager.request(STORAGE_LOCK_NAME, { mode: 'exclusive' }, async (lock) => {
+    if (!lock || lock.mode !== 'exclusive') fail('shop_batch_first_use_storage_lock_unavailable')
+    const { raw: beforeRaw, store } = await readValidatedStore(storage, commerce)
+    const { input, commerceSourceSnapshotDigest } = await buildInput(commerce, draft, store, projectionAt)
+    const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
+    const record: ShopBatchLocalRecord = {
+      contract: LOCAL_RECORD_CONTRACT,
+      recordRevision: store.records.length + 1,
+      priorRecordDigest: store.headRecordDigest,
+      createdAt: projectionAt,
+      batchId: draft.batchId,
+      commerceSourceSnapshotDigest,
+      workspaceSnapshotDigest: input.workspaceHistorySnapshot.snapshotDigest,
+      inputLeaves: persistedInputLeaves(input),
+      projectionDigest: await canonicalDigest(projection),
+      recordDigest: '',
+    }
+    record.recordDigest = await canonicalDigest(withoutField(record, 'recordDigest'))
+    const nextStore: ShopBatchLocalStore = {
+      ...store,
+      records: [...store.records, record],
+      headRecordDigest: record.recordDigest,
+    }
+    await validateStore(nextStore, readCurrentCommerce())
+    if (readRaw(storage) !== beforeRaw) fail('shop_batch_first_use_storage_race')
+    const serialized = canonicalJson(nextStore)
+    if (new TextEncoder().encode(serialized).byteLength > SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES) fail('shop_batch_first_use_storage_size_exceeded')
+    try { storage.setItem(SHOP_BATCH_FIRST_USE_STORAGE_KEY, serialized) } catch { fail('shop_batch_first_use_storage_write_failed') }
+    if (readRaw(storage) !== serialized) fail('shop_batch_first_use_storage_readback_failed')
+    const verified = await readValidatedStore(storage, commerce)
+    if (verified.store.headRecordDigest !== record.recordDigest || !verified.projection) fail('shop_batch_first_use_storage_readback_failed')
+    return { recordCount: nextStore.records.length, projection: verified.projection }
+  })
 }
 
 type WorkflowState =
@@ -958,6 +1006,8 @@ function displayFailure(error: unknown) {
   const code = error instanceof Error ? error.message : 'shop_batch_first_use_unknown_failure'
   const labels: Record<string, string> = {
     shop_batch_first_use_storage_unavailable: 'Local Batch storage is unavailable. No estimate was saved or shown.',
+    shop_batch_first_use_storage_lock_unavailable: 'Exclusive local Batch saving is unavailable. No estimate was saved or shown.',
+    shop_batch_first_use_storage_size_exceeded: 'The bounded local Batch workspace is full. Existing records remain unchanged; no estimate was saved or shown.',
     shop_batch_first_use_storage_write_failed: 'Local Batch storage refused the write. No estimate was saved or shown.',
     shop_batch_first_use_storage_readback_failed: 'The saved Batch record did not read back exactly. No estimate is trusted.',
     shop_batch_first_use_source_snapshot_stale: 'The retained Shop sale evidence changed. Reopen the workflow from the current workspace.',
@@ -978,7 +1028,14 @@ function initialBatchId(date: string) {
   return `BATCH-${date.replaceAll('-', '')}-01`
 }
 
-const MODULE_LOAD_YANGON_DATE = yangonDate(Date.now())
+// eslint-disable-next-line react-refresh/only-export-components -- deterministic action-time date boundary has focused clock tests
+export function shopBatchFirstUseReviewDefaults(timestampMs = Date.now(), recordNumber = 1) {
+  const businessDate = yangonDate(timestampMs)
+  return {
+    businessDate,
+    batchId: initialBatchId(businessDate).replace(/-01$/, `-${String(recordNumber).padStart(2, '0')}`),
+  }
+}
 
 function defaultItemInput(soldUnits: number): ShopBatchFirstUseItemInput {
   return {
@@ -999,11 +1056,12 @@ export function ShopBatchProfitControlFirstUse({
   commerce: CommerceState
   onProjection: (projection: ShopBatchProfitControlProjection | null) => void
 }) {
-  const today = MODULE_LOAD_YANGON_DATE
+  const [initialReview] = useState(() => shopBatchFirstUseReviewDefaults())
   const [workflow, setWorkflow] = useState<WorkflowState>({ status: 'loading' })
   const [newReviewChosen, setNewReviewChosen] = useState(false)
-  const [batchId, setBatchId] = useState(initialBatchId(today))
-  const [businessDate, setBusinessDate] = useState(today)
+  const [reviewDate, setReviewDate] = useState(initialReview.businessDate)
+  const [batchId, setBatchId] = useState(initialReview.batchId)
+  const [businessDate, setBusinessDate] = useState(initialReview.businessDate)
   const [selected, setSelected] = useState<string[]>([])
   const [itemInputs, setItemInputs] = useState<Record<string, ShopBatchFirstUseItemInput>>({})
   const [packagingCostMmk, setPackagingCostMmk] = useState(0)
@@ -1124,7 +1182,10 @@ export function ShopBatchProfitControlFirstUse({
       {recordCount > 0 && !newReviewChosen ? <div className="shop-batch-first-use-choice">
         <p><strong>Existing local Batch kept.</strong> It was revalidated against the current selected Shop evidence. Starting another review appends a new immutable record; it never replaces or merges an existing Batch or the Shop workspace.</p>
         <button className="core-button" onClick={() => {
-          setBatchId(initialBatchId(today).replace(/-01$/, `-${String(recordCount + 1).padStart(2, '0')}`))
+          const nextReview = shopBatchFirstUseReviewDefaults(Date.now(), recordCount + 1)
+          setReviewDate(nextReview.businessDate)
+          setBusinessDate(nextReview.businessDate)
+          setBatchId(nextReview.batchId)
           setSelected([])
           setItemInputs({})
           setNewReviewChosen(true)
@@ -1134,7 +1195,7 @@ export function ShopBatchProfitControlFirstUse({
         <fieldset>
           <legend>1. Batch identity and exact sale lines</legend>
           <label><span>Batch ID</span><input maxLength={80} onChange={(event) => setBatchId(event.target.value)} pattern="[A-Za-z0-9][A-Za-z0-9._:-]{0,79}" required value={batchId} /></label>
-          <label><span>Business date</span><input max={today} onChange={(event) => setBusinessDate(event.target.value)} required type="date" value={businessDate} /></label>
+          <label><span>Business date</span><input max={reviewDate} onChange={(event) => setBusinessDate(event.target.value)} required type="date" value={businessDate} /></label>
           <div aria-label="Eligible completed sale lines" className="shop-batch-first-use-lines">
             {evidence.lines.map((line) => <label key={line.selectionId}>
               <input checked={selected.includes(line.selectionId)} onChange={() => toggleLine(line)} type="checkbox" />
