@@ -10,6 +10,7 @@ const PRODUCTION_COST_CONTRACT = 'supermega.shop.batch_profit_control.production
 const OVERHEAD_CONTRACT = 'supermega.shop.batch_profit_control.overhead_receipt.v1'
 const RETAINED_EVIDENCE_CONTRACT = 'supermega.shop.batch_profit_control.retained_evidence_receipt.v1'
 const ENVELOPE_CONTRACT = 'supermega.shop.batch_profit_control.batch_envelope.v1'
+const WORKSPACE_HISTORY_CONTRACT = 'supermega.shop.batch_profit_control.workspace_history_receipt.v1'
 const COST_METHOD = 'owner_reviewed_standard_unit_cost_estimate'
 const SYNTHETIC_CLASSIFICATION = 'synthetic_local_fixture_never_evidence'
 const LOCAL_OPERATING_CLASSIFICATION = 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof'
@@ -293,6 +294,34 @@ export type ShopBatchEnvelope = {
   envelopeDigest: string
 }
 
+type WorkspaceHistoryControls = {
+  sourceDerived: true
+  completeWorkspaceScan: true
+  activeClosedVoidedIncluded: true
+  manualHistoryAssertionAccepted: false
+  omittedHistoryAllowed: false
+  privateIdentityExported: false
+  customerWrite: false
+  paymentWrite: false
+  stockWrite: false
+  hostedWrite: false
+}
+
+export type ShopBatchWorkspaceHistoryReceipt = {
+  contract: typeof WORKSPACE_HISTORY_CONTRACT
+  generatedAt: string
+  projectionAt: string
+  candidateBatchId: string
+  candidateRevision: number
+  scope: 'all_active_closed_voided_batch_lineages'
+  envelopeCount: number
+  saleAllocationLedgerCount: number
+  envelopes: ShopBatchEnvelope[]
+  saleAllocationLedgers: ShopBatchSaleAllocationLedger[]
+  controls: WorkspaceHistoryControls
+  receiptDigest: string
+}
+
 export type ShopBatchProfitControlInput = {
   dispositionCore: ShopBatchDispositionCore
   sourceRecordSet: ShopBatchSourceRecordSet
@@ -301,8 +330,7 @@ export type ShopBatchProfitControlInput = {
   overheadReceipt: ShopBatchOverheadReceipt
   retainedEvidenceReceipt: ShopBatchRetainedEvidenceReceipt
   batchEnvelope: ShopBatchEnvelope
-  workspaceBatchEnvelopes: ShopBatchEnvelope[]
-  workspaceSaleAllocations: ShopBatchSaleAllocation[]
+  workspaceHistoryReceipt: ShopBatchWorkspaceHistoryReceipt
   marginFloorBasisPoints?: number
 }
 
@@ -323,10 +351,12 @@ export type ShopBatchProfitPriority = {
   closureCondition: string
 }
 
+export type ShopBatchProfitControlState = 'no_batch' | 'collecting_batch_evidence' | 'review_adjustments' | 'batch_margin_at_risk' | 'batch_controlled'
+
 export type ShopBatchProfitControlProjection = {
   contract: typeof SHOP_BATCH_PROFIT_CONTROL_CONTRACT
   contractSourceSha256: typeof SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256
-  state: 'collecting_batch_evidence' | 'review_adjustments' | 'batch_margin_at_risk' | 'batch_controlled'
+  state: Exclude<ShopBatchProfitControlState, 'no_batch'>
   batchIdentity: {
     batchId: string
     revision: number
@@ -349,7 +379,7 @@ export type ShopBatchProfitControlProjection = {
     reconciliationComplete: boolean
     batchSaleAllocationComplete: true
     crossBatchReuseAbsent: true
-    retainedSalesEvidenceComplete: true
+    retainedSalesEvidenceComplete: boolean
     productionQuantityCostCoverageComplete: true
     costEstimateBasisUnambiguous: true
     overheadReviewComplete: true
@@ -383,6 +413,49 @@ export type ShopBatchProfitControlProjection = {
   truthBoundary: {
     costLabel: 'Owner-reviewed production-cost estimate'
     classification: BatchClassification
+    boundary: string
+    mayCountAsBaseline: false
+    mayCountAsPilotRun: false
+    mayCountAsCustomerEvidence: false
+    mayCountAsCommercialProof: false
+  }
+  authority: {
+    paymentWrite: false
+    stockWrite: false
+    supplierWrite: false
+    accountingWrite: false
+    customerWrite: false
+    hostedWrite: false
+    providerWrite: false
+    modelUsed: false
+  }
+}
+
+export type ShopBatchProfitControlNoBatchProjection = {
+  contract: typeof SHOP_BATCH_PROFIT_CONTROL_CONTRACT
+  contractSourceSha256: typeof SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256
+  state: 'no_batch'
+  batchIdentity: null
+  evidenceStatus: {
+    canonicalDigestsComplete: false
+    immutableRevisionLineageComplete: false
+    reconciliationComplete: false
+    batchSaleAllocationComplete: false
+    crossBatchReuseAbsent: false
+    retainedSalesEvidenceComplete: false
+    productionQuantityCostCoverageComplete: false
+    costEstimateBasisUnambiguous: false
+    overheadReviewComplete: false
+    adjustmentLinkageComplete: false
+    profitStatus: 'withheld'
+    withheldReasonCodes: ['no_batch']
+  }
+  totals: null
+  estimatePreview: null
+  priorities: []
+  truthBoundary: {
+    costLabel: 'Owner-reviewed production-cost estimate'
+    classification: null
     boundary: string
     mayCountAsBaseline: false
     mayCountAsPilotRun: false
@@ -473,7 +546,8 @@ function safeTimestamp(value: unknown, projectionAtMs: number | null, code: stri
 
 function safeDate(value: unknown, code: string) {
   const date = safeString(value, code, 10)
-  if (!DATE_PATTERN.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) fail(code)
+  const parsed = Date.parse(`${date}T00:00:00Z`)
+  if (!DATE_PATTERN.test(date) || !Number.isFinite(parsed) || new Date(parsed).toISOString().slice(0, 10) !== date) fail(code)
   return date
 }
 
@@ -582,6 +656,7 @@ function validateSaleLine(line: ShopBatchSaleLine, projectionAtMs: number) {
   if (line.sourceBusinessDate > yangonDate(projectionAtMs)) fail('shop_batch_profit_sale_business_date_future')
   safeWhole(line.netUnits, 'shop_batch_profit_sale_units_invalid', MAX_INDIVIDUAL_COUNT)
   safeWhole(line.netValueMmk, 'shop_batch_profit_sale_value_invalid', MAX_INDIVIDUAL_MMK)
+  if (line.netUnits === 0 && line.netValueMmk > 0) fail('shop_batch_profit_sale_quantity_value_invalid')
   safeBoolean(line.nonSample, 'shop_batch_profit_sale_classification_invalid')
   safeBoolean(line.paymentReconciled, 'shop_batch_profit_payment_evidence_invalid')
   safeBoolean(line.completionPresent, 'shop_batch_profit_completion_evidence_invalid')
@@ -637,8 +712,19 @@ function validateSourceRecordSet(source: ShopBatchSourceRecordSet, core: ShopBat
   const saleLines = safeArray(source.saleLines, 'shop_batch_profit_sale_lines_invalid') as ShopBatchSaleLine[]
   for (const line of saleLines) validateSaleLine(line, projectionAtMs)
   exactOrder(saleLines, (line) => line.orderLineBindingDigest, 'shop_batch_profit_sale_line_order_invalid')
+  const classificationMatches = core.classification === SYNTHETIC_CLASSIFICATION
+    ? saleLines.every((line) => line.nonSample === false)
+    : saleLines.every((line) => line.nonSample === true)
+  if (!classificationMatches) fail('shop_batch_profit_classification_source_mismatch')
   const costs = safeArray(source.standardUnitCostEstimateSources, 'shop_batch_profit_cost_sources_invalid') as ShopBatchStandardUnitCostEstimateSource[]
+  const costSkus = new Set<string>()
   for (const cost of costs) validateCostSource(cost, core, projectionAtMs)
+  for (const cost of costs) {
+    if (costSkus.has(cost.sku)) fail('shop_batch_profit_cost_source_ambiguous')
+    costSkus.add(cost.sku)
+  }
+  const dispositionSkus = new Set(core.items.map((item) => item.sku))
+  if (costSkus.size !== dispositionSkus.size || [...costSkus].some((sku) => !dispositionSkus.has(sku))) fail('shop_batch_profit_cost_source_coverage_invalid')
   exactOrder(costs, (cost) => `${cost.sku}\u0000${cost.effectiveFrom}\u0000${cost.estimateBasisDigest}`, 'shop_batch_profit_cost_source_order_invalid')
   validateOverheadValues(source.overheadSource, core, projectionAtMs)
 }
@@ -658,7 +744,9 @@ function validateLedgerControls(controls: SaleLedgerControls) {
   }, 'shop_batch_profit_sale_ledger_controls_invalid')
 }
 
-function validateAllocationShape(allocation: ShopBatchSaleAllocation, core: ShopBatchDispositionCore, projectionAtMs: number) {
+type ShopBatchAllocationBinding = Pick<ShopBatchDispositionCore, 'batchId' | 'revision' | 'businessDate'>
+
+function validateAllocationShape(allocation: ShopBatchSaleAllocation, core: ShopBatchAllocationBinding, projectionAtMs: number) {
   exactKeys(allocation, ['allocationId', 'batchId', 'envelopeRevision', 'supersedesAllocationId', 'orderLineBindingDigest', 'completionBindingDigest', 'allocationMode', 'assignmentReason', 'completedAt', 'sourceBusinessDate', 'batchBusinessDate', 'retainedNetUnits', 'retainedNetValueMmk', 'allocatedNetUnits', 'allocatedNetValueMmk', 'priorAllocatedUnits', 'priorAllocatedValueMmk', 'remainingUnitsBefore', 'remainingValueBefore', 'preorderBatchBindingDigest'], 'shop_batch_profit_allocation_shape_invalid')
   safeId(allocation.allocationId, 'shop_batch_profit_allocation_id_invalid')
   if (allocation.batchId !== core.batchId || allocation.envelopeRevision !== core.revision) fail('shop_batch_profit_allocation_batch_binding_invalid')
@@ -688,8 +776,8 @@ function validateAllocationShape(allocation: ShopBatchSaleAllocation, core: Shop
   if (allocation.preorderBatchBindingDigest !== null) safeDigest(allocation.preorderBatchBindingDigest, 'shop_batch_profit_preorder_binding_invalid')
 }
 
-function findImmediatelyPriorAllocation(input: ShopBatchProfitControlInput, allocation: ShopBatchSaleAllocation) {
-  const matches = input.workspaceSaleAllocations.filter((candidate) => candidate.orderLineBindingDigest === allocation.orderLineBindingDigest)
+function findImmediatelyPriorAllocation(allocationsByLine: ReadonlyMap<string, readonly ShopBatchSaleAllocation[]>, allocation: ShopBatchSaleAllocation) {
+  const matches = allocationsByLine.get(allocation.orderLineBindingDigest) ?? []
   if (matches.some((candidate) => candidate.batchId !== allocation.batchId)) fail('shop_batch_profit_cross_batch_sale_reuse')
   const sameBatch = matches.filter((candidate) => candidate.batchId === allocation.batchId)
   const duplicateIds = new Set<string>()
@@ -700,10 +788,14 @@ function findImmediatelyPriorAllocation(input: ShopBatchProfitControlInput, allo
   }
   const immediatelyPrior = sameBatch.find((candidate) => candidate.envelopeRevision === allocation.envelopeRevision - 1) ?? null
   if (sameBatch.some((candidate) => candidate.envelopeRevision > allocation.envelopeRevision - 1)) fail('shop_batch_profit_allocation_history_gap')
-  return immediatelyPrior
+  return { immediatelyPrior, hasSameBatchHistory: sameBatch.length > 0 }
 }
 
-function validateSaleAllocationLedger(input: ShopBatchProfitControlInput, projectionAtMs: number) {
+function validateSaleAllocationLedger(
+  input: ShopBatchProfitControlInput,
+  projectionAtMs: number,
+  history: { allocationIds: ReadonlySet<string>; allocationsByLine: ReadonlyMap<string, readonly ShopBatchSaleAllocation[]> },
+) {
   const { saleAllocationLedger: ledger, dispositionCore: core, sourceRecordSet: source } = input
   exactKeys(ledger, ['contract', 'generatedAt', 'projectionAt', 'batchId', 'revision', 'dispositionCoreDigest', 'sourceRecordSetDigest', 'allocations', 'controls', 'ledgerDigest'], 'shop_batch_profit_ledger_shape_invalid')
   exactValue(ledger.contract, SALE_LEDGER_CONTRACT, 'shop_batch_profit_ledger_contract_invalid')
@@ -716,10 +808,10 @@ function validateSaleAllocationLedger(input: ShopBatchProfitControlInput, projec
   const allocations = safeArray(ledger.allocations, 'shop_batch_profit_allocations_invalid') as ShopBatchSaleAllocation[]
   exactOrder(allocations, (allocation) => `${allocation.batchId}\u0000${String(allocation.envelopeRevision).padStart(6, '0')}\u0000${allocation.orderLineBindingDigest}`, 'shop_batch_profit_allocation_order_invalid')
   const lines = new Map(source.saleLines.map((line) => [line.orderLineBindingDigest, line]))
-  const allocationIds = new Set<string>()
+  const allocationIds = new Set(history.allocationIds)
   for (const allocation of allocations) {
     validateAllocationShape(allocation, core, projectionAtMs)
-    if (allocationIds.has(allocation.allocationId)) fail('shop_batch_profit_allocation_duplicate')
+    if (allocationIds.has(allocation.allocationId)) fail('shop_batch_profit_allocation_id_reused')
     allocationIds.add(allocation.allocationId)
     const line = lines.get(allocation.orderLineBindingDigest)
     if (!line
@@ -728,9 +820,11 @@ function validateSaleAllocationLedger(input: ShopBatchProfitControlInput, projec
       || line.sourceBusinessDate !== allocation.sourceBusinessDate
       || line.netUnits !== allocation.retainedNetUnits
       || line.netValueMmk !== allocation.retainedNetValueMmk) fail('shop_batch_profit_allocation_source_mismatch')
-    const prior = findImmediatelyPriorAllocation(input, allocation)
-    if (core.revision === 1 || prior === null) {
+    const { immediatelyPrior: prior, hasSameBatchHistory } = findImmediatelyPriorAllocation(history.allocationsByLine, allocation)
+    if (core.revision === 1 || (!hasSameBatchHistory && prior === null)) {
       if (allocation.supersedesAllocationId !== null || allocation.priorAllocatedUnits !== 0 || allocation.priorAllocatedValueMmk !== 0) fail('shop_batch_profit_allocation_initial_lineage_invalid')
+    } else if (prior === null) {
+      fail('shop_batch_profit_allocation_history_gap')
     } else if (allocation.supersedesAllocationId !== prior.allocationId
       || allocation.priorAllocatedUnits !== prior.allocatedNetUnits
       || allocation.priorAllocatedValueMmk !== prior.allocatedNetValueMmk) fail('shop_batch_profit_allocation_supersession_invalid')
@@ -939,14 +1033,126 @@ async function validateEnvelopeDigest(envelope: ShopBatchEnvelope) {
   if (await canonicalDigest(withoutField(envelope, 'envelopeDigest')) !== envelope.envelopeDigest) fail('shop_batch_profit_envelope_digest_mismatch')
 }
 
-async function validateEnvelopeLineage(input: ShopBatchProfitControlInput) {
+function validateWorkspaceHistoryControls(controls: WorkspaceHistoryControls) {
+  validateFalseControls(controls, {
+    sourceDerived: true,
+    completeWorkspaceScan: true,
+    activeClosedVoidedIncluded: true,
+    manualHistoryAssertionAccepted: false,
+    omittedHistoryAllowed: false,
+    privateIdentityExported: false,
+    customerWrite: false,
+    paymentWrite: false,
+    stockWrite: false,
+    hostedWrite: false,
+  }, 'shop_batch_profit_workspace_history_controls_invalid')
+}
+
+async function validateHistoricalLedger(ledger: ShopBatchSaleAllocationLedger, envelope: ShopBatchEnvelope, projectionAtMs: number) {
+  exactKeys(ledger, ['contract', 'generatedAt', 'projectionAt', 'batchId', 'revision', 'dispositionCoreDigest', 'sourceRecordSetDigest', 'allocations', 'controls', 'ledgerDigest'], 'shop_batch_profit_workspace_ledger_shape_invalid')
+  exactValue(ledger.contract, SALE_LEDGER_CONTRACT, 'shop_batch_profit_workspace_ledger_contract_invalid')
+  if (ledger.batchId !== envelope.batchId || ledger.revision !== envelope.revision || ledger.projectionAt !== envelope.projectionAt) fail('shop_batch_profit_workspace_ledger_envelope_mismatch')
+  safeTimestamp(ledger.generatedAt, projectionAtMs, 'shop_batch_profit_workspace_ledger_time_invalid')
+  safeTimestamp(ledger.projectionAt, projectionAtMs, 'shop_batch_profit_workspace_ledger_projection_time_invalid')
+  if (ledger.dispositionCoreDigest !== envelope.dispositionCoreDigest || ledger.sourceRecordSetDigest !== envelope.sourceRecordSetDigest) fail('shop_batch_profit_workspace_ledger_envelope_mismatch')
+  safeDigest(ledger.ledgerDigest, 'shop_batch_profit_workspace_ledger_digest_invalid')
+  validateLedgerControls(ledger.controls)
+  const allocations = safeArray(ledger.allocations, 'shop_batch_profit_workspace_allocations_invalid') as ShopBatchSaleAllocation[]
+  exactOrder(allocations, (allocation) => `${allocation.batchId}\u0000${String(allocation.envelopeRevision).padStart(6, '0')}\u0000${allocation.orderLineBindingDigest}`, 'shop_batch_profit_workspace_allocation_order_invalid')
+  const allocationIds = new Set<string>()
+  for (const allocation of allocations) {
+    validateAllocationShape(allocation, envelope, projectionAtMs)
+    if (allocationIds.has(allocation.allocationId)) fail('shop_batch_profit_workspace_allocation_duplicate')
+    allocationIds.add(allocation.allocationId)
+  }
+  if (await canonicalDigest(withoutField(ledger, 'ledgerDigest')) !== ledger.ledgerDigest) fail('shop_batch_profit_workspace_ledger_digest_mismatch')
+}
+
+function validateHistoricalAllocationLineage(allocations: readonly ShopBatchSaleAllocation[]) {
+  const allocationIds = new Set<string>()
+  const byLine = new Map<string, ShopBatchSaleAllocation[]>()
+  for (const allocation of allocations) {
+    if (allocationIds.has(allocation.allocationId)) fail('shop_batch_profit_workspace_allocation_id_reused')
+    allocationIds.add(allocation.allocationId)
+    const rows = byLine.get(allocation.orderLineBindingDigest) ?? []
+    rows.push(allocation)
+    byLine.set(allocation.orderLineBindingDigest, rows)
+  }
+  for (const rows of byLine.values()) {
+    if (new Set(rows.map((row) => row.batchId)).size !== 1) fail('shop_batch_profit_cross_batch_sale_reuse')
+    let prior: ShopBatchSaleAllocation | null = null
+    for (const row of rows) {
+      if (prior === null) {
+        if (row.supersedesAllocationId !== null || row.priorAllocatedUnits !== 0 || row.priorAllocatedValueMmk !== 0) fail('shop_batch_profit_workspace_allocation_initial_lineage_invalid')
+      } else if (row.envelopeRevision !== prior.envelopeRevision + 1
+        || row.supersedesAllocationId !== prior.allocationId
+        || row.priorAllocatedUnits !== prior.allocatedNetUnits
+        || row.priorAllocatedValueMmk !== prior.allocatedNetValueMmk) fail('shop_batch_profit_workspace_allocation_lineage_invalid')
+      prior = row
+    }
+  }
+  return { allocationIds, allocationsByLine: byLine }
+}
+
+async function validateWorkspaceHistoryReceipt(input: ShopBatchProfitControlInput, projectionAtMs: number) {
+  const { workspaceHistoryReceipt: receipt, dispositionCore: core } = input
+  exactKeys(receipt, ['contract', 'generatedAt', 'projectionAt', 'candidateBatchId', 'candidateRevision', 'scope', 'envelopeCount', 'saleAllocationLedgerCount', 'envelopes', 'saleAllocationLedgers', 'controls', 'receiptDigest'], 'shop_batch_profit_workspace_history_shape_invalid')
+  exactValue(receipt.contract, WORKSPACE_HISTORY_CONTRACT, 'shop_batch_profit_workspace_history_contract_invalid')
+  safeTimestamp(receipt.generatedAt, projectionAtMs, 'shop_batch_profit_workspace_history_time_invalid')
+  if (receipt.projectionAt !== core.projectionAt || receipt.candidateBatchId !== core.batchId || receipt.candidateRevision !== core.revision) fail('shop_batch_profit_workspace_history_candidate_mismatch')
+  exactValue(receipt.scope, 'all_active_closed_voided_batch_lineages', 'shop_batch_profit_workspace_history_scope_invalid')
+  const envelopes = safeArray(receipt.envelopes, 'shop_batch_profit_workspace_envelopes_invalid') as ShopBatchEnvelope[]
+  const ledgers = safeArray(receipt.saleAllocationLedgers, 'shop_batch_profit_workspace_ledgers_invalid') as ShopBatchSaleAllocationLedger[]
+  safeWhole(receipt.envelopeCount, 'shop_batch_profit_workspace_envelope_count_invalid', MAX_RECORD_COUNT)
+  safeWhole(receipt.saleAllocationLedgerCount, 'shop_batch_profit_workspace_ledger_count_invalid', MAX_RECORD_COUNT)
+  if (receipt.envelopeCount !== envelopes.length || receipt.saleAllocationLedgerCount !== ledgers.length || envelopes.length !== ledgers.length) fail('shop_batch_profit_workspace_history_count_mismatch')
+  exactOrder(envelopes, (envelope) => `${envelope.batchId}\u0000${String(envelope.revision).padStart(6, '0')}`, 'shop_batch_profit_workspace_envelope_order_invalid')
+  exactOrder(ledgers, (ledger) => `${ledger.batchId}\u0000${String(ledger.revision).padStart(6, '0')}`, 'shop_batch_profit_workspace_ledger_order_invalid')
+  validateWorkspaceHistoryControls(receipt.controls)
+  safeDigest(receipt.receiptDigest, 'shop_batch_profit_workspace_history_digest_invalid')
+
+  const envelopeByRevision = new Map<string, ShopBatchEnvelope>()
+  const envelopesByBatch = new Map<string, ShopBatchEnvelope[]>()
+  for (const envelope of envelopes) {
+    await validateEnvelopeDigest(envelope)
+    if (envelope.batchId === core.batchId && envelope.revision >= core.revision) fail('shop_batch_profit_workspace_history_future')
+    const key = `${envelope.batchId}\u0000${envelope.revision}`
+    if (envelopeByRevision.has(key)) fail('shop_batch_profit_workspace_envelope_duplicate')
+    envelopeByRevision.set(key, envelope)
+    const rows = envelopesByBatch.get(envelope.batchId) ?? []
+    rows.push(envelope)
+    envelopesByBatch.set(envelope.batchId, rows)
+  }
+  for (const rows of envelopesByBatch.values()) {
+    let priorDigest: string | null = null
+    for (let index = 0; index < rows.length; index += 1) {
+      const envelope = rows[index]
+      if (envelope.revision !== index + 1 || envelope.priorEnvelopeDigest !== priorDigest) fail('shop_batch_profit_workspace_envelope_lineage_invalid')
+      if ((envelope.revision === 1) !== (envelope.revisionReasonCode === 'initial')) fail('shop_batch_profit_workspace_envelope_lineage_invalid')
+      priorDigest = envelope.envelopeDigest
+    }
+  }
+
+  const workspaceAllocations: ShopBatchSaleAllocation[] = []
+  for (const ledger of ledgers) {
+    const envelope = envelopeByRevision.get(`${ledger.batchId}\u0000${ledger.revision}`)
+    if (!envelope) fail('shop_batch_profit_workspace_ledger_envelope_missing')
+    await validateHistoricalLedger(ledger, envelope, projectionAtMs)
+    workspaceAllocations.push(...ledger.allocations)
+    if (workspaceAllocations.length > MAX_RECORD_COUNT) fail('shop_batch_profit_workspace_allocation_count_invalid')
+  }
+  const allocationHistory = validateHistoricalAllocationLineage(workspaceAllocations)
+  if (await canonicalDigest(withoutField(receipt, 'receiptDigest')) !== receipt.receiptDigest) fail('shop_batch_profit_workspace_history_digest_mismatch')
+  return { envelopes, ...allocationHistory }
+}
+
+async function validateEnvelopeLineage(input: ShopBatchProfitControlInput, workspaceBatchEnvelopes: readonly ShopBatchEnvelope[]) {
   const { batchEnvelope: current, dispositionCore: core } = input
   await validateEnvelopeDigest(current)
   assertSharedBinding(current, core, 'shop_batch_profit_envelope_binding_invalid')
   if (current.businessDate !== core.businessDate || current.classification !== core.classification || current.logicalStatus !== core.status) fail('shop_batch_profit_envelope_core_mismatch')
   if (current.revisionReasonCode === 'voided' && current.logicalStatus !== 'voided') fail('shop_batch_profit_void_lineage_invalid')
-  const prior = safeArray(input.workspaceBatchEnvelopes, 'shop_batch_profit_workspace_envelopes_invalid') as ShopBatchEnvelope[]
-  const byRevision = [...prior].sort((left, right) => left.revision - right.revision)
+  const byRevision = workspaceBatchEnvelopes.filter((envelope) => envelope.batchId === current.batchId)
   if (current.revision === 1) {
     if (current.priorEnvelopeDigest !== null || current.revisionReasonCode !== 'initial' || byRevision.length !== 0) fail('shop_batch_profit_initial_lineage_invalid')
     return
@@ -956,7 +1162,7 @@ async function validateEnvelopeLineage(input: ShopBatchProfitControlInput) {
   for (let index = 0; index < byRevision.length; index += 1) {
     const envelope = byRevision[index]
     await validateEnvelopeDigest(envelope)
-    if (envelope.batchId !== current.batchId || envelope.revision !== index + 1 || envelope.priorEnvelopeDigest !== previousDigest) fail('shop_batch_profit_revision_lineage_invalid')
+    if (envelope.batchId !== current.batchId || envelope.revision !== index + 1 || envelope.priorEnvelopeDigest !== previousDigest || envelope.classification !== current.classification || envelope.businessDate !== current.businessDate) fail('shop_batch_profit_revision_lineage_invalid')
     if (envelope.revision === 1 && envelope.revisionReasonCode !== 'initial') fail('shop_batch_profit_revision_lineage_invalid')
     if (envelope.revision > 1 && envelope.revisionReasonCode === 'initial') fail('shop_batch_profit_revision_lineage_invalid')
     previousDigest = envelope.envelopeDigest
@@ -1029,20 +1235,67 @@ function allocateOverhead(totalOverhead: bigint, saleValues: ReadonlyMap<string,
 }
 
 function projectionState(priorities: readonly ShopBatchProfitPriority[], withheld: readonly string[]) {
-  if (withheld.includes('batch_not_closed') || withheld.includes('completed_sale_value_zero')) return 'collecting_batch_evidence' as const
+  if (withheld.includes('batch_not_closed') || withheld.includes('batch_voided') || withheld.includes('completed_sale_value_zero')) return 'collecting_batch_evidence' as const
+  if (withheld.includes('retained_sale_evidence_incomplete')) return 'review_adjustments' as const
   if (withheld.includes('synthetic_or_sample_evidence_excluded')) return priorities.length ? 'batch_margin_at_risk' as const : 'batch_controlled' as const
   return priorities.length ? 'batch_margin_at_risk' as const : 'batch_controlled' as const
 }
 
+export function projectNoBatchProfitControl(): ShopBatchProfitControlNoBatchProjection {
+  return {
+    contract: SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
+    contractSourceSha256: SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
+    state: 'no_batch',
+    batchIdentity: null,
+    evidenceStatus: {
+      canonicalDigestsComplete: false,
+      immutableRevisionLineageComplete: false,
+      reconciliationComplete: false,
+      batchSaleAllocationComplete: false,
+      crossBatchReuseAbsent: false,
+      retainedSalesEvidenceComplete: false,
+      productionQuantityCostCoverageComplete: false,
+      costEstimateBasisUnambiguous: false,
+      overheadReviewComplete: false,
+      adjustmentLinkageComplete: false,
+      profitStatus: 'withheld',
+      withheldReasonCodes: ['no_batch'],
+    },
+    totals: null,
+    estimatePreview: null,
+    priorities: [],
+    truthBoundary: {
+      costLabel: 'Owner-reviewed production-cost estimate',
+      classification: null,
+      boundary: 'No batch is selected. Decision estimates and priorities are unavailable; no evidence or authority is inferred.',
+      mayCountAsBaseline: false,
+      mayCountAsPilotRun: false,
+      mayCountAsCustomerEvidence: false,
+      mayCountAsCommercialProof: false,
+    },
+    authority: {
+      paymentWrite: false,
+      stockWrite: false,
+      supplierWrite: false,
+      accountingWrite: false,
+      customerWrite: false,
+      hostedWrite: false,
+      providerWrite: false,
+      modelUsed: false,
+    },
+  }
+}
+
 export async function projectShopBatchProfitControl(input: ShopBatchProfitControlInput): Promise<ShopBatchProfitControlProjection> {
-  exactKeys(input, ['dispositionCore', 'sourceRecordSet', 'saleAllocationLedger', 'productionCostReceipt', 'overheadReceipt', 'retainedEvidenceReceipt', 'batchEnvelope', 'workspaceBatchEnvelopes', 'workspaceSaleAllocations', ...(input.marginFloorBasisPoints === undefined ? [] : ['marginFloorBasisPoints'])], 'shop_batch_profit_input_shape_invalid')
+  exactKeys(input, ['dispositionCore', 'sourceRecordSet', 'saleAllocationLedger', 'productionCostReceipt', 'overheadReceipt', 'retainedEvidenceReceipt', 'batchEnvelope', 'workspaceHistoryReceipt', ...(input.marginFloorBasisPoints === undefined ? [] : ['marginFloorBasisPoints'])], 'shop_batch_profit_input_shape_invalid')
   const projectionAtMs = validateDisposition(input.dispositionCore)
   validateSourceRecordSet(input.sourceRecordSet, input.dispositionCore, projectionAtMs)
-  validateSaleAllocationLedger(input, projectionAtMs)
+  const workspaceHistory = await validateWorkspaceHistoryReceipt(input, projectionAtMs)
+  await validateEnvelopeLineage(input, workspaceHistory.envelopes)
+  validateSaleAllocationLedger(input, projectionAtMs, workspaceHistory)
   validateProductionCostReceipt(input, projectionAtMs)
   validateOverheadReceipt(input, projectionAtMs)
   validateRetainedEvidenceReceipt(input, projectionAtMs)
-  await validateEnvelopeLineage(input)
   const digests = await validateCanonicalDigests(input)
   const floorBasisPoints = input.marginFloorBasisPoints ?? SHOP_BATCH_PROFIT_CONTROL_MARGIN_FLOOR_BASIS_POINTS
   safeWhole(floorBasisPoints, 'shop_batch_profit_margin_floor_invalid', 10_000)
@@ -1072,11 +1325,27 @@ export async function projectShopBatchProfitControl(input: ShopBatchProfitContro
   const totalOverhead = BigInt(input.overheadReceipt.packagingCostMmk) + BigInt(input.overheadReceipt.deliveryCostMmk) + BigInt(input.overheadReceipt.otherReviewedBatchCostMmk)
   const totalSales = sumBigInt([...saleValues.values()])
   const totalCompletedUnits = sumBigInt([...saleUnits.values()])
+  if (totalSales > 0n && totalCompletedUnits === 0n) fail('shop_batch_profit_sale_quantity_value_invalid')
   const totalBatchCost = totalProductionCost + totalOverhead
   const overheadBySku = allocateOverhead(totalOverhead, saleValues)
+  const synthetic = core.classification === SYNTHETIC_CLASSIFICATION
+  const saleCompletionEvidenceComplete = input.sourceRecordSet.saleLines.every((line) => line.paymentReconciled && line.completionPresent)
+  const retainedSalesEvidenceComplete = !synthetic
+    && input.sourceRecordSet.saleLines.length > 0
+    && input.sourceRecordSet.saleLines.every((line) => line.nonSample && line.paymentReconciled && line.completionPresent)
+  const withheldReasonCodes: string[] = []
+  if (core.status !== 'closed') withheldReasonCodes.push(core.status === 'voided' ? 'batch_voided' : 'batch_not_closed')
+  if (totalSales === 0n) withheldReasonCodes.push('completed_sale_value_zero')
+  if (synthetic) withheldReasonCodes.push('synthetic_or_sample_evidence_excluded')
+  if (!saleCompletionEvidenceComplete) withheldReasonCodes.push('retained_sale_evidence_incomplete')
+  const decisionArithmeticAllowed = core.status === 'closed'
+    && totalSales > 0n
+    && totalCompletedUnits > 0n
+    && saleCompletionEvidenceComplete
+    && (synthetic || retainedSalesEvidenceComplete)
   const priorities: ShopBatchProfitPriority[] = []
 
-  if (totalSales > 0n) {
+  if (decisionArithmeticAllowed) {
     for (const item of core.items) {
       const saleValue = saleValues.get(item.sku) ?? 0n
       const cost = reviewedProductionCost.get(item.sku) ?? 0n
@@ -1136,13 +1405,7 @@ export async function projectShopBatchProfitControl(input: ShopBatchProfitContro
       || left.sku.localeCompare(right.sku)
   })
 
-  const synthetic = core.classification === SYNTHETIC_CLASSIFICATION || input.sourceRecordSet.saleLines.some((line) => !line.nonSample)
-  const withheldReasonCodes: string[] = []
-  if (core.status !== 'closed') withheldReasonCodes.push(core.status === 'voided' ? 'batch_voided' : 'batch_not_closed')
-  if (totalSales === 0n) withheldReasonCodes.push('completed_sale_value_zero')
-  if (synthetic) withheldReasonCodes.push('synthetic_or_sample_evidence_excluded')
-  if (!synthetic && input.sourceRecordSet.saleLines.some((line) => !line.paymentReconciled || !line.completionPresent)) withheldReasonCodes.push('retained_sale_evidence_incomplete')
-  const estimatePreview = totalSales > 0n && core.status === 'closed'
+  const estimatePreview = decisionArithmeticAllowed
     ? {
         batchContributionEstimateMmk: safeBigIntOutput(totalSales - totalBatchCost),
         aggregateContributionEstimateBasisPoints: safeBigIntOutput(floorSigned((totalSales - totalBatchCost) * 10_000n, totalSales)),
@@ -1182,7 +1445,7 @@ export async function projectShopBatchProfitControl(input: ShopBatchProfitContro
       reconciliationComplete,
       batchSaleAllocationComplete: true,
       crossBatchReuseAbsent: true,
-      retainedSalesEvidenceComplete: true,
+      retainedSalesEvidenceComplete,
       productionQuantityCostCoverageComplete: true,
       costEstimateBasisUnambiguous: true,
       overheadReviewComplete: true,

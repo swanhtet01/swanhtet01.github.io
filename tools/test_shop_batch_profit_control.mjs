@@ -9,7 +9,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { projectShopBatchProfitControl, SHOP_BATCH_PROFIT_CONTROL_CONTRACT, SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256 } from './shop-batch-profit-control.ts'`,
+    contents: `export { projectShopBatchProfitControl, projectNoBatchProfitControl, SHOP_BATCH_PROFIT_CONTROL_CONTRACT, SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256 } from './shop-batch-profit-control.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/shop-batch-profit-control-test-entry.ts',
     loader: 'ts',
@@ -23,6 +23,7 @@ const bundle = await build({
 
 const {
   projectShopBatchProfitControl,
+  projectNoBatchProfitControl,
   SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
   SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
@@ -317,6 +318,31 @@ function buildFixture() {
     revisionReasonCode: 'initial',
     logicalStatus: 'closed',
   }
+  const workspaceHistoryReceipt = {
+    contract: 'supermega.shop.batch_profit_control.workspace_history_receipt.v1',
+    generatedAt: dispositionCore.projectionAt,
+    projectionAt: dispositionCore.projectionAt,
+    candidateBatchId: dispositionCore.batchId,
+    candidateRevision: dispositionCore.revision,
+    scope: 'all_active_closed_voided_batch_lineages',
+    envelopeCount: 0,
+    saleAllocationLedgerCount: 0,
+    envelopes: [],
+    saleAllocationLedgers: [],
+    controls: {
+      sourceDerived: true,
+      completeWorkspaceScan: true,
+      activeClosedVoidedIncluded: true,
+      manualHistoryAssertionAccepted: false,
+      omittedHistoryAllowed: false,
+      privateIdentityExported: false,
+      customerWrite: false,
+      paymentWrite: false,
+      stockWrite: false,
+      hostedWrite: false,
+    },
+    receiptDigest: '',
+  }
   return reseal({
     dispositionCore,
     sourceRecordSet,
@@ -325,8 +351,7 @@ function buildFixture() {
     overheadReceipt,
     retainedEvidenceReceipt,
     batchEnvelope,
-    workspaceBatchEnvelopes: [],
-    workspaceSaleAllocations: [],
+    workspaceHistoryReceipt,
   })
 }
 
@@ -378,13 +403,20 @@ function reseal(input) {
   input.batchEnvelope.retainedEvidenceReceiptDigest = input.retainedEvidenceReceipt.receiptDigest
   input.batchEnvelope.ownerReviewedOverheadReceiptDigest = input.overheadReceipt.receiptDigest
   input.batchEnvelope.envelopeDigest = digest(without(input.batchEnvelope, 'envelopeDigest'))
+  input.workspaceHistoryReceipt.generatedAt = input.dispositionCore.projectionAt
+  input.workspaceHistoryReceipt.projectionAt = input.dispositionCore.projectionAt
+  input.workspaceHistoryReceipt.candidateBatchId = input.dispositionCore.batchId
+  input.workspaceHistoryReceipt.candidateRevision = input.dispositionCore.revision
+  input.workspaceHistoryReceipt.envelopeCount = input.workspaceHistoryReceipt.envelopes.length
+  input.workspaceHistoryReceipt.saleAllocationLedgerCount = input.workspaceHistoryReceipt.saleAllocationLedgers.length
+  input.workspaceHistoryReceipt.receiptDigest = digest(without(input.workspaceHistoryReceipt, 'receiptDigest'))
   return input
 }
 
 function makeRevisionTwo(first) {
   const next = clone(first)
-  next.workspaceBatchEnvelopes = [clone(first.batchEnvelope)]
-  next.workspaceSaleAllocations = clone(first.saleAllocationLedger.allocations)
+  next.workspaceHistoryReceipt.envelopes = [clone(first.batchEnvelope)]
+  next.workspaceHistoryReceipt.saleAllocationLedgers = [clone(first.saleAllocationLedger)]
   next.dispositionCore.revision = 2
   next.sourceRecordSet.revision = 2
   next.sourceRecordSet.overheadSource.revision = 2
@@ -417,6 +449,65 @@ function makeZeroSale(input, indexes) {
   return reseal(next)
 }
 
+function rebindBatchId(input, batchId) {
+  const next = clone(input)
+  next.dispositionCore.batchId = batchId
+  next.sourceRecordSet.batchId = batchId
+  next.sourceRecordSet.overheadSource.batchId = batchId
+  next.saleAllocationLedger.batchId = batchId
+  for (const entry of next.saleAllocationLedger.allocations) {
+    entry.batchId = batchId
+    entry.allocationId = `${batchId}-${entry.allocationId}`
+  }
+  next.productionCostReceipt.batchId = batchId
+  next.overheadReceipt.batchId = batchId
+  next.retainedEvidenceReceipt.batchId = batchId
+  next.batchEnvelope.batchId = batchId
+  return reseal(next)
+}
+
+function moveToLeapDay(input) {
+  const next = clone(input)
+  const businessDate = '2024-02-29'
+  const projectionAt = '2024-02-29T12:00:00.000Z'
+  next.dispositionCore.businessDate = businessDate
+  next.dispositionCore.projectionAt = projectionAt
+  next.sourceRecordSet.projectionAt = projectionAt
+  for (const line of next.sourceRecordSet.saleLines) {
+    line.completedAt = '2024-02-29T11:00:00.000Z'
+    line.sourceBusinessDate = businessDate
+  }
+  for (const source of next.sourceRecordSet.standardUnitCostEstimateSources) {
+    source.reviewedAt = '2024-02-29T09:10:00.000Z'
+    source.effectiveFrom = businessDate
+    source.effectiveTo = null
+  }
+  next.sourceRecordSet.overheadSource.reviewedAt = '2024-02-29T11:30:00.000Z'
+  next.saleAllocationLedger.generatedAt = projectionAt
+  next.saleAllocationLedger.projectionAt = projectionAt
+  for (const entry of next.saleAllocationLedger.allocations) {
+    entry.completedAt = '2024-02-29T11:00:00.000Z'
+    entry.sourceBusinessDate = businessDate
+    entry.batchBusinessDate = businessDate
+  }
+  next.productionCostReceipt.generatedAt = projectionAt
+  next.productionCostReceipt.projectionAt = projectionAt
+  next.productionCostReceipt.businessDate = businessDate
+  for (const source of next.productionCostReceipt.skuBindings) {
+    source.reviewedAt = '2024-02-29T09:10:00.000Z'
+    source.effectiveFrom = businessDate
+    source.effectiveTo = null
+  }
+  next.overheadReceipt.projectionAt = projectionAt
+  next.overheadReceipt.reviewedAt = '2024-02-29T11:30:00.000Z'
+  next.retainedEvidenceReceipt.generatedAt = projectionAt
+  next.retainedEvidenceReceipt.projectionAt = projectionAt
+  next.retainedEvidenceReceipt.businessDate = businessDate
+  next.batchEnvelope.businessDate = businessDate
+  next.batchEnvelope.projectionAt = projectionAt
+  return reseal(next)
+}
+
 let checks = 0
 function check(condition, label) {
   checks += 1
@@ -430,6 +521,10 @@ async function rejects(input, code, label) {
 
 check(SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256 === ACCEPTED_CONTRACT_SHA256, 'implementation binds the exact accepted R&D contract digest')
 check(SHOP_BATCH_PROFIT_CONTROL_CONTRACT === 'supermega.shop.batch_profit_control.v1', 'output contract is exact')
+const noBatch = projectNoBatchProfitControl()
+check(noBatch.state === 'no_batch' && noBatch.batchIdentity === null && noBatch.totals === null, 'no-batch state is explicitly representable without invented totals')
+check(noBatch.estimatePreview === null && noBatch.priorities.length === 0 && noBatch.evidenceStatus.withheldReasonCodes.join(',') === 'no_batch', 'no-batch state withholds every decision surface')
+check(Object.values(noBatch.authority).every((value) => value === false), 'no-batch state grants no external authority')
 
 const fixture = buildFixture()
 check(digest(fixture.dispositionCore) === EXPECTED_DIGESTS.disposition, 'accepted disposition-core digest independently recomputes')
@@ -454,6 +549,7 @@ check(JSON.stringify(projection.estimatePreview?.overheadAllocationMmkBySku) ===
 check(projection.estimatePreview?.estimatedMarginAtRiskMmk === 24_000, 'estimated margin at risk is exact')
 check(projection.priorities.map((priority) => priority.sku).join(',') === 'BAK-CROISSANT,BAK-MILK-BREAD,BAK-TEA-BUN', 'priority order matches the accepted vector')
 check(projection.evidenceStatus.profitStatus === 'withheld' && projection.evidenceStatus.withheldReasonCodes.join(',') === 'synthetic_or_sample_evidence_excluded', 'synthetic arithmetic never becomes evidence')
+check(projection.evidenceStatus.retainedSalesEvidenceComplete === false, 'synthetic arithmetic is never reported as retained real-sale evidence')
 check(projection.truthBoundary.costLabel === 'Owner-reviewed production-cost estimate' && /never actual accounting cost/i.test(projection.truthBoundary.boundary), 'reviewed-estimate wording is permanent')
 check(Object.values(projection.authority).every((value) => value === false), 'all external authority flags are false')
 check([projection.truthBoundary.mayCountAsBaseline, projection.truthBoundary.mayCountAsPilotRun, projection.truthBoundary.mayCountAsCustomerEvidence, projection.truthBoundary.mayCountAsCommercialProof].every((value) => value === false), 'synthetic output cannot become baseline, pilot, customer, or commercial proof')
@@ -493,7 +589,63 @@ for (const line of realLocal.sourceRecordSet.saleLines) line.nonSample = true
 reseal(realLocal)
 const localProjection = await projectShopBatchProfitControl(realLocal)
 check(localProjection.evidenceStatus.profitStatus === 'available', 'complete retained non-sample local evidence can expose the estimate')
+check(localProjection.evidenceStatus.retainedSalesEvidenceComplete === true, 'complete retained non-sample local evidence is explicitly complete')
 check(localProjection.truthBoundary.mayCountAsPilotRun === false && localProjection.truthBoundary.mayCountAsCommercialProof === false, 'local estimate still cannot become pilot or commercial proof')
+
+for (const [field, label] of [['paymentReconciled', 'unreconciled payment'], ['completionPresent', 'missing completion']]) {
+  const incomplete = clone(realLocal)
+  incomplete.sourceRecordSet.saleLines[0][field] = false
+  reseal(incomplete)
+  const incompleteProjection = await projectShopBatchProfitControl(incomplete)
+  check(incompleteProjection.evidenceStatus.profitStatus === 'withheld' && incompleteProjection.evidenceStatus.withheldReasonCodes.includes('retained_sale_evidence_incomplete'), `${label} exposes a stable evidence blocker`)
+  check(incompleteProjection.estimatePreview === null && incompleteProjection.priorities.length === 0, `${label} withholds all decision metrics and priorities`)
+}
+
+for (const status of ['draft', 'voided']) {
+  const incompleteBatch = clone(fixture)
+  incompleteBatch.dispositionCore.status = status
+  incompleteBatch.batchEnvelope.logicalStatus = status
+  reseal(incompleteBatch)
+  const incompleteProjection = await projectShopBatchProfitControl(incompleteBatch)
+  check(incompleteProjection.estimatePreview === null && incompleteProjection.priorities.length === 0, `${status} batch withholds every money decision`)
+  check(incompleteProjection.state === 'collecting_batch_evidence' && incompleteProjection.evidenceStatus.profitStatus === 'withheld', `${status} batch remains explicitly non-decisional`)
+}
+
+const localWithSampleRows = clone(fixture)
+localWithSampleRows.dispositionCore.classification = 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof'
+localWithSampleRows.batchEnvelope.classification = localWithSampleRows.dispositionCore.classification
+await rejects(localWithSampleRows, 'shop_batch_profit_classification_source_mismatch', 'local-operating classification cannot contain sample rows')
+
+const syntheticWithRealRows = clone(fixture)
+for (const line of syntheticWithRealRows.sourceRecordSet.saleLines) line.nonSample = true
+await rejects(syntheticWithRealRows, 'shop_batch_profit_classification_source_mismatch', 'synthetic classification cannot present rows as non-sample evidence')
+
+const duplicateCostBasis = clone(fixture)
+duplicateCostBasis.sourceRecordSet.standardUnitCostEstimateSources.push({
+  ...clone(duplicateCostBasis.sourceRecordSet.standardUnitCostEstimateSources[0]),
+  estimateBasisDigest: `sha256:${'10'.repeat(32)}`,
+})
+await rejects(duplicateCostBasis, 'shop_batch_profit_cost_source_ambiguous', 'multiple accepted cost-estimate bases for one SKU fail closed')
+
+const unrelatedCostSource = clone(fixture)
+unrelatedCostSource.sourceRecordSet.standardUnitCostEstimateSources.push({
+  ...clone(unrelatedCostSource.sourceRecordSet.standardUnitCostEstimateSources[0]),
+  sku: 'UNLINKED-SKU',
+})
+await rejects(unrelatedCostSource, 'shop_batch_profit_cost_source_coverage_invalid', 'unlinked extra cost-estimate source cannot enter the complete evidence set')
+
+const zeroUnitPositiveValue = clone(fixture)
+zeroUnitPositiveValue.sourceRecordSet.saleLines[0].netUnits = 0
+zeroUnitPositiveValue.sourceRecordSet.saleLines[0].netValueMmk = 1
+await rejects(zeroUnitPositiveValue, 'shop_batch_profit_sale_quantity_value_invalid', 'zero-unit positive-value line fails with a stable code before arithmetic')
+
+const impossibleDate = clone(fixture)
+impossibleDate.dispositionCore.businessDate = '2026-02-30'
+await rejects(impossibleDate, 'shop_batch_profit_business_date_invalid', 'normalized impossible calendar date fails closed')
+
+const leapDay = moveToLeapDay(fixture)
+const leapDayProjection = await projectShopBatchProfitControl(leapDay)
+check(leapDayProjection.batchIdentity.businessDate === '2024-02-29' && leapDayProjection.estimatePreview?.batchContributionEstimateMmk === -14_550, 'valid leap day survives exact calendar round trip and preserves arithmetic')
 
 const revisionTwo = makeRevisionTwo(fixture)
 const revisionTwoProjection = await projectShopBatchProfitControl(revisionTwo)
@@ -506,12 +658,36 @@ wrongPrior.batchEnvelope.envelopeDigest = digest(without(wrongPrior.batchEnvelop
 await rejects(wrongPrior, 'shop_batch_profit_revision_prior_mismatch', 'wrong prior envelope digest fails closed')
 
 const gap = clone(revisionTwo)
-gap.workspaceBatchEnvelopes = []
+gap.workspaceHistoryReceipt.envelopes = []
+gap.workspaceHistoryReceipt.saleAllocationLedgers = []
+reseal(gap)
 await rejects(gap, 'shop_batch_profit_revision_lineage_gap', 'revision gap fails closed')
 
+const otherBatch = rebindBatchId(buildFixture(), 'OTHER-BATCH')
 const crossBatch = clone(fixture)
-crossBatch.workspaceSaleAllocations = [{ ...clone(fixture.saleAllocationLedger.allocations[0]), batchId: 'OTHER-BATCH' }]
+crossBatch.workspaceHistoryReceipt.envelopes = [clone(otherBatch.batchEnvelope)]
+crossBatch.workspaceHistoryReceipt.saleAllocationLedgers = [clone(otherBatch.saleAllocationLedger)]
+reseal(crossBatch)
 await rejects(crossBatch, 'shop_batch_profit_cross_batch_sale_reuse', 'cross-batch retained sale reuse fails closed')
+
+const omittedHistory = clone(crossBatch)
+omittedHistory.workspaceHistoryReceipt.envelopes = []
+omittedHistory.workspaceHistoryReceipt.saleAllocationLedgers = []
+omittedHistory.workspaceHistoryReceipt.envelopeCount = 0
+omittedHistory.workspaceHistoryReceipt.saleAllocationLedgerCount = 0
+await rejects(omittedHistory, 'shop_batch_profit_workspace_history_digest_mismatch', 'omitting source-scanned history breaks the bound workspace receipt')
+
+const forgedPrior = clone(revisionTwo)
+forgedPrior.workspaceHistoryReceipt.saleAllocationLedgers[0].allocations[0].allocationId = 'FORGED-PRIOR'
+await rejects(forgedPrior, 'shop_batch_profit_workspace_ledger_digest_mismatch', 'forged prior allocation body cannot satisfy supersession')
+
+const reusedAllocationId = clone(revisionTwo)
+reusedAllocationId.saleAllocationLedger.allocations[0].allocationId = fixture.saleAllocationLedger.allocations[0].allocationId
+await rejects(reusedAllocationId, 'shop_batch_profit_allocation_id_reused', 'current allocation cannot reuse an immutable historical allocation ID')
+
+const selfAssertedHistory = clone(fixture)
+selfAssertedHistory.workspaceHistoryReceipt.controls.manualHistoryAssertionAccepted = true
+await rejects(selfAssertedHistory, 'shop_batch_profit_workspace_history_controls_invalid', 'self-asserted workspace completeness cannot satisfy the source-owned history gate')
 
 const partialCost = clone(fixture)
 partialCost.productionCostReceipt.skuBindings[0].coveredProducedUnits = 14
