@@ -49,7 +49,7 @@ const mime = {
   '.woff2': 'font/woff2',
 }
 
-function findBrowser() {
+export function findBrowser() {
   const candidates = [
     explicitChromium,
     process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : '',
@@ -126,7 +126,7 @@ function reservePort() {
   })
 }
 
-class Cdp {
+export class Cdp {
   constructor(ws) {
     this.ws = ws
     this.nextId = 1
@@ -150,7 +150,10 @@ class Cdp {
   static async connect(wsUrl) {
     const ws = new WebSocket(wsUrl)
     await new Promise((resolveConnected, reject) => {
-      const timer = setTimeout(() => reject(new Error('timeout connecting to browser websocket')), 30_000)
+      const timer = setTimeout(() => {
+        ws.close()
+        reject(new Error('timeout connecting to browser websocket'))
+      }, 30_000)
       ws.addEventListener('open', () => {
         clearTimeout(timer)
         resolveConnected()
@@ -187,7 +190,7 @@ class Cdp {
   }
 }
 
-async function launchBrowser(browserBin, userDataDir) {
+export async function launchBrowser(browserBin, userDataDir) {
   const debugPort = await reservePort()
   let stderr = ''
   let exited = null
@@ -221,6 +224,7 @@ async function launchBrowser(browserBin, userDataDir) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   }
   const exitNote = exited === null ? 'still running' : `exited with code ${exited}`
+  browser.kill()
   throw new Error(`browser did not expose DevTools on port ${debugPort} (${exitNote}). ${stderr.trim()}`.trim())
 }
 
@@ -260,12 +264,11 @@ try {
 }`
 }
 
-async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs
-  let latest = null
-  while (Date.now() < deadline) {
-    latest = await evalInPage(cdp, sessionId, `(() => ({
+async function readRenderedState(cdp, sessionId) {
+  return evalInPage(cdp, sessionId, `(() => ({
+      origin: location.origin,
       path: location.pathname + location.search,
+      hash: location.hash,
       text: document.body ? document.body.innerText : '',
       bodyLength: document.body ? document.body.innerText.trim().length : 0,
       viewportWidth: window.innerWidth,
@@ -274,10 +277,44 @@ async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText, 
       overlay: Boolean(document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')),
       seedError: window.__supermegaSeedError || '',
     }))()`)
+}
+
+function matchesExpectedPath(expectedPath, value) {
+  return typeof expectedPath === 'function' ? expectedPath(value) : value === expectedPath
+}
+
+export function evaluateFinalRenderedLocation({ beforeCapture, afterCapture, expectedOrigin, expectedPath, expectedPathLabel }) {
+  const before = beforeCapture || {}
+  const after = afterCapture || {}
+  const label = expectedPathLabel || expectedPath
+  const locationStable = before.origin === after.origin && before.path === after.path && before.hash === after.hash
+  const failures = [
+    ...(matchesExpectedPath(expectedPath, before.path || '') ? [] : [`expected final path ${label}, got ${before.path || 'unknown'} before screenshot`]),
+    ...(!expectedOrigin || before.origin === expectedOrigin ? [] : [`expected final origin ${expectedOrigin}, got ${before.origin || 'unknown'} before screenshot`]),
+    ...(before.hash === '' ? [] : [`expected empty final hash, got ${before.hash || 'unknown'} before screenshot`]),
+    ...(locationStable ? [] : ['rendered location changed during screenshot capture']),
+    ...(matchesExpectedPath(expectedPath, after.path || '') ? [] : [`expected final path ${label}, got ${after.path || 'unknown'} after screenshot`]),
+    ...(!expectedOrigin || after.origin === expectedOrigin ? [] : [`expected final origin ${expectedOrigin}, got ${after.origin || 'unknown'} after screenshot`]),
+    ...(after.hash === '' ? [] : [`expected empty final hash, got ${after.hash || 'unknown'} after screenshot`]),
+  ]
+  return {
+    final: {
+      origin: String(after.origin || ''),
+      path: String(after.path || ''),
+      hash: String(after.hash || ''),
+    },
+    ok: failures.length === 0,
+    failures,
+  }
+}
+
+async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs
+  let latest = null
+  while (Date.now() < deadline) {
+    latest = await readRenderedState(cdp, sessionId)
     const text = latest.text || ''
-    const matchesPath = typeof expectedPath === 'function'
-      ? expectedPath(latest.path)
-      : latest.path === expectedPath
+    const matchesPath = matchesExpectedPath(expectedPath, latest.path)
     if (matchesPath && latest.bodyLength > 0 && expectedText.every((needle) => text.includes(needle))) return latest
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   }
@@ -489,8 +526,19 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   }
 }
 
-async function verifyCase(cdp, origin, testCase) {
-  const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
+export async function verifyCase(cdp, origin, testCase) {
+  let browserContextId = null
+  if (testCase.isolatedBrowserContext) {
+    const context = await cdp.send('Target.createBrowserContext', { disposeOnDetach: true })
+    if (typeof context?.browserContextId !== 'string' || !context.browserContextId) {
+      throw new Error('browser context isolation could not be established')
+    }
+    browserContextId = context.browserContextId
+  }
+  const { targetId } = await cdp.send('Target.createTarget', {
+    url: 'about:blank',
+    ...(browserContextId ? { browserContextId } : {}),
+  })
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
   const errors = []
   const networkRequests = []
@@ -540,13 +588,14 @@ async function verifyCase(cdp, origin, testCase) {
     })
     await cdp.send('Page.navigate', { url: origin + testCase.route }, sessionId)
     await load
-    const rendered = await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
+    await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
+    const beforeCapture = await readRenderedState(cdp, sessionId)
     let screenshot = null
     if (screenshotDir && testCase.screenshotName) {
       const capture = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)
@@ -555,12 +604,18 @@ async function verifyCase(cdp, origin, testCase) {
       screenshot = buildScreenshotEvidence({ payload: screenshotPayload, path: screenshotPath, evidenceDir: screenshotDir })
       await writeFile(screenshotPath, screenshotPayload, { flag: 'wx' })
     }
-    const pathMatches = typeof testCase.expectedPath === 'function'
-      ? testCase.expectedPath(rendered?.path || '')
-      : rendered?.path === testCase.expectedPath
-    const missingText = testCase.expectedText.filter((needle) => !(rendered?.text || '').includes(needle))
-    const renderedViewportMatches = Math.abs((rendered?.viewportWidth ?? 0) - testCase.width) <= 1
-      && Math.abs((rendered?.viewportHeight ?? 0) - testCase.height) <= 1
+    const afterCapture = await readRenderedState(cdp, sessionId)
+    const finalLocation = evaluateFinalRenderedLocation({
+      beforeCapture,
+      afterCapture,
+      expectedOrigin: testCase.expectedOrigin,
+      expectedPath: testCase.expectedPath,
+      expectedPathLabel: testCase.expectedPathLabel,
+    })
+    const finalRendered = afterCapture
+    const missingText = testCase.expectedText.filter((needle) => !(finalRendered?.text || '').includes(needle))
+    const renderedViewportMatches = Math.abs((finalRendered?.viewportWidth ?? 0) - testCase.width) <= 1
+      && Math.abs((finalRendered?.viewportHeight ?? 0) - testCase.height) <= 1
     const counterViewportMatches = !shopCounter
       || Math.abs((shopCounter.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((shopCounter.viewportHeight ?? 0) - testCase.height) <= 1
@@ -573,13 +628,13 @@ async function verifyCase(cdp, origin, testCase) {
       return { method: entry.method, path }
     })
     const failures = [
-      ...(pathMatches ? [] : [`expected path ${testCase.expectedPathLabel || testCase.expectedPath}, got ${rendered?.path || 'unknown'}`]),
-      ...(rendered?.bodyLength > 0 ? [] : ['blank page']),
-      ...(rendered?.overlay ? ['framework error overlay present'] : []),
-      ...(rendered?.seedError ? [`seed error: ${rendered.seedError}`] : []),
-      ...(renderedViewportMatches ? [] : [`expected ${testCase.width}x${testCase.height} viewport, got ${rendered?.viewportWidth ?? 'unknown'}x${rendered?.viewportHeight ?? 'unknown'}`]),
-      ...(testCase.noHorizontalOverflow && rendered?.documentScrollWidth > rendered?.viewportWidth + 1
-        ? [`horizontal overflow: ${rendered.documentScrollWidth}px document in ${rendered.viewportWidth}px viewport`]
+      ...finalLocation.failures,
+      ...(finalRendered?.bodyLength > 0 ? [] : ['blank page']),
+      ...(finalRendered?.overlay ? ['framework error overlay present'] : []),
+      ...(finalRendered?.seedError ? [`seed error: ${finalRendered.seedError}`] : []),
+      ...(renderedViewportMatches ? [] : [`expected ${testCase.width}x${testCase.height} viewport, got ${finalRendered?.viewportWidth ?? 'unknown'}x${finalRendered?.viewportHeight ?? 'unknown'}`]),
+      ...(testCase.noHorizontalOverflow && finalRendered?.documentScrollWidth > finalRendered?.viewportWidth + 1
+        ? [`horizontal overflow: ${finalRendered.documentScrollWidth}px document in ${finalRendered.viewportWidth}px viewport`]
         : []),
       ...(shopCounter && !shopCounter.ok ? [shopCounter.error || 'counter checkout exercise failed'] : []),
       ...(shopCounter && !shopCounter.accessibility?.ok ? ['counter accessibility or mobile touch-target contract failed'] : []),
@@ -598,19 +653,24 @@ async function verifyCase(cdp, origin, testCase) {
       name: testCase.name,
       route: testCase.route,
       viewport: `${testCase.width}x${testCase.height}${testCase.mobile ? ' mobile' : ''}`,
-      path: rendered?.path || '',
-      bodyLength: rendered?.bodyLength || 0,
+      path: finalLocation.final.path,
+      ...(testCase.expectedOrigin ? { origin: finalLocation.final.origin, hash: finalLocation.final.hash } : {}),
+      bodyLength: finalRendered?.bodyLength || 0,
       layout: shopCounter,
       claimBoundary: ecommerceClaimBoundary,
       screenshot,
       network: { mutatingRequestCount: mutatingRequests.length, mutatingRequests },
       runtime: { clean: errors.length === 0, errors: [...errors] },
+      ...(browserContextId ? { browserContextIsolated: true } : {}),
       ok: failures.length === 0,
       failures,
     }
   } finally {
     for (const dispose of disposers) dispose()
     await cdp.send('Target.closeTarget', { targetId }).catch(() => {})
+    if (browserContextId) {
+      await cdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => {})
+    }
   }
 }
 
@@ -843,14 +903,16 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  const report = {
-    ok: false,
-    contract: APP_ENTRY_RENDERED_CONTRACT,
-    scope: proofScope,
-    sourceCommit: gitHead(),
-    failures: [error.message],
-  }
-  console.error(JSON.stringify(report, null, 2))
-  process.exit(1)
-})
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    const report = {
+      ok: false,
+      contract: APP_ENTRY_RENDERED_CONTRACT,
+      scope: proofScope,
+      sourceCommit: gitHead(),
+      failures: [error.message],
+    }
+    console.error(JSON.stringify(report, null, 2))
+    process.exit(1)
+  })
+}
