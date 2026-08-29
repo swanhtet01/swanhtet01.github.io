@@ -10,7 +10,7 @@ import {
 } from '../showroom/src/core/shop-batch-profit-control.ts'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8')
+const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8').replace(/\r\n?/g, '\n')
 const css = readFileSync(`${root}/showroom/src/core/core-app.css`, 'utf8')
 const firstUseSource = readFileSync(`${root}/showroom/src/core/shop-batch-profit-control-first-use.tsx`, 'utf8')
 const packageJson = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'))
