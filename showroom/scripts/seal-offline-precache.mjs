@@ -21,9 +21,10 @@
 //
 // What that yields: the app shell and its chrome (including the product switcher and workspace
 // status panel, which render on every screen), the `core-app` chunk -- /shop/ and /plant/, the till
-// and the shop floor -- and the nine lazy screens the operations route owns (Today, Sell, Orders,
+// and the shop floor -- and the lazy screens the operations route owns (Today, Sell, Orders,
 // Stock, the receipt dialog, the service schedule, the monthly statement, the channel intake, the
-// Plant order board). About 1.9 MB uncompressed, roughly 480 KB over the wire.
+// Plant order board), plus the explicitly requested synthetic bakery demo opened from Today.
+// About 1.9 MB uncompressed, roughly 480 KB over the wire.
 //
 // What the exclusions drop, and why each one: Website and Ecommerce (publishing a site and serving
 // a storefront both require a network by definition), Settings, product onboarding, login, signup
@@ -54,7 +55,7 @@ const swPath = resolve(distDir, 'sw.js')
 // pins that same name as the operations route artifact. Both are resolved against the manifest and
 // a miss is fatal, so a rename cannot quietly drop a route out of the offline set.
 const OFFLINE_ENTRY_KEYS = ['index.html']
-const OFFLINE_CHUNK_NAMES = ['core-app']
+const OFFLINE_CHUNK_NAMES = ['core-app', 'shop-bakery-demo-loader']
 
 // Surfaces that are NOT worth the install-time bytes: either they need a network to do anything,
 // or they are one-time setup a shop does once, on connectivity, and never again during a shift.
