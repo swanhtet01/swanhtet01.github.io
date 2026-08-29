@@ -350,6 +350,8 @@ test('route probes reject credential-bearing URLs without source-stored password
     credentialUrl,
     `[${credentialUrl}]`,
     `(${credentialUrl}).`,
+    `${credentialUrl}${']'.repeat(9)}`,
+    `https://safe.example/?next=${credentialUrl}`,
   ]
   for (const routeBody of routeBodies) {
     const { packet } = await buildFixture({ fetchOptions: { routeBody } })

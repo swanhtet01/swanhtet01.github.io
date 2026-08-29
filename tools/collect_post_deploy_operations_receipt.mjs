@@ -39,8 +39,8 @@ const PROJECTS = Object.freeze({
 })
 const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|vercel_[A-Za-z0-9]{20,}|sb_secret_[A-Za-z0-9_-]{20,}|sbp_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/
 const PRIVATE_PATH_PATTERN = /(?:[A-Z]:\\Users\\|\/Users\/|\/home\/|OneDrive - )/iu
-const URL_CANDIDATE_PATTERN = /https?:\/\/[^\s"'<>]+/giu
-const URL_TRAILING_DELIMITERS = new Set([']', ')', '}', ',', '.', ';', '!', '?', '`'])
+const URL_SCHEME_PATTERN = /https?:\/\//giu
+const URL_AUTHORITY_BOUNDARY_PATTERN = /[\/?#\\\s"'<>]/u
 
 function fail(code) {
   throw new Error(code)
@@ -51,22 +51,15 @@ function isRecord(value) {
 }
 
 function containsCredentialUrl(value) {
-  const candidates = String(value || '').match(URL_CANDIDATE_PATTERN) || []
-  return candidates.some((candidate) => {
-    let boundedCandidate = candidate
-    for (let removed = 0; boundedCandidate && removed <= 8; removed += 1) {
-      try {
-        const parsed = new URL(boundedCandidate)
-        if (parsed.username || parsed.password) return true
-      } catch {
-        // Delimited prose and Markdown may leave punctuation on the URL candidate.
-      }
-      const trailing = boundedCandidate.at(-1)
-      if (!URL_TRAILING_DELIMITERS.has(trailing)) break
-      boundedCandidate = boundedCandidate.slice(0, -1)
-    }
-    return false
-  })
+  const text = String(value || '')
+  for (const match of text.matchAll(URL_SCHEME_PATTERN)) {
+    const authoritySuffix = text.slice(match.index + match[0].length)
+    const boundary = authoritySuffix.search(URL_AUTHORITY_BOUNDARY_PATTERN)
+    const authority = boundary === -1 ? authoritySuffix : authoritySuffix.slice(0, boundary)
+    const userInfoEnd = authority.lastIndexOf('@')
+    if (userInfoEnd > 0) return true
+  }
+  return false
 }
 
 function exactKeys(value, keys, code) {
