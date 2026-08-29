@@ -5,6 +5,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
+
 const run = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDir = resolve(root, '.vercel', 'output')
@@ -274,7 +276,7 @@ const sharedStyle = `
   .solution-modules span { min-height: 52px; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 14px; line-height: 1.45; padding: 10px 0; }
   .solution-modules i { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
   /* Design tribunal phase 1 language, applied to the public site: the free/premium/
-     managed story and the nine trade demo links, at a readable size on a cheap phone. */
+     managed story and the registry-backed trade demo links, at a readable size on a cheap phone. */
   .tier-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; border-top: 1px solid var(--line-strong); padding-top: 24px; }
   .tier-lane h3 { margin: 4px 0 8px; font-size: 17px; letter-spacing: -.01em; }
   .tier-lane .eyebrow { color: var(--green); }
@@ -440,23 +442,17 @@ const homeHtml = documentHtml({
   </main>`,
 })
 
-// The nine shipped Shop trade templates. Each link opens the real app with that
-// trade's catalog, sample sales and a live order already loaded — no signup. This
-// is the strongest thing the site can offer a shop owner: their own trade, running.
-const SHOP_TRADES = [
-  ['mini-mart', 'Mini-mart & grocery', 'Daily groceries and household basics'],
-  ['pharmacy', 'Pharmacy', 'Medicine and clinic supplies with strict reorder levels'],
-  ['phone-electronics', 'Phone & electronics', 'Accessories and small electronics'],
-  ['fashion', 'Fashion & clothing', 'Stock tracked down to the size'],
-  ['hardware', 'Hardware & construction', 'Bulk orders quoted and set aside'],
-  ['tea-coffee', 'Tea & coffee shop', 'Counter menu plus office preorders'],
-  ['auto-parts', 'Auto parts', 'Exact-fit spares checked against stock'],
-  ['restaurant', 'Restaurant', 'Full menu with table bookings'],
-  ['beauty-spa', 'Beauty spa', 'Treatments booked against staff and rooms'],
-]
+// Every validated Shop trade template is projected into the public site. Keeping
+// this projection registry-backed prevents a shipped template from disappearing
+// from the public door when the product registry changes.
+const SHOP_TRADES = validateShopBusinessTemplates().map((template) => ({
+  id: template.id,
+  name: template.name.en,
+  note: template.description,
+}))
 
 function tradeTemplatesHtml() {
-  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one opens Sell with a real catalog, sample sales and a live order in your browser. Nothing to install and no account required.</p></div><div class="trade-grid">${SHOP_TRADES.map(([id, name, note]) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one opens Sell with a real catalog, sample sales and a live order in your browser. Nothing to install and no account required.</p></div><div class="trade-grid">${SHOP_TRADES.map(({ id, name, note }) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
 }
 
 function productLandingHtml(product, page) {

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
+
 const root = process.cwd()
 const staticDir = resolve(root, '.vercel', 'output', 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
@@ -88,7 +90,13 @@ for (const page of landingPages) {
 }
 
 const shopLanding = readStatic('shop/index.html')
-for (const templateId of ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa']) {
+const shopTemplateIds = validateShopBusinessTemplates().map((template) => template.id)
+const publicShopTemplateIds = [...shopLanding.matchAll(/<a class="trade-card" href="https:\/\/app\.supermega\.dev\/shop\/\?template=([a-z0-9-]+)">/g)]
+  .map((match) => match[1])
+check(shopTemplateIds.length === 10, 'shop_trade_registry_count')
+check(new Set(publicShopTemplateIds).size === publicShopTemplateIds.length, 'shop_trade_links_unique')
+check(publicShopTemplateIds.join(',') === shopTemplateIds.join(','), 'shop_trade_links_match_registry_exactly')
+for (const templateId of shopTemplateIds) {
   check(shopLanding.includes(`href="https://app.supermega.dev/shop/?template=${templateId}"`), `shop_trade_opens_sell:${templateId}`)
   check(!shopLanding.includes(`href="https://app.supermega.dev/settings/?product=shop&amp;template=${templateId}"`), `shop_trade_skips_setup_detour:${templateId}`)
 }
