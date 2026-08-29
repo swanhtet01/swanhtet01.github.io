@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -13,6 +14,20 @@ import {
 const CLAIM_CODE = 'SM-ABCD-2345'
 const WORKSPACE_ID = 'c7a3fa0e-7f81-5cf3-9c2e-8f6d1a2b3c4d'
 const BUSINESS_NAME = 'Yangon Tyre and Service'
+const managedTrialSource = readFileSync(new URL('../showroom/src/core/managed-trial.ts', import.meta.url), 'utf8')
+
+test('managed browser auth excludes unused Supabase database, realtime, storage, and function clients', () => {
+  assert.match(managedTrialSource, /import type \{ Session \} from '@supabase\/auth-js'/)
+  assert.match(managedTrialSource, /InstanceType<\s*typeof import\('@supabase\/auth-js'\)\.AuthClient\s*>/)
+  assert.match(managedTrialSource, /import\('@supabase\/auth-js'\)\.then\(\(\{ AuthClient \}\) => \(\{/)
+  assert.match(managedTrialSource, /url: new URL\('auth\/v1'/)
+  assert.match(managedTrialSource, /Authorization: `Bearer \$\{SUPABASE_PUBLISHABLE_KEY\}`/)
+  assert.match(managedTrialSource, /apikey: SUPABASE_PUBLISHABLE_KEY/)
+  assert.match(managedTrialSource, /detectSessionInUrl: false/)
+  assert.match(managedTrialSource, /persistSession: true/)
+  assert.match(managedTrialSource, /storageKey: 'supermega\.auth\.session\.v1'/)
+  assert.doesNotMatch(managedTrialSource, /@supabase\/supabase-js/)
+})
 
 const session = {
   access_token: 'header.payload.signature',

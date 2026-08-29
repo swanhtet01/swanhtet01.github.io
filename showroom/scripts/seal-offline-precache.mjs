@@ -81,10 +81,10 @@ const ONLINE_ONLY = [
 ]
 // Vite records dependencies reached through the workspace's node_modules junction with an
 // installation-specific relative prefix. Match the stable package suffix instead of sealing one
-// machine's path into this contract. Supabase authentication cannot operate without the network
-// and its responses must never become install-time offline assets.
+// machine's path into this contract. The browser ships only Supabase Auth; it cannot operate
+// without the network and its responses must never become install-time offline assets.
 const ONLINE_ONLY_SUFFIXES = [
-  '/@supabase/supabase-js/dist/index.mjs',
+  '/@supabase/auth-js/dist/module/index.js',
 ]
 // The other three products' own surfaces, by location rather than by name, so a product added
 // later is excluded without anyone having to remember this file.

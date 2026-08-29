@@ -1,4 +1,4 @@
-import type { Session, SupabaseClient } from '@supabase/supabase-js'
+import type { Session } from '@supabase/auth-js'
 import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
 import type { PlantEquipmentImportPackage } from './plant-equipment-import.ts'
 import {
@@ -2496,7 +2496,9 @@ export function requireManagedSurfaceState(
   return record
 }
 
-let clientPromise: Promise<SupabaseClient | null> | undefined
+type ManagedAuthClient = { auth: InstanceType<typeof import('@supabase/auth-js').AuthClient> }
+
+let clientPromise: Promise<ManagedAuthClient | null> | undefined
 let pendingManagedAccountSetup: Promise<ManagedAccountSetup> | undefined
 
 function validSupabaseUrl(value: string) {
@@ -2532,13 +2534,20 @@ export function managedTrialAuthConfigured() {
 function authClient() {
   if (clientPromise) return clientPromise
   if (!managedTrialAuthConfigured()) return Promise.resolve(null)
-  clientPromise = import('@supabase/supabase-js').then(({ createClient }) => createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: {
+  clientPromise = import('@supabase/auth-js').then(({ AuthClient }) => ({
+    auth: new AuthClient({
+      url: new URL('auth/v1', SUPABASE_URL.endsWith('/') ? SUPABASE_URL : `${SUPABASE_URL}/`).href,
+      headers: {
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        'X-Client-Info': 'supabase-js/2.110.8; runtime=web',
+      },
       autoRefreshToken: true,
       detectSessionInUrl: false,
       persistSession: true,
       storageKey: 'supermega.auth.session.v1',
-    },
+      hasCustomAuthorizationHeader: false,
+    }),
   }))
   return clientPromise
 }
