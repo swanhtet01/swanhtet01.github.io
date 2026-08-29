@@ -405,9 +405,9 @@ function rebuildRetainedBindings(input) {
   })
 }
 
-function resealWorkspaceHistory(input) {
+function resealWorkspaceHistory(input, capturedAt = input.dispositionCore.projectionAt) {
   const snapshot = input.workspaceHistorySnapshot
-  snapshot.capturedAt = input.dispositionCore.projectionAt
+  snapshot.capturedAt = capturedAt
   snapshot.projectionAt = input.dispositionCore.projectionAt
   snapshot.candidateBatchId = input.dispositionCore.batchId
   snapshot.candidateRevision = input.dispositionCore.revision
@@ -760,6 +760,18 @@ omittedHistory.workspaceHistorySnapshot.records = []
 resealWorkspaceHistory(omittedHistory)
 await rejects(omittedHistory, 'shop_batch_profit_workspace_snapshot_anchor_mismatch', 'rehashed omission cannot replace the independently supplied source-workspace snapshot anchor', sourceOwnedCompleteWorkspaceDigest)
 
+const newerOmittedBatch = moveCurrentProjection(rebindBatchId(buildFixture(), 'NEWER-OTHER-BATCH'), '2026-08-29T12:30:00.000Z')
+const staleAuthenticSnapshot = moveCurrentProjection(fixture, '2026-08-29T13:00:00.000Z')
+resealWorkspaceHistory(staleAuthenticSnapshot, '2026-08-29T12:00:00.000Z')
+const staleAuthenticAnchor = staleAuthenticSnapshot.workspaceHistorySnapshot.snapshotDigest
+check(
+  newerOmittedBatch.saleAllocationLedger.allocations[0].orderLineBindingDigest === staleAuthenticSnapshot.saleAllocationLedger.allocations[0].orderLineBindingDigest
+    && Date.parse(newerOmittedBatch.batchEnvelope.projectionAt) > Date.parse(staleAuthenticSnapshot.workspaceHistorySnapshot.capturedAt)
+    && Date.parse(newerOmittedBatch.batchEnvelope.projectionAt) < Date.parse(staleAuthenticSnapshot.dispositionCore.projectionAt),
+  'stale-snapshot regression contains a newer omitted cross-batch allocation before candidate projection',
+)
+await rejects(staleAuthenticSnapshot, 'shop_batch_profit_workspace_snapshot_stale', 'authentic rehashed snapshot and matching external anchor cannot substitute for an atomic current-state scan', staleAuthenticAnchor)
+
 const forgedPrior = clone(revisionTwo)
 const forgedRecord = forgedPrior.workspaceHistorySnapshot.records[0]
 forgedRecord.saleAllocationLedger.allocations[0].allocationId = 'FORGED-PRIOR'
@@ -782,6 +794,20 @@ await rejects(selfAssertedHistory, 'shop_batch_profit_workspace_history_controls
 const callerSubsetSnapshot = clone(fixture)
 callerSubsetSnapshot.workspaceHistorySnapshot.controls.callerProvidedSubsetAccepted = true
 await rejects(callerSubsetSnapshot, 'shop_batch_profit_workspace_snapshot_controls_invalid', 'caller-provided subset cannot satisfy the source-owned workspace snapshot boundary')
+
+const receiptBeforeSnapshot = clone(fixture)
+receiptBeforeSnapshot.workspaceHistoryReceipt.generatedAt = '2026-08-29T11:59:59.999Z'
+receiptBeforeSnapshot.workspaceHistoryReceipt.receiptDigest = digest(without(receiptBeforeSnapshot.workspaceHistoryReceipt, 'receiptDigest'))
+await rejects(receiptBeforeSnapshot, 'shop_batch_profit_workspace_history_before_snapshot', 'derived workspace receipt cannot predate the atomic source snapshot it references')
+
+const historicalEnvelopeAfterSnapshot = clone(revisionTwo)
+const futureEnvelopeRecord = historicalEnvelopeAfterSnapshot.workspaceHistorySnapshot.records[0]
+futureEnvelopeRecord.envelope.projectionAt = '2026-08-29T12:00:00.001Z'
+futureEnvelopeRecord.envelope.envelopeDigest = digest(without(futureEnvelopeRecord.envelope, 'envelopeDigest'))
+historicalEnvelopeAfterSnapshot.batchEnvelope.priorEnvelopeDigest = futureEnvelopeRecord.envelope.envelopeDigest
+historicalEnvelopeAfterSnapshot.batchEnvelope.envelopeDigest = digest(without(historicalEnvelopeAfterSnapshot.batchEnvelope, 'envelopeDigest'))
+resealWorkspaceHistory(historicalEnvelopeAfterSnapshot)
+await rejects(historicalEnvelopeAfterSnapshot, 'shop_batch_profit_workspace_envelope_projection_time_invalid', 'historical envelope cannot postdate the atomic source snapshot capture')
 
 const historicalLedgerAfterEnvelope = moveCurrentProjection(revisionTwo, '2026-08-30T12:00:00.000Z')
 const lateLedgerRecord = historicalLedgerAfterEnvelope.workspaceHistorySnapshot.records[0]

@@ -1244,8 +1244,9 @@ async function validateWorkspaceHistorySnapshot(
   const { workspaceHistorySnapshot: snapshot, dispositionCore: core } = input
   exactKeys(snapshot, ['contract', 'capturedAt', 'projectionAt', 'candidateBatchId', 'candidateRevision', 'scope', 'recordCount', 'records', 'controls', 'recordSetDigest', 'snapshotDigest'], 'shop_batch_profit_workspace_snapshot_shape_invalid')
   exactValue(snapshot.contract, WORKSPACE_HISTORY_SNAPSHOT_CONTRACT, 'shop_batch_profit_workspace_snapshot_contract_invalid')
-  safeTimestamp(snapshot.capturedAt, projectionAtMs, 'shop_batch_profit_workspace_snapshot_time_invalid')
+  const snapshotCapturedAtMs = safeTimestamp(snapshot.capturedAt, projectionAtMs, 'shop_batch_profit_workspace_snapshot_time_invalid')
   if (snapshot.projectionAt !== core.projectionAt || snapshot.candidateBatchId !== core.batchId || snapshot.candidateRevision !== core.revision) fail('shop_batch_profit_workspace_snapshot_candidate_mismatch')
+  if (snapshot.capturedAt !== core.projectionAt) fail('shop_batch_profit_workspace_snapshot_stale')
   exactValue(snapshot.scope, 'all_active_closed_voided_batch_lineages', 'shop_batch_profit_workspace_snapshot_scope_invalid')
   const records = safeArray(snapshot.records, 'shop_batch_profit_workspace_snapshot_records_invalid') as ShopBatchWorkspaceHistoryRecord[]
   safeWhole(snapshot.recordCount, 'shop_batch_profit_workspace_snapshot_count_invalid', MAX_RECORD_COUNT)
@@ -1263,7 +1264,8 @@ async function validateWorkspaceHistorySnapshot(
   for (const record of records) {
     exactKeys(record, ['envelope', 'saleAllocationLedger', 'retainedEvidenceReceipt'], 'shop_batch_profit_workspace_snapshot_record_shape_invalid')
     const { envelope, saleAllocationLedger, retainedEvidenceReceipt } = record
-    await validateEnvelopeDigest(envelope, projectionAtMs)
+    const envelopeProjectionAtMs = safeTimestamp(envelope.projectionAt, snapshotCapturedAtMs, 'shop_batch_profit_workspace_envelope_projection_time_invalid')
+    await validateEnvelopeDigest(envelope, snapshotCapturedAtMs)
     if (envelope.batchId === core.batchId && envelope.revision >= core.revision) fail('shop_batch_profit_workspace_history_future')
     const key = `${envelope.batchId}\u0000${envelope.revision}`
     if (envelopeByRevision.has(key)) fail('shop_batch_profit_workspace_envelope_duplicate')
@@ -1271,7 +1273,6 @@ async function validateWorkspaceHistorySnapshot(
     const rows = envelopesByBatch.get(envelope.batchId) ?? []
     rows.push(envelope)
     envelopesByBatch.set(envelope.batchId, rows)
-    const envelopeProjectionAtMs = safeTimestamp(envelope.projectionAt, projectionAtMs, 'shop_batch_profit_workspace_envelope_projection_time_invalid')
     await validateHistoricalLedger(saleAllocationLedger, envelope, envelopeProjectionAtMs)
     await validateHistoricalRetainedEvidenceReceipt(retainedEvidenceReceipt, saleAllocationLedger, envelope, envelopeProjectionAtMs)
     workspaceAllocations.push(...saleAllocationLedger.allocations)
@@ -1305,7 +1306,8 @@ async function validateWorkspaceHistoryReceipt(input: ShopBatchProfitControlInpu
   const { workspaceHistoryReceipt: receipt, dispositionCore: core } = input
   exactKeys(receipt, ['contract', 'generatedAt', 'projectionAt', 'candidateBatchId', 'candidateRevision', 'scope', 'sourceWorkspaceRecordSetDigest', 'sourceWorkspaceSnapshotDigest', 'recordCount', 'controls', 'receiptDigest'], 'shop_batch_profit_workspace_history_shape_invalid')
   exactValue(receipt.contract, WORKSPACE_HISTORY_CONTRACT, 'shop_batch_profit_workspace_history_contract_invalid')
-  safeTimestamp(receipt.generatedAt, projectionAtMs, 'shop_batch_profit_workspace_history_time_invalid')
+  const receiptGeneratedAtMs = safeTimestamp(receipt.generatedAt, projectionAtMs, 'shop_batch_profit_workspace_history_time_invalid')
+  if (receiptGeneratedAtMs < Date.parse(snapshot.capturedAt)) fail('shop_batch_profit_workspace_history_before_snapshot')
   if (receipt.projectionAt !== core.projectionAt || receipt.candidateBatchId !== core.batchId || receipt.candidateRevision !== core.revision) fail('shop_batch_profit_workspace_history_candidate_mismatch')
   exactValue(receipt.scope, 'all_active_closed_voided_batch_lineages', 'shop_batch_profit_workspace_history_scope_invalid')
   safeDigest(receipt.sourceWorkspaceRecordSetDigest, 'shop_batch_profit_workspace_history_record_set_digest_invalid')
