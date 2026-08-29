@@ -28,7 +28,10 @@ export const EXACT_APP_PREVIEW_VALIDATION_CONTRACT = 'supermega.exact-app-previe
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const verifierPath = fileURLToPath(import.meta.url)
 const browserHarnessPath = resolve(root, 'tools', 'verify_app_entry_rendered.mjs')
+const siteManifestPath = resolve(root, 'site-manifest.json')
+const publicGeneratorPath = resolve(root, 'tools', 'create_public_vercel_output.mjs')
 const MAX_JSON_BYTES = 2 * 1024 * 1024
+const MAX_PUBLIC_GENERATOR_BYTES = 512 * 1024
 const MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024
 const MAX_RELEASE_BYTES = 64 * 1024
 const MAX_OPERATIONS_AGE_MS = 2 * 60 * 60 * 1000
@@ -41,6 +44,11 @@ const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-
 const PRIVATE_PATH_PATTERN = /(?:[A-Z]:\\Users\\|\/Users\/|\/home\/|OneDrive - )/iu
 const CREDENTIAL_URL_PATTERN = /https?:\/\/[^/\s:@]+:[^/\s@]+@/iu
 const PNG_SIGNATURE = Object.freeze([137, 80, 78, 71, 13, 10, 26, 10])
+const PUBLIC_HOME_EXPLORE_LABEL = 'Explore all products'
+const RETIRED_PUBLIC_HOME_EXPECTED_TEXT = Object.freeze([
+  'Pick one product and try the working sample.',
+  'Choose a product',
+])
 const PRODUCTION_HOSTS = new Set([
   'supermega.dev',
   'www.supermega.dev',
@@ -68,6 +76,77 @@ function fail(code) {
 
 function isRecord(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function exactPublicClaim(value, code) {
+  if (typeof value !== 'string' || value.length < 2 || value.length > 240
+    || value.trim() !== value || /[\u0000-\u001f\u007f<>]/u.test(value)) fail(code)
+  return value
+}
+
+function occursExactlyOnce(source, fragment) {
+  return source.indexOf(fragment) >= 0 && source.indexOf(fragment) === source.lastIndexOf(fragment)
+}
+
+export function derivePublicHomepageExpectedText({ manifest, generatorSource }) {
+  if (!isRecord(manifest) || !isRecord(manifest.company)
+    || !Array.isArray(manifest.customerProducts)) fail('exact_app_preview_public_manifest_invalid')
+  const headline = exactPublicClaim(
+    manifest.company.headline,
+    'exact_app_preview_public_headline_invalid',
+  )
+  const shopProducts = manifest.customerProducts.filter((product) => product?.id === 'shop')
+  if (shopProducts.length !== 1 || !isRecord(shopProducts[0].primaryCta)) {
+    fail('exact_app_preview_public_shop_action_invalid')
+  }
+  const shopActionLabel = exactPublicClaim(
+    shopProducts[0].primaryCta.label,
+    'exact_app_preview_public_shop_action_invalid',
+  )
+  if (shopProducts[0].primaryCta.url !== 'https://app.supermega.dev/shop/?tab=today') {
+    fail('exact_app_preview_public_shop_action_invalid')
+  }
+  if (typeof generatorSource !== 'string' || generatorSource.length < 2
+    || Buffer.byteLength(generatorSource, 'utf8') > MAX_PUBLIC_GENERATOR_BYTES) {
+    fail('exact_app_preview_public_generator_invalid')
+  }
+  const requiredGeneratorBindings = [
+    'function shopProfitControlAction()',
+    'const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()',
+    '${escapeHtml(manifest.company.headline)}',
+    '${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.href)}',
+    '${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}',
+    `href="#products">${PUBLIC_HOME_EXPLORE_LABEL}</a>`,
+  ]
+  if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
+    fail('exact_app_preview_public_generator_binding_drift')
+  }
+  const expected = [headline, shopActionLabel, PUBLIC_HOME_EXPLORE_LABEL]
+  if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
+    generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
+  ))) fail('exact_app_preview_public_retired_copy_present')
+  return Object.freeze(expected)
+}
+
+export async function loadPublicHomepageExpectedText() {
+  const manifestMetadata = await lstat(siteManifestPath).catch(() => null)
+  if (!manifestMetadata?.isFile() || manifestMetadata.isSymbolicLink()
+    || manifestMetadata.size < 2 || manifestMetadata.size > MAX_JSON_BYTES) {
+    fail('exact_app_preview_public_manifest_file_invalid')
+  }
+  let manifest
+  try {
+    manifest = JSON.parse(await readFile(siteManifestPath, 'utf8'))
+  } catch {
+    fail('exact_app_preview_public_manifest_invalid')
+  }
+  const generatorMetadata = await lstat(publicGeneratorPath).catch(() => null)
+  if (!generatorMetadata?.isFile() || generatorMetadata.isSymbolicLink()
+    || generatorMetadata.size < 2 || generatorMetadata.size > MAX_PUBLIC_GENERATOR_BYTES) {
+    fail('exact_app_preview_public_generator_file_invalid')
+  }
+  const generatorSource = await readFile(publicGeneratorPath, 'utf8')
+  return derivePublicHomepageExpectedText({ manifest, generatorSource })
 }
 
 function exactKeys(value, keys, code) {
@@ -793,15 +872,20 @@ function expectedPath(spec) {
   return spec.route
 }
 
-function expectedText(spec) {
-  if (spec.surface === 'public') return ['Pick one product and try the working sample.', 'Choose a product']
+function expectedText(spec, publicHomepageExpectedText) {
+  if (spec.surface === 'public') {
+    if (!Array.isArray(publicHomepageExpectedText) || publicHomepageExpectedText.length !== 3) {
+      fail('exact_app_preview_public_expected_text_invalid')
+    }
+    return [...publicHomepageExpectedText]
+  }
   if (spec.surface === 'shop') return ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL DEMO']
   if (spec.surface === 'plant') return ['Plant', 'working sample', "These dates belong to this browser-local sample, not today's production."]
   if (spec.surface === 'website') return ['Website', 'Make this website yours', 'Nothing has been deployed.']
   return ['Ecommerce', 'Try one customer order', 'Start sample order']
 }
 
-function browserCase(spec, origin) {
+function browserCase(spec, origin, publicHomepageExpectedText) {
   return {
     name: spec.id,
     route: spec.route,
@@ -811,7 +895,7 @@ function browserCase(spec, origin) {
     expectedOrigin: origin,
     expectedPath: expectedPath(spec),
     expectedPathLabel: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.route,
-    expectedText: expectedText(spec),
+    expectedText: expectedText(spec, publicHomepageExpectedText),
     exerciseShopCounter: spec.surface === 'shop',
     exerciseEcommerceClaimBoundary: spec.surface === 'ecommerce',
     isolatedBrowserContext: true,
@@ -850,6 +934,7 @@ async function main() {
   await assertEvidenceDirectoryReady(options.screenshotDir)
   const verifierBefore = await collectCurrentVerifierBinding()
   if (verifierBefore.source.commit !== verifierHead) fail('exact_app_preview_verifier_head_mismatch')
+  const publicHomepageExpectedText = await loadPublicHomepageExpectedText()
   await mkdir(resolve(options.screenshotDir), { recursive: true })
   const browserBin = findBrowser()
   const userDataDir = await mkdtemp(resolve(tmpdir(), 'supermega-exact-preview-'))
@@ -870,7 +955,7 @@ async function main() {
       const origin = spec.surface === 'public'
         ? operationsBinding.binding.publicOrigin
         : operationsBinding.binding.appOrigin
-      cases.push(await verifyCase(cdp, origin, browserCase(spec, origin)))
+      cases.push(await verifyCase(cdp, origin, browserCase(spec, origin, publicHomepageExpectedText)))
     }
     const releaseAfter = await probeExactPairedReleaseIdentity({
       publicOrigin: operationsBinding.binding.publicOrigin,

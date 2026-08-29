@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -18,6 +18,8 @@ import {
   EXACT_APP_PREVIEW_CONTRACT,
   buildExactAppPreviewReport,
   collectCurrentVerifierBinding,
+  derivePublicHomepageExpectedText,
+  loadPublicHomepageExpectedText,
   parseExactAppPreviewArgs,
   probeExactPairedReleaseIdentity,
   validateExactAppPreviewReport,
@@ -25,6 +27,7 @@ import {
 import { evaluateFinalRenderedLocation } from './verify_app_entry_rendered.mjs'
 
 const operationsGeneratedAt = '2026-08-28T12:00:00.000Z'
+const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const reportGeneratedAt = '2026-08-28T12:05:00.000Z'
 const expectedCommit = 'a'.repeat(40)
 const previousCommit = 'b'.repeat(40)
@@ -361,6 +364,44 @@ test('requires one exact generation or validation argument set', () => {
 })
 
 test('builds and validates the exact ten-case technical preview proof', async () => {
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
+  const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
+  const publicExpectedText = await loadPublicHomepageExpectedText()
+  assert.deepEqual(publicExpectedText, [
+    'Shop Profit Control: see today’s operating money risk and close one accountable action.',
+    'Open Shop Profit Control',
+    'Explore all products',
+  ])
+  assert.deepEqual(
+    derivePublicHomepageExpectedText({ manifest, generatorSource }),
+    publicExpectedText,
+  )
+  const changedManifest = clone(manifest)
+  changedManifest.company.headline = 'Current source-owned homepage claim.'
+  assert.equal(
+    derivePublicHomepageExpectedText({ manifest: changedManifest, generatorSource })[0],
+    changedManifest.company.headline,
+  )
+  for (const binding of [
+    '${escapeHtml(manifest.company.headline)}',
+    '${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}',
+    'href="#products">Explore all products</a>',
+  ]) {
+    assert.throws(
+      () => derivePublicHomepageExpectedText({
+        manifest,
+        generatorSource: generatorSource.replace(binding, 'retired-static-copy'),
+      }),
+      /exact_app_preview_public_generator_binding_drift/,
+    )
+  }
+  assert.throws(
+    () => derivePublicHomepageExpectedText({
+      manifest,
+      generatorSource: `${generatorSource}\nPick one product and try the working sample.`,
+    }),
+    /exact_app_preview_public_retired_copy_present/,
+  )
   const { report, operationsPacket } = await reportFixture()
   const validation = validateExactAppPreviewReport({
     report,
@@ -627,7 +668,6 @@ test('fails closed on report, digest, gate, commit, and operations binding tampe
 
 test('binds no-browser CLI validation to the actual clean verifier checkout and bytes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-preview-validation-'))
-  const repoRoot = fileURLToPath(new URL('..', import.meta.url))
   const dirtyMarker = join(repoRoot, `.exact-app-preview-dirty-test-${process.pid}`)
   try {
     const currentBinding = await collectCurrentVerifierBinding()
