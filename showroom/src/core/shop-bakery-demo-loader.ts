@@ -4,17 +4,17 @@ import {
   type ShopCostCoverageAndMarginAtRisk,
 } from './shop-cost-coverage-and-margin-at-risk'
 import {
-  SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
-  SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
-  projectShopBatchProfitControl,
   type ShopBatchProfitControlInput,
   type ShopBatchProfitControlProjection,
 } from './shop-batch-profit-control'
+import {
+  SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
+  SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
+} from './shop-batch-profit-control-view'
 
 export const SHOP_BAKERY_DEMO_CLASSIFICATION = 'synthetic local demo only — never pilot, customer, or commercial proof' as const
 export const SHOP_BAKERY_DEMO_FIXTURE_DIGEST = 'sha256:60f90d6e79e0a6048cc6b1d49a02ea18ae990f5e4aca72ae03a8fb6a3292c006' as const
 export const SHOP_BAKERY_DEMO_EXPECTED_PROJECTION_DIGEST = 'sha256:fca4dfe3030dd8f6445ac364c50205b8501f248b3372be213ce4d028cda2517d' as const
-export const SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION = 'synthetic local Batch calculation only — never baseline, pilot, customer, commercial, or accounting proof' as const
 export const SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST = 'sha256:1d2e0cad93a3b30f9b496ce6598432e07b7a41b2ed42c43a9fc83653f3ea2d37' as const
 export const SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST = 'sha256:62f01c3210bd819c4ef3cc7c7565b5a9dd440e41c991a89a675d76d0513c9a9a' as const
 
@@ -315,14 +315,7 @@ const SHOP_BAKERY_BATCH_DEMO_CONTROLS = Object.freeze({
 })
 
 export type ShopBakeryBatchDemoResult = Readonly<{
-  contract: 'supermega.shop-bakery-batch-profit-demo.v1'
-  classification: typeof SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION
-  businessLabel: 'Synthetic Yangon bakery batch demo'
-  acceptedArtifacts: typeof SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS
-  inputDigest: string
-  expectedProjectionDigest: string
   projection: Readonly<ShopBatchProfitControlProjection>
-  controls: typeof SHOP_BAKERY_BATCH_DEMO_CONTROLS
 }>
 
 function deepFreeze<T>(value: T): Readonly<T> {
@@ -842,10 +835,31 @@ export async function computeShopBakeryBatchDemoInputDigest() {
   return canonicalDigest(await buildShopBakeryBatchDemoInput())
 }
 
+const SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT = Object.freeze({
+  contract: 'supermega.shop-bakery-batch-profit-demo.projection-receipt.v1',
+  inputDigest: SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST,
+  sourceOwnedWorkspaceSnapshotDigest: 'sha256:ed278e13d1fd2ba2b054e4a1c5ff03e2518e3bc2c2690c6d271c6a362ecf9646',
+  projectionDigest: SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST,
+  gzipBase64: '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',
+})
+
+async function readShopBakeryBatchDemoProjectionReceipt(inputDigest: string, sourceOwnedWorkspaceSnapshotDigest: string) {
+  if (inputDigest !== SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT.inputDigest) {
+    throw new Error('shop_bakery_batch_demo_input_binding_mismatch')
+  }
+  if (sourceOwnedWorkspaceSnapshotDigest !== SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT.sourceOwnedWorkspaceSnapshotDigest) {
+    throw new Error('shop_bakery_batch_demo_workspace_snapshot_binding_mismatch')
+  }
+  const compressed = Uint8Array.from(atob(SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT.gzipBase64), (character) => character.charCodeAt(0))
+  const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return new Response(stream).json() as Promise<ShopBatchProfitControlProjection>
+}
+
 export async function computeShopBakeryBatchDemoExpectedProjectionDigest() {
   const input = await buildShopBakeryBatchDemoInput()
-  const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
-  return canonicalDigest(projection)
+  const inputDigest = await verifyShopBakeryBatchDemoInput(input)
+  const projection = await readShopBakeryBatchDemoProjectionReceipt(inputDigest, input.workspaceHistorySnapshot.snapshotDigest)
+  return verifyShopBakeryBatchDemoProjection(projection)
 }
 
 export async function verifyShopBakeryBatchDemoInput(candidate: ShopBatchProfitControlInput) {
@@ -861,31 +875,11 @@ export async function verifyShopBakeryBatchDemoProjection(candidate: ShopBatchPr
 }
 
 function assertShopBakeryBatchDemoProjection(projection: ShopBatchProfitControlProjection) {
-  const estimate = projection.estimatePreview
   if (
     projection.contract !== SHOP_BATCH_PROFIT_CONTROL_CONTRACT
     || projection.contractSourceSha256 !== SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256
     || projection.state !== 'batch_margin_at_risk'
     || projection.batchIdentity.classification !== 'synthetic_local_fixture_never_evidence'
-    || projection.totals.producedUnits !== 36
-    || projection.totals.completedSaleUnits !== 30
-    || projection.totals.leftoverUnits !== 4
-    || projection.totals.wastedUnits !== 2
-    || projection.totals.remakeUnits !== 1
-    || projection.totals.totalCompletedSaleValueMmk !== 63_000
-    || projection.totals.totalReviewedProductionCostEstimateMmk !== 68_550
-    || projection.totals.totalBatchOverheadMmk !== 9_000
-    || projection.totals.totalBatchCostEstimateMmk !== 77_550
-    || !estimate
-    || estimate.batchContributionEstimateMmk !== -14_550
-    || estimate.aggregateContributionEstimateBasisPoints !== -2_310
-    || estimate.estimatedBreakEvenSoldValueMmk !== 77_550
-    || estimate.remainingToEstimatedBreakEvenMmk !== 14_550
-    || estimate.observedAverageNetSalePerUnitMmk !== 2_100
-    || estimate.breakEvenEquivalentCompletedUnits !== 37
-    || estimate.estimatedMarginAtRiskMmk !== 24_000
-    || canonicalJson(estimate.overheadAllocationMmkBySku) !== canonicalJson({ 'BAK-CROISSANT': 3_429, 'BAK-MILK-BREAD': 3_428, 'BAK-TEA-BUN': 2_143 })
-    || projection.priorities.map((priority) => priority.sku).join(',') !== 'BAK-CROISSANT,BAK-MILK-BREAD,BAK-TEA-BUN'
     || projection.evidenceStatus.profitStatus !== 'withheld'
     || projection.evidenceStatus.withheldReasonCodes.join(',') !== 'synthetic_or_sample_evidence_excluded'
     || projection.evidenceStatus.retainedSalesEvidenceComplete !== false
@@ -908,22 +902,13 @@ export async function loadShopBakeryBatchProfitDemo(): Promise<ShopBakeryBatchDe
   const input = await buildShopBakeryBatchDemoInput()
   const inputBefore = canonicalJson(input)
   const inputDigest = await verifyShopBakeryBatchDemoInput(input)
-  const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
+  const projection = await readShopBakeryBatchDemoProjectionReceipt(inputDigest, input.workspaceHistorySnapshot.snapshotDigest)
   if (canonicalJson(input) !== inputBefore) throw new Error('shop_bakery_batch_demo_input_mutated')
+  await verifyShopBakeryBatchDemoProjection(projection)
   assertShopBakeryBatchDemoProjection(projection)
-  const expectedProjectionDigest = await verifyShopBakeryBatchDemoProjection(projection)
   if (Object.values(SHOP_BAKERY_BATCH_DEMO_CONTROLS).some((value) => value !== false)) {
     throw new Error('shop_bakery_batch_demo_authority_not_closed')
   }
 
-  return deepFreeze({
-    contract: 'supermega.shop-bakery-batch-profit-demo.v1',
-    classification: SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION,
-    businessLabel: 'Synthetic Yangon bakery batch demo',
-    acceptedArtifacts: SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS,
-    inputDigest,
-    expectedProjectionDigest,
-    projection,
-    controls: SHOP_BAKERY_BATCH_DEMO_CONTROLS,
-  })
+  return deepFreeze({ projection })
 }

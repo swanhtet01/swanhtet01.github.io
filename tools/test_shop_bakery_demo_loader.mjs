@@ -16,8 +16,16 @@ const loaderBundle = await build({
 })
 
 const loader = await import(`data:text/javascript;base64,${Buffer.from(loaderBundle.outputFiles[0].contents).toString('base64')}`)
+const engineBundle = await build({
+  entryPoints: ['showroom/src/core/shop-batch-profit-control.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  write: false,
+  logLevel: 'error',
+})
+const engine = await import(`data:text/javascript;base64,${Buffer.from(engineBundle.outputFiles[0].contents).toString('base64')}`)
 const {
-  SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION,
   SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST,
   SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST,
   SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS,
@@ -87,34 +95,35 @@ check(Object.isFrozen(result) && Object.isFrozen(result.projection) && Object.is
 
 check(await computeShopBakeryBatchDemoInputDigest() === SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST, 'Batch demo input digest is exact')
 check(await computeShopBakeryBatchDemoExpectedProjectionDigest() === SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST, 'Batch demo expected projection digest is exact')
+const exactBatchInput = await shopBakeryBatchDemoInputForVerification()
+const independentlyRecomputedBatchProjection = await engine.projectShopBatchProfitControl(
+  structuredClone(exactBatchInput),
+  exactBatchInput.workspaceHistorySnapshot.snapshotDigest,
+)
 const batchResult = await loadShopBakeryBatchProfitDemo()
-check(batchResult.contract === 'supermega.shop-bakery-batch-profit-demo.v1', 'Batch loader emits the exact demo contract')
-check(batchResult.classification === SHOP_BAKERY_BATCH_DEMO_CLASSIFICATION, 'Batch loader retains the permanent synthetic classification')
-check(batchResult.classification.includes('never baseline, pilot, customer, commercial, or accounting proof'), 'Batch classification closes every evidence overclaim')
-check(batchResult.businessLabel === 'Synthetic Yangon bakery batch demo', 'Batch loader exposes only a synthetic business label')
-assert.deepEqual(batchResult.acceptedArtifacts, SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS, 'Batch loader binds the accepted scenario, validation, and run-sheet artifacts')
-check(batchResult.inputDigest === SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST, 'Batch result binds the immutable input digest')
-check(batchResult.expectedProjectionDigest === SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST, 'Batch result binds the exact projection digest')
-check(batchResult.projection.contractSourceSha256 === 'd2968009e5eb18c44420e2fbbe6b40072e59b9bac0cda1e9ff531a4cae7b5910', 'Batch result binds the accepted R&D contract')
-check(batchResult.projection.state === 'batch_margin_at_risk', 'synthetic Batch arithmetic reaches the expected estimate state')
-check(batchResult.projection.totals.producedUnits === 36 && batchResult.projection.totals.completedSaleUnits === 30, 'Batch produced and completed units are exact')
-check(batchResult.projection.totals.leftoverUnits === 4 && batchResult.projection.totals.wastedUnits === 2 && batchResult.projection.totals.remakeUnits === 1, 'Batch disposition is exact')
-check(batchResult.projection.totals.totalCompletedSaleValueMmk === 63_000, 'Batch sold value is exact')
-check(batchResult.projection.totals.totalReviewedProductionCostEstimateMmk === 68_550, 'Batch reviewed production-cost estimate is exact')
-check(batchResult.projection.totals.totalBatchOverheadMmk === 9_000 && batchResult.projection.totals.totalBatchCostEstimateMmk === 77_550, 'Batch overhead and total cost estimates are exact')
-check(batchResult.projection.estimatePreview?.batchContributionEstimateMmk === -14_550, 'Batch contribution estimate is exact')
-check(batchResult.projection.estimatePreview?.aggregateContributionEstimateBasisPoints === -2_310, 'Batch contribution-estimate rate is exact')
-check(batchResult.projection.estimatePreview?.estimatedBreakEvenSoldValueMmk === 77_550 && batchResult.projection.estimatePreview?.remainingToEstimatedBreakEvenMmk === 14_550, 'Batch break-even sold-value estimates are exact')
-check(batchResult.projection.estimatePreview?.observedAverageNetSalePerUnitMmk === 2_100 && batchResult.projection.estimatePreview?.breakEvenEquivalentCompletedUnits === 37, 'Batch exact-rational break-even units are exact')
-check(JSON.stringify(batchResult.projection.estimatePreview?.overheadAllocationMmkBySku) === JSON.stringify({ 'BAK-CROISSANT': 3_429, 'BAK-MILK-BREAD': 3_428, 'BAK-TEA-BUN': 2_143 }), 'Batch largest-remainder overhead allocation is exact')
-check(batchResult.projection.estimatePreview?.estimatedMarginAtRiskMmk === 24_000, 'Batch estimated margin at risk is exact')
-check(batchResult.projection.priorities.map((priority) => priority.sku).join(',') === 'BAK-CROISSANT,BAK-MILK-BREAD,BAK-TEA-BUN', 'Batch priority order is exact')
-check(batchResult.projection.evidenceStatus.profitStatus === 'withheld' && batchResult.projection.evidenceStatus.withheldReasonCodes.join(',') === 'synthetic_or_sample_evidence_excluded', 'synthetic Batch arithmetic never becomes operating evidence')
-check(batchResult.projection.evidenceStatus.retainedSalesEvidenceComplete === false, 'synthetic Batch sales never become retained real-sale evidence')
-check(batchResult.projection.truthBoundary.costLabel === 'Owner-reviewed production-cost estimate' && /never actual accounting cost/i.test(batchResult.projection.truthBoundary.boundary), 'Batch estimate semantics remain permanent')
-check(Object.values(batchResult.projection.authority).every((value) => value === false), 'Batch projection authority flags are all false')
-check(Object.values(batchResult.controls).every((value) => value === false), 'Batch demo evidence and write controls are all false')
-check(Object.isFrozen(batchResult) && Object.isFrozen(batchResult.projection) && Object.isFrozen(batchResult.controls), 'Batch result is deeply immutable at its public roots')
+const batchProjection = batchResult.projection
+check(Object.keys(batchResult).join(',') === 'projection', 'Batch browser return exposes projection only')
+assert.deepEqual(batchProjection, independentlyRecomputedBatchProjection, 'sealed Batch projection exactly equals the accepted real engine'); checks += 1
+check(batchProjection.contractSourceSha256 === 'd2968009e5eb18c44420e2fbbe6b40072e59b9bac0cda1e9ff531a4cae7b5910', 'Batch result binds the accepted R&D contract')
+check(batchProjection.state === 'batch_margin_at_risk', 'synthetic Batch arithmetic reaches the expected estimate state')
+check(batchProjection.totals.producedUnits === 36 && batchProjection.totals.completedSaleUnits === 30, 'Batch produced and completed units are exact')
+check(batchProjection.totals.leftoverUnits === 4 && batchProjection.totals.wastedUnits === 2 && batchProjection.totals.remakeUnits === 1, 'Batch disposition is exact')
+check(batchProjection.totals.totalCompletedSaleValueMmk === 63_000, 'Batch sold value is exact')
+check(batchProjection.totals.totalReviewedProductionCostEstimateMmk === 68_550, 'Batch reviewed production-cost estimate is exact')
+check(batchProjection.totals.totalBatchOverheadMmk === 9_000 && batchProjection.totals.totalBatchCostEstimateMmk === 77_550, 'Batch overhead and total cost estimates are exact')
+check(batchProjection.estimatePreview?.batchContributionEstimateMmk === -14_550, 'Batch contribution estimate is exact')
+check(batchProjection.estimatePreview?.aggregateContributionEstimateBasisPoints === -2_310, 'Batch contribution-estimate rate is exact')
+check(batchProjection.estimatePreview?.estimatedBreakEvenSoldValueMmk === 77_550 && batchProjection.estimatePreview?.remainingToEstimatedBreakEvenMmk === 14_550, 'Batch break-even sold-value estimates are exact')
+check(batchProjection.estimatePreview?.observedAverageNetSalePerUnitMmk === 2_100 && batchProjection.estimatePreview?.breakEvenEquivalentCompletedUnits === 37, 'Batch exact-rational break-even units are exact')
+check(JSON.stringify(batchProjection.estimatePreview?.overheadAllocationMmkBySku) === JSON.stringify({ 'BAK-CROISSANT': 3_429, 'BAK-MILK-BREAD': 3_428, 'BAK-TEA-BUN': 2_143 }), 'Batch largest-remainder overhead allocation is exact')
+check(batchProjection.estimatePreview?.estimatedMarginAtRiskMmk === 24_000, 'Batch estimated margin at risk is exact')
+check(batchProjection.priorities.map((priority) => priority.sku).join(',') === 'BAK-CROISSANT,BAK-MILK-BREAD,BAK-TEA-BUN', 'Batch priority order is exact')
+check(batchProjection.evidenceStatus.profitStatus === 'withheld' && batchProjection.evidenceStatus.withheldReasonCodes.join(',') === 'synthetic_or_sample_evidence_excluded', 'synthetic Batch arithmetic never becomes operating evidence')
+check(batchProjection.evidenceStatus.retainedSalesEvidenceComplete === false, 'synthetic Batch sales never become retained real-sale evidence')
+check(batchProjection.truthBoundary.classification === 'synthetic_local_fixture_never_evidence', 'Batch classification remains permanently synthetic')
+check(batchProjection.truthBoundary.costLabel === 'Owner-reviewed production-cost estimate' && /never actual accounting cost/i.test(batchProjection.truthBoundary.boundary), 'Batch estimate semantics remain permanent')
+check(Object.values(batchProjection.authority).every((value) => value === false), 'Batch projection authority flags are all false')
+check(Object.isFrozen(batchResult) && Object.isFrozen(batchProjection) && Object.isFrozen(batchProjection.authority) && Object.isFrozen(batchProjection.priorities), 'Batch result and projection are deeply immutable at their public roots')
 
 const repeat = await loadShopBakeryMarginDemo()
 assert.deepEqual(repeat, result, 'repeat load is deterministic')
@@ -151,15 +160,33 @@ tamperedBatchInput.dispositionCore.items[0].producedUnits += 1
 await assert.rejects(() => verifyShopBakeryBatchDemoInput(tamperedBatchInput), /shop_bakery_batch_demo_input_binding_mismatch/)
 checks += 1
 
-const tamperedBatchProjection = structuredClone(batchResult.projection)
+const tamperedBatchProjection = structuredClone(batchProjection)
 tamperedBatchProjection.totals.totalCompletedSaleValueMmk += 1
 await assert.rejects(() => verifyShopBakeryBatchDemoProjection(tamperedBatchProjection), /shop_bakery_batch_demo_projection_binding_mismatch/)
 checks += 1
 
 const loaderSource = await readFile('showroom/src/core/shop-bakery-demo-loader.ts', 'utf8')
 const todaySource = await readFile('showroom/src/core/ShopToday.tsx', 'utf8')
+const batchEngineSource = await readFile('showroom/src/core/shop-batch-profit-control.ts', 'utf8')
+const batchViewSource = await readFile('showroom/src/core/shop-batch-profit-control-view.ts', 'utf8')
 const coreCss = await readFile('showroom/src/core/core-app.css', 'utf8')
 const packageSource = await readFile('package.json', 'utf8')
+const batchControlsStart = loaderSource.indexOf('const SHOP_BAKERY_BATCH_DEMO_CONTROLS = Object.freeze({')
+const batchControlsEnd = loaderSource.indexOf('\n})', batchControlsStart)
+const batchControlsSource = loaderSource.slice(batchControlsStart, batchControlsEnd)
+check(batchControlsStart >= 0 && batchControlsEnd > batchControlsStart, 'Batch internal controls remain source-owned and bounded')
+for (const control of [
+  'baselineEvidenceAllowed', 'pilotEvidenceAllowed', 'customerEvidenceAllowed', 'commercialProofAllowed',
+  'localWorkspaceWrite', 'managedWorkspaceWrite', 'paymentWrite', 'stockWrite', 'supplierWrite',
+  'accountingWrite', 'customerWrite', 'hostedWrite', 'providerWrite', 'productionWrite', 'modelUsed',
+]) check(batchControlsSource.includes(`${control}: false`), `Batch internal control stays false: ${control}`)
+check(loaderSource.includes('Object.values(SHOP_BAKERY_BATCH_DEMO_CONTROLS).some((value) => value !== false)'), 'Batch load fails closed unless every internal authority control is false')
+check(loaderSource.includes("type ShopBatchProfitControlProjection,\n} from './shop-batch-profit-control'"), 'Batch loader keeps only engine types at runtime')
+check(!loaderSource.includes('projectShopBatchProfitControl'), 'Batch loader retains neither the generic projector nor a second arithmetic implementation')
+check(todaySource.includes("import type { ShopBatchProfitControlProjection } from './shop-batch-profit-control'"), 'Shop Today keeps only an engine type dependency')
+check(todaySource.includes("from './shop-batch-profit-control-view'"), 'Shop Today reads values from the lightweight Batch view boundary')
+check(batchEngineSource.includes("projectNoBatchProfitControl,\n} from './shop-batch-profit-control-view.ts'"), 'The engine preserves the lightweight no-batch re-export')
+check((batchViewSource.match(/supermega\.shop\.batch_profit_control\.v1/g) ?? []).length === 1, 'The lightweight view boundary owns the single public contract literal')
 for (const forbidden of ['localStorage', 'sessionStorage', 'indexedDB', 'fetch(', 'XMLHttpRequest', 'OneDrive', 'C:\\\\Users', 'saveCommerce', 'setItem(']) {
   check(!loaderSource.includes(forbidden), `loader excludes runtime dependency or write primitive: ${forbidden}`)
 }
@@ -200,6 +227,9 @@ const outputs = Object.entries(splitBuild.metafile.outputs)
 const entryOutput = outputs.find(([, output]) => output.entryPoint?.replaceAll('\\\\', '/') === 'showroom/src/core/ShopToday.tsx')
 check(Boolean(entryOutput), 'Shop Today split-build entry exists')
 check(!Object.keys(entryOutput[1].inputs).some((input) => input.endsWith('shop-bakery-demo-loader.ts')), 'loader fixture is absent from the Shop Today initial static entry')
-check(outputs.some(([outputPath, output]) => outputPath !== entryOutput[0] && Object.keys(output.inputs).some((input) => input.endsWith('shop-bakery-demo-loader.ts'))), 'loader fixture is emitted in a separate conditional chunk')
+const loaderOutput = outputs.find(([outputPath, output]) => outputPath !== entryOutput[0] && Object.keys(output.inputs).some((input) => input.endsWith('shop-bakery-demo-loader.ts')))
+check(Boolean(loaderOutput), 'loader fixture is emitted in a separate conditional chunk')
+check(!Object.keys(entryOutput[1].inputs).some((input) => input.endsWith('shop-batch-profit-control.ts')), 'the full Batch engine is absent from the Shop Today initial entry')
+check(!Object.keys(loaderOutput[1].inputs).some((input) => input.endsWith('shop-batch-profit-control.ts')), 'the sealed demo chunk does not retain the full Batch engine')
 
 console.log(`shop bakery demo loader checks passed: ${checks}`)
