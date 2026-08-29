@@ -96,6 +96,7 @@ for (const rel of targets) {
   }
 }
 
+runPowerShellResolverBehaviorCheck()
 runGitHubSecretSyncBehaviorChecks()
 runLocalSecretMaterializerBehaviorChecks()
 
@@ -326,8 +327,30 @@ function runLocalSecretMaterializerBehaviorChecks() {
   }
 }
 
+function runPowerShellResolverBehaviorCheck() {
+  const cases = [
+    ['win32', 'powershell'],
+    ['linux', 'pwsh'],
+    ['darwin', 'pwsh'],
+  ]
+  const ok = cases.every(([platform, expected]) => resolvePowerShellExecutable(platform) === expected)
+
+  behaviorChecks.push({
+    name: 'powershell_host_resolves_cross_platform',
+    ok,
+    status: ok ? 0 : 1,
+    externalWritesPerformed: false,
+    secretValuesExposed: false,
+  })
+  if (!ok) errors.push('powershell_host_resolution_failed')
+}
+
+function resolvePowerShellExecutable(platform = process.platform) {
+  return platform === 'win32' ? 'powershell' : 'pwsh'
+}
+
 function runPowerShell(args) {
-  return spawnSync('powershell', args, {
+  return spawnSync(resolvePowerShellExecutable(), args, {
     cwd: repoRoot,
     encoding: 'utf8',
     env: {
