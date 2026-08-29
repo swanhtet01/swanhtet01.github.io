@@ -130,7 +130,7 @@ for (const [hostname, protocol] of [['preview.vercel.app', 'https:'], ['supermeg
   check(execution.appended.length === 0 && execution.window.vaq === undefined && execution.window.siq === undefined, `public_observability_non_production_inert:${protocol}//${hostname}`)
 }
 const privacy = readStatic('privacy/index.html')
-for (const token of ['Site measurement', 'seven public page paths', 'removes query strings and fragments', 'No custom or conversion event', 'Source code or a reachable script does not prove that provider telemetry was observed.']) {
+for (const token of ['Site measurement', 'seven public page paths', 'removes query strings and fragments', 'SuperMega supplies no custom or conversion event', 'Vercel may add a timestamp, referrer', 'Source code or a reachable script does not prove that provider telemetry was observed.']) {
   check(privacy.includes(token), `public_observability_privacy_disclosure:${token}`)
 }
 

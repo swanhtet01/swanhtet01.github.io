@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 
 import {
   POST_DEPLOY_OPERATIONS_CONTRACT,
   PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT,
+  PUBLIC_OBSERVABILITY_VISIBILITY_ATTESTATION_CONTRACT,
   ROLLBACK_EVIDENCE_CONTRACT,
   RUNTIME_LOG_EVIDENCE_CONTRACT,
   buildPostDeployOperationsReceipt,
@@ -26,7 +28,10 @@ const sourceDigests = {
   runtime: `sha256:${'1'.repeat(64)}`,
   rollback: `sha256:${'2'.repeat(64)}`,
   publicObservability: `sha256:${'3'.repeat(64)}`,
+  publicObservabilityAttestation: `sha256:${'4'.repeat(64)}`,
 }
+
+const compactDigest = (value) => `sha256:${createHash('sha256').update(String(value)).digest('hex')}`
 
 const appHeaders = {
   'content-type': 'text/html; charset=utf-8',
@@ -39,7 +44,7 @@ const appHeaders = {
 
 const publicHeaders = {
   'content-type': 'text/html; charset=utf-8',
-  'content-security-policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'",
+  'content-security-policy': `base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'sha256-${'A'.repeat(43)}='`,
   'permissions-policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
@@ -150,12 +155,43 @@ function publicObservabilityEvidence(overrides = {}) {
       endedAt: '2026-08-28T11:55:00.000Z',
     },
     queryMode: 'read_only',
+    query: {
+      source: 'vercel_observability_dashboard',
+      pathAllowlist: ['/', '/shop/', '/plant/', '/website/', '/ecommerce/', '/contact/', '/privacy/'],
+      webAnalyticsMetric: 'pageviews',
+      speedInsightsMetric: 'core_web_vitals',
+    },
     webAnalytics: { status: 'observed', dataPointCount: 1 },
     speedInsights: { status: 'observed', dataPointCount: 1 },
+    providerEvidenceDigest: `sha256:${'5'.repeat(64)}`,
     rawEventsRetained: false,
     personalDataRetained: false,
     credentialValuesExposed: false,
     sourcePresenceUsedAsTelemetryEvidence: false,
+    providerMutations: 0,
+    ...overrides,
+  }
+}
+
+function publicObservabilityAttestation(visibility, overrides = {}) {
+  return {
+    contract: PUBLIC_OBSERVABILITY_VISIBILITY_ATTESTATION_CONTRACT,
+    expectedCommit,
+    projectId: 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
+    environment: 'production',
+    reviewedAt: '2026-08-28T11:59:00.000Z',
+    reviewerRole: 'owner',
+    reviewMethod: 'manual_vercel_dashboard',
+    reviewOutcome: 'accept',
+    visibilitySourceDigest: sourceDigests.publicObservability,
+    visibilityReceiptDigest: compactDigest(JSON.stringify(visibility)),
+    providerEvidenceDigest: visibility.providerEvidenceDigest,
+    providerDashboardReviewed: true,
+    queryAndCountsReviewed: true,
+    manualAttestationNotCryptographic: true,
+    sourcePresenceUsedAsTelemetryEvidence: false,
+    rawProviderEvidenceRetained: false,
+    credentialValuesExposed: false,
     providerMutations: 0,
     ...overrides,
   }
@@ -192,7 +228,9 @@ function fixtureFetch(origins, options = {}) {
     if (isPublic && url.pathname === '/') {
       return html('<!doctype html><html><body>SuperMega<script src="/vercel-insights.js"></script></body></html>', options.publicHeadersMissing
         ? { 'content-type': 'text/html' }
-        : publicHeaders)
+        : options.publicHeadersUnsafeScript
+          ? { ...publicHeaders, 'content-security-policy': "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'" }
+          : publicHeaders)
     }
     if (isApp && ['/shop/', '/plant/', '/website/', '/ecommerce/'].includes(url.pathname)) {
       const headers = options.cameraDenied
@@ -257,6 +295,7 @@ async function buildFixture({
   runtime = runtimeEvidence(origins),
   rollback = rollbackEvidence(),
   publicObservability = stage === 'production' ? publicObservabilityEvidence() : null,
+  publicObservabilityReview = publicObservability ? publicObservabilityAttestation(publicObservability) : null,
 } = {}) {
   const fixture = fixtureFetch(origins, fetchOptions)
   const probes = await collectPostDeployProbes({
@@ -278,6 +317,10 @@ async function buildFixture({
     rollbackSourceDigest: rollback ? sourceDigests.rollback : null,
     publicObservabilityVisibilityEvidence: publicObservability,
     publicObservabilityVisibilitySourceDigest: publicObservability ? sourceDigests.publicObservability : null,
+    publicObservabilityVisibilityAttestation: publicObservabilityReview,
+    publicObservabilityVisibilityAttestationSourceDigest: publicObservabilityReview
+      ? sourceDigests.publicObservabilityAttestation
+      : null,
   })
   return { packet, ...fixture }
 }
@@ -316,6 +359,10 @@ test('blocks release drift, missing public headers, denied camera access, and a 
   assert.ok(packet.operations.blockers.includes('shop_security_headers_invalid'))
   assert.ok(packet.operations.blockers.includes('app_speed_insights_bootstrap_invalid'))
   assert.equal(packet.operations.status, 'blocked')
+
+  const unsafeScript = await buildFixture({ fetchOptions: { publicHeadersUnsafeScript: true } })
+  assert.ok(unsafeScript.packet.operations.blockers.includes('public_home_security_headers_invalid'))
+  assert.equal(unsafeScript.packet.probes.publicHome.headers.scriptSourcesRestricted, false)
 })
 
 test('keeps nonzero runtime findings and stale evidence visible as derived blockers', async () => {
@@ -375,10 +422,28 @@ test('production source delivery cannot self-assert provider-visible public tele
   })
   assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_delivery_ready').status, 'pass')
   assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_delivery_ready').status, 'pass')
-  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_provider_visibility').status, 'blocked')
-  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_provider_visibility').status, 'blocked')
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_provider_visibility_owner_attested').status, 'blocked')
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_provider_visibility_owner_attested').status, 'blocked')
   assert.deepEqual(packet.operations.blockers.filter((blocker) => blocker === 'public_observability_visibility_receipt_missing'), [
     'public_observability_visibility_receipt_missing',
+  ])
+})
+
+test('a shape-valid count receipt cannot pass without a separate owner dashboard attestation', async () => {
+  const publicObservability = publicObservabilityEvidence()
+  const { packet } = await buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability,
+    publicObservabilityReview: null,
+  })
+  assert.equal(packet.evidence.publicObservability.receipt.webAnalytics.status, 'observed')
+  assert.equal(packet.evidence.publicObservabilityAttestation, null)
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_provider_visibility_owner_attested').status, 'blocked')
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_provider_visibility_owner_attested').status, 'blocked')
+  assert.deepEqual(packet.operations.blockers.filter((blocker) => blocker === 'public_observability_owner_attestation_missing'), [
+    'public_observability_owner_attestation_missing',
   ])
 })
 
@@ -392,8 +457,8 @@ test('production provider visibility stays blocked until each read-only signal i
       speedInsights: { status: 'not_observed', dataPointCount: 0 },
     }),
   })
-  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_provider_visibility').status, 'pass')
-  assert.deepEqual(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_provider_visibility').blockers, [
+  assert.equal(packet.operations.gates.find((gate) => gate.id === 'public_web_analytics_provider_visibility_owner_attested').status, 'pass')
+  assert.deepEqual(packet.operations.gates.find((gate) => gate.id === 'public_speed_insights_provider_visibility_owner_attested').blockers, [
     'public_speed_insights_not_observed',
   ])
   assert.equal(packet.evidence.publicObservability.receipt.sourcePresenceUsedAsTelemetryEvidence, false)
@@ -412,6 +477,41 @@ test('rejects visibility evidence that treats source presence as observed teleme
     runtime: runtimeEvidence(productionOrigins),
     publicObservability: publicObservabilityEvidence({ expectedCommit: 'c'.repeat(40) }),
   }), /post_deploy_public_observability_commit_mismatch/)
+})
+
+test('rejects an owner attestation that does not bind the exact visibility receipt and provider evidence', async () => {
+  const publicObservability = publicObservabilityEvidence()
+  await assert.rejects(() => buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability,
+    publicObservabilityReview: publicObservabilityAttestation(publicObservability, {
+      visibilityReceiptDigest: `sha256:${'6'.repeat(64)}`,
+    }),
+  }), /post_deploy_public_observability_attestation_binding_mismatch/)
+  await assert.rejects(() => buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability,
+    publicObservabilityReview: publicObservabilityAttestation(publicObservability, {
+      providerEvidenceDigest: `sha256:${'7'.repeat(64)}`,
+    }),
+  }), /post_deploy_public_observability_attestation_binding_mismatch/)
+})
+
+test('an owner-rejected dashboard attestation keeps both visibility gates blocked', async () => {
+  const publicObservability = publicObservabilityEvidence()
+  const { packet } = await buildFixture({
+    stage: 'production',
+    origins: productionOrigins,
+    runtime: runtimeEvidence(productionOrigins),
+    publicObservability,
+    publicObservabilityReview: publicObservabilityAttestation(publicObservability, { reviewOutcome: 'reject' }),
+  })
+  assert.ok(packet.operations.blockers.includes('public_observability_owner_attestation_rejected'))
+  assert.equal(packet.operations.status, 'blocked')
 })
 
 test('blocks a stale provider-visibility receipt and an invalid public bootstrap independently', async () => {

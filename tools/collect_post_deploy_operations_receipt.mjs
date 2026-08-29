@@ -9,6 +9,7 @@ export const POST_DEPLOY_OPERATIONS_CONTRACT = 'supermega.post-deploy-operations
 export const RUNTIME_LOG_EVIDENCE_CONTRACT = 'supermega.vercel-runtime-log-scan.v1'
 export const ROLLBACK_EVIDENCE_CONTRACT = 'supermega.paired-rollback-target.v1'
 export const PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT = 'supermega.public-observability-provider-visibility.v1'
+export const PUBLIC_OBSERVABILITY_VISIBILITY_ATTESTATION_CONTRACT = 'supermega.public-observability-provider-visibility-attestation.v1'
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
@@ -23,6 +24,9 @@ const PRODUCT_ROUTES = Object.freeze([
   ['plant', '/plant/'],
   ['website', '/website/'],
   ['ecommerce', '/ecommerce/'],
+])
+const PUBLIC_OBSERVABILITY_PATHS = Object.freeze([
+  '/', '/shop/', '/plant/', '/website/', '/ecommerce/', '/contact/', '/privacy/',
 ])
 const PRODUCTION_ORIGINS = Object.freeze({
   public: 'https://supermega.dev',
@@ -251,7 +255,7 @@ function normalizePublicObservabilityVisibilityEvidence(value, context) {
   if (context.stage !== 'production') fail('post_deploy_public_observability_preview_evidence_forbidden')
   exactKeys(value, [
     'contract', 'expectedCommit', 'projectId', 'environment', 'capturedAt', 'window', 'queryMode',
-    'webAnalytics', 'speedInsights', 'rawEventsRetained', 'personalDataRetained',
+    'query', 'webAnalytics', 'speedInsights', 'providerEvidenceDigest', 'rawEventsRetained', 'personalDataRetained',
     'credentialValuesExposed', 'sourcePresenceUsedAsTelemetryEvidence', 'providerMutations',
   ], 'post_deploy_public_observability_evidence_shape_invalid')
   if (value.contract !== PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT) fail('post_deploy_public_observability_evidence_contract_invalid')
@@ -272,6 +276,15 @@ function normalizePublicObservabilityVisibilityEvidence(value, context) {
     || value.sourcePresenceUsedAsTelemetryEvidence !== false || value.providerMutations !== 0) {
     fail('post_deploy_public_observability_controls_invalid')
   }
+  exactKeys(value.query, [
+    'source', 'pathAllowlist', 'webAnalyticsMetric', 'speedInsightsMetric',
+  ], 'post_deploy_public_observability_query_invalid')
+  if (value.query.source !== 'vercel_observability_dashboard'
+    || JSON.stringify(value.query.pathAllowlist) !== JSON.stringify(PUBLIC_OBSERVABILITY_PATHS)
+    || value.query.webAnalyticsMetric !== 'pageviews'
+    || value.query.speedInsightsMetric !== 'core_web_vitals') {
+    fail('post_deploy_public_observability_query_contract_invalid')
+  }
   const normalizeSignal = (signal, code) => {
     exactKeys(signal, ['status', 'dataPointCount'], code)
     if (!['observed', 'not_observed'].includes(signal.status)) fail(`${code}_status_invalid`)
@@ -287,12 +300,78 @@ function normalizePublicObservabilityVisibilityEvidence(value, context) {
     capturedAt,
     window: { startedAt, endedAt },
     queryMode: 'read_only',
+    query: {
+      source: 'vercel_observability_dashboard',
+      pathAllowlist: [...PUBLIC_OBSERVABILITY_PATHS],
+      webAnalyticsMetric: 'pageviews',
+      speedInsightsMetric: 'core_web_vitals',
+    },
     webAnalytics: normalizeSignal(value.webAnalytics, 'post_deploy_public_web_analytics_evidence_invalid'),
     speedInsights: normalizeSignal(value.speedInsights, 'post_deploy_public_speed_insights_evidence_invalid'),
+    providerEvidenceDigest: exactDigest(value.providerEvidenceDigest, 'post_deploy_public_observability_provider_evidence_digest_invalid'),
     rawEventsRetained: false,
     personalDataRetained: false,
     credentialValuesExposed: false,
     sourcePresenceUsedAsTelemetryEvidence: false,
+    providerMutations: 0,
+  }
+}
+
+function normalizePublicObservabilityVisibilityAttestation(value, context, visibilityEnvelope) {
+  if (value === null || value === undefined) return null
+  if (!visibilityEnvelope) fail('post_deploy_public_observability_attestation_without_visibility')
+  if (context.stage !== 'production') fail('post_deploy_public_observability_preview_attestation_forbidden')
+  exactKeys(value, [
+    'contract', 'expectedCommit', 'projectId', 'environment', 'reviewedAt', 'reviewerRole',
+    'reviewMethod', 'reviewOutcome', 'visibilitySourceDigest', 'visibilityReceiptDigest',
+    'providerEvidenceDigest', 'providerDashboardReviewed', 'queryAndCountsReviewed',
+    'manualAttestationNotCryptographic', 'sourcePresenceUsedAsTelemetryEvidence',
+    'rawProviderEvidenceRetained', 'credentialValuesExposed', 'providerMutations',
+  ], 'post_deploy_public_observability_attestation_shape_invalid')
+  if (value.contract !== PUBLIC_OBSERVABILITY_VISIBILITY_ATTESTATION_CONTRACT
+    || value.expectedCommit !== context.expectedCommit || value.projectId !== PROJECTS.public
+    || value.environment !== 'production' || value.reviewerRole !== 'owner'
+    || value.reviewMethod !== 'manual_vercel_dashboard'
+    || !['accept', 'reject'].includes(value.reviewOutcome)) {
+    fail('post_deploy_public_observability_attestation_contract_invalid')
+  }
+  const reviewedAt = exactTimestamp(value.reviewedAt, 'post_deploy_public_observability_attestation_reviewed_at_invalid')
+  if (Date.parse(reviewedAt) < Date.parse(visibilityEnvelope.receipt.capturedAt)
+    || Date.parse(reviewedAt) > Date.parse(context.generatedAt) + 60_000) {
+    fail('post_deploy_public_observability_attestation_time_invalid')
+  }
+  const visibilitySourceDigest = exactDigest(value.visibilitySourceDigest, 'post_deploy_public_observability_attestation_source_digest_invalid')
+  const visibilityReceiptDigest = exactDigest(value.visibilityReceiptDigest, 'post_deploy_public_observability_attestation_receipt_digest_invalid')
+  const providerEvidenceDigest = exactDigest(value.providerEvidenceDigest, 'post_deploy_public_observability_attestation_provider_digest_invalid')
+  if (visibilitySourceDigest !== visibilityEnvelope.sourceDigest
+    || visibilityReceiptDigest !== digest(JSON.stringify(visibilityEnvelope.receipt))
+    || providerEvidenceDigest !== visibilityEnvelope.receipt.providerEvidenceDigest) {
+    fail('post_deploy_public_observability_attestation_binding_mismatch')
+  }
+  if (value.providerDashboardReviewed !== true || value.queryAndCountsReviewed !== true
+    || value.manualAttestationNotCryptographic !== true
+    || value.sourcePresenceUsedAsTelemetryEvidence !== false || value.rawProviderEvidenceRetained !== false
+    || value.credentialValuesExposed !== false || value.providerMutations !== 0) {
+    fail('post_deploy_public_observability_attestation_controls_invalid')
+  }
+  return {
+    contract: PUBLIC_OBSERVABILITY_VISIBILITY_ATTESTATION_CONTRACT,
+    expectedCommit: context.expectedCommit,
+    projectId: PROJECTS.public,
+    environment: 'production',
+    reviewedAt,
+    reviewerRole: 'owner',
+    reviewMethod: 'manual_vercel_dashboard',
+    reviewOutcome: value.reviewOutcome,
+    visibilitySourceDigest,
+    visibilityReceiptDigest,
+    providerEvidenceDigest,
+    providerDashboardReviewed: true,
+    queryAndCountsReviewed: true,
+    manualAttestationNotCryptographic: true,
+    sourcePresenceUsedAsTelemetryEvidence: false,
+    rawProviderEvidenceRetained: false,
+    credentialValuesExposed: false,
     providerMutations: 0,
   }
 }
@@ -313,7 +392,7 @@ function booleanHeaderEvidence(headers) {
   const permissions = String(headers.get('permissions-policy') || '')
   return {
     contentSecurityPolicyPresent: Boolean(csp),
-    scriptSelfOnly: /(?:^|;)\s*script-src\s+'self'\s*(?:;|$)/i.test(csp),
+    scriptSourcesRestricted: /(?:^|;)\s*script-src\s+'self'(?:\s+'sha256-[A-Za-z0-9+/]{43}=')*\s*(?:;|$)/i.test(csp),
     frameAncestorsNone: /(?:^|;)\s*frame-ancestors\s+'none'\s*(?:;|$)/i.test(csp),
     cameraSelf: /(?:^|,)\s*camera=\(self\)\s*(?:,|$)/i.test(permissions),
     sensitiveCapabilitiesDenied: ['geolocation=()', 'microphone=()', 'payment=()', 'usb=()'].every((token) => permissions.includes(token)),
@@ -483,6 +562,17 @@ async function probeLoader(fetchImpl, appOrigin) {
   }
 }
 
+function publicObservabilityAttestationEnvelope(value, sourceDigest, context, visibilityEnvelope) {
+  if (value === null || value === undefined) {
+    if (sourceDigest !== null && sourceDigest !== undefined) fail('post_deploy_public_observability_attestation_digest_without_evidence')
+    return null
+  }
+  return {
+    sourceDigest: exactDigest(sourceDigest, 'post_deploy_public_observability_attestation_source_file_digest_invalid'),
+    receipt: normalizePublicObservabilityVisibilityAttestation(value, context, visibilityEnvelope),
+  }
+}
+
 async function probePublicLoader(fetchImpl, publicOrigin) {
   const response = await getText(fetchImpl, new URL('/vercel-insights.js', publicOrigin), 'text/javascript, application/javascript')
   const source = response.text
@@ -602,7 +692,7 @@ function normalizeHtmlProbe(value, expectedId, expectedPath, code) {
   exactKeys(value, ['id', 'path', 'statusCode', 'html', 'appShell', 'observabilityBootstrap', 'responseSafe', 'headers'], code)
   if (value.id !== expectedId || value.path !== expectedPath) fail(`${code}_identity`)
   exactKeys(value.headers, [
-    'contentSecurityPolicyPresent', 'scriptSelfOnly', 'frameAncestorsNone', 'cameraSelf',
+    'contentSecurityPolicyPresent', 'scriptSourcesRestricted', 'frameAncestorsNone', 'cameraSelf',
     'sensitiveCapabilitiesDenied', 'referrerNoReferrer', 'noSniff', 'frameDenied',
   ], `${code}_headers`)
   return {
@@ -701,7 +791,7 @@ function evidenceFresh(timestamp, generatedAt) {
   return age >= -60_000 && age <= MAX_EVIDENCE_AGE_MS
 }
 
-function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope, publicObservabilityEnvelope) {
+function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope, publicObservabilityEnvelope, publicObservabilityAttestationEnvelope) {
   const releaseBlockers = []
   const expectedRelease = [
     ['public', probes.release.public, 'supermega-public-site'],
@@ -734,7 +824,7 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope, pu
   if (probes.publicHome.statusCode !== 200 || !probes.publicHome.html || !probes.publicHome.observabilityBootstrap
     || !probes.publicHome.responseSafe) routeBlockers.push('public_home_invalid')
   const requiredPublicHeaders = [
-    'contentSecurityPolicyPresent', 'scriptSelfOnly', 'frameAncestorsNone', 'sensitiveCapabilitiesDenied',
+    'contentSecurityPolicyPresent', 'scriptSourcesRestricted', 'frameAncestorsNone', 'sensitiveCapabilitiesDenied',
     'referrerNoReferrer', 'noSniff', 'frameDenied',
   ]
   if (requiredPublicHeaders.some((key) => probes.publicHome.headers[key] !== true)) {
@@ -847,11 +937,25 @@ function deriveOperations(context, probes, runtimeEnvelope, rollbackEnvelope, pu
         publicWebAnalyticsVisibilityBlockers.push('public_observability_visibility_receipt_stale')
         publicSpeedInsightsVisibilityBlockers.push('public_observability_visibility_receipt_stale')
       }
+      if (!publicObservabilityAttestationEnvelope) {
+        publicWebAnalyticsVisibilityBlockers.push('public_observability_owner_attestation_missing')
+        publicSpeedInsightsVisibilityBlockers.push('public_observability_owner_attestation_missing')
+      } else {
+        const attestation = publicObservabilityAttestationEnvelope.receipt
+        if (!evidenceFresh(attestation.reviewedAt, context.generatedAt)) {
+          publicWebAnalyticsVisibilityBlockers.push('public_observability_owner_attestation_stale')
+          publicSpeedInsightsVisibilityBlockers.push('public_observability_owner_attestation_stale')
+        }
+        if (attestation.reviewOutcome !== 'accept') {
+          publicWebAnalyticsVisibilityBlockers.push('public_observability_owner_attestation_rejected')
+          publicSpeedInsightsVisibilityBlockers.push('public_observability_owner_attestation_rejected')
+        }
+      }
       if (visibility.webAnalytics.status !== 'observed') publicWebAnalyticsVisibilityBlockers.push('public_web_analytics_not_observed')
       if (visibility.speedInsights.status !== 'observed') publicSpeedInsightsVisibilityBlockers.push('public_speed_insights_not_observed')
     }
-    gates.push(gate('public_web_analytics_provider_visibility', publicWebAnalyticsVisibilityBlockers))
-    gates.push(gate('public_speed_insights_provider_visibility', publicSpeedInsightsVisibilityBlockers))
+    gates.push(gate('public_web_analytics_provider_visibility_owner_attested', publicWebAnalyticsVisibilityBlockers))
+    gates.push(gate('public_speed_insights_provider_visibility_owner_attested', publicSpeedInsightsVisibilityBlockers))
   }
   const blockers = [...new Set(gates.flatMap((item) => item.blockers))]
   return {
@@ -891,6 +995,8 @@ export function buildPostDeployOperationsReceipt({
   rollbackSourceDigest = null,
   publicObservabilityVisibilityEvidence = null,
   publicObservabilityVisibilitySourceDigest = null,
+  publicObservabilityVisibilityAttestation = null,
+  publicObservabilityVisibilityAttestationSourceDigest = null,
 }) {
   const context = normalizeContext({ generatedAt, stage, expectedCommit, publicOrigin, appOrigin })
   const normalizedProbes = normalizeProbes(probes, context.stage)
@@ -903,7 +1009,20 @@ export function buildPostDeployOperationsReceipt({
     context,
     'post_deploy_public_observability',
   )
-  const operations = deriveOperations(context, normalizedProbes, runtimeLogs, rollback, publicObservability)
+  const publicObservabilityAttestation = publicObservabilityAttestationEnvelope(
+    publicObservabilityVisibilityAttestation,
+    publicObservabilityVisibilityAttestationSourceDigest,
+    context,
+    publicObservability,
+  )
+  const operations = deriveOperations(
+    context,
+    normalizedProbes,
+    runtimeLogs,
+    rollback,
+    publicObservability,
+    publicObservabilityAttestation,
+  )
   const body = {
     contract: POST_DEPLOY_OPERATIONS_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -913,7 +1032,7 @@ export function buildPostDeployOperationsReceipt({
     expectedCommit: context.expectedCommit,
     deploymentOrigins: { public: context.publicOrigin, app: context.appOrigin },
     probes: normalizedProbes,
-    evidence: { runtimeLogs, rollback, publicObservability },
+    evidence: { runtimeLogs, rollback, publicObservability, publicObservabilityAttestation },
     operations,
     externalReleaseGates: externalReleaseGates(),
     releaseAuthorized: false,
@@ -964,7 +1083,9 @@ export function validatePostDeployOperationsReceipt(packet) {
   })
   exactKeys(packet.deploymentOrigins, ['public', 'app'], 'post_deploy_receipt_origins_shape_invalid')
   const probes = normalizeProbes(packet.probes, context.stage)
-  exactKeys(packet.evidence, ['runtimeLogs', 'rollback', 'publicObservability'], 'post_deploy_receipt_evidence_shape_invalid')
+  exactKeys(packet.evidence, [
+    'runtimeLogs', 'rollback', 'publicObservability', 'publicObservabilityAttestation',
+  ], 'post_deploy_receipt_evidence_shape_invalid')
   const normalizeStoredEnvelope = (value, normalizer, code) => {
     if (value === null) return null
     exactKeys(value, ['sourceDigest', 'receipt'], `${code}_shape_invalid`)
@@ -980,7 +1101,30 @@ export function validatePostDeployOperationsReceipt(packet) {
     normalizePublicObservabilityVisibilityEvidence,
     'post_deploy_stored_public_observability',
   )
-  const operations = deriveOperations(context, probes, runtimeLogs, rollback, publicObservability)
+  const publicObservabilityAttestation = packet.evidence.publicObservabilityAttestation === null
+    ? null
+    : (() => {
+        exactKeys(packet.evidence.publicObservabilityAttestation, ['sourceDigest', 'receipt'], 'post_deploy_stored_public_observability_attestation_shape_invalid')
+        return {
+          sourceDigest: exactDigest(
+            packet.evidence.publicObservabilityAttestation.sourceDigest,
+            'post_deploy_stored_public_observability_attestation_digest_invalid',
+          ),
+          receipt: normalizePublicObservabilityVisibilityAttestation(
+            packet.evidence.publicObservabilityAttestation.receipt,
+            context,
+            publicObservability,
+          ),
+        }
+      })()
+  const operations = deriveOperations(
+    context,
+    probes,
+    runtimeLogs,
+    rollback,
+    publicObservability,
+    publicObservabilityAttestation,
+  )
   if (JSON.stringify(packet.operations) !== JSON.stringify(operations)) fail('post_deploy_operations_derived_state_mismatch')
   const external = externalReleaseGates()
   if (JSON.stringify(packet.externalReleaseGates) !== JSON.stringify(external)) fail('post_deploy_external_gates_mismatch')
@@ -1033,6 +1177,7 @@ function parseArgs(argv) {
     runtimeLogReceipt: null,
     rollbackReceipt: null,
     publicObservabilityVisibilityReceipt: null,
+    publicObservabilityVisibilityAttestation: null,
     outputPath: null,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -1045,6 +1190,7 @@ function parseArgs(argv) {
     else if (arg === '--runtime-log-receipt') options.runtimeLogReceipt = argv[++index] || null
     else if (arg === '--rollback-receipt') options.rollbackReceipt = argv[++index] || null
     else if (arg === '--public-observability-visibility-receipt') options.publicObservabilityVisibilityReceipt = argv[++index] || null
+    else if (arg === '--public-observability-visibility-attestation') options.publicObservabilityVisibilityAttestation = argv[++index] || null
     else if (arg === '--output') options.outputPath = argv[++index] || null
     else fail(`post_deploy_usage_invalid:${arg}`)
   }
@@ -1085,6 +1231,10 @@ async function main() {
   const runtime = await readEvidence(options.runtimeLogReceipt, 'post_deploy_runtime_log_receipt')
   const rollback = await readEvidence(options.rollbackReceipt, 'post_deploy_rollback_receipt')
   const publicObservability = await readEvidence(options.publicObservabilityVisibilityReceipt, 'post_deploy_public_observability_visibility_receipt')
+  const publicObservabilityAttestation = await readEvidence(
+    options.publicObservabilityVisibilityAttestation,
+    'post_deploy_public_observability_visibility_attestation',
+  )
   const probes = await collectPostDeployProbes({
     stage: context.stage,
     publicOrigin: context.publicOrigin,
@@ -1099,6 +1249,8 @@ async function main() {
     rollbackSourceDigest: rollback.sourceDigest,
     publicObservabilityVisibilityEvidence: publicObservability.value,
     publicObservabilityVisibilitySourceDigest: publicObservability.sourceDigest,
+    publicObservabilityVisibilityAttestation: publicObservabilityAttestation.value,
+    publicObservabilityVisibilityAttestationSourceDigest: publicObservabilityAttestation.sourceDigest,
   })
   validatePostDeployOperationsReceipt(packet)
   const output = await writeExclusive(options.outputPath, `${JSON.stringify(packet, null, 2)}\n`)
