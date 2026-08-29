@@ -79,8 +79,12 @@ for (const page of landingPages) {
   }
   const guidedSampleHref = `https://app.supermega.dev/settings/?product=${product.id}`
   const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
-  check(html.includes(`href="${guidedSampleHref}">${guidedSampleLabel}</a>`), `landing_primary_cta:${page.route}`)
-  check(html.includes(`href="/contact/?product=${product.id}"`), `landing_secondary_cta:${page.route}`)
+  const assistedSetupHref = `/contact/?product=${product.id}`
+  check(html.includes(`href="${guidedSampleHref}">${guidedSampleLabel}</a>`), `landing_guided_sample_cta:${page.route}`)
+  check(product.secondaryCta?.label === 'Request assisted setup' && product.secondaryCta.url === assistedSetupHref, `landing_assisted_setup_manifest:${page.route}`)
+  check(html.includes(`href="${assistedSetupHref}">Request assisted setup</a>`), `landing_assisted_setup_cta:${page.route}`)
+  check(html.includes('Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.'), `landing_external_effect_boundary:${page.route}`)
+  check(html.includes('Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.'), `landing_managed_activation_boundary:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
   check(html.includes('aria-label="SuperMega home"'), `landing_home_navigation:${page.route}`)
@@ -143,6 +147,18 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
+const shopProfitControlHref = 'https://app.supermega.dev/shop/?tab=today'
+const shopProfitControlLabel = 'Open Shop Profit Control'
+const shopProfitControlAnchor = `href="${shopProfitControlHref}">${shopProfitControlLabel}</a>`
+check(manifest.company.positioning === 'POS-independent Shop Profit Control for Myanmar operators.', 'home_shop_profit_control_positioning_exact')
+check(manifest.company.headline === 'Shop Profit Control: see today’s operating money risk and close one accountable action.', 'home_shop_profit_control_headline_exact')
+for (const token of ['read-only first job', 'current local Shop record', 'operating money leak or risk', 'accountable owner', 'objective closure', 'next action', 'does not replace a POS']) {
+  check(manifest.company.supporting.includes(token), `home_shop_profit_control_truth:${token}`)
+  check(home.includes(token), `home_shop_profit_control_visible:${token}`)
+}
+check(home.includes(`<a class="button primary" ${shopProfitControlAnchor}`), 'home_shop_profit_control_primary_action')
+check(countOccurrences(home, shopProfitControlAnchor) === 1, 'home_shop_profit_control_action_once')
+check(!shopProfitControlHref.includes('/contact/'), 'home_shop_profit_control_not_contact')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
@@ -156,9 +172,18 @@ const shopGenericSetupHref = 'https://app.supermega.dev/settings/?product=shop'
 const shopGenericSetupLabel = 'Choose Shop type or continue saved'
 const shopGenericSetupAnchor = `href="${shopGenericSetupHref}">${shopGenericSetupLabel}</a>`
 check(countOccurrences(home, shopGenericSetupAnchor) === 1, 'home_shop_generic_cta_truthful_once')
-check(countOccurrences(shopLanding, shopGenericSetupAnchor) === 2, 'shop_landing_generic_cta_truthful_twice')
+check(countOccurrences(shopLanding, shopGenericSetupAnchor) === 1, 'shop_landing_generic_cta_truthful_once')
 check(!`${home}\n${shopLanding}`.includes(`href="${shopGenericSetupHref}">Start free sample</a>`), 'shop_generic_cta_does_not_promise_new_sample')
 check(!shopGenericSetupHref.includes('template='), 'shop_generic_cta_does_not_silently_choose_trade')
+const shopProduct = manifest.customerProducts.find((product) => product.id === 'shop')
+check(shopProduct?.primaryCta?.label === shopProfitControlLabel && shopProduct.primaryCta.url === shopProfitControlHref, 'shop_profit_control_manifest_action_exact')
+check(countOccurrences(shopLanding, shopProfitControlAnchor) === 2, 'shop_profit_control_leads_hero_and_close')
+for (const token of ['POS-independent Shop Profit Control', 'read-only first job', 'current local Shop record', 'operating money leak or risk', 'accountable owner', 'objective closure', 'next action']) {
+  check(shopLanding.includes(token), `shop_profit_control_visible_truth:${token}`)
+}
+for (const forbidden of ['margin at risk', 'margin-at-risk', 'cost coverage', '49,000 MMK', '59,000 MMK', '20 consecutive accepted']) {
+  check(!`${home}\n${shopLanding}`.toLowerCase().includes(forbidden.toLowerCase()), `shop_profit_control_unproven_claim_absent:${forbidden}`)
+}
 const shopTemplateIds = validateShopBusinessTemplates().map((template) => template.id)
 const publicShopTemplateIds = [...shopLanding.matchAll(/<a class="trade-card" href="https:\/\/app\.supermega\.dev\/shop\/\?template=([a-z0-9-]+)">/g)]
   .map((match) => match[1])
@@ -170,6 +195,30 @@ for (const templateId of shopTemplateIds) {
   check(!shopLanding.includes(`href="https://app.supermega.dev/settings/?product=shop&amp;template=${templateId}"`), `shop_trade_skips_setup_detour:${templateId}`)
 }
 check(!shopLanding.includes('id="first-job-templates"'), 'shop_keeps_trade_first_door_without_generic_template_section')
+
+const allLandingHtml = landingPages.map((page) => readStatic(page.file)).join('\n')
+for (const product of manifest.customerProducts) {
+  check(!allLandingHtml.includes(`Set up ${product.name} data`), `assisted_setup_old_label_absent:${product.id}`)
+}
+check(countOccurrences(allLandingHtml, '>Request assisted setup</a>') === 4, 'assisted_setup_exactly_once_per_product')
+
+const ecommerceLanding = readStatic('ecommerce/index.html')
+for (const token of [
+  'current local Shop workspace',
+  'browser-local catalog',
+  'request, not an order',
+  'nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved',
+  'Shop remains the price and stock record',
+  'Current-workspace catalog',
+  'not a live stock promise',
+  'no managed quote is issued',
+  'no card capture, nothing charged automatically',
+]) {
+  check(ecommerceLanding.toLowerCase().includes(token.toLowerCase()), `ecommerce_local_request_boundary:${token}`)
+}
+for (const forbidden of ['Storefront from real stock', 'Send the reviewed request into Shop.', 'Create a Shop-connected ordering page.']) {
+  check(!`${JSON.stringify(manifest)}\n${ecommerceLanding}`.includes(forbidden), `ecommerce_old_claim_absent:${forbidden}`)
+}
 
 function productContract(id) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === id)

@@ -456,6 +456,22 @@ function guidedSampleAction(product) {
     : { href, label: 'Start free sample' }
 }
 
+function assistedSetupAction(product) {
+  const expectedHref = `/contact/?product=${encodeURIComponent(product.id)}`
+  assert(product.secondaryCta?.label === 'Request assisted setup', `assisted_setup_label_invalid:${product.id}`)
+  assert(product.secondaryCta.url === expectedHref, `assisted_setup_route_invalid:${product.id}`)
+  return { href: product.secondaryCta.url, label: product.secondaryCta.label }
+}
+
+function shopProfitControlAction() {
+  const shop = publicProducts.find((product) => product.id === 'shop')
+  assert(shop?.primaryCta?.label === 'Open Shop Profit Control', 'shop_profit_control_label_invalid')
+  assert(shop.primaryCta.url === 'https://app.supermega.dev/shop/?tab=today', 'shop_profit_control_route_invalid')
+  return { href: shop.primaryCta.url, label: shop.primaryCta.label }
+}
+
+const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()
+
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
   const firstLoop = productFirstOperatingLoop(product)
@@ -477,8 +493,8 @@ const homeHtml = documentHtml({
   description: manifest.company.statement,
   schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: manifest.company.statement },
   content: `<main id="content">
-    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four focused products</span><span>Working samples</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Name the business, choose its type, and start with one guided job. Real client data stays optional until the workflow makes sense.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
+    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.href)}">${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}</a><a class="button" href="#products">Explore all products</a></div><div class="hero-note"><span>POS-independent</span><span>Read-only local record</span><span>No payment or stock write</span></div></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Start with Shop Profit Control, then choose a connected workflow.</h2><p>Shop surfaces the first accountable operating action. Plant, Website, and Ecommerce remain focused local products with guided samples of their own.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
     <section class="frame section offer-model" id="model" aria-label="Free and managed SuperMega"><div class="section-head"><span class="eyebrow">Free product. Managed intelligence.</span><h2>Run the products free. Add managed company intelligence when the workflow proves value.</h2><p>The free workspace keeps the operating software useful on its own. Managed service adds approved AI context and company controls without replacing the underlying record.</p></div><div class="offer-model-grid"><div class="offer-model-lane"><span class="eyebrow">Free local workspace</span><h3>Operate without a stripped-down plan.</h3><p>Every workflow visible in Shop, Plant, Website, and Ecommerce remains available in the browser workspace.</p><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></div><div class="offer-model-lane"><span class="eyebrow">Managed company intelligence</span><h3>Use approved context across products.</h3><p>SuperMega can retain reviewed context, rank next actions, and prepare controlled work only after company controls pass.</p><ul class="offer-model-list"><li>Approved AI context across all four products</li><li>Persistent company history and role-aware access</li><li>Reviewed recommendations and accountable actions</li><li>Managed setup, recovery, and support</li></ul></div></div><div class="offer-model-action"><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p><a class="button primary" href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
   </main>`,
@@ -563,7 +579,11 @@ function firstJobTemplatesHtml(productId) {
 
 function productLandingHtml(product, page) {
   const guidedSample = guidedSampleAction(product)
-  const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
+  const assistedSetup = assistedSetupAction(product)
+  const leadingAction = product.id === 'shop' ? SHOP_PROFIT_CONTROL_ACTION : guidedSample
+  const actionsHtml = product.id === 'shop'
+    ? `<a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
+    : `<a class="button primary" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
   const description = page.description || product.description
   const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
   const firstLoop = productFirstOperatingLoop(product)
@@ -577,14 +597,14 @@ function productLandingHtml(product, page) {
     shareImage: `/og-card-${product.id}.png`,
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
-    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
     <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">First operating loop</span><h2>Start with one ${escapeHtml(product.name)} job.</h2><p>This is the path a new owner should understand before looking at advanced modules.</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
     ${firstJobTemplatesHtml(product.id)}
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
     <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Use the core workflow before adding complexity.</h2><p>The guided workspace runs on the owner’s device. Managed service is only for shared records, approved AI context, and infrastructure the business asks SuperMega to operate.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Local</span><h3>Start one real job</h3><ul class="offer-model-list"><li>The ${escapeHtml(launchModules.length)} core workflows above</li><li>Backup and restore</li><li>Review before consequential actions</li></ul></div><div class="tier-lane"><span class="eyebrow">AI assisted</span><h3>Prepare, then review</h3><ul class="offer-model-list"><li>Source-backed drafts from approved records</li><li>Ranked next actions</li><li>No automatic send or payment</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>One company workspace</h3><ul class="offer-model-list"><li>Separate client portal</li><li>Staff sign-ins and limits</li><li>Shared records with recovery controls</li></ul></div></div></section>
     <section class="frame trust-strip" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
-    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a></div></section>
+    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a></div></section>
   </main>`,
   })
 }
