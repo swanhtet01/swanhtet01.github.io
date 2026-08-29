@@ -4,11 +4,11 @@
 
 Who this is for: counter-first businesses that sell and track stock — the manifest ships internal template packs for `Retail`, `Cafe`, `Restaurant`, `Spa`, `Gym`, and `School`, over the workflow templates `Social commerce`, `Retail and wholesale`, and `Restaurant ordering`.
 
-The pitch, verbatim from approved copy (eyebrow `Shop operations`):
+The pitch, verbatim from approved copy (eyebrow `POS-independent Shop Profit Control`):
 
-- `Operating software for Myanmar companies.`
-- `Sell, track stock, and close the day.`
-- `Use the working Shop sample for counter sales, orders, stock, purchases, receipts, returns, and daily close. Real payments, messages, delivery, and stock writes stay behind review.`
+- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
+- `Shop Profit Control: see today’s operating money risk.`
+- `A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.`
 
 ## 2. Pre-demo setup
 
@@ -51,6 +51,6 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 ## 5. The close
 
 - Self-serve close: send them to the public `/shop/` page and have them press `Start free sample` (`https://app.supermega.dev/settings/?product=shop`) on their own phone before they leave.
-- Assisted close: the public landing page's second button `Set up Shop data` opens `/contact/?product=shop`, pre-selecting Shop in the `Starting point` field. The form asks `What happens now, and what should be better?` and submits with `Send workflow`; the confirmation starts with `Request received: ` and an ID to keep.
+- Assisted close: the public landing page's second button `Request assisted setup` opens `/contact/?product=shop`, pre-selecting Shop in the `Starting point` field. The form asks `What happens now, and what should be better?` and submits with `Send workflow`; the confirmation starts with `Request received: ` and an ID to keep.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
 - Managed pilot close (multi-product or AI-context interest): `/contact/?product=guide&source=managed-intelligence` — the contact page retitles itself and the submit button becomes `Request managed pilot`.

@@ -49,10 +49,15 @@ const packageManifest = JSON.parse(read('package.json'))
 const derived = new Set()
 
 check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_production_domain')
-check(generator.includes('href="/contact/?product=${escapeHtml(product.id)}"'), 'generator_contact_product_link_pattern')
+check(generator.includes('function assistedSetupAction(product) {'), 'generator_assisted_setup_action')
+check(generator.includes('const expectedHref = `/contact/?product=${encodeURIComponent(product.id)}`'), 'generator_assisted_setup_expected_href')
+check(generator.includes("assert(product.secondaryCta?.label === 'Request assisted setup'"), 'generator_assisted_setup_label_guard')
+check(generator.includes('assert(product.secondaryCta.url === expectedHref'), 'generator_assisted_setup_route_guard')
+check(generator.includes('return { href: product.secondaryCta.url, label: product.secondaryCta.label }'), 'generator_assisted_setup_manifest_projection')
+check(generator.includes('const assistedSetup = assistedSetupAction(product)'), 'generator_assisted_setup_call')
 check(generator.includes('https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}'), 'generator_guided_sample_link_pattern')
 // eslint-disable-next-line no-template-curly-in-string
-check(generator.includes('Set up ${product.name} data'), 'generator_setup_label_pattern')
+check(!generator.includes('Set up ${product.name} data'), 'generator_retired_setup_label_absent')
 check(generator.includes('/contact/?product=guide&amp;source=managed-intelligence'), 'generator_managed_pilot_link')
 derived.add('/contact/?product=guide&source=managed-intelligence')
 
@@ -63,10 +68,13 @@ check(accountRoutes.includes("template: 'managed-account'"), 'account_contact_te
 
 for (const product of manifest.customerProducts) {
   check(product.appRoute === `https://app.supermega.dev/${product.id}/`, `manifest_app_route:${product.id}`)
-  derived.add(`/contact/?product=${product.id}`)
+  const expectedAssistedSetupHref = `/contact/?product=${encodeURIComponent(product.id)}`
+  check(product.secondaryCta?.label === 'Request assisted setup', `manifest_assisted_setup_label:${product.id}`)
+  check(product.secondaryCta?.url === expectedAssistedSetupHref, `manifest_assisted_setup_route:${product.id}`)
+  derived.add(product.secondaryCta.label)
+  derived.add(product.secondaryCta.url)
   derived.add(`/settings/?product=${product.id}`)
   derived.add(`https://app.supermega.dev/settings/?product=${product.id}`)
-  derived.add(`Set up ${product.name} data`)
   for (const template of product.templates ?? []) {
     derived.add(`https://supermega.dev/contact/?product=${product.id}&template=${template.id}&utm_source=app&utm_medium=guided_trial`)
   }
@@ -106,6 +114,18 @@ for (const file of files) {
   check(tokens.length >= 5, `${file}:token_floor:${tokens.length}`)
   for (const token of tokens) check(tokenOk(token), `${file}:unknown_token:${token}`)
   if (file === 'README.md') continue
+  const productId = file.replace(/\.md$/, '')
+  const product = manifest.customerProducts.find((candidate) => candidate.id === productId)
+  const page = manifest.pages.find((candidate) => candidate.productId === productId)
+  check(Boolean(product && page), `${file}:manifest_product_page_missing`)
+  const renderedDescription = page.description || product.description
+  check(text.includes(`eyebrow \`${product.eyebrow}\``), `${file}:eyebrow_drift`)
+  check(text.includes(`- \`${manifest.company.statement}\``), `${file}:company_statement_drift`)
+  check(text.includes(`- \`${product.headline}\``), `${file}:headline_drift`)
+  check(text.includes(`- \`${renderedDescription}\``), `${file}:description_drift`)
+  check(text.includes(`\`${product.secondaryCta.label}\``), `${file}:assisted_setup_label_missing`)
+  check(text.includes(`\`${product.secondaryCta.url}\``), `${file}:assisted_setup_route_missing`)
+  check(!text.includes(`Set up ${product.name} data`), `${file}:retired_setup_label_present`)
   for (const section of requiredSections) check(text.includes(section), `${file}:section_missing:${section}`)
   const script = text.split('## 3. Demo script')[1]?.split('## 4.')[0] ?? ''
   const steps = script.split('\n').filter((line) => /^\d+\.\s/.test(line.trim()))
