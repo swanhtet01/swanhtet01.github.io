@@ -607,6 +607,9 @@ else {
   else {
     // The operations route artifact, by the same chunk name this file already pins below.
     if (!precache.some((url) => /^\/assets\/core-app-[^/]+\.js$/.test(url))) fail('service_worker_precache_omits_operations_route')
+    if (!precache.some((url) => /^\/assets\/shop-batch-profit-control-first-use-[^/]+\.js$/.test(url))) {
+      fail('service_worker_precache_omits_shop_batch_first_use')
+    }
     // Everything the built document loads, so the shell the worker falls back to can boot.
     for (const asset of rootPageSource.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)) {
       if (!precache.includes(asset[1])) fail(`service_worker_precache_omits_shell_asset:${asset[1]}`)
