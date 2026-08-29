@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import { validatePlantBusinessTemplates } from '../showroom/src/products/plant/business-templates.ts'
 import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 
 const run = promisify(execFile)
@@ -489,6 +490,69 @@ function tradeTemplatesHtml() {
   return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one opens Sell with a real catalog, sample sales and a live order in your browser. Nothing to install and no account required.</p></div><div class="trade-grid">${SHOP_TRADES.map(({ id, name, note }) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
 }
 
+function customerProductContract(id) {
+  const product = publicProducts.find((candidate) => candidate.id === id)
+  assert(product, `customer_product_missing:${id}`)
+  return product
+}
+
+function validatedProductTemplates(productId, expectedCount) {
+  const templates = customerProductContract(productId).templates
+  assert(Array.isArray(templates) && templates.length === expectedCount, `public_template_count_changed:${productId}`)
+  assert(templates.every((template) => /^[a-z][a-z0-9-]{1,39}$/.test(template.id)
+    && typeof template.name === 'string' && template.name.trim()
+    && typeof template.outcome === 'string' && template.outcome.trim()), `public_template_copy_invalid:${productId}`)
+  assert(new Set(templates.map((template) => template.id)).size === templates.length, `public_template_id_duplicate:${productId}`)
+  return templates
+}
+
+function guidedTemplateRoute(productId, templateId, extra = {}) {
+  const query = new URLSearchParams({ product: productId, template: templateId, ...extra })
+  return `https://app.supermega.dev/settings/?${query.toString()}`
+}
+
+const plantWorkflowTemplate = validatedProductTemplates('plant', 3)[0]
+const FIRST_JOB_TEMPLATE_SECTIONS = {
+  plant: {
+    title: 'Choose a shipped production sample.',
+    intro: 'Each door carries its validated Plant pack and first production workflow into guided setup.',
+    doors: validatePlantBusinessTemplates().map((template) => ({
+      id: template.id,
+      name: template.name.en,
+      note: template.description,
+      href: guidedTemplateRoute('plant', plantWorkflowTemplate.id, { pack: template.industryPackId }),
+    })),
+  },
+  website: {
+    title: 'Choose the first job for your website.',
+    intro: 'Start from one validated layout, then review the local draft before any publishing decision.',
+    doors: validatedProductTemplates('website', 3).map((template) => ({
+      id: template.id,
+      name: template.name,
+      note: template.outcome,
+      href: guidedTemplateRoute('website', template.id),
+    })),
+  },
+  ecommerce: {
+    title: 'Choose the first ordering workflow.',
+    intro: 'Start with one validated Shop-connected request flow while Shop remains the operating record.',
+    doors: validatedProductTemplates('ecommerce', 3).map((template) => ({
+      id: template.id,
+      name: template.name,
+      note: template.outcome,
+      href: guidedTemplateRoute('ecommerce', template.id),
+    })),
+  },
+}
+
+function firstJobTemplatesHtml(productId) {
+  const section = FIRST_JOB_TEMPLATE_SECTIONS[productId]
+  if (!section) return ''
+  const hrefs = section.doors.map((door) => door.href)
+  assert(new Set(hrefs).size === hrefs.length, `public_template_route_duplicate:${productId}`)
+  return `<section class="frame section" id="first-job-templates"><div class="section-head"><span class="eyebrow">${escapeHtml(section.doors.length)} validated starting points</span><h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.intro)}</p></div><div class="trade-grid" aria-label="${escapeHtml(customerProductContract(productId).name)} first-job templates">${section.doors.map(({ id, name, note, href }) => `<a class="trade-card first-job-card" data-template="${escapeHtml(id)}" href="${escapeHtml(href)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div><div class="control-line"><span class="eyebrow">Browser-local setup only</span><p>Opening a door does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue. Any later setup change remains an explicit reviewed action.</p></div></section>`
+}
+
 function productLandingHtml(product, page) {
   const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
@@ -507,6 +571,7 @@ function productLandingHtml(product, page) {
     content: `<main id="content">
     <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
     <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">First operating loop</span><h2>Start with one ${escapeHtml(product.name)} job.</h2><p>This is the path a new owner should understand before looking at advanced modules.</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
+    ${firstJobTemplatesHtml(product.id)}
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
     <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Use the core workflow before adding complexity.</h2><p>The guided workspace runs on the owner’s device. Managed service is only for shared records, approved AI context, and infrastructure the business asks SuperMega to operate.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Local</span><h3>Start one real job</h3><ul class="offer-model-list"><li>The ${escapeHtml(launchModules.length)} core workflows above</li><li>Backup and restore</li><li>Review before consequential actions</li></ul></div><div class="tier-lane"><span class="eyebrow">AI assisted</span><h3>Prepare, then review</h3><ul class="offer-model-list"><li>Source-backed drafts from approved records</li><li>Ranked next actions</li><li>No automatic send or payment</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>One company workspace</h3><ul class="offer-model-list"><li>Separate client portal</li><li>Staff sign-ins and limits</li><li>Shared records with recovery controls</li></ul></div></div></section>

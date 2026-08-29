@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 
+import { validatePlantBusinessTemplates } from '../showroom/src/products/plant/business-templates.ts'
 import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 
 const root = process.cwd()
@@ -153,6 +154,66 @@ check(publicShopTemplateIds.join(',') === shopTemplateIds.join(','), 'shop_trade
 for (const templateId of shopTemplateIds) {
   check(shopLanding.includes(`href="https://app.supermega.dev/shop/?template=${templateId}"`), `shop_trade_opens_sell:${templateId}`)
   check(!shopLanding.includes(`href="https://app.supermega.dev/settings/?product=shop&amp;template=${templateId}"`), `shop_trade_skips_setup_detour:${templateId}`)
+}
+check(!shopLanding.includes('id="first-job-templates"'), 'shop_keeps_trade_first_door_without_generic_template_section')
+
+function productContract(id) {
+  const product = manifest.customerProducts.find((candidate) => candidate.id === id)
+  assert.ok(product, `missing product contract ${id}`)
+  return product
+}
+
+function escapedHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function publicFirstJobDoors(html) {
+  return [...html.matchAll(/<a class="trade-card first-job-card" data-template="([a-z0-9-]+)" href="([^"]+)">/g)]
+    .map((match) => ({ id: match[1], href: match[2] }))
+}
+
+const plantProduct = productContract('plant')
+const plantTemplates = validatePlantBusinessTemplates()
+const plantLanding = readStatic('plant/index.html')
+const plantDoors = publicFirstJobDoors(plantLanding)
+const plantExpectedDoors = plantTemplates.map((template) => ({
+  id: template.id,
+  href: escapedHtml(`https://app.supermega.dev/settings/?product=plant&template=${plantProduct.templates[0].id}&pack=${template.industryPackId}`),
+}))
+check(plantTemplates.length === 2, 'plant_shipped_template_registry_count')
+check(JSON.stringify(plantDoors) === JSON.stringify(plantExpectedDoors), 'plant_first_job_doors_match_validated_registry_exactly')
+for (const template of plantTemplates) {
+  check(plantLanding.includes(`<strong>${escapedHtml(template.name.en)}</strong><span>${escapedHtml(template.description)}</span>`), `plant_first_job_copy_matches_registry:${template.id}`)
+}
+
+for (const productId of ['website', 'ecommerce']) {
+  const product = productContract(productId)
+  const html = readStatic(`${productId}/index.html`)
+  const doors = publicFirstJobDoors(html)
+  const expectedDoors = product.templates.map((template) => ({
+    id: template.id,
+    href: escapedHtml(`https://app.supermega.dev/settings/?product=${productId}&template=${template.id}`),
+  }))
+  check(product.templates.length === 3, `${productId}_template_registry_count`)
+  check(JSON.stringify(doors) === JSON.stringify(expectedDoors), `${productId}_first_job_doors_match_registry_exactly`)
+  for (const template of product.templates) {
+    check(html.includes(`<strong>${escapedHtml(template.name)}</strong><span>${escapedHtml(template.outcome)}</span>`), `${productId}_first_job_copy_matches_registry:${template.id}`)
+  }
+}
+
+for (const productId of ['plant', 'website', 'ecommerce']) {
+  const html = readStatic(`${productId}/index.html`)
+  const doors = publicFirstJobDoors(html)
+  check(doors.length > 0 && new Set(doors.map((door) => door.id)).size === doors.length, `${productId}_first_job_template_ids_unique`)
+  check(new Set(doors.map((door) => door.href)).size === doors.length, `${productId}_first_job_routes_unique`)
+  check(html.includes('Browser-local setup only'), `${productId}_first_job_local_boundary`)
+  check(html.includes('does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue'), `${productId}_first_job_external_effect_boundary`)
+  check(html.includes('@media (max-width: 560px) { .trade-grid { grid-template-columns: 1fr; }'), `${productId}_first_job_mobile_single_column`)
 }
 
 // Homepage carries exactly one Organization JSON-LD block sourced from the manifest.
