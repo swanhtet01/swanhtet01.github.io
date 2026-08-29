@@ -26,6 +26,9 @@ const exactWorkspaceKeys = new Set([
   'supermega.client-demo-workspace.v1',
   'supermega.ecommerce.storefront_draft.v1',
   'supermega.shop.service-schedule.v1',
+  // Append-only local Batch Profit Control reviews. These records are workspace content, so
+  // backup/restore must carry them and "Reset this device" must remove them with the Shop data.
+  'supermega.shop.batch-profit-control.local-workspace.v1',
   'supermega.plant.industry-pack.v1',
   'supermega.pilot-outcome.v1',
   'supermega.owner-control-acknowledgements.v1',
