@@ -387,26 +387,49 @@ function evidenceEnvelope(value, sourceDigest, normalizer, context, code) {
   }
 }
 
-function hasRestrictedScriptSources(csp) {
-  const scriptDirectives = String(csp || '')
+function singleCspDirectiveTokens(csp, directiveName) {
+  const matching = String(csp || '')
     .split(';')
     .map((directive) => directive.trim())
-    .filter((directive) => /^script-src(?:\s|$)/iu.test(directive))
-  if (scriptDirectives.length !== 1) return false
-  const tokens = scriptDirectives[0].split(/\s+/u)
-  if (tokens.shift()?.toLowerCase() !== 'script-src' || tokens.shift()?.toLowerCase() !== "'self'") return false
+    .filter((directive) => directive.split(/\s+/u, 1)[0]?.toLowerCase() === directiveName)
+  if (matching.length !== 1) return null
+  const tokens = matching[0].split(/\s+/u)
+  if (tokens.shift()?.toLowerCase() !== directiveName) return null
+  return tokens
+}
+
+function hasRestrictedScriptSources(csp) {
+  const tokens = singleCspDirectiveTokens(csp, 'script-src')
+  if (!tokens || tokens.shift()?.toLowerCase() !== "'self'") return false
   return tokens.every((token) => /^'sha256-[A-Za-z0-9+/]{43}='$/u.test(token))
+}
+
+function hasFrameAncestorsNone(csp) {
+  const tokens = singleCspDirectiveTokens(csp, 'frame-ancestors')
+  return Boolean(tokens && tokens.length === 1 && tokens[0].toLowerCase() === "'none'")
+}
+
+function permissionsPolicyDirectives(value) {
+  const directives = new Map()
+  for (const part of String(value || '').split(',')) {
+    const match = /^\s*([a-z][a-z0-9-]*)\s*=\s*(\([^)]*\))\s*$/iu.exec(part)
+    if (!match || directives.has(match[1].toLowerCase())) return null
+    directives.set(match[1].toLowerCase(), match[2].replace(/\s+/gu, '').toLowerCase())
+  }
+  return directives
 }
 
 function booleanHeaderEvidence(headers) {
   const csp = String(headers.get('content-security-policy') || '')
   const permissions = String(headers.get('permissions-policy') || '')
+  const permissionDirectives = permissionsPolicyDirectives(permissions)
   return {
     contentSecurityPolicyPresent: Boolean(csp),
     scriptSourcesRestricted: hasRestrictedScriptSources(csp),
-    frameAncestorsNone: /(?:^|;)\s*frame-ancestors\s+'none'\s*(?:;|$)/i.test(csp),
-    cameraSelf: /(?:^|,)\s*camera=\(self\)\s*(?:,|$)/i.test(permissions),
-    sensitiveCapabilitiesDenied: ['geolocation=()', 'microphone=()', 'payment=()', 'usb=()'].every((token) => permissions.includes(token)),
+    frameAncestorsNone: hasFrameAncestorsNone(csp),
+    cameraSelf: permissionDirectives?.get('camera') === '(self)',
+    sensitiveCapabilitiesDenied: ['geolocation', 'microphone', 'payment', 'usb']
+      .every((capability) => permissionDirectives?.get(capability) === '()'),
     referrerNoReferrer: String(headers.get('referrer-policy') || '').toLowerCase() === 'no-referrer',
     noSniff: String(headers.get('x-content-type-options') || '').toLowerCase() === 'nosniff',
     frameDenied: String(headers.get('x-frame-options') || '').toUpperCase() === 'DENY',

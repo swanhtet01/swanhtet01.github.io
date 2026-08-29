@@ -227,15 +227,23 @@ function fixtureFetch(origins, options = {}) {
       return json(appHealth)
     }
     if (isPublic && url.pathname === '/') {
+      const publicResponseHeaders = options.publicScriptDirective || options.publicFrameAncestorsDirective || options.publicPermissionsPolicy
+        ? {
+            ...publicHeaders,
+            'content-security-policy': `base-uri 'self'; ${options.publicFrameAncestorsDirective || "frame-ancestors 'none'"}; object-src 'none'; ${options.publicScriptDirective || validPublicScriptDirective}`,
+            'permissions-policy': options.publicPermissionsPolicy || publicHeaders['permissions-policy'],
+          }
+        : publicHeaders
       return html('<!doctype html><html><body>SuperMega<script src="/vercel-insights.js"></script></body></html>', options.publicHeadersMissing
         ? { 'content-type': 'text/html' }
-        : options.publicScriptDirective
-          ? { ...publicHeaders, 'content-security-policy': `base-uri 'self'; frame-ancestors 'none'; object-src 'none'; ${options.publicScriptDirective}` }
-          : publicHeaders)
+        : publicResponseHeaders)
     }
     if (isApp && ['/shop/', '/plant/', '/website/', '/ecommerce/'].includes(url.pathname)) {
-      const headers = options.cameraDenied
-        ? { ...appHeaders, 'permissions-policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()' }
+      const headers = options.cameraDenied || options.appPermissionsPolicy
+        ? {
+            ...appHeaders,
+            'permissions-policy': options.appPermissionsPolicy || 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+          }
         : appHeaders
       return html(options.routeBody || '<!doctype html><html><body><div id="root"></div><script src="/vercel-insights.js"></script></body></html>', headers)
     }
@@ -370,6 +378,28 @@ test('blocks release drift, missing public headers, denied camera access, and a 
     assert.ok(unsafeScript.packet.operations.blockers.includes('public_home_security_headers_invalid'))
     assert.equal(unsafeScript.packet.probes.publicHome.headers.scriptSourcesRestricted, false)
   }
+  for (const publicFrameAncestorsDirective of [
+    'frame-ancestors https://frames.example.test',
+    "frame-ancestors https://frames.example.test; frame-ancestors 'none'",
+  ]) {
+    const unsafeFrame = await buildFixture({ fetchOptions: { publicFrameAncestorsDirective } })
+    assert.ok(unsafeFrame.packet.operations.blockers.includes('public_home_security_headers_invalid'))
+    assert.equal(unsafeFrame.packet.probes.publicHome.headers.frameAncestorsNone, false)
+  }
+  const unsafePublicPermission = await buildFixture({
+    fetchOptions: {
+      publicPermissionsPolicy: 'camera=(), geolocation=(self), geolocation=(), microphone=(), payment=(), usb=()',
+    },
+  })
+  assert.equal(unsafePublicPermission.packet.probes.publicHome.headers.sensitiveCapabilitiesDenied, false)
+  assert.ok(unsafePublicPermission.packet.operations.blockers.includes('public_home_security_headers_invalid'))
+  const unsafeAppPermission = await buildFixture({
+    fetchOptions: {
+      appPermissionsPolicy: 'camera=(*), camera=(self), geolocation=(), microphone=(), payment=(), usb=()',
+    },
+  })
+  assert.equal(unsafeAppPermission.packet.probes.routes[0].headers.cameraSelf, false)
+  assert.ok(unsafeAppPermission.packet.operations.blockers.includes('shop_security_headers_invalid'))
 })
 
 test('keeps nonzero runtime findings and stale evidence visible as derived blockers', async () => {
