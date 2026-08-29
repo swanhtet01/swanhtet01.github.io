@@ -81,11 +81,101 @@ function batchPriorityLabel(priority: ShopBatchProfitControlProjection['prioriti
   return 'Below contribution-estimate floor'
 }
 
-export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, metrics, modules, nextAction, nextDetail, nextTo, profitControl }: ShopTodayProps) {
-  const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
+export function ShopBatchProfitControlPanel({ batchProfitControl = projectNoBatchProfitControl() }: { batchProfitControl?: ShopBatchProfitControlView }) {
   const batchProjectionBound = batchProfitControl.contract === SHOP_BATCH_PROFIT_CONTROL_CONTRACT
     && batchProfitControl.contractSourceSha256 === SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256
     && Object.values(batchProfitControl.authority).every((value) => value === false)
+
+  return <section aria-label="Shop Batch Profit Control" className="shop-margin-control shop-batch-profit-control" id="shop-batch-profit-control">
+    <header>
+      <div>
+        <span className="core-eyebrow">Batch Profit Control</span>
+        <h3>Review batch evidence before the next production or delivery decision</h3>
+        <p>{batchProjectionBound ? <>
+          {batchProfitControl.truthBoundary.costLabel}. {batchClassificationLabel(batchProfitControl.truthBoundary.classification)}. {batchProfitControl.truthBoundary.boundary}
+        </> : 'Accepted Batch Profit Control binding did not verify. No evidence, estimate, priority, or authority is inferred.'}</p>
+      </div>
+      <b data-state={batchProjectionBound ? batchProfitControl.state === 'batch_controlled' ? 'controlled' : batchProfitControl.state : 'blocked'}>{batchProjectionBound ? batchStateLabels[batchProfitControl.state] : 'Blocked'}</b>
+    </header>
+    {!batchProjectionBound ? <p className="shop-margin-gaps" role="alert"><strong>Batch projection blocked.</strong> The accepted contract binding or no-write authority boundary did not match.</p> : batchProfitControl.state === 'no_batch' ? <p className="shop-margin-gaps" role="status">
+      <strong>Decision estimates withheld.</strong> No source-owned batch is selected, so contribution, break-even, margin-at-risk estimates, and priorities remain unavailable.
+    </p> : <>
+      <div aria-label="Batch evidence status" className="shop-batch-evidence">
+        <article data-state={batchProfitControl.evidenceStatus.canonicalDigestsComplete && batchProfitControl.evidenceStatus.immutableRevisionLineageComplete ? 'complete' : 'blocked'}>
+          <span>Canonical revision lineage</span><b>{batchProfitControl.evidenceStatus.canonicalDigestsComplete && batchProfitControl.evidenceStatus.immutableRevisionLineageComplete ? 'Complete' : 'Blocked'}</b>
+        </article>
+        <article data-state={batchProfitControl.evidenceStatus.batchSaleAllocationComplete && batchProfitControl.evidenceStatus.crossBatchReuseAbsent ? 'complete' : 'blocked'}>
+          <span>Whole-line batch allocation</span><b>{batchProfitControl.evidenceStatus.batchSaleAllocationComplete && batchProfitControl.evidenceStatus.crossBatchReuseAbsent ? 'Complete' : 'Blocked'}</b>
+        </article>
+        <article data-state={batchProfitControl.evidenceStatus.productionQuantityCostCoverageComplete && batchProfitControl.evidenceStatus.costEstimateBasisUnambiguous ? 'complete' : 'blocked'}>
+          <span>Production-cost estimate coverage</span><b>{batchProfitControl.evidenceStatus.productionQuantityCostCoverageComplete && batchProfitControl.evidenceStatus.costEstimateBasisUnambiguous ? 'Complete' : 'Blocked'}</b>
+        </article>
+        <article data-state={batchProfitControl.evidenceStatus.retainedSalesEvidenceComplete ? 'complete' : 'blocked'}>
+          <span>Retained completed sales</span><b>{batchProfitControl.evidenceStatus.retainedSalesEvidenceComplete ? 'Complete' : 'Excluded or incomplete'}</b>
+        </article>
+        <article data-state={batchProfitControl.evidenceStatus.overheadReviewComplete ? 'complete' : 'blocked'}>
+          <span>Packaging and delivery review</span><b>{batchProfitControl.evidenceStatus.overheadReviewComplete ? 'Complete' : 'Blocked'}</b>
+        </article>
+        <article data-state={batchProfitControl.evidenceStatus.adjustmentLinkageComplete && batchProfitControl.evidenceStatus.reconciliationComplete ? 'complete' : 'blocked'}>
+          <span>Adjustments and unit reconciliation</span><b>{batchProfitControl.evidenceStatus.adjustmentLinkageComplete && batchProfitControl.evidenceStatus.reconciliationComplete ? 'Complete' : 'Blocked'}</b>
+        </article>
+      </div>
+      <p className="shop-batch-identity">
+        <strong>{batchProfitControl.batchIdentity.batchId}</strong> · revision {batchProfitControl.batchIdentity.revision} · {batchProfitControl.batchIdentity.businessDate} · {batchClassificationLabel(batchProfitControl.batchIdentity.classification)}
+      </p>
+      {batchProfitControl.evidenceStatus.withheldReasonCodes.length ? <p className="shop-margin-gaps" role="status">
+        <strong>Operating decision status: {batchProfitControl.evidenceStatus.profitStatus === 'withheld' ? 'withheld' : 'estimate available'}.</strong> {batchProfitControl.evidenceStatus.withheldReasonCodes.map((reason) => batchReasonLabels[reason] ?? reason.replaceAll('_', ' ')).join(' ')}
+      </p> : null}
+      <div className="shop-margin-summary">
+        <article>
+          <small>Completed sold value</small>
+          <strong>{formatMmk(batchProfitControl.totals.totalCompletedSaleValueMmk)}</strong>
+          <span>{batchProfitControl.totals.completedSaleUnits} completed units from {batchProfitControl.totals.producedUnits} produced</span>
+        </article>
+        <article>
+          <small>Total batch cost estimate</small>
+          <strong>{formatMmk(batchProfitControl.totals.totalBatchCostEstimateMmk)}</strong>
+          <span>{formatMmk(batchProfitControl.totals.totalReviewedProductionCostEstimateMmk)} production · {formatMmk(batchProfitControl.totals.totalBatchOverheadMmk)} reviewed overhead</span>
+        </article>
+        <article>
+          <small>Batch contribution estimate</small>
+          <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.batchContributionEstimateMmk) : 'Withheld'}</strong>
+          <span>{batchProfitControl.estimatePreview ? formatShopMarginRate(batchProfitControl.estimatePreview.aggregateContributionEstimateBasisPoints) : 'No decision metric until all evidence gates pass'}</span>
+        </article>
+      </div>
+      <div className="shop-margin-summary">
+        <article>
+          <small>Estimated break-even sold value</small>
+          <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.estimatedBreakEvenSoldValueMmk) : 'Withheld'}</strong>
+          <span>{batchProfitControl.estimatePreview ? `${batchProfitControl.estimatePreview.breakEvenEquivalentCompletedUnits} equivalent completed units` : 'Unknown is never replaced with zero'}</span>
+        </article>
+        <article>
+          <small>Estimated margin at risk</small>
+          <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.estimatedMarginAtRiskMmk) : 'Withheld'}</strong>
+          <span>{batchProfitControl.estimatePreview ? `${formatMmk(batchProfitControl.estimatePreview.remainingToEstimatedBreakEvenMmk)} remains to estimated break-even` : 'No ranking while decision evidence is incomplete'}</span>
+        </article>
+        <article>
+          <small>Batch disposition</small>
+          <strong>{batchProfitControl.totals.leftoverUnits + batchProfitControl.totals.wastedUnits + batchProfitControl.totals.remakeUnits}</strong>
+          <span>{batchProfitControl.totals.leftoverUnits} leftover · {batchProfitControl.totals.wastedUnits} wasted · {batchProfitControl.totals.remakeUnits} remake</span>
+        </article>
+      </div>
+      {batchProfitControl.priorities.length ? <div aria-label="Batch margin-risk priorities" className="shop-batch-priorities">
+        {batchProfitControl.priorities.map((priority, index) => <article data-tone={priority.severity} key={priority.sku}>
+          <header><span>Priority {index + 1} · {batchPriorityLabel(priority)}</span><b>{formatMmk(priority.marginRiskEstimateMmk)} at risk</b></header>
+          <strong>{priority.sku}</strong>
+          <small>{formatMmk(priority.contributionEstimateMmk)} contribution estimate · {priority.contributionEstimateBasisPoints === null ? 'Rate unavailable — no sold value' : formatShopMarginRate(priority.contributionEstimateBasisPoints)}</small>
+          <small>{formatMmk(priority.operationalCostRiskEstimateMmk)} leftover/waste cost estimate · {priority.ownerRole} · {priority.dueLabel}</small>
+          <p><strong>Next:</strong> {priority.actionLabel}. <strong>Closed when:</strong> {priority.closureCondition}</p>
+        </article>)}
+      </div> : batchProfitControl.estimatePreview ? <p className="shop-margin-controlled">No item is below the configured contribution-estimate floor in this validated batch projection.</p> : null}
+    </>}
+    <p className="panel-note">Read-only local projection. It never counts as baseline, pilot, customer, or commercial proof and performs no payment, stock, supplier, accounting, customer, hosted, provider, model, or production action.</p>
+  </section>
+}
+
+export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, metrics, modules, nextAction, nextDetail, nextTo, profitControl }: ShopTodayProps) {
+  const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [bakeryDemo, setBakeryDemo] = useState<ShopBakeryDemoState>({ status: 'idle' })
   const bakeryDemoAttempt = useRef(0)
   useEffect(() => () => { bakeryDemoAttempt.current += 1 }, [])
@@ -187,90 +277,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       <p className="panel-note">No payment, stock, supplier, accounting, customer, or hosted write runs from this panel.</p>
     </section>
 
-    <section aria-label="Shop Batch Profit Control" className="shop-margin-control shop-batch-profit-control" id="shop-batch-profit-control">
-      <header>
-        <div>
-          <span className="core-eyebrow">Batch Profit Control</span>
-          <h3>Review batch evidence before the next production or delivery decision</h3>
-          <p>{batchProfitControl.truthBoundary.costLabel}. {batchClassificationLabel(batchProfitControl.truthBoundary.classification)}. {batchProfitControl.truthBoundary.boundary}</p>
-        </div>
-        <b data-state={batchProfitControl.state === 'batch_controlled' ? 'controlled' : batchProfitControl.state}>{batchStateLabels[batchProfitControl.state]}</b>
-      </header>
-      {!batchProjectionBound ? <p className="shop-margin-gaps" role="alert"><strong>Batch projection blocked.</strong> The accepted contract binding or no-write authority boundary did not match.</p> : batchProfitControl.state === 'no_batch' ? <p className="shop-margin-gaps" role="status">
-        <strong>Decision estimates withheld.</strong> No source-owned batch is selected, so contribution, break-even, margin-at-risk estimates, and priorities remain unavailable.
-      </p> : <>
-        <div aria-label="Batch evidence status" className="shop-batch-evidence">
-          <article data-state={batchProfitControl.evidenceStatus.canonicalDigestsComplete && batchProfitControl.evidenceStatus.immutableRevisionLineageComplete ? 'complete' : 'blocked'}>
-            <span>Canonical revision lineage</span><b>{batchProfitControl.evidenceStatus.canonicalDigestsComplete && batchProfitControl.evidenceStatus.immutableRevisionLineageComplete ? 'Complete' : 'Blocked'}</b>
-          </article>
-          <article data-state={batchProfitControl.evidenceStatus.batchSaleAllocationComplete && batchProfitControl.evidenceStatus.crossBatchReuseAbsent ? 'complete' : 'blocked'}>
-            <span>Whole-line batch allocation</span><b>{batchProfitControl.evidenceStatus.batchSaleAllocationComplete && batchProfitControl.evidenceStatus.crossBatchReuseAbsent ? 'Complete' : 'Blocked'}</b>
-          </article>
-          <article data-state={batchProfitControl.evidenceStatus.productionQuantityCostCoverageComplete && batchProfitControl.evidenceStatus.costEstimateBasisUnambiguous ? 'complete' : 'blocked'}>
-            <span>Production-cost estimate coverage</span><b>{batchProfitControl.evidenceStatus.productionQuantityCostCoverageComplete && batchProfitControl.evidenceStatus.costEstimateBasisUnambiguous ? 'Complete' : 'Blocked'}</b>
-          </article>
-          <article data-state={batchProfitControl.evidenceStatus.retainedSalesEvidenceComplete ? 'complete' : 'blocked'}>
-            <span>Retained completed sales</span><b>{batchProfitControl.evidenceStatus.retainedSalesEvidenceComplete ? 'Complete' : 'Excluded or incomplete'}</b>
-          </article>
-          <article data-state={batchProfitControl.evidenceStatus.overheadReviewComplete ? 'complete' : 'blocked'}>
-            <span>Packaging and delivery review</span><b>{batchProfitControl.evidenceStatus.overheadReviewComplete ? 'Complete' : 'Blocked'}</b>
-          </article>
-          <article data-state={batchProfitControl.evidenceStatus.adjustmentLinkageComplete && batchProfitControl.evidenceStatus.reconciliationComplete ? 'complete' : 'blocked'}>
-            <span>Adjustments and unit reconciliation</span><b>{batchProfitControl.evidenceStatus.adjustmentLinkageComplete && batchProfitControl.evidenceStatus.reconciliationComplete ? 'Complete' : 'Blocked'}</b>
-          </article>
-        </div>
-        <p className="shop-batch-identity">
-          <strong>{batchProfitControl.batchIdentity.batchId}</strong> · revision {batchProfitControl.batchIdentity.revision} · {batchProfitControl.batchIdentity.businessDate} · {batchClassificationLabel(batchProfitControl.batchIdentity.classification)}
-        </p>
-        {batchProfitControl.evidenceStatus.withheldReasonCodes.length ? <p className="shop-margin-gaps" role="status">
-          <strong>Operating decision status: {batchProfitControl.evidenceStatus.profitStatus === 'withheld' ? 'withheld' : 'estimate available'}.</strong> {batchProfitControl.evidenceStatus.withheldReasonCodes.map((reason) => batchReasonLabels[reason] ?? reason.replaceAll('_', ' ')).join(' ')}
-        </p> : null}
-        <div className="shop-margin-summary">
-          <article>
-            <small>Completed sold value</small>
-            <strong>{formatMmk(batchProfitControl.totals.totalCompletedSaleValueMmk)}</strong>
-            <span>{batchProfitControl.totals.completedSaleUnits} completed units from {batchProfitControl.totals.producedUnits} produced</span>
-          </article>
-          <article>
-            <small>Total batch cost estimate</small>
-            <strong>{formatMmk(batchProfitControl.totals.totalBatchCostEstimateMmk)}</strong>
-            <span>{formatMmk(batchProfitControl.totals.totalReviewedProductionCostEstimateMmk)} production · {formatMmk(batchProfitControl.totals.totalBatchOverheadMmk)} reviewed overhead</span>
-          </article>
-          <article>
-            <small>Batch contribution estimate</small>
-            <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.batchContributionEstimateMmk) : 'Withheld'}</strong>
-            <span>{batchProfitControl.estimatePreview ? formatShopMarginRate(batchProfitControl.estimatePreview.aggregateContributionEstimateBasisPoints) : 'No decision metric until all evidence gates pass'}</span>
-          </article>
-        </div>
-        <div className="shop-margin-summary">
-          <article>
-            <small>Estimated break-even sold value</small>
-            <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.estimatedBreakEvenSoldValueMmk) : 'Withheld'}</strong>
-            <span>{batchProfitControl.estimatePreview ? `${batchProfitControl.estimatePreview.breakEvenEquivalentCompletedUnits} equivalent completed units` : 'Unknown is never replaced with zero'}</span>
-          </article>
-          <article>
-            <small>Estimated margin at risk</small>
-            <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.estimatedMarginAtRiskMmk) : 'Withheld'}</strong>
-            <span>{batchProfitControl.estimatePreview ? `${formatMmk(batchProfitControl.estimatePreview.remainingToEstimatedBreakEvenMmk)} remains to estimated break-even` : 'No ranking while decision evidence is incomplete'}</span>
-          </article>
-          <article>
-            <small>Batch disposition</small>
-            <strong>{batchProfitControl.totals.leftoverUnits + batchProfitControl.totals.wastedUnits + batchProfitControl.totals.remakeUnits}</strong>
-            <span>{batchProfitControl.totals.leftoverUnits} leftover · {batchProfitControl.totals.wastedUnits} wasted · {batchProfitControl.totals.remakeUnits} remake</span>
-          </article>
-        </div>
-        {batchProfitControl.priorities.length ? <div aria-label="Batch margin-risk priorities" className="shop-batch-priorities">
-          {batchProfitControl.priorities.map((priority, index) => <article data-tone={priority.severity} key={priority.sku}>
-            <header><span>Priority {index + 1} · {batchPriorityLabel(priority)}</span><b>{formatMmk(priority.marginRiskEstimateMmk)} at risk</b></header>
-            <strong>{priority.sku}</strong>
-            <small>{formatMmk(priority.contributionEstimateMmk)} contribution estimate · {priority.contributionEstimateBasisPoints === null ? 'Rate unavailable — no sold value' : formatShopMarginRate(priority.contributionEstimateBasisPoints)}</small>
-            <small>{formatMmk(priority.operationalCostRiskEstimateMmk)} leftover/waste cost estimate · {priority.ownerRole} · {priority.dueLabel}</small>
-            <p><strong>Next:</strong> {priority.actionLabel}. <strong>Closed when:</strong> {priority.closureCondition}</p>
-          </article>)}
-        </div> : batchProfitControl.estimatePreview ? <p className="shop-margin-controlled">No item is below the configured contribution-estimate floor in this validated batch projection.</p> : null}
-      </>}
-      <p className="panel-note">Read-only local projection. It never counts as baseline, pilot, customer, or commercial proof and performs no payment, stock, supplier, accounting, customer, hosted, provider, model, or production action.</p>
-    </section>
+    <ShopBatchProfitControlPanel batchProfitControl={batchProfitControl} />
 
     <section aria-label="Synthetic bakery margin demo" className="shop-margin-control">
       <header>

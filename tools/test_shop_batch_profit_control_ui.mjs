@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import {
   SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
@@ -13,7 +14,7 @@ const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8')
 const css = readFileSync(`${root}/showroom/src/core/core-app.css`, 'utf8')
 const packageJson = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'))
 const start = today.indexOf('<section aria-label="Shop Batch Profit Control"')
-const end = today.indexOf('<section aria-label="Synthetic bakery margin demo"', start)
+const end = today.indexOf('export function ShopToday', start)
 
 let checks = 0
 const check = (condition, message) => {
@@ -39,6 +40,12 @@ check(today.includes('batchProfitControl.contract === SHOP_BATCH_PROFIT_CONTROL_
 check(today.includes('batchProfitControl.contractSourceSha256 === SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256'), 'UI must bind the accepted R&D contract digest')
 check(today.includes('Object.values(batchProfitControl.authority).every((value) => value === false)'), 'UI must fail closed if any authority flag is true')
 check(section.includes('role="alert"') && section.includes('Batch projection blocked.'), 'Contract or authority mismatch must render a blocking alert')
+const boundHeaderStart = section.indexOf('{batchProjectionBound ? <>')
+const blockedHeaderCopy = 'Accepted Batch Profit Control binding did not verify. No evidence, estimate, priority, or authority is inferred.'
+const blockedHeaderStart = section.indexOf(`</> : '${blockedHeaderCopy}'}`)
+check(boundHeaderStart >= 0 && blockedHeaderStart > boundHeaderStart, 'Projection-derived header copy must be inside the verified binding branch')
+check(section.slice(boundHeaderStart, blockedHeaderStart).includes('batchProfitControl.truthBoundary.boundary'), 'Only a verified projection may expose its truth-boundary copy')
+check(section.includes(": 'blocked'}>{batchProjectionBound ? batchStateLabels[batchProfitControl.state] : 'Blocked'}</b>"), 'An unbound projection must show only the blocked state')
 
 for (const [state, label] of Object.entries({
   no_batch: 'No batch selected',
@@ -93,6 +100,71 @@ assert.equal(
   'node tools/test_shop_batch_profit_control.mjs && node tools/test_shop_batch_profit_control_ui.mjs',
 )
 checks += 1
+
+const showroomRequire = createRequire(new URL('../showroom/package.json', import.meta.url))
+const [{ createServer }, react, { renderToStaticMarkup }] = await Promise.all([
+  import(pathToFileURL(showroomRequire.resolve('vite')).href),
+  import(pathToFileURL(showroomRequire.resolve('react')).href),
+  import(pathToFileURL(showroomRequire.resolve('react-dom/server')).href),
+])
+const createElement = react.createElement ?? react.default.createElement
+const vite = await createServer({
+  appType: 'custom',
+  configFile: `${root}/showroom/vite.config.ts`,
+  configLoader: 'runner',
+  logLevel: 'silent',
+  root: `${root}/showroom`,
+  server: { hmr: false, middlewareMode: true },
+})
+
+try {
+  const { ShopBatchProfitControlPanel } = await vite.ssrLoadModule('/src/core/ShopToday.tsx')
+  const allFalseAuthority = {
+    paymentWrite: false,
+    stockWrite: false,
+    supplierWrite: false,
+    accountingWrite: false,
+    customerWrite: false,
+    hostedWrite: false,
+    providerWrite: false,
+    modelUsed: false,
+  }
+  const untrustedProjection = {
+    contract: SHOP_BATCH_PROFIT_CONTROL_CONTRACT,
+    contractSourceSha256: SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256,
+    state: 'batch_controlled',
+    batchIdentity: { batchId: 'UNTRUSTED-BATCH-ID' },
+    evidenceStatus: { withheldReasonCodes: [], profitStatus: 'available' },
+    totals: { totalCompletedSaleValueMmk: 987654321 },
+    estimatePreview: { batchContributionEstimateMmk: 987654321 },
+    priorities: [{ sku: 'UNTRUSTED-PRIORITY-SKU' }],
+    truthBoundary: {
+      costLabel: 'UNTRUSTED COST CONTENT',
+      classification: 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof',
+      boundary: 'UNTRUSTED TRUTH CONTENT',
+    },
+    authority: allFalseAuthority,
+  }
+  const renderProjection = (projection) => renderToStaticMarkup(createElement(ShopBatchProfitControlPanel, { batchProfitControl: projection }))
+  const assertBlockedProjection = (markup, reason) => {
+    check(markup.includes('Accepted Batch Profit Control binding did not verify.'), `${reason} must show neutral binding copy`)
+    check(markup.includes('<b data-state="blocked">Blocked</b>'), `${reason} must show only a blocked state`)
+    check(markup.includes('Batch projection blocked.'), `${reason} must show the blocking alert`)
+    for (const forbidden of ['Controlled', 'UNTRUSTED COST CONTENT', 'UNTRUSTED TRUTH CONTENT', 'UNTRUSTED-BATCH-ID', 'UNTRUSTED-PRIORITY-SKU', '987,654,321', 'Retained local operating evidence', 'Completed sold value']) {
+      check(!markup.includes(forbidden), `${reason} must not expose supplied projection content: ${forbidden}`)
+    }
+  }
+
+  assertBlockedProjection(renderProjection({ ...untrustedProjection, contractSourceSha256: '0'.repeat(64) }), 'digest mismatch')
+  for (const authorityKey of Object.keys(allFalseAuthority)) {
+    assertBlockedProjection(renderProjection({
+      ...untrustedProjection,
+      authority: { ...allFalseAuthority, [authorityKey]: true },
+    }), `true authority ${authorityKey}`)
+  }
+} finally {
+  await vite.close()
+}
 
 console.log(JSON.stringify({
   ok: true,
