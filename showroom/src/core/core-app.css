@@ -2403,6 +2403,32 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-today-module-grid small { color: var(--core-muted); font-size: 0.625rem; line-height: 1.45; }
 .shop-today-module-grid b { border-radius: 999px; padding: 5px 7px; background: var(--core-soft); color: var(--core-muted); font-family: var(--core-mono); font-size: 0.5rem; white-space: nowrap; }
 .shop-today-module-grid > a[data-tone="attention"] b { background: color-mix(in srgb,var(--core-warning) 14%,var(--core-panel)); color: var(--core-warning); }
+.shop-margin-control { min-width: 0; border: .0625rem solid color-mix(in srgb,var(--core-accent) 28%,var(--core-line)); border-radius: 1rem; background: var(--core-panel); overflow: hidden; }
+.shop-margin-control > header { display: flex; align-items: center; justify-content: space-between; gap: 1.125rem; padding: 1rem 1.125rem; }
+.shop-margin-control > header > div { min-width: 0; }
+.shop-margin-control h3 { margin: .25rem 0; font-size: 1.125rem; }
+.shop-margin-control header p { margin: 0; color: var(--core-muted); font-size: 0.6875rem; line-height: 1.5; }
+.shop-margin-control > header > b { flex: 0 0 auto; border-radius: var(--radius-pill); padding: .375rem .5625rem; background: color-mix(in srgb,var(--core-warning) 13%,var(--core-panel)); color: var(--core-warning); font-family: var(--core-mono); font-size: 0.625rem; }
+.shop-margin-control > header > b[data-state="controlled"] { background: color-mix(in srgb,var(--core-success) 13%,var(--core-panel)); color: var(--core-success); }
+.shop-margin-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border-block: .0625rem solid var(--core-line); }
+.shop-margin-summary article { min-width: 0; min-height: 7rem; display: grid; align-content: center; gap: .4375rem; border-right: .0625rem solid var(--core-line); padding: .875rem 1.125rem; }
+.shop-margin-summary article:last-child { border-right: 0; }
+.shop-margin-summary small, .shop-margin-summary span { color: var(--core-muted); font-size: 0.6875rem; line-height: 1.45; }
+.shop-margin-summary strong { overflow-wrap: anywhere; font-family: var(--core-mono); font-size: clamp(1rem,2.4vw,1.5rem); letter-spacing: -.025em; }
+.shop-margin-gaps, .shop-margin-controlled { margin: 0; border-bottom: .0625rem solid var(--core-line); padding: .6875rem 1.125rem; color: var(--core-muted); font-size: 0.6875rem; line-height: 1.55; }
+.shop-margin-gaps { background: color-mix(in srgb,var(--core-warning) 7%,var(--core-panel)); color: var(--core-warning); }
+.shop-margin-priorities { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .5625rem; padding: .75rem; }
+.shop-margin-priorities > a { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .625rem; border: .0625rem solid var(--core-line); border-radius: .875rem; padding: .875rem; color: var(--core-text); text-decoration: none; }
+.shop-margin-priorities > a[data-tone="critical"] { border-color: color-mix(in srgb,var(--core-danger) 44%,var(--core-line)); }
+.shop-margin-priorities > a[data-tone="attention"] { border-color: color-mix(in srgb,var(--core-warning) 44%,var(--core-line)); }
+.shop-margin-priorities > a > div { min-width: 0; display: grid; gap: .25rem; }
+.shop-margin-priorities > a > div:last-of-type { justify-items: end; text-align: right; }
+.shop-margin-priorities span, .shop-margin-priorities small, .shop-margin-priorities p { color: var(--core-muted); font-size: 0.6875rem; line-height: 1.45; overflow-wrap: anywhere; }
+.shop-margin-priorities span { color: var(--core-warning); font-family: var(--core-mono); font-weight: var(--font-weight-bold); text-transform: uppercase; }
+.shop-margin-priorities b { font-family: var(--core-mono); font-size: 0.75rem; }
+.shop-margin-priorities p { grid-column: 1 / -1; margin: .1875rem 0 0; border-top: .0625rem solid var(--core-line); padding-top: .5625rem; }
+.shop-margin-priorities p strong { color: var(--core-text); font-family: inherit; font-size: inherit; }
+.shop-margin-control > .panel-note { margin: 0; padding: .6875rem 1.125rem; }
 .shop-today-coverage { border: 1px solid var(--core-line); border-radius: 16px; background: var(--core-panel); overflow: hidden; }
 .shop-today-coverage > summary { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 18px; cursor: pointer; list-style: none; }
 .shop-today-coverage > summary::-webkit-details-marker { display: none; }
@@ -2420,6 +2446,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-today-mission { min-height: 0; grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .shop-today-actions .core-button { flex: 1; }
   .shop-today-module-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .shop-margin-priorities { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
@@ -2433,6 +2460,16 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-today-metrics article:nth-last-child(-n+2) { border-bottom: 0; }
   .shop-today-module-grid { grid-template-columns: 1fr; }
   .shop-today-module-grid > a { min-height: 94px; }
+  .shop-margin-control > header { align-items: flex-start; padding: .875rem; }
+  .shop-margin-control > header > b { max-width: 42%; font-size: 0.75rem; white-space: normal; text-align: right; }
+  .shop-margin-control .core-eyebrow, .shop-margin-control header p, .shop-margin-summary small, .shop-margin-summary span, .shop-margin-gaps, .shop-margin-controlled, .shop-margin-priorities span, .shop-margin-priorities small, .shop-margin-priorities p, .shop-margin-control > .panel-note { font-size: 0.75rem; }
+  .shop-margin-summary { grid-template-columns: 1fr; }
+  .shop-margin-summary article { min-height: 5.25rem; border-right: 0; border-bottom: .0625rem solid var(--core-line); padding: .75rem .875rem; }
+  .shop-margin-summary article:last-child { border-bottom: 0; }
+  .shop-margin-gaps, .shop-margin-controlled, .shop-margin-control > .panel-note { padding-inline: .875rem; }
+  .shop-margin-priorities { padding: .5625rem; }
+  .shop-margin-priorities > a { grid-template-columns: 1fr; }
+  .shop-margin-priorities > a > div:last-of-type { justify-items: start; text-align: left; }
   .shop-today-coverage > div { grid-template-columns: 1fr; }
   .shop-today-coverage article, .shop-today-coverage article:nth-child(3n), .shop-today-coverage article:nth-last-child(-n+3) { border-right: 0; border-bottom: 1px solid var(--core-line); }
   .shop-today-coverage article:last-child { border-bottom: 0; }
