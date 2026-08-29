@@ -695,7 +695,7 @@ async function buildShopBakeryBatchDemoInput(): Promise<ShopBatchProfitControlIn
   const saleLinesByDigest = new Map(saleLines.map((line) => [line.orderLineBindingDigest, line]))
   retainedEvidenceReceipt.saleLineBindings = allocations.map((entry) => {
     const line = saleLinesByDigest.get(entry.orderLineBindingDigest)
-    if (!line) throw new Error('shop_bakery_batch_demo_sale_line_unlinked')
+    if (!line) throw new Error('batch_demo_sale_line_unlinked')
     return {
       ...entry,
       sku: line.sku,
@@ -845,10 +845,10 @@ const SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT = Object.freeze({
 
 async function readShopBakeryBatchDemoProjectionReceipt(inputDigest: string, sourceOwnedWorkspaceSnapshotDigest: string) {
   if (inputDigest !== SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT.inputDigest) {
-    throw new Error('shop_bakery_batch_demo_input_binding_mismatch')
+    throw new Error('batch_demo_input_binding')
   }
   if (sourceOwnedWorkspaceSnapshotDigest !== SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT.sourceOwnedWorkspaceSnapshotDigest) {
-    throw new Error('shop_bakery_batch_demo_workspace_snapshot_binding_mismatch')
+    throw new Error('batch_demo_snapshot_binding')
   }
   const compressed = Uint8Array.from(atob(SHOP_BAKERY_BATCH_DEMO_PROJECTION_RECEIPT.gzipBase64), (character) => character.charCodeAt(0))
   const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))
@@ -864,13 +864,13 @@ export async function computeShopBakeryBatchDemoExpectedProjectionDigest() {
 
 export async function verifyShopBakeryBatchDemoInput(candidate: ShopBatchProfitControlInput) {
   const digest = await canonicalDigest(candidate)
-  if (digest !== SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST) throw new Error('shop_bakery_batch_demo_input_binding_mismatch')
+  if (digest !== SHOP_BAKERY_BATCH_DEMO_INPUT_DIGEST) throw new Error('batch_demo_input_binding')
   return digest
 }
 
 export async function verifyShopBakeryBatchDemoProjection(candidate: ShopBatchProfitControlProjection) {
   const digest = await canonicalDigest(candidate)
-  if (digest !== SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST) throw new Error('shop_bakery_batch_demo_projection_binding_mismatch')
+  if (digest !== SHOP_BAKERY_BATCH_DEMO_EXPECTED_PROJECTION_DIGEST) throw new Error('batch_demo_projection_binding')
   return digest
 }
 
@@ -892,22 +892,22 @@ function assertShopBakeryBatchDemoProjection(projection: ShopBatchProfitControlP
       projection.truthBoundary.mayCountAsCustomerEvidence,
       projection.truthBoundary.mayCountAsCommercialProof,
     ].some((value) => value !== false)
-  ) throw new Error('shop_bakery_batch_demo_projection_invariant_mismatch')
+  ) throw new Error('batch_demo_projection_invariant')
 }
 
 export async function loadShopBakeryBatchProfitDemo(): Promise<ShopBakeryBatchDemoResult> {
   if (SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256 !== 'd2968009e5eb18c44420e2fbbe6b40072e59b9bac0cda1e9ff531a4cae7b5910') {
-    throw new Error('shop_bakery_batch_demo_contract_binding_mismatch')
+    throw new Error('batch_demo_contract_binding')
   }
   const input = await buildShopBakeryBatchDemoInput()
   const inputBefore = canonicalJson(input)
   const inputDigest = await verifyShopBakeryBatchDemoInput(input)
   const projection = await readShopBakeryBatchDemoProjectionReceipt(inputDigest, input.workspaceHistorySnapshot.snapshotDigest)
-  if (canonicalJson(input) !== inputBefore) throw new Error('shop_bakery_batch_demo_input_mutated')
+  if (canonicalJson(input) !== inputBefore) throw new Error('batch_demo_input_mutated')
   await verifyShopBakeryBatchDemoProjection(projection)
   assertShopBakeryBatchDemoProjection(projection)
   if (Object.values(SHOP_BAKERY_BATCH_DEMO_CONTROLS).some((value) => value !== false)) {
-    throw new Error('shop_bakery_batch_demo_authority_not_closed')
+    throw new Error('batch_demo_authority_open')
   }
 
   return deepFreeze({ projection })

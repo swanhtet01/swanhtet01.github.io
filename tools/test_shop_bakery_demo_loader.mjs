@@ -157,12 +157,12 @@ checks += 1
 
 const tamperedBatchInput = await shopBakeryBatchDemoInputForVerification()
 tamperedBatchInput.dispositionCore.items[0].producedUnits += 1
-await assert.rejects(() => verifyShopBakeryBatchDemoInput(tamperedBatchInput), /shop_bakery_batch_demo_input_binding_mismatch/)
+await assert.rejects(() => verifyShopBakeryBatchDemoInput(tamperedBatchInput), /batch_demo_input_binding/)
 checks += 1
 
 const tamperedBatchProjection = structuredClone(batchProjection)
 tamperedBatchProjection.totals.totalCompletedSaleValueMmk += 1
-await assert.rejects(() => verifyShopBakeryBatchDemoProjection(tamperedBatchProjection), /shop_bakery_batch_demo_projection_binding_mismatch/)
+await assert.rejects(() => verifyShopBakeryBatchDemoProjection(tamperedBatchProjection), /batch_demo_projection_binding/)
 checks += 1
 
 const loaderSource = await readFile('showroom/src/core/shop-bakery-demo-loader.ts', 'utf8')
