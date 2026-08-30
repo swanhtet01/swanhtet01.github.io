@@ -28,6 +28,7 @@ import {
   SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
   SHOP_ORDER_DRAFT_RESET_PREFIX,
   clientSetupPath,
+  managedTemplateDoorRequiresReview,
   type SetupProductId,
 } from './product-setup'
 import {
@@ -1124,7 +1125,9 @@ export function OperationsPage({ product }: { product: ProductId }) {
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const productCopy = view === 'commerce'
-    ? requestedShopTemplate && commerceTab === 'counter'
+    ? managedIdentity && requestedShopTemplate
+      ? `The ${requestedShopTemplate.name.en} public request is not applied to this company catalog until a separate managed review.`
+      : requestedShopTemplate && commerceTab === 'counter'
       ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
       : {
         today: 'See today’s next job and key numbers.',
@@ -3086,7 +3089,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   const effectiveMode = managedIdentity && (workspaceMode === 'local' || managedWorkspaceId !== managedIdentity.workspaceId) ? 'managed-loading' : workspaceMode
-  const managedCommerceBoundary: ReactNode = managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
+  const managedTemplateRequestBlocked = managedTemplateDoorRequiresReview(Boolean(managedIdentity), effectiveMode, managedTemplateId)
+  const managedCommerceBoundary: ReactNode = managedTemplateRequestBlocked && managedIdentity && managedTemplate ? <section className="core-panel managed-commerce-boundary" data-template-request="blocked">
+    <div className="panel-head"><div><span className="core-eyebrow">Managed catalog review required</span><h2>{managedTemplate.name.en} was requested, not applied</h2></div><span className="status-pill pending">Blocked</span></div>
+    <p className="panel-copy">This company already has a managed Shop catalog. The public trade link did not replace, merge, or relabel it, and no starter item, sale, customer, payment, or stock record was created.</p>
+    <p className="authority-note">Continue only with the existing company catalog, or ask the workspace owner to review a separate catalog migration.</p>
+    <div className="form-actions"><Link className="core-button primary" to="/shop/?tab=counter">Continue existing managed Shop</Link><Link className="text-link" to="/settings/#controls">Open workspace controls</Link></div>
+  </section> : managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>

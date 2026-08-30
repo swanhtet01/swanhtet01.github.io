@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
@@ -8,12 +9,15 @@ const moduleUrl = `${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'pro
 const {
   PRODUCT_SETUP_REGISTRY_KEY,
   conflictingOwnerRecord,
+  managedTemplateDoorRequiresReview,
   normalizeSetup,
   readProductSetup,
   rememberProductSetup,
   resolveSetupTemplateDoor,
+  resolveSetupVariantDoor,
   seedSetupForProduct,
 } = await import(moduleUrl)
+const onboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial))
@@ -88,6 +92,65 @@ test('an invalid template-door id never replaces or challenges saved setup', () 
   assert.equal(selection.activeTemplate.id, 'quality-traceability')
   assert.equal(selection.requestedTemplate, null)
   assert.equal(selection.choiceRequired, false)
+})
+
+test('a Plant pack door starts a new setup on the validated requested pack', () => {
+  const selection = resolveSetupVariantDoor('general-manufacturing', 'food-beverage', false)
+  assert.deepEqual(selection, {
+    activeId: 'food-beverage',
+    requestedId: 'food-beverage',
+    choiceRequired: false,
+  })
+})
+
+test('a different Plant pack door protects the saved pack behind an explicit choice', () => {
+  const selection = resolveSetupVariantDoor('general-manufacturing', 'food-beverage', true)
+  assert.deepEqual(selection, {
+    activeId: 'general-manufacturing',
+    requestedId: 'food-beverage',
+    choiceRequired: true,
+  })
+})
+
+test('the same saved Plant pack needs no redundant choice', () => {
+  const selection = resolveSetupVariantDoor('food-beverage', 'food-beverage', true)
+  assert.deepEqual(selection, {
+    activeId: 'food-beverage',
+    requestedId: 'food-beverage',
+    choiceRequired: false,
+  })
+})
+
+test('only a requested trade on a ready managed Shop requires the blocking review boundary', () => {
+  assert.equal(managedTemplateDoorRequiresReview(true, 'managed-ready', 'bakery'), true)
+  assert.equal(managedTemplateDoorRequiresReview(true, 'managed-unprovisioned', 'bakery'), false)
+  assert.equal(managedTemplateDoorRequiresReview(true, 'managed-loading', 'bakery'), false)
+  assert.equal(managedTemplateDoorRequiresReview(false, 'managed-ready', 'bakery'), false)
+  assert.equal(managedTemplateDoorRequiresReview(true, 'managed-ready', null), false)
+})
+
+test('Plant pack mismatch stays blocked until an explicit reviewed choice and later form submit', () => {
+  for (const token of [
+    'Saved Plant type protected',
+    'The public door requested {pendingRequestedPlantIndustryPack.name}. Nothing has changed yet.',
+    'Use {pendingRequestedPlantIndustryPack.name} for reviewed setup',
+    'No Plant record or saved plant type changes until the requested pack is explicitly selected and the setup form is submitted.',
+    'disabled={Boolean(pendingRequestedPlantIndustryPack)}',
+    'setPlantPackChangeSelected(true)',
+    'setPlantPackChangeSelected(hasSavedPlantSetup && id !== savedPlantIndustryPackId)',
+    'if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack)',
+    'savePlantIndustryPackId(plantIndustryPackId, window.localStorage)',
+  ]) assert.ok(onboardingSource.includes(token), `Plant pack review guard missing: ${token}`)
+  assert.ok(
+    onboardingSource.indexOf('if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack)')
+      < onboardingSource.indexOf('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)'),
+    'Plant pack choice must fail closed before the saved pack can change',
+  )
+  assert.ok(
+    onboardingSource.indexOf('await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)')
+      < onboardingSource.indexOf('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)'),
+    'Plant pack persistence must follow successful local provisioning',
+  )
 })
 
 test('the company identity of one product is readable from another', () => {

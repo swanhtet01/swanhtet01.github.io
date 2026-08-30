@@ -19,6 +19,18 @@ test('a trade URL opens Sell and invokes the guarded local sample boundary', () 
   assert.match(coreAppSource, /Existing Shop kept/)
 })
 
+test('a trade URL cannot relabel or operate an existing managed catalog', () => {
+  for (const token of [
+    'managedTemplateDoorRequiresReview(Boolean(managedIdentity), effectiveMode, managedTemplateId)',
+    'data-template-request="blocked"',
+    'was requested, not applied',
+    'The public trade link did not replace, merge, or relabel it',
+    'Continue existing managed Shop',
+    'to="/shop/?tab=counter"',
+  ]) assert.ok(coreAppSource.includes(token), `managed trade boundary missing: ${token}`)
+  assert.match(coreAppSource, /managedIdentity && requestedShopTemplate\s*\? `The \$\{requestedShopTemplate\.name\.en\} public request is not applied/)
+})
+
 test('registry carries exactly the 10 supported Myanmar business types', () => {
   assert.deepEqual(model.shopBusinessTemplates.map((template) => template.id), expectedTemplateIds)
   assert.equal(new Set(model.shopBusinessTemplates.map((template) => template.id)).size, 10)

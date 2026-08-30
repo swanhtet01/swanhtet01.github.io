@@ -124,6 +124,41 @@ export function resolveSetupTemplateDoor(
   }
 }
 
+export type SetupVariantDoorSelection<T extends string> = {
+  activeId: T
+  requestedId: T | null
+  choiceRequired: boolean
+}
+
+// Some public doors share one workflow template but carry a second validated setup
+// dimension (Plant's industry pack is the first example). That dimension must make
+// the same saved-versus-requested distinction as the workflow template: a URL may
+// propose a value, but it cannot silently replace the value attached to a returning
+// setup. Callers validate the ids against their source-owned registry before use.
+export function resolveSetupVariantDoor<T extends string>(
+  savedId: T,
+  requestedId: T | null | undefined,
+  hasSavedSetup: boolean,
+): SetupVariantDoorSelection<T> {
+  const requested = requestedId ?? null
+  return {
+    activeId: hasSavedSetup ? savedId : requested ?? savedId,
+    requestedId: requested,
+    choiceRequired: Boolean(hasSavedSetup && requested && requested !== savedId),
+  }
+}
+
+// A public Shop trade is not evidence that an existing managed catalog has that
+// shape. A ready company workspace therefore needs an explicit review boundary;
+// unprovisioned workspaces keep using their existing reviewed creation form.
+export function managedTemplateDoorRequiresReview(
+  hasManagedIdentity: boolean,
+  workspaceMode: string,
+  requestedTemplateId: string | null | undefined,
+) {
+  return hasManagedIdentity && workspaceMode === 'managed-ready' && Boolean(requestedTemplateId)
+}
+
 export function seedSetupForProduct(product: SetupProductId, templateId = ''): SetupState {
   const template = templateFor(product, templateId)
   return {

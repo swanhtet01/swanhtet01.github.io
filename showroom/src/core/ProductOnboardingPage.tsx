@@ -17,6 +17,7 @@ import {
   readProductSetup,
   rememberProductSetup,
   resolveSetupTemplateDoor,
+  resolveSetupVariantDoor,
   seedSetupForProduct,
   templateFor,
   type SetupProductId,
@@ -140,13 +141,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
-  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => {
+  const requestedPlantIndustryPackId = useMemo<PlantIndustryPackId | null>(() => {
     const requested = new URLSearchParams(location.search).get('pack')?.trim().toLowerCase()
-    return plantIndustryPacks.find((pack) => pack.id === requested)?.id
-      ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage)
-  })
+    return plantIndustryPacks.find((pack) => pack.id === requested)?.id ?? null
+  }, [location.search])
+  const [savedPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [hasSavedPlantSetup] = useState(() => typeof window !== 'undefined' && Boolean(readProductSetup(window.localStorage, 'production')))
+  const plantPackDoorSelection = resolveSetupVariantDoor(savedPlantIndustryPackId, requestedPlantIndustryPackId, hasSavedPlantSetup)
+  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => plantPackDoorSelection.activeId)
+  const [plantPackChangeSelected, setPlantPackChangeSelected] = useState(false)
   const [plantTypeOpen, setPlantTypeOpen] = useState(() => product === 'production')
   const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
+  const pendingRequestedPlantIndustryPack = product === 'production' && plantPackDoorSelection.choiceRequired && plantPackDoorSelection.requestedId
+    ? plantIndustryPack(plantPackDoorSelection.requestedId)
+    : null
   // One grouped picker, ported from the signup page so both doors ask the product's first
   // question the same way. A choice is either 'trade:<template>' or 'pack:<industry pack>';
   // the empty string keeps the standard sample on whatever pack this device already carries.
@@ -253,8 +261,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         ? 'Example: Mandalay Clinic'
         : 'Example: Yangon Home Store'
   const workspaceOwner = setup.owner.trim() || 'Business owner'
-  const workflowReady = setup.product === product && Boolean(setup.workspace.trim()) && !pendingRequestedWorkflowTemplate
-  const workspaceStarted = workflowReady && Boolean(setup.startedAt)
+  const workflowReady = setup.product === product
+    && Boolean(setup.workspace.trim())
+    && !pendingRequestedWorkflowTemplate
+    && !pendingRequestedPlantIndustryPack
+  const workspaceStarted = workflowReady && Boolean(setup.startedAt) && !(product === 'production' && plantPackChangeSelected)
   // A schedule that predates the current integrity contract is protected, so provisioning must
   // fail closed. The error used to be rendered as one sentence with no action, leaving a new owner
   // unable to finish setup and unable to discover the backup-and-reset controls that can recover
@@ -354,9 +365,31 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     setNotice(`${requested.name} is selected for reviewed setup. Existing ${onboardingProduct.name} records were not overwritten; setup will run only after you submit this form.`)
   }
 
+  function continueSavedPlantPack() {
+    if (!pendingRequestedPlantIndustryPack) return
+    setPlantIndustryPackId(savedPlantIndustryPackId)
+    setPlantPackChangeSelected(false)
+    clearTemplateDoorQuery()
+    setNotice(`Continuing the saved ${plantIndustryPack(savedPlantIndustryPackId).name} Plant type. The requested ${pendingRequestedPlantIndustryPack.name} pack was not applied.`)
+  }
+
+  function useRequestedPlantPack() {
+    if (!pendingRequestedPlantIndustryPack) return
+    const requested = pendingRequestedPlantIndustryPack
+    setPlantIndustryPackId(requested.id)
+    setPlantPackChangeSelected(true)
+    clearTemplateDoorQuery()
+    setNotice(`${requested.name} is selected for reviewed setup. Existing Plant records and the saved plant type were not changed; provisioning runs only after you submit this form.`)
+  }
+
+  function changePlantIndustryPack(id: PlantIndustryPackId) {
+    setPlantIndustryPackId(id)
+    setPlantPackChangeSelected(hasSavedPlantSetup && id !== savedPlantIndustryPackId)
+  }
+
   async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (pendingRequestedWorkflowTemplate) {
+    if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack) {
       setNotice('Choose the saved setup or the requested starting point before continuing.')
       return
     }
@@ -396,14 +429,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           : await provisionLocalShopWorkingSample(schedule.industryPackId, onboardingTemplate.id)
         carriedOver = disposition === 'preserved'
       }
-      // Deliberately NOT guarded, and the one place Plant is treated differently from Shop: this
-      // records which plant type she picked, and readPlantIndustryPackId reads it back to prefill
-      // the picker on her next visit. That is a device preference, not workspace data, so it is
-      // the right answer for a company account too -- and it is what makes "saved as your plant
-      // type" in managedPlantOnboardingNotice literally true rather than a second small lie.
-      if (product === 'production') {
-        savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
-      }
       // The twin of the commerce guard above, and the same defect: mutateProductionWorkingSample
       // is window.localStorage, which a managed Plant never reads. Re-measured the same way before
       // this guard was added -- disposition 'installed', zero fetch calls, across all five plant
@@ -411,6 +436,14 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       // 'managed-unprovisioned'. See managedPlantOnboardingNotice in product-onboarding-runtime.ts.
       if (product === 'production' && !managedIdentity) {
         await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
+      }
+      // Save the reviewed device preference only after local provisioning succeeds. A rejected
+      // or failed pack request must leave both the production record and the retained Plant type
+      // untouched. Managed Plant has no local sample write, but still saves this device preference
+      // after the owner submits the same reviewed form.
+      if (product === 'production') {
+        savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
+        setPlantPackChangeSelected(false)
       }
       if (product === 'website' && !managedIdentity) {
         // Returns { ok, error } instead of throwing. Ignoring it sent the owner into a Website that
@@ -557,6 +590,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
               <p>Both choices preserve existing product records. Loading different sample data still requires the reviewed setup action below and may fail closed when existing records cannot be replaced safely.</p>
             </section>
           ) : null}
+          {pendingRequestedPlantIndustryPack ? (
+            <section aria-label="Plant type choice" className="product-onboarding-proof">
+              <div>
+                <span className="core-eyebrow">Saved Plant type protected</span>
+                <h3>Choose which Plant type to continue</h3>
+                <p>This device has {plantIndustryPack(savedPlantIndustryPackId).name} saved. The public door requested {pendingRequestedPlantIndustryPack.name}. Nothing has changed yet.</p>
+              </div>
+              <div className="actions">
+                <button className="core-button" onClick={continueSavedPlantPack} type="button">Continue saved {plantIndustryPack(savedPlantIndustryPackId).name}</button>
+                <button className="core-button primary" onClick={useRequestedPlantPack} type="button">Use {pendingRequestedPlantIndustryPack.name} for reviewed setup</button>
+              </div>
+              <p>No Plant record or saved plant type changes until the requested pack is explicitly selected and the setup form is submitted.</p>
+            </section>
+          ) : null}
           {product === 'commerce' ? (
             <section aria-label="Shop pilot proof rule" className="product-onboarding-proof">
               <div>
@@ -610,7 +657,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
             <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setPlantTypeOpen(event.currentTarget.open)} open={plantTypeOpen}>
               <summary><span>Plant type</span><small>{selectedPlantIndustryPack.name} starter data</small></summary>
               <label className="demo-pack-select">Type of production
-                <select onChange={(event) => setPlantIndustryPackId(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>
+                <select disabled={Boolean(pendingRequestedPlantIndustryPack)} onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>
                   {plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
                 </select>
                 <small>{selectedPlantIndustryPack.firstWorkflow}. {selectedPlantIndustryPack.description}</small>
@@ -622,7 +669,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 so a screen reader landing on the disabled control hears "Enter a business name
                 to continue" instead of an unexplained dead end. */}
             <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy || accountCheckPending} type="submit">{accountCheckPending ? 'Checking company account...' : workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small id="product-onboarding-submit-hint">{pendingRequestedWorkflowTemplate ? 'Choose the saved setup or requested starting point first.' : accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            <small id="product-onboarding-submit-hint">{pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack ? 'Choose the saved setup or requested starting point first.' : accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
