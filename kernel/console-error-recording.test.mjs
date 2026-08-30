@@ -4,6 +4,13 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
+import {
+  OPERATING_ACTION_BOARD_CONTRACT,
+  OPERATING_ACTION_BOARD_MODE,
+  buildOperatingActionBoardSummary,
+  validateOperatingActionBoard,
+} from './operating-action-board.mjs'
+
 const ENV_KEYS = [
   'SUPERMEGA_OPS_KEY',
   'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY',
@@ -31,6 +38,49 @@ function conversionRecordId(kind, leadId) {
     .update(`supermega.lead-conversion-${kind}.v1:${leadId}`)
     .digest('hex')
   return `lead-${kind}-${digest.slice(0, 40)}`
+}
+
+function operatingBoardWithDueDate(dueDate) {
+  const action = {
+    id: 'strict-date-regression',
+    openedAt: '2026-08-25T00:00:00.000Z',
+    productIds: ['shop'],
+    sourceFinding: {
+      sourceType: 'release_gate',
+      label: 'Strict calendar date regression',
+      evidenceRef: 'kernel/operating-action-board.mjs',
+      evidenceDigest: `sha256:${'a'.repeat(64)}`,
+    },
+    recommendation: 'Reject impossible calendar dates before an owner action is accepted.',
+    severity: 'high',
+    businessImpact: { kind: 'release_risk', estimateLabel: 'Prevents normalized impossible due dates.', measured: false },
+    owner: { role: 'Founder plus Engineering', namedPrivate: false },
+    dueDate,
+    status: 'owner-gated',
+    authority: { ownerApprovalRequired: true, externalWriteAllowed: false },
+    acceptance: { evidenceRequired: ['Exact UTC calendar date'], tests: ['focused date regression'] },
+    closure: { closedAt: null, closureNote: null, measuredResult: null },
+  }
+  return {
+    contract: OPERATING_ACTION_BOARD_CONTRACT,
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    mode: OPERATING_ACTION_BOARD_MODE,
+    products: ['shop', 'plant', 'website', 'ecommerce'],
+    controls: {
+      externalWritesPerformed: false,
+      gitRemoteWritesPerformed: false,
+      githubWritesPerformed: false,
+      vercelDeploymentsPerformed: false,
+      supabaseMutationsPerformed: false,
+      credentialValuesInspected: false,
+      customerContactPerformed: false,
+      paymentOrStockActionPerformed: false,
+      managedActivationPerformed: false,
+      privateIdentityExposed: false,
+    },
+    weeklyReport: buildOperatingActionBoardSummary([action]),
+    actions: [action],
+  }
 }
 
 test('lead conversion records the won stage before it logs a clean win', async () => {
@@ -83,7 +133,7 @@ test('lead conversion records the won stage before it logs a clean win', async (
 test('lead conversion retry reconciles its partial project without duplicate client or project records', async () => {
   const saved = captureEnvironment()
   let store
-  let originalUpdateLead
+  let originalMarkLeadWon
   try {
     for (const name of ENV_KEYS) delete process.env[name]
     process.env.SUPERMEGA_OPS_KEY = CONFORMING_KEY
@@ -111,14 +161,14 @@ test('lead conversion retry reconciles its partial project without duplicate cli
 
     const clientsBefore = (await store.listClients()).length
     const projectsBefore = (await store.listProjects()).length
-    originalUpdateLead = store.updateLead
+    originalMarkLeadWon = store.markLeadWon
     let rejectWonOnce = true
-    store.updateLead = async (...args) => {
-      if (args[0] === leadId && args[1]?.stage === 'won' && rejectWonOnce) {
+    store.markLeadWon = async (...args) => {
+      if (args[0] === leadId && rejectWonOnce) {
         rejectWonOnce = false
         throw new Error('simulated_won_stage_failure')
       }
-      return originalUpdateLead(...args)
+      return originalMarkLeadWon(...args)
     }
 
     const first = await handle({
@@ -135,7 +185,7 @@ test('lead conversion retry reconciles its partial project without duplicate cli
       method: 'POST', path: `/api/leads/${leadId}`, query: { action: 'convert' }, headers, body: {},
     })
     assert.equal(retried.status, 200)
-    assert.equal(retried.json.replayed, true)
+    assert.equal(retried.json.replayed, false, 'the one durable won transition owns conversion completion')
     assert.equal(retried.json.project.id, partialProjects[0].id)
     assert.equal(retried.json.client.id, partialProjects[0].client_id)
     assert.equal(retried.json.lead.stage, 'won')
@@ -164,7 +214,7 @@ test('lead conversion retry reconciles its partial project without duplicate cli
     assert.equal(blockedReplay.json.reason, 'lead_conversion_ambiguous')
     assert.equal((await store.listProjects()).length, projectsBeforeBlockedReplay, 'ambiguous history must fail before another project')
   } finally {
-    if (store && originalUpdateLead) store.updateLead = originalUpdateLead
+    if (store && originalMarkLeadWon) store.markLeadWon = originalMarkLeadWon
     restoreEnvironment(saved)
   }
 })
@@ -173,6 +223,7 @@ test('concurrent lead conversion writers resolve to one deterministic client and
   const saved = captureEnvironment()
   let store
   let originalGetProject
+  let originalCreateProject
   try {
     for (const name of ENV_KEYS) delete process.env[name]
     process.env.SUPERMEGA_OPS_KEY = CONFORMING_KEY
@@ -187,6 +238,12 @@ test('concurrent lead conversion writers resolve to one deterministic client and
     await store.insertLead({ id: leadId, name: 'Concurrent Owner', company: 'Concurrent Shop', stage: 'qualified' })
 
     originalGetProject = store.getProject
+    originalCreateProject = store.createProject
+    let createAttempts = 0
+    store.createProject = async (...args) => {
+      createAttempts += 1
+      return originalCreateProject(...args)
+    }
     let waiting = 0
     let release
     const bothReadMissing = new Promise((resolveBarrier) => { release = resolveBarrier })
@@ -199,25 +256,32 @@ test('concurrent lead conversion writers resolve to one deterministic client and
       return originalGetProject(id)
     }
 
-    const request = () => handle({
-      method: 'POST', path: `/api/leads/${leadId}`, query: { action: 'convert' }, headers, body: {},
+    const request = (offer) => handle({
+      method: 'POST', path: `/api/leads/${leadId}`, query: { action: 'convert' }, headers, body: { offer },
     })
-    const [first, second] = await Promise.all([request(), request()])
+    const [first, second] = await Promise.all([request('dashboard'), request('ai-agent')])
     assert.equal(first.status, 200)
     assert.equal(second.status, 200)
     assert.equal(first.json.client.id, clientId)
     assert.equal(second.json.client.id, clientId)
     assert.equal(first.json.project.id, projectId)
     assert.equal(second.json.project.id, projectId)
+    assert.equal(first.json.project.offer, second.json.project.offer, 'conflict read-back must return one persisted project body')
+    assert.equal((await store.getProject(projectId)).offer, first.json.project.offer)
+    assert.equal(createAttempts, 2, 'both stale writers must exercise insert conflict and read-back')
+    assert.deepEqual([first.json.replayed, second.json.replayed].sort(), [false, true], 'only one writer may own conversion completion')
     assert.equal((await store.listClients()).filter((client) => client.id === clientId).length, 1)
     assert.equal((await store.listProjects()).filter((project) => project.lead_id === leadId).length, 1)
+    const wins = (await store.listActivity(100)).filter((entry) => entry.kind === 'won' && entry.ref === projectId)
+    assert.equal(wins.length, 1, 'the atomic won transition must emit one success activity')
   } finally {
     if (store && originalGetProject) store.getProject = originalGetProject
+    if (store && originalCreateProject) store.createProject = originalCreateProject
     restoreEnvironment(saved)
   }
 })
 
-test('lead conversion rejects a deterministic client paired with another client project', async () => {
+test('lead conversion recovers client-only state and rejects mismatched project lineage', async () => {
   const saved = captureEnvironment()
   try {
     for (const name of ENV_KEYS) delete process.env[name]
@@ -226,9 +290,20 @@ test('lead conversion rejects a deterministic client paired with another client 
     const store = (await import('./store.mjs')).default
     assert.equal(store.mode, 'memory', 'this test must not touch a real database')
 
+    const partialLeadId = `lead-convert-client-only-${Date.now()}`
+    const partialClientId = conversionRecordId('client', partialLeadId)
+    const headers = { 'x-ops-key': CONFORMING_KEY }
+    await store.insertLead({ id: partialLeadId, name: 'Partial Owner', company: 'Partial Shop', stage: 'qualified' })
+    await store.createClient({ id: partialClientId, name: 'Partial conversion client' })
+    const recovered = await handle({
+      method: 'POST', path: `/api/leads/${partialLeadId}`, query: { action: 'convert' }, headers, body: {},
+    })
+    assert.equal(recovered.status, 200)
+    assert.equal(recovered.json.client.id, partialClientId)
+    assert.equal(recovered.json.project.client_id, partialClientId)
+
     const leadId = `lead-convert-lineage-${Date.now()}`
     const deterministicClientId = conversionRecordId('client', leadId)
-    const headers = { 'x-ops-key': CONFORMING_KEY }
     await store.insertLead({ id: leadId, name: 'Lineage Owner', company: 'Lineage Shop', stage: 'qualified' })
     await store.createClient({ id: deterministicClientId, name: 'Deterministic conversion client' })
     const otherClient = await store.createClient({ name: 'Other valid client' })
@@ -248,12 +323,30 @@ test('lead conversion rejects a deterministic client paired with another client 
   }
 })
 
+test('operating actions require exact UTC calendar dates while preserving leap days and year boundaries', () => {
+  for (const impossible of [
+    '2026-02-29',
+    '2026-02-30',
+    '2026-02-31',
+    '2026-04-31',
+    '2026-00-10',
+    '2026-13-01',
+    '2026-01-00',
+    '2026-01-32',
+  ]) {
+    assert.throws(() => validateOperatingActionBoard(operatingBoardWithDueDate(impossible)), /operating_action_due_date_invalid/, impossible)
+  }
+  for (const valid of ['2024-02-29', '2026-12-31', '2027-01-01']) {
+    assert.equal(validateOperatingActionBoard(operatingBoardWithDueDate(valid)).actions[0].dueDate, valid)
+  }
+})
+
 test('console error handling contract records safe metadata and never request bodies', async () => {
   const source = await readFile(resolve(import.meta.dirname, 'console/api.mjs'), 'utf8')
   const storeSource = await readFile(resolve(import.meta.dirname, 'store.mjs'), 'utf8')
   assert.match(source, /import \{ captureError \} from '\.\.\/alert\.mjs'/)
   assert.match(source, /const recordConsoleError = \(context, detail, meta = \{\}\) => captureError/)
-  assert.match(source, /store\.updateLead\(seg\[1\], \{ stage: 'won' \}\)\.catch\(async \(error\) =>/)
+  assert.match(source, /store\.markLeadWon\(seg\[1\]\)\.catch\(async \(error\) =>/)
   assert.match(source, /lead_won_stage_update_failed/)
   assert.match(source, /matchingProjects\.length > 1/)
   assert.match(source, /lead_conversion_ambiguous/)
@@ -261,6 +354,9 @@ test('console error handling contract records safe metadata and never request bo
   assert.match(source, /leadConversionRecordId\('project', lead\.id\)/)
   assert.match(source, /store\.createProject\(\{ id: projectId,/)
   assert.match(storeSource, /const row = \{ id: String\(p\.id \|\| randomUUID\(\)\), client_id:/)
+  assert.match(storeSource, /if \(mem\.client\.has\(row\.id\)\) throw new Error\('console_client_id_conflict'\)/)
+  assert.match(storeSource, /if \(mem\.project\.has\(row\.id\)\) throw new Error\('console_project_id_conflict'\)/)
+  assert.match(storeSource, /export async function markLeadWon\(id\)/)
   assert.match(source, /replayed: true/)
   assert.match(source, /await recordConsoleError\('console\.api_unhandled_error', err, \{ method, path: safePath\(path\) \}\)/)
   assert.doesNotMatch(source, /console\.api_unhandled_error[\s\S]{0,160}body/)

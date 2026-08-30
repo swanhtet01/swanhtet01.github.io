@@ -283,15 +283,16 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
           || (deterministicClient && project.client_id !== clientId))) {
           return bad(409, 'lead_conversion_ambiguous')
         }
-        let client = project?.client_id ? await store.getClient(project.client_id) : null
+        let client = project?.client_id ? await store.getClient(project.client_id) : deterministicClient
         if (project && !client) return bad(409, 'lead_conversion_client_missing')
-        const replayed = Boolean(project)
         if (!project) {
-          client = deterministicClient || await createOrReadConversionRecord(
-            () => store.getClient(clientId),
-            () => store.createClient({ id: clientId, name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] }),
-            'lead_conversion_client_create_failed',
-          )
+          if (!client) {
+            client = await createOrReadConversionRecord(
+              () => store.getClient(clientId),
+              () => store.createClient({ id: clientId, name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] }),
+              'lead_conversion_client_create_failed',
+            )
+          }
           project = await createOrReadConversionRecord(
             () => store.getProject(projectId),
             () => store.createProject({ id: projectId, client_id: client.id, lead_id: lead.id, offer: lead.package || body.offer || 'build', status: 'scoping' }),
@@ -299,17 +300,17 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
           )
           if (project.lead_id !== lead.id || project.client_id !== client.id) return bad(409, 'lead_conversion_ambiguous')
         }
-        if (replayed && lead.stage === 'won') return ok({ ok: true, client, project, lead, replayed: true })
-        const wonLead = await store.updateLead(seg[1], { stage: 'won' }).catch(async (error) => {
+        if (lead.stage === 'won') return ok({ ok: true, client, project, lead, replayed: true })
+        const wonTransition = await store.markLeadWon(seg[1]).catch(async (error) => {
           await recordConsoleError('console.lead_convert_won_stage_failed', error, { leadId: lead.id, clientId: client.id, projectId: project.id })
           return null
         })
-        if (!wonLead) {
+        if (!wonTransition) {
           await recordConsoleError('console.lead_convert_partial_project', 'lead_won_stage_not_recorded', { leadId: lead.id, clientId: client.id, projectId: project.id })
           return bad(500, 'lead_won_stage_update_failed')
         }
-        log('won', `Won ${lead.company || lead.name} → ${project.offer} project`, project.id)
-        return ok({ ok: true, client, project, lead: wonLead, replayed })
+        if (wonTransition.changed) log('won', `Won ${lead.company || lead.name} → ${project.offer} project`, project.id)
+        return ok({ ok: true, client, project, lead: wonTransition.lead, replayed: !wonTransition.changed })
       }
     }
 
