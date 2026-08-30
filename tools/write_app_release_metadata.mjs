@@ -186,6 +186,21 @@ const themeRestoreScript = `try {
   }
 } catch (e) {}
 `
+// The app stylesheet is 230KB and first paint does not need one byte of it: the boot shell in
+// index.html carries its own CSS inline. Left as a render-blocking <link> it stalled FCP anyway
+// -- measured 3,236ms with it blocking, 1,484ms with it injected here instead, on the throttled
+// Android profile (ANDROID-PERFORMANCE-BASELINE.md). A file rather than an inline block for the
+// same reason as the three scripts around it: `script-src 'self'` with no hash refuses inline
+// script silently, which is how the service worker went unregistered for months.
+//
+// `data-href` rather than a baked-in path because the stylesheet name carries a content hash
+// that only exists after bundling; the Vite plugin in showroom/vite.config.ts fills it in and
+// verify_app_build.mjs reads it back out to keep the file inside the Shop first-paint closure.
+const cssAsyncScript = `var link = document.createElement('link')
+link.rel = 'stylesheet'
+link.href = document.currentScript.getAttribute('data-href')
+document.head.appendChild(link)
+`
 const serviceWorkerRegisterScript = `if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
 `
 // Vercel Web Analytics: cookieless aggregate pageviews, no PII. Loaded dynamically because
@@ -292,7 +307,7 @@ const cacheKey = `${cachePrefix}${manifest.brand.version}`
 const shellList = JSON.stringify([
   '/', '/favicon.svg', '/site.webmanifest', '/icon-192.png', '/icon-512.png',
   '/apple-touch-icon.png', '/icon-512-maskable.png',
-  '/theme-restore.js', '/sw-register.js', '/vercel-insights.js',
+  '/theme-restore.js', '/sw-register.js', '/vercel-insights.js', '/css-async.js',
 ])
 const serviceWorker = `const BUILD = 'unsealed__SUPERMEGA_PRECACHE_BUILD__'
 const SEALED = !BUILD.startsWith('unsealed')
@@ -464,6 +479,7 @@ await Promise.all([
   writeFile(resolve(publicDir, 'theme-restore.js'), themeRestoreScript, 'utf8'),
   writeFile(resolve(publicDir, 'sw-register.js'), serviceWorkerRegisterScript, 'utf8'),
   writeFile(resolve(publicDir, 'vercel-insights.js'), insightsScript, 'utf8'),
+  writeFile(resolve(publicDir, 'css-async.js'), cssAsyncScript, 'utf8'),
   ...rasterIcons.map(([name, bytes]) => writeFile(resolve(publicDir, name), bytes)),
 ])
 console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release', commit: release.commit }))

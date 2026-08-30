@@ -61,6 +61,35 @@ function localHealthPlugin(): Plugin {
   }
 }
 
+// Takes the stylesheet off the render-blocking path. Vite emits
+// `<link rel="stylesheet" ... href="/assets/index-<hash>.css">` into the built document; first
+// paint then waits on 230KB the boot shell does not need, because the shell's own CSS is inline.
+// This rewrites that link into the shell script that appends it after parsing. Measured
+// 3,236ms -> 1,484ms FCP on the throttled Android profile, with the stylesheet still live 855ms
+// before React mounts (so no unstyled flash) and an identical end state: same 1,813 CSS rules,
+// same computed styles.
+//
+// Build only. In dev, Vite serves CSS through its own HMR pipeline and there is no hashed asset
+// to point at.
+//
+// LOCKSTEP: verify_app_build.mjs derives the Shop first-paint closure by matching stylesheet
+// links in the built document. It now also matches this script's data-href -- if that stops
+// working the 230KB file silently leaves the closure and the byte guard goes blind while still
+// reporting ok. Change the emitted shape here and change that walk in the same commit.
+function asyncStylesheetPlugin() {
+  return {
+    name: 'supermega-async-stylesheet',
+    apply: 'build' as const,
+    enforce: 'post' as const,
+    transformIndexHtml(html: string) {
+      return html.replace(
+        /<link rel="stylesheet"[^>]*href="(\/assets\/[^"]+\.css)"[^>]*>/,
+        (_match: string, href: string) => `<script src="/css-async.js" data-href="${href}"></script>`,
+      )
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   root: projectRoot,
@@ -73,6 +102,7 @@ export default defineConfig({
   plugins: [
     react(),
     localHealthPlugin(),
+    asyncStylesheetPlugin(),
     shouldAnalyzeBundle
       ? visualizer({
           filename: resolve(projectRoot, 'dist/bundle-stats.html'),

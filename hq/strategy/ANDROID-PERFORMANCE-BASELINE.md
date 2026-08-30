@@ -613,7 +613,7 @@ customer-facing sentences (there is live precedent: P3.8 batch 1 is built and
 held in a draft PR for exactly that). Shipping the mechanism is an hour;
 shipping the sentence is a decision.
 
-### Measured lead, NOT shipped: making the stylesheet non-render-blocking
+### SHIPPED: the stylesheet no longer blocks first paint
 
 **FCP 3,236 -> 1,484 ms. −1,752 ms, −54%.** Measured 2026-08-30 on the fixed
 harness, 3 cold runs per arm, both arms built from the same commit WITH the boot
@@ -684,7 +684,17 @@ open, and one of them is a warning about this document's own method:
    grows from 35 files, and `404.html`/the public shell need deciding on
    separately — `rootPageSource` is checked for the three shell scripts today.
 
-Do the pass. Do not lift the diff from this note.
+**Shipped on the real build**, not the throwaway variant: FCP median **1,492 ms**
+(runs 1,472 / 1,492 / 1,492), FOUC clean with the stylesheet live at 3,524 ms
+against a 4,359 ms mount — **835 ms of margin, zero unstyled frames**. Gate
+652/652, lint 0 errors.
+
+The closure guard was taught the new shape in the same commit, and the fix was
+verified by breaking it: with the `data-href` branch removed the build fails
+`shop_route_closure_found_no_stylesheet` rather than passing blind. The closure
+now measures **458,562 br q3 across 25 assets** (was 457,284 across 24 — the new
+shell script is the 25th), so the 230KB stylesheet is demonstrably still inside
+it. Had it dropped out, that number would have collapsed to roughly 180,000.
 
 ### Remaining identified FCP levers
 

@@ -20731,7 +20731,20 @@ if (!downloadFileSource.includes('export function downloadBlob(filename: string,
   || !downloadFileSource.includes('URL.createObjectURL(blob)')
   || !downloadFileSource.includes('window.setTimeout(() => URL.revokeObjectURL(url), 0)')) fail('shared_download_helper_leaks_object_url')
 const documentScripts = [...rootPageSource.matchAll(/<script[^>]+src="\/([^"]+)"/g)].map((match) => match[1])
-const documentStyles = [...rootPageSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)].map((match) => match[1])
+// Two shapes, and the second one is load-bearing. The stylesheet is no longer a render-blocking
+// <link>: showroom/vite.config.ts's asyncStylesheetPlugin rewrites it to
+// `<script src="/css-async.js" data-href="/assets/index-<hash>.css">` so first paint stops
+// waiting on 230KB the boot shell does not need (3,236ms -> 1,484ms FCP, measured). If this walk
+// only matched the <link> form it would find NOTHING, the stylesheet would silently drop out of
+// the Shop first-paint closure, and the byte guard below would keep reporting ok while no longer
+// seeing the largest file in it -- the same blindness this file already warns about at the
+// initial_javascript_budget walk. The floor check is the backstop; do not lower the floor to
+// accommodate a drop here, investigate it.
+const documentStyles = [
+  ...[...rootPageSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)].map((match) => match[1]),
+  ...[...rootPageSource.matchAll(/<script[^>]+src="\/css-async\.js"[^>]+data-href="\/([^"]+)"/g)].map((match) => match[1]),
+]
+if (!documentStyles.length) fail('shop_route_closure_found_no_stylesheet')
 const moduleEntryAsset = documentScripts.find((path) => /^assets\/[^/]+\.js$/.test(path))
 const routeEntrySource = moduleEntryAsset && await exists(resolve(dist, moduleEntryAsset))
   ? await readFile(resolve(dist, moduleEntryAsset), 'utf8')
