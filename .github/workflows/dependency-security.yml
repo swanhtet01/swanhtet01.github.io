@@ -1,7 +1,22 @@
 name: Dependency Security Audit
 
 on:
+  # NOTE (2026-08-31): the pull_request trigger is deliberately NOT path-filtered.
+  # These audit jobs produce checks that branch protection requires, and a required
+  # check only satisfies the rule if it actually REPORTS on the pull request. A
+  # path-filtered PR trigger never starts on a pull request that misses the filter, so
+  # such a pull request sits at "required status checks are expected" forever, however
+  # green it is. Measured on live PRs touching only showroom/, docs/ or hq/.
+  #
+  # The lockfile list that used to gate the PR trigger is preserved below on push, so
+  # a lockfile landing on main is still audited -- that is what the
+  # verify_app_deploy_workflow.mjs contract "dependency audit is read-only,
+  # scheduled, and covers every npm lockfile" exists to protect. Widening the PR
+  # trigger must not cost that coverage.
   pull_request:
+  push:
+    branches:
+      - main
     paths:
       - 'package.json'
       - 'package-lock.json'
