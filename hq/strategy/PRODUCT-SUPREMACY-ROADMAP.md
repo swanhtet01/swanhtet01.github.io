@@ -136,6 +136,46 @@ status column in §1 for each. The operative forward sequence is now:
    `loadCommerceWorkspace()` call in a `useState` initializer
    (`workspace-runtime.ts:509-512`). Each needs its own planning pass, and each
    must be measured on the tap-through journey, not one route in isolation.
+
+   **RE-RANKED 2026-08-30, on measurement. Read this before picking (a), (b) or
+   (c) above — two of the three are closed and the biggest lever is not among
+   them.**
+
+   - **(a) is SHIPPED (#567).** The app-shell skeleton moved FCP 4,400 -> 3,280 ms
+     on `/` and 4,516 -> 3,244 ms on the chooser, load flat. This item predicted
+     "well under 1 s"; it is 3.2 s. That prediction was wrong and is corrected in
+     `ANDROID-PERFORMANCE-BASELINE.md` — do not carry it forward.
+   - **(b) is an HONEST ZERO (#569), closed by evidence the way DESIGN-PROGRAM
+     closed P3.5.** Removing 19.1 KB gz moved FCP +4/-8 ms; removing 40.1 KB gz
+     moved it -20/-4 ms. Both inside the +/-88 ms control band, and the entire
+     app-authored share of the entry set (~15 KB gz) is SMALLER than the cut that
+     already measured nothing. The response to size is a step, not a slope. The
+     premise also died with (a): post-#567 `jsTransferBeforeFcpBytes` is 19,068 --
+     the 254 KB entry chunk has not finished when the page paints. Do not reopen
+     this looking for the bytes; they were measured and they do not pay.
+   - **THE ACTUAL BIGGEST LEVER IS NOT LISTED ABOVE: the render-blocking chain.**
+     Removing the stylesheet measured **-2,290 ms**, twice the entire entry set
+     for a third of the bytes, and `/theme-restore.js` is a further ~400 ms of
+     pure latency. **This should be item 1 of the next cycle.** It needs its own
+     planning pass and it is not a free edit: `theme-restore.js` cannot simply be
+     inlined (`script-src 'self'` refuses inline script, `verify_app_build.mjs`
+     enforces that, and that exact failure is why the service worker never
+     registered for months), and it cannot simply be deferred without
+     reintroducing the light flash it exists to prevent. Doing it means a
+     `sha256` CSP source kept in lockstep in two places — a security-surface
+     change worth real seconds, which is why it deserves a pass rather than a
+     patch.
+   - **Unrelated but urgent, found on the way (#570):** the pre-FCP entry graph
+     is **299,995 bytes against a 300,000 ceiling**. Five bytes. The next change
+     touching any module in that graph fails the build. #570 makes the margin
+     visible and the failure legible; it deliberately does not raise the ceiling.
+
+   Measurement caveat that invalidates anything timed between 2026-08-20 and
+   2026-08-30: the harness was serving runs 2 and 3 out of the service worker's
+   Cache Storage (`Network.setCacheDisabled` does not touch it), reporting
+   medians ~10x optimistic. Fixed in #567. A polluted row is sub-second with zero
+   JS transfer bytes; no figure in the baseline document carries that signature,
+   so the recorded numbers stand.
 2. ~~P2 Plant shop-floor scanning~~ — SHIPPED 2026-08-20, see the Plant table
    in §1. Remaining Plant scan surface, unclaimed and deliberately deferred:
    the Control tab's recall-lot trace already has an exact-match resolution
