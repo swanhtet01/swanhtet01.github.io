@@ -49,7 +49,9 @@ const requiredSnippets = {
     'Refusing --token. Set GITHUB_TOKEN or GH_TOKEN and pass --token-env instead.',
     'Quarantined legacy GitHub secret sync',
     'secret_value_loaded = _load_secret_value(',
-    '"external_writes_performed": False',
+    '"external_writes_performed": performed_by_outcome[outcome]',
+    'WRITE_OUTCOME_UNKNOWN = "outcome_unknown"',
+    '"external_write_retry_allowed": False',
     '"secret_values_exposed": False',
   ],
 }
@@ -141,7 +143,13 @@ function runGitHubSecretSyncBehaviorChecks() {
         '--plan',
       ],
       expectedStatus: 0,
-      expectedJson: { status: 'planned', external_write_attempted: false, external_writes_performed: false },
+      expectedJson: {
+        status: 'planned',
+        external_write_attempted: false,
+        external_writes_performed: false,
+        external_write_outcome: 'confirmed_not_performed',
+        external_write_retry_allowed: false,
+      },
     },
     {
       name: 'approval_required_before_secret_read',
@@ -155,7 +163,12 @@ function runGitHubSecretSyncBehaviorChecks() {
       expectedStatus: 1,
       expectedErrorIncludes: 'Quarantined legacy GitHub secret sync',
       forbiddenErrorIncludes: 'Environment variable is empty',
-      expectedJson: { external_write_attempted: false, external_writes_performed: false },
+      expectedJson: {
+        external_write_attempted: false,
+        external_writes_performed: false,
+        external_write_outcome: 'confirmed_not_performed',
+        external_write_retry_allowed: false,
+      },
     },
     {
       name: 'command_line_token_rejected_even_in_plan_mode',
@@ -169,7 +182,12 @@ function runGitHubSecretSyncBehaviorChecks() {
       ],
       expectedStatus: 1,
       expectedErrorIncludes: 'Refusing --token',
-      expectedJson: { external_write_attempted: false, external_writes_performed: false },
+      expectedJson: {
+        external_write_attempted: false,
+        external_writes_performed: false,
+        external_write_outcome: 'confirmed_not_performed',
+        external_write_retry_allowed: false,
+      },
     },
     {
       name: 'token_required_before_secret_read_after_approval',
@@ -185,7 +203,12 @@ function runGitHubSecretSyncBehaviorChecks() {
       expectedStatus: 1,
       expectedErrorIncludes: 'Token environment variable is empty: GITHUB_TOKEN',
       forbiddenErrorIncludes: 'UNIT_TEST_SECRET_VALUE',
-      expectedJson: { external_write_attempted: false, external_writes_performed: false },
+      expectedJson: {
+        external_write_attempted: false,
+        external_writes_performed: false,
+        external_write_outcome: 'confirmed_not_performed',
+        external_write_retry_allowed: false,
+      },
     },
   ]
 
@@ -219,9 +242,185 @@ function runGitHubSecretSyncBehaviorChecks() {
     })
     if (!ok) errors.push(`github_secret_sync_behavior_failed:${testCase.name}`)
   }
+
+  runGitHubSecretSyncPutOutcomeChecks(script)
 }
 
-function runPython(args) {
+function runGitHubSecretSyncPutOutcomeChecks(script) {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'supermega-github-secret-sync-'))
+  const fakeModules = path.join(tempRoot, 'fake-modules')
+  const tracePath = path.join(tempRoot, 'request-trace.txt')
+  const secretSentinel = 'SUPERMEGA_TEST_SECRET_SENTINEL_DO_NOT_PRINT'
+  fs.mkdirSync(path.join(fakeModules, 'nacl'), { recursive: true })
+  fs.writeFileSync(path.join(fakeModules, 'nacl', '__init__.py'), '', 'utf8')
+  fs.writeFileSync(path.join(fakeModules, 'nacl', 'encoding.py'), 'class Base64Encoder:\n    pass\n', 'utf8')
+  fs.writeFileSync(path.join(fakeModules, 'nacl', 'public.py'), [
+    'class PublicKey:',
+    '    def __init__(self, value, encoder):',
+    '        self.value = value',
+    '',
+    'class SealedBox:',
+    '    def __init__(self, public_key):',
+    '        self.public_key = public_key',
+    '    def encrypt(self, value):',
+    '        return b"encrypted-test-value"',
+    '',
+  ].join('\n'), 'utf8')
+  fs.writeFileSync(path.join(fakeModules, 'requests.py'), [
+    'import os',
+    '',
+    'class Response:',
+    '    def __init__(self, status_code):',
+    '        self.status_code = status_code',
+    '    def json(self):',
+    '        return {"key": "dGVzdC1wdWJsaWMta2V5", "key_id": "test-key-id"}',
+    '',
+    'def _trace(value):',
+    '    with open(os.environ["FAKE_REQUEST_TRACE"], "a", encoding="utf-8") as handle:',
+    '        handle.write(value + "\\n")',
+    '',
+    'def get(url, headers, timeout):',
+    '    _trace("GET")',
+    '    if os.environ.get("FAKE_REQUEST_MODE") == "public_key_non_2xx":',
+    '        return Response(503)',
+    '    return Response(200)',
+    '',
+    'def put(url, headers, json, timeout):',
+    '    _trace("PUT")',
+    '    mode = os.environ.get("FAKE_REQUEST_MODE")',
+    '    if mode == "timeout":',
+    '        raise TimeoutError(os.environ["SECRET_SENTINEL"])',
+    '    if mode == "connection":',
+    '        raise ConnectionError(os.environ["SECRET_SENTINEL"])',
+    '    if mode == "response_loss":',
+    '        raise RuntimeError(os.environ["SECRET_SENTINEL"])',
+    '    if mode == "non_2xx":',
+    '        return Response(422)',
+    '    if mode == "server_error":',
+    '        return Response(503)',
+    '    return Response(204)',
+    '',
+  ].join('\n'), 'utf8')
+
+  const cases = [
+    {
+      name: 'put_success_confirmed_performed',
+      mode: 'success',
+      expectedStatus: 0,
+      expectedOutcome: 'confirmed_performed',
+      expectedPerformed: true,
+      expectedPutCount: 1,
+      expectedStatusCode: 204,
+    },
+    {
+      name: 'put_non_2xx_confirmed_not_performed',
+      mode: 'non_2xx',
+      expectedStatus: 1,
+      expectedOutcome: 'confirmed_not_performed',
+      expectedPerformed: false,
+      expectedPutCount: 1,
+      expectedStatusCode: 422,
+    },
+    {
+      name: 'put_timeout_outcome_unknown_no_retry',
+      mode: 'timeout',
+      expectedStatus: 1,
+      expectedOutcome: 'outcome_unknown',
+      expectedPerformed: null,
+      expectedPutCount: 1,
+    },
+    {
+      name: 'put_server_error_outcome_unknown_no_retry',
+      mode: 'server_error',
+      expectedStatus: 1,
+      expectedOutcome: 'outcome_unknown',
+      expectedPerformed: null,
+      expectedPutCount: 1,
+      expectedStatusCode: 503,
+    },
+    {
+      name: 'put_connection_failure_outcome_unknown_no_retry',
+      mode: 'connection',
+      expectedStatus: 1,
+      expectedOutcome: 'outcome_unknown',
+      expectedPerformed: null,
+      expectedPutCount: 1,
+    },
+    {
+      name: 'put_response_loss_outcome_unknown_no_retry',
+      mode: 'response_loss',
+      expectedStatus: 1,
+      expectedOutcome: 'outcome_unknown',
+      expectedPerformed: null,
+      expectedPutCount: 1,
+    },
+    {
+      name: 'public_key_rejection_prevents_put',
+      mode: 'public_key_non_2xx',
+      expectedStatus: 1,
+      expectedOutcome: 'confirmed_not_performed',
+      expectedPerformed: false,
+      expectedPutCount: 0,
+      expectedStatusCode: 503,
+    },
+  ]
+
+  try {
+    for (const testCase of cases) {
+      fs.writeFileSync(tracePath, '', 'utf8')
+      const child = runPython([
+        script,
+        '--repo', 'swanhtet01/swanhtet01.github.io',
+        '--name', 'UNIT_TEST_SECRET',
+        '--value-env', 'UNIT_TEST_SECRET_VALUE',
+        '--token-env', 'GITHUB_TOKEN',
+        '--allow-external-write',
+        '--owner-confirmation', 'I APPROVE SUPERMEGA GITHUB SECRET WRITE',
+      ], {
+        GITHUB_TOKEN: 'github-test-token-placeholder',
+        UNIT_TEST_SECRET_VALUE: secretSentinel,
+        PYTHONPATH: fakeModules,
+        FAKE_REQUEST_MODE: testCase.mode,
+        FAKE_REQUEST_TRACE: tracePath,
+        SECRET_SENTINEL: secretSentinel,
+      })
+      let packet = null
+      try {
+        packet = JSON.parse(String(child.stdout || '').trim())
+      } catch {
+        errors.push(`github_secret_sync_put_json_invalid:${testCase.name}`)
+      }
+      const trace = fs.readFileSync(tracePath, 'utf8').trim().split(/\r?\n/).filter(Boolean)
+      const putCount = trace.filter((value) => value === 'PUT').length
+      const output = `${child.stdout || ''}${child.stderr || ''}`
+      const ok = child.status === testCase.expectedStatus
+        && packet?.contract === 'supermega.github-secret-sync.quarantine.v1'
+        && packet?.secret_values_exposed === false
+        && packet?.external_write_attempted === (testCase.expectedPutCount === 1)
+        && packet?.external_writes_performed === testCase.expectedPerformed
+        && packet?.external_write_outcome === testCase.expectedOutcome
+        && packet?.external_write_retry_allowed === false
+        && putCount === testCase.expectedPutCount
+        && (testCase.expectedStatusCode === undefined || packet?.status_code === testCase.expectedStatusCode)
+        && !output.includes(secretSentinel)
+
+      behaviorChecks.push({
+        name: testCase.name,
+        ok,
+        status: child.status,
+        putCount,
+        outcome: packet?.external_write_outcome ?? null,
+        externalWritesPerformed: packet?.external_writes_performed,
+        secretValuesExposed: packet?.secret_values_exposed === true,
+      })
+      if (!ok) errors.push(`github_secret_sync_put_behavior_failed:${testCase.name}`)
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true })
+  }
+}
+
+function runPython(args, envOverrides = {}) {
   const python = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
   return spawnSync(python, args, {
     cwd: repoRoot,
@@ -231,6 +430,7 @@ function runPython(args) {
       GITHUB_TOKEN: '',
       GH_TOKEN: '',
       UNIT_TEST_SECRET_VALUE: '',
+      ...envOverrides,
     },
     timeout: 10_000,
     windowsHide: true,

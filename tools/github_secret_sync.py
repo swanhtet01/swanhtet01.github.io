@@ -9,6 +9,9 @@ from pathlib import Path
 EXPECTED_OWNER_CONFIRMATION = "I APPROVE SUPERMEGA GITHUB SECRET WRITE"
 ALLOWED_TOKEN_ENVS = frozenset({"GITHUB_TOKEN", "GH_TOKEN"})
 CONTRACT = "supermega.github-secret-sync.quarantine.v1"
+WRITE_CONFIRMED_PERFORMED = "confirmed_performed"
+WRITE_CONFIRMED_NOT_PERFORMED = "confirmed_not_performed"
+WRITE_OUTCOME_UNKNOWN = "outcome_unknown"
 
 
 def _load_secret_value(path: str | None, env_name: str | None) -> str:
@@ -69,6 +72,26 @@ def _emit(payload: dict) -> None:
     )
 
 
+def _external_write_controls(*, attempted: bool, outcome: str) -> dict:
+    performed_by_outcome = {
+        WRITE_CONFIRMED_PERFORMED: True,
+        WRITE_CONFIRMED_NOT_PERFORMED: False,
+        WRITE_OUTCOME_UNKNOWN: None,
+    }
+    if outcome not in performed_by_outcome:
+        raise ValueError("GitHub secret write outcome is invalid.")
+    if outcome == WRITE_CONFIRMED_PERFORMED and not attempted:
+        raise ValueError("A confirmed GitHub secret write must have been attempted.")
+    if outcome == WRITE_OUTCOME_UNKNOWN and not attempted:
+        raise ValueError("An unknown GitHub secret write outcome must have been attempted.")
+    return {
+        "external_write_attempted": attempted,
+        "external_writes_performed": performed_by_outcome[outcome],
+        "external_write_outcome": outcome,
+        "external_write_retry_allowed": False,
+    }
+
+
 def _assert_external_write_approval(allow_external_write: bool, owner_confirmation: str) -> None:
     if not allow_external_write or owner_confirmation != EXPECTED_OWNER_CONFIRMATION:
         raise ValueError(
@@ -98,8 +121,10 @@ def main() -> int:
                 "repo": args.repo,
                 "secret_name": args.name,
                 "error": "Refusing --token. Set GITHUB_TOKEN or GH_TOKEN and pass --token-env instead.",
-                "external_write_attempted": False,
-                "external_writes_performed": False,
+                **_external_write_controls(
+                    attempted=False,
+                    outcome=WRITE_CONFIRMED_NOT_PERFORMED,
+                ),
             }
         )
         return 1
@@ -111,20 +136,29 @@ def main() -> int:
                 "repo": args.repo,
                 "secret_name": args.name,
                 "owner_gate_required": True,
-                "external_write_attempted": False,
-                "external_writes_performed": False,
+                **_external_write_controls(
+                    attempted=False,
+                    outcome=WRITE_CONFIRMED_NOT_PERFORMED,
+                ),
             }
         )
         return 0
 
+    secret_material_loaded = False
+    external_write_attempted = False
+    failure_stage = "approval"
     try:
         _assert_external_write_approval(args.allow_external_write, args.owner_confirmation)
+        failure_stage = "token"
         token = _load_token(args.token_env or None, args.token or None)
+        failure_stage = "secret_value"
         secret_value_loaded = _load_secret_value(
             path=args.value_file or None,
             env_name=args.value_env or None,
         )
+        secret_material_loaded = True
 
+        failure_stage = "requests_import"
         import requests
 
         headers = {
@@ -135,6 +169,7 @@ def main() -> int:
         }
 
         key_url = f"https://api.github.com/repos/{args.repo}/actions/secrets/public-key"
+        failure_stage = "public_key_request"
         key_resp = requests.get(key_url, headers=headers, timeout=30)
         if key_resp.status_code != 200:
             _emit(
@@ -144,15 +179,21 @@ def main() -> int:
                     "repo": args.repo,
                     "secret_name": args.name,
                     "status_code": key_resp.status_code,
-                    "external_write_attempted": False,
-                    "external_writes_performed": False,
+                    **_external_write_controls(
+                        attempted=False,
+                        outcome=WRITE_CONFIRMED_NOT_PERFORMED,
+                    ),
                 }
             )
             return 1
 
+        failure_stage = "public_key_response"
         key_payload = key_resp.json()
+        failure_stage = "encryption"
         encrypted_value = _encrypt(key_payload["key"], secret_value_loaded)
         put_url = f"https://api.github.com/repos/{args.repo}/actions/secrets/{args.name}"
+        external_write_attempted = True
+        failure_stage = "secret_put"
         put_resp = requests.put(
             put_url,
             headers=headers,
@@ -163,27 +204,49 @@ def main() -> int:
             timeout=30,
         )
 
-        ok = put_resp.status_code in {201, 204}
+        failure_stage = "secret_put_response"
+        status_code = put_resp.status_code
+        ok = status_code in {201, 204}
+        if ok:
+            outcome = WRITE_CONFIRMED_PERFORMED
+        elif 400 <= status_code < 500:
+            outcome = WRITE_CONFIRMED_NOT_PERFORMED
+        else:
+            outcome = WRITE_OUTCOME_UNKNOWN
         _emit(
             {
                 "status": "ready" if ok else "error",
                 "repo": args.repo,
                 "secret_name": args.name,
-                "status_code": put_resp.status_code,
-                "external_write_attempted": True,
-                "external_writes_performed": ok,
+                "status_code": status_code,
+                **_external_write_controls(
+                    attempted=True,
+                    outcome=outcome,
+                ),
             }
         )
         return 0 if ok else 1
     except Exception as exc:
+        if external_write_attempted:
+            error = "github_secret_sync_put_outcome_unknown"
+            outcome = WRITE_OUTCOME_UNKNOWN
+        elif secret_material_loaded:
+            error = f"github_secret_sync_{failure_stage}_failed"
+            outcome = WRITE_CONFIRMED_NOT_PERFORMED
+        else:
+            error = str(exc)[:240]
+            outcome = WRITE_CONFIRMED_NOT_PERFORMED
         _emit(
             {
                 "status": "error",
+                "stage": failure_stage,
                 "repo": args.repo,
                 "secret_name": args.name,
-                "error": str(exc)[:240],
-                "external_write_attempted": False,
-                "external_writes_performed": False,
+                "error": error,
+                **_external_write_controls(
+                    attempted=external_write_attempted,
+                    outcome=outcome,
+                ),
             }
         )
         return 1
