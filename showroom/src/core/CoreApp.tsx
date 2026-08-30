@@ -6790,7 +6790,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
-    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} commerce={commerce} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} profitControl={shopProfitControl} /></Suspense>
+    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} commerce={commerce} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} profitControl={shopProfitControl} /></Suspense>
     {actionGate}
   </div>
 

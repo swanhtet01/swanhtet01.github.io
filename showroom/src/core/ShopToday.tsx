@@ -32,6 +32,7 @@ type ShopTodayProps = {
   nextDetail: string
   nextTo: string
   commerce: CommerceState
+  localBatchFirstUseAllowed: boolean
   profitControl: ShopProfitControlBoard
 }
 
@@ -196,7 +197,7 @@ export function ShopBatchProfitControlPanel({
   </section>
 }
 
-export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, metrics, modules, nextAction, nextDetail, nextTo, profitControl }: ShopTodayProps) {
+export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextDetail, nextTo, profitControl }: ShopTodayProps) {
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [bakeryDemo, setBakeryDemo] = useState<ShopBakeryDemoState>({ status: 'idle' })
   const [bakeryBatchDemo, setBakeryBatchDemo] = useState<ShopBakeryBatchDemoState>({ status: 'idle' })
@@ -210,7 +211,6 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     bakeryBatchDemoAttempt.current += 1
     batchFirstUseAttempt.current += 1
   }, [])
-
   const acceptLocalBatchProjection = useCallback((projection: ShopBatchProfitControlProjection | null) => {
     setLocalBatchProjection(projection)
   }, [])
@@ -240,6 +240,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   }
 
   const openBatchFirstUse = async () => {
+    if (!localBatchFirstUseAllowed) return
     const attempt = ++batchFirstUseAttempt.current
     setLocalBatchProjection(null)
     setBatchFirstUse({ status: 'loading' })
@@ -251,7 +252,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     }
   }
 
-  const activeBatchProfitControl = batchProfitControl.state === 'no_batch' && localBatchProjection
+  const activeBatchProfitControl = localBatchFirstUseAllowed && batchProfitControl.state === 'no_batch' && localBatchProjection
     ? localBatchProjection
     : batchProfitControl
 
@@ -341,7 +342,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       <p className="panel-note">No payment, stock, supplier, accounting, customer, or hosted write runs from this panel.</p>
     </section>
 
-    <section aria-label="Open local Batch Profit Control workflow" className="shop-margin-control shop-batch-first-use-launcher">
+    {localBatchFirstUseAllowed ? <section aria-label="Open local Batch Profit Control workflow" className="shop-margin-control shop-batch-first-use-launcher">
       <header>
         <div>
           <span className="core-eyebrow">Real local Batch review</span>
@@ -354,9 +355,11 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
         <b>Owner-reviewed local estimate</b>
       </header>
       {batchFirstUse.status === 'error' ? <p className="shop-margin-gaps" role="alert">Local Batch workflow failed to load. No estimate was shown or saved and the Shop workspace stayed unchanged.</p> : null}
-      {batchFirstUse.status === 'ready' ? <batchFirstUse.Component commerce={commerce} onProjection={acceptLocalBatchProjection} /> : null}
+      {batchFirstUse.status === 'ready' ? <batchFirstUse.Component commerce={commerce} onProjection={acceptLocalBatchProjection} workspaceScope="confirmed-local" /> : null}
       <p className="panel-note">Not pilot, customer, commercial, or accounting proof. No payment, stock, supplier, customer, hosted, provider, model, or production write is authorized.</p>
-    </section>
+    </section> : <section aria-label="Local Batch Profit Control unavailable" className="shop-margin-control shop-batch-first-use-launcher">
+      <header><div><span className="core-eyebrow">Local Batch first use</span><h3>Local Batch review stays off</h3><p>This browser-only workflow opens only after Shop confirms a local workspace. Managed company records stay separate; no local Batch record is read or saved.</p></div><b>Local workspace required</b></header>
+    </section>}
 
     <ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />
 
