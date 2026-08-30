@@ -31,6 +31,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from supermega_runtime.telemetry import redact
+from supermega_runtime.telemetry.errors import build_error_event
 
 
 _LOGGER = logging.getLogger("supermega.telemetry")
@@ -114,6 +115,18 @@ class RedactingSpanProcessor:
         fresh `ReadableSpan` via its public constructor — rather than
         reaching into `_immutable`/`_attributes` to force a mutation — keeps
         this scrubber independent of that private implementation detail.
+
+        Events are scrubbed too, and that is not a formality. When an
+        instrumented request raises, the ASGI instrumentation calls
+        `Span.record_exception`, which attaches `exception.message`
+        (`str(exc)` verbatim) and `exception.stacktrace` as a span event.
+        An earlier version of this method copied `events=span.events`
+        straight through, so a `RuntimeError` naming a customer, a phone
+        number, or an MMK amount reached the exporter in full even though
+        the span's own attributes were clean. `redact.scrub_events` digests
+        the message and drops the stacktrace; see
+        `tests/telemetry/test_span_events.py` for the end-to-end proof
+        through the real FastAPI instrumentation.
         """
 
         from opentelemetry.sdk.trace import ReadableSpan
@@ -129,7 +142,7 @@ class RedactingSpanProcessor:
             parent=span.parent,
             resource=span.resource,
             attributes=sanitized_attributes,
-            events=span.events,
+            events=redact.scrub_events(span.events),
             links=span.links,
             kind=span.kind,
             status=span.status,
@@ -339,6 +352,61 @@ def domain_span(name: str, **attributes: Any) -> Iterator[Any]:
         yield span
 
 
+def install_error_lane(app: Any) -> None:
+    """Record unhandled exceptions on the current span, then re-raise.
+
+    The server half of the error lane the scorecard's observability
+    recommendation 2 asks for ("an error lane on the existing no-PII beacon,
+    not Sentry"); ``showroom/src/core/client-error-reporter.ts`` is the
+    browser half. Attributes come from ``telemetry.errors``, where every key
+    is whitelisted and the message text is reduced to a one-way digest.
+
+    Two properties this must never lose:
+
+    * It RE-RAISES the original exception. This handler observes; it does not
+      handle. FastAPI's own error handling, status codes and response bodies
+      are unchanged, so installing the lane cannot alter what a client sees.
+    * It is fail-open. Any fault inside the lane is swallowed and the original
+      exception still propagates — an observability bug must never convert a
+      handled failure into an unhandled one, nor mask the real cause.
+
+    ``supermega_runtime/runtime.py`` is digest-bound (verify_hq_contract's
+    databaseImplementationPaths), so the lane is installed from here, through
+    the ``instrument_app`` seam that runtime.py already calls, rather than by
+    editing runtime.py and triggering the rehearsal cascade.
+    """
+
+    try:
+        from starlette.middleware.base import BaseHTTPMiddleware
+    except Exception:  # pragma: no cover - starlette absent: tracing is simply off
+        _LOGGER.debug("supermega.telemetry: starlette unavailable; error lane not installed")
+        return
+
+    class _ErrorLaneMiddleware(BaseHTTPMiddleware):  # type: ignore[misc]
+        async def dispatch(self, request: Any, call_next: Any) -> Any:
+            try:
+                return await call_next(request)
+            except BaseException as exc:
+                try:
+                    from opentelemetry import trace as _trace
+
+                    span = _trace.get_current_span()
+                    attributes = build_error_event(exc, request=request)
+                    if attributes and span is not None:
+                        span.set_attributes(attributes)
+                except Exception:  # pragma: no cover - never mask the real failure
+                    _LOGGER.debug(
+                        "supermega.telemetry: error lane could not annotate span",
+                        exc_info=True,
+                    )
+                raise
+
+    try:
+        app.add_middleware(_ErrorLaneMiddleware)
+    except Exception:  # pragma: no cover - a refused middleware must not break startup
+        _LOGGER.debug("supermega.telemetry: error lane middleware not added", exc_info=True)
+
+
 def instrument_app(app: Any) -> None:
     """One-call Phase A wiring: tracing provider + FastAPI + psycopg + middleware.
 
@@ -351,6 +419,7 @@ def instrument_app(app: Any) -> None:
     install_traceparent_middleware(app)
     instrument_fastapi_app(app)
     instrument_psycopg()
+    install_error_lane(app)
 
 
 __all__ = [
@@ -362,6 +431,7 @@ __all__ = [
     "instrument_psycopg",
     "install_traceparent_middleware",
     "instrument_app",
+    "install_error_lane",
     "domain_span",
     "RedactingSpanProcessor",
 ]
