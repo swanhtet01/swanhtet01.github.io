@@ -8,6 +8,7 @@ import {
   applyReleasePullRequestWithClient,
   buildPullRequestOwnerReceipt,
   buildPullRequestPlan,
+  buildReleasePullRequestFailureReceipt,
   confirmPullRequestOwnerClick,
   consumePullRequestOwnerReceipt,
   renderPullRequestOwnerConfirmation,
@@ -208,6 +209,25 @@ function response(status, json) {
   }
 }
 
+function pull(number = 42) {
+  return {
+    number,
+    state: 'open',
+    html_url: `https://github.com/swanhtet01/swanhtet01.github.io/pull/${number}`,
+    head: { ref: branch, sha: commit },
+    base: { ref: 'main' },
+  }
+}
+
+async function failureReceipt(action) {
+  try {
+    await action()
+    assert.fail('expected release pull-request failure')
+  } catch (error) {
+    return buildReleasePullRequestFailureReceipt(error)
+  }
+}
+
 test('plan is no-write and blocks execution until the remote branch is exact', () => {
   const unpublished = packet({ remote: { candidateCommit: null, candidateBranchState: 'unpublished' } })
   const plan = buildPullRequestPlan({
@@ -221,7 +241,10 @@ test('plan is no-write and blocks execution until the remote branch is exact', (
   assert.match(plan.digest, /^sha256:[0-9a-f]{64}$/)
   assert.equal(plan.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(plan.mode, 'plan_only_no_github_write')
+  assert.equal(plan.controls.githubWriteAttempted, false)
   assert.equal(plan.controls.githubWritesPerformed, false)
+  assert.equal(plan.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(plan.controls.githubWriteRetryAllowed, false)
   assert.equal(plan.controls.pullRequestCreated, false)
   assert.equal(plan.remoteBefore.branchExactForPr, false)
   assert.deepEqual(plan.readiness.blockers, [
@@ -428,6 +451,7 @@ test('execute creates one pull request after handoff and remote branch verificat
   const { git, calls } = stubGit()
   const requests = []
   const sequence = []
+  let getCount = 0
   const result = await applyReleasePullRequestWithClient({
     handoffReceipt: approved.handoffReceipt,
     mainProtectionSnapshotReceipt: approved.protectionReceipt,
@@ -444,20 +468,17 @@ test('execute creates one pull request after handoff and remote branch verificat
     request: async (url, options) => {
       sequence.push(options.method)
       requests.push({ url, options })
-      if (options.method === 'GET') return response(200, [])
+      if (options.method === 'GET') {
+        getCount += 1
+        return response(200, getCount === 1 ? [] : [pull(42)])
+      }
       if (options.method === 'POST') {
         const body = JSON.parse(options.body)
         assert.equal(body.head, branch)
         assert.equal(body.base, 'main')
         assert.equal(body.draft, false)
         assert.ok(body.body.includes('source review only'))
-        return response(201, {
-          number: 42,
-          state: 'open',
-          html_url: 'https://github.com/swanhtet01/swanhtet01.github.io/pull/42',
-          head: { ref: branch, sha: commit },
-          base: { ref: 'main' },
-        })
+        return response(201, pull(42))
       }
       throw new Error(`unexpected request ${options.method}`)
     },
@@ -465,7 +486,10 @@ test('execute creates one pull request after handoff and remote branch verificat
   assert.equal(result.ok, true)
   assert.equal(result.mode, 'executed_owner_approved_github_pr_write')
   assert.equal(validatePullRequestReport(result, { expectedMode: 'executed_owner_approved_github_pr_write' }), result)
+  assert.equal(result.controls.githubWriteAttempted, true)
   assert.equal(result.controls.githubWritesPerformed, true)
+  assert.equal(result.controls.githubWriteOutcome, 'confirmed_performed')
+  assert.equal(result.controls.githubWriteRetryAllowed, false)
   assert.equal(result.controls.pullRequestCreated, true)
   assert.equal(result.controls.ownerApprovalReceiptConsumed, true)
   assert.equal(result.approval.receipt.consumed, true)
@@ -476,19 +500,156 @@ test('execute creates one pull request after handoff and remote branch verificat
   assert.equal(result.verification.remoteBranchExactAtCreate, true)
   assert.equal(result.verification.existingPullRequestCheckedBeforeCreate, true)
   assert.equal(result.verification.existingPullRequestResult, 'none_before_create')
+  assert.equal(result.verification.postCreateReadBackExact, true)
   assert.equal(result.verification.duplicatePullRequestCreated, false)
   assert.deepEqual(calls.filter((args) => args[0] === 'ls-remote'), [['ls-remote', '--heads', 'origin', branch]])
-  assert.equal(requests.length, 2)
-  assert.deepEqual(sequence, ['consume', 'GET', 'POST'])
+  assert.equal(requests.length, 3)
+  assert.deepEqual(sequence, ['consume', 'GET', 'POST', 'GET'])
   assert.ok(String(requests[0].url).includes('/pulls?'))
   assert.ok(String(requests[1].url).endsWith('/pulls'))
+  assert.ok(String(requests[2].url).includes('/pulls?'))
   assert.doesNotMatch(JSON.stringify(result), /ghp_placeholder/)
+})
+
+test('post-initiation transport, response, shape, and read-back failures remain unknown without POST retry', async () => {
+  for (const failureKind of ['transport', 'malformed-json', 'invalid-shape', 'read-back']) {
+    const approved = ownerApproval()
+    const { git } = stubGit()
+    let getCount = 0
+    let postCount = 0
+    const failed = await failureReceipt(() => applyReleasePullRequestWithClient({
+      handoffReceipt: approved.handoffReceipt,
+      mainProtectionSnapshotReceipt: approved.protectionReceipt,
+      ownerApprovalReceipt: approved.ownerApprovalReceipt,
+      ownerApprovalChallenge: approved.ownerApprovalChallenge,
+      now: approved.now,
+      env: { GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
+      git,
+      verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
+      consumeApprovalReceipt: async (ownerApprovalReceipt) => ({
+        ok: true,
+        packetDigest: ownerApprovalReceipt.packet.digest,
+      }),
+      request: async (url, options) => {
+        if (options.method === 'POST') {
+          postCount += 1
+          if (failureKind === 'transport') throw new Error('connection_lost_after_post_start')
+          if (failureKind === 'malformed-json') {
+            return { ok: true, status: 201, text: async () => '{' }
+          }
+          if (failureKind === 'invalid-shape') return response(201, { state: 'open' })
+          return response(201, pull(42))
+        }
+        getCount += 1
+        if (getCount === 1) return response(200, [])
+        if (failureKind === 'read-back') throw new Error('read_back_connection_lost')
+        return response(200, [])
+      },
+    }))
+    assert.equal(postCount, 1)
+    assert.equal(failed.error, 'release_pull_request_write_outcome_unknown')
+    assert.equal(failed.controls.githubWriteAttempted, true)
+    assert.equal(failed.controls.githubWritesPerformed, null)
+    assert.equal(failed.controls.githubWriteOutcome, 'outcome_unknown')
+    assert.equal(failed.controls.githubWriteRetryAllowed, false)
+    assert.equal(failed.controls.pullRequestCreated, null)
+    assert.equal(failed.controls.ownerApprovalReceiptConsumed, true)
+    assert.doesNotMatch(JSON.stringify(failed), /ghp_placeholder/)
+  }
+})
+
+test('exact read-back confirms creation after transport, JSON, or shape response loss', async () => {
+  for (const responseKind of ['transport', 'malformed-json', 'invalid-shape']) {
+    const approved = ownerApproval()
+    const { git } = stubGit()
+    let getCount = 0
+    let postCount = 0
+    const result = await applyReleasePullRequestWithClient({
+      handoffReceipt: approved.handoffReceipt,
+      mainProtectionSnapshotReceipt: approved.protectionReceipt,
+      ownerApprovalReceipt: approved.ownerApprovalReceipt,
+      ownerApprovalChallenge: approved.ownerApprovalChallenge,
+      now: approved.now,
+      env: { GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
+      git,
+      verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
+      consumeApprovalReceipt: async (ownerApprovalReceipt) => ({
+        ok: true,
+        packetDigest: ownerApprovalReceipt.packet.digest,
+      }),
+      request: async (url, options) => {
+        if (options.method === 'POST') {
+          postCount += 1
+          if (responseKind === 'transport') throw new Error('response_lost_after_server_acceptance')
+          if (responseKind === 'malformed-json') {
+            return { ok: true, status: 201, text: async () => '{' }
+          }
+          return response(201, { state: 'open' })
+        }
+        getCount += 1
+        return response(200, getCount === 1 ? [] : [pull(44)])
+      },
+    })
+    assert.equal(postCount, 1)
+    assert.equal(result.pullRequest.number, 44)
+    assert.equal(result.controls.githubWriteAttempted, true)
+    assert.equal(result.controls.githubWritesPerformed, true)
+    assert.equal(result.controls.githubWriteOutcome, 'confirmed_performed')
+    assert.equal(result.controls.githubWriteRetryAllowed, false)
+    assert.equal(result.controls.pullRequestCreated, true)
+    assert.equal(result.verification.postCreateReadBackExact, true)
+    const expectedFailure = {
+      transport: 'response_lost_after_server_acceptance',
+      'malformed-json': 'release_pull_request_response_json_invalid',
+      'invalid-shape': 'release_pull_request_create_response_invalid',
+    }[responseKind]
+    assert.equal(result.action.status, responseKind === 'invalid-shape' ? 201 : null)
+    assert.equal(result.action.responseFailure, expectedFailure)
+  }
+})
+
+test('explicit client rejection is confirmed no-write and never retried', async () => {
+  const approved = ownerApproval()
+  const { git } = stubGit()
+  let postCount = 0
+  let getCount = 0
+  const failed = await failureReceipt(() => applyReleasePullRequestWithClient({
+    handoffReceipt: approved.handoffReceipt,
+    mainProtectionSnapshotReceipt: approved.protectionReceipt,
+    ownerApprovalReceipt: approved.ownerApprovalReceipt,
+    ownerApprovalChallenge: approved.ownerApprovalChallenge,
+    now: approved.now,
+    env: { GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
+    git,
+    verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
+    consumeApprovalReceipt: async (ownerApprovalReceipt) => ({
+      ok: true,
+      packetDigest: ownerApprovalReceipt.packet.digest,
+    }),
+    request: async (url, options) => {
+      if (options.method === 'POST') {
+        postCount += 1
+        return response(422, { message: 'validation failed' })
+      }
+      getCount += 1
+      return response(200, [])
+    },
+  }))
+  assert.equal(postCount, 1)
+  assert.equal(getCount, 1)
+  assert.equal(failed.error, 'release_pull_request_create_failed:422')
+  assert.equal(failed.controls.githubWriteAttempted, true)
+  assert.equal(failed.controls.githubWritesPerformed, false)
+  assert.equal(failed.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(failed.controls.githubWriteRetryAllowed, false)
+  assert.equal(failed.controls.pullRequestCreated, false)
 })
 
 test('execute can use GitHub CLI keyring token without exposing it in the report', async () => {
   const approved = ownerApproval()
   const { git } = stubGit()
   const { gh, calls } = stubGh()
+  let getCount = 0
   const result = await applyReleasePullRequestWithClient({
     handoffReceipt: approved.handoffReceipt,
     mainProtectionSnapshotReceipt: approved.protectionReceipt,
@@ -502,15 +663,12 @@ test('execute can use GitHub CLI keyring token without exposing it in the report
     verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
     request: async (url, options) => {
       assert.match(String(options.headers.Authorization), /^Bearer gho_placeholder_token_value_0000$/)
-      if (options.method === 'GET') return response(200, [])
+      if (options.method === 'GET') {
+        getCount += 1
+        return response(200, getCount === 1 ? [] : [pull(43)])
+      }
       if (options.method === 'POST') {
-        return response(201, {
-          number: 43,
-          state: 'open',
-          html_url: 'https://github.com/swanhtet01/swanhtet01.github.io/pull/43',
-          head: { ref: branch, sha: commit },
-          base: { ref: 'main' },
-        })
+        return response(201, pull(43))
       }
       throw new Error(`unexpected request ${options.method}`)
     },
@@ -546,7 +704,10 @@ test('execute returns no-write when an exact open PR already exists', async () =
   })
   assert.equal(result.mode, 'executed_owner_approved_existing_pr_no_write')
   assert.equal(validatePullRequestReport(result, { expectedMode: 'executed_owner_approved_existing_pr_no_write' }), result)
+  assert.equal(result.controls.githubWriteAttempted, false)
   assert.equal(result.controls.githubWritesPerformed, false)
+  assert.equal(result.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(result.controls.githubWriteRetryAllowed, false)
   assert.equal(result.controls.pullRequestCreated, false)
   assert.equal(result.controls.ownerApprovalReceiptConsumed, true)
   assert.equal(result.verification.remoteBranchObservedAtCreate, commit)
@@ -557,14 +718,46 @@ test('execute returns no-write when an exact open PR already exists', async () =
   assert.equal(result.pullRequest.number, 41)
 })
 
+test('a failed existing-PR read remains confirmed pre-write after receipt consumption', async () => {
+  const approved = ownerApproval()
+  const { git } = stubGit()
+  let postCount = 0
+  const failed = await failureReceipt(() => applyReleasePullRequestWithClient({
+    handoffReceipt: approved.handoffReceipt,
+    mainProtectionSnapshotReceipt: approved.protectionReceipt,
+    ownerApprovalReceipt: approved.ownerApprovalReceipt,
+    ownerApprovalChallenge: approved.ownerApprovalChallenge,
+    now: approved.now,
+    env: { GITHUB_TOKEN: 'ghp_placeholder_token_value_0000' },
+    git,
+    verifyHandoff: async () => ({ ok: true, candidate: { branch, commit, clean: true } }),
+    consumeApprovalReceipt: async (ownerApprovalReceipt) => ({
+      ok: true,
+      packetDigest: ownerApprovalReceipt.packet.digest,
+    }),
+    request: async (url, options) => {
+      if (options.method === 'POST') postCount += 1
+      return response(503, { message: 'temporarily unavailable' })
+    },
+  }))
+  assert.equal(postCount, 0)
+  assert.equal(failed.error, 'release_pull_request_list_failed:503')
+  assert.equal(failed.controls.githubWritesApproved, true)
+  assert.equal(failed.controls.githubWriteAttempted, false)
+  assert.equal(failed.controls.githubWritesPerformed, false)
+  assert.equal(failed.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(failed.controls.githubWriteRetryAllowed, false)
+  assert.equal(failed.controls.pullRequestCreated, false)
+  assert.equal(failed.controls.ownerApprovalReceiptConsumed, true)
+})
+
 test('execute rejects stale remote branch before checking or creating a pull request', async () => {
   const approved = ownerApproval()
   const staleRemoteCommit = 'c'.repeat(40)
   const { git, calls } = stubGit({ remote: staleRemoteCommit })
   const requests = []
   let consumeCount = 0
-  await assert.rejects(
-    applyReleasePullRequestWithClient({
+  const failed = await failureReceipt(() => applyReleasePullRequestWithClient({
       handoffReceipt: approved.handoffReceipt,
       mainProtectionSnapshotReceipt: approved.protectionReceipt,
       ownerApprovalReceipt: approved.ownerApprovalReceipt,
@@ -581,9 +774,14 @@ test('execute rejects stale remote branch before checking or creating a pull req
         requests.push({ url, options })
         return response(200, [])
       },
-    }),
-    /release_pull_request_remote_branch_not_exact/,
-  )
+    }))
+  assert.equal(failed.error, 'release_pull_request_remote_branch_not_exact')
+  assert.equal(failed.controls.githubWriteAttempted, false)
+  assert.equal(failed.controls.githubWritesPerformed, false)
+  assert.equal(failed.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(failed.controls.githubWriteRetryAllowed, false)
+  assert.equal(failed.controls.pullRequestCreated, false)
+  assert.equal(failed.controls.ownerApprovalReceiptConsumed, false)
   assert.deepEqual(calls.filter((args) => args[0] === 'ls-remote'), [['ls-remote', '--heads', 'origin', branch]])
   assert.equal(requests.length, 0)
   assert.equal(consumeCount, 0)

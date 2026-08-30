@@ -39,6 +39,9 @@ const NONCE_PATTERN = /^[0-9a-f]{64}$/
 const EXECUTION_CHALLENGE_PATTERN = /^[0-9a-f]{64}$/
 const EXECUTION_SEAL_PATTERN = /^hmac-sha256:[0-9a-f]{64}$/
 const consumedOwnerReceiptDigests = new Set()
+const WRITE_CONFIRMED_PERFORMED = 'confirmed_performed'
+const WRITE_CONFIRMED_NOT_PERFORMED = 'confirmed_not_performed'
+const WRITE_OUTCOME_UNKNOWN = 'outcome_unknown'
 
 function fail(code) {
   throw new Error(code)
@@ -46,6 +49,76 @@ function fail(code) {
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function githubWriteControls({ attempted, outcome }) {
+  const performedByOutcome = {
+    [WRITE_CONFIRMED_PERFORMED]: true,
+    [WRITE_CONFIRMED_NOT_PERFORMED]: false,
+    [WRITE_OUTCOME_UNKNOWN]: null,
+  }
+  if (!(outcome in performedByOutcome)) fail('release_pull_request_write_outcome_invalid')
+  if (!attempted && outcome !== WRITE_CONFIRMED_NOT_PERFORMED) fail('release_pull_request_write_outcome_invalid')
+  const performed = performedByOutcome[outcome]
+  return {
+    githubWriteAttempted: attempted,
+    githubWritesPerformed: performed,
+    githubWriteOutcome: outcome,
+    githubWriteRetryAllowed: false,
+    pullRequestCreated: performed,
+  }
+}
+
+function safeFailureCode(error) {
+  const code = String(error?.message || 'release_pull_request_failed')
+  return /^[a-z0-9_:-]{1,240}$/.test(code) ? code : 'release_pull_request_failed'
+}
+
+function writeFailure(code, { attempted, outcome, ownerApprovalReceiptConsumed = false }) {
+  const error = new Error(code)
+  error.writeOutcome = { attempted, outcome, ownerApprovalReceiptConsumed }
+  return error
+}
+
+function throwWithWriteOutcome(error, { attempted, resolvedOutcome = null, ownerApprovalReceiptConsumed }) {
+  if (isRecord(error?.writeOutcome)) throw error
+  throw writeFailure(
+    attempted && resolvedOutcome === null ? 'release_pull_request_write_outcome_unknown' : safeFailureCode(error),
+    {
+      attempted,
+      outcome: attempted ? (resolvedOutcome || WRITE_OUTCOME_UNKNOWN) : WRITE_CONFIRMED_NOT_PERFORMED,
+      ownerApprovalReceiptConsumed,
+    },
+  )
+}
+
+export function buildReleasePullRequestFailureReceipt(error) {
+  const writeOutcome = isRecord(error?.writeOutcome)
+    ? error.writeOutcome
+    : {
+        attempted: false,
+        outcome: WRITE_CONFIRMED_NOT_PERFORMED,
+        ownerApprovalReceiptConsumed: false,
+      }
+  return {
+    ok: false,
+    contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
+    error: safeFailureCode(error),
+    controls: {
+      githubWritesApproved: writeOutcome.attempted || writeOutcome.ownerApprovalReceiptConsumed === true,
+      ...githubWriteControls(writeOutcome),
+      ownerApprovalReceiptConsumed: writeOutcome.ownerApprovalReceiptConsumed === true,
+      repositorySettingsMutated: false,
+      branchMutated: false,
+      forcePushPerformed: false,
+      branchDeletionPerformed: false,
+      mergePerformed: false,
+      workflowDispatchPerformed: false,
+      deploymentPerformed: false,
+      supabaseMutated: false,
+      credentialValueExposed: false,
+    },
+  }
 }
 
 function digest(value) {
@@ -772,8 +845,7 @@ export function buildPullRequestPlan({
     ],
     controls: {
       githubWritesApproved: approval.approved,
-      githubWritesPerformed: false,
-      pullRequestCreated: false,
+      ...githubWriteControls({ attempted: false, outcome: WRITE_CONFIRMED_NOT_PERFORMED }),
       ownerApprovalReceiptConsumed: false,
       repositorySettingsMutated: false,
       branchMutated: false,
@@ -847,7 +919,10 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
   }
   if (packet.mode === 'plan_only_no_github_write') {
     if (packet.ok !== true
+      || packet.controls?.githubWriteAttempted !== false
       || packet.controls?.githubWritesPerformed !== false
+      || packet.controls?.githubWriteOutcome !== WRITE_CONFIRMED_NOT_PERFORMED
+      || packet.controls?.githubWriteRetryAllowed !== false
       || packet.controls?.pullRequestCreated !== false
       || packet.controls?.ownerApprovalReceiptConsumed !== false
       || packet.controls?.repositorySettingsMutated !== false
@@ -932,14 +1007,21 @@ export function validatePullRequestReport(packet, { expectedMode = null } = {}) 
       fail('release_pull_request_execute_verification_invalid')
     }
     if (packet.mode === 'executed_owner_approved_existing_pr_no_write') {
-      if (packet.controls.githubWritesPerformed !== false
+      if (packet.controls.githubWriteAttempted !== false
+        || packet.controls.githubWritesPerformed !== false
+        || packet.controls.githubWriteOutcome !== WRITE_CONFIRMED_NOT_PERFORMED
+        || packet.controls.githubWriteRetryAllowed !== false
         || packet.controls.pullRequestCreated !== false
         || packet.verification.existingPullRequestResult !== 'exact_open_pr_reused') {
         fail('release_pull_request_existing_pr_controls_invalid')
       }
-    } else if (packet.controls.githubWritesPerformed !== true
+    } else if (packet.controls.githubWriteAttempted !== true
+      || packet.controls.githubWritesPerformed !== true
+      || packet.controls.githubWriteOutcome !== WRITE_CONFIRMED_PERFORMED
+      || packet.controls.githubWriteRetryAllowed !== false
       || packet.controls.pullRequestCreated !== true
       || packet.verification.existingPullRequestResult !== 'none_before_create'
+      || packet.verification.postCreateReadBackExact !== true
       || packet.action?.method !== 'POST'
       || packet.action?.path !== `/repos/${REPOSITORY}/pulls`) {
       fail('release_pull_request_create_controls_invalid')
@@ -1009,6 +1091,14 @@ function classifyExistingPulls(pulls, gate) {
   return pull
 }
 
+function exactPullRequestShape(pull, gate) {
+  return pull?.state === 'open'
+    && pull?.head?.ref === gate.branch
+    && pull?.head?.sha === gate.commit
+    && pull?.base?.ref === BASE_BRANCH
+    && Number.isSafeInteger(pull?.number)
+}
+
 export async function applyReleasePullRequestWithClient({
   handoffReceipt,
   mainProtectionSnapshotReceipt = null,
@@ -1023,64 +1113,176 @@ export async function applyReleasePullRequestWithClient({
   consumeApprovalReceipt = consumePullRequestOwnerReceipt,
   now = () => new Date(),
 } = {}) {
-  const gate = validatePullRequestHandoff(handoffReceipt?.packet)
-  const gitState = currentGitState(git)
-  validateLocalState({ gate, gitState, execute: true })
-  let approval = validateOwnerApproval({
-    gate,
-    handoffReceipt,
-    mainProtectionSnapshotReceipt,
-    ownerApprovalReceipt,
-    ownerApprovalChallenge,
-    execute: true,
-    now: now(),
-  })
-  const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
-  const token = tokenForExecute({ env, gh, useGitHubCliAuth })
-  if (!token) fail('release_pull_request_token_required')
+  let githubWriteAttempted = false
+  let resolvedWriteOutcome = null
+  let ownerApprovalReceiptConsumed = false
+  try {
+    const gate = validatePullRequestHandoff(handoffReceipt?.packet)
+    const gitState = currentGitState(git)
+    validateLocalState({ gate, gitState, execute: true })
+    let approval = validateOwnerApproval({
+      gate,
+      handoffReceipt,
+      mainProtectionSnapshotReceipt,
+      ownerApprovalReceipt,
+      ownerApprovalChallenge,
+      execute: true,
+      now: now(),
+    })
+    const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
+    const token = tokenForExecute({ env, gh, useGitHubCliAuth })
+    if (!token) fail('release_pull_request_token_required')
 
-  const verification = await verifyHandoff(handoffReceipt.path)
-  if (verification?.ok !== true
-    || verification.candidate?.branch !== gate.branch
-    || verification.candidate?.commit !== gate.commit
-    || verification.candidate?.clean !== true) {
-    fail('release_pull_request_handoff_not_current')
-  }
+    const verification = await verifyHandoff(handoffReceipt.path)
+    if (verification?.ok !== true
+      || verification.candidate?.branch !== gate.branch
+      || verification.candidate?.commit !== gate.commit
+      || verification.candidate?.clean !== true) {
+      fail('release_pull_request_handoff_not_current')
+    }
 
-  const observedRemote = remoteHead(git, gate.branch)
-  if (observedRemote !== gate.commit) fail('release_pull_request_remote_branch_not_exact')
+    const observedRemote = remoteHead(git, gate.branch)
+    if (observedRemote !== gate.commit) fail('release_pull_request_remote_branch_not_exact')
 
-  approval = validateOwnerApproval({
-    gate,
-    handoffReceipt,
-    mainProtectionSnapshotReceipt,
-    ownerApprovalReceipt,
-    ownerApprovalChallenge,
-    execute: true,
-    now: now(),
-  })
-  const consumed = await consumeApprovalReceipt(ownerApprovalReceipt)
-  if (consumed?.ok !== true || consumed.packetDigest !== approval.receipt.digest) {
-    fail('release_pull_request_owner_receipt_consume_verify_failed')
-  }
-  approval = {
-    ...approval,
-    receipt: { ...approval.receipt, consumed: true },
-  }
+    approval = validateOwnerApproval({
+      gate,
+      handoffReceipt,
+      mainProtectionSnapshotReceipt,
+      ownerApprovalReceipt,
+      ownerApprovalChallenge,
+      execute: true,
+      now: now(),
+    })
+    const consumed = await consumeApprovalReceipt(ownerApprovalReceipt)
+    if (consumed?.ok !== true || consumed.packetDigest !== approval.receipt.digest) {
+      fail('release_pull_request_owner_receipt_consume_verify_failed')
+    }
+    approval = {
+      ...approval,
+      receipt: { ...approval.receipt, consumed: true },
+    }
+    ownerApprovalReceiptConsumed = true
 
-  const existingResponse = await githubRequest({
-    path: pullsQueryPath(gate.branch),
-    token: token.value,
-    request,
-  })
-  if (!existingResponse.ok) fail(`release_pull_request_list_failed:${existingResponse.status}`)
-  const existing = classifyExistingPulls(existingResponse.json, gate)
-  if (existing) {
+    const existingResponse = await githubRequest({
+      path: pullsQueryPath(gate.branch),
+      token: token.value,
+      request,
+    })
+    if (!existingResponse.ok) fail(`release_pull_request_list_failed:${existingResponse.status}`)
+    const existing = classifyExistingPulls(existingResponse.json, gate)
+    if (existing) {
+      const body = {
+        ok: true,
+        contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
+        digestScope: 'utf8_compact_json_without_digest',
+        mode: 'executed_owner_approved_existing_pr_no_write',
+        repository: REPOSITORY,
+        releaseHandoff: {
+          path: handoffReceipt.path || null,
+          digest: handoffReceipt.digest || null,
+          packetDigest: handoffReceipt.packet?.digest || null,
+        },
+        candidate: { branch: gate.branch, head: gate.commit, clean: true },
+        approval,
+        githubMainProtection: mainProtection,
+        token: { present: true, env: token.key, source: token.source || null, valueExposed: false },
+        verification: {
+          releaseHandoffCurrent: true,
+          remoteBranchObservedAtCreate: observedRemote,
+          remoteBranchExactAtCreate: true,
+          existingPullRequestCheckedBeforeCreate: true,
+          existingPullRequestResult: 'exact_open_pr_reused',
+          duplicatePullRequestCreated: false,
+        },
+        pullRequest: {
+          number: existing.number,
+          state: existing.state,
+          head: existing.head.ref,
+          base: existing.base.ref,
+          url: existing.html_url || null,
+        },
+        controls: {
+          githubWritesApproved: true,
+          ...githubWriteControls({ attempted: false, outcome: WRITE_CONFIRMED_NOT_PERFORMED }),
+          ownerApprovalReceiptConsumed: true,
+          repositorySettingsMutated: false,
+          branchMutated: false,
+          forcePushPerformed: false,
+          branchDeletionPerformed: false,
+          mergePerformed: false,
+          workflowDispatchPerformed: false,
+          deploymentPerformed: false,
+          supabaseMutated: false,
+          credentialValueExposed: false,
+        },
+      }
+      assertNoSecretEcho(body)
+      return signed(body)
+    }
+
+    const payload = buildCreatePullRequestPayload({ gate, handoffReceipt })
+    let created = null
+    let createFailure = null
+    githubWriteAttempted = true
+    try {
+      created = await githubRequest({
+        path: '/pulls',
+        method: 'POST',
+        token: token.value,
+        body: payload,
+        request,
+      })
+    } catch (error) {
+      createFailure = error
+    }
+    if (created && !created.ok && created.status >= 400 && created.status < 500) {
+      throw writeFailure(`release_pull_request_create_failed:${created.status}`, {
+        attempted: true,
+        outcome: WRITE_CONFIRMED_NOT_PERFORMED,
+        ownerApprovalReceiptConsumed,
+      })
+    }
+    if (created && !created.ok) createFailure = new Error(`release_pull_request_create_failed:${created.status}`)
+    if (created?.ok && !exactPullRequestShape(created.json, gate)) {
+      createFailure = new Error('release_pull_request_create_response_invalid')
+    }
+
+    let readBackResponse
+    try {
+      readBackResponse = await githubRequest({
+        path: pullsQueryPath(gate.branch),
+        token: token.value,
+        request,
+      })
+    } catch (error) {
+      throw writeFailure('release_pull_request_write_outcome_unknown', {
+        attempted: true,
+        outcome: WRITE_OUTCOME_UNKNOWN,
+        ownerApprovalReceiptConsumed,
+      })
+    }
+    if (!readBackResponse.ok) {
+      throw writeFailure('release_pull_request_write_outcome_unknown', {
+        attempted: true,
+        outcome: WRITE_OUTCOME_UNKNOWN,
+        ownerApprovalReceiptConsumed,
+      })
+    }
+    const createdPull = classifyExistingPulls(readBackResponse.json, gate)
+    if (!createdPull) {
+      throw writeFailure('release_pull_request_write_outcome_unknown', {
+        attempted: true,
+        outcome: WRITE_OUTCOME_UNKNOWN,
+        ownerApprovalReceiptConsumed,
+      })
+    }
+    resolvedWriteOutcome = WRITE_CONFIRMED_PERFORMED
+
     const body = {
       ok: true,
       contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
       digestScope: 'utf8_compact_json_without_digest',
-      mode: 'executed_owner_approved_existing_pr_no_write',
+      mode: 'executed_owner_approved_github_pr_write',
       repository: REPOSITORY,
       releaseHandoff: {
         path: handoffReceipt.path || null,
@@ -1096,20 +1298,26 @@ export async function applyReleasePullRequestWithClient({
         remoteBranchObservedAtCreate: observedRemote,
         remoteBranchExactAtCreate: true,
         existingPullRequestCheckedBeforeCreate: true,
-        existingPullRequestResult: 'exact_open_pr_reused',
+        existingPullRequestResult: 'none_before_create',
+        postCreateReadBackExact: true,
         duplicatePullRequestCreated: false,
       },
+      action: {
+        method: 'POST',
+        path: `/repos/${REPOSITORY}/pulls`,
+        status: created?.status ?? null,
+        responseFailure: createFailure ? safeFailureCode(createFailure) : null,
+      },
       pullRequest: {
-        number: existing.number,
-        state: existing.state,
-        head: existing.head.ref,
-        base: existing.base.ref,
-        url: existing.html_url || null,
+        number: createdPull.number,
+        state: createdPull.state,
+        head: createdPull.head.ref,
+        base: createdPull.base.ref,
+        url: createdPull.html_url || null,
       },
       controls: {
         githubWritesApproved: true,
-        githubWritesPerformed: false,
-        pullRequestCreated: false,
+        ...githubWriteControls({ attempted: true, outcome: WRITE_CONFIRMED_PERFORMED }),
         ownerApprovalReceiptConsumed: true,
         repositorySettingsMutated: false,
         branchMutated: false,
@@ -1124,78 +1332,13 @@ export async function applyReleasePullRequestWithClient({
     }
     assertNoSecretEcho(body)
     return signed(body)
+  } catch (error) {
+    throwWithWriteOutcome(error, {
+      attempted: githubWriteAttempted,
+      resolvedOutcome: resolvedWriteOutcome,
+      ownerApprovalReceiptConsumed,
+    })
   }
-
-  const payload = buildCreatePullRequestPayload({ gate, handoffReceipt })
-  const created = await githubRequest({
-    path: '/pulls',
-    method: 'POST',
-    token: token.value,
-    body: payload,
-    request,
-  })
-  if (!created.ok) fail(`release_pull_request_create_failed:${created.status}`)
-  if (created.json?.state !== 'open'
-    || created.json?.head?.ref !== gate.branch
-    || created.json?.head?.sha !== gate.commit
-    || created.json?.base?.ref !== BASE_BRANCH
-    || !Number.isSafeInteger(created.json?.number)) {
-    fail('release_pull_request_create_response_invalid')
-  }
-
-  const body = {
-    ok: true,
-    contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
-    digestScope: 'utf8_compact_json_without_digest',
-    mode: 'executed_owner_approved_github_pr_write',
-    repository: REPOSITORY,
-    releaseHandoff: {
-      path: handoffReceipt.path || null,
-      digest: handoffReceipt.digest || null,
-      packetDigest: handoffReceipt.packet?.digest || null,
-    },
-    candidate: { branch: gate.branch, head: gate.commit, clean: true },
-    approval,
-    githubMainProtection: mainProtection,
-    token: { present: true, env: token.key, source: token.source || null, valueExposed: false },
-    verification: {
-      releaseHandoffCurrent: true,
-      remoteBranchObservedAtCreate: observedRemote,
-      remoteBranchExactAtCreate: true,
-      existingPullRequestCheckedBeforeCreate: true,
-      existingPullRequestResult: 'none_before_create',
-      duplicatePullRequestCreated: false,
-    },
-    action: {
-      method: 'POST',
-      path: `/repos/${REPOSITORY}/pulls`,
-      status: created.status,
-    },
-    pullRequest: {
-      number: created.json.number,
-      state: created.json.state,
-      head: created.json.head.ref,
-      base: created.json.base.ref,
-      url: created.json.html_url || null,
-    },
-    controls: {
-      githubWritesApproved: true,
-      githubWritesPerformed: true,
-      pullRequestCreated: true,
-      ownerApprovalReceiptConsumed: true,
-      repositorySettingsMutated: false,
-      branchMutated: false,
-      forcePushPerformed: false,
-      branchDeletionPerformed: false,
-      mergePerformed: false,
-      workflowDispatchPerformed: false,
-      deploymentPerformed: false,
-      supabaseMutated: false,
-      credentialValueExposed: false,
-    },
-  }
-  assertNoSecretEcho(body)
-  return signed(body)
 }
 
 function parseArgs(argv) {
@@ -1510,24 +1653,7 @@ async function main() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(JSON.stringify({
-      ok: false,
-      contract: RELEASE_PULL_REQUEST_APPLY_CONTRACT,
-      error: String(error?.message || 'release_pull_request_failed').slice(0, 240),
-      controls: {
-        githubWritesPerformed: false,
-        pullRequestCreated: false,
-        repositorySettingsMutated: false,
-        branchMutated: false,
-        forcePushPerformed: false,
-        branchDeletionPerformed: false,
-        mergePerformed: false,
-        workflowDispatchPerformed: false,
-        deploymentPerformed: false,
-        supabaseMutated: false,
-        credentialValueExposed: false,
-      },
-    }, null, 2))
+    console.error(JSON.stringify(buildReleasePullRequestFailureReceipt(error), null, 2))
     process.exitCode = 1
   })
 }
