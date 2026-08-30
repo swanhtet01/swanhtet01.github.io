@@ -798,6 +798,7 @@ requireContract('console errors and partial lead conversions are recorded with s
   && /const recordConsoleError = \(context, detail, meta = \{\}\) => captureError/.test(consoleApi)
   && /store\.logActivity\(\{ kind, summary, ref \}\)[\s\S]{0,180}console\.activity_log_failed/.test(consoleApi)
   && /const wonTransition = await store\.markLeadWon\(seg\[1\]\)\.catch\(async \(error\) =>/.test(consoleApi)
+  && /if \(!wonTransition \|\| wonTransition\.lead\?\.stage !== 'won'\)/.test(consoleApi)
   && /if \(wonTransition\.changed\) log\('won'/.test(consoleApi)
   && /replayed: !wonTransition\.changed/.test(consoleApi)
   && /export async function markLeadWon\(id\)/.test(consoleStore)

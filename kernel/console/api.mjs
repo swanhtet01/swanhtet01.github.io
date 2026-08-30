@@ -305,7 +305,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
           await recordConsoleError('console.lead_convert_won_stage_failed', error, { leadId: lead.id, clientId: client.id, projectId: project.id })
           return null
         })
-        if (!wonTransition) {
+        if (!wonTransition || wonTransition.lead?.stage !== 'won') {
           await recordConsoleError('console.lead_convert_partial_project', 'lead_won_stage_not_recorded', { leadId: lead.id, clientId: client.id, projectId: project.id })
           return bad(500, 'lead_won_stage_update_failed')
         }

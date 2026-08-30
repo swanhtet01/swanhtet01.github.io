@@ -163,11 +163,13 @@ test('lead conversion retry reconciles its partial project without duplicate cli
     const projectsBefore = (await store.listProjects()).length
     originalMarkLeadWon = store.markLeadWon
     let rejectWonOnce = true
+    let returnNonWonFor = ''
     store.markLeadWon = async (...args) => {
       if (args[0] === leadId && rejectWonOnce) {
         rejectWonOnce = false
         throw new Error('simulated_won_stage_failure')
       }
+      if (args[0] === returnNonWonFor) return { lead: await store.getLead(args[0]), changed: false }
       return originalMarkLeadWon(...args)
     }
 
@@ -199,6 +201,19 @@ test('lead conversion retry reconciles its partial project without duplicate cli
     assert.equal(replay.json.replayed, true)
     assert.equal(replay.json.project.id, partialProjects[0].id)
     assert.equal((await store.listProjects()).filter((project) => project.lead_id === leadId).length, 1)
+
+    const nonWonLeadId = `lead-convert-non-won-readback-${Date.now()}`
+    const nonWonProjectId = conversionRecordId('project', nonWonLeadId)
+    await store.insertLead({ id: nonWonLeadId, name: 'Race Owner', company: 'Race Shop', stage: 'qualified' })
+    returnNonWonFor = nonWonLeadId
+    const nonWon = await handle({
+      method: 'POST', path: `/api/leads/${nonWonLeadId}`, query: { action: 'convert' }, headers, body: {},
+    })
+    assert.equal(nonWon.status, 500)
+    assert.equal(nonWon.json.reason, 'lead_won_stage_update_failed')
+    assert.equal((await store.getLead(nonWonLeadId)).stage, 'qualified')
+    assert.equal((await store.listActivity(100)).filter((entry) => entry.kind === 'won' && entry.ref === nonWonProjectId).length, 0)
+    returnNonWonFor = ''
 
     const ambiguousLeadId = `lead-convert-ambiguous-${Date.now()}`
     await store.insertLead({ id: ambiguousLeadId, name: 'Ambiguous Owner', company: 'Ambiguous Shop', stage: 'qualified' })
@@ -357,6 +372,8 @@ test('console error handling contract records safe metadata and never request bo
   assert.match(storeSource, /if \(mem\.client\.has\(row\.id\)\) throw new Error\('console_client_id_conflict'\)/)
   assert.match(storeSource, /if \(mem\.project\.has\(row\.id\)\) throw new Error\('console_project_id_conflict'\)/)
   assert.match(storeSource, /export async function markLeadWon\(id\)/)
+  assert.match(storeSource, /return lead\?\.stage === 'won' \? \{ lead, changed: false \} : null/)
+  assert.match(source, /if \(!wonTransition \|\| wonTransition\.lead\?\.stage !== 'won'\)/)
   assert.match(source, /replayed: true/)
   assert.match(source, /await recordConsoleError\('console\.api_unhandled_error', err, \{ method, path: safePath\(path\) \}\)/)
   assert.doesNotMatch(source, /console\.api_unhandled_error[\s\S]{0,160}body/)

@@ -365,15 +365,21 @@ export async function markLeadWon(id) {
   if (!id) return null
   if (mode === 'supabase') {
     const changed = await rest('PATCH', `supermega_leads?lead_id=eq.${encodeURIComponent(id)}&or=(lead_stage.neq.won,lead_stage.is.null)`, { lead_stage: 'won' })
-    if (changed?.[0]) return { lead: mapLead(changed[0]), changed: true }
+    if (changed?.[0]) {
+      const lead = mapLead(changed[0])
+      return lead.stage === 'won' ? { lead, changed: true } : null
+    }
     const lead = await getLead(id)
-    return lead ? { lead, changed: false } : null
+    return lead?.stage === 'won' ? { lead, changed: false } : null
   }
   if (mode === 'postgres') {
     const changed = await q(`update public.supermega_leads set lead_stage='won' where lead_id=$1 and lead_stage is distinct from 'won' returning ${LEAD_COLS}`, [id])
-    if (changed[0]) return { lead: mapLead(changed[0]), changed: true }
+    if (changed[0]) {
+      const lead = mapLead(changed[0])
+      return lead.stage === 'won' ? { lead, changed: true } : null
+    }
     const lead = await getLead(id)
-    return lead ? { lead, changed: false } : null
+    return lead?.stage === 'won' ? { lead, changed: false } : null
   }
   const current = mem.lead.get(id)
   if (!current) return null
