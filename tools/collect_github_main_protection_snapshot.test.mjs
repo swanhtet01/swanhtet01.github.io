@@ -51,7 +51,6 @@ const listedRuleset = {
   name: 'SuperMega main release gate',
   target: 'branch',
   enforcement: 'active',
-  conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
   rules: [],
 }
 
@@ -155,6 +154,7 @@ test('collector expands ruleset list entries before protection assessment', asyn
     '/repos/swanhtet01/swanhtet01.github.io/rulesets',
     '/repos/swanhtet01/swanhtet01.github.io/rulesets/123',
   ])
+  assert.equal(Object.hasOwn(listedRuleset, 'conditions'), false)
   assert.deepEqual(packet.rulesets, sanitizeRulesetsSnapshot(rulesets))
 })
 
@@ -186,12 +186,14 @@ test('collector retries the full ruleset endpoint after a transient required-det
   assert.deepEqual(packet.rulesets, sanitizeRulesetsSnapshot(rulesets))
 })
 
-test('collector rejects malformed, mismatched, and empty required details after bounded retries without writing', async () => {
+test('collector rejects mismatched shared identity and empty required details after bounded retries without writing', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-main-protection-detail-no-write-'))
   const paths = [join(directory, 'snapshot.json'), join(directory, 'branch.json'), join(directory, 'rulesets.json')]
   const invalidDetails = [
-    null,
     { ...rulesets[0], id: 999 },
+    { ...rulesets[0], name: 'Different release gate' },
+    { ...rulesets[0], target: 'tag' },
+    { ...rulesets[0], enforcement: 'disabled' },
     { ...rulesets[0], rules: [] },
   ]
   let listCalls = 0
@@ -202,7 +204,7 @@ test('collector rejects malformed, mismatched, and empty required details after 
         outputPath: paths[0],
         branchOutputPath: paths[1],
         rulesetsOutputPath: paths[2],
-        attempts: 3,
+        attempts: 5,
         request: async (url) => {
           if (String(url).endsWith('/branches/main')) return jsonResponse(branch)
           if (String(url).endsWith('/rulesets')) {
@@ -221,8 +223,8 @@ test('collector rejects malformed, mismatched, and empty required details after 
       }),
       /github_main_protection_snapshot_unavailable:github_main_protection_snapshot_ruleset_detail_invalid/,
     )
-    assert.equal(listCalls, 3)
-    assert.equal(detailCalls, 3)
+    assert.equal(listCalls, 5)
+    assert.equal(detailCalls, 5)
     await assertOutputsAbsent(paths)
   } finally {
     await removeTestDirectory(directory, paths)

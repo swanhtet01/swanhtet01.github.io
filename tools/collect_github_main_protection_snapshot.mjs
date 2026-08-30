@@ -467,14 +467,23 @@ async function githubGetJson(url, { env = process.env, request = fetch } = {}) {
 function rulesetIdentity(ruleset) {
   if (!isRecord(ruleset)) return null
   const id = /^\d+$/.test(String(ruleset.id || '')) ? String(ruleset.id) : null
-  if (!id) return null
-  const sanitized = sanitizeRulesetsSnapshot([ruleset])[0]
+  const name = typeof ruleset.name === 'string' && ruleset.name === ruleset.name.trim() && ruleset.name.length <= 160
+    ? ruleset.name
+    : null
+  const target = typeof ruleset.target === 'string' && ruleset.target === ruleset.target.trim() && ruleset.target.length <= 80
+    ? ruleset.target
+    : null
+  const enforcement = typeof ruleset.enforcement === 'string'
+    && ruleset.enforcement === ruleset.enforcement.trim()
+    && ruleset.enforcement.length <= 80
+    ? ruleset.enforcement
+    : null
+  if (!id || !name || !target || !enforcement) return null
   return {
     id,
-    name: sanitized.name,
-    target: sanitized.target,
-    enforcement: sanitized.enforcement,
-    conditions: sanitized.conditions,
+    name,
+    target,
+    enforcement,
   }
 }
 
