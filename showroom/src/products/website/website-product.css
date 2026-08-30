@@ -1881,6 +1881,7 @@
 .website-today-metrics span { min-width: 0; display: grid; gap: 3px; padding: 10px 8px; background: var(--website-panel); }
 .website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
 .website-today-metrics strong { overflow: hidden; color: var(--website-ink); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.website-today-metrics span:last-child strong { overflow: visible; text-overflow: clip; white-space: normal; }
 
 .website-today-source {
   grid-column: 1 / -1;
