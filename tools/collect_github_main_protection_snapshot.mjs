@@ -12,6 +12,7 @@ import {
 } from './verify_github_main_protection.mjs'
 
 export const GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT = 'supermega.github-main-protection-snapshot.v1'
+export const GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS = 3
 
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const OWNER = 'swanhtet01'
@@ -21,6 +22,7 @@ const RULESETS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/rulesets`
 const RULESET_DETAIL_URL_PREFIX = `${RULESETS_URL}/`
 const TOKEN_ENVS = ['GITHUB_TOKEN', 'GH_TOKEN']
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+const MAX_COLLECTION_ATTEMPTS = 5
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const SECRET_PATTERNS = [
@@ -87,6 +89,20 @@ function boundedString(value, max = 160) {
   const text = String(value || '').trim()
   if (!text || text.length > max) return null
   return text
+}
+
+function boundedFailureReason(error) {
+  return String(error?.message || 'unknown')
+    .replace(/[^A-Za-z0-9_:.-]+/g, '_')
+    .slice(0, 120)
+}
+
+function retryableCollectionFailure(error) {
+  const reason = String(error?.message || '')
+  return reason === 'github_main_protection_snapshot_branch_invalid'
+    || reason === 'github_main_protection_snapshot_rulesets_invalid'
+    || reason === 'github_main_protection_snapshot_response_json_invalid'
+    || reason.startsWith('github_main_protection_snapshot_fetch_failed:')
 }
 
 function asArray(value) {
@@ -368,22 +384,65 @@ async function writeJson(path, value) {
   return absolute
 }
 
+async function collectGitHubMainProtectionSnapshotAttempt({
+  env = process.env,
+  request = fetch,
+} = {}) {
+  const branch = await githubGetJson(BRANCH_URL, { env, request })
+  if (!isRecord(branch.json)
+    || branch.json.name !== 'main'
+    || exactShaOrNull(branch.json.commit?.sha) === null
+    || typeof branch.json.protected !== 'boolean') {
+    fail('github_main_protection_snapshot_branch_invalid')
+  }
+  const rulesets = await githubGetJson(RULESETS_URL, { env, request })
+  sanitizeRulesetsSnapshot(rulesets.json)
+  const expandedRulesets = await expandRulesetsWithDetails(rulesets.json, { env, request })
+  const tokenEnv = branch.tokenEnv || rulesets.tokenEnv || null
+  return {
+    packet: buildGitHubMainProtectionSnapshot({
+      branch: branch.json,
+      rulesets: expandedRulesets,
+      tokenEnv,
+    }),
+  }
+}
+
 export async function collectGitHubMainProtectionSnapshot({
   outputPath = null,
   branchOutputPath = null,
   rulesetsOutputPath = null,
   env = process.env,
   request = fetch,
+  attempts = GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
+  delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
-  const branch = await githubGetJson(BRANCH_URL, { env, request })
-  const rulesets = await githubGetJson(RULESETS_URL, { env, request })
-  const expandedRulesets = await expandRulesetsWithDetails(rulesets.json, { env, request })
-  const tokenEnv = branch.tokenEnv || rulesets.tokenEnv || null
-  const packet = buildGitHubMainProtectionSnapshot({
-    branch: branch.json,
-    rulesets: expandedRulesets,
-    tokenEnv,
-  })
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > MAX_COLLECTION_ATTEMPTS) {
+    fail('github_main_protection_snapshot_attempts_invalid')
+  }
+  if (typeof delay !== 'function') {
+    fail('github_main_protection_snapshot_retry_contract_invalid')
+  }
+  let packet = null
+  let lastError = null
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await collectGitHubMainProtectionSnapshotAttempt({ env, request })
+      if (!isRecord(result) || !isRecord(result.packet)) {
+        fail('github_main_protection_snapshot_result_invalid')
+      }
+      packet = validateGitHubMainProtectionSnapshot(result.packet)
+      break
+    } catch (error) {
+      if (!retryableCollectionFailure(error)) throw error
+      lastError = error
+      if (attempt >= attempts) break
+      await delay(250 * attempt)
+    }
+  }
+  if (!packet) {
+    fail(`github_main_protection_snapshot_unavailable:${boundedFailureReason(lastError)}`)
+  }
   const outputs = {
     packet: outputPath ? await writeJson(outputPath, packet) : null,
     branch: branchOutputPath ? await writeJson(branchOutputPath, packet.branch) : null,

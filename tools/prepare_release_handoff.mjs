@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 
 import {
+  GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
   GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
   collectGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
@@ -25,7 +26,6 @@ const PUBLIC_RELEASE_URL = 'https://supermega.dev/__release.json'
 const LEGACY_RELEASE_BRANCH = 'agent/supermega-release-candidate'
 const MAX_OUTPUT_BYTES = 1_000_000
 const MAX_LIVE_BYTES = 65_536
-const GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS = 3
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const BRANCH_PATTERN = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
@@ -217,35 +217,28 @@ function githubMainProtectionState(value) {
   return state
 }
 
-function boundedFailureReason(error) {
-  return String(error?.message || 'unknown')
-    .replace(/[^A-Za-z0-9_:.-]+/g, '_')
-    .slice(0, 120)
-}
-
 export async function collectGitHubMainProtectionSnapshotForHandoff({
   collect = collectGitHubMainProtectionSnapshot,
   attempts = GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
-  delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  delay,
 } = {}) {
-  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 5) {
-    fail('release_handoff_github_main_protection_snapshot_attempts_invalid')
-  }
-  let lastError = null
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const result = await collect()
-      if (!isRecord(result) || !isRecord(result.packet)) {
-        fail('release_handoff_github_main_protection_snapshot_result_invalid')
-      }
-      return result
-    } catch (error) {
-      lastError = error
-      if (attempt >= attempts) break
-      await delay(250 * attempt)
+  try {
+    const result = await collect({ attempts, delay })
+    if (!isRecord(result) || !isRecord(result.packet)) {
+      fail('release_handoff_github_main_protection_snapshot_result_invalid')
     }
+    return result
+  } catch (error) {
+    const reason = String(error?.message || '')
+    if (reason === 'github_main_protection_snapshot_attempts_invalid') {
+      fail('release_handoff_github_main_protection_snapshot_attempts_invalid')
+    }
+    const prefix = 'github_main_protection_snapshot_unavailable:'
+    if (reason.startsWith(prefix)) {
+      fail(`release_handoff_github_main_protection_snapshot_unavailable:${reason.slice(prefix.length)}`)
+    }
+    throw error
   }
-  fail(`release_handoff_github_main_protection_snapshot_unavailable:${boundedFailureReason(lastError)}`)
 }
 
 function reviewBranchPushAction({ remoteBranchState, branch, candidateCommit }) {

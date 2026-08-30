@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { access, mkdtemp, readFile, rm, rmdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -41,6 +44,21 @@ const rulesets = [{
     },
   ],
 }]
+
+function jsonResponse(body) {
+  return {
+    ok: true,
+    status: 200,
+    async text() {
+      return JSON.stringify(body)
+    },
+  }
+}
+
+async function removeTestDirectory(directory, paths) {
+  for (const path of paths) await rm(path, { force: true })
+  await rmdir(directory)
+}
 
 test('sanitizes branch snapshots down to verifier fields and removes identity details', () => {
   const sanitized = sanitizeBranchSnapshot(branch)
@@ -117,6 +135,82 @@ test('collector expands ruleset list entries before protection assessment', asyn
   assert.equal(packet.assessment.ok, true)
   assert.ok(calls.some((url) => url.endsWith('/rulesets/123')))
   assert.deepEqual(packet.rulesets[0].rules.map((rule) => rule.type), ['deletion', 'non_fast_forward', 'pull_request', 'required_status_checks'])
+})
+
+test('collector retries null and non-record branch responses before writing one complete packet', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-main-protection-retry-'))
+  const outputPath = join(directory, 'snapshot.json')
+  const branchOutputPath = join(directory, 'branch.json')
+  const rulesetsOutputPath = join(directory, 'rulesets.json')
+  const branchResponses = [null, [], branch]
+  const delays = []
+  let branchCalls = 0
+  let rulesetsCalls = 0
+  const request = async (url) => {
+    if (String(url).endsWith('/branches/main')) {
+      const response = branchResponses[branchCalls]
+      branchCalls += 1
+      return jsonResponse(response)
+    }
+    if (String(url).endsWith('/rulesets')) {
+      rulesetsCalls += 1
+      return jsonResponse(rulesets)
+    }
+    throw new Error(`unexpected_url:${url}`)
+  }
+  try {
+    const result = await collectGitHubMainProtectionSnapshot({
+      outputPath,
+      branchOutputPath,
+      rulesetsOutputPath,
+      request,
+      env: {},
+      attempts: 3,
+      delay: async (milliseconds) => delays.push(milliseconds),
+    })
+    assert.equal(branchCalls, 3)
+    assert.equal(rulesetsCalls, 1)
+    assert.deepEqual(delays, [250, 500])
+    assert.equal(result.packet.assessment.ok, true)
+    assert.deepEqual(JSON.parse(await readFile(outputPath, 'utf8')), result.packet)
+    assert.deepEqual(JSON.parse(await readFile(branchOutputPath, 'utf8')), result.packet.branch)
+    assert.deepEqual(JSON.parse(await readFile(rulesetsOutputPath, 'utf8')), result.packet.rulesets)
+  } finally {
+    await removeTestDirectory(directory, [outputPath, branchOutputPath, rulesetsOutputPath])
+  }
+})
+
+test('collector exhausts bounded malformed-branch retries without writing any output', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-main-protection-no-write-'))
+  const outputPath = join(directory, 'snapshot.json')
+  const branchOutputPath = join(directory, 'branch.json')
+  const rulesetsOutputPath = join(directory, 'rulesets.json')
+  let branchCalls = 0
+  const request = async (url) => {
+    assert.ok(String(url).endsWith('/branches/main'))
+    branchCalls += 1
+    return jsonResponse(null)
+  }
+  try {
+    await assert.rejects(
+      collectGitHubMainProtectionSnapshot({
+        outputPath,
+        branchOutputPath,
+        rulesetsOutputPath,
+        request,
+        env: {},
+        attempts: 3,
+        delay: async () => {},
+      }),
+      /github_main_protection_snapshot_unavailable:github_main_protection_snapshot_branch_invalid/,
+    )
+    assert.equal(branchCalls, 3)
+    for (const path of [outputPath, branchOutputPath, rulesetsOutputPath]) {
+      await assert.rejects(access(path), (error) => error?.code === 'ENOENT')
+    }
+  } finally {
+    await removeTestDirectory(directory, [outputPath, branchOutputPath, rulesetsOutputPath])
+  }
 })
 
 test('rejects tampered write controls and digest mismatch', () => {

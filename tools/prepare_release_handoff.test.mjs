@@ -173,27 +173,35 @@ test('release handoff preserves fast-forward-only push for a different ancestor 
   assert.deepEqual(packet.actions.reviewBranchPush, packet.nextAction)
 })
 
-test('GitHub main protection snapshot collection retries transient read-only failures', async () => {
+test('release handoff delegates once to the centralized protection snapshot retry contract', async () => {
+  const delay = async () => {}
   let calls = 0
+  let receivedOptions = null
   const result = await collectGitHubMainProtectionSnapshotForHandoff({
-    delay: async () => {},
-    collect: async () => {
+    attempts: 2,
+    delay,
+    collect: async (options) => {
       calls += 1
-      if (calls === 1) throw new Error('github_main_protection_snapshot_rulesets_invalid')
+      receivedOptions = options
       return { packet: protectedMainSnapshot() }
     },
   })
-  assert.equal(calls, 2)
+  assert.equal(calls, 1)
+  assert.equal(receivedOptions.attempts, 2)
+  assert.equal(receivedOptions.delay, delay)
   assert.equal(result.packet.assessment.ok, true)
   await assert.rejects(
     collectGitHubMainProtectionSnapshotForHandoff({
       attempts: 2,
-      delay: async () => {},
       collect: async () => {
-        throw new Error('github_main_protection_snapshot_rulesets_invalid')
+        throw new Error('github_main_protection_snapshot_unavailable:github_main_protection_snapshot_rulesets_invalid')
       },
     }),
     /release_handoff_github_main_protection_snapshot_unavailable:github_main_protection_snapshot_rulesets_invalid/,
+  )
+  await assert.rejects(
+    collectGitHubMainProtectionSnapshotForHandoff({ attempts: 0 }),
+    /release_handoff_github_main_protection_snapshot_attempts_invalid/,
   )
 })
 
