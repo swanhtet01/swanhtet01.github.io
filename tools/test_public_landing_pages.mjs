@@ -12,6 +12,8 @@ const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'u
 const config = JSON.parse(readFileSync(resolve(root, '.vercel', 'output', 'config.json'), 'utf8'))
 const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
 const publicObservabilitySource = readStatic('vercel-insights.js')
+const publicGeneratorSource = readFileSync(resolve(root, 'tools/create_public_vercel_output.mjs'), 'utf8')
+const skipLinkTouchTargetCss = '.skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }'
 
 let checks = 0
 function check(condition, label) {
@@ -25,6 +27,7 @@ function countOccurrences(source, token) {
 
 const landingPages = manifest.pages.filter((page) => page.productId)
 check(landingPages.map((page) => page.route).join(',') === '/shop/,/plant/,/website/,/ecommerce/', 'landing_route_set')
+check(countOccurrences(publicGeneratorSource, skipLinkTouchTargetCss) === 1, 'landing_skip_link_touch_target_source_contract')
 
 // Route resolution: landing routes must reach the filesystem handler untouched, while the
 // slash-less and deep variants must 308 onto the canonical landing route.
@@ -65,6 +68,7 @@ for (const page of landingPages) {
   check(html.includes('<meta property="og:image:width" content="1200" />') && html.includes('<meta property="og:image:height" content="630" />'), `landing_og_image_dimensions:${page.route}`)
   check(html.includes('<meta name="twitter:card" content="summary_large_image" />') && html.includes(`<meta name="twitter:image" content="${shareImage}" />`), `landing_twitter_card:${page.route}`)
   check(html.includes('<a class="skip-link" href="#content">Skip to content</a>') && html.includes('id="content"'), `landing_skip_link:${page.route}`)
+  check(countOccurrences(html, skipLinkTouchTargetCss) === 1, `landing_skip_link_touch_target_output_contract:${page.route}`)
   const schemaBlocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
   check(schemaBlocks.length === 1, `landing_structured_data_count:${page.route}`)
   const schema = JSON.parse(schemaBlocks[0]?.[1] || '{}')

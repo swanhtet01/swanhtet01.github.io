@@ -125,7 +125,7 @@ const sharedStyle = `
   a { color: inherit; }
   button, input, select, textarea { font: inherit; }
   img, svg { display: block; max-width: 100%; }
-  .skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }
+  .skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }
   .skip-link:focus { transform: translateY(0); }
   .shell { min-height: 100svh; }
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
