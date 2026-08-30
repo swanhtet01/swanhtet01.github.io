@@ -97,7 +97,10 @@ function assertLine(value, maxLength, code) {
 
 function assertDate(value, code) {
   const normalized = String(value || '').trim()
-  if (!DATE_PATTERN.test(normalized) || Number.isNaN(Date.parse(`${normalized}T00:00:00.000Z`))) fail(code)
+  const parsed = new Date(`${normalized}T00:00:00.000Z`)
+  if (!DATE_PATTERN.test(normalized)
+    || Number.isNaN(parsed.getTime())
+    || parsed.toISOString().slice(0, 10) !== normalized) fail(code)
   return normalized
 }
 

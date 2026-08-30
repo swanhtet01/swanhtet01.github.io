@@ -207,6 +207,31 @@ test('fails closed when an action lacks source evidence, owner, due date, or exa
   })), /operating_action_board_weekly_report_stale/)
 })
 
+test('requires exact UTC calendar dates while preserving leap days and year boundaries', () => {
+  const withDueDate = (dueDate) => {
+    const candidate = action({ dueDate })
+    return board({
+      actions: [candidate],
+      weeklyReport: buildOperatingActionBoardSummary([candidate]),
+    })
+  }
+  for (const impossible of [
+    '2026-02-29',
+    '2026-02-30',
+    '2026-02-31',
+    '2026-04-31',
+    '2026-00-10',
+    '2026-13-01',
+    '2026-01-00',
+    '2026-01-32',
+  ]) {
+    assert.throws(() => validateOperatingActionBoard(withDueDate(impossible)), /operating_action_due_date_invalid/, impossible)
+  }
+  for (const valid of ['2024-02-29', '2026-12-31', '2027-01-01']) {
+    assert.equal(validateOperatingActionBoard(withDueDate(valid)).actions[0].dueDate, valid)
+  }
+})
+
 test('rejects private identity, external effects, fifth-product AI, and credential-shaped text', () => {
   assert.throws(() => validateOperatingActionBoard(board({
     actions: [action({ owner: { role: 'Named customer owner', namedPrivate: true } })],

@@ -42,6 +42,13 @@ const OFFER_USD = { 'tool-week': 600, dashboard: 1800, 'ai-agent': 2500, 'design
 const priceOf = (offer) => OFFER_USD[offer] || OFFER_USD.build
 const aiConfigured = () => providerChain().length > 0
 
+function leadConversionClientId(leadId) {
+  const digest = crypto.createHash('sha256')
+    .update(`supermega.lead-conversion-client.v1:${leadId}`)
+    .digest('hex')
+  return `lead-client-${digest.slice(0, 40)}`
+}
+
 function operatorAiBudgetStatus(usage, window, capUnits) {
   const contract = 'supermega.company-ai-budget-status.v1'
   const unavailable = {
@@ -250,8 +257,19 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       if (method === 'POST' && seg[1] && !seg[2] && query.action === 'convert') {
         const lead = await store.getLead(seg[1])
         if (!lead) return bad(404, 'lead_not_found')
-        const client = await store.createClient({ name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] })
-        const project = await store.createProject({ client_id: client.id, lead_id: lead.id, offer: lead.package || body.offer || 'build', status: 'scoping' })
+        const matchingProjects = (await store.listProjects()).filter((project) => project.lead_id === lead.id)
+        if (matchingProjects.length > 1) return bad(409, 'lead_conversion_ambiguous')
+        let project = matchingProjects[0] || null
+        let client = project?.client_id ? await store.getClient(project.client_id) : null
+        if (project && !client) return bad(409, 'lead_conversion_client_missing')
+        const replayed = Boolean(project)
+        if (!project) {
+          const clientId = leadConversionClientId(lead.id)
+          client = await store.getClient(clientId)
+            || await store.createClient({ id: clientId, name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] })
+          project = await store.createProject({ client_id: client.id, lead_id: lead.id, offer: lead.package || body.offer || 'build', status: 'scoping' })
+        }
+        if (replayed && lead.stage === 'won') return ok({ ok: true, client, project, lead, replayed: true })
         const wonLead = await store.updateLead(seg[1], { stage: 'won' }).catch(async (error) => {
           await recordConsoleError('console.lead_convert_won_stage_failed', error, { leadId: lead.id, clientId: client.id, projectId: project.id })
           return null
@@ -261,7 +279,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
           return bad(500, 'lead_won_stage_update_failed')
         }
         log('won', `Won ${lead.company || lead.name} → ${project.offer} project`, project.id)
-        return ok({ ok: true, client, project, lead: wonLead })
+        return ok({ ok: true, client, project, lead: wonLead, replayed })
       }
     }
 
