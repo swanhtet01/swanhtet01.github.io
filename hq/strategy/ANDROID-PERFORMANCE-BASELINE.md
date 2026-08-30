@@ -578,6 +578,29 @@ achievable without also moving those two blockers — and note that
 `theme-restore.js` cannot simply be deferred, because it exists to prevent a
 dark-theme user seeing a light flash.
 
-Remaining identified FCP levers, unchanged: shrinking the 91 KB gz entry set,
-and the two render-blockers named above.
+Dark theme verified rather than assumed: with
+`supermega-interface-theme=dark` in localStorage and CPU throttled x20, the
+shell sampled at t=428 ms reads `background: rgb(5, 8, 13)` with
+`#root.children.length === 0` — genuinely pre-mount, and dark on the first
+frame. No light flash.
+
+### Remaining identified FCP levers
+
+1. **Shrink the 91 KB gz entry set.** Needs its own planning pass.
+2. **The 35 KB render-blocking stylesheet.**
+3. **`/theme-restore.js` — a 253-byte file costing a whole round trip.** Worth
+   naming precisely because there is an obvious-looking fix that is a trap.
+   The file is tiny, so its ~400 ms cost on this profile is almost entirely
+   latency, and inlining it would remove that from the critical path. **Do not
+   simply inline it.** `script-src 'self'` has no `'unsafe-inline'`, so an
+   inline block is silently REFUSED — that exact failure is why the service
+   worker never registered for months (G3), and `verify_app_build.mjs` now
+   fails the build on any inline `<script>` in the shell specifically to keep
+   it from recurring. Making this work would mean adding a `'sha256-...'`
+   source to the policy in BOTH `index.html`'s meta and `vercel.json`, keeping
+   the hash in lockstep with the script body, and deliberately relaxing a
+   guard whose comment explains why it exists. That is a security-surface
+   change, not a perf tweak, and it needs its own pass with that framing —
+   the payoff is roughly 400 ms, which is real but does not justify doing it
+   carelessly.
 
