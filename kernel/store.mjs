@@ -392,7 +392,7 @@ export async function getClient(id) {
   return mem.client.get(id) || null
 }
 export async function createProject(p) {
-  const row = { id: randomUUID(), client_id: p.client_id || null, lead_id: p.lead_id || null, offer: p.offer || 'build', scope_summary: p.scope_summary || '', status: p.status || 'scoping', deposit_status: p.deposit_status || 'unpaid' }
+  const row = { id: String(p.id || randomUUID()), client_id: p.client_id || null, lead_id: p.lead_id || null, offer: p.offer || 'build', scope_summary: p.scope_summary || '', status: p.status || 'scoping', deposit_status: p.deposit_status || 'unpaid' }
   if (mode === 'supabase') return (await rest('POST', 'supermega_console_projects', row))[0]
   if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_console_projects (id,client_id,lead_id,offer,scope_summary,status,deposit_status) values ($1,$2,$3,$4,$5,$6,$7) returning *', [row.id, row.client_id, row.lead_id, row.offer, row.scope_summary, row.status, row.deposit_status]))[0] }
   const rec = { ...row, created_at: new Date().toISOString() }; mem.project.set(rec.id, rec); return rec

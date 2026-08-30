@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
@@ -24,6 +25,13 @@ function restoreEnvironment(saved) {
 }
 
 const CONFORMING_KEY = 'console-error-recording-key-0123456789'
+
+function conversionRecordId(kind, leadId) {
+  const digest = createHash('sha256')
+    .update(`supermega.lead-conversion-${kind}.v1:${leadId}`)
+    .digest('hex')
+  return `lead-${kind}-${digest.slice(0, 40)}`
+}
 
 test('lead conversion records the won stage before it logs a clean win', async () => {
   const saved = captureEnvironment()
@@ -161,15 +169,98 @@ test('lead conversion retry reconciles its partial project without duplicate cli
   }
 })
 
+test('concurrent lead conversion writers resolve to one deterministic client and project', async () => {
+  const saved = captureEnvironment()
+  let store
+  let originalGetProject
+  try {
+    for (const name of ENV_KEYS) delete process.env[name]
+    process.env.SUPERMEGA_OPS_KEY = CONFORMING_KEY
+    const { handle } = await import(`./console/api.mjs?convert-concurrent=${Date.now()}-${Math.random()}`)
+    store = (await import('./store.mjs')).default
+    assert.equal(store.mode, 'memory', 'this test must not touch a real database')
+
+    const leadId = `lead-convert-concurrent-${Date.now()}`
+    const projectId = conversionRecordId('project', leadId)
+    const clientId = conversionRecordId('client', leadId)
+    const headers = { 'x-ops-key': CONFORMING_KEY }
+    await store.insertLead({ id: leadId, name: 'Concurrent Owner', company: 'Concurrent Shop', stage: 'qualified' })
+
+    originalGetProject = store.getProject
+    let waiting = 0
+    let release
+    const bothReadMissing = new Promise((resolveBarrier) => { release = resolveBarrier })
+    store.getProject = async (id) => {
+      if (id !== projectId) return originalGetProject(id)
+      waiting += 1
+      if (waiting === 2) release()
+      await bothReadMissing
+      if (waiting <= 2) return null
+      return originalGetProject(id)
+    }
+
+    const request = () => handle({
+      method: 'POST', path: `/api/leads/${leadId}`, query: { action: 'convert' }, headers, body: {},
+    })
+    const [first, second] = await Promise.all([request(), request()])
+    assert.equal(first.status, 200)
+    assert.equal(second.status, 200)
+    assert.equal(first.json.client.id, clientId)
+    assert.equal(second.json.client.id, clientId)
+    assert.equal(first.json.project.id, projectId)
+    assert.equal(second.json.project.id, projectId)
+    assert.equal((await store.listClients()).filter((client) => client.id === clientId).length, 1)
+    assert.equal((await store.listProjects()).filter((project) => project.lead_id === leadId).length, 1)
+  } finally {
+    if (store && originalGetProject) store.getProject = originalGetProject
+    restoreEnvironment(saved)
+  }
+})
+
+test('lead conversion rejects a deterministic client paired with another client project', async () => {
+  const saved = captureEnvironment()
+  try {
+    for (const name of ENV_KEYS) delete process.env[name]
+    process.env.SUPERMEGA_OPS_KEY = CONFORMING_KEY
+    const { handle } = await import(`./console/api.mjs?convert-lineage=${Date.now()}-${Math.random()}`)
+    const store = (await import('./store.mjs')).default
+    assert.equal(store.mode, 'memory', 'this test must not touch a real database')
+
+    const leadId = `lead-convert-lineage-${Date.now()}`
+    const deterministicClientId = conversionRecordId('client', leadId)
+    const headers = { 'x-ops-key': CONFORMING_KEY }
+    await store.insertLead({ id: leadId, name: 'Lineage Owner', company: 'Lineage Shop', stage: 'qualified' })
+    await store.createClient({ id: deterministicClientId, name: 'Deterministic conversion client' })
+    const otherClient = await store.createClient({ name: 'Other valid client' })
+    const conflictingProject = await store.createProject({ client_id: otherClient.id, lead_id: leadId, offer: 'build' })
+    const projectCount = (await store.listProjects()).length
+
+    const blocked = await handle({
+      method: 'POST', path: `/api/leads/${leadId}`, query: { action: 'convert' }, headers, body: {},
+    })
+    assert.equal(blocked.status, 409)
+    assert.equal(blocked.json.reason, 'lead_conversion_ambiguous')
+    assert.equal((await store.listProjects()).length, projectCount)
+    assert.equal((await store.getLead(leadId)).stage, 'qualified')
+    assert.equal((await store.getProject(conflictingProject.id)).client_id, otherClient.id)
+  } finally {
+    restoreEnvironment(saved)
+  }
+})
+
 test('console error handling contract records safe metadata and never request bodies', async () => {
   const source = await readFile(resolve(import.meta.dirname, 'console/api.mjs'), 'utf8')
+  const storeSource = await readFile(resolve(import.meta.dirname, 'store.mjs'), 'utf8')
   assert.match(source, /import \{ captureError \} from '\.\.\/alert\.mjs'/)
   assert.match(source, /const recordConsoleError = \(context, detail, meta = \{\}\) => captureError/)
   assert.match(source, /store\.updateLead\(seg\[1\], \{ stage: 'won' \}\)\.catch\(async \(error\) =>/)
   assert.match(source, /lead_won_stage_update_failed/)
   assert.match(source, /matchingProjects\.length > 1/)
   assert.match(source, /lead_conversion_ambiguous/)
-  assert.match(source, /leadConversionClientId\(lead\.id\)/)
+  assert.match(source, /leadConversionRecordId\('client', lead\.id\)/)
+  assert.match(source, /leadConversionRecordId\('project', lead\.id\)/)
+  assert.match(source, /store\.createProject\(\{ id: projectId,/)
+  assert.match(storeSource, /const row = \{ id: String\(p\.id \|\| randomUUID\(\)\), client_id:/)
   assert.match(source, /replayed: true/)
   assert.match(source, /await recordConsoleError\('console\.api_unhandled_error', err, \{ method, path: safePath\(path\) \}\)/)
   assert.doesNotMatch(source, /console\.api_unhandled_error[\s\S]{0,160}body/)
