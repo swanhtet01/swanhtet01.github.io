@@ -155,6 +155,78 @@ export function sanitizeBranchSnapshot(branch) {
   }
 }
 
+function fallbackBranchSnapshot(commit) {
+  return {
+    name: 'main',
+    protected: false,
+    commit: { sha: commit },
+    protection: {
+      enabled: false,
+      required_status_checks: { contexts: [], checks: [] },
+      allow_force_pushes: null,
+      allow_deletions: null,
+      required_pull_request_reviews: null,
+      required_conversation_resolution: null,
+    },
+  }
+}
+
+function endpointBranchEvidence(expectedRemoteMainCommit = null) {
+  return {
+    kind: 'github_branch_endpoint',
+    branchEndpointAvailable: true,
+    expectedRemoteMainCommit,
+    fallbackUsed: false,
+    classicBranchProtectionEvidence: 'endpoint_observed',
+  }
+}
+
+function fallbackBranchEvidence(expectedRemoteMainCommit) {
+  return {
+    kind: 'expected_remote_main_fallback',
+    branchEndpointAvailable: false,
+    expectedRemoteMainCommit,
+    fallbackUsed: true,
+    classicBranchProtectionEvidence: 'unavailable_not_claimed',
+  }
+}
+
+export function validateGitHubMainProtectionBranchEvidence(value, branch) {
+  if (!isRecord(value) || !isRecord(branch)) fail('github_main_protection_snapshot_branch_evidence_invalid')
+  const keys = Object.keys(value).sort().join(',')
+  if (keys !== 'branchEndpointAvailable,classicBranchProtectionEvidence,expectedRemoteMainCommit,fallbackUsed,kind') {
+    fail('github_main_protection_snapshot_branch_evidence_invalid')
+  }
+  const expectedRemoteMainCommit = value.expectedRemoteMainCommit === null
+    ? null
+    : exactShaOrNull(value.expectedRemoteMainCommit)
+  if (value.expectedRemoteMainCommit !== null && expectedRemoteMainCommit === null) {
+    fail('github_main_protection_snapshot_expected_main_invalid')
+  }
+  if (value.kind === 'github_branch_endpoint') {
+    if (value.branchEndpointAvailable !== true
+      || value.fallbackUsed !== false
+      || value.classicBranchProtectionEvidence !== 'endpoint_observed') {
+      fail('github_main_protection_snapshot_branch_evidence_invalid')
+    }
+    if (expectedRemoteMainCommit !== null && branch.commit?.sha !== expectedRemoteMainCommit) {
+      fail('github_main_protection_snapshot_expected_main_mismatch')
+    }
+    return endpointBranchEvidence(expectedRemoteMainCommit)
+  }
+  if (value.kind === 'expected_remote_main_fallback') {
+    if (expectedRemoteMainCommit === null
+      || value.branchEndpointAvailable !== false
+      || value.fallbackUsed !== true
+      || value.classicBranchProtectionEvidence !== 'unavailable_not_claimed'
+      || JSON.stringify(branch) !== JSON.stringify(fallbackBranchSnapshot(expectedRemoteMainCommit))) {
+      fail('github_main_protection_snapshot_fallback_branch_invalid')
+    }
+    return fallbackBranchEvidence(expectedRemoteMainCommit)
+  }
+  fail('github_main_protection_snapshot_branch_evidence_invalid')
+}
+
 function sanitizeRequiredStatusChecks(value) {
   return asArray(value).map((check) => ({
     context: boundedString(check?.context) || boundedString(check?.name),
@@ -214,12 +286,20 @@ export function buildGitHubMainProtectionSnapshot({
   branch,
   rulesets,
   tokenEnv = null,
+  branchEvidence = null,
 } = {}) {
   const generated = String(generatedAt || new Date().toISOString())
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(generated)) fail('github_main_protection_snapshot_time_invalid')
   const branchSnapshot = sanitizeBranchSnapshot(branch)
   const rulesetsSnapshot = sanitizeRulesetsSnapshot(rulesets)
+  const normalizedBranchEvidence = validateGitHubMainProtectionBranchEvidence(
+    branchEvidence || endpointBranchEvidence(null),
+    branchSnapshot,
+  )
   const assessment = assessGitHubMainProtection({ branch: branchSnapshot, rulesets: rulesetsSnapshot })
+  if (normalizedBranchEvidence.fallbackUsed && assessment.ok !== true) {
+    fail('github_main_protection_snapshot_fallback_rulesets_incomplete')
+  }
   const body = {
     contract: GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -232,6 +312,7 @@ export function buildGitHubMainProtectionSnapshot({
       tokenPresent: Boolean(tokenEnv),
       tokenEnv: tokenEnv || null,
       tokenValueExposed: false,
+      branchEvidence: normalizedBranchEvidence,
     },
     branch: branchSnapshot,
     rulesets: rulesetsSnapshot,
@@ -264,13 +345,40 @@ export function validateGitHubMainProtectionSnapshot(packet) {
   if (packet.mode !== 'read_only_no_github_write') fail('github_main_protection_snapshot_mode_invalid')
   if (packet.source?.branchUrl !== BRANCH_URL || packet.source?.rulesetsUrl !== RULESETS_URL) fail('github_main_protection_snapshot_source_invalid')
   if (packet.source?.tokenValueExposed !== false) fail('github_main_protection_snapshot_token_invalid')
+  const branchSnapshot = sanitizeBranchSnapshot(packet.branch)
+  const rulesetsSnapshot = sanitizeRulesetsSnapshot(packet.rulesets)
+  if (JSON.stringify(branchSnapshot) !== JSON.stringify(packet.branch)) fail('github_main_protection_snapshot_branch_invalid')
+  if (JSON.stringify(rulesetsSnapshot) !== JSON.stringify(packet.rulesets)) fail('github_main_protection_snapshot_rulesets_invalid')
+  const branchEvidence = validateGitHubMainProtectionBranchEvidence(packet.source?.branchEvidence, branchSnapshot)
+  if (JSON.stringify(branchEvidence) !== JSON.stringify(packet.source.branchEvidence)) {
+    fail('github_main_protection_snapshot_branch_evidence_invalid')
+  }
+  let tokenEnv = null
+  if (packet.source.tokenEnv !== null) {
+    if (!TOKEN_ENVS.includes(packet.source.tokenEnv)) fail('github_main_protection_snapshot_token_invalid')
+    tokenEnv = packet.source.tokenEnv
+  }
+  const normalizedSource = {
+    branchUrl: BRANCH_URL,
+    rulesetsUrl: RULESETS_URL,
+    tokenPresent: Boolean(tokenEnv),
+    tokenEnv,
+    tokenValueExposed: false,
+    branchEvidence,
+  }
+  if (JSON.stringify(normalizedSource) !== JSON.stringify(packet.source)) {
+    fail('github_main_protection_snapshot_source_invalid')
+  }
   if (!Array.isArray(packet.controls?.githubApiMethods) || packet.controls.githubApiMethods.join(',') !== 'GET') {
     fail('github_main_protection_snapshot_methods_invalid')
   }
   for (const [key, value] of Object.entries(packet.controls || {})) {
     if (key !== 'githubApiMethods' && value !== false) fail(`github_main_protection_snapshot_control_not_false:${key}`)
   }
-  const assessment = assessGitHubMainProtection({ branch: packet.branch, rulesets: packet.rulesets })
+  const assessment = assessGitHubMainProtection({ branch: branchSnapshot, rulesets: rulesetsSnapshot })
+  if (branchEvidence.fallbackUsed && assessment.ok !== true) {
+    fail('github_main_protection_snapshot_fallback_rulesets_incomplete')
+  }
   if (JSON.stringify(assessment) !== JSON.stringify(packet.assessment)) fail('github_main_protection_snapshot_assessment_invalid')
   const expectedAction = assessment.ok
     ? 'main_protection_verified_continue_to_review_branch_push'
@@ -384,10 +492,29 @@ async function writeJson(path, value) {
   return absolute
 }
 
-async function collectGitHubMainProtectionSnapshotAttempt({
-  env = process.env,
-  request = fetch,
-} = {}) {
+function explicitExpectedMainCommit(value) {
+  if (value === null || value === undefined) return null
+  const commit = exactShaOrNull(value)
+  if (!commit) fail('github_main_protection_snapshot_expected_main_invalid')
+  return commit
+}
+
+async function collectWithBoundedRetry(action, { attempts, delay }) {
+  let lastError = null
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return { ok: true, value: await action() }
+    } catch (error) {
+      if (!retryableCollectionFailure(error)) throw error
+      lastError = error
+      if (attempt >= attempts) break
+      await delay(250 * attempt)
+    }
+  }
+  return { ok: false, error: lastError }
+}
+
+async function collectBranchEndpoint({ env, request, expectedMainCommit }) {
   const branch = await githubGetJson(BRANCH_URL, { env, request })
   if (!isRecord(branch.json)
     || branch.json.name !== 'main'
@@ -395,16 +522,19 @@ async function collectGitHubMainProtectionSnapshotAttempt({
     || typeof branch.json.protected !== 'boolean') {
     fail('github_main_protection_snapshot_branch_invalid')
   }
+  const branchCommit = exactShaOrNull(branch.json.commit.sha)
+  if (expectedMainCommit !== null && branchCommit !== expectedMainCommit) {
+    fail('github_main_protection_snapshot_expected_main_mismatch')
+  }
+  return branch
+}
+
+async function collectRulesetsEndpoint({ env, request }) {
   const rulesets = await githubGetJson(RULESETS_URL, { env, request })
   sanitizeRulesetsSnapshot(rulesets.json)
-  const expandedRulesets = await expandRulesetsWithDetails(rulesets.json, { env, request })
-  const tokenEnv = branch.tokenEnv || rulesets.tokenEnv || null
   return {
-    packet: buildGitHubMainProtectionSnapshot({
-      branch: branch.json,
-      rulesets: expandedRulesets,
-      tokenEnv,
-    }),
+    json: await expandRulesetsWithDetails(rulesets.json, { env, request }),
+    tokenEnv: rulesets.tokenEnv,
   }
 }
 
@@ -416,6 +546,7 @@ export async function collectGitHubMainProtectionSnapshot({
   request = fetch,
   attempts = GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
   delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  expectedMainCommit = null,
 } = {}) {
   if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > MAX_COLLECTION_ATTEMPTS) {
     fail('github_main_protection_snapshot_attempts_invalid')
@@ -423,26 +554,39 @@ export async function collectGitHubMainProtectionSnapshot({
   if (typeof delay !== 'function') {
     fail('github_main_protection_snapshot_retry_contract_invalid')
   }
-  let packet = null
-  let lastError = null
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const result = await collectGitHubMainProtectionSnapshotAttempt({ env, request })
-      if (!isRecord(result) || !isRecord(result.packet)) {
-        fail('github_main_protection_snapshot_result_invalid')
-      }
-      packet = validateGitHubMainProtectionSnapshot(result.packet)
-      break
-    } catch (error) {
-      if (!retryableCollectionFailure(error)) throw error
-      lastError = error
-      if (attempt >= attempts) break
-      await delay(250 * attempt)
+  const expectedMain = explicitExpectedMainCommit(expectedMainCommit)
+  const retryContract = { attempts, delay }
+  const branchResult = await collectWithBoundedRetry(
+    () => collectBranchEndpoint({ env, request, expectedMainCommit: expectedMain }),
+    retryContract,
+  )
+  let branch
+  let branchEvidence
+  let branchTokenEnv = null
+  if (branchResult.ok) {
+    branch = branchResult.value.json
+    branchTokenEnv = branchResult.value.tokenEnv
+    branchEvidence = endpointBranchEvidence(expectedMain)
+  } else {
+    if (expectedMain === null) {
+      fail(`github_main_protection_snapshot_expected_main_required:${boundedFailureReason(branchResult.error)}`)
     }
+    branch = fallbackBranchSnapshot(expectedMain)
+    branchEvidence = fallbackBranchEvidence(expectedMain)
   }
-  if (!packet) {
-    fail(`github_main_protection_snapshot_unavailable:${boundedFailureReason(lastError)}`)
+  const rulesetsResult = await collectWithBoundedRetry(
+    () => collectRulesetsEndpoint({ env, request }),
+    retryContract,
+  )
+  if (!rulesetsResult.ok) {
+    fail(`github_main_protection_snapshot_unavailable:${boundedFailureReason(rulesetsResult.error)}`)
   }
+  const packet = buildGitHubMainProtectionSnapshot({
+    branch,
+    rulesets: rulesetsResult.value.json,
+    tokenEnv: branchTokenEnv || rulesetsResult.value.tokenEnv || null,
+    branchEvidence,
+  })
   const outputs = {
     packet: outputPath ? await writeJson(outputPath, packet) : null,
     branch: branchOutputPath ? await writeJson(branchOutputPath, packet.branch) : null,
@@ -529,6 +673,7 @@ function parseArgs(argv) {
     outputPath: null,
     branchOutputPath: null,
     rulesetsOutputPath: null,
+    expectedMainCommit: null,
     verifyPath: null,
     selfTest: false,
     help: false,
@@ -538,6 +683,11 @@ function parseArgs(argv) {
     if (arg === '--output') args.outputPath = argv[++index]
     else if (arg === '--branch-output') args.branchOutputPath = argv[++index]
     else if (arg === '--rulesets-output') args.rulesetsOutputPath = argv[++index]
+    else if (arg === '--expected-main') {
+      const value = argv[++index]
+      if (!value) fail('github_main_protection_snapshot_expected_main_invalid')
+      args.expectedMainCommit = value
+    }
     else if (arg === '--verify') args.verifyPath = argv[++index]
     else if (arg === '--self-test') args.selfTest = true
     else if (arg === '--help' || arg === '-h') args.help = true
@@ -549,7 +699,7 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   if (args.help) {
-    console.log('Usage: node tools/collect_github_main_protection_snapshot.mjs [--output <packet.json>] [--branch-output <branch.json>] [--rulesets-output <rulesets.json>]')
+    console.log('Usage: node tools/collect_github_main_protection_snapshot.mjs [--output <packet.json>] [--branch-output <branch.json>] [--rulesets-output <rulesets.json>] [--expected-main <40-hex>]')
     console.log('       node tools/collect_github_main_protection_snapshot.mjs --verify <packet.json>')
     console.log('       node tools/collect_github_main_protection_snapshot.mjs --self-test')
     return

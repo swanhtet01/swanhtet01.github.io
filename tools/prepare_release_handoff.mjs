@@ -10,6 +10,7 @@ import {
   GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
   GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
   collectGitHubMainProtectionSnapshot,
+  validateGitHubMainProtectionBranchEvidence,
 } from './collect_github_main_protection_snapshot.mjs'
 import {
   REQUIRED_MAIN_CHECKS,
@@ -186,11 +187,16 @@ function githubMainProtectionEvidence(value) {
     ? 'main_protection_verified_continue_to_review_branch_push'
     : 'apply_github_main_protection_after_owner_approval'
   if (value.currentAction !== expectedAction) fail('release_handoff_github_main_protection_action_invalid')
+  const branchEvidence = validateGitHubMainProtectionBranchEvidence(value.source?.branchEvidence, value.branch)
+  if (JSON.stringify(branchEvidence) !== JSON.stringify(value.source.branchEvidence)) {
+    fail('release_handoff_github_main_protection_branch_evidence_invalid')
+  }
   return {
     contract: GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
     generatedAt,
     repository: REPOSITORY,
     mode: 'read_only_no_github_write',
+    source: { branchEvidence },
     branch: value.branch,
     rulesets: value.rulesets,
     assessment,
@@ -221,9 +227,10 @@ export async function collectGitHubMainProtectionSnapshotForHandoff({
   collect = collectGitHubMainProtectionSnapshot,
   attempts = GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
   delay,
+  expectedMainCommit = null,
 } = {}) {
   try {
-    const result = await collect({ attempts, delay })
+    const result = await collect({ attempts, delay, expectedMainCommit })
     if (!isRecord(result) || !isRecord(result.packet)) {
       fail('release_handoff_github_main_protection_snapshot_result_invalid')
     }
@@ -236,6 +243,9 @@ export async function collectGitHubMainProtectionSnapshotForHandoff({
     const prefix = 'github_main_protection_snapshot_unavailable:'
     if (reason.startsWith(prefix)) {
       fail(`release_handoff_github_main_protection_snapshot_unavailable:${reason.slice(prefix.length)}`)
+    }
+    if (reason.startsWith('github_main_protection_snapshot_')) {
+      fail(`release_handoff_${reason}`)
     }
     throw error
   }
@@ -629,7 +639,9 @@ async function prepareReleaseHandoff(output) {
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
   if (git('rev-parse', 'HEAD') !== candidateCommit || git('status', '--porcelain=v1')) fail('release_handoff_candidate_changed_during_verify')
 
-  const { packet: githubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff()
+  const { packet: githubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff({
+    expectedMainCommit: remoteMainCommit,
+  })
   const legacyCounts = legacyCommit ? git('rev-list', '--left-right', '--count', `${legacyCommit}...${candidateCommit}`).split(/\s+/).map(Number) : [0, 0]
   const packet = buildReleaseHandoff({
     generatedAt: new Date().toISOString(),
@@ -696,7 +708,9 @@ export async function verifyCurrentReleaseHandoff(inputPath) {
     || JSON.stringify(publicIdentity) !== JSON.stringify(packet.live.identity)) {
     fail('release_handoff_live_state_changed')
   }
-  const { packet: currentGitHubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff()
+  const { packet: currentGitHubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff({
+    expectedMainCommit: remoteMainCommit,
+  })
   if (JSON.stringify(githubMainProtectionState(currentGitHubMainProtection))
     !== JSON.stringify(githubMainProtectionState(packet.githubMainProtection))) {
     fail('release_handoff_github_main_protection_state_changed')

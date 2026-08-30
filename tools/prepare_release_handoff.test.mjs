@@ -108,6 +108,26 @@ function protectedMainSnapshot() {
   })
 }
 
+function protectedFallbackMainSnapshot() {
+  return buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-07-29T13:59:00.000Z',
+    branch: {
+      name: 'main',
+      protected: false,
+      commit: { sha: main },
+      protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+    },
+    rulesets: protectedMainSnapshot().rulesets,
+    branchEvidence: {
+      kind: 'expected_remote_main_fallback',
+      branchEndpointAvailable: false,
+      expectedRemoteMainCommit: main,
+      fallbackUsed: true,
+      classicBranchProtectionEvidence: 'unavailable_not_claimed',
+    },
+  })
+}
+
 test('release handoff is immutable, review-only, and exact-commit bound', () => {
   const packet = buildReleaseHandoff(valid())
   assert.equal(packet.contract, 'supermega.release-handoff.v2')
@@ -138,6 +158,22 @@ test('release handoff advances to branch push only after main protection is veri
   assert.equal(packet.githubMainProtection.assessment.ok, true)
   assert.equal(packet.nextAction.kind, 'owner_review_initial_branch_push')
   assert.equal(packet.nextAction.approvalTemplate, packet.actions.reviewBranchPush.approvalTemplate)
+})
+
+test('release handoff preserves exact expected-main fallback provenance without legacy protection claims', () => {
+  const packet = buildReleaseHandoff(valid({ githubMainProtection: protectedFallbackMainSnapshot() }))
+  assert.equal(packet.githubMainProtection.assessment.ok, true)
+  assert.deepEqual(packet.githubMainProtection.source.branchEvidence, {
+    kind: 'expected_remote_main_fallback',
+    branchEndpointAvailable: false,
+    expectedRemoteMainCommit: main,
+    fallbackUsed: true,
+    classicBranchProtectionEvidence: 'unavailable_not_claimed',
+  })
+  assert.equal(packet.githubMainProtection.branch.protected, false)
+  assert.equal(packet.githubMainProtection.branch.protection.enabled, false)
+  assert.deepEqual(packet.githubMainProtection.branch.protection.required_status_checks, { contexts: [], checks: [] })
+  assert.deepEqual(validateReleaseHandoffPacket(packet), packet)
 })
 
 test('release handoff advances an exact remote branch to owner-gated pull request creation', () => {
@@ -180,6 +216,7 @@ test('release handoff delegates once to the centralized protection snapshot retr
   const result = await collectGitHubMainProtectionSnapshotForHandoff({
     attempts: 2,
     delay,
+    expectedMainCommit: main,
     collect: async (options) => {
       calls += 1
       receivedOptions = options
@@ -189,6 +226,7 @@ test('release handoff delegates once to the centralized protection snapshot retr
   assert.equal(calls, 1)
   assert.equal(receivedOptions.attempts, 2)
   assert.equal(receivedOptions.delay, delay)
+  assert.equal(receivedOptions.expectedMainCommit, main)
   assert.equal(result.packet.assessment.ok, true)
   await assert.rejects(
     collectGitHubMainProtectionSnapshotForHandoff({
@@ -198,6 +236,15 @@ test('release handoff delegates once to the centralized protection snapshot retr
       },
     }),
     /release_handoff_github_main_protection_snapshot_unavailable:github_main_protection_snapshot_rulesets_invalid/,
+  )
+  await assert.rejects(
+    collectGitHubMainProtectionSnapshotForHandoff({
+      expectedMainCommit: main,
+      collect: async () => {
+        throw new Error('github_main_protection_snapshot_expected_main_mismatch')
+      },
+    }),
+    /release_handoff_github_main_protection_snapshot_expected_main_mismatch/,
   )
   await assert.rejects(
     collectGitHubMainProtectionSnapshotForHandoff({ attempts: 0 }),

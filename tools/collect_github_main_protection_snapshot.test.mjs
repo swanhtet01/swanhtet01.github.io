@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { access, mkdtemp, readFile, rm, rmdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -52,6 +53,21 @@ function jsonResponse(body) {
     async text() {
       return JSON.stringify(body)
     },
+  }
+}
+
+function reseal(packet) {
+  const body = JSON.parse(JSON.stringify(packet))
+  delete body.digest
+  return {
+    ...body,
+    digest: `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`,
+  }
+}
+
+async function assertOutputsAbsent(paths) {
+  for (const path of paths) {
+    await assert.rejects(access(path), (error) => error?.code === 'ENOENT')
   }
 }
 
@@ -172,6 +188,8 @@ test('collector retries null and non-record branch responses before writing one 
     assert.equal(rulesetsCalls, 1)
     assert.deepEqual(delays, [250, 500])
     assert.equal(result.packet.assessment.ok, true)
+    assert.equal(result.packet.source.branchEvidence.kind, 'github_branch_endpoint')
+    assert.equal(result.packet.source.branchEvidence.fallbackUsed, false)
     assert.deepEqual(JSON.parse(await readFile(outputPath, 'utf8')), result.packet)
     assert.deepEqual(JSON.parse(await readFile(branchOutputPath, 'utf8')), result.packet.branch)
     assert.deepEqual(JSON.parse(await readFile(rulesetsOutputPath, 'utf8')), result.packet.rulesets)
@@ -180,7 +198,7 @@ test('collector retries null and non-record branch responses before writing one 
   }
 })
 
-test('collector exhausts bounded malformed-branch retries without writing any output', async () => {
+test('collector requires an explicit expected main after bounded branch exhaustion and writes nothing', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-main-protection-no-write-'))
   const outputPath = join(directory, 'snapshot.json')
   const branchOutputPath = join(directory, 'branch.json')
@@ -202,15 +220,166 @@ test('collector exhausts bounded malformed-branch retries without writing any ou
         attempts: 3,
         delay: async () => {},
       }),
-      /github_main_protection_snapshot_unavailable:github_main_protection_snapshot_branch_invalid/,
+      /github_main_protection_snapshot_expected_main_required:github_main_protection_snapshot_branch_invalid/,
     )
     assert.equal(branchCalls, 3)
-    for (const path of [outputPath, branchOutputPath, rulesetsOutputPath]) {
-      await assert.rejects(access(path), (error) => error?.code === 'ENOENT')
-    }
+    await assertOutputsAbsent([outputPath, branchOutputPath, rulesetsOutputPath])
   } finally {
     await removeTestDirectory(directory, [outputPath, branchOutputPath, rulesetsOutputPath])
   }
+})
+
+test('collector prefers the real branch endpoint when it matches the expected remote main', async () => {
+  let branchCalls = 0
+  let rulesetsCalls = 0
+  const { packet } = await collectGitHubMainProtectionSnapshot({
+    expectedMainCommit: branch.commit.sha,
+    request: async (url) => {
+      if (String(url).endsWith('/branches/main')) {
+        branchCalls += 1
+        return jsonResponse(branch)
+      }
+      if (String(url).endsWith('/rulesets')) {
+        rulesetsCalls += 1
+        return jsonResponse(rulesets)
+      }
+      throw new Error(`unexpected_url:${url}`)
+    },
+    env: {},
+    delay: async () => {},
+  })
+  assert.equal(branchCalls, 1)
+  assert.equal(rulesetsCalls, 1)
+  assert.deepEqual(packet.source.branchEvidence, {
+    kind: 'github_branch_endpoint',
+    branchEndpointAvailable: true,
+    expectedRemoteMainCommit: branch.commit.sha,
+    fallbackUsed: false,
+    classicBranchProtectionEvidence: 'endpoint_observed',
+  })
+})
+
+test('collector uses only the exact expected main fallback after branch exhaustion and relies on complete active rulesets', async () => {
+  let branchCalls = 0
+  let rulesetsCalls = 0
+  const { packet } = await collectGitHubMainProtectionSnapshot({
+    expectedMainCommit: branch.commit.sha,
+    attempts: 2,
+    request: async (url) => {
+      if (String(url).endsWith('/branches/main')) {
+        branchCalls += 1
+        return jsonResponse(null)
+      }
+      if (String(url).endsWith('/rulesets')) {
+        rulesetsCalls += 1
+        return jsonResponse(rulesets)
+      }
+      throw new Error(`unexpected_url:${url}`)
+    },
+    env: {},
+    delay: async () => {},
+  })
+  assert.equal(branchCalls, 2)
+  assert.equal(rulesetsCalls, 1)
+  assert.equal(packet.assessment.ok, true)
+  assert.deepEqual(packet.branch, {
+    name: 'main',
+    protected: false,
+    commit: { sha: branch.commit.sha },
+    protection: {
+      enabled: false,
+      required_status_checks: { contexts: [], checks: [] },
+      allow_force_pushes: null,
+      allow_deletions: null,
+      required_pull_request_reviews: null,
+      required_conversation_resolution: null,
+    },
+  })
+  assert.deepEqual(packet.source.branchEvidence, {
+    kind: 'expected_remote_main_fallback',
+    branchEndpointAvailable: false,
+    expectedRemoteMainCommit: branch.commit.sha,
+    fallbackUsed: true,
+    classicBranchProtectionEvidence: 'unavailable_not_claimed',
+  })
+})
+
+test('collector rejects malformed or mismatched expected main bindings before fallback', async () => {
+  let requests = 0
+  await assert.rejects(
+    collectGitHubMainProtectionSnapshot({
+      expectedMainCommit: 'not-a-commit',
+      request: async () => { requests += 1; return jsonResponse(branch) },
+      env: {},
+    }),
+    /github_main_protection_snapshot_expected_main_invalid/,
+  )
+  assert.equal(requests, 0)
+
+  await assert.rejects(
+    collectGitHubMainProtectionSnapshot({
+      expectedMainCommit: 'b'.repeat(40),
+      request: async (url) => {
+        requests += 1
+        assert.ok(String(url).endsWith('/branches/main'))
+        return jsonResponse(branch)
+      },
+      env: {},
+    }),
+    /github_main_protection_snapshot_expected_main_mismatch/,
+  )
+  assert.equal(requests, 1)
+})
+
+test('fallback rejects incomplete rulesets and writes no partial output', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-main-protection-fallback-no-write-'))
+  const paths = [join(directory, 'snapshot.json'), join(directory, 'branch.json'), join(directory, 'rulesets.json')]
+  try {
+    await assert.rejects(
+      collectGitHubMainProtectionSnapshot({
+        outputPath: paths[0],
+        branchOutputPath: paths[1],
+        rulesetsOutputPath: paths[2],
+        expectedMainCommit: branch.commit.sha,
+        attempts: 2,
+        request: async (url) => jsonResponse(String(url).endsWith('/branches/main') ? null : []),
+        env: {},
+        delay: async () => {},
+      }),
+      /github_main_protection_snapshot_fallback_rulesets_incomplete/,
+    )
+    await assertOutputsAbsent(paths)
+  } finally {
+    await removeTestDirectory(directory, paths)
+  }
+})
+
+test('fallback provenance is digest-bound and rejects an internally inconsistent resealed binding', async () => {
+  const { packet } = await collectGitHubMainProtectionSnapshot({
+    expectedMainCommit: branch.commit.sha,
+    attempts: 1,
+    request: async (url) => jsonResponse(String(url).endsWith('/branches/main') ? null : rulesets),
+    env: {},
+    delay: async () => {},
+  })
+  const tampered = JSON.parse(JSON.stringify(packet))
+  tampered.source.branchEvidence.expectedRemoteMainCommit = 'b'.repeat(40)
+  assert.throws(
+    () => validateGitHubMainProtectionSnapshot(reseal(tampered)),
+    /github_main_protection_snapshot_fallback_branch_invalid/,
+  )
+  const missingProvenance = JSON.parse(JSON.stringify(packet))
+  delete missingProvenance.source.branchEvidence
+  assert.throws(
+    () => validateGitHubMainProtectionSnapshot(reseal(missingProvenance)),
+    /github_main_protection_snapshot_branch_evidence_invalid/,
+  )
+  const inventedProvenance = JSON.parse(JSON.stringify(packet))
+  inventedProvenance.source.branchEndpointClaim = 'available'
+  assert.throws(
+    () => validateGitHubMainProtectionSnapshot(reseal(inventedProvenance)),
+    /github_main_protection_snapshot_source_invalid/,
+  )
 })
 
 test('rejects tampered write controls and digest mismatch', () => {
