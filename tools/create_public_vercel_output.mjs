@@ -487,11 +487,16 @@ function productCardHtml(product, index) {
   </article>`
 }
 
+const homePage = manifest.pages.find((page) => page.route === '/')
+assert(homePage?.file === 'index.html', 'home_page_manifest_entry_invalid')
+assert(typeof homePage.title === 'string' && homePage.title.includes('Shop Profit Control'), 'home_page_title_invalid')
+assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
+
 const homeHtml = documentHtml({
   route: '/',
-  title: 'SuperMega | Four products',
-  description: manifest.company.statement,
-  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: manifest.company.statement },
+  title: homePage.title,
+  description: homePage.description,
+  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: homePage.description },
   content: `<main id="content">
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.href)}">${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}</a><a class="button" href="#products">Explore all products</a></div><div class="hero-note"><span>POS-independent</span><span>Read-only local record</span><span>No payment or stock write</span></div></div></section>
     <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Start with Shop Profit Control, then choose a connected workflow.</h2><p>Shop surfaces the first accountable operating action. Plant, Website, and Ecommerce remain focused local products with guided samples of their own.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>

@@ -147,6 +147,27 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
+const homePage = manifest.pages.find((page) => page.route === '/')
+const expectedHomeDescription = manifest.company.supporting.split(' It does not replace a POS')[0]
+check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
+check(homePage?.title === 'Shop Profit Control for Myanmar operators | SuperMega', 'home_manifest_profit_control_title_exact')
+check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')
+for (const token of [
+  `<title>${homePage.title}</title>`,
+  `<meta name="description" content="${homePage.description}" />`,
+  `<meta property="og:title" content="${homePage.title}" />`,
+  `<meta property="og:description" content="${homePage.description}" />`,
+]) {
+  check(home.includes(token), `home_metadata_manifest_bound:${token}`)
+}
+for (const staleToken of [
+  '<title>SuperMega | Four products</title>',
+  '<meta property="og:title" content="SuperMega | Four products" />',
+  `<meta name="description" content="${manifest.company.statement}" />`,
+  `<meta property="og:description" content="${manifest.company.statement}" />`,
+]) {
+  check(!home.includes(staleToken), `home_stale_metadata_absent:${staleToken}`)
+}
 const shopProfitControlHref = 'https://app.supermega.dev/shop/?tab=today'
 const shopProfitControlLabel = 'Open Shop Profit Control'
 const shopProfitControlAnchor = `href="${shopProfitControlHref}">${shopProfitControlLabel}</a>`
@@ -312,7 +333,7 @@ check(homeSchema['@context'] === 'https://schema.org'
   && homeSchema['@type'] === 'Organization'
   && homeSchema.name === 'SuperMega'
   && homeSchema.url === new URL('/', `${manifest.release.productionDomain}/`).href
-  && homeSchema.description === manifest.company.statement, 'home_structured_data')
+  && homeSchema.description === homePage.description, 'home_structured_data')
 
 // Sitemap covers every public route exactly once with a well-formed lastmod.
 const sitemap = readStatic('sitemap.xml')

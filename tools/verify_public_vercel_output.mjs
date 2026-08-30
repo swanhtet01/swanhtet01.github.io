@@ -154,6 +154,7 @@ const forbiddenCopy = [
 const encodingCorruption = ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']
 
 const pages = new Map(manifest.pages.map((page) => [page.route, { ...page, html: readStatic(page.file) }]))
+const homePage = manifest.pages.find((page) => page.route === '/')
 for (const [route, page] of pages) {
   if (!page.html.includes(`<title>${page.title}</title>`)) fail('page_title_drift', { route, expected: page.title })
   for (const token of sharedRequired) {
@@ -170,6 +171,11 @@ for (const [route, page] of pages) {
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
   if (!/<meta name="description" content="[^"]{20,}" \/>/.test(page.html)) fail('page_description_missing', { route })
+  if (!page.html.includes(`<meta property="og:title" content="${page.title}" />`)) fail('page_open_graph_title_drift', { route, expected: page.title })
+  if (page.description) {
+    if (!page.html.includes(`<meta name="description" content="${page.description}" />`)) fail('page_description_drift', { route, expected: page.description })
+    if (!page.html.includes(`<meta property="og:description" content="${page.description}" />`)) fail('page_open_graph_description_drift', { route, expected: page.description })
+  }
   // Landing pages carry their per-product share card; every other page keeps the generic card.
   const pageShareImage = new URL(page.productId ? `/og-card-${page.productId}.png` : '/og-card.png', `${manifest.release.productionDomain}/`).href
   for (const token of [
@@ -213,7 +219,7 @@ for (const [route, page] of pages) {
     if (schema['@type'] !== 'Organization'
       || schema.name !== 'SuperMega'
       || schema.url !== new URL('/', `${manifest.release.productionDomain}/`).href
-      || schema.description !== manifest.company.statement) fail('organization_schema_drift', { route, schema })
+      || schema.description !== homePage.description) fail('organization_schema_drift', { route, schema })
   } else {
     const pageEntry = manifest.pages.find((entry) => entry.route === route)
     if (schema['@type'] !== 'Product'
@@ -244,6 +250,18 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
+const expectedHomeDescription = manifest.company.supporting.split(' It does not replace a POS')[0]
+if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
+if (homePage.title !== 'Shop Profit Control for Myanmar operators | SuperMega') fail('home_manifest_title_drift')
+if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
+for (const staleToken of [
+  '<title>SuperMega | Four products</title>',
+  '<meta property="og:title" content="SuperMega | Four products" />',
+  `<meta name="description" content="${manifest.company.statement}" />`,
+  `<meta property="og:description" content="${manifest.company.statement}" />`,
+]) {
+  if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
+}
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
 if (shop?.primaryCta?.label !== 'Open Shop Profit Control'
   || shop?.primaryCta?.url !== 'https://app.supermega.dev/shop/?tab=today') fail('shop_profit_control_action_drift')
