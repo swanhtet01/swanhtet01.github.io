@@ -52,7 +52,7 @@ changed routes, or renamed screenshots fail closed.
 | --- | --- | --- | --- |
 | Public | 1280 x 900 | 390 x 844 | Product entry is visible |
 | Shop Counter | 1280 x 900 | 390 x 844 | Exact `/shop/?template=mini-mart` checkout, payment, total, open-order choice, and review action are above fold |
-| Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` shows one deterministic non-controlled priority with title, impact, metric, accountable role, due point, exact next action and target, objective closure, and the read-only boundary |
+| Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` renders the untouched source-owned fresh Shop seed as `attention` / `3 open`, led by `payment_pending` (`Reconcile pending payments`) with its exact payment-review action and target, objective closure, and read-only boundary |
 | Plant | 1280 x 900 | 390 x 844 | Working-sample timeline is explicitly not today's production |
 | Website | 1280 x 900 | 390 x 844 | Local working sample visibly says nothing was deployed |
 | Ecommerce | 1280 x 900 | 390 x 844 | Completed sample request remains visibly browser-local, with no managed Shop receipt claim |
@@ -67,6 +67,12 @@ immediately before and after screenshot capture. Both reads must be stable and
 match the receipt-bound origin and exact route with an empty hash. A late
 cross-origin redirect therefore fails even when its destination serves a
 plausible route.
+
+The Shop Profit Control cases do not edit browser storage. Each fresh isolated
+context follows the product's source-owned Commerce seed path, whose first
+priority is `payment_pending`: `Review payments` links to
+`/shop/?tab=orders#shop-order-queue`, and the card closes only when every pending
+payment has reviewed external evidence or an explicit unpaid state.
 
 ## Generate
 

@@ -43,6 +43,28 @@ const sourceDigests = {
   rollback: `sha256:${'2'.repeat(64)}`,
 }
 
+const expectedFreshSeedProfitControl = Object.freeze({
+  ariaLabel: 'Shop profit control',
+  heading: 'Profit control',
+  explanation: 'Current leak → accountable owner → objective closure',
+  state: 'attention',
+  status: '3 open',
+  priority: Object.freeze({
+    id: 'payment_pending',
+    title: 'Reconcile pending payments',
+    impact: 'Completed work without payment evidence can overstate revenue and available cash.',
+    ownerRole: 'Cashier / owner',
+    dueLabel: 'Before daily close',
+    actionLabel: 'Review payments',
+    target: '/shop/?tab=orders#shop-order-queue',
+    closureCondition: 'Every pending payment has reviewed external evidence or an explicit unpaid state.',
+    metric: '2 pending payments',
+    actionLabelVisible: true,
+    accessibleNamePresent: true,
+  }),
+  boundary: 'Read-only projection from the current Shop record. A card clears only when its source metric changes; this panel does not contact anyone, move money or stock, or write a completion claim.',
+})
+
 const appHeaders = {
   'content-type': 'text/html; charset=utf-8',
   'content-security-policy': "default-src 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
@@ -393,8 +415,13 @@ test('builds and validates the exact twelve-case technical preview proof', async
   const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
   const proofGuide = await readFile(join(repoRoot, 'docs', 'EXACT-APP-PREVIEW-PROOF.md'), 'utf8')
   const renderedHarnessSource = await readFile(join(repoRoot, 'tools', 'verify_app_entry_rendered.mjs'), 'utf8')
-  const profitControlGuideRow = '| Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` shows one deterministic non-controlled priority with title, impact, metric, accountable role, due point, exact next action and target, objective closure, and the read-only boundary |'
+  const commerceWorkspaceSource = await readFile(join(repoRoot, 'showroom', 'src', 'core', 'commerce-workspace.ts'), 'utf8')
+  const coreAppSource = await readFile(join(repoRoot, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8')
+  const profitControlSource = await readFile(join(repoRoot, 'showroom', 'src', 'core', 'shop-profit-control.ts'), 'utf8')
+  const profitControlGuideRow = '| Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` renders the untouched source-owned fresh Shop seed as `attention` / `3 open`, led by `payment_pending` (`Reconcile pending payments`) with its exact payment-review action and target, objective closure, and read-only boundary |'
   assert.equal(proofGuide.split(profitControlGuideRow).length - 1, 1)
+  assert.match(proofGuide, /The Shop Profit Control cases do not edit browser storage\./)
+  assert.match(proofGuide, /`Review payments` links to\s+`\/shop\/\?tab=orders#shop-order-queue`/)
   assert.match(proofGuide, /all twelve\s+screenshots/)
   assert.match(proofGuide, /before and after the twelve browser cases/)
   assert.match(proofGuide, /all twelve PNG files, including both Shop Counter and\s+Shop Profit Control/)
@@ -402,6 +429,38 @@ test('builds and validates the exact twelve-case technical preview proof', async
   assert.match(renderedHarnessSource, /event\.type === 'warning' \|\| event\.type === 'warn'/)
   assert.match(renderedHarnessSource, /event\.entry\?\.level === 'warning'/)
   assert.match(renderedHarnessSource, /clean: errors\.length === 0 && warnings\.length === 0/)
+  assert.deepEqual(SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION, expectedFreshSeedProfitControl)
+  assert.equal(
+    commerceWorkspaceSource.split("return persistInitialState(storage, createSeedCommerce(Date.now()), 'seed')").length - 1,
+    1,
+  )
+  const seedStart = commerceWorkspaceSource.indexOf('export function createSeedCommerce(')
+  const seedEnd = commerceWorkspaceSource.indexOf('\nexport function commerceSeedAnchor(', seedStart)
+  assert.ok(seedStart >= 0 && seedEnd > seedStart)
+  const seedSource = commerceWorkspaceSource.slice(seedStart, seedEnd)
+  assert.equal(seedSource.split("paymentStatus: 'pending'").length - 1, 2)
+  assert.equal(seedSource.split("paymentStatus: 'reconciled'").length - 1, 1)
+  assert.match(seedSource, /sku: 'SM-1002', name: 'Cold drink pack', onHand: 8, reorderAt: 12/)
+  const projectionStart = coreAppSource.indexOf('const shopProfitControl = projectShopProfitControl({')
+  const projectionEnd = coreAppSource.indexOf('\n  })', projectionStart)
+  assert.ok(projectionStart >= 0 && projectionEnd > projectionStart)
+  const projectionSource = coreAppSource.slice(projectionStart, projectionEnd)
+  for (const sourceBinding of [
+    'paymentPendingCount: pendingPaymentOrders.length',
+    'lowStockCount: lowStock.length',
+    'closeReadyCount: closableOrders.length',
+  ]) assert.equal(projectionSource.split(sourceBinding).length - 1, 1)
+  const paymentPriorityStart = profitControlSource.indexOf('if (input.paymentPendingCount && !input.overdueReceivableCount)')
+  const paymentPriorityEnd = profitControlSource.indexOf('\n  })', paymentPriorityStart)
+  assert.ok(paymentPriorityStart >= 0 && paymentPriorityEnd > paymentPriorityStart)
+  const paymentPrioritySource = profitControlSource.slice(paymentPriorityStart, paymentPriorityEnd)
+  for (const sourceBinding of [
+    "id: 'payment_pending'",
+    "title: 'Reconcile pending payments'",
+    "actionLabel: 'Review payments'",
+    "target: '/shop/?tab=orders#shop-order-queue'",
+    "metric: countMetric('pending payments', 'pending payment', input.paymentPendingCount)",
+  ]) assert.equal(paymentPrioritySource.split(sourceBinding).length - 1, 1)
   const publicExpectedText = await loadPublicHomepageExpectedText()
   assert.deepEqual(publicExpectedText, [
     'Shop Profit Control: see today’s operating money risk and close one accountable action.',
