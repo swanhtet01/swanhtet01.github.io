@@ -48,9 +48,50 @@
       name="twitter:description"
       content="Shop sells and tracks stock. Plant runs production. Website builds pages. Ecommerce creates Shop-connected ordering."
     />
+    <!--
+      Boot shell. FCP measured 3,940 ms on `/` against a 3,690 ms load event
+      (ANDROID-PERFORMANCE-BASELINE.md) -- the document finished loading and
+      still painted nothing, because #root is empty until React renders and an
+      empty body has no content to paint. This gives the browser something
+      real to paint as soon as the 4 KB document parses, ahead of the 91 KB gz
+      entry set and ahead of core-app.css.
+
+      Rules this has to obey, all of them load-bearing:
+      * The CSS is INLINE. Pointing at a stylesheet would make first paint wait
+        on the same fetch the app already waits on, which is the whole problem.
+        `style-src` carries 'unsafe-inline' so this is allowed; `script-src` is
+        'self' with no hash, so an inline SCRIPT here would be silently refused
+        (see the note on /theme-restore.js) -- hence the removal is pure CSS.
+      * `#root:not(:empty) + #boot-shell` retires the shell the instant React
+        commits anything, with no JS and no mount hook to forget. `:empty`
+        rather than `:has(*)` because this ships to old Android WebViews.
+      * The colours are duplicated from core-app.css `--core-bg` (#f6f4ee /
+        #05080d) rather than referenced, because that file has not loaded yet
+        at the moment this paints. If those tokens change, change them here
+        too -- verify_app_build.mjs fails the build if they drift.
+      * theme-restore.js stamps data-supermega-theme BEFORE paint, so the dark
+        rule below is correct on the very first frame and a dark-theme user
+        never sees a light flash.
+    -->
+    <style>
+      #boot-shell{position:fixed;inset:0;z-index:-1;background:#f6f4ee;display:flex;flex-direction:column;gap:14px;padding:18px;font-family:Geist,Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+      #root:not(:empty)+#boot-shell{display:none}
+      .boot-shell__mark{color:#0b745e;font-size:.75rem;font-weight:800;letter-spacing:.1em}
+      .boot-shell__line{background:rgba(11,116,94,.1);border-radius:8px;height:14px}
+      .boot-shell__line--wide{width:62%}
+      .boot-shell__line--tall{flex:1;min-height:120px}
+      :root[data-supermega-theme="dark"] #boot-shell{background:#05080d}
+      :root[data-supermega-theme="dark"] .boot-shell__line{background:rgba(120,214,190,.12)}
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-shell" aria-hidden="true">
+      <span class="boot-shell__mark">SUPERMEGA</span>
+      <div class="boot-shell__line boot-shell__line--wide"></div>
+      <div class="boot-shell__line boot-shell__line--tall"></div>
+      <div class="boot-shell__line boot-shell__line--wide"></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- Both of these are files rather than inline blocks for the same reason as
          /theme-restore.js above: `script-src 'self'` refuses inline script, so the

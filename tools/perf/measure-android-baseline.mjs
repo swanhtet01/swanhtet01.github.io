@@ -308,6 +308,18 @@ async function measureRoute(cdp, origin, route) {
     await cdp.send('Performance.enable', {}, sessionId)
     await cdp.send('Profiler.enable', {}, sessionId)
     await cdp.send('Network.setCacheDisabled', { cacheDisabled: true }, sessionId)
+    // `Network.setCacheDisabled` disables the HTTP cache and NOTHING ELSE. It does
+    // not touch a service worker's Cache Storage, so once dist/ started shipping a
+    // real sw.js (G3 -- before that this file's premise "dist/ contains no sw.js"
+    // held and this line was unnecessary), run 1 registered the worker and precached
+    // 35 files, and every run after it was served entirely out of Cache Storage:
+    // measured 2026-08-30 on `/` as 4,440ms/99,209 B cold, then 400ms/0 B and
+    // 392ms/0 B, reported as a 400ms median. That is a ~10x optimistic number for
+    // an instrument whose whole job is to be the citable baseline. Clearing the
+    // origin's storage per run restores the cold navigation this script claims to
+    // measure; it also drops localStorage, which is correct here -- the documented
+    // route semantics for `/` are a fresh visitor's redirect to the default product.
+    await cdp.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' }, sessionId)
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE_RATE }, sessionId)
     await cdp.send('Network.emulateNetworkConditions', NET, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', DEVICE, sessionId)

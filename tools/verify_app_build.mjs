@@ -559,6 +559,36 @@ if (!indexSource.includes('<title>SuperMega</title>')
 // headline "works offline" claim was false end to end: measured 2026-08-20 in Chromium against
 // a built dist/, three refused inline scripts, zero registrations, zero caches. The shell now
 // loads three files instead, and this check is what keeps it that way.
+// Boot shell (first-paint skeleton). It exists because FCP measured 4,400ms against a
+// 4,207ms load event on `/`: the document had finished loading and still painted nothing,
+// because #root is empty until React commits and an empty body has no content to paint.
+// Adding it moved FCP to 3,280ms (-1,120ms) on `/` and 3,244ms (-1,272ms) on the chooser,
+// measured cold on the throttled Android profile. Three things have to stay true or it
+// silently stops working, and two of them fail OPEN rather than loudly:
+//   1. the removal rule. Without it the skeleton is a permanent overlay covering the app.
+//   2. `:empty`, not `:has(*)` -- this ships to old Android WebViews.
+//   3. the duplicated background colours. They are inline because core-app.css has NOT
+//      loaded at the moment the shell paints, so they cannot reference --core-bg. If the
+//      token moves and this copy does not, a dark-theme user gets a light flash back.
+for (const bootShellPin of [
+  '<div id="boot-shell" aria-hidden="true">',
+  '#root:not(:empty)+#boot-shell{display:none}',
+]) {
+  if (!indexSource.includes(bootShellPin)) fail(`boot_shell_contract_broken:${bootShellPin.slice(0, 40)}`)
+}
+{
+  const coreAppCss = await readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8')
+  const lightBg = coreAppCss.match(/--core-bg:\s*(#[0-9a-fA-F]{3,8})/)?.[1]
+  const darkBg = coreAppCss.match(/:root\[data-supermega-theme="dark"\]\s*\{\s*--core-bg:\s*(#[0-9a-fA-F]{3,8})/)?.[1]
+  if (!lightBg || !darkBg) fail('boot_shell_theme_tokens_unreadable')
+  if (!indexSource.includes(`#boot-shell{position:fixed;inset:0;z-index:-1;background:${lightBg};`)) {
+    fail(`boot_shell_light_background_drifted_from_core_bg:${lightBg}`)
+  }
+  if (!indexSource.includes(`:root[data-supermega-theme="dark"] #boot-shell{background:${darkBg}}`)) {
+    fail(`boot_shell_dark_background_drifted_from_core_bg:${darkBg}`)
+  }
+}
+
 const inlineShellScripts = [indexSource, rootPageSource]
   .flatMap((source) => [...source.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)])
   .filter((match) => match[1].trim().length)

@@ -69,7 +69,12 @@ node tools/perf/measure-android-baseline.mjs --runs 3 --out baseline.json
   (gzip-encoded, Script resources only); JS source/executed bytes from
   `Profiler.takePreciseCoverage` (detailed, block-level); ScriptDuration /
   TaskDuration from `Performance.getMetrics`.
-- The build's `dist/` contains no `sw.js`, so the service-worker registration
+- **[STALE as of 2026-08-30 — see "the instrument was measuring its own cache"
+  at the foot of this document. This premise died when G3 shipped a real
+  service worker, and every run of the harness between then and 2026-08-30
+  reported medians that were roughly 10x optimistic. The numbers in the table
+  below predate that and are sound; a re-run before the fix would not be.]**
+  The build's `dist/` contains no `sw.js`, so the service-worker registration
   in `showroom/index.html:59` 404s and no SW cache interferes with runs.
 
 ## Per-route results (median of 3 cold loads)
@@ -489,3 +494,75 @@ including the two it was intended to help. Not shipped.
   counts to settle, so it cannot by itself distinguish "moved off the critical
   path" from "never loaded" — that is what `jsTransferBeforeFcpBytes` was added
   for, and the early-tap probe covers the interaction axis neither of them sees.
+
+---
+
+## 2026-08-30: the instrument was measuring its own cache, and the app shell landed
+
+Two findings, one of which invalidates a slice of this document's own future.
+
+### 1. The harness was reporting ~10x optimistic medians
+
+`Network.setCacheDisabled` disables the HTTP cache and nothing else. It does
+not touch a service worker's Cache Storage. This document's methodology note
+said runs were clean because "`dist/` contains no `sw.js`" — true when it was
+written, and false the moment G3 shipped a real service worker. From then on,
+run 1 of each route registered the worker and precached 35 files (1.98 MB),
+and every run after it was served entirely out of Cache Storage.
+
+Measured on `/`, three runs, before the fix:
+
+| Run | FCP (ms) | load (ms) | JS transfer (B) |
+|---|---|---|---|
+| 1 (cold) | 4,440 | 4,215 | 99,209 |
+| 2 | 400 | 243 | **0** |
+| 3 | 392 | 230 | **0** |
+| **reported median** | **400** | **243** | **0** |
+
+A median of 400 ms for a route that actually takes 4,440 ms cold. The zero
+transfer bytes are the tell, and they were being reported in the output all
+along.
+
+Fixed in `tools/perf/measure-android-baseline.mjs` by clearing the origin's
+storage (`Storage.clearDataForOrigin`, `storageTypes: 'all'`) per run, which
+restores the cold navigation the script claims to measure. Post-fix control on
+the same unmodified build: `/` FCP 4,400 ms / load 4,207 ms, `/?choose=1` FCP
+4,516 ms / load 4,249 ms — consistent run to run, and back in line with the
+original table.
+
+**Anything measured with this harness between G3 and 2026-08-30 should be
+re-run before it is cited.** The per-route table above predates G3 and stands.
+
+### 2. Recommendation 3 (static app-shell skeleton) — SHIPPED, and it works
+
+`showroom/index.html` now carries a boot shell: inline critical CSS plus a few
+skeleton blocks, retired by `#root:not(:empty)+#boot-shell{display:none}` the
+instant React commits. No JS — `script-src 'self'` refuses inline script, and
+`verify_app_build.mjs` enforces that separately, so the removal had to be pure
+CSS. The CSS is inline rather than in `core-app.css` because pointing at the
+stylesheet would make first paint wait on the very fetch that is the problem.
+
+Measured cold, 3 runs each, same build, same profile, before and after:
+
+| Route | FCP before | FCP after | Δ | load before | load after |
+|---|---|---|---|---|---|
+| `/` | 4,400 ms | **3,280 ms** | **−1,120 ms (−25.5%)** | 4,207 ms | 4,247 ms |
+| `/?choose=1` | 4,516 ms | **3,244 ms** | **−1,272 ms (−28.2%)** | 4,249 ms | 4,228 ms |
+
+Load is flat, so the win is not bought from somewhere else, and long-task
+totals are unchanged (`/`: 956 → 962 ms; chooser: 503 → 476 ms).
+
+**This item's own prediction was wrong, and by a lot.** It said a skeleton
+"moves first visual feedback to well under 1 s on this profile". It does not:
+FCP is 3.2 s, not sub-second. The reason is that a render-blocking
+`<script src="/theme-restore.js">` and a 35 KB stylesheet still sit between the
+document and first paint, and on a 400 ms RTT / 50 KB/s pipe those cost roughly
+two seconds before the skeleton is allowed to draw. A −1.1 s improvement for
+~1 KB of HTML is a good trade, but do not carry "under 1 s" forward as
+achievable without also moving those two blockers — and note that
+`theme-restore.js` cannot simply be deferred, because it exists to prevent a
+dark-theme user seeing a light flash.
+
+Remaining identified FCP levers, unchanged: shrinking the 91 KB gz entry set,
+and the two render-blockers named above.
+
