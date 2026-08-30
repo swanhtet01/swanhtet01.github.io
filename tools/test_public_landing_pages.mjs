@@ -209,10 +209,15 @@ for (const token of ['POS-independent Shop Profit Control', 'read-only first job
 for (const forbidden of ['margin at risk', 'margin-at-risk', 'cost coverage', '49,000 MMK', '59,000 MMK', '20 consecutive accepted']) {
   check(!`${home}\n${shopLanding}`.toLowerCase().includes(forbidden.toLowerCase()), `shop_profit_control_unproven_claim_absent:${forbidden}`)
 }
-const shopTemplateIds = validateShopBusinessTemplates().map((template) => template.id)
+const shopTemplates = validateShopBusinessTemplates()
+const shopTemplateIds = shopTemplates.map((template) => template.id)
 const publicShopTemplateIds = [...shopLanding.matchAll(/<a class="trade-card" href="https:\/\/app\.supermega\.dev\/shop\/\?template=([a-z0-9-]+)">/g)]
   .map((match) => match[1])
 check(shopTemplateIds.length === 10, 'shop_trade_registry_count')
+const shopTemplateCopy = shopProduct?.modules?.filter((module) => /^\d+ Myanmar trade templates — /.test(module)) || []
+const expectedShopTemplateCopy = `${shopTemplates.length} Myanmar trade templates — ${shopTemplates.map((template) => template.name.en).join(', ')}`
+check(shopTemplateCopy.length === 1, 'shop_trade_manifest_copy_once')
+check(shopTemplateCopy[0] === expectedShopTemplateCopy, 'shop_trade_manifest_copy_matches_registry_exactly')
 check(new Set(publicShopTemplateIds).size === publicShopTemplateIds.length, 'shop_trade_links_unique')
 check(publicShopTemplateIds.join(',') === shopTemplateIds.join(','), 'shop_trade_links_match_registry_exactly')
 for (const templateId of shopTemplateIds) {
