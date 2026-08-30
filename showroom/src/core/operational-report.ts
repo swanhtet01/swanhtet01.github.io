@@ -244,7 +244,8 @@ function exactIso(value: string) {
 
 function exactDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  return !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+  const parsed = Date.parse(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value
 }
 
 function safeLine(value: unknown, maximum: number, reason: string) {

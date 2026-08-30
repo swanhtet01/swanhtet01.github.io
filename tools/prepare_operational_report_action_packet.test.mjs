@@ -46,6 +46,34 @@ test('builds a local sample action packet with owner gates and no external autho
   assert.doesNotMatch(JSON.stringify(packet), /May|Ko Aung|Daw Mya|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}/)
 })
 
+test('rejects normalized impossible calendar dates and numeric overflows', async () => {
+  for (const dueDate of ['2026-02-29', '2026-02-30', '2026-02-31', '2026-04-31']) {
+    await assert.rejects(() => buildOperationalReportActionPacket({
+      observedAt: '2026-08-25T00:00:00.000Z',
+      openedAt: '2026-08-25T02:00:00.000Z',
+      dueDate,
+    }), /Operational report action due date is invalid/)
+  }
+  for (const dueDate of ['2026-00-10', '2026-13-01', '2026-01-00', '2026-01-32']) {
+    await assert.rejects(() => buildOperationalReportActionPacket({
+      observedAt: '2026-08-25T00:00:00.000Z',
+      openedAt: '2026-08-25T02:00:00.000Z',
+      dueDate,
+    }), /operational_report_action_packet_due_date_invalid/)
+  }
+})
+
+test('preserves valid leap days and calendar year boundaries', async () => {
+  for (const dueDate of ['2024-02-29', '2026-01-01', '2026-12-31', '2027-01-01']) {
+    const packet = await buildOperationalReportActionPacket({
+      observedAt: '2026-08-25T00:00:00.000Z',
+      openedAt: '2026-08-25T02:00:00.000Z',
+      dueDate,
+    })
+    assert.equal(packet.dueDate, dueDate)
+  }
+})
+
 test('filters critical actions without turning ready findings into work orders', async () => {
   const packet = await buildOperationalReportActionPacket({
     observedAt: '2026-08-25T00:00:00.000Z',
