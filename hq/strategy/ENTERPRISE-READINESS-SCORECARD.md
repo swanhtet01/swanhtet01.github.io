@@ -157,8 +157,18 @@ manual QA lane -- it protects the largest untested surface (CoreApp.tsx).
 > recommendation at the foot of this section is already complete.** Verified
 > against live source, not inferred:
 >
-> - **Tracing shipped.** OpenTelemetry Phase A is implemented, declared and
->   wired. Four packages are pinned in BOTH `requirements.txt:5-8` and
+> - **Tracing largely shipped — Phase A is 3/5 on its own step 9.** Corrected
+>   2026-08-30 after Codex challenged the flat "shipped" claim, and it was
+>   right to. The implementation plan's step 9 names five workflows to wrap
+>   in manual domain spans; three are wired at the shared `/commands` call
+>   site (`trial_runtime.py:2451` via `_command_domain_span_name`: shop order
+>   confirm, plant job release, ecommerce request submit). AI invocation and
+>   worker cycle are NOT — `worker.cycle.start` exists only as a schema
+>   constant and a redaction fixture — and the code says why: neither is
+>   reachable from that endpoint (`trial_runtime.py:625-627`). So the
+>   infrastructure below is real and in use, but do not read "Phase A" as
+>   complete, and do not close the tracing recommendation on it.
+>   Four packages are pinned in BOTH `requirements.txt:5-8` and
 >   `pyproject.toml:11-14` (`opentelemetry-sdk==1.44.0`,
 >   `-instrumentation-fastapi`, `-instrumentation-psycopg`,
 >   `-exporter-otlp-proto-grpc`). `supermega_runtime/telemetry/` carries
@@ -166,18 +176,36 @@ manual QA lane -- it protects the largest untested surface (CoreApp.tsx).
 >   `runtime.py:36,:1047` calls `instrument_telemetry(app)` additively inside a
 >   try/except so a telemetry fault cannot affect a response. The import
 >   succeeds in a clean checkout. `tests/telemetry/test_redact.py` passes 12/12.
->   The scrubber fails CLOSED — on any scrub exception it drops the span rather
->   than exporting it (`tracing.py:90-92`).
+>   The scrubber drops a span rather than exporting it if scrubbing itself
+>   raises (`tracing.py:90-92`).
+>   **Correction 2026-08-30:** an earlier draft of this line said the scrubber
+>   "fails CLOSED" without qualification. That was wrong, and Codex caught it.
+>   `_sanitized_copy` scrubbed the span name and attributes but copied
+>   `events=span.events` through untouched, and OpenTelemetry's ASGI
+>   instrumentation records every unhandled exception as a span event carrying
+>   `exception.message` (the verbatim `str(exc)`) plus the full stacktrace.
+>   Reproduced end-to-end against the real instrumentation: the exporter
+>   received a customer name, a Myanmar mobile number and an MMK amount in one
+>   event. Fixed on the error-lane branch (`redact.scrub_events`: message
+>   digested, stacktrace dropped, `exception.type` held to `scrub_span_name`)
+>   with a test that fails if the one-line regression returns. Until that
+>   merges, treat this scrubber as closed for attributes and names only.
 > - **Alerting over measured target states shipped.**
 >   `kernel/agent-company-operations.mjs:1861` is headed "founder alerting over
 >   the measured target states" and imports `notifyDetailed` from `alert.mjs`.
 >   Best-effort and fail-closed: without owner Telegram tokens it performs no
 >   I/O, and an alert failure cannot affect the report response.
 >
-> **Still true:** there is no error tracking — no Sentry or equivalent in any
-> manifest (re-checked across `package.json`, `showroom/`, `kernel/`,
-> `requirements.txt`, `pyproject.toml`). That, not tracing, is now the real
-> highest-leverage gap.
+> **Still true, with its scope corrected:** the canonical runtime has no error
+> tracking. The manifests it actually ships from carry no Sentry or equivalent
+> (`package.json`, `showroom/`, `kernel/`, `requirements.txt`,
+> `pyproject.toml`). An earlier draft said "any manifest", which Codex
+> correctly flagged as false: `mark1_pilot/requirements.txt:14` declares
+> `sentry-sdk[fastapi]` and `tools/serve_solution.py:3032-3051,3110-3111`
+> initializes it and captures server exceptions. That is a legacy service, not
+> the Vercel runtime, so the production gap is real — but it is a wiring gap
+> next to an existing implementation worth reading first, not a greenfield
+> build. That, not tracing, is now the real highest-leverage gap.
 >
 > The D+ rests on premises that are now false, so it is left visible rather
 > than silently bumped: **re-derive it against the rubric.** The honest input
@@ -216,9 +244,11 @@ this recommendation is complete as of 2026-08-31 verification; following it
 would redo finished work.**
 
 Highest leverage now: **error tracking**, which is the one bullet in this
-section that survived checking. There is no Sentry or equivalent in any
-manifest and no error-event lane, so a runtime exception in the hosted layer
-is presently invisible. Note the adjacent partial: `client-error-reporter.ts`
+section that survived checking. The canonical runtime's manifests carry no
+Sentry or equivalent and no error-event lane, so a runtime exception in the
+hosted layer is presently invisible. (Scope note, 2026-08-30: `mark1_pilot/`
+does carry `sentry-sdk[fastapi]`; that legacy service is not the Vercel
+runtime, so read this as a wiring gap beside an existing implementation.) Note the adjacent partial: `client-error-reporter.ts`
 exists on the browser side and reports through the metrics surface map, so
 this gap is server-side, not total — scope any work to that before assuming
 a greenfield build.
