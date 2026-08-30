@@ -211,7 +211,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
   && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 14
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 324497
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 325851
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
