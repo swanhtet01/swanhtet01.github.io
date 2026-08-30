@@ -47,6 +47,10 @@ function requireSnippet(text, snippet, rel) {
   check(text.includes(snippet), `missing_required_snippet:${rel}:${snippet}`)
 }
 
+function forbidSnippet(text, snippet, rel) {
+  check(!text.includes(snippet), `forbidden_retired_snippet:${rel}:${snippet}`)
+}
+
 const packageText = read(files.packageJson)
 const currentText = read(files.current)
 const readinessText = read(files.readiness)
@@ -136,9 +140,47 @@ requireSnippet(ownerObservationPackText, 'client:pilot:observed-evidence:templat
 requireSnippet(ownerObservationPackText, 'client:pilot:observed-evidence:validate', files.ownerObservationPack)
 requireSnippet(ownerObservationPackText, 'shop:pilot:decision-packet', files.ownerObservationPack)
 
+const baselineCompleteCommand = 'npm.cmd run shop:pilot:baseline-complete -- --input "<private-baseline-input.json>" --output-dir "<private-baseline-completion-directory>"'
+const baselineCompleteVerifyCommand = 'npm.cmd run shop:pilot:baseline-complete -- --verify-dir "<private-baseline-completion-directory>"'
+const intakePacketCommand = 'npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"'
+const launchGateReportCommand = 'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<private-baseline-completion-directory>/owner-safe-baseline-packet.json" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"'
+const launchGateVerifyCommand = 'npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"'
+const day0ReleaseBoundCommand = 'npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"'
+const atomicBaselineSequence = [
+  baselineCompleteCommand,
+  baselineCompleteVerifyCommand,
+  intakePacketCommand,
+  launchGateReportCommand,
+  launchGateVerifyCommand,
+  day0ReleaseBoundCommand,
+]
+const retiredBaselineCommands = [
+  'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"',
+]
+
+for (const [rel, guideText] of [
+  [files.salesAgentGuide, salesAgentGuideText],
+  [files.baselineMeasurement, baselineMeasurementText],
+]) {
+  let previousCommandIndex = -1
+  for (const command of atomicBaselineSequence) {
+    const commandIndex = guideText.indexOf(command)
+    check(commandIndex > previousCommandIndex, `atomic_baseline_command_order:${rel}:${command}`)
+    previousCommandIndex = commandIndex
+  }
+  requireSnippet(guideText, 'owner_safe_baseline_completion_receipt_digest', rel)
+  requireSnippet(guideText, 'owner-safe-baseline-completion-receipt.json', rel)
+  requireSnippet(guideText, 'Do not hand-edit or manually replace any file in the completion directory', rel)
+  requireSnippet(guideText, 'retired separate lint/generate/verify', rel)
+  for (const retiredCommand of retiredBaselineCommands) {
+    forbidSnippet(guideText, retiredCommand, rel)
+  }
+}
+
 requireSnippet(salesAgentGuideText, 'Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, 'shop:pilot:day0-readiness', files.salesAgentGuide)
-requireSnippet(salesAgentGuideText, '--verify "<owner-safe-baseline-packet.json>"', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, 'shop:pilot:launch-gate:verify', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, '--launch-gate-report "<owner-safe-launch-gate-report.json>"', files.salesAgentGuide)
 requireSnippet(salesAgentGuideText, '--release-handoff "<release-handoff.json>"', files.salesAgentGuide)
@@ -157,10 +199,9 @@ requireSnippet(baselineMeasurementText, 'package-redemption/package-balance upda
 requireSnippet(baselineMeasurementText, 'manual daily-close runs', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, 'Every private JSON `runId` must be unique across all three streams', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, 'Use a distinct private JSON `runId` for every row across all three tables', files.baselineMeasurement)
-requireSnippet(baselineMeasurementText, '--verify "<owner-safe-baseline-packet.json>"', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, 'shop:pilot:launch-gate:verify', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, '--launch-gate-report "<owner-safe-launch-gate-report.json>"', files.baselineMeasurement)
-requireSnippet(baselineMeasurementText, 'The owner-safe baseline packet and launch-gate report must both be written and verified before Day-0 readiness', files.baselineMeasurement)
+requireSnippet(baselineMeasurementText, 'The atomic completion directory and launch-gate report must both be sealed and verified before Day-0 readiness', files.baselineMeasurement)
 requireSnippet(baselineMeasurementText, '`owner_private_intake_ready` and Day-0 readiness reports `blocked_owner_observed_baseline_required`', files.baselineMeasurement)
 requireSnippet(pilotKitReadmeText, 'at least three observed manual order runs, three package-redemption runs, three daily-close runs, distinct private JSON run IDs across every baseline stream', files.pilotKitReadme)
 requireSnippet(salesAgentGuideText, 'The private baseline JSON must use distinct `runId` values across order, package-redemption, and daily-close streams', files.salesAgentGuide)
