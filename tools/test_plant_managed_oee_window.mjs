@@ -142,6 +142,24 @@ function outputEvent(extra = {}) {
   }
 }
 
+function windowOutputEvents() {
+  return [
+    outputEvent({
+      id: 'EV-OUTPUT-GOOD',
+      actionId: 'ACT-OUTPUT-GOOD',
+      quantity: 190,
+    }),
+    outputEvent({
+      id: 'EV-OUTPUT-SCRAP',
+      actionId: 'ACT-OUTPUT-SCRAP',
+      createdAt: '2026-08-25T10:30:00.000Z',
+      evidenceReference: 'EV-OUTPUT-002',
+      quantity: 10,
+      outputKind: 'scrap',
+    }),
+  ]
+}
+
 function input(extra = {}) {
   return {
     windowId: 'OEE-WINDOW-001',
@@ -161,7 +179,7 @@ function happyState() {
   return state({
     jobs: [job()],
     machines: [machine()],
-    events: [downtimeStart(), downtimeEnd(), shiftClose()],
+    events: [...windowOutputEvents(), downtimeStart(), downtimeEnd(), shiftClose()],
   })
 }
 
@@ -182,7 +200,7 @@ function happyState() {
   check(/^sha256:[0-9a-f]{64}$/.test(r.windowDigest), 'window digest is sha256')
   check(r.gates.find((gate) => gate.id === 'source_quantity_mapping_unambiguous')?.passed === true, 'source quantity mapping is unambiguous')
   check(/^sha256:[0-9a-f]{64}$/.test(r.evidence.sourceMapDigest), 'source map digest is sha256')
-  check(r.sourceTrust.passed === true && r.sourceTrust.rejectedQuantityLikeFields.length === 0, 'source trust accepts canonical shift close only')
+  check(r.sourceTrust.passed === true && r.sourceTrust.rejectedQuantityLikeFields.length === 0, 'source trust accepts canonical window output and shift close')
   check(r.evidence.operatorReviewDigest === OPERATOR_DIGEST, 'operator digest retained')
   check(r.evidence.supervisorReviewDigest === SUPERVISOR_DIGEST, 'supervisor digest retained')
 }
@@ -220,7 +238,7 @@ function happyState() {
 // 6. Active downtime blocks readiness.
 {
   const r = projectPlantManagedOeeWindow(
-    state({ jobs: [job()], machines: [machine()], events: [downtimeStart(), shiftClose()] }),
+    state({ jobs: [job()], machines: [machine()], events: [...windowOutputEvents(), downtimeStart(), shiftClose()] }),
     input(),
   )
   check(r.readyForManagedRehearsal === false, 'active downtime blocks')
@@ -230,7 +248,7 @@ function happyState() {
 // 7. Stopped machine blocks readiness even if metrics exist.
 {
   const r = projectPlantManagedOeeWindow(
-    state({ jobs: [job()], machines: [machine({ state: 'stopped' })], events: [downtimeStart(), downtimeEnd(), shiftClose()] }),
+    state({ jobs: [job()], machines: [machine({ state: 'stopped' })], events: [...windowOutputEvents(), downtimeStart(), downtimeEnd(), shiftClose()] }),
     input(),
   )
   check(r.readyForManagedRehearsal === false, 'stopped machine blocks')
@@ -243,7 +261,7 @@ function happyState() {
     state({
       jobs: [job({ closure: undefined })],
       machines: [machine()],
-      events: [outputEvent(), downtimeStart(), downtimeEnd(), shiftClose()],
+      events: [...windowOutputEvents(), downtimeStart(), downtimeEnd(), shiftClose()],
     }),
     input(),
   )
@@ -270,7 +288,7 @@ function happyState() {
     state({
       jobs: [job()],
       machines: [machine()],
-      events: [downtimeStart(), downtimeEnd(), shiftClose({ totalUnits: 200, actualQuantity: 201 })],
+      events: [...windowOutputEvents(), downtimeStart(), downtimeEnd(), shiftClose({ totalUnits: 200, actualQuantity: 201 })],
     }),
     input(),
   )
@@ -287,7 +305,12 @@ function happyState() {
     state({
       jobs: [job()],
       machines: [machine()],
-      events: [downtimeStart(), downtimeEnd(), shiftClose({ goodUnits: 500, scrapUnits: 0 })],
+      events: [
+        outputEvent({ quantity: 500 }),
+        downtimeStart(),
+        downtimeEnd(),
+        shiftClose({ goodUnits: 500, scrapUnits: 0, outputEntryCount: 1 }),
+      ],
     }),
     input(),
   )
@@ -300,12 +323,167 @@ function happyState() {
     state({
       jobs: [job()],
       machines: [machine()],
-      events: [downtimeStart(), downtimeEnd(), shiftClose({ createdAt: '2026-08-25T13:00:00.000Z' })],
+      events: [...windowOutputEvents(), downtimeStart(), downtimeEnd(), shiftClose({ createdAt: '2026-08-25T13:00:00.000Z' })],
     }),
     input(),
   )
   check(r.readyForManagedRehearsal === false, 'outside-window shift close blocks')
   check(r.gates.find((gate) => gate.id === 'shift_close_inside_window')?.passed === false, 'shift close inside-window gate fails')
+}
+
+// 13. Complete intervals are clipped at both reviewed-window boundaries.
+{
+  const events = [
+    ...windowOutputEvents(),
+    downtimeStart({ id: 'EV-DOWN-START-PRE', actionId: 'ACT-DOWN-START-PRE', createdAt: '2026-08-25T07:30:00.000Z' }),
+    downtimeEnd({
+      id: 'EV-DOWN-END-PRE',
+      actionId: 'ACT-DOWN-END-PRE',
+      createdAt: '2026-08-25T08:15:00.000Z',
+      downtimeStartActionId: 'ACT-DOWN-START-PRE',
+    }),
+    downtimeStart({ id: 'EV-DOWN-START-POST', actionId: 'ACT-DOWN-START-POST', createdAt: '2026-08-25T11:45:00.000Z' }),
+    downtimeEnd({
+      id: 'EV-DOWN-END-POST',
+      actionId: 'ACT-DOWN-END-POST',
+      createdAt: '2026-08-25T12:30:00.000Z',
+      downtimeStartActionId: 'ACT-DOWN-START-POST',
+    }),
+    shiftClose(),
+  ]
+  const r = projectPlantManagedOeeWindow(state({ jobs: [job()], machines: [machine()], events }), input())
+  check(r.readyForManagedRehearsal === true, 'boundary-clipped complete downtime remains ready')
+  check(r.metrics.downtimeMinutes === 30, 'only the two fifteen-minute in-window overlaps count')
+  check(r.metrics.runtimeMinutes === 210, 'boundary-clipped downtime reduces only reviewed runtime')
+}
+
+// 14. Malformed and unclosed downtime pairs fail closed instead of becoming zero downtime.
+{
+  const orphan = projectPlantManagedOeeWindow(
+    state({
+      jobs: [job()],
+      machines: [machine()],
+      events: [
+        ...windowOutputEvents(),
+        downtimeEnd({ downtimeStartActionId: 'ACT-MISSING-START' }),
+        shiftClose(),
+      ],
+    }),
+    input(),
+  )
+  check(orphan.readyForManagedRehearsal === false, 'orphan downtime end blocks readiness')
+  check(orphan.gates.find((gate) => gate.id === 'downtime_pairs_closed')?.passed === false, 'orphan downtime end fails pair gate')
+
+  const reversed = projectPlantManagedOeeWindow(
+    state({
+      jobs: [job()],
+      machines: [machine()],
+      events: [
+        ...windowOutputEvents(),
+        downtimeStart({ createdAt: '2026-08-25T10:00:00.000Z' }),
+        downtimeEnd({ createdAt: '2026-08-25T09:30:00.000Z' }),
+        shiftClose(),
+      ],
+    }),
+    input(),
+  )
+  check(reversed.readyForManagedRehearsal === false, 'end-before-start downtime blocks readiness')
+  check(reversed.gates.find((gate) => gate.id === 'downtime_pairs_closed')?.passed === false, 'end-before-start fails pair gate')
+
+  const preWindowOpen = projectPlantManagedOeeWindow(
+    state({
+      jobs: [job()],
+      machines: [machine()],
+      events: [
+        ...windowOutputEvents(),
+        downtimeStart({ createdAt: '2026-08-25T07:30:00.000Z' }),
+        shiftClose(),
+      ],
+    }),
+    input(),
+  )
+  check(preWindowOpen.readyForManagedRehearsal === false, 'pre-window unclosed downtime blocks readiness')
+  check(preWindowOpen.gates.find((gate) => gate.id === 'downtime_pairs_closed')?.passed === false, 'pre-window unclosed downtime fails pair gate')
+}
+
+// 15. A subwindow uses only output records inside that window, never whole-shift close totals.
+{
+  const events = [
+    outputEvent({ id: 'EV-OUTPUT-BEFORE', actionId: 'ACT-OUTPUT-BEFORE', createdAt: '2026-08-25T09:00:00.000Z', quantity: 150 }),
+    outputEvent({ id: 'EV-OUTPUT-IN-GOOD', actionId: 'ACT-OUTPUT-IN-GOOD', createdAt: '2026-08-25T10:30:00.000Z', quantity: 40 }),
+    outputEvent({
+      id: 'EV-OUTPUT-IN-SCRAP',
+      actionId: 'ACT-OUTPUT-IN-SCRAP',
+      createdAt: '2026-08-25T11:00:00.000Z',
+      quantity: 10,
+      outputKind: 'scrap',
+    }),
+    shiftClose({ outputEntryCount: 3 }),
+  ]
+  const r = projectPlantManagedOeeWindow(
+    state({ jobs: [job()], machines: [machine()], events }),
+    input({ startedAt: '2026-08-25T10:00:00.000Z' }),
+  )
+  check(r.readyForManagedRehearsal === true, 'complete subwindow evidence is ready')
+  check(r.metrics.goodUnits === 40 && r.metrics.scrapUnits === 10, 'subwindow excludes pre-window shift output')
+  check(r.metrics.totalUnits === 50, 'subwindow total is derived from in-window records')
+  check(r.metrics.performanceRate === 42, 'subwindow performance is not inflated by whole-shift close totals')
+}
+
+// 16. Output records on both exact time boundaries are included and source-bound.
+{
+  const events = [
+    outputEvent({ id: 'EV-OUTPUT-AT-START', actionId: 'ACT-OUTPUT-AT-START', createdAt: '2026-08-25T10:00:00.000Z', quantity: 20 }),
+    outputEvent({
+      id: 'EV-OUTPUT-AT-END',
+      actionId: 'ACT-OUTPUT-AT-END',
+      createdAt: END,
+      quantity: 5,
+      outputKind: 'scrap',
+    }),
+    shiftClose({ goodUnits: 20, scrapUnits: 5, outputEntryCount: 2 }),
+  ]
+  const r = projectPlantManagedOeeWindow(
+    state({ jobs: [job()], machines: [machine()], events }),
+    input({ startedAt: '2026-08-25T10:00:00.000Z' }),
+  )
+  check(r.readyForManagedRehearsal === true, 'exact-boundary output evidence is ready')
+  check(r.metrics.goodUnits === 20 && r.metrics.scrapUnits === 5, 'both output boundaries are inclusive')
+}
+
+// 17. An in-window output without an exact shift binding fails closed and zeros decision units.
+{
+  const r = projectPlantManagedOeeWindow(
+    state({
+      jobs: [job()],
+      machines: [machine()],
+      events: [outputEvent({ shiftRef: undefined }), shiftClose({ outputEntryCount: 1 })],
+    }),
+    input(),
+  )
+  check(r.readyForManagedRehearsal === false, 'unbound window output blocks readiness')
+  check(r.gates.find((gate) => gate.id === 'source_quantity_mapping_unambiguous')?.passed === false, 'unbound window output fails source gate')
+  check(r.metrics.totalUnits === 0 && r.metrics.oeeRate === 0, 'unbound window output cannot expose OEE decision units')
+}
+
+// 18. Projection is deterministic across source event ordering.
+{
+  const events = [
+    ...windowOutputEvents(),
+    downtimeStart({ id: 'EV-DOWN-START-PRE', actionId: 'ACT-DOWN-START-PRE', createdAt: '2026-08-25T07:30:00.000Z' }),
+    downtimeEnd({
+      id: 'EV-DOWN-END-PRE',
+      actionId: 'ACT-DOWN-END-PRE',
+      createdAt: '2026-08-25T08:30:00.000Z',
+      downtimeStartActionId: 'ACT-DOWN-START-PRE',
+    }),
+    shiftClose(),
+  ]
+  const forward = projectPlantManagedOeeWindow(state({ jobs: [job()], machines: [machine()], events }), input())
+  const reversed = projectPlantManagedOeeWindow(state({ jobs: [job()], machines: [machine()], events: [...events].reverse() }), input())
+  check(JSON.stringify(forward.metrics) === JSON.stringify(reversed.metrics), 'event order does not change projected metrics')
+  check(JSON.stringify(forward.gates) === JSON.stringify(reversed.gates), 'event order does not change gates')
+  check(forward.windowDigest === reversed.windowDigest, 'event order does not change the projection digest')
 }
 
 console.log(JSON.stringify({ ok: true, checks }))

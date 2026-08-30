@@ -91,10 +91,13 @@ const digestPattern = /^sha256:[0-9a-f]{64}$/i
 const sourceQuantityFieldPattern = /(?:quantity|qty|units?|output|scrap|good|count|reject|waste)/i
 const plantManagedOeeSourceMap = {
   contract: PLANT_MANAGED_OEE_SOURCE_MAP_CONTRACT,
-  sourceEventKind: 'shift_closed',
+  windowUnitSourceEventKind: 'output_recorded',
+  windowUnitFields: ['quantity', 'outputKind'],
+  windowScopeFields: ['createdAt', 'subjectId', 'shiftRef'],
+  reconciliationEventKind: 'shift_closed',
   canonicalQuantityFields: ['goodUnits', 'scrapUnits'],
   supportingCountFields: ['outputEntryCount', 'materialEntryCount'],
-  rejectedQuantityLikeFieldPolicy: 'any non-canonical quantity-like field on the shift_closed event blocks managed OEE readiness',
+  rejectedQuantityLikeFieldPolicy: 'any non-canonical quantity-like field on window output or shift-close evidence blocks managed OEE readiness',
 }
 const plantManagedOeeSourceMapDigest = `sha256:${sha256Hex(JSON.stringify(plantManagedOeeSourceMap))}`
 
@@ -111,7 +114,7 @@ function boundedRate(numerator: number, denominator: number) {
 function findShiftClose(events: ProductionEvent[], shiftRef: string) {
   return events
     .filter((event) => event.kind === 'shift_closed' && event.subjectId === shiftRef)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.actionId.localeCompare(a.actionId))[0]
 }
 
 function eventWithin(event: ProductionEvent, startedAt: number, endedAt: number) {
@@ -120,34 +123,66 @@ function eventWithin(event: ProductionEvent, startedAt: number, endedAt: number)
 }
 
 function pairedDowntimeMinutes(events: ProductionEvent[], machineId: string, startedAt: number, endedAt: number) {
-  const starts = new Map<string, ProductionEvent>()
+  const starts = new Map<string, number>()
+  const ends = new Map<string, number>()
+  const seenActionIds = new Set<string>()
+  const intervals: Array<{ startedAt: number; endedAt: number }> = []
   let activeDowntimeCount = 0
   let completedIntervals = 0
-  let totalDowntimeMinutes = 0
+  let invalidEvidenceCount = 0
+  let totalDowntimeMilliseconds = 0
 
   for (const event of events) {
-    if (event.kind !== 'downtime_started' || event.subjectId !== machineId || !eventWithin(event, startedAt, endedAt)) continue
-    starts.set(event.actionId, event)
-    activeDowntimeCount++
+    if (event.subjectId !== machineId || (event.kind !== 'downtime_started' && event.kind !== 'downtime_ended')) continue
+    const createdAt = safeTimestamp(event.createdAt)
+    if (createdAt === null) {
+      invalidEvidenceCount++
+      continue
+    }
+    if (!event.actionId || seenActionIds.has(event.actionId)) {
+      invalidEvidenceCount++
+      continue
+    }
+    seenActionIds.add(event.actionId)
+    if (event.kind === 'downtime_started') {
+      starts.set(event.actionId, createdAt)
+      continue
+    }
+    const startActionId = event.downtimeStartActionId
+    if (!startActionId || ends.has(startActionId)) invalidEvidenceCount++
+    else ends.set(startActionId, createdAt)
   }
 
-  for (const event of events) {
-    if (event.kind !== 'downtime_ended' || event.subjectId !== machineId || !event.downtimeStartActionId || !eventWithin(event, startedAt, endedAt)) continue
-    const start = starts.get(event.downtimeStartActionId)
-    if (!start) continue
-    const startAt = safeTimestamp(start.createdAt)
-    const endAt = safeTimestamp(event.createdAt)
-    if (startAt === null || endAt === null || endAt < startAt) continue
-    starts.delete(event.downtimeStartActionId)
-    activeDowntimeCount--
+  for (const [startActionId, ended] of ends) {
+    const started = starts.get(startActionId)
+    if (started === undefined || ended < started) {
+      invalidEvidenceCount++
+      continue
+    }
+    intervals.push({ startedAt: started, endedAt: ended })
+  }
+
+  for (const [startActionId, started] of starts) {
+    if (!ends.has(startActionId) && started <= endedAt) activeDowntimeCount++
+  }
+
+  let previousRelevantEnd: number | null = null
+  for (const interval of intervals.sort((left, right) => left.startedAt - right.startedAt || left.endedAt - right.endedAt)) {
+    const overlapStartedAt = Math.max(startedAt, interval.startedAt)
+    const overlapEndedAt = Math.min(endedAt, interval.endedAt)
+    if (overlapEndedAt <= overlapStartedAt) continue
+    if (previousRelevantEnd !== null && interval.startedAt < previousRelevantEnd) invalidEvidenceCount++
+    previousRelevantEnd = Math.max(previousRelevantEnd ?? interval.endedAt, interval.endedAt)
     completedIntervals++
-    totalDowntimeMinutes += Math.round((endAt - startAt) / 60000)
+    totalDowntimeMilliseconds += overlapEndedAt - overlapStartedAt
   }
 
   return {
     activeDowntimeCount,
     completedIntervals,
-    totalDowntimeMinutes,
+    invalidEvidenceCount,
+    evidenceValid: activeDowntimeCount === 0 && invalidEvidenceCount === 0,
+    totalDowntimeMinutes: Math.round(totalDowntimeMilliseconds / 60000),
   }
 }
 
@@ -163,6 +198,97 @@ function jobLinkedToShift(job: ProductionJob | undefined, events: ProductionEven
 
 function reviewDigest(value: string | undefined) {
   return value && digestPattern.test(value) ? value.toLowerCase() : null
+}
+
+type PlantManagedOeeWindowOutput = {
+  passed: boolean
+  goodUnits: number
+  scrapUnits: number
+  eventCount: number
+  rejectedQuantityLikeFields: string[]
+  reason: string
+}
+
+function outputUnitsInsideWindow(
+  events: ProductionEvent[],
+  jobId: string,
+  shiftRef: string,
+  startedAt: number,
+  endedAt: number,
+  shiftClose: ProductionEvent | undefined,
+): PlantManagedOeeWindowOutput {
+  const allowedQuantityLikeFields = new Set(plantManagedOeeSourceMap.windowUnitFields)
+  const rejectedQuantityLikeFields = new Set<string>()
+  const seenActionIds = new Set<string>()
+  const shiftCloseAt = shiftClose ? safeTimestamp(shiftClose.createdAt) : null
+  let goodUnits = 0
+  let scrapUnits = 0
+  let eventCount = 0
+  let invalidEvidenceCount = 0
+
+  for (const event of events) {
+    if (event.kind !== 'output_recorded' || event.subjectId !== jobId) continue
+    const createdAt = safeTimestamp(event.createdAt)
+    if (event.shiftRef === undefined) {
+      if (createdAt === null || (createdAt >= startedAt && createdAt <= endedAt)) invalidEvidenceCount++
+      continue
+    }
+    if (event.shiftRef !== shiftRef) continue
+    if (createdAt === null) {
+      invalidEvidenceCount++
+      continue
+    }
+    if (createdAt < startedAt || createdAt > endedAt) continue
+
+    const source = event as unknown as Record<string, unknown>
+    for (const field of Object.keys(source)) {
+      if (sourceQuantityFieldPattern.test(field) && !allowedQuantityLikeFields.has(field)) {
+        rejectedQuantityLikeFields.add(field)
+      }
+    }
+    const outputKind = event.outputKind ?? 'good'
+    const quantity = event.quantity
+    if (!event.actionId
+      || seenActionIds.has(event.actionId)
+      || !Number.isSafeInteger(quantity)
+      || !(Number(quantity) > 0)
+      || (outputKind !== 'good' && outputKind !== 'scrap')
+      || shiftCloseAt === null
+      || createdAt > shiftCloseAt) {
+      invalidEvidenceCount++
+      continue
+    }
+    seenActionIds.add(event.actionId)
+    if (outputKind === 'scrap') scrapUnits += Number(quantity)
+    else goodUnits += Number(quantity)
+    eventCount++
+    if (!Number.isSafeInteger(goodUnits) || !Number.isSafeInteger(scrapUnits)) invalidEvidenceCount++
+  }
+
+  const reconcilesWithShiftClose = !!shiftClose
+    && shiftClose.shiftRef === shiftRef
+    && typeof shiftClose.goodUnits === 'number'
+    && typeof shiftClose.scrapUnits === 'number'
+    && typeof shiftClose.outputEntryCount === 'number'
+    && goodUnits <= shiftClose.goodUnits
+    && scrapUnits <= shiftClose.scrapUnits
+    && eventCount <= shiftClose.outputEntryCount
+  if (!reconcilesWithShiftClose) invalidEvidenceCount++
+  const rejectedFields = [...rejectedQuantityLikeFields].sort()
+  if (eventCount === 0) invalidEvidenceCount++
+  const passed = invalidEvidenceCount === 0 && rejectedFields.length === 0
+  return {
+    passed,
+    goodUnits,
+    scrapUnits,
+    eventCount,
+    rejectedQuantityLikeFields: rejectedFields,
+    reason: passed
+      ? 'Window units use only in-window job output records reconciled within the digest-bound shift close.'
+      : rejectedFields.length > 0
+        ? `Window output has unreviewed quantity-like fields: ${rejectedFields.join(', ')}.`
+        : 'Window output evidence is missing, unbound, malformed, duplicated, post-close, or does not reconcile with the shift close.',
+  }
 }
 
 function sourceTrustForShiftClose(shiftClose: ProductionEvent | undefined): PlantManagedOeeSourceTrust {
@@ -211,6 +337,28 @@ function sourceTrustForShiftClose(shiftClose: ProductionEvent | undefined): Plan
   }
 }
 
+function sourceTrustForWindow(
+  shiftClose: ProductionEvent | undefined,
+  windowOutput: PlantManagedOeeWindowOutput,
+): PlantManagedOeeSourceTrust {
+  const shiftCloseTrust = sourceTrustForShiftClose(shiftClose)
+  const rejectedQuantityLikeFields = [...new Set([
+    ...shiftCloseTrust.rejectedQuantityLikeFields,
+    ...windowOutput.rejectedQuantityLikeFields,
+  ])].sort()
+  const passed = shiftCloseTrust.passed && windowOutput.passed
+  return {
+    ...shiftCloseTrust,
+    passed,
+    rejectedQuantityLikeFields,
+    reason: passed
+      ? windowOutput.reason
+      : !shiftCloseTrust.passed
+        ? shiftCloseTrust.reason
+        : windowOutput.reason,
+  }
+}
+
 export function projectPlantManagedOeeWindow(
   production: ProductionState,
   input: PlantManagedOeeWindowInput,
@@ -226,12 +374,22 @@ export function projectPlantManagedOeeWindow(
   const linkedToShift = jobLinkedToShift(job, production.events, input.shiftRef)
   const downtime = windowTimeValid
     ? pairedDowntimeMinutes(production.events, input.machineId, startedAt as number, endedAt as number)
-    : { activeDowntimeCount: 0, completedIntervals: 0, totalDowntimeMinutes: 0 }
-  const sourceTrust = sourceTrustForShiftClose(shiftClose)
+    : { activeDowntimeCount: 0, completedIntervals: 0, invalidEvidenceCount: 1, evidenceValid: false, totalDowntimeMinutes: 0 }
+  const windowOutput = windowTimeValid
+    ? outputUnitsInsideWindow(production.events, input.jobId, input.shiftRef, startedAt as number, endedAt as number, shiftClose)
+    : {
+        passed: false,
+        goodUnits: 0,
+        scrapUnits: 0,
+        eventCount: 0,
+        rejectedQuantityLikeFields: [],
+        reason: 'Window output cannot be trusted until the reviewed time window is valid.',
+      }
+  const sourceTrust = sourceTrustForWindow(shiftClose, windowOutput)
 
   const runtimeMinutes = Math.max(0, plannedMinutes - downtime.totalDowntimeMinutes)
-  const goodUnits = sourceTrust.passed && typeof shiftClose?.goodUnits === 'number' ? shiftClose.goodUnits : 0
-  const scrapUnits = sourceTrust.passed && typeof shiftClose?.scrapUnits === 'number' ? shiftClose.scrapUnits : 0
+  const goodUnits = sourceTrust.passed ? windowOutput.goodUnits : 0
+  const scrapUnits = sourceTrust.passed ? windowOutput.scrapUnits : 0
   const totalUnits = goodUnits + scrapUnits
   const expectedUnitsAtRuntime = input.idealUnitsPerHour > 0
     ? Math.round((input.idealUnitsPerHour * runtimeMinutes) / 60)
@@ -284,8 +442,10 @@ export function projectPlantManagedOeeWindow(
     },
     {
       id: 'downtime_pairs_closed',
-      passed: downtime.activeDowntimeCount === 0,
-      reason: downtime.activeDowntimeCount === 0 ? 'All downtime starts in the window are closed.' : 'One or more downtime starts remain open.',
+      passed: downtime.evidenceValid,
+      reason: downtime.evidenceValid
+        ? 'All downtime intervals that can intersect the window are complete and clipped to the reviewed window.'
+        : 'Downtime evidence is malformed, overlapping, or unclosed for the reviewed window.',
     },
     {
       id: 'machine_not_stopped',
