@@ -213,14 +213,14 @@ function fullCaseMatrixFixture() {
       name: 'desktop Plant shows the browser-local working sample',
       route: '/plant/',
       viewport: '1280x900',
-      path: '/plant/',
+      path: '/plant/?tab=production',
       screenshot: { file: 'plant-working-sample-desktop-1280x900.png' },
     },
     {
       name: 'mobile Plant shows the browser-local working sample',
       route: '/plant/',
       viewport: '390x844 mobile',
-      path: '/plant/',
+      path: '/plant/?tab=production',
       screenshot: { file: 'plant-working-sample-mobile-390x844.png' },
     },
     {
@@ -331,6 +331,36 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const wrongMobileViewport = structuredClone(ecommerce)
   wrongMobileViewport[1].viewport = '1280x900'
   assert.throws(() => assertRenderedProofCaseMatrix(wrongMobileViewport, 'ecommerce-claim'), /case_matrix_mismatch/)
+})
+
+test('full visual cases pin current product truth copy and Plant canonicalization', async () => {
+  const rootDir = process.cwd()
+  const [renderer, coreApp, websiteProduct, ecommerceProduct, ecommerceWorkspace] = await Promise.all([
+    readFile(join(rootDir, 'tools', 'verify_app_entry_rendered.mjs'), 'utf8'),
+    readFile(join(rootDir, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
+    readFile(join(rootDir, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
+    readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
+    readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8'),
+  ])
+  const sourceBoundText = [
+    [coreApp, 'Record first shift output'],
+    [coreApp, "These dates belong to this browser-local sample, not today's production."],
+    [websiteProduct, 'Customize this demo'],
+    [websiteProduct, 'Saved on this device'],
+    [websiteProduct, 'The working sample stays unchanged until you choose Customize demo.'],
+    [ecommerceProduct, 'Sample request saved locally'],
+    [ecommerceWorkspace, 'This sample order request is saved on this device for Shop review.'],
+    [ecommerceWorkspace, 'This browser demo retained the request.'],
+  ]
+  for (const [source, text] of sourceBoundText) {
+    assert.ok(source.includes(text), `missing current product authority: ${text}`)
+    assert.ok(renderer.includes(text), `renderer does not require current product truth: ${text}`)
+  }
+  assert.equal((renderer.match(/expectedPath: '\/plant\/\?tab=production'/g) || []).length, 2)
+  const expectedTextBodies = [...renderer.matchAll(/expectedText:\s*\[([^\]]*)\]/g)].map((match) => match[1])
+  for (const retired of ['Make this website yours', 'Nothing has been deployed.', 'Try one customer order', 'Start sample order']) {
+    assert.equal(expectedTextBodies.some((body) => body.includes(retired)), false, `retired rendered expectation remains: ${retired}`)
+  }
 })
 
 test('validates a clean exact on-disk Ecommerce rendered proof', async (context) => {
