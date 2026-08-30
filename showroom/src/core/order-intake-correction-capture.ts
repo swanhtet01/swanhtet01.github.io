@@ -300,3 +300,81 @@ export function captureOrderIntakeCorrection(
   }
   return entry
 }
+
+/**
+ * Section 9's correction-effort metric, the `ai-assistance` nextGate's quality bar.
+ *
+ * The research doc (hq/research/order-intake-agent-evaluation-2026-08.md section 9) defines it
+ * per fixture as `fields_corrected / total_extracted_fields`, then says "the correction effort
+ * is averaged across all 20 fixtures". That is a MEAN OF PER-FIXTURE RATIOS, not a pooled
+ * `sum(corrected) / sum(extracted)` — the two differ whenever fixtures populate different
+ * numbers of fields, and the pooled figure quietly weights a draft with eight populated fields
+ * four times as heavily as one with two. `pooledEffort` is reported alongside precisely so the
+ * divergence is visible rather than argued about; `averageEffort` is the one the gate reads.
+ *
+ * A draft where the model populated NOTHING has no defined effort — the denominator is zero.
+ * Those are excluded from the mean and counted in `undefinedCount`, which matters more than it
+ * looks: scoring them as 0 would let a model that extracts nothing at all post a perfect
+ * correction effort and clear the bar by refusing to do the job. Excluding them means such a
+ * run instead fails on `measuredCount`, which is the honest failure.
+ *
+ * Fail-closed throughout: no measured fixtures, or fewer than the protocol's required sample,
+ * is NOT a pass regardless of the ratio.
+ */
+export const ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD = 0.2
+export const ORDER_INTAKE_CORRECTION_EFFORT_SAMPLE = 20
+
+/**
+ * The threshold comparison is `<=`, and summing ratios of small integers does not land where
+ * arithmetic says it should: twenty fixtures each corrected 1-of-5 is exactly 0.20 correction
+ * effort, but the accumulated mean is 0.20000000000000004, which is greater than 0.2. Without
+ * this tolerance a run sitting exactly ON the bar — the single most likely borderline case,
+ * since field counts are small integers — fails, and fails invisibly, on representation noise
+ * rather than on quality.
+ *
+ * 1e-9 is far below any difference in correction effort that could mean anything (the smallest
+ * real step is one corrected field out of a handful), so this absorbs float error without
+ * widening the bar in any way an operator could exercise. `averageEffort` is reported raw and
+ * unrounded; only the pass/fail comparison is tolerant.
+ */
+const EFFORT_COMPARISON_EPSILON = 1e-9
+
+export type OrderIntakeCorrectionEffort = {
+  sampleSize: number
+  measuredCount: number
+  undefinedCount: number
+  averageEffort: number | null
+  pooledEffort: number | null
+  threshold: typeof ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD
+  requiredSample: number
+  meetsQualityBar: boolean
+}
+
+export function summarizeOrderIntakeCorrectionEffort(
+  records: readonly OrderIntakeEvidenceRecord[],
+  options: { requiredSample?: number } = {},
+): OrderIntakeCorrectionEffort {
+  const requiredSample = Number.isSafeInteger(options.requiredSample) && (options.requiredSample as number) >= 0
+    ? (options.requiredSample as number)
+    : ORDER_INTAKE_CORRECTION_EFFORT_SAMPLE
+  const measured = records.filter((entry) => entry.totalExtractedFields > 0)
+  const ratioSum = measured.reduce(
+    (total, entry) => total + entry.correctionCount / entry.totalExtractedFields,
+    0,
+  )
+  const correctedSum = measured.reduce((total, entry) => total + entry.correctionCount, 0)
+  const extractedSum = measured.reduce((total, entry) => total + entry.totalExtractedFields, 0)
+  const averageEffort = measured.length ? ratioSum / measured.length : null
+  return {
+    sampleSize: records.length,
+    measuredCount: measured.length,
+    undefinedCount: records.length - measured.length,
+    averageEffort,
+    pooledEffort: extractedSum ? correctedSum / extractedSum : null,
+    threshold: ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD,
+    requiredSample,
+    meetsQualityBar: averageEffort !== null
+      && measured.length >= requiredSample
+      && averageEffort <= ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD + EFFORT_COMPARISON_EPSILON,
+  }
+}
