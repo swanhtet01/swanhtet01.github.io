@@ -285,8 +285,9 @@ function runGitHubSecretSyncPutOutcomeChecks(script) {
     '        return Response(503)',
     '    return Response(200)',
     '',
-    'def put(url, headers, json, timeout):',
+    'def put(url, headers, json, timeout, allow_redirects):',
     '    _trace("PUT")',
+    '    _trace("REDIRECTS_DISABLED" if allow_redirects is False else "REDIRECTS_ENABLED")',
     '    mode = os.environ.get("FAKE_REQUEST_MODE")',
     '    if mode == "timeout":',
     '        raise TimeoutError(os.environ["SECRET_SENTINEL"])',
@@ -296,8 +297,12 @@ function runGitHubSecretSyncPutOutcomeChecks(script) {
     '        raise RuntimeError(os.environ["SECRET_SENTINEL"])',
     '    if mode == "non_2xx":',
     '        return Response(422)',
+    '    if mode == "redirect":',
+    '        return Response(307)',
     '    if mode == "server_error":',
     '        return Response(503)',
+    '    if mode == "created":',
+    '        return Response(201)',
     '    return Response(204)',
     '',
   ].join('\n'), 'utf8')
@@ -311,6 +316,15 @@ function runGitHubSecretSyncPutOutcomeChecks(script) {
       expectedPerformed: true,
       expectedPutCount: 1,
       expectedStatusCode: 204,
+    },
+    {
+      name: 'put_created_confirmed_performed',
+      mode: 'created',
+      expectedStatus: 0,
+      expectedOutcome: 'confirmed_performed',
+      expectedPerformed: true,
+      expectedPutCount: 1,
+      expectedStatusCode: 201,
     },
     {
       name: 'put_non_2xx_confirmed_not_performed',
@@ -328,6 +342,15 @@ function runGitHubSecretSyncPutOutcomeChecks(script) {
       expectedOutcome: 'outcome_unknown',
       expectedPerformed: null,
       expectedPutCount: 1,
+    },
+    {
+      name: 'put_redirect_outcome_unknown_without_replay',
+      mode: 'redirect',
+      expectedStatus: 1,
+      expectedOutcome: 'outcome_unknown',
+      expectedPerformed: null,
+      expectedPutCount: 1,
+      expectedStatusCode: 307,
     },
     {
       name: 'put_server_error_outcome_unknown_no_retry',
@@ -392,6 +415,7 @@ function runGitHubSecretSyncPutOutcomeChecks(script) {
       }
       const trace = fs.readFileSync(tracePath, 'utf8').trim().split(/\r?\n/).filter(Boolean)
       const putCount = trace.filter((value) => value === 'PUT').length
+      const redirectsDisabledCount = trace.filter((value) => value === 'REDIRECTS_DISABLED').length
       const output = `${child.stdout || ''}${child.stderr || ''}`
       const ok = child.status === testCase.expectedStatus
         && packet?.contract === 'supermega.github-secret-sync.quarantine.v1'
@@ -401,6 +425,8 @@ function runGitHubSecretSyncPutOutcomeChecks(script) {
         && packet?.external_write_outcome === testCase.expectedOutcome
         && packet?.external_write_retry_allowed === false
         && putCount === testCase.expectedPutCount
+        && redirectsDisabledCount === testCase.expectedPutCount
+        && !trace.includes('REDIRECTS_ENABLED')
         && (testCase.expectedStatusCode === undefined || packet?.status_code === testCase.expectedStatusCode)
         && !output.includes(secretSentinel)
 
@@ -409,6 +435,7 @@ function runGitHubSecretSyncPutOutcomeChecks(script) {
         ok,
         status: child.status,
         putCount,
+        redirectsDisabledCount,
         outcome: packet?.external_write_outcome ?? null,
         externalWritesPerformed: packet?.external_writes_performed,
         secretValuesExposed: packet?.secret_values_exposed === true,

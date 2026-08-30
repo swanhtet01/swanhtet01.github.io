@@ -202,6 +202,7 @@ def main() -> int:
                 "key_id": key_payload["key_id"],
             },
             timeout=30,
+            allow_redirects=False,
         )
 
         failure_stage = "secret_put_response"
