@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path'
 import test from 'node:test'
 
 import {
+  SHOP_OBSERVED_AT_MAX_FUTURE_SKEW_MS,
   SHOP_OBSERVED_EVIDENCE_CONTRACT,
   SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT,
   SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT,
@@ -363,6 +364,62 @@ test('preflights filled private observed-run input as owner-safe validation arti
   assert.equal(invalid.privateRunInputDigest, null)
   assert.equal(invalid.run, null)
   assert.doesNotMatch(JSON.stringify(invalid), /owner@example|RUN-002/i)
+})
+
+test('future observations fail closed while the explicit clock-skew boundary stays deterministic', async () => {
+  assert.equal(SHOP_OBSERVED_AT_MAX_FUTURE_SKEW_MS, 300_000)
+  const recordingTime = '2026-08-25T08:00:00.000Z'
+  const skewBoundary = runInput(21, { observedAt: '2026-08-25T08:05:00.000Z' })
+  const beyondSkew = runInput(22, { observedAt: '2026-08-25T08:05:00.001Z' })
+  const firstBoundaryPacket = preflightObservedRunInput(skewBoundary, { generatedAt: recordingTime })
+  const secondBoundaryPacket = preflightObservedRunInput(skewBoundary, { generatedAt: recordingTime })
+  assert.deepEqual(firstBoundaryPacket, secondBoundaryPacket)
+  assert.equal(firstBoundaryPacket.ok, true)
+  assert.equal(firstBoundaryPacket.safeToRecordPrivateObservedRun, true)
+
+  const rejectedPacket = preflightObservedRunInput(beyondSkew, { generatedAt: recordingTime })
+  assert.equal(rejectedPacket.ok, false)
+  assert.equal(rejectedPacket.safeToRecordPrivateObservedRun, false)
+  assert.deepEqual(rejectedPacket.failures, ['shop_observed_at_future'])
+  assert.equal(rejectedPacket.privateRunInputDigest, null)
+  assert.equal(rejectedPacket.run, null)
+
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-future-'))
+  const workspace = join(parent, 'workspace')
+  try {
+    const futureObservedAt = new Date(Date.now() + SHOP_OBSERVED_AT_MAX_FUTURE_SKEW_MS + 60_000).toISOString()
+    await assert.rejects(() => recordObservedShopPilotRun({
+      workspace,
+      runInput: runInput(23, { observedAt: futureObservedAt }),
+    }), /shop_observed_at_future/)
+    await assert.rejects(() => readFile(join(workspace, 'observed-runs.private.jsonl'), 'utf8'), { code: 'ENOENT' })
+    await assert.rejects(() => readFile(join(workspace, 'observed-summary.private.json'), 'utf8'), { code: 'ENOENT' })
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('rehash-valid future stored observations cannot count or accept another record', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-observed-future-stored-'))
+  const runsPath = join(parent, 'observed-runs.private.jsonl')
+  try {
+    await recordObservedShopPilotRun({ workspace: parent, runInput: runInput(1) })
+    const original = JSON.parse((await readFile(runsPath, 'utf8')).trim())
+    const unsigned = {
+      ...original,
+      observedAt: new Date(Date.now() + SHOP_OBSERVED_AT_MAX_FUTURE_SKEW_MS + 60_000).toISOString(),
+    }
+    delete unsigned.recordDigest
+    const futureRecord = { ...unsigned, recordDigest: recordDigest(unsigned) }
+    const futureBytes = `${JSON.stringify(futureRecord)}\n`
+    await writeFile(runsPath, futureBytes)
+
+    await assert.rejects(() => verifyObservedShopPilotEvidence(parent), /shop_observed_at_future/)
+    await assert.rejects(() => recordObservedShopPilotRun({ workspace: parent, runInput: runInput(2) }), /shop_observed_at_future/)
+    assert.equal(await readFile(runsPath, 'utf8'), futureBytes)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
 })
 
 test('replayed evidence and anchor digests cannot inflate accepted run count', async () => {

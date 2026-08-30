@@ -13,6 +13,7 @@ export const SHOP_OBSERVED_RUN_INPUT_CONTRACT = 'supermega.shop.observed_pilot_r
 export const SHOP_OBSERVED_EVIDENCE_CONTRACT = 'supermega.shop.observed_pilot_evidence.v1'
 export const SHOP_OBSERVED_RUN_INPUT_TEMPLATE_CONTRACT = 'supermega.shop.observed_pilot_run_input_template.v1'
 export const SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT = 'supermega.shop.observed_pilot_run_input_validation.v1'
+export const SHOP_OBSERVED_AT_MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
 
 const RUNS_FILE = 'observed-runs.private.jsonl'
 const SUMMARY_FILE = 'observed-summary.private.json'
@@ -189,6 +190,15 @@ function exactIsoUtc(value, field) {
   return normalized
 }
 
+function observedAtWithinRecordingTime(value, recordingTime) {
+  const observedAt = exactIsoUtc(value, 'observed_at')
+  const normalizedRecordingTime = exactIsoUtc(recordingTime, 'recording_time')
+  if (Date.parse(observedAt) > Date.parse(normalizedRecordingTime) + SHOP_OBSERVED_AT_MAX_FUTURE_SKEW_MS) {
+    throw new Error('shop_observed_at_future')
+  }
+  return observedAt
+}
+
 function exactShaDigest(value, field) {
   const normalized = exactText(value, field, 80)
   if (!/^sha256:[0-9a-f]{64}$/.test(normalized)) throw new Error(`${field}_invalid`)
@@ -265,7 +275,7 @@ function assertStoredProofIntegrity(entries) {
   }
 }
 
-export function normalizeObservedRunInput(input) {
+function normalizeObservedRunInputAt(input, recordingTime) {
   assertNoPrivateIdentity(input)
   if (!exactKeys(input, REQUIRED_INPUT_KEYS)) throw new Error('shop_observed_run_input_keys_invalid')
   if (input.contract !== SHOP_OBSERVED_RUN_INPUT_CONTRACT) throw new Error('shop_observed_run_contract_invalid')
@@ -285,7 +295,7 @@ export function normalizeObservedRunInput(input) {
     pilotMode: SHOP_PILOT_MODE,
     verticalPack: SHOP_PILOT_VERTICAL_PACK,
     runId,
-    observedAt: exactIsoUtc(input.observedAt, 'observed_at'),
+    observedAt: observedAtWithinRecordingTime(input.observedAt, recordingTime),
     dayIndex: exactNumber(input.dayIndex, 'day_index', { min: 1, max: 5, integer: true }),
     operatorReviewed: exactTrue(input.operatorReviewed, 'operator_reviewed'),
     targetCorrect: exactTrue(input.targetCorrect, 'target_correct'),
@@ -303,6 +313,10 @@ export function normalizeObservedRunInput(input) {
     evidenceReferenceDigest,
     independentAnchorDigest,
   }
+}
+
+export function normalizeObservedRunInput(input) {
+  return normalizeObservedRunInputAt(input, new Date().toISOString())
 }
 
 export function buildObservedRunInputTemplate({
@@ -466,7 +480,8 @@ async function readStoredRuns(workspace) {
   return parseStoredRuns(await readFile(path, 'utf8'))
 }
 
-function evidenceSummary(entries) {
+function evidenceSummary(entries, recordingTime) {
+  entries.forEach((entry) => observedAtWithinRecordingTime(entry.observedAt, recordingTime))
   const proofIntegrity = assertStoredProofIntegrity(entries)
   const acceptedRunCount = entries.filter((entry) => entry.accepted === true).length
   const acceptedEntries = entries.filter((entry) => entry.accepted === true)
@@ -567,26 +582,28 @@ async function writeNewJson(path, value) {
 }
 
 export async function recordObservedShopPilotRun({ workspace, runInput }) {
+  const recordingTime = new Date().toISOString()
+  const run = normalizeObservedRunInputAt(runInput, recordingTime)
   const root = resolve(workspace)
   await mkdir(root, { recursive: true })
-  const run = normalizeObservedRunInput(runInput)
   const existing = await readStoredRuns(root)
   if (existing.some((entry) => entry.runId === run.runId)) throw new Error('shop_observed_run_id_duplicate')
   if (existing.some((entry) => entry.evidenceReferenceDigest === run.evidenceReferenceDigest)) throw new Error('shop_observed_evidence_reference_digest_duplicate')
   if (existing.some((entry) => entry.independentAnchorDigest === run.independentAnchorDigest)) throw new Error('shop_observed_independent_anchor_digest_duplicate')
   const entry = evidenceEntry(run)
   const updated = [...existing, entry]
+  const summary = evidenceSummary(updated, recordingTime)
   const lines = `${updated.map((stored) => JSON.stringify(stored)).join('\n')}\n`
   await writeFile(resolve(root, RUNS_FILE), lines, 'utf8')
-  const summary = evidenceSummary(updated)
   await writeSummary(root, summary)
   return summary
 }
 
 export async function verifyObservedShopPilotEvidence(workspace) {
+  const recordingTime = new Date().toISOString()
   const root = resolve(workspace)
   const entries = await readStoredRuns(root)
-  const expected = evidenceSummary(entries)
+  const expected = evidenceSummary(entries, recordingTime)
   if (await exists(resolve(root, SUMMARY_FILE))) {
     const stored = JSON.parse(await readFile(resolve(root, SUMMARY_FILE), 'utf8'))
     if (canonicalJson(stored) !== canonicalJson(expected)) throw new Error('shop_observed_summary_stale_or_tampered')
@@ -618,10 +635,11 @@ function publicRunInputValidation(run) {
 }
 
 export function preflightObservedRunInput(input, { generatedAt = new Date().toISOString() } = {}) {
+  const recordingTime = exactIsoUtc(generatedAt, 'generated_at')
   const base = {
     contract: SHOP_OBSERVED_RUN_INPUT_VALIDATION_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
-    generatedAt: exactIsoUtc(generatedAt, 'generated_at'),
+    generatedAt: recordingTime,
     product: SHOP_PILOT_PRODUCT,
     pilotMode: SHOP_PILOT_MODE,
     verticalPack: SHOP_PILOT_VERTICAL_PACK,
@@ -631,7 +649,7 @@ export function preflightObservedRunInput(input, { generatedAt = new Date().toIS
     controls: publicControls(),
   }
   try {
-    const run = normalizeObservedRunInput(input)
+    const run = normalizeObservedRunInputAt(input, recordingTime)
     const body = {
       ...base,
       ok: true,
