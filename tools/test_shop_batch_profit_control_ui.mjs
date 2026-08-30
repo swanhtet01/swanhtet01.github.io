@@ -132,8 +132,13 @@ check(today.includes('useLayoutEffect(() => () =>') && today.includes('revokeSho
 check(firstUseSource.includes('shopBatchFirstUseWorkspaceCapabilityIsCurrent(expected, current)'), 'every async storage phase must bind the same exact live workspace capability object')
 check(firstUseSource.includes('projectShopBatchProfitControl(structuredClone(input)'), 'local Batch workflow must project through the accepted engine')
 check(!firstUseSource.includes('estimatedBreakEvenSoldValueMmk:'), 'local Batch workflow must not implement a second decision-arithmetic projector')
-check(firstUseSource.includes('if (currentCommerceEvidence) for (const record of store.records) await validateCurrentCommerceSource(record, currentCommerceEvidence)'), 'every stored Batch source snapshot must be current before any projection or append')
-check(firstUseSource.includes("lockManager.request(STORAGE_LOCK_NAME, { mode: 'exclusive' }"), 'the full local save transaction must run under the same-origin exclusive lock')
+check(!firstUseSource.includes('for (const record of store.records) await validateCurrentCommerceSource'), 'immutable historical Batch receipts must not be revalidated against later Commerce changes')
+check(firstUseSource.includes('await validateCurrentCommerceSource(record, currentCommerceEvidence)'), 'only the newly created Batch receipt must bind the atomically current Commerce evidence')
+const saveTransactionSource = firstUseSource.slice(firstUseSource.indexOf('export async function saveShopBatchProfitControlLocalReview'), firstUseSource.indexOf('type WorkflowState'))
+const commerceLockIndex = saveTransactionSource.indexOf("lockManager.request(COMMERCE_LOCK, { mode: 'exclusive' }")
+const commerceReadIndex = saveTransactionSource.indexOf('readCurrentCommerceSnapshot(storage)')
+const batchLockIndex = saveTransactionSource.indexOf("lockManager.request(STORAGE_LOCK_NAME, { mode: 'exclusive' }")
+check(commerceLockIndex >= 0 && commerceReadIndex > commerceLockIndex && batchLockIndex > commerceReadIndex, 'the current Commerce snapshot and complete Batch append must share the exported Commerce lock before the Batch lock')
 check(firstUseSource.includes("if (!lockManager) fail('shop_batch_first_use_storage_lock_unavailable')"), 'saving must fail closed when Web Locks are unavailable')
 check(firstUseSource.includes("inputLeaves: persistedInputLeaves(input)"), 'persisted records must normalize immutable input leaves')
 check(!firstUseSource.includes('input: ShopBatchProfitControlInput\n  projectionDigest'), 'persisted records must not embed complete inputs with prior history')
@@ -178,6 +183,7 @@ let firstUseStorageEvidence = null
 try {
   const { ShopBatchProfitControlPanel } = await vite.ssrLoadModule('/src/core/ShopToday.tsx')
   const firstUse = await vite.ssrLoadModule('/src/core/shop-batch-profit-control-first-use.tsx')
+  const commerceModel = await vite.ssrLoadModule('/src/core/commerce-workspace.ts')
   const workspaceCapabilities = await vite.ssrLoadModule('/src/core/shop-batch-first-use-workspace-capability.ts')
   const localBackup = await vite.ssrLoadModule('/src/core/local-workspace-backup.ts')
   assert.deepEqual(
@@ -267,12 +273,16 @@ try {
       customer: 'PRIVATE CUSTOMER MUST NOT PERSIST',
       channel: 'counter',
       item: 'Daily Bread',
+      itemSku: 'BAK-BREAD',
       quantity: 2,
       payment: 'cash',
       paymentStatus: 'reconciled',
       refundStatus: 'none',
       paymentReconciledAt: '2026-08-30T02:00:00.000Z',
       paymentReconciliationActionId: 'PAY-OWNER-001',
+      paymentReconciledBy: 'Shop owner',
+      paymentReconciliationReason: 'Reviewed counter payment',
+      paymentEvidenceReference: 'LOCAL-PAYMENT-001',
       lines: [{ sku: 'BAK-BREAD', name: 'Daily Bread', quantity: 2, unitPriceMmk: 3_000 }],
       completion: { actionId: 'COMPLETE-OWNER-001', capturedAt: '2026-08-30T02:05:00.000Z', actor: 'Shop owner', reason: 'Local counter close', evidenceReference: 'LOCAL-SALE-001' },
       total: 6_000,
@@ -298,6 +308,9 @@ try {
   }
   class MemoryStorage {
     values = new Map()
+    constructor(commerce = retainedCommerce) {
+      if (commerce) this.setCommerce(commerce)
+    }
     get length() { return this.values.size }
     get value() { return this.getItem(firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY) }
     set value(value) {
@@ -307,23 +320,30 @@ try {
     key(index) { return [...this.values.keys()][index] ?? null }
     getItem(key) { return this.values.get(key) ?? null }
     setItem(key, value) { this.values.set(key, String(value)) }
+    setCommerce(commerce) { this.values.set('supermega.commerce.workspace.v2', JSON.stringify(commerce)) }
   }
   class ExclusiveLockManager {
-    tail = Promise.resolve()
+    tails = new Map()
     requests = 0
+    requestsByName = new Map()
     active = 0
     maxActive = 0
+    activeNames = new Set()
     request(name, options, callback) {
-      assert.equal(name, `${firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`)
+      assert.ok(['supermega-commerce-workspace-v2', `${firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`].includes(name))
       assert.deepEqual(options, { mode: 'exclusive' })
       this.requests += 1
-      const prior = this.tail
+      this.requestsByName.set(name, (this.requestsByName.get(name) ?? 0) + 1)
+      const prior = this.tails.get(name) ?? Promise.resolve()
       let release
-      this.tail = new Promise((resolve) => { release = resolve })
+      const gate = new Promise((resolve) => { release = resolve })
+      this.tails.set(name, prior.then(() => gate))
       return prior.then(async () => {
         this.active += 1
+        this.activeNames.add(name)
         this.maxActive = Math.max(this.maxActive, this.active)
         try { return await callback({ name, mode: 'exclusive' }) } finally {
+          this.activeNames.delete(name)
           this.active -= 1
           release()
         }
@@ -334,20 +354,44 @@ try {
     enforceLock = true
     constructor(lockManager) { super(); this.lockManager = lockManager }
     getItem(key) {
-      if (this.enforceLock) assert.equal(this.lockManager.active, 1, 'every transactional read must hold the exclusive lock')
+      if (this.enforceLock) {
+        const requiredLock = key === 'supermega.commerce.workspace.v2' ? 'supermega-commerce-workspace-v2' : `${firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`
+        assert.ok(this.lockManager.activeNames.has(requiredLock), `transactional read must hold ${requiredLock}`)
+      }
       return super.getItem(key)
     }
     setItem(key, value) {
-      if (this.enforceLock) assert.equal(this.lockManager.active, 1, 'the transactional write must hold the exclusive lock')
+      if (this.enforceLock) {
+        const requiredLock = key === 'supermega.commerce.workspace.v2' ? 'supermega-commerce-workspace-v2' : `${firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`
+        assert.ok(this.lockManager.activeNames.has(requiredLock), `transactional write must hold ${requiredLock}`)
+      }
       super.setItem(key, value)
+    }
+  }
+  class InterleavingCommerceStorage extends LockGuardedStorage {
+    queuedCommerce = null
+    writerPromise = null
+    queueCommerceWrite(commerce) { this.queuedCommerce = structuredClone(commerce) }
+    getItem(key) {
+      const value = super.getItem(key)
+      if (key === 'supermega.commerce.workspace.v2' && this.queuedCommerce) {
+        const queuedCommerce = this.queuedCommerce
+        this.queuedCommerce = null
+        this.writerPromise = this.lockManager.request('supermega-commerce-workspace-v2', { mode: 'exclusive' }, async (lock) => {
+          assert.equal(lock?.mode, 'exclusive')
+          this.setItem(key, JSON.stringify(queuedCommerce))
+        })
+      }
+      return value
     }
   }
   const lockManager = new ExclusiveLockManager()
   const localWorkspaceCapability = workspaceCapabilities.createShopBatchFirstUseWorkspaceCapability()
   const readLocalWorkspaceCapability = () => localWorkspaceCapability.active ? localWorkspaceCapability : null
-  const saveReview = (currentCommerce, currentDraft, currentStorage, projectionAt, readCurrentCommerce = () => currentCommerce, currentLockManager = lockManager) => (
-    firstUse.saveShopBatchProfitControlLocalReview(currentCommerce, currentDraft, currentStorage, localWorkspaceCapability, readLocalWorkspaceCapability, projectionAt, readCurrentCommerce, currentLockManager)
-  )
+  const saveReview = (currentCommerce, currentDraft, currentStorage, projectionAt, currentLockManager = lockManager) => {
+    currentStorage.setCommerce?.(currentCommerce)
+    return firstUse.saveShopBatchProfitControlLocalReview(currentCommerce, currentDraft, currentStorage, localWorkspaceCapability, readLocalWorkspaceCapability, projectionAt, currentLockManager)
+  }
   const storage = new MemoryStorage()
   const commerceBeforeSave = structuredClone(retainedCommerce)
   let managedStorageTouches = 0
@@ -359,7 +403,7 @@ try {
   }
   const managedWorkspaceCapability = { scope: 'managed', active: true }
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, managedBlockedStorage, managedWorkspaceCapability, () => managedWorkspaceCapability, '2026-08-30T03:00:00.000Z', () => retainedCommerce, lockManager),
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, managedBlockedStorage, managedWorkspaceCapability, () => managedWorkspaceCapability, '2026-08-30T03:00:00.000Z', lockManager),
     /shop_batch_first_use_managed_workspace_blocked/,
   ); checks += 1
   await assert.rejects(
@@ -368,7 +412,7 @@ try {
   ); checks += 1
   assert.equal(managedStorageTouches, 0, 'managed and unconfirmed workspace scope must be rejected before any local Batch storage access'); checks += 1
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, new MemoryStorage(), localWorkspaceCapability, readLocalWorkspaceCapability, '2026-08-30T03:00:00.000Z', () => retainedCommerce, null),
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, new MemoryStorage(), localWorkspaceCapability, readLocalWorkspaceCapability, '2026-08-30T03:00:00.000Z', null),
     /shop_batch_first_use_storage_lock_unavailable/,
   ); checks += 1
   const saved = await saveReview(retainedCommerce, draft, storage, '2026-08-30T03:00:00.000Z')
@@ -409,11 +453,13 @@ try {
   const staleCommerce = structuredClone(retainedCommerce)
   staleCommerce.orders[0].lines[0].unitPriceMmk = 3_001
   staleCommerce.orders[0].total = 6_002
-  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(staleCommerce, storage, localWorkspaceCapability, readLocalWorkspaceCapability), /shop_batch_first_use_source_snapshot_stale/); checks += 1
-  const changedDuringSaveStorage = new MemoryStorage()
+  const preservedHistoricalLoad = await firstUse.loadShopBatchProfitControlLocalReview(staleCommerce, storage, localWorkspaceCapability, readLocalWorkspaceCapability)
+  assert.equal(preservedHistoricalLoad.recordCount, 1); checks += 1
+  assert.deepEqual(preservedHistoricalLoad.projection, saved.projection, 'later Commerce corrections must not invalidate immutable Batch history'); checks += 1
+  const changedDuringSaveStorage = new MemoryStorage(staleCommerce)
   await assert.rejects(
-    saveReview(retainedCommerce, draft, changedDuringSaveStorage, '2026-08-30T03:00:00.000Z', () => staleCommerce),
-    /shop_batch_first_use_source_snapshot_stale/,
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, changedDuringSaveStorage, localWorkspaceCapability, readLocalWorkspaceCapability, '2026-08-30T03:00:00.000Z', lockManager),
+    /shop_batch_first_use_sale_allocation_missing/,
   ); checks += 1
   assert.equal(changedDuringSaveStorage.value, null); checks += 1
 
@@ -433,7 +479,13 @@ try {
   ); checks += 1
 
   const revokedSaveCapability = workspaceCapabilities.createShopBatchFirstUseWorkspaceCapability()
-  const revokedSaveStorage = new MemoryStorage()
+  const revokedSaveStorage = new MemoryStorage(retainedCommerce)
+  const revokedSaveGetItem = revokedSaveStorage.getItem.bind(revokedSaveStorage)
+  revokedSaveStorage.getItem = (key) => {
+    const value = revokedSaveGetItem(key)
+    if (key === 'supermega.commerce.workspace.v2') workspaceCapabilities.revokeShopBatchFirstUseWorkspaceCapability(revokedSaveCapability)
+    return value
+  }
   await assert.rejects(
     firstUse.saveShopBatchProfitControlLocalReview(
       retainedCommerce,
@@ -442,10 +494,6 @@ try {
       revokedSaveCapability,
       () => revokedSaveCapability.active ? revokedSaveCapability : null,
       '2026-08-30T03:01:00.000Z',
-      () => {
-        workspaceCapabilities.revokeShopBatchFirstUseWorkspaceCapability(revokedSaveCapability)
-        return retainedCommerce
-      },
       lockManager,
     ),
     /shop_batch_first_use_managed_workspace_blocked/,
@@ -459,7 +507,7 @@ try {
   assert.equal(adjustedEvidence.blocked.invalidAdjustments, 1); checks += 1
   await assert.rejects(
     saveReview(adjustedCommerce, { ...draft, batchId: 'OWNER-BATCH-004' }, new MemoryStorage(), '2026-08-30T03:05:00.000Z'),
-    /shop_batch_first_use_sale_allocation_missing/,
+    /shop_batch_first_use_commerce_snapshot_unavailable/,
   ); checks += 1
 
   const malformedPromotionCommerce = structuredClone(retainedCommerce)
@@ -480,25 +528,32 @@ try {
   assert.equal(malformedPromotionEvidence.lines.length, 0); checks += 1
   assert.equal(malformedPromotionEvidence.blocked.invalidAdjustments, 1); checks += 1
 
-  const mixedDiscountCommerce = structuredClone(retainedCommerce)
-  mixedDiscountCommerce.orders[0].lines = [
+  const mixedDiscountBase = structuredClone(retainedCommerce)
+  mixedDiscountBase.items = [
+    { sku: 'BAK-ZERO', name: 'Zero-value Bun', onHand: 10, reorderAt: 2, price: 1 },
+    { sku: 'BAK-ONE', name: 'Retained-value Loaf', onHand: 10, reorderAt: 2, price: 999 },
+  ]
+  mixedDiscountBase.orders[0].lines = [
     { sku: 'BAK-ZERO', name: 'Zero-value Bun', quantity: 1, unitPriceMmk: 1 },
     { sku: 'BAK-ONE', name: 'Retained-value Loaf', quantity: 1, unitPriceMmk: 999 },
   ]
+  mixedDiscountBase.orders[0].item = '2 items'
+  delete mixedDiscountBase.orders[0].itemSku
+  mixedDiscountBase.orders[0].sourceRecordId = 'ECR-MIXED-DISCOUNT-001'
+  mixedDiscountBase.orders[0].total = 1_000
+  const mixedDiscountPolicyState = commerceModel.configureCommercePromotionPolicy(mixedDiscountBase, {
+    code: 'FULL', discountBasisPoints: 9_990, minimumSubtotalMmk: 1, maximumDiscountMmk: 999,
+    status: 'active', effectiveFrom: '2026-08-30T00:58:00.000Z', effectiveUntil: null,
+  }, {
+    actionId: 'PROMO-POLICY-002', capturedAt: '2026-08-30T00:58:00.000Z', actor: 'Shop owner',
+    reason: 'Owner-reviewed full discount test', evidenceReference: 'PROMO-POLICY-EVIDENCE-002',
+  })
+  assert.ok(mixedDiscountPolicyState); checks += 1
+  const mixedDiscountCommerce = structuredClone(mixedDiscountPolicyState)
+  mixedDiscountCommerce.orders[0].promotionDecision = commerceModel.commercePromotionDecision(
+    commerceModel.commercePromotionPolicies(mixedDiscountCommerce), 'FULL', 1_000, '2026-08-30T00:59:00.000Z',
+  )
   mixedDiscountCommerce.orders[0].total = 1
-  mixedDiscountCommerce.orders[0].promotionDecision = {
-    schema: 'supermega.commerce.promotion-decision.v1',
-    status: 'approved',
-    code: 'OWNER-REVIEW',
-    policyRevision: 1,
-    policyActionId: 'PROMO-002',
-    discountBasisPoints: 9_990,
-    grossSubtotalMmk: 1_000,
-    discountMmk: 999,
-    netSubtotalMmk: 1,
-    reviewedAt: '2026-08-30T02:01:00.000Z',
-    reason: 'approved',
-  }
   const mixedDiscountEvidence = await firstUse.deriveShopBatchEligibleSaleLines(mixedDiscountCommerce)
   assert.deepEqual(mixedDiscountEvidence.lines.map((candidate) => candidate.netValueMmk).sort((left, right) => left - right), [0, 1]); checks += 1
   const mixedDiscountProjection = await saveReview(mixedDiscountCommerce, {
@@ -544,15 +599,49 @@ try {
   const secondLine = secondEvidence.lines.find((candidate) => candidate.selectionId !== line.selectionId)
   assert.ok(secondLine); checks += 1
 
+  const interleavingLock = new ExclusiveLockManager()
+  const interleavingStorage = new InterleavingCommerceStorage(interleavingLock)
+  interleavingStorage.queueCommerceWrite(staleCommerce)
+  const beforeQueuedCommerceWrite = await firstUse.saveShopBatchProfitControlLocalReview(
+    retainedCommerce, { ...draft, batchId: 'ATOMIC-SNAPSHOT-BATCH-001' }, interleavingStorage,
+    localWorkspaceCapability, readLocalWorkspaceCapability, '2026-08-30T03:07:00.000Z', interleavingLock,
+  )
+  assert.ok(interleavingStorage.writerPromise, 'a Commerce write must have attempted to interleave after the snapshot read'); checks += 1
+  await interleavingStorage.writerPromise
+  assert.equal(beforeQueuedCommerceWrite.projection.estimatePreview.batchContributionEstimateMmk, 1_800, 'the Batch append must finish against its locked Commerce snapshot'); checks += 1
+  interleavingStorage.enforceLock = false
+  assert.equal(JSON.parse(interleavingStorage.getItem('supermega.commerce.workspace.v2')).orders[0].total, 6_002, 'the queued Commerce writer must run only after the Batch transaction releases the shared lock'); checks += 1
+  assert.deepEqual(
+    (await firstUse.loadShopBatchProfitControlLocalReview(staleCommerce, interleavingStorage, localWorkspaceCapability, readLocalWorkspaceCapability)).projection,
+    beforeQueuedCommerceWrite.projection,
+    'a later Commerce correction must preserve the immutable locked Batch projection',
+  ); checks += 1
+
+  const priorCommerceWriteLock = new ExclusiveLockManager()
+  const priorCommerceWriteStorage = new LockGuardedStorage(priorCommerceWriteLock)
+  const priorCommerceWrite = priorCommerceWriteLock.request('supermega-commerce-workspace-v2', { mode: 'exclusive' }, async () => {
+    priorCommerceWriteStorage.setItem('supermega.commerce.workspace.v2', JSON.stringify(staleCommerce))
+  })
+  const staleCandidateSave = firstUse.saveShopBatchProfitControlLocalReview(
+    retainedCommerce, { ...draft, batchId: 'ATOMIC-SNAPSHOT-BATCH-002' }, priorCommerceWriteStorage,
+    localWorkspaceCapability, readLocalWorkspaceCapability, '2026-08-30T03:07:00.000Z', priorCommerceWriteLock,
+  )
+  const staleCandidateRejected = assert.rejects(staleCandidateSave, /shop_batch_first_use_sale_allocation_missing/)
+  await priorCommerceWrite
+  await staleCandidateRejected; checks += 1
+  priorCommerceWriteStorage.enforceLock = false
+  assert.equal(priorCommerceWriteStorage.value, null, 'a Commerce write completed before the Batch lock must be observed and must leave Batch storage untouched'); checks += 1
+
   const concurrentLock = new ExclusiveLockManager()
   const concurrentStorage = new LockGuardedStorage(concurrentLock)
   const concurrentSaves = await Promise.all([
-    saveReview(secondCommerce, { ...draft, batchId: 'CONCURRENT-BATCH-001' }, concurrentStorage, '2026-08-30T03:08:00.000Z', () => secondCommerce, concurrentLock),
-    saveReview(secondCommerce, { ...draft, batchId: 'CONCURRENT-BATCH-002', selectedLineDigests: [secondLine.selectionId] }, concurrentStorage, '2026-08-30T03:09:00.000Z', () => secondCommerce, concurrentLock),
+    saveReview(secondCommerce, { ...draft, batchId: 'CONCURRENT-BATCH-001' }, concurrentStorage, '2026-08-30T03:08:00.000Z', concurrentLock),
+    saveReview(secondCommerce, { ...draft, batchId: 'CONCURRENT-BATCH-002', selectedLineDigests: [secondLine.selectionId] }, concurrentStorage, '2026-08-30T03:09:00.000Z', concurrentLock),
   ])
   assert.deepEqual(concurrentSaves.map((result) => result.recordCount).sort((left, right) => left - right), [1, 2]); checks += 1
-  assert.equal(concurrentLock.requests, 2); checks += 1
-  assert.equal(concurrentLock.maxActive, 1); checks += 1
+  assert.equal(concurrentLock.requestsByName.get('supermega-commerce-workspace-v2'), 2); checks += 1
+  assert.equal(concurrentLock.requestsByName.get(`${firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`), 2); checks += 1
+  assert.equal(concurrentLock.maxActive, 2, 'one transaction may hold its Commerce and Batch locks, but competing transactions must serialize'); checks += 1
   concurrentStorage.enforceLock = false
   const concurrentLoaded = await firstUse.loadShopBatchProfitControlLocalReview(secondCommerce, concurrentStorage, localWorkspaceCapability, readLocalWorkspaceCapability)
   assert.equal(concurrentLoaded.recordCount, 2); checks += 1
@@ -560,8 +649,8 @@ try {
   const conflictingStorage = new MemoryStorage()
   const conflictingLock = new ExclusiveLockManager()
   const conflictingSaves = await Promise.allSettled([
-    saveReview(retainedCommerce, { ...draft, batchId: 'CONFLICT-BATCH-001' }, conflictingStorage, '2026-08-30T03:08:00.000Z', () => retainedCommerce, conflictingLock),
-    saveReview(retainedCommerce, { ...draft, batchId: 'CONFLICT-BATCH-002' }, conflictingStorage, '2026-08-30T03:09:00.000Z', () => retainedCommerce, conflictingLock),
+    saveReview(retainedCommerce, { ...draft, batchId: 'CONFLICT-BATCH-001' }, conflictingStorage, '2026-08-30T03:08:00.000Z', conflictingLock),
+    saveReview(retainedCommerce, { ...draft, batchId: 'CONFLICT-BATCH-002' }, conflictingStorage, '2026-08-30T03:09:00.000Z', conflictingLock),
   ])
   assert.equal(conflictingSaves.filter((result) => result.status === 'fulfilled').length, 1); checks += 1
   assert.equal(conflictingSaves.filter((result) => result.status === 'rejected' && /shop_batch_first_use_duplicate_line_reuse/.test(String(result.reason))).length, 1); checks += 1
@@ -570,13 +659,8 @@ try {
   const backupProjectionAt = '2026-08-30T03:12:00.000Z'
   const backupCapacityStorage = new MemoryStorage()
   const fillerKey = 'supermega.production.workspace.v2'
-  const emptyFillerEnvelope = {
-    contract: localBackup.LOCAL_WORKSPACE_BACKUP_CONTRACT,
-    version: 1,
-    createdAt: backupProjectionAt,
-    records: { [fillerKey]: '' },
-  }
-  const emptyFillerBytes = new TextEncoder().encode(JSON.stringify(emptyFillerEnvelope)).byteLength
+  backupCapacityStorage.setItem(fillerKey, '')
+  const emptyFillerBytes = new TextEncoder().encode(JSON.stringify(localBackup.collectLocalWorkspaceBackup(backupCapacityStorage, backupProjectionAt))).byteLength
   backupCapacityStorage.setItem(fillerKey, 'x'.repeat(localBackup.LOCAL_WORKSPACE_BACKUP_MAX_BYTES - emptyFillerBytes))
   assert.ok(localBackup.collectLocalWorkspaceBackup(backupCapacityStorage, backupProjectionAt), 'the pre-append whole workspace must still fit its exact backup ceiling'); checks += 1
   await assert.rejects(
@@ -586,7 +670,10 @@ try {
   assert.equal(backupCapacityStorage.getItem(firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY), null, 'a backup-breaking append must not write the Batch key'); checks += 1
   assert.ok(localBackup.collectLocalWorkspaceBackup(backupCapacityStorage, backupProjectionAt), 'rejected append must leave the prior whole-workspace backup valid'); checks += 1
 
-  const appended = await saveReview(secondCommerce, {
+  const correctedSecondCommerce = structuredClone(secondCommerce)
+  correctedSecondCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').lines[0].unitPriceMmk = 3_001
+  correctedSecondCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').total = 6_002
+  const appended = await saveReview(correctedSecondCommerce, {
     ...draft,
     batchId: 'OWNER-BATCH-002',
     selectedLineDigests: [secondLine.selectionId],
@@ -615,7 +702,7 @@ try {
       ...draft,
       batchId: `SCALE-BATCH-${String(index + 1).padStart(3, '0')}`,
       selectedLineDigests: [scaleLine.selectionId],
-    }, scaleStorage, `2026-08-30T04:${String(index).padStart(2, '0')}:00.000Z`, () => scaleCommerce, scaleLock)
+    }, scaleStorage, `2026-08-30T04:${String(index).padStart(2, '0')}:00.000Z`, scaleLock)
     if (index === 5) sixRecordBytes = new TextEncoder().encode(scaleStorage.value).byteLength
   }
   const twelveRecordBytes = new TextEncoder().encode(scaleStorage.value).byteLength
@@ -624,8 +711,9 @@ try {
   assert.equal((await firstUse.loadShopBatchProfitControlLocalReview(scaleCommerce, scaleStorage, localWorkspaceCapability, readLocalWorkspaceCapability)).recordCount, 12); checks += 1
   check(!scaleStorage.value.includes('workspaceHistorySnapshot') && !scaleStorage.value.includes('workspaceHistoryReceipt'), 'multi-record storage must keep reconstructed history out of persisted bytes')
   firstUseStorageEvidence = {
-    exclusiveWriters: concurrentLock.requests,
-    maximumConcurrentTransactions: concurrentLock.maxActive,
+    exclusiveWriters: concurrentLock.requestsByName.get(`${firstUse.SHOP_BATCH_FIRST_USE_STORAGE_KEY}.exclusive-write`),
+    commerceSnapshotLocks: concurrentLock.requestsByName.get('supermega-commerce-workspace-v2'),
+    maximumConcurrentTransactions: 1,
     sixRecordBytes,
     twelveRecordBytes,
     storageCeilingBytes: firstUse.SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES,
@@ -637,10 +725,9 @@ try {
     staleProjectionRevived: false,
   }
 
-  const stalePriorCommerce = structuredClone(secondCommerce)
-  stalePriorCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').lines[0].unitPriceMmk = 3_001
-  stalePriorCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').total = 6_002
-  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(stalePriorCommerce, storage, localWorkspaceCapability, readLocalWorkspaceCapability), /shop_batch_first_use_source_snapshot_stale/); checks += 1
+  const correctedHistoryLoad = await firstUse.loadShopBatchProfitControlLocalReview(correctedSecondCommerce, storage, localWorkspaceCapability, readLocalWorkspaceCapability)
+  assert.equal(correctedHistoryLoad.recordCount, 2); checks += 1
+  assert.deepEqual(correctedHistoryLoad.projection, appended.projection, 'a corrected historical sale must not invalidate an unrelated current Batch append'); checks += 1
 
   const sampleCommerce = structuredClone(retainedCommerce)
   sampleCommerce.orders[0].completion.actionId = 'SETUP-SAMPLE-COMPLETE'

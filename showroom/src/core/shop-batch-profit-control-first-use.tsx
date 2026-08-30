@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { CommerceOrder, CommerceState } from './commerce-workspace'
+import {
+  COMMERCE_KEY,
+  COMMERCE_LOCK,
+  validateCommerceState,
+  type CommerceOrder,
+  type CommerceState,
+} from './commerce-workspace'
 import { collectLocalWorkspaceBackup } from './local-workspace-backup'
 import {
   shopBatchFirstUseWorkspaceCapabilityIsCurrent,
@@ -602,9 +608,8 @@ async function validateCurrentCommerceSource(record: ShopBatchLocalRecord, curre
   if (await currentSourceSnapshotDigest(retained) !== record.commerceSourceSnapshotDigest) fail('shop_batch_first_use_source_snapshot_stale')
 }
 
-async function validateStore(store: ShopBatchLocalStore, commerce: CommerceState | null) {
+async function validateStore(store: ShopBatchLocalStore) {
   if (store.records.length > MAX_RECORDS) fail('shop_batch_first_use_storage_record_count_invalid')
-  const currentCommerceEvidence = commerce ? await deriveShopBatchEligibleSaleLines(commerce) : null
   let priorRecordDigest: string | null = null
   const seenBatchIds = new Set<string>()
   for (const [index, record] of store.records.entries()) {
@@ -632,7 +637,6 @@ async function validateStore(store: ShopBatchLocalStore, commerce: CommerceState
     priorRecordDigest = record.recordDigest
   }
   if (store.headRecordDigest !== priorRecordDigest) fail('shop_batch_first_use_storage_head_mismatch')
-  if (currentCommerceEvidence) for (const record of store.records) await validateCurrentCommerceSource(record, currentCommerceEvidence)
   const latest = store.records.at(-1)
   if (!latest) return { store, projection: null as ShopBatchProfitControlProjection | null }
   const input = await hydrateInput(latest.inputLeaves, store.records.slice(0, -1))
@@ -642,11 +646,18 @@ async function validateStore(store: ShopBatchLocalStore, commerce: CommerceState
   return { store, projection }
 }
 
-async function readValidatedStore(storage: ShopBatchFirstUseStorage, commerce: CommerceState | null) {
+async function readValidatedStore(storage: ShopBatchFirstUseStorage) {
   const raw = readRaw(storage)
   const store = parseStore(raw)
-  const validated = await validateStore(store, commerce)
+  const validated = await validateStore(store)
   return { raw, ...validated }
+}
+
+function readCurrentCommerceSnapshot(storage: ShopBatchFirstUseStorage) {
+  let raw: string | null
+  try { raw = storage.getItem(COMMERCE_KEY) } catch { fail('shop_batch_first_use_commerce_snapshot_unavailable') }
+  if (raw === null) fail('shop_batch_first_use_commerce_snapshot_unavailable')
+  try { return validateCommerceState(JSON.parse(raw)) } catch { fail('shop_batch_first_use_commerce_snapshot_unavailable') }
 }
 
 function assertDraft(draft: ShopBatchFirstUseDraft, projectionAt: string) {
@@ -981,6 +992,7 @@ async function buildInput(
   return {
     input,
     commerceSourceSnapshotDigest: await currentSourceSnapshotDigest(saleLines),
+    currentCommerceEvidence: evidence,
   }
 }
 
@@ -1007,71 +1019,76 @@ function persistedInputLeaves(input: ShopBatchProfitControlInput): ShopBatchPers
 
 // eslint-disable-next-line react-refresh/only-export-components -- source-owned receipt loading is tested through this action-loaded boundary
 export async function loadShopBatchProfitControlLocalReview(
-  commerce: CommerceState,
+  _commerce: CommerceState,
   storage: ShopBatchFirstUseStorage,
   workspaceCapability: ShopBatchFirstUseWorkspaceCapability,
   readCurrentWorkspaceCapability: ShopBatchFirstUseWorkspaceCapabilityReader,
 ) {
   assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-  const { store, projection } = await readValidatedStore(storage, commerce)
+  const { store, projection } = await readValidatedStore(storage)
   assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
   return { recordCount: store.records.length, projection }
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- source-owned receipt saving is tested through this action-loaded boundary
 export async function saveShopBatchProfitControlLocalReview(
-  commerce: CommerceState,
+  _commerce: CommerceState,
   draft: ShopBatchFirstUseDraft,
   storage: ShopBatchFirstUseStorage,
   workspaceCapability: ShopBatchFirstUseWorkspaceCapability,
   readCurrentWorkspaceCapability: ShopBatchFirstUseWorkspaceCapabilityReader,
   projectionAt = new Date().toISOString(),
-  readCurrentCommerce: () => CommerceState = () => commerce,
   lockManager: ShopBatchFirstUseLockManager | null = browserLockManager(),
 ) {
   assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
   if (!lockManager) fail('shop_batch_first_use_storage_lock_unavailable')
-  return lockManager.request(STORAGE_LOCK_NAME, { mode: 'exclusive' }, async (lock) => {
-    if (!lock || lock.mode !== 'exclusive') fail('shop_batch_first_use_storage_lock_unavailable')
+  return lockManager.request(COMMERCE_LOCK, { mode: 'exclusive' }, async (commerceLock) => {
+    if (!commerceLock || commerceLock.mode !== 'exclusive') fail('shop_batch_first_use_storage_lock_unavailable')
     assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    const { raw: beforeRaw, store } = await readValidatedStore(storage, commerce)
-    assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    const { input, commerceSourceSnapshotDigest } = await buildInput(commerce, draft, store, projectionAt)
-    assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
-    assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    const record: ShopBatchLocalRecord = {
-      contract: LOCAL_RECORD_CONTRACT,
-      recordRevision: store.records.length + 1,
-      priorRecordDigest: store.headRecordDigest,
-      createdAt: projectionAt,
-      batchId: draft.batchId,
-      commerceSourceSnapshotDigest,
-      workspaceSnapshotDigest: input.workspaceHistorySnapshot.snapshotDigest,
-      inputLeaves: persistedInputLeaves(input),
-      projectionDigest: await canonicalDigest(projection),
-      recordDigest: '',
-    }
-    record.recordDigest = await canonicalDigest(withoutField(record, 'recordDigest'))
-    assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    const nextStore: ShopBatchLocalStore = {
-      ...store,
-      records: [...store.records, record],
-      headRecordDigest: record.recordDigest,
-    }
-    await validateStore(nextStore, readCurrentCommerce())
-    assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    if (readRaw(storage) !== beforeRaw) fail('shop_batch_first_use_storage_race')
-    assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    const serialized = canonicalJson(nextStore)
-    if (new TextEncoder().encode(serialized).byteLength > SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES) fail('shop_batch_first_use_storage_size_exceeded')
-    assertWorkspaceBackupCapacity(storage, serialized, projectionAt)
-    assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
-    try { storage.setItem(SHOP_BATCH_FIRST_USE_STORAGE_KEY, serialized) } catch { fail('shop_batch_first_use_storage_write_failed') }
-    if (readRaw(storage) !== serialized) fail('shop_batch_first_use_storage_readback_failed')
-    const verified = await readValidatedStore(storage, commerce)
-    if (verified.store.headRecordDigest !== record.recordDigest || !verified.projection) fail('shop_batch_first_use_storage_readback_failed')
-    return { recordCount: nextStore.records.length, projection: verified.projection }
+    const currentCommerce = readCurrentCommerceSnapshot(storage)
+    return lockManager.request(STORAGE_LOCK_NAME, { mode: 'exclusive' }, async (lock) => {
+      if (!lock || lock.mode !== 'exclusive') fail('shop_batch_first_use_storage_lock_unavailable')
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      const { raw: beforeRaw, store } = await readValidatedStore(storage)
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      const { input, commerceSourceSnapshotDigest, currentCommerceEvidence } = await buildInput(currentCommerce, draft, store, projectionAt)
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      const projection = await projectShopBatchProfitControl(structuredClone(input), input.workspaceHistorySnapshot.snapshotDigest)
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      const record: ShopBatchLocalRecord = {
+        contract: LOCAL_RECORD_CONTRACT,
+        recordRevision: store.records.length + 1,
+        priorRecordDigest: store.headRecordDigest,
+        createdAt: projectionAt,
+        batchId: draft.batchId,
+        commerceSourceSnapshotDigest,
+        workspaceSnapshotDigest: input.workspaceHistorySnapshot.snapshotDigest,
+        inputLeaves: persistedInputLeaves(input),
+        projectionDigest: await canonicalDigest(projection),
+        recordDigest: '',
+      }
+      record.recordDigest = await canonicalDigest(withoutField(record, 'recordDigest'))
+      await validateCurrentCommerceSource(record, currentCommerceEvidence)
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      const nextStore: ShopBatchLocalStore = {
+        ...store,
+        records: [...store.records, record],
+        headRecordDigest: record.recordDigest,
+      }
+      await validateStore(nextStore)
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      if (readRaw(storage) !== beforeRaw) fail('shop_batch_first_use_storage_race')
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      const serialized = canonicalJson(nextStore)
+      if (new TextEncoder().encode(serialized).byteLength > SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES) fail('shop_batch_first_use_storage_size_exceeded')
+      assertWorkspaceBackupCapacity(storage, serialized, projectionAt)
+      assertLocalWorkspaceCapability(workspaceCapability, readCurrentWorkspaceCapability)
+      try { storage.setItem(SHOP_BATCH_FIRST_USE_STORAGE_KEY, serialized) } catch { fail('shop_batch_first_use_storage_write_failed') }
+      if (readRaw(storage) !== serialized) fail('shop_batch_first_use_storage_readback_failed')
+      const verified = await readValidatedStore(storage)
+      if (verified.store.headRecordDigest !== record.recordDigest || !verified.projection) fail('shop_batch_first_use_storage_readback_failed')
+      return { recordCount: nextStore.records.length, projection: verified.projection }
+    })
   })
 }
 
@@ -1087,6 +1104,7 @@ function displayFailure(error: unknown) {
   const labels: Record<string, string> = {
     shop_batch_first_use_storage_unavailable: 'Local Batch storage is unavailable. No estimate was saved or shown.',
     shop_batch_first_use_storage_lock_unavailable: 'Exclusive local Batch saving is unavailable. No estimate was saved or shown.',
+    shop_batch_first_use_commerce_snapshot_unavailable: 'The current Shop workspace could not be read exactly. No estimate was saved or shown.',
     shop_batch_first_use_storage_size_exceeded: 'The bounded local Batch workspace is full. Existing records remain unchanged; no estimate was saved or shown.',
     shop_batch_first_use_workspace_backup_capacity_unavailable: 'The complete local workspace backup capacity could not be verified. No estimate was saved or shown.',
     shop_batch_first_use_workspace_backup_capacity_exceeded: 'This Batch append would make the complete local workspace impossible to back up. Existing records remain unchanged; no estimate was saved or shown.',
@@ -1156,10 +1174,7 @@ export function ShopBatchProfitControlFirstUse({
   const [otherReviewedBatchCostMmk, setOtherReviewedBatchCostMmk] = useState(0)
   const [otherReviewedBatchCostReason, setOtherReviewedBatchCostReason] = useState<ShopBatchFirstUseDraft['otherReviewedBatchCostReason']>('none')
   const [overheadOwnerReviewed, setOverheadOwnerReviewed] = useState(false)
-  const commerceRef = useRef(commerce)
   const saveAttempt = useRef(0)
-
-  useEffect(() => { commerceRef.current = commerce }, [commerce])
 
   useEffect(() => {
     let current = true
@@ -1237,7 +1252,7 @@ export function ShopBatchProfitControlFirstUse({
         otherReviewedBatchCostMmk,
         otherReviewedBatchCostReason,
         overheadOwnerReviewed,
-      }, localStorage, workspaceCapability, readCurrentWorkspaceCapability, new Date().toISOString(), () => commerceRef.current)
+      }, localStorage, workspaceCapability, readCurrentWorkspaceCapability, new Date().toISOString())
       if (attempt !== saveAttempt.current) return
       onProjection({ workspaceCapability, projection: saved.projection })
       setWorkflow({ status: 'saved', evidence, recordCount: saved.recordCount })
