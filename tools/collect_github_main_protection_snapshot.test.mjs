@@ -46,6 +46,15 @@ const rulesets = [{
   ],
 }]
 
+const listedRuleset = {
+  id: 123,
+  name: 'SuperMega main release gate',
+  target: 'branch',
+  enforcement: 'active',
+  conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+  rules: [],
+}
+
 function jsonResponse(body) {
   return {
     ok: true,
@@ -124,19 +133,11 @@ test('ruleset sanitizer keeps only protection-relevant fields', () => {
 
 test('collector expands ruleset list entries before protection assessment', async () => {
   const calls = []
-  const listRuleset = {
-    id: 123,
-    name: 'SuperMega main release gate',
-    target: 'branch',
-    enforcement: 'active',
-    conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
-    rules: [],
-  }
   const request = async (url) => {
     calls.push(String(url))
     let body
     if (String(url).endsWith('/branches/main')) body = branch
-    else if (String(url).endsWith('/rulesets')) body = [listRuleset]
+    else if (String(url).endsWith('/rulesets')) body = [listedRuleset]
     else if (String(url).endsWith('/rulesets/123')) body = rulesets[0]
     else throw new Error(`unexpected_url:${url}`)
     return {
@@ -149,8 +150,83 @@ test('collector expands ruleset list entries before protection assessment', asyn
   }
   const { packet } = await collectGitHubMainProtectionSnapshot({ request, env: {} })
   assert.equal(packet.assessment.ok, true)
-  assert.ok(calls.some((url) => url.endsWith('/rulesets/123')))
-  assert.deepEqual(packet.rulesets[0].rules.map((rule) => rule.type), ['deletion', 'non_fast_forward', 'pull_request', 'required_status_checks'])
+  assert.deepEqual(calls.map((url) => url.slice(url.indexOf('/repos/'))), [
+    '/repos/swanhtet01/swanhtet01.github.io/branches/main',
+    '/repos/swanhtet01/swanhtet01.github.io/rulesets',
+    '/repos/swanhtet01/swanhtet01.github.io/rulesets/123',
+  ])
+  assert.deepEqual(packet.rulesets, sanitizeRulesetsSnapshot(rulesets))
+})
+
+test('collector retries the full ruleset endpoint after a transient required-detail failure', async () => {
+  let listCalls = 0
+  let detailCalls = 0
+  const delays = []
+  const { packet } = await collectGitHubMainProtectionSnapshot({
+    attempts: 2,
+    request: async (url) => {
+      if (String(url).endsWith('/branches/main')) return jsonResponse(branch)
+      if (String(url).endsWith('/rulesets')) {
+        listCalls += 1
+        return jsonResponse([listedRuleset])
+      }
+      if (String(url).endsWith('/rulesets/123')) {
+        detailCalls += 1
+        return jsonResponse(detailCalls === 1 ? null : rulesets[0])
+      }
+      throw new Error(`unexpected_url:${url}`)
+    },
+    env: {},
+    delay: async (milliseconds) => delays.push(milliseconds),
+  })
+  assert.equal(listCalls, 2)
+  assert.equal(detailCalls, 2)
+  assert.deepEqual(delays, [250])
+  assert.equal(packet.assessment.ok, true)
+  assert.deepEqual(packet.rulesets, sanitizeRulesetsSnapshot(rulesets))
+})
+
+test('collector rejects malformed, mismatched, and empty required details after bounded retries without writing', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-main-protection-detail-no-write-'))
+  const paths = [join(directory, 'snapshot.json'), join(directory, 'branch.json'), join(directory, 'rulesets.json')]
+  const invalidDetails = [
+    null,
+    { ...rulesets[0], id: 999 },
+    { ...rulesets[0], rules: [] },
+  ]
+  let listCalls = 0
+  let detailCalls = 0
+  try {
+    await assert.rejects(
+      collectGitHubMainProtectionSnapshot({
+        outputPath: paths[0],
+        branchOutputPath: paths[1],
+        rulesetsOutputPath: paths[2],
+        attempts: 3,
+        request: async (url) => {
+          if (String(url).endsWith('/branches/main')) return jsonResponse(branch)
+          if (String(url).endsWith('/rulesets')) {
+            listCalls += 1
+            return jsonResponse([listedRuleset])
+          }
+          if (String(url).endsWith('/rulesets/123')) {
+            const response = invalidDetails[detailCalls]
+            detailCalls += 1
+            return jsonResponse(response)
+          }
+          throw new Error(`unexpected_url:${url}`)
+        },
+        env: {},
+        delay: async () => {},
+      }),
+      /github_main_protection_snapshot_unavailable:github_main_protection_snapshot_ruleset_detail_invalid/,
+    )
+    assert.equal(listCalls, 3)
+    assert.equal(detailCalls, 3)
+    await assertOutputsAbsent(paths)
+  } finally {
+    await removeTestDirectory(directory, paths)
+  }
 })
 
 test('collector retries null and non-record branch responses before writing one complete packet', async () => {

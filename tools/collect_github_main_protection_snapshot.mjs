@@ -101,6 +101,7 @@ function retryableCollectionFailure(error) {
   const reason = String(error?.message || '')
   return reason === 'github_main_protection_snapshot_branch_invalid'
     || reason === 'github_main_protection_snapshot_rulesets_invalid'
+    || reason === 'github_main_protection_snapshot_ruleset_detail_invalid'
     || reason === 'github_main_protection_snapshot_response_json_invalid'
     || reason.startsWith('github_main_protection_snapshot_fetch_failed:')
 }
@@ -463,12 +464,31 @@ async function githubGetJson(url, { env = process.env, request = fetch } = {}) {
   }
 }
 
-async function githubGetJsonOptional(url, { env = process.env, request = fetch } = {}) {
-  try {
-    return await githubGetJson(url, { env, request })
-  } catch {
-    return null
+function rulesetIdentity(ruleset) {
+  if (!isRecord(ruleset)) return null
+  const id = /^\d+$/.test(String(ruleset.id || '')) ? String(ruleset.id) : null
+  if (!id) return null
+  const sanitized = sanitizeRulesetsSnapshot([ruleset])[0]
+  return {
+    id,
+    name: sanitized.name,
+    target: sanitized.target,
+    enforcement: sanitized.enforcement,
+    conditions: sanitized.conditions,
   }
+}
+
+function requireRulesetDetail(listEntry, detail) {
+  const listIdentity = rulesetIdentity(listEntry)
+  const detailIdentity = rulesetIdentity(detail)
+  const sanitizedDetail = detailIdentity ? sanitizeRulesetsSnapshot([detail])[0] : null
+  if (!listIdentity
+    || !detailIdentity
+    || JSON.stringify(detailIdentity) !== JSON.stringify(listIdentity)
+    || sanitizedDetail.rules.length === 0) {
+    fail('github_main_protection_snapshot_ruleset_detail_invalid')
+  }
+  return detail
 }
 
 async function expandRulesetsWithDetails(rulesets, { env = process.env, request = fetch } = {}) {
@@ -477,13 +497,14 @@ async function expandRulesetsWithDetails(rulesets, { env = process.env, request 
   for (const ruleset of rulesets) {
     if (!isRecord(ruleset)) fail('github_main_protection_snapshot_rulesets_invalid')
     const id = /^\d+$/.test(String(ruleset.id || '')) ? String(ruleset.id) : null
-    const needsDetail = id && asArray(ruleset.rules).length === 0
+    const needsDetail = asArray(ruleset.rules).length === 0
     if (!needsDetail) {
       expanded.push(ruleset)
       continue
     }
-    const detail = await githubGetJsonOptional(`${RULESET_DETAIL_URL_PREFIX}${id}`, { env, request })
-    expanded.push(isRecord(detail?.json) ? detail.json : ruleset)
+    if (!id) fail('github_main_protection_snapshot_ruleset_detail_invalid')
+    const detail = await githubGetJson(`${RULESET_DETAIL_URL_PREFIX}${id}`, { env, request })
+    expanded.push(requireRulesetDetail(ruleset, detail.json))
   }
   return expanded
 }
