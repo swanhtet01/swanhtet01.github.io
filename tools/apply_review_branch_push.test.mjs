@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import {
   REVIEW_BRANCH_PUSH_APPLY_CONTRACT,
   applyReviewBranchPushWithGit,
+  buildReviewBranchPushFailureReceipt,
   buildReviewBranchPushPlan,
   validateOwnerApproval,
   validateReviewBranchPushReport,
@@ -202,7 +203,7 @@ function gitState(overrides = {}) {
   }
 }
 
-function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatus = 0, mergeBaseRemote = before } = {}) {
+function stubGit({ before = null, after = commit, afterReadStatus = 0, pushStatus = 0, pushThrows = false, mergeBaseStatus = 0, mergeBaseRemote = before } = {}) {
   const calls = []
   let readCount = 0
   const git = (args) => {
@@ -216,12 +217,13 @@ function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatu
       const value = readCount === 0 ? before : after
       readCount += 1
       return {
-        status: 0,
+        status: readCount === 1 ? 0 : afterReadStatus,
         stdout: value ? `${value}\trefs/heads/${branch}` : '',
         stderr: '',
       }
     }
     if (command === `push --force-with-lease=refs/heads/${branch}:${before || ''} origin ${commit}:refs/heads/${branch}`) {
+      if (pushThrows) throw new Error('push_connection_lost')
       return { status: pushStatus, stdout: '', stderr: pushStatus === 0 ? '' : 'rejected' }
     }
     if (command === `merge-base --is-ancestor ${mergeBaseRemote} ${commit}`) {
@@ -230,6 +232,15 @@ function stubGit({ before = null, after = commit, pushStatus = 0, mergeBaseStatu
     throw new Error(`unexpected git call: ${command}`)
   }
   return { git, calls }
+}
+
+async function failureReceipt(action) {
+  try {
+    await action()
+    assert.fail('expected review-branch push failure')
+  } catch (error) {
+    return buildReviewBranchPushFailureReceipt(error)
+  }
 }
 
 function runLocalGit(cwd, args, { optional = false } = {}) {
@@ -259,7 +270,10 @@ test('plan is no-write, exact-commit-bound, and approval-aware', () => {
   assert.equal(plan.candidate.head, commit)
   assert.equal(plan.candidate.branch, branch)
   assert.equal(plan.approval.approved, false)
+  assert.equal(plan.controls.gitRemoteWriteAttempted, false)
   assert.equal(plan.controls.gitRemoteWritesPerformed, false)
+  assert.equal(plan.controls.gitRemoteWriteOutcome, 'confirmed_not_performed')
+  assert.equal(plan.controls.gitRemoteWriteRetryAllowed, false)
   assert.equal(plan.controls.branchMutated, false)
   assert.equal(plan.controls.pullRequestCreated, false)
   assert.equal(plan.controls.deploymentPerformed, false)
@@ -507,7 +521,10 @@ test('execute performs one normal exact-commit branch push and verifies the remo
   })
   assert.equal(result.ok, true)
   assert.equal(result.mode, 'executed_owner_approved_git_remote_write')
+  assert.equal(result.controls.gitRemoteWriteAttempted, true)
   assert.equal(result.controls.gitRemoteWritesPerformed, true)
+  assert.equal(result.controls.gitRemoteWriteOutcome, 'confirmed_performed')
+  assert.equal(result.controls.gitRemoteWriteRetryAllowed, false)
   assert.equal(result.controls.remoteHeadLeaseEnforced, true)
   assert.equal(result.controls.branchMutated, true)
   assert.equal(result.controls.forcePushPerformed, false)
@@ -555,8 +572,7 @@ test('execute rejects a changed remote branch before pushing', async () => {
   })
   const handoffReceipt = receipt(existingBranch)
   const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
-  await assert.rejects(
-    applyReviewBranchPushWithGit({
+  const failed = await failureReceipt(() => applyReviewBranchPushWithGit({
       handoffReceipt,
       mainProtectionSnapshotReceipt: mainProtectionReceipt(),
       ownerApprovalReceipt: ownerClickReceipt(handoffReceipt, gate),
@@ -573,9 +589,13 @@ test('execute rejects a changed remote branch before pushing', async () => {
         },
       }),
       now: () => ownerApprovalTime,
-    }),
-    /review_branch_push_remote_state_changed/,
-  )
+    }))
+  assert.equal(failed.error, 'review_branch_push_remote_state_changed')
+  assert.equal(failed.controls.gitRemoteWriteAttempted, false)
+  assert.equal(failed.controls.gitRemoteWritesPerformed, false)
+  assert.equal(failed.controls.gitRemoteWriteOutcome, 'confirmed_not_performed')
+  assert.equal(failed.controls.gitRemoteWriteRetryAllowed, false)
+  assert.equal(failed.controls.branchMutated, false)
   assert.equal(calls.some((args) => args[0] === 'push'), false)
 })
 
@@ -612,7 +632,10 @@ test('execute no-ops when the remote branch already equals the candidate', async
     }),
   })
   assert.equal(result.mode, 'executed_already_published_no_write')
+  assert.equal(result.controls.gitRemoteWriteAttempted, false)
   assert.equal(result.controls.gitRemoteWritesPerformed, false)
+  assert.equal(result.controls.gitRemoteWriteOutcome, 'confirmed_not_performed')
+  assert.equal(result.controls.gitRemoteWriteRetryAllowed, false)
   assert.equal(result.controls.gitRemoteWritesApproved, false)
   assert.equal(result.controls.ownerApprovalReceiptConsumed, false)
   assert.equal(result.controls.remoteHeadLeaseEnforced, false)
@@ -642,14 +665,13 @@ test('exact remote-head lease rejects a race after approval instead of overwriti
   const ownerApprovalReceipt = ownerClickReceipt(handoffReceipt, gate)
   const { git, calls } = stubGit({
     before: remoteBase,
-    after: commit,
+    after: remoteBase,
     mergeBaseRemote: remoteBase,
     mergeBaseStatus: 0,
     pushStatus: 1,
   })
   let consumeCount = 0
-  await assert.rejects(
-    applyReviewBranchPushWithGit({
+  const failed = await failureReceipt(() => applyReviewBranchPushWithGit({
       handoffReceipt,
       mainProtectionSnapshotReceipt: mainProtectionReceipt(),
       ownerApprovalReceipt,
@@ -670,9 +692,14 @@ test('exact remote-head lease rejects a race after approval instead of overwriti
         return { ok: true, packetDigest: received.packet.digest }
       },
       now: () => ownerApprovalTime,
-    }),
-    /review_branch_push_push_failed/,
-  )
+    }))
+  assert.equal(failed.error, 'review_branch_push_push_failed')
+  assert.equal(failed.controls.gitRemoteWriteAttempted, true)
+  assert.equal(failed.controls.gitRemoteWritesPerformed, false)
+  assert.equal(failed.controls.gitRemoteWriteOutcome, 'confirmed_not_performed')
+  assert.equal(failed.controls.gitRemoteWriteRetryAllowed, false)
+  assert.equal(failed.controls.branchMutated, false)
+  assert.equal(failed.controls.ownerApprovalReceiptConsumed, true)
   assert.equal(consumeCount, 1)
   assert.deepEqual(
     calls.filter((args) => args[0] === 'push'),
@@ -683,6 +710,81 @@ test('exact remote-head lease rejects a race after approval instead of overwriti
       `${commit}:refs/heads/${branch}`,
     ]],
   )
+})
+
+test('push transport and post-push read-back loss stay unknown without a duplicate push', async () => {
+  for (const failureKind of ['push-transport', 'read-back']) {
+    const handoffReceipt = receipt()
+    const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
+    const ownerApprovalReceipt = ownerClickReceipt(handoffReceipt, gate)
+    const stub = failureKind === 'push-transport'
+      ? stubGit({ pushThrows: true })
+      : stubGit({ afterReadStatus: 1 })
+    const failed = await failureReceipt(() => applyReviewBranchPushWithGit({
+      handoffReceipt,
+      mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+      ownerApprovalReceipt,
+      ownerApprovalChallenge,
+      git: stub.git,
+      verifyHandoff: async () => ({
+        ok: true,
+        candidate: { branch, commit, clean: true },
+        nextAction: {
+          exactCommit: commit,
+          forcePushAllowed: false,
+          mergeIncluded: false,
+          deploymentIncluded: false,
+        },
+      }),
+      consumeApprovalReceipt: async (received) => ({
+        ok: true,
+        packetDigest: received.packet.digest,
+      }),
+      now: () => ownerApprovalTime,
+    }))
+    assert.equal(failed.error, 'review_branch_push_write_outcome_unknown')
+    assert.equal(failed.controls.gitRemoteWriteAttempted, true)
+    assert.equal(failed.controls.gitRemoteWritesPerformed, null)
+    assert.equal(failed.controls.gitRemoteWriteOutcome, 'outcome_unknown')
+    assert.equal(failed.controls.gitRemoteWriteRetryAllowed, false)
+    assert.equal(failed.controls.branchMutated, null)
+    assert.equal(failed.controls.ownerApprovalReceiptConsumed, true)
+    assert.equal(stub.calls.filter((args) => args[0] === 'push').length, 1)
+  }
+})
+
+test('exact remote read-back resolves a nonzero push transport status as performed', async () => {
+  const handoffReceipt = receipt()
+  const gate = validateReviewBranchPushHandoff(handoffReceipt.packet)
+  const stub = stubGit({ pushStatus: 1, after: commit })
+  const result = await applyReviewBranchPushWithGit({
+    handoffReceipt,
+    mainProtectionSnapshotReceipt: mainProtectionReceipt(),
+    ownerApprovalReceipt: ownerClickReceipt(handoffReceipt, gate),
+    ownerApprovalChallenge,
+    git: stub.git,
+    verifyHandoff: async () => ({
+      ok: true,
+      candidate: { branch, commit, clean: true },
+      nextAction: {
+        exactCommit: commit,
+        forcePushAllowed: false,
+        mergeIncluded: false,
+        deploymentIncluded: false,
+      },
+    }),
+    consumeApprovalReceipt: async (received) => ({
+      ok: true,
+      packetDigest: received.packet.digest,
+    }),
+    now: () => ownerApprovalTime,
+  })
+  assert.equal(result.controls.gitRemoteWriteAttempted, true)
+  assert.equal(result.controls.gitRemoteWritesPerformed, true)
+  assert.equal(result.controls.gitRemoteWriteOutcome, 'confirmed_performed')
+  assert.equal(result.controls.gitRemoteWriteRetryAllowed, false)
+  assert.equal(result.controls.branchMutated, true)
+  assert.equal(stub.calls.filter((args) => args[0] === 'push').length, 1)
 })
 
 test('real Git exact leases create an absent ref, allow the approved fast-forward, and reject a raced head', async () => {

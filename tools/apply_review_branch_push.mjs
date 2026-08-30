@@ -30,6 +30,9 @@ const ORIGIN = `https://github.com/${REPOSITORY}.git`
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const BRANCH_PATTERN = /^codex\/[a-z0-9][a-z0-9._/-]{0,119}$/
 const MAX_FILE_BYTES = 1_000_000
+const WRITE_CONFIRMED_PERFORMED = 'confirmed_performed'
+const WRITE_CONFIRMED_NOT_PERFORMED = 'confirmed_not_performed'
+const WRITE_OUTCOME_UNKNOWN = 'outcome_unknown'
 
 function fail(code) {
   throw new Error(code)
@@ -37,6 +40,77 @@ function fail(code) {
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function gitRemoteWriteControls({ attempted, outcome }) {
+  const performedByOutcome = {
+    [WRITE_CONFIRMED_PERFORMED]: true,
+    [WRITE_CONFIRMED_NOT_PERFORMED]: false,
+    [WRITE_OUTCOME_UNKNOWN]: null,
+  }
+  if (!(outcome in performedByOutcome)) fail('review_branch_push_write_outcome_invalid')
+  if (!attempted && outcome !== WRITE_CONFIRMED_NOT_PERFORMED) fail('review_branch_push_write_outcome_invalid')
+  const performed = performedByOutcome[outcome]
+  return {
+    gitRemoteWriteAttempted: attempted,
+    gitRemoteWritesPerformed: performed,
+    gitRemoteWriteOutcome: outcome,
+    gitRemoteWriteRetryAllowed: false,
+    branchMutated: performed,
+  }
+}
+
+function safeFailureCode(error) {
+  const code = String(error?.message || 'review_branch_push_failed')
+  return /^[a-z0-9_:-]{1,240}$/.test(code) ? code : 'review_branch_push_failed'
+}
+
+function writeFailure(code, { attempted, outcome, ownerApprovalReceiptConsumed = false }) {
+  const error = new Error(code)
+  error.writeOutcome = { attempted, outcome, ownerApprovalReceiptConsumed }
+  return error
+}
+
+function throwWithWriteOutcome(error, { attempted, resolvedOutcome = null, ownerApprovalReceiptConsumed }) {
+  if (isRecord(error?.writeOutcome)) throw error
+  throw writeFailure(
+    attempted && resolvedOutcome === null ? 'review_branch_push_write_outcome_unknown' : safeFailureCode(error),
+    {
+      attempted,
+      outcome: attempted ? (resolvedOutcome || WRITE_OUTCOME_UNKNOWN) : WRITE_CONFIRMED_NOT_PERFORMED,
+      ownerApprovalReceiptConsumed,
+    },
+  )
+}
+
+export function buildReviewBranchPushFailureReceipt(error) {
+  const writeOutcome = isRecord(error?.writeOutcome)
+    ? error.writeOutcome
+    : {
+        attempted: false,
+        outcome: WRITE_CONFIRMED_NOT_PERFORMED,
+        ownerApprovalReceiptConsumed: false,
+      }
+  return {
+    ok: false,
+    contract: REVIEW_BRANCH_PUSH_APPLY_CONTRACT,
+    error: safeFailureCode(error),
+    controls: {
+      gitRemoteWritesApproved: writeOutcome.attempted,
+      ...gitRemoteWriteControls(writeOutcome),
+      ownerApprovalReceiptConsumed: writeOutcome.ownerApprovalReceiptConsumed === true,
+      remoteHeadLeaseEnforced: writeOutcome.attempted,
+      repositorySettingsMutated: false,
+      forcePushPerformed: false,
+      branchDeletionPerformed: false,
+      pullRequestCreated: false,
+      mergePerformed: false,
+      workflowDispatchPerformed: false,
+      deploymentPerformed: false,
+      supabaseMutated: false,
+      credentialValueExposed: false,
+    },
+  }
 }
 
 function digest(value) {
@@ -527,11 +601,10 @@ export function buildReviewBranchPushPlan({
         ],
     controls: {
       gitRemoteWritesApproved: approval.approved,
-      gitRemoteWritesPerformed: false,
+      ...gitRemoteWriteControls({ attempted: false, outcome: WRITE_CONFIRMED_NOT_PERFORMED }),
       ownerApprovalReceiptConsumed: false,
       remoteHeadLeaseEnforced: false,
       repositorySettingsMutated: false,
-      branchMutated: false,
       forcePushPerformed: false,
       branchDeletionPerformed: false,
       pullRequestCreated: false,
@@ -601,7 +674,10 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
   if (packet.mode === 'plan_only_no_git_remote_write') {
     const fastForwardProof = validateFastForwardProofRecord(packet)
     if (packet.ok !== true
+      || packet.controls?.gitRemoteWriteAttempted !== false
       || packet.controls?.gitRemoteWritesPerformed !== false
+      || packet.controls?.gitRemoteWriteOutcome !== WRITE_CONFIRMED_NOT_PERFORMED
+      || packet.controls?.gitRemoteWriteRetryAllowed !== false
       || packet.controls?.ownerApprovalReceiptConsumed !== false
       || packet.controls?.remoteHeadLeaseEnforced !== false
       || packet.controls?.gitRemoteWritesApproved !== packet.approval.approved
@@ -694,7 +770,10 @@ export function validateReviewBranchPushReport(packet, { expectedMode = null } =
       : null
     if (packet.approval.approved !== branchMutated
       || packet.controls?.gitRemoteWritesApproved !== branchMutated
+      || packet.controls?.gitRemoteWriteAttempted !== branchMutated
       || packet.controls?.gitRemoteWritesPerformed !== branchMutated
+      || packet.controls?.gitRemoteWriteOutcome !== (branchMutated ? WRITE_CONFIRMED_PERFORMED : WRITE_CONFIRMED_NOT_PERFORMED)
+      || packet.controls?.gitRemoteWriteRetryAllowed !== false
       || packet.controls?.remoteHeadLeaseEnforced !== branchMutated
       || packet.controls?.branchMutated !== branchMutated
       || packet.controls?.repositorySettingsMutated !== false
@@ -743,126 +822,150 @@ export async function applyReviewBranchPushWithGit({
   consumeApprovalReceipt = consumeReviewBranchPushOwnerReceipt,
   now = () => new Date(),
 } = {}) {
-  const gate = validateReviewBranchPushHandoff(handoffReceipt?.packet)
-  const gitState = currentGitState(git)
-  validateLocalState({ gate, gitState, execute: true })
-  let approval = validateOwnerApproval({
-    gate,
-    handoffReceipt,
-    ownerApprovalReceipt,
-    ownerApprovalChallenge,
-    execute: gate.pushKind !== 'already_published_no_push',
-    now: now(),
-  })
-  const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
-  const fastForward = buildFastForwardProof({ gate, git })
-  if (fastForward.ok !== true) fail('review_branch_push_fast_forward_unproven')
-
-  const verification = await verifyHandoff(handoffReceipt.path)
-  if (verification?.ok !== true
-    || verification.candidate?.branch !== gate.branch
-    || verification.candidate?.commit !== gate.commit
-    || verification.candidate?.clean !== true
-    || verification.nextAction?.exactCommit !== gate.commit
-    || verification.nextAction?.forcePushAllowed !== false
-    || verification.nextAction?.mergeIncluded !== false
-    || verification.nextAction?.deploymentIncluded !== false) {
-    fail('review_branch_push_handoff_not_current')
-  }
-
-  const before = remoteHead(git, gate.branch)
-  if (before !== gate.remoteCommit) fail('review_branch_push_remote_state_changed')
-
-  let pushStatus = null
-  let branchMutated = false
+  let gitRemoteWriteAttempted = false
+  let resolvedWriteOutcome = null
   let ownerApprovalReceiptConsumed = false
-  if (before !== gate.commit) {
-    approval = validateOwnerApproval({
+  try {
+    const gate = validateReviewBranchPushHandoff(handoffReceipt?.packet)
+    const gitState = currentGitState(git)
+    validateLocalState({ gate, gitState, execute: true })
+    let approval = validateOwnerApproval({
       gate,
       handoffReceipt,
       ownerApprovalReceipt,
       ownerApprovalChallenge,
-      execute: true,
+      execute: gate.pushKind !== 'already_published_no_push',
       now: now(),
     })
-    if (approval.method === 'in_process_owner_click_receipt') {
-      const consumed = await consumeApprovalReceipt(ownerApprovalReceipt)
-      if (consumed?.ok !== true || consumed.packetDigest !== approval.receipt.digest) {
-        fail('review_branch_push_owner_receipt_consume_verify_failed')
-      }
-      approval = {
-        ...approval,
-        receipt: { ...approval.receipt, consumed: true },
-      }
-      ownerApprovalReceiptConsumed = true
+    const mainProtection = requireMainProtectionVerified(mainProtectionSnapshotReceipt)
+    const fastForward = buildFastForwardProof({ gate, git })
+    if (fastForward.ok !== true) fail('review_branch_push_fast_forward_unproven')
+
+    const verification = await verifyHandoff(handoffReceipt.path)
+    if (verification?.ok !== true
+      || verification.candidate?.branch !== gate.branch
+      || verification.candidate?.commit !== gate.commit
+      || verification.candidate?.clean !== true
+      || verification.nextAction?.exactCommit !== gate.commit
+      || verification.nextAction?.forcePushAllowed !== false
+      || verification.nextAction?.mergeIncluded !== false
+      || verification.nextAction?.deploymentIncluded !== false) {
+      fail('review_branch_push_handoff_not_current')
     }
-    const [, ...pushArgs] = reviewBranchPushCommand(gate)
-    const push = git(pushArgs, { optional: true, timeout: 180_000 })
-    pushStatus = push.status
-    if (push.status !== 0) fail('review_branch_push_push_failed')
-    branchMutated = true
-  }
 
-  const after = remoteHead(git, gate.branch)
-  if (after !== gate.commit) fail('review_branch_push_post_verify_failed')
+    const before = remoteHead(git, gate.branch)
+    if (before !== gate.remoteCommit) fail('review_branch_push_remote_state_changed')
 
-  const body = {
-    ok: true,
-    contract: REVIEW_BRANCH_PUSH_APPLY_CONTRACT,
-    digestScope: 'utf8_compact_json_without_digest',
-    mode: branchMutated ? 'executed_owner_approved_git_remote_write' : 'executed_already_published_no_write',
-    repository: REPOSITORY,
-    releaseHandoff: {
-      path: handoffReceipt.path || null,
-      digest: handoffReceipt.digest || null,
-      packetDigest: handoffReceipt.packet?.digest || null,
-    },
-    candidate: {
-      branch: gate.branch,
-      head: gate.commit,
-      clean: true,
-    },
-    remoteBefore: {
-      origin: ORIGIN,
-      candidateBranchState: gate.remoteState,
-      candidateCommit: gate.remoteCommit,
-      mainCommit: handoffReceipt.packet?.remote?.mainCommit || null,
-    },
-    action: {
-      kind: gate.pushKind,
-      command: branchMutated ? reviewBranchPushCommand(gate) : null,
-      pushExitStatus: pushStatus,
-      remoteCommitBefore: before,
-      remoteCommitAfter: after,
-    },
-    approval,
-    githubMainProtection: mainProtection,
-    fastForwardProof: fastForward,
-    verification: {
-      handoffCurrent: true,
-      remoteStateUnchanged: true,
-      remoteBranchExact: true,
-      fastForwardProofOk: true,
-    },
-    controls: {
-      gitRemoteWritesApproved: branchMutated,
-      gitRemoteWritesPerformed: branchMutated,
+    let pushStatus = null
+    if (before !== gate.commit) {
+      approval = validateOwnerApproval({
+        gate,
+        handoffReceipt,
+        ownerApprovalReceipt,
+        ownerApprovalChallenge,
+        execute: true,
+        now: now(),
+      })
+      if (approval.method === 'in_process_owner_click_receipt') {
+        const consumed = await consumeApprovalReceipt(ownerApprovalReceipt)
+        if (consumed?.ok !== true || consumed.packetDigest !== approval.receipt.digest) {
+          fail('review_branch_push_owner_receipt_consume_verify_failed')
+        }
+        approval = {
+          ...approval,
+          receipt: { ...approval.receipt, consumed: true },
+        }
+        ownerApprovalReceiptConsumed = true
+      }
+      const [, ...pushArgs] = reviewBranchPushCommand(gate)
+      gitRemoteWriteAttempted = true
+      const push = git(pushArgs, { optional: true, timeout: 180_000 })
+      pushStatus = push.status
+      const afterPush = remoteHead(git, gate.branch)
+      if (afterPush === gate.commit) {
+        resolvedWriteOutcome = WRITE_CONFIRMED_PERFORMED
+      } else if (push.status !== 0 && afterPush === before) {
+        throw writeFailure('review_branch_push_push_failed', {
+          attempted: true,
+          outcome: WRITE_CONFIRMED_NOT_PERFORMED,
+          ownerApprovalReceiptConsumed,
+        })
+      } else {
+        throw writeFailure('review_branch_push_write_outcome_unknown', {
+          attempted: true,
+          outcome: WRITE_OUTCOME_UNKNOWN,
+          ownerApprovalReceiptConsumed,
+        })
+      }
+    }
+    const after = gitRemoteWriteAttempted ? gate.commit : remoteHead(git, gate.branch)
+    if (after !== gate.commit) fail('review_branch_push_post_verify_failed')
+    const writeOutcome = resolvedWriteOutcome || WRITE_CONFIRMED_NOT_PERFORMED
+    const branchMutated = writeOutcome === WRITE_CONFIRMED_PERFORMED
+
+    const body = {
+      ok: true,
+      contract: REVIEW_BRANCH_PUSH_APPLY_CONTRACT,
+      digestScope: 'utf8_compact_json_without_digest',
+      mode: branchMutated ? 'executed_owner_approved_git_remote_write' : 'executed_already_published_no_write',
+      repository: REPOSITORY,
+      releaseHandoff: {
+        path: handoffReceipt.path || null,
+        digest: handoffReceipt.digest || null,
+        packetDigest: handoffReceipt.packet?.digest || null,
+      },
+      candidate: {
+        branch: gate.branch,
+        head: gate.commit,
+        clean: true,
+      },
+      remoteBefore: {
+        origin: ORIGIN,
+        candidateBranchState: gate.remoteState,
+        candidateCommit: gate.remoteCommit,
+        mainCommit: handoffReceipt.packet?.remote?.mainCommit || null,
+      },
+      action: {
+        kind: gate.pushKind,
+        command: branchMutated ? reviewBranchPushCommand(gate) : null,
+        pushExitStatus: pushStatus,
+        remoteCommitBefore: before,
+        remoteCommitAfter: after,
+      },
+      approval,
+      githubMainProtection: mainProtection,
+      fastForwardProof: fastForward,
+      verification: {
+        handoffCurrent: true,
+        remoteStateUnchanged: true,
+        remoteBranchExact: true,
+        fastForwardProofOk: true,
+      },
+      controls: {
+        gitRemoteWritesApproved: branchMutated,
+        ...gitRemoteWriteControls({ attempted: gitRemoteWriteAttempted, outcome: writeOutcome }),
+        ownerApprovalReceiptConsumed,
+        remoteHeadLeaseEnforced: gitRemoteWriteAttempted,
+        repositorySettingsMutated: false,
+        forcePushPerformed: false,
+        branchDeletionPerformed: false,
+        pullRequestCreated: false,
+        mergePerformed: false,
+        workflowDispatchPerformed: false,
+        deploymentPerformed: false,
+        supabaseMutated: false,
+        credentialValueExposed: false,
+      },
+    }
+    assertNoSecretEcho(body)
+    return signed(body)
+  } catch (error) {
+    throwWithWriteOutcome(error, {
+      attempted: gitRemoteWriteAttempted,
+      resolvedOutcome: resolvedWriteOutcome,
       ownerApprovalReceiptConsumed,
-      remoteHeadLeaseEnforced: branchMutated,
-      repositorySettingsMutated: false,
-      branchMutated,
-      forcePushPerformed: false,
-      branchDeletionPerformed: false,
-      pullRequestCreated: false,
-      mergePerformed: false,
-      workflowDispatchPerformed: false,
-      deploymentPerformed: false,
-      supabaseMutated: false,
-      credentialValueExposed: false,
-    },
+    })
   }
-  assertNoSecretEcho(body)
-  return signed(body)
 }
 
 function parseArgs(argv) {
@@ -1212,23 +1315,7 @@ async function main() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(JSON.stringify({
-      ok: false,
-      contract: REVIEW_BRANCH_PUSH_APPLY_CONTRACT,
-      error: String(error?.message || 'review_branch_push_failed').slice(0, 240),
-      controls: {
-        gitRemoteWritesPerformed: false,
-        repositorySettingsMutated: false,
-        branchMutated: false,
-        forcePushPerformed: false,
-        branchDeletionPerformed: false,
-        pullRequestCreated: false,
-        mergePerformed: false,
-        deploymentPerformed: false,
-        supabaseMutated: false,
-        credentialValueExposed: false,
-      },
-    }, null, 2))
+    console.error(JSON.stringify(buildReviewBranchPushFailureReceipt(error), null, 2))
     process.exitCode = 1
   })
 }
