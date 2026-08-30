@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { CommerceState } from './commerce-workspace'
 import type { ShopBakeryBatchDemoResult } from './shop-bakery-demo-loader'
 import type { ShopBakeryMarginDemoResult } from './shop-bakery-demo-loader'
 import type { ShopBatchProfitControlProjection } from './shop-batch-profit-control'
+import {
+  createShopBatchFirstUseWorkspaceCapability,
+  revokeShopBatchFirstUseWorkspaceCapability,
+  shopBatchFirstUseWorkspaceCapabilityIsCurrent,
+  type ShopBatchFirstUseWorkspaceCapability,
+} from './shop-batch-first-use-workspace-capability'
+import type { ShopBatchFirstUseProjectionResult } from './shop-batch-profit-control-first-use'
 import { SHOP_BATCH_PROFIT_CONTROL_CONTRACT, SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256, projectNoBatchProfitControl, type ShopBatchProfitControlNoBatchProjection } from './shop-batch-profit-control-view'
 import { formatShopCostCoverage, formatShopMarginRate, projectShopCostCoverageAndMarginAtRisk } from './shop-cost-coverage-and-margin-at-risk'
 import { formatHiddenShopProfitControlPriorities, formatShopProfitControlMetric } from './shop-profit-control'
@@ -53,7 +60,11 @@ type ShopBakeryBatchDemoState =
 type ShopBatchFirstUseModuleState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'ready'; Component: typeof import('./shop-batch-profit-control-first-use')['ShopBatchProfitControlFirstUse'] }
+  | {
+    status: 'ready'
+    Component: typeof import('./shop-batch-profit-control-first-use')['ShopBatchProfitControlFirstUse']
+    workspaceCapability: ShopBatchFirstUseWorkspaceCapability
+  }
   | { status: 'error' }
 
 const capabilityGroups = [
@@ -88,6 +99,20 @@ function batchClassificationLabel(classification: ShopBatchProfitControlView['tr
   if (classification === 'synthetic_local_fixture_never_evidence') return 'Synthetic calculation only — never evidence'
   if (classification === 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof') return 'Retained local operating evidence — not pilot, customer, or commercial proof'
   return 'No batch evidence selected'
+}
+
+function selectShopBatchProfitControlView(
+  supplied: ShopBatchProfitControlView,
+  localBatchFirstUseAllowed: boolean,
+  localResult: ShopBatchFirstUseProjectionResult | null,
+  currentWorkspaceCapability: ShopBatchFirstUseWorkspaceCapability | null,
+): ShopBatchProfitControlView {
+  return localBatchFirstUseAllowed
+    && supplied.state === 'no_batch'
+    && localResult
+    && shopBatchFirstUseWorkspaceCapabilityIsCurrent(localResult.workspaceCapability, currentWorkspaceCapability)
+    ? localResult.projection
+    : supplied
 }
 
 function batchPriorityLabel(priority: ShopBatchProfitControlProjection['priorities'][number]) {
@@ -202,18 +227,32 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   const [bakeryDemo, setBakeryDemo] = useState<ShopBakeryDemoState>({ status: 'idle' })
   const [bakeryBatchDemo, setBakeryBatchDemo] = useState<ShopBakeryBatchDemoState>({ status: 'idle' })
   const [batchFirstUse, setBatchFirstUse] = useState<ShopBatchFirstUseModuleState>({ status: 'idle' })
-  const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchProfitControlProjection | null>(null)
+  const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchFirstUseProjectionResult | null>(null)
   const bakeryDemoAttempt = useRef(0)
   const bakeryBatchDemoAttempt = useRef(0)
   const batchFirstUseAttempt = useRef(0)
-  useEffect(() => () => {
+  const currentWorkspaceCapability = batchFirstUse.status === 'ready' ? batchFirstUse.workspaceCapability : null
+  const readCurrentWorkspaceCapability = useCallback(() => (
+    localBatchFirstUseAllowed
+      && shopBatchFirstUseWorkspaceCapabilityIsCurrent(currentWorkspaceCapability, currentWorkspaceCapability)
+      ? currentWorkspaceCapability
+      : null
+  ), [currentWorkspaceCapability, localBatchFirstUseAllowed])
+  useLayoutEffect(() => () => {
     bakeryDemoAttempt.current += 1
     bakeryBatchDemoAttempt.current += 1
     batchFirstUseAttempt.current += 1
   }, [])
-  const acceptLocalBatchProjection = useCallback((projection: ShopBatchProfitControlProjection | null) => {
-    setLocalBatchProjection(projection)
-  }, [])
+  useLayoutEffect(() => {
+    if (batchFirstUse.status !== 'ready') return undefined
+    if (!localBatchFirstUseAllowed) revokeShopBatchFirstUseWorkspaceCapability(batchFirstUse.workspaceCapability)
+    return () => { revokeShopBatchFirstUseWorkspaceCapability(batchFirstUse.workspaceCapability) }
+  }, [batchFirstUse, localBatchFirstUseAllowed])
+  const acceptLocalBatchProjection = useCallback((result: ShopBatchFirstUseProjectionResult | null) => {
+    if (result && (!localBatchFirstUseAllowed
+      || !shopBatchFirstUseWorkspaceCapabilityIsCurrent(result.workspaceCapability, currentWorkspaceCapability))) return
+    setLocalBatchProjection(result)
+  }, [currentWorkspaceCapability, localBatchFirstUseAllowed])
 
   const openBakeryDemo = async () => {
     const attempt = ++bakeryDemoAttempt.current
@@ -242,19 +281,30 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   const openBatchFirstUse = async () => {
     if (!localBatchFirstUseAllowed) return
     const attempt = ++batchFirstUseAttempt.current
+    if (batchFirstUse.status === 'ready') revokeShopBatchFirstUseWorkspaceCapability(batchFirstUse.workspaceCapability)
     setLocalBatchProjection(null)
     setBatchFirstUse({ status: 'loading' })
     try {
       const { ShopBatchProfitControlFirstUse } = await import('./shop-batch-profit-control-first-use')
-      if (attempt === batchFirstUseAttempt.current) setBatchFirstUse({ status: 'ready', Component: ShopBatchProfitControlFirstUse })
+      if (attempt === batchFirstUseAttempt.current && localBatchFirstUseAllowed) {
+        const workspaceCapability = createShopBatchFirstUseWorkspaceCapability()
+        setBatchFirstUse({
+          status: 'ready',
+          Component: ShopBatchProfitControlFirstUse,
+          workspaceCapability,
+        })
+      }
     } catch {
       if (attempt === batchFirstUseAttempt.current) setBatchFirstUse({ status: 'error' })
     }
   }
 
-  const activeBatchProfitControl = localBatchFirstUseAllowed && batchProfitControl.state === 'no_batch' && localBatchProjection
-    ? localBatchProjection
-    : batchProfitControl
+  const activeBatchProfitControl = selectShopBatchProfitControlView(
+    batchProfitControl,
+    localBatchFirstUseAllowed,
+    localBatchProjection,
+    currentWorkspaceCapability,
+  )
 
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
@@ -355,7 +405,10 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
         <b>Owner-reviewed local estimate</b>
       </header>
       {batchFirstUse.status === 'error' ? <p className="shop-margin-gaps" role="alert">Local Batch workflow failed to load. No estimate was shown or saved and the Shop workspace stayed unchanged.</p> : null}
-      {batchFirstUse.status === 'ready' ? <batchFirstUse.Component commerce={commerce} onProjection={acceptLocalBatchProjection} workspaceScope="confirmed-local" /> : null}
+      {batchFirstUse.status === 'ready'
+        && shopBatchFirstUseWorkspaceCapabilityIsCurrent(batchFirstUse.workspaceCapability, currentWorkspaceCapability)
+        ? <batchFirstUse.Component commerce={commerce} onProjection={acceptLocalBatchProjection} readCurrentWorkspaceCapability={readCurrentWorkspaceCapability} workspaceCapability={batchFirstUse.workspaceCapability} />
+        : null}
       <p className="panel-note">Not pilot, customer, commercial, or accounting proof. No payment, stock, supplier, customer, hosted, provider, model, or production write is authorized.</p>
     </section> : <section aria-label="Local Batch Profit Control unavailable" className="shop-margin-control shop-batch-first-use-launcher">
       <header><div><span className="core-eyebrow">Local Batch first use</span><h3>Local Batch review stays off</h3><p>This browser-only workflow opens only after Shop confirms a local workspace. Managed company records stay separate; no local Batch record is read or saved.</p></div><b>Local workspace required</b></header>

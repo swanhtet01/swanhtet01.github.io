@@ -14,6 +14,7 @@ const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8').re
 const coreApp = readFileSync(`${root}/showroom/src/core/CoreApp.tsx`, 'utf8').replace(/\r\n?/g, '\n')
 const css = readFileSync(`${root}/showroom/src/core/core-app.css`, 'utf8')
 const firstUseSource = readFileSync(`${root}/showroom/src/core/shop-batch-profit-control-first-use.tsx`, 'utf8')
+const workspaceCapabilitySource = readFileSync(`${root}/showroom/src/core/shop-batch-first-use-workspace-capability.ts`, 'utf8')
 const packageJson = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'))
 const panelStart = today.indexOf('export function ShopBatchProfitControlPanel')
 const start = today.indexOf('return <section aria-label={panelAriaLabel}', panelStart)
@@ -120,12 +121,15 @@ check(today.includes('setLocalBatchProjection(null)\n    setBatchFirstUse({ stat
 check(today.includes('Existing Batch records and the current Shop workspace are never overwritten.'), 'launcher states the no-overwrite boundary')
 check(today.includes('Not pilot, customer, commercial, or accounting proof.'), 'launcher permanently excludes commercial evidence claims')
 check(coreApp.includes('localBatchFirstUseAllowed={confirmedLocalShop}'), 'the local Batch workflow must use the settled local-workspace identity gate')
+check(coreApp.includes("key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'}"), 'a local-to-managed identity transition must synchronously replace the Shop Today lifecycle')
 check(today.includes('if (!localBatchFirstUseAllowed) return'), 'managed or unconfirmed shops must not action-load the local Batch workflow')
-check(today.includes('localBatchFirstUseAllowed && batchProfitControl.state'), 'a prior local Batch projection must not surface after a managed-workspace switch')
+check(today.includes('shopBatchFirstUseWorkspaceCapabilityIsCurrent(localResult.workspaceCapability, currentWorkspaceCapability)'), 'a prior local Batch projection must not surface after capability revocation or lifecycle replacement')
 check(today.includes('Managed company records stay separate; no local Batch record is read or saved.'), 'managed and unconfirmed shops must show the fail-closed local Batch boundary')
-check(today.includes('workspaceScope="confirmed-local"'), 'the action-loaded workflow must receive only the confirmed-local capability')
 check(firstUseSource.includes("SHOP_BATCH_FIRST_USE_STORAGE_KEY = 'supermega.shop.batch-profit-control.local-workspace.v1'"), 'local Batch storage must be explicitly versioned')
-check(firstUseSource.includes("SHOP_BATCH_FIRST_USE_LOCAL_SCOPE = 'confirmed-local'"), 'the local Batch storage API must require an explicit confirmed-local scope')
+check(workspaceCapabilitySource.includes("SHOP_BATCH_FIRST_USE_LOCAL_SCOPE = 'confirmed-local'"), 'the local Batch storage API must require an explicit confirmed-local scope')
+check(workspaceCapabilitySource.includes('capabilityState = new WeakMap'), 'only a source-owned capability may authorize local Batch storage')
+check(today.includes('useLayoutEffect(() => () =>') && today.includes('revokeShopBatchFirstUseWorkspaceCapability(batchFirstUse.workspaceCapability)'), 'unmounting or replacing the local workflow must synchronously revoke its exact capability before stale async work can commit')
+check(firstUseSource.includes('shopBatchFirstUseWorkspaceCapabilityIsCurrent(expected, current)'), 'every async storage phase must bind the same exact live workspace capability object')
 check(firstUseSource.includes('projectShopBatchProfitControl(structuredClone(input)'), 'local Batch workflow must project through the accepted engine')
 check(!firstUseSource.includes('estimatedBreakEvenSoldValueMmk:'), 'local Batch workflow must not implement a second decision-arithmetic projector')
 check(firstUseSource.includes('if (currentCommerceEvidence) for (const record of store.records) await validateCurrentCommerceSource(record, currentCommerceEvidence)'), 'every stored Batch source snapshot must be current before any projection or append')
@@ -174,6 +178,7 @@ let firstUseStorageEvidence = null
 try {
   const { ShopBatchProfitControlPanel } = await vite.ssrLoadModule('/src/core/ShopToday.tsx')
   const firstUse = await vite.ssrLoadModule('/src/core/shop-batch-profit-control-first-use.tsx')
+  const workspaceCapabilities = await vite.ssrLoadModule('/src/core/shop-batch-first-use-workspace-capability.ts')
   const localBackup = await vite.ssrLoadModule('/src/core/local-workspace-backup.ts')
   assert.deepEqual(
     firstUse.shopBatchFirstUseReviewDefaults(Date.parse('2026-08-30T17:29:59.999Z'), 7),
@@ -338,8 +343,10 @@ try {
     }
   }
   const lockManager = new ExclusiveLockManager()
+  const localWorkspaceCapability = workspaceCapabilities.createShopBatchFirstUseWorkspaceCapability()
+  const readLocalWorkspaceCapability = () => localWorkspaceCapability.active ? localWorkspaceCapability : null
   const saveReview = (currentCommerce, currentDraft, currentStorage, projectionAt, readCurrentCommerce = () => currentCommerce, currentLockManager = lockManager) => (
-    firstUse.saveShopBatchProfitControlLocalReview(currentCommerce, currentDraft, currentStorage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE, projectionAt, readCurrentCommerce, currentLockManager)
+    firstUse.saveShopBatchProfitControlLocalReview(currentCommerce, currentDraft, currentStorage, localWorkspaceCapability, readLocalWorkspaceCapability, projectionAt, readCurrentCommerce, currentLockManager)
   )
   const storage = new MemoryStorage()
   const commerceBeforeSave = structuredClone(retainedCommerce)
@@ -350,17 +357,18 @@ try {
     key() { managedStorageTouches += 1; throw new Error('managed storage must not be inspected') },
     setItem() { managedStorageTouches += 1; throw new Error('managed storage must not be written') },
   }
+  const managedWorkspaceCapability = { scope: 'managed', active: true }
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, managedBlockedStorage, 'managed', '2026-08-30T03:00:00.000Z', () => retainedCommerce, lockManager),
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, managedBlockedStorage, managedWorkspaceCapability, () => managedWorkspaceCapability, '2026-08-30T03:00:00.000Z', () => retainedCommerce, lockManager),
     /shop_batch_first_use_managed_workspace_blocked/,
   ); checks += 1
   await assert.rejects(
-    firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, managedBlockedStorage, 'managed'),
+    firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, managedBlockedStorage, managedWorkspaceCapability, () => managedWorkspaceCapability),
     /shop_batch_first_use_managed_workspace_blocked/,
   ); checks += 1
   assert.equal(managedStorageTouches, 0, 'managed and unconfirmed workspace scope must be rejected before any local Batch storage access'); checks += 1
   await assert.rejects(
-    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, new MemoryStorage(), firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE, '2026-08-30T03:00:00.000Z', () => retainedCommerce, null),
+    firstUse.saveShopBatchProfitControlLocalReview(retainedCommerce, draft, new MemoryStorage(), localWorkspaceCapability, readLocalWorkspaceCapability, '2026-08-30T03:00:00.000Z', () => retainedCommerce, null),
     /shop_batch_first_use_storage_lock_unavailable/,
   ); checks += 1
   const saved = await saveReview(retainedCommerce, draft, storage, '2026-08-30T03:00:00.000Z')
@@ -374,7 +382,15 @@ try {
   const firstPersistedRecord = JSON.parse(storage.value).records[0]
   assert.ok(firstPersistedRecord.inputLeaves && !('input' in firstPersistedRecord)); checks += 1
   assert.deepEqual(retainedCommerce, commerceBeforeSave); checks += 1
-  const loaded = await firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, storage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE)
+
+  const priorLifecycleCapability = workspaceCapabilities.createShopBatchFirstUseWorkspaceCapability()
+  const replacementLifecycleCapability = workspaceCapabilities.createShopBatchFirstUseWorkspaceCapability()
+  assert.equal(workspaceCapabilities.shopBatchFirstUseWorkspaceCapabilityIsCurrent(priorLifecycleCapability, priorLifecycleCapability), true); checks += 1
+  assert.equal(workspaceCapabilities.shopBatchFirstUseWorkspaceCapabilityIsCurrent(priorLifecycleCapability, replacementLifecycleCapability), false, 'a projection cannot cross an exact local-workspace capability identity'); checks += 1
+  workspaceCapabilities.revokeShopBatchFirstUseWorkspaceCapability(priorLifecycleCapability)
+  assert.equal(workspaceCapabilities.shopBatchFirstUseWorkspaceCapabilityIsCurrent(priorLifecycleCapability, replacementLifecycleCapability), false, 'a revoked projection cannot revive after a managed-to-local transition'); checks += 1
+
+  const loaded = await firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, storage, localWorkspaceCapability, readLocalWorkspaceCapability)
   assert.equal(loaded.recordCount, 1); checks += 1
   assert.deepEqual(loaded.projection, saved.projection); checks += 1
 
@@ -393,13 +409,48 @@ try {
   const staleCommerce = structuredClone(retainedCommerce)
   staleCommerce.orders[0].lines[0].unitPriceMmk = 3_001
   staleCommerce.orders[0].total = 6_002
-  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(staleCommerce, storage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE), /shop_batch_first_use_source_snapshot_stale/); checks += 1
+  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(staleCommerce, storage, localWorkspaceCapability, readLocalWorkspaceCapability), /shop_batch_first_use_source_snapshot_stale/); checks += 1
   const changedDuringSaveStorage = new MemoryStorage()
   await assert.rejects(
     saveReview(retainedCommerce, draft, changedDuringSaveStorage, '2026-08-30T03:00:00.000Z', () => staleCommerce),
     /shop_batch_first_use_source_snapshot_stale/,
   ); checks += 1
   assert.equal(changedDuringSaveStorage.value, null); checks += 1
+
+  const revokedLoadCapability = workspaceCapabilities.createShopBatchFirstUseWorkspaceCapability()
+  const revokedLoadStorage = {
+    get length() { return 0 },
+    key() { return null },
+    getItem() {
+      workspaceCapabilities.revokeShopBatchFirstUseWorkspaceCapability(revokedLoadCapability)
+      return null
+    },
+    setItem() { throw new Error('revoked load must never write') },
+  }
+  await assert.rejects(
+    firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, revokedLoadStorage, revokedLoadCapability, () => revokedLoadCapability.active ? revokedLoadCapability : null),
+    /shop_batch_first_use_managed_workspace_blocked/,
+  ); checks += 1
+
+  const revokedSaveCapability = workspaceCapabilities.createShopBatchFirstUseWorkspaceCapability()
+  const revokedSaveStorage = new MemoryStorage()
+  await assert.rejects(
+    firstUse.saveShopBatchProfitControlLocalReview(
+      retainedCommerce,
+      draft,
+      revokedSaveStorage,
+      revokedSaveCapability,
+      () => revokedSaveCapability.active ? revokedSaveCapability : null,
+      '2026-08-30T03:01:00.000Z',
+      () => {
+        workspaceCapabilities.revokeShopBatchFirstUseWorkspaceCapability(revokedSaveCapability)
+        return retainedCommerce
+      },
+      lockManager,
+    ),
+    /shop_batch_first_use_managed_workspace_blocked/,
+  ); checks += 1
+  assert.equal(revokedSaveStorage.value, null, 'a local-to-managed transition during validation must leave the Batch store untouched'); checks += 1
 
   const adjustedCommerce = structuredClone(retainedCommerce)
   adjustedCommerce.orders[0].returns = [{ actionId: 'RETURN-001', createdAt: '2026-08-30T02:06:00.000Z', actor: 'Shop owner', reason: 'Reviewed return', evidenceReference: 'RETURN-EVIDENCE-001', sku: 'BAK-BREAD', quantity: 1, disposition: 'restock' }]
@@ -478,7 +529,7 @@ try {
   const oversizedStorage = new MemoryStorage()
   oversizedStorage.value = 'x'.repeat(firstUse.SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES + 1)
   await assert.rejects(
-    firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, oversizedStorage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE),
+    firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, oversizedStorage, localWorkspaceCapability, readLocalWorkspaceCapability),
     /shop_batch_first_use_storage_size_exceeded/,
   ); checks += 1
 
@@ -503,7 +554,7 @@ try {
   assert.equal(concurrentLock.requests, 2); checks += 1
   assert.equal(concurrentLock.maxActive, 1); checks += 1
   concurrentStorage.enforceLock = false
-  const concurrentLoaded = await firstUse.loadShopBatchProfitControlLocalReview(secondCommerce, concurrentStorage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE)
+  const concurrentLoaded = await firstUse.loadShopBatchProfitControlLocalReview(secondCommerce, concurrentStorage, localWorkspaceCapability, readLocalWorkspaceCapability)
   assert.equal(concurrentLoaded.recordCount, 2); checks += 1
 
   const conflictingStorage = new MemoryStorage()
@@ -514,7 +565,7 @@ try {
   ])
   assert.equal(conflictingSaves.filter((result) => result.status === 'fulfilled').length, 1); checks += 1
   assert.equal(conflictingSaves.filter((result) => result.status === 'rejected' && /shop_batch_first_use_duplicate_line_reuse/.test(String(result.reason))).length, 1); checks += 1
-  assert.equal((await firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, conflictingStorage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE)).recordCount, 1); checks += 1
+  assert.equal((await firstUse.loadShopBatchProfitControlLocalReview(retainedCommerce, conflictingStorage, localWorkspaceCapability, readLocalWorkspaceCapability)).recordCount, 1); checks += 1
 
   const backupProjectionAt = '2026-08-30T03:12:00.000Z'
   const backupCapacityStorage = new MemoryStorage()
@@ -570,7 +621,7 @@ try {
   const twelveRecordBytes = new TextEncoder().encode(scaleStorage.value).byteLength
   assert.ok(twelveRecordBytes < sixRecordBytes * 2.2, `normalized 12-record bytes ${twelveRecordBytes} must remain linear from 6-record bytes ${sixRecordBytes}`); checks += 1
   assert.ok(twelveRecordBytes < firstUse.SHOP_BATCH_FIRST_USE_MAX_STORAGE_BYTES); checks += 1
-  assert.equal((await firstUse.loadShopBatchProfitControlLocalReview(scaleCommerce, scaleStorage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE)).recordCount, 12); checks += 1
+  assert.equal((await firstUse.loadShopBatchProfitControlLocalReview(scaleCommerce, scaleStorage, localWorkspaceCapability, readLocalWorkspaceCapability)).recordCount, 12); checks += 1
   check(!scaleStorage.value.includes('workspaceHistorySnapshot') && !scaleStorage.value.includes('workspaceHistoryReceipt'), 'multi-record storage must keep reconstructed history out of persisted bytes')
   firstUseStorageEvidence = {
     exclusiveWriters: concurrentLock.requests,
@@ -581,12 +632,15 @@ try {
     managedStorageTouches,
     wholeWorkspaceBackupCeilingBytes: localBackup.LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
     backupBreakingAppendWritten: false,
+    revokedLoadProjectionReturned: false,
+    revokedSaveWritten: revokedSaveStorage.value !== null,
+    staleProjectionRevived: false,
   }
 
   const stalePriorCommerce = structuredClone(secondCommerce)
   stalePriorCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').lines[0].unitPriceMmk = 3_001
   stalePriorCommerce.orders.find((order) => order.id === 'ORDER-OWNER-001').total = 6_002
-  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(stalePriorCommerce, storage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE), /shop_batch_first_use_source_snapshot_stale/); checks += 1
+  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(stalePriorCommerce, storage, localWorkspaceCapability, readLocalWorkspaceCapability), /shop_batch_first_use_source_snapshot_stale/); checks += 1
 
   const sampleCommerce = structuredClone(retainedCommerce)
   sampleCommerce.orders[0].completion.actionId = 'SETUP-SAMPLE-COMPLETE'
@@ -602,7 +656,7 @@ try {
 
   const tamperedStorage = new MemoryStorage()
   tamperedStorage.value = storage.value.replace('OWNER-BATCH-002', 'OWNER-BATCH-009')
-  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(secondCommerce, tamperedStorage, firstUse.SHOP_BATCH_FIRST_USE_LOCAL_SCOPE)); checks += 1
+  await assert.rejects(firstUse.loadShopBatchProfitControlLocalReview(secondCommerce, tamperedStorage, localWorkspaceCapability, readLocalWorkspaceCapability)); checks += 1
 } finally {
   await vite.close()
 }
