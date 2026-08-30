@@ -28,8 +28,11 @@ from supermega_runtime.billing_rail import (
     BILLING_ENTITLEMENT_READ_POLICY_DIGEST,
     BILLING_ENTITLEMENT_READ_SCHEMA_VERSION,
     BILLING_EVENT_RESULT_CONTRACT,
+    BILLING_MUTATION_PRIVILEGE_KEYS,
+    BILLING_NON_READ_PRIVILEGE_KEYS,
     BILLING_OVERDUE_REPORT_CONTRACT,
     BILLING_STATE_CONTRACT,
+    BILLING_WRITE_PRIVILEGE_KEYS,
     CONFIRM_BILLING_ACTION_PHRASE,
     INVOICE_PACKET_CONTRACT,
     MANAGED_BILLING_CONTRACT,
@@ -53,6 +56,9 @@ from supermega_runtime.trial_store import (
 
 # OPS-762: no DSN-shaped literals in tests; assembled from parts.
 DATABASE_URL = "://".join(("postgresql", "billing-rail-fixture"))
+# The second credential A2 introduces: same database, bounded read role. Split
+# the same way as DATABASE_URL so neither fixture is DSN-shaped in the source.
+READ_DATABASE_URL = "://".join(("postgresql", "billing-rail-read-fixture"))
 WORKSPACE_ID = "yangon-tyre-managed"
 INVOICE_ID = "INV-TEST-0001"
 NOW = datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
@@ -142,10 +148,29 @@ def founder_evidence(action_id: str, reference: str, reason: str = "Founder veri
     }
 
 
-# The two tables that stay founder-only forever, and every privilege the
-# deny-by-default guard reasons about.
+# The three billing tables, the two that stay founder-only forever, and every
+# privilege the deny-by-default guards reason about. BILLING_PRIVILEGES is all
+# EIGHT PostgreSQL 17 table privileges, enumerated from aclexplode() on a real
+# 17.10 server rather than hand-written -- four consecutive revisions of this
+# set were curated subsets and each was missing something real (DELETE, then
+# TRUNCATE, then MAINTAIN). MAINTAIN is PG17-only; PostgreSQL 16 raises
+# `unrecognized privilege type` for it, which is why a PG16 harness could not
+# have found it.
+BILLING_TABLES = ("billing_invoices", "billing_events", "billing_entitlements")
 FOUNDER_ONLY_BILLING_TABLES = ("billing_invoices", "billing_events")
-BILLING_PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "DELETE")
+BILLING_PRIVILEGES = (
+    "SELECT",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "TRUNCATE",
+    "REFERENCES",
+    "TRIGGER",
+    "MAINTAIN",
+)
+BILLING_NON_READ_PRIVILEGES = tuple(
+    privilege for privilege in BILLING_PRIVILEGES if privilege != "SELECT"
+)
 # The exact grant set v13 leaves behind: SELECT on billing_entitlements only.
 V13_RUNTIME_GRANTS = frozenset({("billing_entitlements", "SELECT")})
 # pg_policies.qual for v13's billing_entitlements_self_read, copied verbatim
@@ -182,9 +207,92 @@ def runtime_privilege_columns(granted: object) -> dict[str, bool]:
         ),
         "runtime_entitlement_write_denied": all(
             ("billing_entitlements", privilege) not in held
-            for privilege in ("INSERT", "UPDATE", "DELETE")
+            for privilege in BILLING_NON_READ_PRIVILEGES
         ),
         "runtime_entitlement_read": ("billing_entitlements", "SELECT") in held,
+    }
+
+
+# The probe column each (table, privilege) cell maps to, mirroring
+# _assert_schema's current_user matrix: three tables by all SEVEN PostgreSQL
+# table privileges, 24 cells. Written out here rather than imported from the
+# module so the fixtures are an independent statement of the expected shape --
+# if billing_rail's generator and this table disagree, a test fails instead of
+# both drifting together.
+CONNECTING_PRIVILEGE_COLUMNS = {
+    (table, privilege): f"{prefix}_{privilege.lower()}"
+    for table, prefix in (
+        ("billing_invoices", "invoice"),
+        ("billing_events", "event"),
+        ("billing_entitlements", "entitlement"),
+    )
+    for privilege in (
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER",
+        "MAINTAIN",
+    )
+}
+# What the founder's administrative connection holds today: the three SELECTs
+# plus the five mutation privileges the write path requires. The read path now
+# refuses exactly this credential, which is the whole point of A2 -- see the
+# PR body and ADMINISTRATIVE_READ_REFUSED test below.
+FOUNDER_WRITE_GRANTS = frozenset(
+    {
+        ("billing_invoices", "SELECT"),
+        ("billing_invoices", "INSERT"),
+        ("billing_invoices", "UPDATE"),
+        ("billing_events", "SELECT"),
+        ("billing_events", "INSERT"),
+        ("billing_entitlements", "SELECT"),
+        ("billing_entitlements", "INSERT"),
+        ("billing_entitlements", "UPDATE"),
+    }
+)
+# A bounded read role: the three SELECTs and nothing else at all.
+BOUNDED_READ_GRANTS = frozenset({(table, "SELECT") for table in BILLING_TABLES})
+# Every cell the read branch must refuse, one at a time: all six non-SELECT
+# privileges across all three tables, 18 in total. TRUNCATE is in here because
+# a role holding only TRUNCATE passed the previous nine-cell check and could
+# empty every billing table in one statement -- row-level triggers do not fire
+# for it and RLS does not constrain it.
+BILLING_NON_READ_CELLS = tuple(
+    (table, privilege)
+    for table in BILLING_TABLES
+    for privilege in BILLING_NON_READ_PRIVILEGES
+)
+# The subset that changes rows directly, kept separate because the code keeps
+# the same distinction.
+BILLING_MUTATION_CELLS = tuple(
+    (table, privilege)
+    for table in BILLING_TABLES
+    for privilege in ("INSERT", "UPDATE", "DELETE", "TRUNCATE")
+)
+
+
+def _camel_case(column: str) -> str:
+    """snake_case probe column -> the camelCase key _assert_schema's snapshot
+    stores it under."""
+
+    head, *rest = column.split("_")
+    return head + "".join(part.capitalize() for part in rest)
+
+
+def connecting_privilege_columns(granted: object) -> dict[str, bool]:
+    """Derive the twelve current_user probe columns from the set of (table,
+    privilege) pairs the CONNECTING role actually holds. Same reasoning as
+    runtime_privilege_columns above: the fixtures model grants, so a test names
+    the privilege it is granting rather than hand-setting a column that the
+    probe might not even ask for."""
+
+    held = {(str(table), str(privilege)) for table, privilege in granted}
+    return {
+        column: (table, privilege) in held
+        for (table, privilege), column in CONNECTING_PRIVILEGE_COLUMNS.items()
     }
 
 
@@ -200,6 +308,11 @@ class FakeBillingDatabase:
         # v12 default: the runtime member role holds nothing on any billing
         # table. A v13 target is modelled by setting V13_RUNTIME_GRANTS.
         self.runtime_privileges: frozenset[tuple[str, str]] = frozenset()
+        # What each of the two credentials holds. connect() reports the first,
+        # connect_read() the second; tests widen read_privileges by one cell to
+        # model a read role provisioned slightly wrong.
+        self.connecting_privileges: frozenset[tuple[str, str]] = FOUNDER_WRITE_GRANTS
+        self.read_privileges: frozenset[tuple[str, str]] = BOUNDED_READ_GRANTS
         # billing_entitlements carries forced RLS and exactly the one permissive
         # SELECT policy v13 creates. False models a target where RLS was
         # disabled, the policy dropped, or a second policy added beside it.
@@ -214,12 +327,26 @@ class FakeBillingDatabase:
         self.schema_version = 12
 
     def connect(self, _database_url: str):
-        return FakeBillingConnection(self)
+        """The founder's administrative connection: the credential that issues
+        invoices and moves entitlements."""
+        return FakeBillingConnection(self, self.connecting_privileges)
+
+    def connect_read(self, _database_url: str):
+        """A bounded read connection to the SAME database -- three SELECTs and
+        not one mutation privilege. Two factories rather than one mutable field
+        because that is the real topology A2 describes: one database, two
+        credentials, and a read path that must refuse the write one."""
+        return FakeBillingConnection(self, self.read_privileges)
 
 
 class FakeBillingConnection:
-    def __init__(self, database: FakeBillingDatabase) -> None:
+    def __init__(
+        self,
+        database: FakeBillingDatabase,
+        connecting_privileges: frozenset[tuple[str, str]],
+    ) -> None:
         self.database = database
+        self.connecting_privileges = connecting_privileges
         self.closed = False
         self.snapshot = None
 
@@ -227,7 +354,7 @@ class FakeBillingConnection:
         return self
 
     def cursor(self):
-        return FakeBillingCursor(self.database)
+        return FakeBillingCursor(self.database, self.connecting_privileges)
 
     def __enter__(self):
         self.snapshot = (
@@ -253,8 +380,13 @@ class FakeBillingConnection:
 
 
 class FakeBillingCursor:
-    def __init__(self, database: FakeBillingDatabase) -> None:
+    def __init__(
+        self,
+        database: FakeBillingDatabase,
+        connecting_privileges: frozenset[tuple[str, str]],
+    ) -> None:
         self.database = database
+        self.connecting_privileges = connecting_privileges
         self.rows: list[object] = []
 
     def __enter__(self):
@@ -290,14 +422,7 @@ class FakeBillingCursor:
                     "runtime_entitlement_read_predicate": (
                         self.database.entitlement_read_predicate
                     ),
-                    "invoice_select": True,
-                    "invoice_insert": True,
-                    "invoice_update": True,
-                    "event_select": True,
-                    "event_insert": True,
-                    "entitlement_select": True,
-                    "entitlement_insert": True,
-                    "entitlement_update": True,
+                    **connecting_privilege_columns(self.connecting_privileges),
                 }
             ]
         elif "from app_private.billing_events" in sql and "count(*)" in sql:
@@ -573,6 +698,12 @@ class BillingLedgerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.database = FakeBillingDatabase()
         self.ledger = BillingLedger(DATABASE_URL, connection_factory=self.database.connect)
+        # The read path no longer accepts the administrative credential, so the
+        # projection is read over a second ledger bound to the bounded read
+        # connection -- one database, two credentials, as A2 describes.
+        self.read_ledger = BillingLedger(
+            DATABASE_URL, connection_factory=self.database.connect_read
+        )
         self.digest = _digest(sample_invoice_core())
 
     def issue(self, reason: str = "Invoice handed to the customer in person.") -> dict[str, object]:
@@ -623,7 +754,7 @@ class BillingLedgerTests(unittest.TestCase):
         self.assertEqual(granted["invoiceDigest"], self.digest)
         self.assertEqual(granted["revision"], 2)
 
-        state = self.ledger.get_billing_state(WORKSPACE_ID)
+        state = self.read_ledger.get_billing_state(WORKSPACE_ID)
         self.assertEqual(state["contract"], BILLING_STATE_CONTRACT)
         self.assertTrue(state["premiumUnlocked"])
         self.assertEqual(state["entitlement"]["status"], "granted")
@@ -741,12 +872,12 @@ class BillingLedgerTests(unittest.TestCase):
         self.assertEqual(row["status"], "revoked")
         self.assertIsNone(row["invoice_digest"])
         self.assertIsNone(row["granted_event_id"])
-        self.assertFalse(self.ledger.get_billing_state(WORKSPACE_ID)["premiumUnlocked"])
+        self.assertFalse(self.read_ledger.get_billing_state(WORKSPACE_ID)["premiumUnlocked"])
 
         regranted = self.grant(expected_revision=3)
         self.assertEqual(regranted["status"], "granted")
         self.assertEqual(regranted["revision"], 4)
-        self.assertTrue(self.ledger.get_billing_state(WORKSPACE_ID)["premiumUnlocked"])
+        self.assertTrue(self.read_ledger.get_billing_state(WORKSPACE_ID)["premiumUnlocked"])
         self.assertEqual(len(self.database.events), 5)
 
     def test_refund_recording_does_not_auto_revoke(self) -> None:
@@ -766,7 +897,7 @@ class BillingLedgerTests(unittest.TestCase):
         # Recording that money moved back never changes service by itself:
         # revoking is a separate founder decision (design section 3).
         self.assertEqual(self.database.entitlements[WORKSPACE_ID]["status"], "granted")
-        self.assertTrue(self.ledger.get_billing_state(WORKSPACE_ID)["premiumUnlocked"])
+        self.assertTrue(self.read_ledger.get_billing_state(WORKSPACE_ID)["premiumUnlocked"])
 
     def test_refund_guards_reference_paid_invoice_and_sealed_total(self) -> None:
         self.issue()
@@ -925,6 +1056,374 @@ class BillingLedgerTests(unittest.TestCase):
         with self.assertRaises(BillingRailError):
             self.issue()
         self.assertEqual(self.database.invoices, {})
+
+
+class BillingReadPathFailsClosedTests(unittest.TestCase):
+    """A2 part one: the READ path must fail closed on every mutation privilege.
+
+    Before this, _assert_schema only ever *required* the mutation flags when
+    require_write_privilege was true and never *rejected* them when it was
+    false, so a read role accidentally provisioned with INSERT or UPDATE sailed
+    straight through the read branch. Declining to require is not an invariant.
+    A2's whole purpose is putting that credential in a service context, so
+    "the service cannot mutate billing" has to be a property the probe proves
+    at connection time rather than one someone provisions correctly by hand.
+
+    These fixtures model grants rather than columns, so each case names the
+    privilege it is granting. The same nine cases were also run against a live
+    PostgreSQL server with real roles and real GRANTs -- the fake cannot
+    validate that the probe statement parses, only that the branch logic reacts
+    to the values it is handed.
+    """
+
+    def read_ledger(self, database: FakeBillingDatabase) -> BillingLedger:
+        return BillingLedger(
+            READ_DATABASE_URL, connection_factory=database.connect_read
+        )
+
+    def test_a_clean_bounded_read_role_is_accepted(self) -> None:
+        database = FakeBillingDatabase()
+        state = self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+        self.assertEqual(state["contract"], BILLING_STATE_CONTRACT)
+
+    def test_the_read_path_still_requires_a_role_that_can_see_past_rls(self) -> None:
+        # A2's spec proposed gating the privileged-role assertion on
+        # require_write_privilege so the read role would not need
+        # superuser-class rights. That is unsafe and this test is the pin.
+        #
+        # v12 puts `force row level security` on all three billing tables and
+        # its own $verify$ block asserts they carry NO policies; v13 adds one,
+        # scoped `to supermega_trial_backend`. Forced RLS is not bypassed by the
+        # table owner -- only by rolsuper or rolbypassrls. Verified on a live
+        # server: a role created `nosuperuser nobypassrls` holding SELECT on all
+        # three tables reads 0 of 1 rows from each. Had the assertion been
+        # gated, such a role would connect cleanly and get_billing_state would
+        # answer a paid-up workspace with no invoices, no entitlement and an
+        # EMPTY overdue report -- silently under-reporting money owed, which is
+        # the exact leakage _overdue_report exists to stop and strictly worse
+        # than a refusal.
+        #
+        # So the bounded read role A2 needs is BYPASSRLS with no mutation grant.
+        # It is the mutation refusal above, not this assertion, that bounds it.
+        database = FakeBillingDatabase()
+        database.provisioning_role_privileged = False
+        with self.assertRaises(BillingRailError) as raised:
+            self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+        self.assertIn("row level security", str(raised.exception))
+
+    def test_the_two_split_role_refusals_say_different_things(self) -> None:
+        # The role-NAME refusal and the read-past-RLS refusal used to be one
+        # condition sharing one message. They are separate guards with different
+        # remedies now, and an operator provisioning a credential has to be able
+        # to tell which one they tripped.
+        blacklisted = FakeBillingDatabase()
+        blacklisted.current_user = "supermega_trial_backend"
+        unprivileged = FakeBillingDatabase()
+        unprivileged.provisioning_role_privileged = False
+        messages = []
+        for database in (blacklisted, unprivileged):
+            with self.assertRaises(BillingRailError) as raised:
+                self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+            messages.append(str(raised.exception))
+        self.assertNotEqual(messages[0], messages[1])
+
+    def test_every_non_select_privilege_is_refused_one_at_a_time(self) -> None:
+        # 21 cells: seven non-SELECT privileges across three tables. Twelve of
+        # them change rows directly; TRIGGER, REFERENCES and MAINTAIN do not and
+        # are refused anyway (see BILLING_TABLE_PRIVILEGES for why).
+        self.assertEqual(len(BILLING_NON_READ_CELLS), 21)
+        self.assertEqual(len(BILLING_MUTATION_CELLS), 12)
+        for table, privilege in BILLING_NON_READ_CELLS:
+            with self.subTest(table=table, privilege=privilege):
+                database = FakeBillingDatabase()
+                database.read_privileges = BOUNDED_READ_GRANTS | {(table, privilege)}
+                with self.assertRaises(BillingRailError) as raised:
+                    self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+                message = str(raised.exception)
+                self.assertIn("SELECT and nothing else", message)
+                # The refusal names the offending cell, so a mis-provisioned
+                # role tells the founder which GRANT to revoke.
+                self.assertIn(
+                    CONNECTING_PRIVILEGE_COLUMNS[(table, privilege)]
+                    .replace("_", " ")
+                    .split()[0],
+                    message.lower(),
+                )
+                self.assertIn(privilege.lower(), message.lower())
+
+    def test_the_probed_set_is_postgres_17s_complete_table_privilege_list(self) -> None:
+        # This list has been a curated subset four times running, and each time
+        # the missing privilege was real. It is now enumerated from the server
+        # rather than written from memory: `grant all on table ... to r` then
+        # aclexplode(relacl) on a real PostgreSQL 17.10 returns exactly these
+        # eight. Pinned here so a future narrowing is a test failure.
+        #
+        # MAINTAIN is PostgreSQL 17 only -- PG16 raises `unrecognized privilege
+        # type: "MAINTAIN"` for it. No version branch guards it because
+        # _assert_schema refuses any server whose postgresMajor is not 17 long
+        # before these checks run.
+        self.assertEqual(
+            set(billing_rail_module.BILLING_TABLE_PRIVILEGES),
+            {
+                "SELECT",
+                "INSERT",
+                "UPDATE",
+                "DELETE",
+                "TRUNCATE",
+                "REFERENCES",
+                "TRIGGER",
+                "MAINTAIN",
+            },
+        )
+        self.assertEqual(len(billing_rail_module.BILLING_PRIVILEGE_CELLS), 24)
+
+    def test_maintain_alone_is_refused(self) -> None:
+        # The fourth narrowing. MAINTAIN does not change rows, so it is not in
+        # the row-changing twelve, but it lets a role run maintenance
+        # operations and take table locks -- it can block billing activity, and
+        # it plainly violates "this connection holds SELECT and nothing else".
+        for table in BILLING_TABLES:
+            with self.subTest(table=table):
+                database = FakeBillingDatabase()
+                database.read_privileges = BOUNDED_READ_GRANTS | {(table, "MAINTAIN")}
+                with self.assertRaises(BillingRailError) as raised:
+                    self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+                self.assertIn("maintain", str(raised.exception).lower())
+        self.assertNotIn(
+            "invoiceMaintain", set(BILLING_MUTATION_PRIVILEGE_KEYS)
+        )
+        self.assertIn("invoiceMaintain", set(BILLING_NON_READ_PRIVILEGE_KEYS))
+
+    def test_truncate_alone_is_refused(self) -> None:
+        # Pinned on its own because this is the privilege that defeated the
+        # first version of this guard. A role holding SELECT plus TRUNCATE and
+        # nothing else was accepted as a bounded reader, and TRUNCATE empties a
+        # billing table in one statement: v12's immutability triggers are all
+        # `for each row` and do not fire for it, and RLS constrains only
+        # SELECT/INSERT/UPDATE/DELETE. Measured on a live server, such a role
+        # was refused DELETE and then truncated all three tables to zero rows.
+        for table in BILLING_TABLES:
+            with self.subTest(table=table):
+                database = FakeBillingDatabase()
+                database.read_privileges = BOUNDED_READ_GRANTS | {(table, "TRUNCATE")}
+                with self.assertRaises(BillingRailError) as raised:
+                    self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+                self.assertIn("truncate", str(raised.exception).lower())
+
+    def test_the_administrative_write_credential_is_refused_on_the_read_path(
+        self,
+    ) -> None:
+        # THE breaking change, pinned deliberately. The credential the founder
+        # runs `status` with today holds the five write grants, so the hardened
+        # read path refuses it. This is not a regression to paper over: it is
+        # the reason A2 lists a founder-provisioned bounded read role as a
+        # prerequisite. If this test ever starts passing as an ACCEPT, the read
+        # path has been loosened back to trusting provisioning discipline.
+        database = FakeBillingDatabase()
+        ledger = BillingLedger(DATABASE_URL, connection_factory=database.connect)
+        with self.assertRaises(BillingRailError) as raised:
+            ledger.get_billing_state(WORKSPACE_ID)
+        self.assertIn("SELECT and nothing else", str(raised.exception))
+
+    def test_the_runtime_role_names_are_still_refused_on_the_read_path(self) -> None:
+        # Gating the PRIVILEGED-role assertion must not gate the runtime-role
+        # NAME refusal beside it; they are different guards and only the first
+        # is what A2 relaxes.
+        for current_user in ("supermega_trial_backend", "supermega_trial_login"):
+            with self.subTest(current_user=current_user):
+                database = FakeBillingDatabase()
+                database.current_user = current_user
+                with self.assertRaises(BillingRailError) as raised:
+                    self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+                self.assertIn("never the runtime role", str(raised.exception))
+
+    def test_the_read_path_still_requires_readable_billing_history(self) -> None:
+        for table in BILLING_TABLES:
+            with self.subTest(table=table):
+                database = FakeBillingDatabase()
+                database.read_privileges = BOUNDED_READ_GRANTS - {(table, "SELECT")}
+                with self.assertRaises(BillingRailError) as raised:
+                    self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+                self.assertIn("verify billing history", str(raised.exception))
+
+    def test_the_write_path_is_unchanged(self) -> None:
+        # Still the reviewed administrative role, still the same five required
+        # privileges, and still no DELETE and no TRUNCATE requirement -- the
+        # ledger is append-only and never deletes from any billing table.
+        self.assertEqual(
+            set(BILLING_WRITE_PRIVILEGE_KEYS),
+            {
+                "invoiceInsert",
+                "invoiceUpdate",
+                "eventInsert",
+                "entitlementInsert",
+                "entitlementUpdate",
+            },
+        )
+        self.assertTrue(set(BILLING_WRITE_PRIVILEGE_KEYS) < set(BILLING_MUTATION_PRIVILEGE_KEYS))
+        # The write path deliberately does NOT reject TRUNCATE, and this pins
+        # the reason rather than leaving it to the commit log. Its role is
+        # superuser-class by construction -- provisioningRolePrivileged demands
+        # rolsuper or rolbypassrls -- and has_table_privilege reports TRUNCATE
+        # true for a superuser regardless of any GRANT (measured on a live
+        # server). Refusing it there would reject every superuser
+        # administrative role and brick all six mutation commands. The read
+        # path is where that bound belongs.
+        self.assertNotIn("Truncate", " ".join(BILLING_WRITE_PRIVILEGE_KEYS))
+        superuser = FakeBillingDatabase()
+        superuser.connecting_privileges = frozenset(
+            (table, privilege)
+            for table in BILLING_TABLES
+            for privilege in BILLING_PRIVILEGES
+        )
+        self.assertEqual(
+            BillingLedger(
+                DATABASE_URL, connection_factory=superuser.connect
+            ).issue_invoice(
+                sample_packet(),
+                workspace_id=WORKSPACE_ID,
+                evidence=founder_evidence("issue-0003", "viber:handover"),
+            )["status"],
+            "issued",
+        )
+        database = FakeBillingDatabase()
+        ledger = BillingLedger(DATABASE_URL, connection_factory=database.connect)
+        issued = ledger.issue_invoice(
+            sample_packet(),
+            workspace_id=WORKSPACE_ID,
+            evidence=founder_evidence("issue-0001", "viber:handover:2026-08-17"),
+        )
+        self.assertEqual(issued["status"], "issued")
+        # A bounded read role cannot write, and a role holding the grants but
+        # not the reviewed administrative role cannot either.
+        for label, factory, privileged in (
+            ("bounded read role", database.connect_read, True),
+            ("unprivileged role holding the grants", database.connect, False),
+        ):
+            with self.subTest(label=label):
+                database.provisioning_role_privileged = privileged
+                with self.assertRaises(BillingRailError):
+                    BillingLedger(
+                        DATABASE_URL, connection_factory=factory
+                    ).issue_invoice(
+                        sample_packet(),
+                        workspace_id=WORKSPACE_ID,
+                        evidence=founder_evidence("issue-0002", "viber:handover"),
+                    )
+                database.provisioning_role_privileged = True
+
+    def test_the_runtime_role_guards_also_probe_every_privilege(self) -> None:
+        # The runtime member role holding TRUNCATE is exactly as destructive as
+        # the read connection holding it -- it empties the table and fires no
+        # row-level trigger -- and the deny-by-default guards listed only four
+        # privileges. Bind their arrays to the full set here; the fixture
+        # computes these columns in Python, so nothing else would notice the
+        # SQL narrowing again.
+        database = FakeBillingDatabase()
+        self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+        probe = next(
+            sql
+            for sql, _params in database.statements
+            if "current_setting('server_version_num')" in sql
+        )
+        runtime_arrays = re.findall(r"unnest\(array\[([^\]]*)\]\)\s*billing_privilege", probe)
+        self.assertEqual(len(runtime_arrays), 2)
+        for privileges in runtime_arrays:
+            for privilege in ("truncate", "references", "trigger", "maintain"):
+                self.assertIn(f"'{privilege}'", privileges)
+
+    def test_a_sequence_row_lands_every_cell_on_its_own_column(self) -> None:
+        # psycopg is configured with dict rows, but _row_value also accepts a
+        # plain sequence and falls back to POSITION. Nothing exercised that
+        # path, so the probe's select-list order and the positional indices
+        # could drift apart silently -- a one-slot shift would read every
+        # privilege from its neighbour's column. Build the row positionally,
+        # independently of the module's own base index, and require the
+        # snapshot to come back correct.
+        leading = [
+            170006,                        # server_version_num
+            "postgres",                    # current_user
+            True,                          # transaction_read_only
+            True,                          # provisioning_role_privileged
+            billing_rail_module.BILLING_SCHEMA_VERSION,  # schema_version
+            True,                          # backend_role_safe
+            True,                          # runtime_ledger_denied
+            True,                          # runtime_entitlement_write_denied
+            False,                         # runtime_entitlement_read
+            True,                          # runtime_entitlement_read_policy_shape
+            V13_READ_POLICY_PREDICATE,     # runtime_entitlement_read_predicate
+        ]
+        cells = [
+            privilege == "SELECT"
+            for _table, privilege in (
+                (table, privilege)
+                for table in BILLING_TABLES
+                for privilege in BILLING_PRIVILEGES
+            )
+        ]
+
+        class SequenceRowCursor:
+            def execute(self, _statement, _params=()):
+                return None
+
+            def fetchone(self):
+                return list(leading) + list(cells)
+
+        snapshot = BillingLedger._assert_schema(
+            SequenceRowCursor(), require_write_privilege=False
+        )
+        for table, privilege in (
+            (table, privilege)
+            for table in BILLING_TABLES
+            for privilege in BILLING_PRIVILEGES
+        ):
+            key = _camel_case(CONNECTING_PRIVILEGE_COLUMNS[(table, privilege)])
+            with self.subTest(table=table, privilege=privilege):
+                self.assertEqual(snapshot[key], privilege == "SELECT")
+
+    def test_the_probe_asks_for_every_cell_both_branches_reason_about(self) -> None:
+        # The gap this change closed was a probe narrower than the checks, and
+        # it recurred: first DELETE and billing_events UPDATE were unprobed
+        # (eight cells), then TRUNCATE was (twelve). The probe now asks for all
+        # eight PostgreSQL 17 table privileges across all three tables -- 24 cells
+        # -- and is generated from the same tuple the checks read, so a subset
+        # cannot silently reappear. A cell that is never probed reads as
+        # permanently absent, so it can be neither required by the write branch
+        # nor rejected by the read branch, with no test failing. Bind the probe
+        # to the checks here.
+        database = FakeBillingDatabase()
+        self.read_ledger(database).get_billing_state(WORKSPACE_ID)
+        probe = next(
+            sql
+            for sql, _params in database.statements
+            if "current_setting('server_version_num')" in sql
+        )
+        for table in BILLING_TABLES:
+            for privilege in BILLING_PRIVILEGES:
+                with self.subTest(table=table, privilege=privilege):
+                    self.assertIn(
+                        f"has_table_privilege(current_user, 'app_private.{table}',"
+                        f" '{privilege}')".lower(),
+                        probe,
+                    )
+        self.assertEqual(len(CONNECTING_PRIVILEGE_COLUMNS), 24)
+        # And the 21 snapshot keys the read branch rejects are exactly the 21
+        # non-SELECT cells the probe asks for -- no key rejecting a column that
+        # is never selected, and no non-SELECT column selected but ignored.
+        self.assertEqual(
+            set(BILLING_NON_READ_PRIVILEGE_KEYS),
+            {
+                _camel_case(CONNECTING_PRIVILEGE_COLUMNS[cell])
+                for cell in BILLING_NON_READ_CELLS
+            },
+        )
+        self.assertEqual(
+            set(BILLING_MUTATION_PRIVILEGE_KEYS),
+            {
+                _camel_case(CONNECTING_PRIVILEGE_COLUMNS[cell])
+                for cell in BILLING_MUTATION_CELLS
+            },
+        )
 
 
 class PolicyPredicateFingerprintTests(unittest.TestCase):
@@ -1194,6 +1693,12 @@ class RefundDigestScopingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.database = FakeBillingDatabase()
         self.ledger = BillingLedger(DATABASE_URL, connection_factory=self.database.connect)
+        # The read path no longer accepts the administrative credential, so the
+        # projection is read over a second ledger bound to the bounded read
+        # connection -- one database, two credentials, as A2 describes.
+        self.read_ledger = BillingLedger(
+            DATABASE_URL, connection_factory=self.database.connect_read
+        )
         self.digest = _digest(sample_invoice_core())
 
     def issue_and_pay(self, packet: dict[str, object], invoice_id: str, suffix: str) -> None:
@@ -1270,7 +1775,7 @@ class RefundDigestScopingTests(unittest.TestCase):
         # the digest predicate and hands back EVERY refund row for the
         # workspace. If the fake ever gains predicate fidelity, this fails
         # loudly instead of the filter assertions going vacuously green.
-        cursor = FakeBillingCursor(self.database)
+        cursor = FakeBillingCursor(self.database, self.database.connecting_privileges)
         cursor.execute(
             """
             select payload_json
@@ -1328,6 +1833,12 @@ class OverdueReportTests(unittest.TestCase):
     def setUp(self) -> None:
         self.database = FakeBillingDatabase()
         self.ledger = BillingLedger(DATABASE_URL, connection_factory=self.database.connect)
+        # The read path no longer accepts the administrative credential, so the
+        # projection is read over a second ledger bound to the bounded read
+        # connection -- one database, two credentials, as A2 describes.
+        self.read_ledger = BillingLedger(
+            DATABASE_URL, connection_factory=self.database.connect_read
+        )
         self.digest = _digest(sample_invoice_core())
 
     def issue(self, packet: dict[str, object] | None = None, action_id: str = "issue-0001") -> dict[str, object]:
@@ -1349,7 +1860,7 @@ class OverdueReportTests(unittest.TestCase):
         )
 
     def report(self, as_of: datetime = NOW) -> dict[str, object]:
-        return self.ledger.get_billing_state(WORKSPACE_ID, as_of=as_of)["overdueReport"]
+        return self.read_ledger.get_billing_state(WORKSPACE_ID, as_of=as_of)["overdueReport"]
 
     def seed_refund_event(self, amount_minor: int, reference: str) -> None:
         seed_refund_event(
@@ -1470,7 +1981,7 @@ class OverdueReportTests(unittest.TestCase):
 
     def test_naive_as_of_fails_closed(self) -> None:
         with self.assertRaises(BillingRailError):
-            self.ledger.get_billing_state(WORKSPACE_ID, as_of=datetime(2026, 8, 17, 4, 0))
+            self.read_ledger.get_billing_state(WORKSPACE_ID, as_of=datetime(2026, 8, 17, 4, 0))
 
 
 class _ReadinessCursor:
@@ -1636,14 +2147,25 @@ class BillingRailCliTests(unittest.TestCase):
         self._tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tempdir.cleanup)
         self.directory = Path(self._tempdir.name)
+        # The transport now dispatches on the URL, because after A2 the two
+        # billing credentials are two different URLs: the administrative one
+        # that mutates and the bounded read one that only projects. Which URL
+        # file a subcommand is pointed at is the whole subject of these tests.
         patcher = patch.object(
             BillingLedger,
             "_connect",
-            lambda ledger_self: self.database.connect(ledger_self._database_url),
+            lambda ledger_self: (
+                self.database.connect_read(ledger_self._database_url)
+                if ledger_self._database_url == READ_DATABASE_URL
+                else self.database.connect(ledger_self._database_url)
+            ),
         )
         patcher.start()
         self.addCleanup(patcher.stop)
         self.database_url_file = self._write_text("database-url.txt", DATABASE_URL)
+        self.read_database_url_file = self._write_text(
+            "read-database-url.txt", READ_DATABASE_URL
+        )
 
     def _write_text(self, name: str, content: str) -> str:
         path = self.directory / name
@@ -1730,7 +2252,7 @@ class BillingRailCliTests(unittest.TestCase):
         code, stdout = self.run_cli(
             [
                 "status",
-                "--database-url-file", self.database_url_file,
+                "--database-url-file", self.read_database_url_file,
                 "--workspace-id", WORKSPACE_ID,
             ]
         )
@@ -1766,7 +2288,7 @@ class BillingRailCliTests(unittest.TestCase):
         code, stdout = self.run_cli(
             [
                 "status",
-                "--database-url-file", self.database_url_file,
+                "--database-url-file", self.read_database_url_file,
                 "--workspace-id", WORKSPACE_ID,
             ]
         )

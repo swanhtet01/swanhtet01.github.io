@@ -531,13 +531,19 @@ requireCheck(
 // the exact policy inventory above already proves those two tables carry no
 // policies; this check proves the runtime member role and every Supabase API
 // role also hold no table privilege on them whatsoever, founder-only forever.
+// "Whatsoever" is all EIGHT PostgreSQL 17 table privileges, not the four this
+// listed before: a role holding only TRUNCATE can empty a billing table in one
+// statement, fires no row-level trigger doing it, and was invisible here.
+// MAINTAIN is PG17-only and was enumerated from aclexplode() on a real 17.10
+// server rather than from a hand-written list -- four consecutive revisions of
+// this set were curated subsets, each missing something real.
 const billingInvoicesEventsPrivilegeRows = await database.query(`
   select bool_or(
     has_table_privilege(role_name, format('app_private.%I', table_name), privilege_name)
   ) as any_privilege
   from unnest(array['billing_invoices', 'billing_events']) table_name,
        unnest(array['supermega_trial_backend', 'anon', 'authenticated', 'service_role']) role_name,
-       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) privilege_name
+       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']) privilege_name
 `)
 requireCheck(
   'v12 billing invoices and events stay deny-by-default for the runtime and API roles',
@@ -552,7 +558,7 @@ const entitlementApiPrivilegeRows = await database.query(`
     has_table_privilege(role_name, 'app_private.billing_entitlements', privilege_name)
   ) as any_privilege
   from unnest(array['anon', 'authenticated', 'service_role']) role_name,
-       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) privilege_name
+       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']) privilege_name
 `)
 requireCheck(
   'v13 billing entitlements stay deny-by-default for every Supabase API role',
@@ -562,7 +568,7 @@ const entitlementRuntimeWriteRows = await database.query(`
   select bool_or(
     has_table_privilege('supermega_trial_backend', 'app_private.billing_entitlements', privilege_name)
   ) as any_write_privilege
-  from unnest(array['INSERT', 'UPDATE', 'DELETE']) privilege_name
+  from unnest(array['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']) privilege_name
 `)
 requireCheck(
   'v13 billing entitlements grant the runtime role read-only access',

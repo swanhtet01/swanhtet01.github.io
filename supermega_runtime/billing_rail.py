@@ -102,6 +102,132 @@ BILLING_ENTITLEMENT_READ_SCHEMA_VERSION = 13
 BILLING_ENTITLEMENT_READ_POLICY_DIGEST = (
     "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5"
 )
+BILLING_TABLES = ("billing_invoices", "billing_events", "billing_entitlements")
+# EVERY table privilege PostgreSQL 17 defines, not a chosen subset. The subset
+# is what went wrong here FOUR times running: the original probe asked for three
+# of them, then four, then seven. Each round the missing one was real -- a role
+# holding only TRUNCATE passed the "cannot mutate billing" check and could empty
+# all three tables in one statement (measured: it was refused DELETE and then
+# truncated invoices, events and entitlements to zero rows).
+#
+# The list below is not curated from documentation or memory. It was enumerated
+# from the server: `grant all on table ... to r`, then aclexplode(relacl) on a
+# real PostgreSQL 17.10, which returns exactly these eight. That matters,
+# because the third revision of this list was assembled on a PostgreSQL 16
+# harness -- and PG16 returns only seven from the same query and raises
+# `unrecognized privilege type: "MAINTAIN"` outright. MAINTAIN is PG17-only, so
+# a PG16 harness could not have found it, whatever care was taken.
+#
+# No version conditionality here on purpose: _assert_schema rejects any server
+# whose postgresMajor is not 17 before it reaches these checks, so a PG16-safe
+# branch would be dead code guarding a state that is already refused.
+#
+# Neither of the ledger's two other defences covers TRUNCATE. v12's
+# billing_events_immutable trigger is `for each row` (migration :146-148, and
+# the invoice and entitlement guards likewise at :105 and :219), and TRUNCATE is
+# a statement-level operation that fires no row-level trigger. RLS constrains
+# SELECT/INSERT/UPDATE/DELETE only, so `force row level security` does not reach
+# it either. The migration mentions TRUNCATE nowhere at all.
+#
+# So the set is enumerated in full and the read branch refuses everything that
+# is not SELECT. Adding a privilege to PostgreSQL's table-privilege list is the
+# only thing that can make this incomplete again.
+BILLING_TABLE_PRIVILEGES = (
+    "SELECT",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "TRUNCATE",
+    "REFERENCES",
+    "TRIGGER",
+    "MAINTAIN",
+)
+# The snapshot key each (table, privilege) cell lands under, and the probe
+# column it is selected as. Derived from the two tuples above rather than hand
+# written, so the probe cannot drift from the checks that read it -- the exact
+# failure that hid TRUNCATE and, before it, DELETE. Dropping a cell from the
+# SELECT list while leaving its key in place would otherwise fail OPEN and
+# silently, because psycopg's dict rows make _row_value return None for a column
+# that was never selected and bool(None) is a privilege nothing rejects.
+_TABLE_KEY_PREFIX = {
+    "billing_invoices": "invoice",
+    "billing_events": "event",
+    "billing_entitlements": "entitlement",
+}
+
+
+def _privilege_cells() -> tuple[tuple[str, str, str, str], ...]:
+    """(table, privilege, snapshot key, probe column) for all 24 cells."""
+
+    cells = []
+    for table in BILLING_TABLES:
+        for privilege in BILLING_TABLE_PRIVILEGES:
+            prefix = _TABLE_KEY_PREFIX[table]
+            cells.append(
+                (
+                    table,
+                    privilege,
+                    f"{prefix}{privilege.capitalize()}",
+                    f"{prefix}_{privilege.lower()}",
+                )
+            )
+    return tuple(cells)
+
+
+BILLING_PRIVILEGE_CELLS = _privilege_cells()
+# Everything that is not SELECT, which is exactly what the read connection must
+# not hold. Two classes, both refused, for reasons worth keeping distinct:
+#
+#   INSERT/UPDATE/DELETE/TRUNCATE change billing rows directly.
+#   TRIGGER and REFERENCES do not, and are refused anyway. TRIGGER is not a
+#     lesser privilege in practice: measured on a live server, a SELECT+TRIGGER
+#     role installed a `before insert ... for each row` trigger returning NULL,
+#     and the founder's next billing-event insert reported `INSERT 0 0` -- the
+#     ledger silently stopped recording while every write appeared to succeed.
+#     REFERENCES is genuinely weaker: it cannot read or change a billing row
+#     (DELETE and TRUNCATE both stayed denied), but a foreign key against the
+#     invoice primary key is an existence oracle for invoice ids. Neither has
+#     any business on a connection whose entire job is SELECT, and probing them
+#     costs one column each, so both are refused rather than argued about.
+BILLING_NON_READ_PRIVILEGE_KEYS = tuple(
+    key for _table, privilege, key, _column in BILLING_PRIVILEGE_CELLS if privilege != "SELECT"
+)
+# The twelve that change rows directly, kept separate so the distinction above
+# stays legible and testable.
+BILLING_MUTATION_PRIVILEGE_KEYS = tuple(
+    key
+    for _table, privilege, key, _column in BILLING_PRIVILEGE_CELLS
+    if privilege in {"INSERT", "UPDATE", "DELETE", "TRUNCATE"}
+)
+# What the WRITE path requires, unchanged by A2 and deliberately NOT widened.
+# The ledger is append-only and deletes from no billing table, so no DELETE and
+# no TRUNCATE is required of the administrative role. Requiring TRUNCATE to be
+# ABSENT there was considered and rejected on evidence: the write path's role is
+# superuser-class by construction (the provisioningRolePrivileged assertion
+# demands rolsuper or rolbypassrls), and has_table_privilege reports TRUNCATE
+# true for a superuser regardless of any GRANT -- measured. Refusing it would
+# reject every superuser administrative role and brick all six mutation
+# commands. The read path is where that bound belongs and where it now lives.
+BILLING_WRITE_PRIVILEGE_KEYS = (
+    "invoiceInsert",
+    "invoiceUpdate",
+    "eventInsert",
+    "entitlementInsert",
+    "entitlementUpdate",
+)
+# The generated tail of _assert_schema's probe: one has_table_privilege call per
+# cell, in BILLING_PRIVILEGE_CELLS order, which is also the positional order the
+# snapshot's _row_value index fallbacks use. Built from constants only -- no
+# caller input reaches it -- and the identifiers are PostgreSQL privilege names
+# and this module's own table names, both fixed tuples above.
+_CONNECTING_PRIVILEGE_SQL = ",\n".join(
+    f"              has_table_privilege(current_user, 'app_private.{table}', '{privilege}')"
+    f" as {column}"
+    for table, privilege, _key, column in BILLING_PRIVILEGE_CELLS
+)
+# Where the connecting-role columns start in the select list, for the positional
+# _row_value fallback used when a row arrives as a plain sequence.
+_CONNECTING_PRIVILEGE_BASE_INDEX = 11
 BILLING_EVENT_RESULT_CONTRACT = "supermega.managed_billing_event.v1"
 BILLING_OVERDUE_REPORT_CONTRACT = "supermega.managed_billing_overdue_report.v1"
 BILLING_STATE_CONTRACT = "supermega.managed_billing_state.v1"
@@ -573,7 +699,14 @@ class BillingLedger:
                  no policy, no privilege, at any schema version (v12 header;
                  tools/verify_private_trial_migrations.mjs asserts the same
                  against a live database). Block comments, not line comments:
-                 fixtures flatten this statement onto one line. */
+                 fixtures flatten this statement onto one line.
+
+                 "No privilege" means all EIGHT PostgreSQL 17 table
+                 privileges,
+                 not the four this used to list. The runtime member role holding
+                 TRUNCATE would be as destructive here as on the read
+                 connection -- it empties the table and fires no row-level
+                 trigger -- and was invisible to this guard. */
               coalesce((
                 select bool_and(
                   not has_table_privilege(
@@ -584,12 +717,14 @@ class BillingLedger:
                 )
                 from unnest(array['billing_invoices', 'billing_events'])
                   billing_table(table_name),
-                  unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
+                  unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE',
+                    'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'])
                   billing_privilege(privilege_name)
               ), false) as runtime_ledger_denied,
               /* Entitlement WRITES stay founder-only forever too: v13 adds no
                  INSERT/UPDATE/DELETE policy and no such grant. The runtime can
-                 observe entitlement, never change it. */
+                 observe entitlement, never change it -- so every non-SELECT
+                 privilege is denied here, TRUNCATE included. */
               coalesce((
                 select bool_and(
                   not has_table_privilege(
@@ -598,7 +733,8 @@ class BillingLedger:
                     billing_privilege.privilege_name
                   )
                 )
-                from unnest(array['INSERT', 'UPDATE', 'DELETE'])
+                from unnest(array['INSERT', 'UPDATE', 'DELETE',
+                  'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'])
                   billing_privilege(privilege_name)
               ), false) as runtime_entitlement_write_denied,
               /* The single privilege v13 deliberately opens, probed on its own
@@ -650,15 +786,14 @@ class BillingLedger:
                   and policy_record.tablename = 'billing_entitlements'
                   and policy_record.policyname = 'billing_entitlements_self_read'
               ) as runtime_entitlement_read_predicate,
-              has_table_privilege(current_user, 'app_private.billing_invoices', 'SELECT') as invoice_select,
-              has_table_privilege(current_user, 'app_private.billing_invoices', 'INSERT') as invoice_insert,
-              has_table_privilege(current_user, 'app_private.billing_invoices', 'UPDATE') as invoice_update,
-              has_table_privilege(current_user, 'app_private.billing_events', 'SELECT') as event_select,
-              has_table_privilege(current_user, 'app_private.billing_events', 'INSERT') as event_insert,
-              has_table_privilege(current_user, 'app_private.billing_entitlements', 'SELECT') as entitlement_select,
-              has_table_privilege(current_user, 'app_private.billing_entitlements', 'INSERT') as entitlement_insert,
-              has_table_privilege(current_user, 'app_private.billing_entitlements', 'UPDATE') as entitlement_update
+              /* The CONNECTING role's own privileges: every table privilege
+                 PostgreSQL defines, across all three billing tables. Generated
+                 from BILLING_PRIVILEGE_CELLS rather than written out, because
+                 a hand-maintained list is what let DELETE and then TRUNCATE go
+                 unprobed -- and an unprobed cell can be neither required by the
+                 write branch nor rejected by the read branch. */
             """
+            + _CONNECTING_PRIVILEGE_SQL
         )
         row = cursor.fetchone()
         if row is None:
@@ -681,15 +816,13 @@ class BillingLedger:
             "runtimeEntitlementReadPredicateDigest": _policy_expression_fingerprint(
                 _row_value(row, "runtime_entitlement_read_predicate", 10)
             ),
-            "invoiceSelect": bool(_row_value(row, "invoice_select", 11)),
-            "invoiceInsert": bool(_row_value(row, "invoice_insert", 12)),
-            "invoiceUpdate": bool(_row_value(row, "invoice_update", 13)),
-            "eventSelect": bool(_row_value(row, "event_select", 14)),
-            "eventInsert": bool(_row_value(row, "event_insert", 15)),
-            "entitlementSelect": bool(_row_value(row, "entitlement_select", 16)),
-            "entitlementInsert": bool(_row_value(row, "entitlement_insert", 17)),
-            "entitlementUpdate": bool(_row_value(row, "entitlement_update", 18)),
         }
+        # The 21 connecting-role cells, keyed and indexed from the same tuple
+        # the probe's select list was generated from, so the two cannot drift.
+        for offset, (_table, _privilege, key, column) in enumerate(BILLING_PRIVILEGE_CELLS):
+            snapshot[key] = bool(
+                _row_value(row, column, _CONNECTING_PRIVILEGE_BASE_INDEX + offset)
+            )
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != BILLING_SCHEMA_VERSION:
             raise BillingRailError(
                 f"The billing ledger requires PostgreSQL 17 and private schema version {BILLING_SCHEMA_VERSION}."
@@ -737,26 +870,60 @@ class BillingLedger:
             raise BillingRailError(
                 "The runtime member role's billing entitlement read must stay scoped to its own workspace."
             )
-        if (
-            not snapshot["provisioningRolePrivileged"]
-            or snapshot["currentUser"] in {"supermega_trial_backend", "supermega_trial_login"}
-        ):
+        # Unconditional, on BOTH paths, exactly as before: the two runtime role
+        # names are never an acceptable billing connection whatever it is doing.
+        if snapshot["currentUser"] in {"supermega_trial_backend", "supermega_trial_login"}:
             raise BillingRailError("The billing ledger requires the reviewed administrative role, never the runtime role.")
+        # Also unconditional, on BOTH paths, and this one is NOT what it looks
+        # like. A2's spec proposed gating it on require_write_privilege so a
+        # bounded read role would not need superuser-class rights. Checked
+        # against the v12 migration and then against a live server, that is
+        # unsafe: v12 puts `force row level security` on all three billing
+        # tables (:221-226) and its own $verify$ block asserts they carry NO
+        # policies; v13 adds exactly one, scoped `to supermega_trial_backend`.
+        # Forced RLS is not bypassed by the table owner -- only by rolsuper or
+        # rolbypassrls, which is precisely what this column probes. So a read
+        # role created `nosuperuser nobypassrls` with SELECT on all three tables
+        # would pass a gated assertion and then read ZERO rows, and
+        # get_billing_state would answer a paid-up workspace with `invoices:
+        # []`, `entitlement.status: "none"` and an EMPTY overdue report. A
+        # silent under-report of money owed is strictly worse than a refusal --
+        # it is the exact revenue leakage _overdue_report exists to stop. The
+        # bounded read role A2 needs is therefore BYPASSRLS with no mutation
+        # grant, not an unprivileged one, and the guard below is what bounds it.
+        if not snapshot["provisioningRolePrivileged"]:
+            raise BillingRailError(
+                "The billing ledger requires a role that can read past row level security."
+            )
         if snapshot["transactionReadOnly"] == require_write_privilege:
             raise BillingRailError("The billing ledger transaction mode is invalid for this operation.")
         if not all(snapshot[key] for key in ("invoiceSelect", "eventSelect", "entitlementSelect")):
             raise BillingRailError("The billing ledger connection cannot verify billing history.")
-        if require_write_privilege and not all(
-            snapshot[key]
-            for key in (
-                "invoiceInsert",
-                "invoiceUpdate",
-                "eventInsert",
-                "entitlementInsert",
-                "entitlementUpdate",
+        if require_write_privilege:
+            if not all(snapshot[key] for key in BILLING_WRITE_PRIVILEGE_KEYS):
+                raise BillingRailError("The billing ledger connection lacks bounded billing privileges.")
+            return snapshot
+        # The read path FAILS CLOSED on everything that is not SELECT, rather
+        # than merely declining to require the write privileges. Declining to
+        # require is not an invariant: a read role provisioned slightly wrong --
+        # one stray grant -- would otherwise sail through here and become a
+        # mutation-capable credential sitting in a service context, with nothing
+        # in code to catch it. Refusing outright makes "the read connection can
+        # only read" a property the probe proves at connection time instead of
+        # one someone has to provision correctly by hand.
+        #
+        # The set is BILLING_NON_READ_PRIVILEGE_KEYS -- all six non-SELECT
+        # privileges, not a chosen subset. A subset is what failed twice: with
+        # only INSERT/UPDATE/DELETE checked, a role holding TRUNCATE alone was
+        # accepted here as a bounded reader and could empty all three billing
+        # tables in one statement, with the row-level immutability triggers and
+        # forced RLS both inapplicable to it. See BILLING_TABLE_PRIVILEGES.
+        held_non_read = sorted(key for key in BILLING_NON_READ_PRIVILEGE_KEYS if snapshot[key])
+        if held_non_read:
+            raise BillingRailError(
+                "The billing ledger read path requires a connection holding SELECT and nothing "
+                "else; this one also holds: " + ", ".join(held_non_read) + "."
             )
-        ):
-            raise BillingRailError("The billing ledger connection lacks bounded billing privileges.")
         return snapshot
 
     @staticmethod
