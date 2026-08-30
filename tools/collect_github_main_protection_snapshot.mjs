@@ -193,6 +193,8 @@ function fallbackBranchEvidence(expectedRemoteMainCommit) {
 
 export function validateGitHubMainProtectionBranchEvidence(value, branch) {
   if (!isRecord(value) || !isRecord(branch)) fail('github_main_protection_snapshot_branch_evidence_invalid')
+  const branchCommit = exactShaOrNull(branch.commit?.sha)
+  if (!branchCommit) fail('github_main_protection_snapshot_branch_commit_invalid')
   const keys = Object.keys(value).sort().join(',')
   if (keys !== 'branchEndpointAvailable,classicBranchProtectionEvidence,expectedRemoteMainCommit,fallbackUsed,kind') {
     fail('github_main_protection_snapshot_branch_evidence_invalid')
@@ -209,7 +211,7 @@ export function validateGitHubMainProtectionBranchEvidence(value, branch) {
       || value.classicBranchProtectionEvidence !== 'endpoint_observed') {
       fail('github_main_protection_snapshot_branch_evidence_invalid')
     }
-    if (expectedRemoteMainCommit !== null && branch.commit?.sha !== expectedRemoteMainCommit) {
+    if (expectedRemoteMainCommit !== null && branchCommit !== expectedRemoteMainCommit) {
       fail('github_main_protection_snapshot_expected_main_mismatch')
     }
     return endpointBranchEvidence(expectedRemoteMainCommit)
@@ -345,6 +347,7 @@ export function validateGitHubMainProtectionSnapshot(packet) {
   if (packet.mode !== 'read_only_no_github_write') fail('github_main_protection_snapshot_mode_invalid')
   if (packet.source?.branchUrl !== BRANCH_URL || packet.source?.rulesetsUrl !== RULESETS_URL) fail('github_main_protection_snapshot_source_invalid')
   if (packet.source?.tokenValueExposed !== false) fail('github_main_protection_snapshot_token_invalid')
+  if (!exactShaOrNull(packet.branch?.commit?.sha)) fail('github_main_protection_snapshot_branch_commit_invalid')
   const branchSnapshot = sanitizeBranchSnapshot(packet.branch)
   const rulesetsSnapshot = sanitizeRulesetsSnapshot(packet.rulesets)
   if (JSON.stringify(branchSnapshot) !== JSON.stringify(packet.branch)) fail('github_main_protection_snapshot_branch_invalid')

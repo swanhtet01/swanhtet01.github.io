@@ -191,6 +191,9 @@ function githubMainProtectionEvidence(value) {
   if (JSON.stringify(branchEvidence) !== JSON.stringify(value.source.branchEvidence)) {
     fail('release_handoff_github_main_protection_branch_evidence_invalid')
   }
+  if (branchEvidence.fallbackUsed && assessment.ok !== true) {
+    fail('release_handoff_github_main_protection_fallback_rulesets_incomplete')
+  }
   return {
     contract: GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
     generatedAt,
@@ -217,10 +220,58 @@ function githubMainProtectionEvidence(value) {
   }
 }
 
-function githubMainProtectionState(value) {
+function githubMainProtectionExactState(value) {
   const evidence = githubMainProtectionEvidence(value)
   const { generatedAt, snapshotDigest, ...state } = evidence
   return state
+}
+
+function githubMainProtectionCommonState(evidence) {
+  return {
+    contract: evidence.contract,
+    repository: evidence.repository,
+    mode: evidence.mode,
+    currentAction: evidence.currentAction,
+    requiredChecks: evidence.requiredChecks,
+    controls: evidence.controls,
+  }
+}
+
+export function githubMainProtectionStatesEqual(left, right) {
+  const leftEvidence = githubMainProtectionEvidence(left)
+  const rightEvidence = githubMainProtectionEvidence(right)
+  const leftKind = leftEvidence.source.branchEvidence.kind
+  const rightKind = rightEvidence.source.branchEvidence.kind
+  if (leftKind === rightKind) {
+    return JSON.stringify(githubMainProtectionExactState(leftEvidence))
+      === JSON.stringify(githubMainProtectionExactState(rightEvidence))
+  }
+  const kinds = [leftKind, rightKind].sort().join(',')
+  if (kinds !== 'expected_remote_main_fallback,github_branch_endpoint') return false
+  const fallback = leftEvidence.source.branchEvidence.fallbackUsed ? leftEvidence : rightEvidence
+  const endpoint = fallback === leftEvidence ? rightEvidence : leftEvidence
+  const fallbackCommit = fallback.branch.commit?.sha
+  const endpointCommit = endpoint.branch.commit?.sha
+  if (fallbackCommit !== endpointCommit
+    || fallback.branch.name !== 'main'
+    || endpoint.branch.name !== 'main'
+    || fallback.source.branchEvidence.expectedRemoteMainCommit !== fallbackCommit
+    || endpoint.source.branchEvidence.expectedRemoteMainCommit !== endpointCommit
+    || JSON.stringify(fallback.rulesets) !== JSON.stringify(endpoint.rulesets)
+    || JSON.stringify(githubMainProtectionCommonState(fallback)) !== JSON.stringify(githubMainProtectionCommonState(endpoint))) {
+    return false
+  }
+  const fallbackRulesetOnly = assessGitHubMainProtection({
+    branch: fallback.branch,
+    rulesets: fallback.rulesets,
+  })
+  const endpointRulesetOnly = assessGitHubMainProtection({
+    branch: fallback.branch,
+    rulesets: endpoint.rulesets,
+  })
+  return fallbackRulesetOnly.ok === true
+    && endpointRulesetOnly.ok === true
+    && JSON.stringify(fallbackRulesetOnly) === JSON.stringify(endpointRulesetOnly)
 }
 
 export async function collectGitHubMainProtectionSnapshotForHandoff({
@@ -639,8 +690,17 @@ async function prepareReleaseHandoff(output) {
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
   if (git('rev-parse', 'HEAD') !== candidateCommit || git('status', '--porcelain=v1')) fail('release_handoff_candidate_changed_during_verify')
 
+  const postVerifyRemoteMainCommit = remoteHead('main')
+  const postVerifyRemoteCandidateCommit = remoteHead(branch)
+  const postVerifyLegacyCommit = remoteHead(LEGACY_RELEASE_BRANCH)
+  if (postVerifyRemoteMainCommit !== remoteMainCommit
+    || postVerifyRemoteCandidateCommit !== remoteCandidateCommit
+    || postVerifyLegacyCommit !== legacyCommit) {
+    fail('release_handoff_remote_state_changed_during_verify')
+  }
+
   const { packet: githubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff({
-    expectedMainCommit: remoteMainCommit,
+    expectedMainCommit: postVerifyRemoteMainCommit,
   })
   const legacyCounts = legacyCommit ? git('rev-list', '--left-right', '--count', `${legacyCommit}...${candidateCommit}`).split(/\s+/).map(Number) : [0, 0]
   const packet = buildReleaseHandoff({
@@ -711,8 +771,7 @@ export async function verifyCurrentReleaseHandoff(inputPath) {
   const { packet: currentGitHubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff({
     expectedMainCommit: remoteMainCommit,
   })
-  if (JSON.stringify(githubMainProtectionState(currentGitHubMainProtection))
-    !== JSON.stringify(githubMainProtectionState(packet.githubMainProtection))) {
+  if (!githubMainProtectionStatesEqual(currentGitHubMainProtection, packet.githubMainProtection)) {
     fail('release_handoff_github_main_protection_state_changed')
   }
 

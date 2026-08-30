@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { buildReleaseHandoff, collectGitHubMainProtectionSnapshotForHandoff, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, withReleaseHandoffOutputLock, writeExclusiveJson } from './prepare_release_handoff.mjs'
+import { buildReleaseHandoff, collectGitHubMainProtectionSnapshotForHandoff, githubMainProtectionStatesEqual, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, withReleaseHandoffOutputLock, writeExclusiveJson } from './prepare_release_handoff.mjs'
 import {
   buildGitHubMainProtectionSnapshot,
 } from './collect_github_main_protection_snapshot.mjs'
@@ -128,6 +128,39 @@ function protectedFallbackMainSnapshot() {
   })
 }
 
+function protectedEndpointMainSnapshot({ branchProtected = false, rulesetName = null, rulesetsOverride = null } = {}) {
+  const base = protectedMainSnapshot()
+  return buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-07-29T13:59:00.000Z',
+    branch: {
+      name: 'main',
+      protected: branchProtected,
+      commit: { sha: main },
+      protection: branchProtected
+        ? {
+            enabled: true,
+            required_status_checks: { contexts: [...REQUIRED_MAIN_CHECKS], checks: [] },
+            allow_force_pushes: { enabled: false },
+            allow_deletions: { enabled: false },
+            required_pull_request_reviews: { required_approving_review_count: 1 },
+            required_conversation_resolution: { enabled: true },
+          }
+        : { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+    },
+    rulesets: rulesetsOverride ?? base.rulesets.map((ruleset) => ({
+      ...ruleset,
+      name: rulesetName || ruleset.name,
+    })),
+    branchEvidence: {
+      kind: 'github_branch_endpoint',
+      branchEndpointAvailable: true,
+      expectedRemoteMainCommit: main,
+      fallbackUsed: false,
+      classicBranchProtectionEvidence: 'endpoint_observed',
+    },
+  })
+}
+
 test('release handoff is immutable, review-only, and exact-commit bound', () => {
   const packet = buildReleaseHandoff(valid())
   assert.equal(packet.contract, 'supermega.release-handoff.v2')
@@ -174,6 +207,43 @@ test('release handoff preserves exact expected-main fallback provenance without 
   assert.equal(packet.githubMainProtection.branch.protection.enabled, false)
   assert.deepEqual(packet.githubMainProtection.branch.protection.required_status_checks, { contexts: [], checks: [] })
   assert.deepEqual(validateReleaseHandoffPacket(packet), packet)
+})
+
+test('protection comparison tolerates endpoint recovery in both directions only with exact complete rulesets', () => {
+  const endpoint = protectedEndpointMainSnapshot()
+  const fallback = protectedFallbackMainSnapshot()
+  assert.equal(githubMainProtectionStatesEqual(endpoint, fallback), true)
+  assert.equal(githubMainProtectionStatesEqual(fallback, endpoint), true)
+
+  const rulesetDrift = protectedEndpointMainSnapshot({ rulesetName: 'Changed main release gate' })
+  assert.equal(githubMainProtectionStatesEqual(fallback, rulesetDrift), false)
+  assert.equal(githubMainProtectionStatesEqual(rulesetDrift, fallback), false)
+
+  const legacyOnly = protectedEndpointMainSnapshot({ branchProtected: true, rulesetsOverride: [] })
+  assert.equal(legacyOnly.assessment.ok, true)
+  assert.equal(githubMainProtectionStatesEqual(fallback, legacyOnly), false)
+  assert.equal(githubMainProtectionStatesEqual(legacyOnly, fallback), false)
+})
+
+test('protection comparison rejects real endpoint legacy-protection drift', () => {
+  const before = protectedEndpointMainSnapshot()
+  const after = protectedEndpointMainSnapshot({ branchProtected: true })
+  assert.equal(githubMainProtectionStatesEqual(before, after), false)
+  assert.equal(githubMainProtectionStatesEqual(after, before), false)
+})
+
+test('handoff source rechecks remote refs after verification before binding the expected main fallback', async () => {
+  const source = (await readFile(new URL('./prepare_release_handoff.mjs', import.meta.url), 'utf8')).replace(/\r\n?/g, '\n')
+  const prepareSource = source.slice(source.indexOf('async function prepareReleaseHandoff'), source.indexOf('export async function verifyCurrentReleaseHandoff'))
+  const preMain = prepareSource.indexOf("const remoteMainCommit = remoteHead('main')")
+  const verifier = prepareSource.indexOf('const verified = process.env.SUPERMEGA_RELEASE_HANDOFF_STREAM')
+  const postMain = prepareSource.indexOf("const postVerifyRemoteMainCommit = remoteHead('main')")
+  const stabilityGate = prepareSource.indexOf("fail('release_handoff_remote_state_changed_during_verify')")
+  const fallbackBinding = prepareSource.indexOf('expectedMainCommit: postVerifyRemoteMainCommit')
+  assert.ok(preMain >= 0 && verifier > preMain && postMain > verifier && stabilityGate > postMain && fallbackBinding > stabilityGate)
+  assert.match(prepareSource, /postVerifyRemoteCandidateCommit !== remoteCandidateCommit/)
+  assert.match(prepareSource, /postVerifyLegacyCommit !== legacyCommit/)
+  assert.doesNotMatch(prepareSource, /expectedMainCommit: remoteMainCommit,/)
 })
 
 test('release handoff advances an exact remote branch to owner-gated pull request creation', () => {

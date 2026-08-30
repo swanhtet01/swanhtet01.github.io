@@ -382,6 +382,22 @@ test('fallback provenance is digest-bound and rejects an internally inconsistent
   )
 })
 
+test('endpoint provenance rejects null or malformed branch commits even after resealing', () => {
+  const packet = buildGitHubMainProtectionSnapshot({
+    generatedAt: '2026-08-25T00:00:00.000Z',
+    branch,
+    rulesets,
+  })
+  for (const invalidCommit of [null, 'not-a-commit']) {
+    const tampered = JSON.parse(JSON.stringify(packet))
+    tampered.branch.commit.sha = invalidCommit
+    assert.throws(
+      () => validateGitHubMainProtectionSnapshot(reseal(tampered)),
+      /github_main_protection_snapshot_branch_commit_invalid/,
+    )
+  }
+})
+
 test('rejects tampered write controls and digest mismatch', () => {
   const packet = buildGitHubMainProtectionSnapshot({
     generatedAt: '2026-08-25T00:00:00.000Z',
