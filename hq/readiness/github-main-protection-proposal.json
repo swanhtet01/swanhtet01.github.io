@@ -129,8 +129,8 @@
     },
     {
       "path": "tools/apply_github_main_protection.mjs",
-      "digest": "sha256:388017bbf97a4a7b70598e10fee11ae2f0b8def757bd44f137a16d01aa5171d1"
+      "digest": "sha256:fc075c0fbff91e01551ec2122fc8728b57412855be41a3ff64546aa95268da96"
     }
   ],
-  "digest": "sha256:579b4c9ee6c920478e48d889bdf663d0ab5a43bc7c66af25cd2bd00ba5b366d3"
+  "digest": "sha256:6cb1bf76a48fb45d5a1f9635770a3dd41ca1404df49e1bf459c6bafb33c06066"
 }
