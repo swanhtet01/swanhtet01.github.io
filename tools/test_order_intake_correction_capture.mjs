@@ -502,8 +502,7 @@ check(isLocalWorkspaceKey(ORDER_INTAKE_EVIDENCE_STORAGE_KEY),
     `mean of per-fixture ratios, got ${skewed.averageEffort}`)
   assert.ok(Math.abs(skewed.pooledEffort - 0.2) < 1e-12,
     `pooled effort is reported alongside, got ${skewed.pooledEffort}`)
-  assert.equal(skewed.meetsQualityBar, false, 'a skewed run must not clear the bar on the pooled figure')
-  checks += 4
+  checks += 3
 
   // A model that populates NOTHING must not score a perfect 0 and clear the bar. Those drafts
   // have no defined ratio, so they are excluded from the mean and surface as undefinedCount --
@@ -514,45 +513,43 @@ check(isLocalWorkspaceKey(ORDER_INTAKE_EVIDENCE_STORAGE_KEY),
   assert.equal(empties.measuredCount, 0, 'zero-extraction drafts are not measured')
   assert.equal(empties.undefinedCount, 20, 'zero-extraction drafts are counted, not silently dropped')
   assert.equal(empties.averageEffort, null, 'no measurable fixture yields no average, not 0')
-  assert.equal(empties.meetsQualityBar, false, 'extracting nothing must never clear the quality bar')
-  checks += 4
+  checks += 3
 
-  // Fail-closed on sample size: a single perfect draft is not a passing evaluation.
   const thin = summarizeOrderIntakeCorrectionEffort([effortRecord(0, 4)])
   assert.equal(thin.averageEffort, 0, 'a clean draft measures 0 effort')
-  assert.equal(thin.meetsQualityBar, false, 'one fixture cannot satisfy a 20-fixture protocol')
-  checks += 2
+  checks += 1
 
-  // A full, genuinely good run passes.
   const good = summarizeOrderIntakeCorrectionEffort(
     Array.from({ length: ORDER_INTAKE_CORRECTION_EFFORT_SAMPLE }, () => effortRecord(1, 10)),
   )
   assert.equal(good.measuredCount, 20, 'all twenty fixtures measured')
   assert.ok(Math.abs(good.averageEffort - 0.1) < 1e-12, `average effort 0.1, got ${good.averageEffort}`)
-  assert.equal(good.meetsQualityBar, true, 'a complete run under the threshold passes')
-  checks += 3
+  checks += 2
 
-  // The boundary is inclusive, and this is the case that caught a real bug: twenty fixtures each
-  // corrected 1-of-5 is exactly 0.20 effort, but the accumulated mean is 0.20000000000000004,
-  // which is > 0.2. A naive comparison fails a run sitting exactly ON the bar, invisibly and for
-  // no reason an operator could act on. The raw average stays unrounded; only the comparison is
-  // tolerant. Deliberately asserted as "greater than the threshold yet still passes", because an
-  // equality assertion here would go green again the moment the tolerance was removed.
+  // The verdict is deliberately absent, and the reasons are named rather than implied. Codex
+  // found both on #568: the denominator walks four of the managed draft's six fields, and two
+  // golden-set fixtures are `scope: "not_an_order"` with every value null, so a CORRECT run has
+  // at most 18 non-zero denominators and a 20-measured gate would fail it. This assertion is
+  // what stops a future caller reading a low average as a pass.
+  assert.equal(good.meetsQualityBar, undefined, 'no gate verdict is rendered from these records')
+  assert.deepEqual([...good.gateBlockedBy], [
+    'denominator_counts_four_of_six_managed_fields',
+    'non_order_outcomes_indistinguishable_from_failed_extraction',
+  ], 'the capture-layer prerequisites are named')
+  checks += 2
+
+  // Kept from the revision that did render a verdict, because the arithmetic fact outlives it and
+  // will bite whoever adds the comparison back: twenty fixtures each corrected 1-of-5 is exactly
+  // 0.20 effort, but the accumulated mean is 0.20000000000000004 — ABOVE an inclusive 0.20 bar.
+  // Any future `<=` here needs a tolerance or it fails a run sitting exactly on the threshold,
+  // invisibly, on representation noise rather than on quality.
   const boundary = summarizeOrderIntakeCorrectionEffort(
     Array.from({ length: 20 }, () => effortRecord(1, 5)),
   )
   assert.ok(boundary.averageEffort > ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD,
     `float accumulation puts the exact-0.20 run above the bar, got ${boundary.averageEffort}`)
   assert.ok(Math.abs(boundary.averageEffort - 0.2) < 1e-9, 'and only just above it')
-  assert.equal(boundary.meetsQualityBar, true, 'the 0.20 bar is inclusive despite float noise')
-  checks += 3
-
-  // One fixture over the bar fails the run.
-  const over = summarizeOrderIntakeCorrectionEffort(
-    Array.from({ length: 20 }, (_unused, index) => effortRecord(index === 0 ? 5 : 1, 5)),
-  )
-  assert.equal(over.meetsQualityBar, false, 'one heavily-corrected fixture fails the run')
-  checks += 1
+  checks += 2
 }
 
 console.log(`order intake correction capture contract: ${checks} checks passed`)
