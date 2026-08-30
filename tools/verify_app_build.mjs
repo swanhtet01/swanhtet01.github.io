@@ -20639,6 +20639,10 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // screen were measured (10,305 / 83,244 bytes, and two that produce nothing on a realistic
 // workspace) and deliberately LEFT rather than changed for consistency.
 let shopRouteWireBytes = 0
+// Reported in the summary alongside shopRouteAssetCount, and for the same reason: this value is
+// asserted against a ceiling but was never printed, so the margin was invisible until it tripped.
+// It was five bytes on 2026-08-30.
+let initialEntryGraphBytes = 0
 let shopRouteAssetCount = 0
 const CDN_BROTLI_QUALITY = 3
 const compressedWireBytes = async (path) => {
@@ -20784,9 +20788,34 @@ else {
   // bytes to 1 / 249,633 and the gate still reported ok:true, with the eager-load check
   // scanning a one-asset set. Raise the ceiling for real product value as usual; when a real
   // reduction trips the floor, lower the floor in the same commit and say what shrank.
+  //
+  // HEADROOM, measured 2026-08-30: 299,995 of 300,000. FIVE BYTES. Verified directly by
+  // temporarily lowering this ceiling and reading the number back out of the failure, because
+  // the value is asserted but never reported, so nobody can see how close it is until it trips.
+  //
+  // That matters mainly for how the failure READS. The next pull request that adds a line to any
+  // module in the entry graph fails here, and it will look like a byte budget it happens to have
+  // exceeded rather than "you touched the pre-FCP entry graph, which is the thing being
+  // rationed". So the message below now says which it is and what the options are, and the value
+  // is reported on success too — a ratchet nobody can see the margin on is a trap rather than a
+  // guard. This is deliberately NOT a raise: nothing has been added, and raising a ceiling with
+  // no product value on the other side is how a ratchet stops meaning anything.
+  //
+  // The measured reduction, if headroom is what you need: narrowing the site-manifest import in
+  // showroom/src/core/product-setup.ts is worth -10,332 raw. `requireProductContract` reads six
+  // fields and nine more per product ship unread. It is NOT a free edit — the JSON import is
+  // deliberate (see that file's header: it exists so the registry can be exercised by a test
+  // rather than pinned as source text), so a hand-written slim table would regress that on
+  // purpose. Doing it properly means generating the narrow copy at build time with a check that
+  // it still derives from site-manifest.json. Costed in hq/strategy/ENTRY-SET-REDUCTION-PLAN.md.
+  initialEntryGraphBytes = initialJavascriptBytes
   if (initialJavascriptAssets.size < 3) fail(`initial_javascript_graph_implausible:${initialJavascriptAssets.size}`)
   if (initialJavascriptBytes < 260_000) fail(`initial_javascript_budget_implausible:${initialJavascriptBytes}`)
-  if (initialJavascriptBytes > 300_000) fail(`initial_javascript_budget:${initialJavascriptBytes}`)
+  if (initialJavascriptBytes > 300_000) {
+    fail(`initial_javascript_pre_fcp_entry_graph_over_budget:${initialJavascriptBytes}_of_300000`
+      + `:this_rations_the_pre_fcp_entry_graph_not_total_bundle_size`
+      + `:see_verify_app_build_initial_javascript_budget_comment_for_the_measured_reduction`)
+  }
   if ([...initialJavascriptAssets].some((asset) => /^(?:core-app|commerce-model|operating-models|shop-planning-models|website-model)-/.test(asset))) {
     fail('product_operations_eagerly_loaded_on_home')
   }
@@ -21277,4 +21306,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes, shopRouteAssetCount, shopRouteWireBytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes, initialEntryGraphBytes, shopRouteAssetCount, shopRouteWireBytes }, null, 2))
