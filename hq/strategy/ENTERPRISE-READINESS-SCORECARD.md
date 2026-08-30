@@ -6,7 +6,8 @@ Status: analysis (no deploy, write, or gate change authorized by this document)
 Question answered: "enterprise level and what other infrastructure and tools"
 Rule: every grade cites a repo file. Companion: ERP-COMPETITIVE-ROADMAP.md sec 3
 (the enterprise checklist), AI-NATIVE-ARCHITECTURE.md (stages and triggers),
-hq/readiness/managed-pilot-readiness.json (gate ledger, 4 blocking).
+hq/readiness/managed-pilot-readiness.json (gate ledger; 4 blocking when
+written, 1 blocking as of 2026-08-30 — see the freshness note below).
 
 **Freshness note, 2026-08-17 (tech lead):** this scorecard predates a full day
 of subsequent work and should not be quoted as current without checking the
@@ -23,6 +24,27 @@ pilot as a floor, not a current reading, until a full re-grade pass is done.
 and its citation was wrong even when written — see the correction inline at
 that item. Do not resurrect it as open work without reading that note first.
 
+**Freshness note, 2026-08-30 (correction pass, verified against live source):**
+this scorecard's single most-repeated recommendation — "run the OPS-754
+preview-branch rehearsal" — was already satisfied on 2026-08-16, the same day
+the scorecard was authored. Verified in
+`hq/readiness/managed-pilot-readiness.json` and
+`hq/readiness/managed-persistence-proof.json`: the `managed_persistence` gate
+reads `ready-hosted`, all seven proofs recorded a passing result, and preview
+branch `persistence-proof-24h-20260816` was created and deleted inside the same
+session. An agent taking this document's "highest leverage" lines at face value
+would try to re-run a completed rehearsal whose runbook
+(`MANAGED-PERSISTENCE-PROOF-PLAN.md` section 6) makes all five of its steps
+founder stops with no agent discretion — approval ID, branch cost, setup SQL
+review, live-run confirmation, branch deletion. Corrected inline below at
+sections 2, 3, 5 and 9; section 6's own corrections are immediately above.
+Two further drifts fixed in the same pass: the ledger is at 1 blocking gate,
+not 4, and the app:verify chain is 652 steps, not 621 (counted from
+`package.json` `app:verify:steps`, and confirmed by a green
+`{"steps":652,"totalSteps":652}` run). Grades are still NOT re-derived — per
+the 2026-08-17 rule above, every grade whose deduction is struck below is now
+a FLOOR, and the letters in the table are stale in the pessimistic direction.
+
 Grading key: A = provable today against an enterprise buyer's checklist.
 C = built or designed but not activated. F = absent with no plan.
 
@@ -36,6 +58,10 @@ C = built or designed but not activated. F = absent with no plan.
 | 6 | Observability | D+ |
 | 7 | Scalability | B- |
 | - | OVERALL | B- |
+
+Table caveat (2026-08-30): grades 2, 3, 5 and 6 rest on deductions that have
+since been struck as satisfied. Read them as floors, not readings; the table
+alone is not quotable without the 2026-08-30 freshness note below.
 
 ---
 
@@ -65,19 +91,37 @@ with exact live-identity verification and automatic rollback of both domains on
 a stale verifier (supermega-public-release.yml shape, CEO-020 evidence, cited
 in AI-NATIVE-ARCHITECTURE.md 4.1; tools/resolve_vercel_rollback_target.mjs).
 
-- Gate coverage: 621-step app:verify chain plus 7 CI workflows; lint and
+- Gate coverage: ~~621-step~~ **652-step (2026-08-30, counted from
+  `package.json` `app:verify:steps`)** app:verify chain plus 7 CI workflows; lint and
   showroom CI fail on their own (AI-NATIVE 4.1 note).
 - Live verification: supermega-public-live-health.yml runs post-release and on
   a daily 01:45 UTC cron against https://supermega.dev.
-- Deduction: backup/restore is proven local only (core/company-backup.ts,
+- ~~Deduction: backup/restore is proven local only (core/company-backup.ts,
   600k-iteration KDF); hosted durable-write, recovery, and restore have never
-  run -- managed_persistence gate is blocked, "Live managed persistence ready
+  run — managed_persistence gate is blocked, "Live managed persistence ready
   is false" (managed-pilot-readiness.json). The OPS-754 seven-proof instrument
   (durable write, idempotent retry, event immutability, cross-tenant denial,
-  recovery round-trip, induced rollback; commit cb59abe8) is built but unrun.
+  recovery round-trip, induced rollback; commit cb59abe8) is built but unrun.~~
+  **SUPERSEDED 2026-08-30.** The instrument ran on 2026-08-16 against preview
+  branch `persistence-proof-24h-20260816` (a branch of the production project,
+  never production itself), session-pooler lane, 45 self-test cases, deleted
+  the same session. All seven proofs passed: `readback_exact`, `no_op_replay`,
+  version conflict `rejected` with 0 stale rows matched, update and delete on
+  `workspace_events` both rejected with SQLSTATE 42501, cross-tenant read
+  `denied_with_canary` with 0 foreign rows visible, backup/restore
+  `roundtrip_exact`, and induced-failure atomic rollback. Evidence:
+  `hq/readiness/managed-persistence-proof.json`. The `managed_persistence`
+  gate now reads `ready-hosted`. Local-only backup/restore remains true of
+  `core/company-backup.ts` specifically; it is no longer true of the hosted
+  layer. Residual deduction, unchanged: this proved the persistence
+  *mechanism* on a disposable branch — production still holds zero workspace
+  data and its activation is a separate founder gate.
 
-Highest leverage: execute the founder-approved 24h preview-branch rehearsal
-with the OPS-754 instrument; it converts four blocked gates into evidence.
+~~Highest leverage: execute the founder-approved 24h preview-branch rehearsal
+with the OPS-754 instrument; it converts four blocked gates into evidence.~~
+**DONE 2026-08-16 (recorded here 2026-08-30).** It did convert the gates: the
+ledger went from 4 blocking to 1, and the one that remains is
+`production_activation`, which is founder-only. Do not re-run this rehearsal.
 
 ## 3. Auditability: A-
 
@@ -91,10 +135,17 @@ that a second decision cannot overwrite (kernel/README.md).
   digest-bound to 8 sha256 source receipts (managed-pilot-readiness.json).
 - Accountable operators: reviews record reviewer, recorder, source, and
   provenance class (operator_recorded vs tenant_bound_customer_session).
-- Deduction: hosted immutability unproven until the rehearsal passes (ERP
-  roadmap sec 3 audit-trail row); OPS-754 proof 4 covers exactly this.
+- ~~Deduction: hosted immutability unproven until the rehearsal passes (ERP
+  roadmap sec 3 audit-trail row); OPS-754 proof 4 covers exactly this.~~
+  **CLOSED 2026-08-30.** Proof 4 (`event_immutability_enforced`) ran hosted on
+  2026-08-16 and recorded `update_and_delete_rejected`, both with SQLSTATE
+  42501 — the append-only guarantee is enforced by the database, not by
+  application discipline. Grade A- is now a floor.
 
-Highest leverage: run OPS-754 proof 4 (event immutability) hosted.
+~~Highest leverage: run OPS-754 proof 4 (event immutability) hosted.~~ Done;
+see above. The next auditability question is the one this proof does not
+answer: immutability is proven on a fixture tenant, not under concurrent load
+by real operators.
 
 ## 4. Access control: C+
 
@@ -120,7 +171,7 @@ staff-roles cannot ship before it.
 Justification: 600 tools/test_*.mjs files green (OPS-736, hq/TIMELINE.md),
 51 kernel test files, ~41 python test files with the tests/ suite run in CI
 via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
-621-step app:verify chain.
+~~621-step~~ **652-step (2026-08-30)** app:verify chain.
 
 - Adversarial culture is real: OPS-750/751 added leak/pagination/429 and
   body-discrimination adversarial cases; OPS-754 ships 37 offline adversarial
@@ -141,8 +192,13 @@ via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
   3. Ecommerce resolved-support-outcome UI state: ENG-144 records "the
      fixture has no resolved case, so that state remains verifier-proven" --
      a named, never-rendered state.
-  4. Hosted recovery: the OPS-754 restore/rollback proofs have never
-     executed against a real branch; recovery is local-rehearsal-only.
+  4. ~~Hosted recovery: the OPS-754 restore/rollback proofs have never
+     executed against a real branch; recovery is local-rehearsal-only.~~
+     **CLOSED 2026-08-30:** proofs 6 (`workspace_backup_restore_roundtrip`,
+     result `roundtrip_exact`) and 7 (induced-failure atomic rollback) both
+     executed against preview branch `persistence-proof-24h-20260816` on
+     2026-08-16. The live gap is now repetition, not first execution: one run
+     is evidence, not a drill cadence — see section 8 item 5.
   5. Load/perf: nothing exercises pool pressure, the 25/day scheduler
      ceiling, or concurrent budget reservation (the token cap "can modestly
      overshoot under highly concurrent calls" -- kernel Honest Limits --
@@ -334,13 +390,24 @@ duplicates the deferred (dense-data-grid, realtime-broadcast) or rejected
 
 The three moves that raise the grade fastest:
 
-1. Run the approved 24h preview-branch rehearsal with the OPS-754 instrument
-   (managed-pilot-readiness.json founderDecision). One bounded action turns
-   Reliability B -> A-, Auditability A- -> A, and unlocks the access ladder.
+1. ~~Run the approved 24h preview-branch rehearsal with the OPS-754
+   instrument (managed-pilot-readiness.json founderDecision). One bounded
+   action turns Reliability B -> A-, Auditability A- -> A, and unlocks the
+   access ladder.~~ **DONE 2026-08-16; recorded 2026-08-30.** The citation was
+   imprecise too: `founderDecision` in that ledger is the *production
+   activation* decision (still `status: required`, `approvalReceipt: null`),
+   not the rehearsal approval — the rehearsal is recorded separately under
+   `managedPersistence.approvalId`. The predicted grade movement (Reliability
+   B -> A-, Auditability A- -> A) is owed but deliberately not applied here,
+   because this pass corrects facts and does not re-derive letters.
 2. Ship the observability floor: OTel local phase + error lane on the
-   MetricEvent beacon (recs 1, 2 -- rec 4 is retired, already done; see
+   MetricEvent beacon (recs 1, 2 — rec 4 is retired, already done; see
    section 8 above). D+ -> B, and it feeds every scaling trigger in
    AI-NATIVE-ARCHITECTURE.md sec 5.
+   **Status 2026-08-30:** partly. Tracing is 3/5 on the plan's manual-span
+   step and the error lane is in review (section 6). What the D+ -> B claim
+   still lacks beyond those is collection — spans and error events that
+   nothing receives do not answer an incident.
 3. Walk the enterprise-capabilities sequence: verified-statements on the
    managed tenant, then staff-roles with a named operator (researchGates
    sequence; enterprise-staff-roles.ts header). Access control C+ -> B+ and
