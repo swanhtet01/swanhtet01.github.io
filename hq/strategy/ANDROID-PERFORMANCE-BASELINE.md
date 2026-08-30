@@ -530,8 +530,23 @@ the same unmodified build: `/` FCP 4,400 ms / load 4,207 ms, `/?choose=1` FCP
 4,516 ms / load 4,249 ms — consistent run to run, and back in line with the
 original table.
 
-**Anything measured with this harness between G3 and 2026-08-30 should be
-re-run before it is cited.** The per-route table above predates G3 and stands.
+**How to tell whether a given number was affected — and the good news for this
+document.** The pollution has a specific signature: because the median of three
+runs lands on one of the two warm runs, a polluted median is *sub-second* and
+carries *zero* JS transfer bytes. It does not look like a slightly-optimistic
+cold number; it looks like a 400 ms one.
+
+G3 landed 2026-08-20 (`677b61e1`, merged as #519 on 2026-08-21), so everything
+recorded here on or after that date was at risk. Checked every measured figure
+in this document against the signature: none of them show it. The 2026-08-20
+corrections section quotes 3,804 / 3,840 / 3,884 ms controls and a 5,372 ms
+modulepreload result; the tap-through probe quotes ~931 ms. All cold-range.
+**So the recorded numbers stand, including the two rejected optimizations and
+the prohibitions that rest on them — do not discard them on account of this
+bug.** What was at risk was any *future* run, and the fix lands before one.
+
+If you find a sub-second median with zero transfer bytes anywhere, that row is
+a cache hit and must be re-run.
 
 ### 2. Recommendation 3 (static app-shell skeleton) — SHIPPED, and it works
 
