@@ -21,14 +21,16 @@ const MAX_CASES = 100
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const FULL_CASE_MATRIX = Object.freeze([
-  { name: 'desktop root shows launcher despite remembered product', route: '/', viewport: '1280x900', path: '/', screenshot: null },
-  { name: 'desktop choose query shows launcher', route: '/?choose=1', viewport: '1280x900', path: '/?choose=1', screenshot: null },
-  { name: 'mobile root shows launcher', route: '/', viewport: '360x800 mobile', path: '/', screenshot: null },
-  { name: 'demo shop opens explicit shop route', route: '/?demo=shop', viewport: '1280x900', pathPrefix: '/shop/', screenshot: null },
+  { name: 'desktop root shows launcher despite remembered product', route: '/', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: 'app-launcher-desktop-1280x900.png' },
+  { name: 'desktop choose query shows launcher', route: '/?choose=1', viewport: '1280x900', width: 1280, height: 900, path: '/?choose=1', screenshot: null },
+  { name: 'mobile root shows launcher', route: '/', viewport: '390x844 mobile', width: 390, height: 844, path: '/', screenshot: 'app-launcher-mobile-390x844.png' },
+  { name: 'demo shop opens explicit shop route', route: '/?demo=shop', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/shop/', screenshot: null },
   {
     name: 'desktop trade link opens a complete mini-mart counter',
     route: '/shop/?template=mini-mart',
     viewport: '1280x900',
+    width: 1280,
+    height: 900,
     path: '/shop/?tab=counter&template=mini-mart',
     screenshot: 'shop-counter-mini-mart-desktop-1280x900.png',
     semantics: 'shop-counter',
@@ -37,17 +39,25 @@ const FULL_CASE_MATRIX = Object.freeze([
     name: 'mobile trade link keeps the complete mini-mart checkout in view',
     route: '/shop/?template=mini-mart',
     viewport: '390x844 mobile',
+    width: 390,
+    height: 844,
     path: '/shop/?tab=counter&template=mini-mart',
     screenshot: 'shop-counter-mini-mart-mobile-390x844.png',
     semantics: 'shop-counter',
   },
-  { name: 'demo plant opens explicit plant route', route: '/?demo=plant', viewport: '1280x900', pathPrefix: '/plant/', screenshot: null },
-  { name: 'demo website opens explicit website route', route: '/?demo=website', viewport: '1280x900', pathPrefix: '/website/', screenshot: null },
-  { name: 'demo ecommerce opens explicit ecommerce route', route: '/?demo=ecommerce', viewport: '1280x900', pathPrefix: '/ecommerce/', screenshot: null },
+  { name: 'demo plant opens explicit plant route', route: '/?demo=plant', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/plant/', screenshot: null },
+  { name: 'desktop Plant shows the browser-local working sample', route: '/plant/', viewport: '1280x900', width: 1280, height: 900, path: '/plant/', screenshot: 'plant-working-sample-desktop-1280x900.png' },
+  { name: 'mobile Plant shows the browser-local working sample', route: '/plant/', viewport: '390x844 mobile', width: 390, height: 844, path: '/plant/', screenshot: 'plant-working-sample-mobile-390x844.png' },
+  { name: 'demo website opens explicit website route', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/website/', screenshot: null },
+  { name: 'desktop Website shows the local preview boundary', route: '/website/', viewport: '1280x900', width: 1280, height: 900, path: '/website/', screenshot: 'website-working-sample-desktop-1280x900.png' },
+  { name: 'mobile Website shows the local preview boundary', route: '/website/', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/', screenshot: 'website-working-sample-mobile-390x844.png' },
+  { name: 'demo ecommerce opens explicit ecommerce route', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/ecommerce/', screenshot: null },
   {
     name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
     route: '/ecommerce/',
     viewport: '1280x900',
+    width: 1280,
+    height: 900,
     pathPrefix: '/ecommerce/',
     screenshot: 'ecommerce-local-request-desktop-1280x900.png',
     semantics: 'ecommerce-claim',
@@ -56,6 +66,8 @@ const FULL_CASE_MATRIX = Object.freeze([
     name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
     route: '/ecommerce/',
     viewport: '390x844 mobile',
+    width: 390,
+    height: 844,
     pathPrefix: '/ecommerce/',
     screenshot: 'ecommerce-local-request-mobile-390x844.png',
     semantics: 'ecommerce-claim',
@@ -167,7 +179,7 @@ export function assertRenderedProofCaseMatrix(cases, scope) {
   return expectedCases
 }
 
-function assertCaseSemantics(testCase, scope) {
+function assertCaseSemantics(testCase, expected) {
   if (!isObject(testCase) || testCase.ok !== true) fail('app_entry_rendered_case_failed')
   if (exactArray(testCase.failures, 'app_entry_rendered_case_failures_invalid').length) fail('app_entry_rendered_case_failed')
   if (!isObject(testCase.runtime) || testCase.runtime.clean !== true) fail('app_entry_rendered_case_runtime_failed')
@@ -176,15 +188,19 @@ function assertCaseSemantics(testCase, scope) {
   if (!exactString(testCase.path, 'app_entry_rendered_case_path_invalid').startsWith('/')) fail('app_entry_rendered_case_path_invalid')
   exactString(testCase.viewport, 'app_entry_rendered_case_viewport_invalid')
 
-  if (testCase.network !== null && testCase.network !== undefined) {
-    if (!isObject(testCase.network)
-      || testCase.network.mutatingRequestCount !== 0
-      || exactArray(testCase.network.mutatingRequests, 'app_entry_rendered_case_network_invalid').length) {
-      fail('app_entry_rendered_mutating_network_observed')
-    }
+  if (!isObject(testCase.network)
+    || testCase.network.mutatingRequestCount !== 0
+    || exactArray(testCase.network.mutatingRequests, 'app_entry_rendered_case_network_invalid').length) {
+    fail('app_entry_rendered_mutating_network_observed')
   }
+  const rendered = testCase.rendered
+  if (!isObject(rendered) || rendered.viewportWidth !== expected.width
+    || rendered.viewportHeight !== expected.height
+    || !Number.isFinite(rendered.documentScrollWidth) || rendered.documentScrollWidth < 1
+    || rendered.documentScrollWidth > rendered.viewportWidth + 1
+    || rendered.noHorizontalOverflow !== true) fail('app_entry_rendered_viewport_or_overflow_invalid')
 
-  if (scope === 'shop-counter') {
+  if (expected.semantics === 'shop-counter') {
     const layout = testCase.layout
     if (!isObject(layout) || layout.ok !== true || layout.aboveFold !== true) fail('app_entry_rendered_shop_layout_failed')
     if (layout.documentScrollWidth > layout.viewportWidth) fail('app_entry_rendered_horizontal_overflow')
@@ -216,7 +232,7 @@ function assertCaseSemantics(testCase, scope) {
     }
   }
 
-  if (scope === 'ecommerce-claim') {
+  if (expected.semantics === 'ecommerce-claim') {
     const boundary = testCase.claimBoundary
     if (!isObject(boundary) || boundary.ok !== true || boundary.boundaryVisible !== true
       || boundary.oldManagedHeadlineVisible !== false || boundary.companyReceiptClaimVisible !== false
@@ -356,7 +372,7 @@ export async function validateRenderedProofReport({ reportPath, expectedHead, ex
   for (let index = 0; index < cases.length; index += 1) {
     const testCase = cases[index]
     const expected = expectedCases[index]
-    assertCaseSemantics(testCase, expected.semantics || 'generic')
+    assertCaseSemantics(testCase, expected)
     if (expected.screenshot !== null) {
       screenshots.push(await assertScreenshot(evidenceDir, testCase.screenshot, seenScreenshots))
     }

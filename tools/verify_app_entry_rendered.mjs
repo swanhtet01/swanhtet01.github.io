@@ -656,6 +656,13 @@ export async function verifyCase(cdp, origin, testCase) {
       path: finalLocation.final.path,
       ...(testCase.expectedOrigin ? { origin: finalLocation.final.origin, hash: finalLocation.final.hash } : {}),
       bodyLength: finalRendered?.bodyLength || 0,
+      rendered: {
+        viewportWidth: finalRendered?.viewportWidth || 0,
+        viewportHeight: finalRendered?.viewportHeight || 0,
+        documentScrollWidth: finalRendered?.documentScrollWidth || 0,
+        noHorizontalOverflow: Boolean(finalRendered
+          && finalRendered.documentScrollWidth <= finalRendered.viewportWidth + 1),
+      },
       layout: shopCounter,
       claimBoundary: ecommerceClaimBoundary,
       screenshot,
@@ -717,6 +724,7 @@ const tests = [
     height: 900,
     expectedPath: '/',
     expectedText: [...launcherText, 'Continue saved workspace: Pilot Spa Workspace'],
+    screenshotName: 'app-launcher-desktop-1280x900',
     seed: { lastProduct: 'production', productSetups: shopSetup },
   },
   {
@@ -731,11 +739,12 @@ const tests = [
   {
     name: 'mobile root shows launcher',
     route: '/',
-    width: 360,
-    height: 800,
+    width: 390,
+    height: 844,
     mobile: true,
     expectedPath: '/',
     expectedText: launcherText,
+    screenshotName: 'app-launcher-mobile-390x844',
     seed: { lastProduct: 'ecommerce' },
   },
   {
@@ -788,6 +797,27 @@ const tests = [
     seed: {},
   },
   {
+    name: 'desktop Plant shows the browser-local working sample',
+    route: '/plant/',
+    width: 1280,
+    height: 900,
+    expectedPath: '/plant/',
+    expectedText: ['Plant', 'working sample', "These dates belong to this browser-local sample, not today's production."],
+    screenshotName: 'plant-working-sample-desktop-1280x900',
+    seed: {},
+  },
+  {
+    name: 'mobile Plant shows the browser-local working sample',
+    route: '/plant/',
+    width: 390,
+    height: 844,
+    mobile: true,
+    expectedPath: '/plant/',
+    expectedText: ['Plant', 'working sample', "These dates belong to this browser-local sample, not today's production."],
+    screenshotName: 'plant-working-sample-mobile-390x844',
+    seed: {},
+  },
+  {
     name: 'demo website opens explicit website route',
     route: '/?demo=website',
     width: 1280,
@@ -795,6 +825,27 @@ const tests = [
     expectedPath: (path) => path.startsWith('/website/'),
     expectedPathLabel: '/website/',
     expectedText: ['Website'],
+    seed: {},
+  },
+  {
+    name: 'desktop Website shows the local preview boundary',
+    route: '/website/',
+    width: 1280,
+    height: 900,
+    expectedPath: '/website/',
+    expectedText: ['Website', 'Make this website yours', 'Nothing has been deployed.'],
+    screenshotName: 'website-working-sample-desktop-1280x900',
+    seed: {},
+  },
+  {
+    name: 'mobile Website shows the local preview boundary',
+    route: '/website/',
+    width: 390,
+    height: 844,
+    mobile: true,
+    expectedPath: '/website/',
+    expectedText: ['Website', 'Make this website yours', 'Nothing has been deployed.'],
+    screenshotName: 'website-working-sample-mobile-390x844',
     seed: {},
   },
   {
@@ -836,7 +887,7 @@ const tests = [
     timeoutMs: 60_000,
     seed: {},
   },
-]
+].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
 async function main() {
   if (shopOnly && ecommerceClaimOnly) throw new Error('app_entry_rendered_scope_conflict')

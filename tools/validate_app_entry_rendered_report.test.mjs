@@ -39,6 +39,12 @@ function ecommerceCase({ file, screenshot, viewport, width, height }) {
     viewport,
     path: '/ecommerce/',
     bodyLength: 500,
+    rendered: {
+      viewportWidth: width,
+      viewportHeight: height,
+      documentScrollWidth: width,
+      noHorizontalOverflow: true,
+    },
     layout: null,
     claimBoundary: {
       ok: true,
@@ -159,7 +165,7 @@ function fullCaseMatrixFixture() {
       route: '/',
       viewport: '1280x900',
       path: '/',
-      screenshot: null,
+      screenshot: { file: 'app-launcher-desktop-1280x900.png' },
     },
     {
       name: 'desktop choose query shows launcher',
@@ -171,9 +177,9 @@ function fullCaseMatrixFixture() {
     {
       name: 'mobile root shows launcher',
       route: '/',
-      viewport: '360x800 mobile',
+      viewport: '390x844 mobile',
       path: '/',
-      screenshot: null,
+      screenshot: { file: 'app-launcher-mobile-390x844.png' },
     },
     {
       name: 'demo shop opens explicit shop route',
@@ -204,11 +210,39 @@ function fullCaseMatrixFixture() {
       screenshot: null,
     },
     {
+      name: 'desktop Plant shows the browser-local working sample',
+      route: '/plant/',
+      viewport: '1280x900',
+      path: '/plant/',
+      screenshot: { file: 'plant-working-sample-desktop-1280x900.png' },
+    },
+    {
+      name: 'mobile Plant shows the browser-local working sample',
+      route: '/plant/',
+      viewport: '390x844 mobile',
+      path: '/plant/',
+      screenshot: { file: 'plant-working-sample-mobile-390x844.png' },
+    },
+    {
       name: 'demo website opens explicit website route',
       route: '/?demo=website',
       viewport: '1280x900',
       path: '/website/',
       screenshot: null,
+    },
+    {
+      name: 'desktop Website shows the local preview boundary',
+      route: '/website/',
+      viewport: '1280x900',
+      path: '/website/',
+      screenshot: { file: 'website-working-sample-desktop-1280x900.png' },
+    },
+    {
+      name: 'mobile Website shows the local preview boundary',
+      route: '/website/',
+      viewport: '390x844 mobile',
+      path: '/website/',
+      screenshot: { file: 'website-working-sample-mobile-390x844.png' },
     },
     {
       name: 'demo ecommerce opens explicit ecommerce route',
@@ -253,16 +287,39 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
-  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 11)
+  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 15)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
-  assert.equal(assertRenderedProofCaseMatrix(full.slice(9), 'ecommerce-claim').length, 2)
-  assert.equal(full.filter((entry) => entry.screenshot === null).length, 7)
+  assert.equal(assertRenderedProofCaseMatrix(full.slice(13), 'ecommerce-claim').length, 2)
+  assert.deepEqual(full.filter((entry) => entry.screenshot).map((entry) => entry.screenshot.file), [
+    'app-launcher-desktop-1280x900.png',
+    'app-launcher-mobile-390x844.png',
+    'shop-counter-mini-mart-desktop-1280x900.png',
+    'shop-counter-mini-mart-mobile-390x844.png',
+    'plant-working-sample-desktop-1280x900.png',
+    'plant-working-sample-mobile-390x844.png',
+    'website-working-sample-desktop-1280x900.png',
+    'website-working-sample-mobile-390x844.png',
+    'ecommerce-local-request-desktop-1280x900.png',
+    'ecommerce-local-request-mobile-390x844.png',
+  ])
+  assert.equal(full.filter((entry) => entry.screenshot === null).length, 5)
 
   assert.throws(() => assertRenderedProofCaseMatrix(full.slice(0, -1), 'full'), /case_matrix_mismatch/)
   assert.throws(() => assertRenderedProofCaseMatrix([...full, structuredClone(full[0])], 'full'), /case_matrix_mismatch/)
   assert.throws(() => assertRenderedProofCaseMatrix([structuredClone(full[0])], 'full'), /case_matrix_mismatch/)
 
-  const ecommerce = full.slice(9)
+  const swappedScreenshots = structuredClone(full)
+  ;[swappedScreenshots[7].screenshot, swappedScreenshots[8].screenshot]
+    = [swappedScreenshots[8].screenshot, swappedScreenshots[7].screenshot]
+  assert.throws(() => assertRenderedProofCaseMatrix(swappedScreenshots, 'full'), /case_matrix_mismatch/)
+  const missingScreenshot = structuredClone(full)
+  missingScreenshot[10].screenshot = null
+  assert.throws(() => assertRenderedProofCaseMatrix(missingScreenshot, 'full'), /case_matrix_mismatch/)
+  const extraScreenshot = structuredClone(full)
+  extraScreenshot[1].screenshot = { file: 'unexpected.png' }
+  assert.throws(() => assertRenderedProofCaseMatrix(extraScreenshot, 'full'), /case_matrix_mismatch/)
+
+  const ecommerce = full.slice(13)
   const duplicateDesktop = [
     structuredClone(ecommerce[0]),
     {

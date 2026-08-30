@@ -121,6 +121,35 @@ function reviewInput(validation = renderedValidation()) {
   }
 }
 
+function fullPortfolioReview() {
+  const files = [
+    'app-launcher-desktop-1280x900.png',
+    'app-launcher-mobile-390x844.png',
+    'shop-counter-mini-mart-desktop-1280x900.png',
+    'shop-counter-mini-mart-mobile-390x844.png',
+    'plant-working-sample-desktop-1280x900.png',
+    'plant-working-sample-mobile-390x844.png',
+    'website-working-sample-desktop-1280x900.png',
+    'website-working-sample-mobile-390x844.png',
+    'ecommerce-local-request-desktop-1280x900.png',
+    'ecommerce-local-request-mobile-390x844.png',
+  ]
+  const digestCharacters = ['8', '9', 'a', 'b', 'c', 'd', 'e', 'f', '0', '1']
+  const validation = renderedValidation({
+    scope: 'full',
+    screenshots: files.map((file, index) => ({
+      file,
+      bytes: 80_000 + index,
+      digest: digest(digestCharacters[index]),
+    })),
+  })
+  const review = reviewInput(validation)
+  review.product = 'portfolio'
+  review.userRole = 'portfolio_reviewer'
+  review.firstJob = 'review_four_product_entry'
+  return { validation, review }
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
@@ -154,6 +183,12 @@ function ecommerceCase({ file, screenshot, viewport, width, height }) {
     viewport,
     path: '/ecommerce/',
     bodyLength: 500,
+    rendered: {
+      viewportWidth: width,
+      viewportHeight: height,
+      documentScrollWidth: width,
+      noHorizontalOverflow: true,
+    },
     layout: null,
     claimBoundary: {
       ok: true,
@@ -372,6 +407,42 @@ test('binds the receipt to the exact rendered validation and payload', () => {
     }),
     /design_critique_receipt_payload_mismatch/,
   )
+})
+
+test('requires inspection of the exact ten-image full portfolio matrix', () => {
+  const { validation, review } = fullPortfolioReview()
+  const receipt = buildDesignCritiqueReceipt({
+    renderedValidation: validation,
+    reportGeneratedAt: REPORT_GENERATED_AT,
+    reviewInput: review,
+    generatedAt: GENERATED_AT,
+  })
+  assert.equal(receipt.review.product, 'portfolio')
+  assert.equal(receipt.renderedProof.scope, 'full')
+  assert.deepEqual(
+    receipt.review.inspectedScreenshots,
+    validation.screenshots.map(({ file, digest: screenshotDigest }) => ({ file, digest: screenshotDigest })),
+  )
+  assert.equal(receipt.review.inspectedScreenshots.length, 10)
+
+  const missing = clone(review)
+  missing.inspectedScreenshots.pop()
+  assert.throws(() => buildDesignCritiqueReceipt({
+    renderedValidation: validation,
+    reportGeneratedAt: REPORT_GENERATED_AT,
+    reviewInput: missing,
+    generatedAt: GENERATED_AT,
+  }), /design_critique_inspected_screenshots_incomplete/)
+
+  const swapped = clone(review)
+  ;[swapped.inspectedScreenshots[0], swapped.inspectedScreenshots[1]]
+    = [swapped.inspectedScreenshots[1], swapped.inspectedScreenshots[0]]
+  assert.throws(() => buildDesignCritiqueReceipt({
+    renderedValidation: validation,
+    reportGeneratedAt: REPORT_GENERATED_AT,
+    reviewInput: swapped,
+    generatedAt: GENERATED_AT,
+  }), /design_critique_inspected_screenshots_mismatch/)
 })
 
 test('fails closed on low scores, self-review, and incomplete screenshot inspection', () => {
