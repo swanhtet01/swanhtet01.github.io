@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from contextvars import ContextVar, Token
+import hashlib
 import re
 from typing import Any
 
@@ -296,8 +297,114 @@ def enrich_and_scrub_db_attributes(attributes: Mapping[str, Any]) -> dict[str, A
     return enriched
 
 
+# Span-event keys written by OpenTelemetry's own exception recording
+# (`Span.record_exception`, which FastAPI/ASGI instrumentation calls on every
+# unhandled error). Their values are free-form: `exception.message` is
+# `str(exc)` verbatim and `exception.stacktrace` is the formatted traceback,
+# which carries source lines and therefore whatever the failing code was
+# holding. Neither can be whitelisted by key the way `scrub_attribute` works,
+# so they get their own handling below.
+EXCEPTION_TYPE_KEY = "exception.type"
+EXCEPTION_MESSAGE_KEY = "exception.message"
+EXCEPTION_STACKTRACE_KEY = "exception.stacktrace"
+EXCEPTION_MESSAGE_DIGEST_KEY = "exception.message_digest"
+
+_MESSAGE_DIGEST_LENGTH = 12
+
+
+def message_text_digest(text: Any) -> str:
+    """One-way digest of a free-form message string.
+
+    The same fault digests identically, so occurrences still correlate in a
+    trace backend, but the text is not recoverable. Deliberately mirrors
+    `errors.message_digest` (same hash, same length) so an error-lane
+    attribute and a span-event digest for one fault agree.
+    """
+
+    try:
+        label = text if isinstance(text, str) else str(text)
+    except Exception:  # pragma: no cover - a __str__ that raises must not propagate
+        label = "<unprintable>"
+    try:
+        return hashlib.sha256(label.encode("utf-8", "replace")).hexdigest()[
+            :_MESSAGE_DIGEST_LENGTH
+        ]
+    except Exception:  # pragma: no cover
+        return "0" * _MESSAGE_DIGEST_LENGTH
+
+
+def scrub_event_attributes(
+    attributes: Mapping[str, Any] | None,
+    deny_values: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    """Scrub one span event's attributes, fail-closed on the exception pair.
+
+    `exception.message` is replaced by a digest and `exception.stacktrace` is
+    dropped outright — neither is ever exported as text, regardless of whether
+    the current request scope happens to know the customer values inside it.
+    That last point is why this cannot simply defer to `scrub_attributes`:
+    deny-value matching only catches content the scope already knows about,
+    and an exception message can carry data from anywhere (a database error
+    echoing a row, a parse error quoting its input). Everything else goes
+    through the normal per-key whitelist.
+    """
+
+    source = dict(attributes or {})
+    sanitized: dict[str, Any] = {}
+
+    raw_message = source.pop(EXCEPTION_MESSAGE_KEY, None)
+    source.pop(EXCEPTION_STACKTRACE_KEY, None)
+    exception_type = source.pop(EXCEPTION_TYPE_KEY, None)
+
+    sanitized.update(scrub_attributes(source, deny_values))
+
+    if isinstance(exception_type, str):
+        # A class name, not content. Held to the same shape rules as any
+        # other span name so a dynamically-built exception class cannot
+        # smuggle a value through in its `__name__`.
+        sanitized[EXCEPTION_TYPE_KEY] = scrub_span_name(exception_type, deny_values)
+    if raw_message is not None:
+        sanitized[EXCEPTION_MESSAGE_DIGEST_KEY] = message_text_digest(raw_message)
+
+    return sanitized
+
+
+def scrub_events(events: Any, deny_values: frozenset[str] | None = None) -> list[Any]:
+    """Rebuild a span's events with scrubbed names and attributes.
+
+    Returns plain `Event` objects; a malformed event is dropped rather than
+    exported unscrubbed.
+    """
+
+    from opentelemetry.sdk.trace import Event
+
+    sanitized: list[Any] = []
+    for event in events or ():
+        try:
+            name = scrub_span_name(getattr(event, "name", ""), deny_values)
+            sanitized.append(
+                Event(
+                    name=name,
+                    attributes=scrub_event_attributes(
+                        getattr(event, "attributes", None), deny_values
+                    ),
+                    timestamp=getattr(event, "timestamp", None),
+                )
+            )
+        except Exception:  # pragma: no cover - never export an unscrubbed event
+            continue
+    return sanitized
+
+
 __all__ = [
     "MAX_ATTRIBUTE_LENGTH",
+    "EXCEPTION_TYPE_KEY",
+    "EXCEPTION_MESSAGE_KEY",
+    "EXCEPTION_STACKTRACE_KEY",
+    "EXCEPTION_MESSAGE_DIGEST_KEY",
+    "message_text_digest",
+    "scrub_event_attributes",
+    "scrub_events",
     "MYANMAR_PHONE_PATTERN",
     "MMK_AMOUNT_PATTERN",
     "CUSTOMER_CONTENT_FIELD_MARKERS",

@@ -115,6 +115,18 @@ class RedactingSpanProcessor:
         fresh `ReadableSpan` via its public constructor — rather than
         reaching into `_immutable`/`_attributes` to force a mutation — keeps
         this scrubber independent of that private implementation detail.
+
+        Events are scrubbed too, and that is not a formality. When an
+        instrumented request raises, the ASGI instrumentation calls
+        `Span.record_exception`, which attaches `exception.message`
+        (`str(exc)` verbatim) and `exception.stacktrace` as a span event.
+        An earlier version of this method copied `events=span.events`
+        straight through, so a `RuntimeError` naming a customer, a phone
+        number, or an MMK amount reached the exporter in full even though
+        the span's own attributes were clean. `redact.scrub_events` digests
+        the message and drops the stacktrace; see
+        `tests/telemetry/test_span_events.py` for the end-to-end proof
+        through the real FastAPI instrumentation.
         """
 
         from opentelemetry.sdk.trace import ReadableSpan
@@ -130,7 +142,7 @@ class RedactingSpanProcessor:
             parent=span.parent,
             resource=span.resource,
             attributes=sanitized_attributes,
-            events=span.events,
+            events=redact.scrub_events(span.events),
             links=span.links,
             kind=span.kind,
             status=span.status,
