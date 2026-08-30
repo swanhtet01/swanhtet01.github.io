@@ -10,7 +10,7 @@ an accepted proof tool can inspect a sealed candidate without changing it.
 It does not deploy, promote, roll back, create a pull request, write provider
 state, contact a customer, capture payment, move stock, or activate managed
 persistence. It deliberately reports `exactPreviewAccepted:false` and
-`releaseAuthorized:false`; an independent person must still inspect all ten
+`releaseAuthorized:false`; an independent person must still inspect all twelve
 screenshots and record the separate release decision.
 
 Keep these screenshots internal. They contain synthetic product/customer
@@ -51,15 +51,16 @@ changed routes, or renamed screenshots fail closed.
 | Surface | Desktop | Mobile | Required technical boundary |
 | --- | --- | --- | --- |
 | Public | 1280 x 900 | 390 x 844 | Product entry is visible |
-| Shop | 1280 x 900 | 390 x 844 | Mini-mart checkout, payment, total, open-order choice, and review action are above fold |
+| Shop Counter | 1280 x 900 | 390 x 844 | Exact `/shop/?template=mini-mart` checkout, payment, total, open-order choice, and review action are above fold |
+| Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` shows one deterministic non-controlled priority with title, impact, metric, accountable role, due point, exact next action and target, objective closure, and the read-only boundary |
 | Plant | 1280 x 900 | 390 x 844 | Working-sample timeline is explicitly not today's production |
 | Website | 1280 x 900 | 390 x 844 | Local working sample visibly says nothing was deployed |
 | Ecommerce | 1280 x 900 | 390 x 844 | Completed sample request remains visibly browser-local, with no managed Shop receipt claim |
 
 Every case also requires meaningful content, the exact route and query set, no horizontal
-overflow, no framework/runtime error, no mutating browser request, and one
-exclusive PNG screenshot. Shop retains its accessibility and mobile target
-checks. The Ecommerce path retains its reload/local-persistence and claim
+overflow, no framework/runtime error or console/log warning, no mutating browser
+request, and one exclusive PNG screenshot. Both Shop flows retain their
+accessibility and mobile target checks. The Ecommerce path retains its reload/local-persistence and claim
 boundary checks from the existing rendered browser harness. After all product
 interactions, each case rereads `location.origin`, pathname, search, and hash
 immediately before and after screenshot capture. Both reads must be stable and
@@ -81,7 +82,7 @@ npm.cmd run app:preview:rendered:verify -- `
 The operations receipt supplies both preview origins. There is intentionally
 no free-form origin flag, so the rendered proof cannot silently diverge from
 the already validated release/health/header/rollback evidence. Immediately
-before and after the ten browser cases, the tool performs fresh GET-only,
+before and after the twelve browser cases, the tool performs fresh GET-only,
 manual-redirect `/__release.json` probes on both origins and requires the
 exact target commit and expected service identity. A redirect or alias commit
 change fails closed.
@@ -110,7 +111,8 @@ both tool files to recompute their byte counts and SHA-256 digests.
 
 The report proves a bounded technical browser run; its digests are integrity
 metadata, not identity or proof that a person inspected the images. A reviewer
-must visually inspect all ten PNG files for clipping, hierarchy, truthful
+must visually inspect all twelve PNG files, including both Shop Counter and
+Shop Profit Control at desktop and mobile sizes, for clipping, hierarchy, truthful
 claims, and the intended product job. Only a separately reviewed acceptance
 artifact may advance the exact-preview gate. Production release still requires
 its own owner action afterward.

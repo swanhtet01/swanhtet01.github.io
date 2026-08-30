@@ -573,8 +573,10 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
   if (!Number.isInteger(value.bodyLength) || value.bodyLength < 1 || value.bodyLength > 2_000_000) {
     fail(`exact_app_preview_case_body_invalid:${spec.id}`)
   }
-  exactKeys(value.runtime, ['clean', 'errors'], `exact_app_preview_case_runtime_shape_invalid:${spec.id}`)
-  if (value.runtime.clean !== true || !Array.isArray(value.runtime.errors) || value.runtime.errors.length !== 0) {
+  exactKeys(value.runtime, ['clean', 'errors', 'warnings'], `exact_app_preview_case_runtime_shape_invalid:${spec.id}`)
+  if (value.runtime.clean !== true
+    || !Array.isArray(value.runtime.errors) || value.runtime.errors.length !== 0
+    || !Array.isArray(value.runtime.warnings) || value.runtime.warnings.length !== 0) {
     fail(`exact_app_preview_case_runtime_invalid:${spec.id}`)
   }
   exactKeys(value.network, ['mutatingRequestCount', 'mutatingRequests'], `exact_app_preview_case_network_shape_invalid:${spec.id}`)
@@ -619,6 +621,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
     browserContextIsolated: true,
     noHorizontalOverflow: true,
     runtimeClean: true,
+    runtimeWarningCount: 0,
     mutatingRequestCount: 0,
     passed: true,
   }
@@ -627,7 +630,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
 function normalizeStoredCase(value, spec, expectedOrigin) {
   exactKeys(value, [
     'id', 'surface', 'route', 'renderedOrigin', 'renderedHash', 'resolvedPath', 'viewport', 'bodyLength', 'primaryFlow',
-    'profitControl', 'screenshot', 'browserContextIsolated', 'noHorizontalOverflow', 'runtimeClean',
+    'profitControl', 'screenshot', 'browserContextIsolated', 'noHorizontalOverflow', 'runtimeClean', 'runtimeWarningCount',
     'mutatingRequestCount', 'passed',
   ], `exact_app_preview_stored_case_shape_invalid:${spec.id}`)
   exactKeys(value.viewport, ['width', 'height', 'mobile'], `exact_app_preview_stored_viewport_shape_invalid:${spec.id}`)
@@ -645,7 +648,7 @@ function normalizeStoredCase(value, spec, expectedOrigin) {
     screenshot: value.screenshot,
     browserContextIsolated: value.browserContextIsolated,
     network: { mutatingRequestCount: value.mutatingRequestCount, mutatingRequests: [] },
-    runtime: { clean: value.runtimeClean, errors: [] },
+    runtime: { clean: value.runtimeClean, errors: [], warnings: value.runtimeWarningCount === 0 ? [] : ['stored warning'] },
     ok: value.passed,
     failures: [],
   }
@@ -783,7 +786,7 @@ export function buildExactAppPreviewReport({
     browser: browserValue,
     cases: normalizedCases,
     checks: normalizedCases.length,
-    runtime: { clean: true, errorCount: 0, mutatingRequestCount: 0 },
+    runtime: { clean: true, errorCount: 0, warningCount: 0, mutatingRequestCount: 0 },
     gates: expectedGates(),
     blockers: expectedBlockers(),
     releaseAuthorized: false,
@@ -856,7 +859,7 @@ export function validateExactAppPreviewReport({
   assertUniqueScreenshots(cases)
   validateScreenshotPayloads(cases, screenshotPayloads)
   if (report.checks !== cases.length) fail('exact_app_preview_check_count_invalid')
-  const runtime = { clean: true, errorCount: 0, mutatingRequestCount: 0 }
+  const runtime = { clean: true, errorCount: 0, warningCount: 0, mutatingRequestCount: 0 }
   if (JSON.stringify(report.runtime) !== JSON.stringify(runtime)) fail('exact_app_preview_runtime_invalid')
   const gates = expectedGates()
   const blockers = expectedBlockers()

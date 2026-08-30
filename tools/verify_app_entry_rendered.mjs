@@ -633,6 +633,7 @@ export async function verifyCase(cdp, origin, testCase) {
   })
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
   const errors = []
+  const warnings = []
   const networkRequests = []
   const networkRequestUrls = new Map()
   const failedNetworkRequests = []
@@ -653,17 +654,17 @@ export async function verifyCase(cdp, origin, testCase) {
     }
     disposers.push(
       cdp.on(sessionId, 'Runtime.consoleAPICalled', (event) => {
-        if (event.type !== 'error') return
         const text = event.args.map((arg) => arg.value || arg.description || '').join(' ')
-        if (!/favicon/i.test(text)) errors.push(`console: ${text}`.trim())
+        if (event.type === 'error' && !/favicon/i.test(text)) errors.push(`console: ${text}`.trim())
+        if (event.type === 'warning' || event.type === 'warn') warnings.push(`console warning: ${text}`.trim())
       }),
       cdp.on(sessionId, 'Runtime.exceptionThrown', (event) => {
         errors.push(`exception: ${event.exceptionDetails?.text || 'runtime exception'}`)
       }),
       cdp.on(sessionId, 'Log.entryAdded', (event) => {
-        if (event.entry?.level !== 'error') return
         const text = event.entry.text || ''
-        if (!/favicon/i.test(text)) errors.push(`log: ${text}`.trim())
+        if (event.entry?.level === 'error' && !/favicon/i.test(text)) errors.push(`log: ${text}`.trim())
+        if (event.entry?.level === 'warning') warnings.push(`log warning: ${text}`.trim())
       }),
       cdp.on(sessionId, 'Network.requestWillBeSent', (event) => {
         const url = String(event.request?.url || '')
@@ -776,6 +777,7 @@ export async function verifyCase(cdp, origin, testCase) {
       ...(mutatingRequests.length ? [`unexpected browser network writes: ${mutatingRequests.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`] : []),
       ...missingText.map((needle) => `missing text: ${needle}`),
       ...errors,
+      ...warnings,
     ]
     return {
       name: testCase.name,
@@ -796,7 +798,7 @@ export async function verifyCase(cdp, origin, testCase) {
       claimBoundary: ecommerceClaimBoundary,
       screenshot,
       network: { mutatingRequestCount: mutatingRequests.length, mutatingRequests },
-      runtime: { clean: errors.length === 0, errors: [...errors] },
+      runtime: { clean: errors.length === 0 && warnings.length === 0, errors: [...errors], warnings: [...warnings] },
       ...(browserContextId ? { browserContextIsolated: true } : {}),
       ok: failures.length === 0,
       failures,
@@ -1063,6 +1065,7 @@ async function main() {
       runtime: {
         clean: cases.every((entry) => entry.runtime.clean),
         errorCount: cases.reduce((total, entry) => total + entry.runtime.errors.length, 0),
+        warningCount: cases.reduce((total, entry) => total + entry.runtime.warnings.length, 0),
       },
       failures,
     }

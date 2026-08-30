@@ -258,7 +258,7 @@ function rawCase(spec, index) {
     },
     browserContextIsolated: true,
     network: { mutatingRequestCount: 0, mutatingRequests: [] },
-    runtime: { clean: true, errors: [] },
+    runtime: { clean: true, errors: [], warnings: [] },
     ok: true,
     failures: [],
   }
@@ -391,6 +391,17 @@ test('requires one exact generation or validation argument set', () => {
 test('builds and validates the exact twelve-case technical preview proof', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
   const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
+  const proofGuide = await readFile(join(repoRoot, 'docs', 'EXACT-APP-PREVIEW-PROOF.md'), 'utf8')
+  const renderedHarnessSource = await readFile(join(repoRoot, 'tools', 'verify_app_entry_rendered.mjs'), 'utf8')
+  const profitControlGuideRow = '| Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` shows one deterministic non-controlled priority with title, impact, metric, accountable role, due point, exact next action and target, objective closure, and the read-only boundary |'
+  assert.equal(proofGuide.split(profitControlGuideRow).length - 1, 1)
+  assert.match(proofGuide, /all twelve\s+screenshots/)
+  assert.match(proofGuide, /before and after the twelve browser cases/)
+  assert.match(proofGuide, /all twelve PNG files, including both Shop Counter and\s+Shop Profit Control/)
+  assert.doesNotMatch(proofGuide, /all ten|ten browser cases/)
+  assert.match(renderedHarnessSource, /event\.type === 'warning' \|\| event\.type === 'warn'/)
+  assert.match(renderedHarnessSource, /event\.entry\?\.level === 'warning'/)
+  assert.match(renderedHarnessSource, /clean: errors\.length === 0 && warnings\.length === 0/)
   const publicExpectedText = await loadPublicHomepageExpectedText()
   assert.deepEqual(publicExpectedText, [
     'Shop Profit Control: see today’s operating money risk and close one accountable action.',
@@ -442,6 +453,8 @@ test('builds and validates the exact twelve-case technical preview proof', async
   assert.deepEqual(report.cases.map((entry) => entry.id), EXACT_APP_PREVIEW_CASE_MATRIX.map((entry) => entry.id))
   assert.equal(report.cases.every((entry) => entry.mutatingRequestCount === 0), true)
   assert.equal(report.cases.every((entry) => entry.browserContextIsolated === true), true)
+  assert.equal(report.cases.every((entry) => entry.runtimeWarningCount === 0), true)
+  assert.equal(report.runtime.warningCount, 0)
   assert.equal(report.gates.cameraPolicyPassed, true)
   assert.equal(report.gates.technicalRenderedPreviewPassed, true)
   assert.equal(report.gates.manualVisualAcceptanceRequired, true)
@@ -534,6 +547,17 @@ test('rejects browser writes and missing Shop or Ecommerce flow proof', async ()
   const ecommerce = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
   ecommerce[caseIndex('ecommerce_desktop')].claimBoundary.ok = false
   await assert.rejects(() => reportFixture({ cases: ecommerce }), /exact_app_preview_ecommerce_claim_invalid:ecommerce_desktop/)
+})
+
+test('rejects a console or log warning even when the raw case claims clean runtime', async () => {
+  for (const warning of ['console warning: deprecated API', 'log warning: layout fallback']) {
+    const cases = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
+    cases[caseIndex('shop_profit_control_desktop')].runtime.warnings = [warning]
+    await assert.rejects(
+      () => reportFixture({ cases }),
+      /exact_app_preview_case_runtime_invalid:shop_profit_control_desktop/,
+    )
+  }
 })
 
 test('rejects production aliases, stale evidence, and a blocked camera policy', async () => {
