@@ -5661,6 +5661,11 @@ const productOnboardingWorkspaceAction = productOnboardingPageSource.indexOf('on
 const productOnboardingBoundary = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.', productOnboardingWorkspaceAction)
 const productOnboardingEnd = productOnboardingPageSource.length
 const productOnboardingContract = productOnboardingPageSource.slice(productOnboardingBranch, productOnboardingEnd)
+const productOnboardingWorkflowReadyContract = sourceBlock(
+  productOnboardingPageSource,
+  '  const workflowReady = ',
+  '\n  const workspaceStarted',
+)
 const founderBusinessTypeField = settingsPageSource.indexOf('<label className="demo-preset-select">Business type')
 const founderCreateDemoAction = settingsPageSource.indexOf("'Create client demo'}</button>")
 const founderCustomizeProducts = settingsPageSource.indexOf('<summary><span>Customize products</span>')
@@ -5793,7 +5798,10 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingRuntimeSource.includes('export async function provisionLocalPlantWorkingSample')
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => productOnboardingRuntimeSource.includes(marker))
   || !productOnboardingPageSource.includes("const workspaceOwner = setup.owner.trim() || 'Business owner'")
-  || !productOnboardingPageSource.includes('setup.product === product && Boolean(setup.workspace.trim())')
+  || !productOnboardingWorkflowReadyContract.includes('setup.product === product')
+  || !productOnboardingWorkflowReadyContract.includes('&& Boolean(setup.workspace.trim())')
+  || !productOnboardingWorkflowReadyContract.includes('&& !pendingRequestedWorkflowTemplate')
+  || !productOnboardingWorkflowReadyContract.includes('&& !pendingRequestedPlantIndustryPack')
   || productOnboardingPageSource.includes('<summary><span>Choose business type</span><small>Optional</small></summary>')
   || !productOnboardingPageSource.includes('owner: workspaceOwner, startedAt')
   || productOnboardingPageSource.includes('product-onboarding-step')

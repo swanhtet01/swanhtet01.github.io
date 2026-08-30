@@ -22,6 +22,7 @@ const {
   shopTemplateDoorState,
 } = await import(moduleUrl)
 const onboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
+const appBuildVerifierSource = await readFile(resolve(root, 'tools', 'verify_app_build.mjs'), 'utf8')
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial))
@@ -201,6 +202,29 @@ test('Plant pack mismatch stays blocked until an explicit reviewed choice and la
       && onboardingSource.indexOf('if (!plantPackSaveAllowed(false, plantProvisionDisposition))')
       < onboardingSource.indexOf('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)'),
     'Plant pack persistence must follow provisioning and its preserved-workspace refusal',
+  )
+})
+
+test('the build verifier binds first-task readiness to both explicit setup-door choices', () => {
+  for (const token of [
+    'const productOnboardingWorkflowReadyContract = sourceBlock(',
+    "'  const workflowReady = '",
+    "'\\n  const workspaceStarted'",
+    "productOnboardingWorkflowReadyContract.includes('setup.product === product')",
+    "productOnboardingWorkflowReadyContract.includes('&& Boolean(setup.workspace.trim())')",
+    "productOnboardingWorkflowReadyContract.includes('&& !pendingRequestedWorkflowTemplate')",
+    "productOnboardingWorkflowReadyContract.includes('&& !pendingRequestedPlantIndustryPack')",
+  ]) assert.ok(appBuildVerifierSource.includes(token), `first-task verifier guard missing: ${token}`)
+  assert.ok(onboardingSource.includes('navigate(onboardingJourney.firstTaskPath)'), 'the reviewed setup must still open the source-owned first task')
+  assert.ok(
+    onboardingSource.indexOf('if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack)')
+      < onboardingSource.indexOf('navigate(onboardingJourney.firstTaskPath)'),
+    'unresolved public-door choices must block before first-task navigation',
+  )
+  assert.doesNotMatch(
+    appBuildVerifierSource,
+    /productOnboardingPageSource\.includes\('setup\.product === product && Boolean\(setup\.workspace\.trim\(\)\)\)'\)/,
+    'the verifier must not regress to the retired one-line formatting assertion',
   )
 })
 
