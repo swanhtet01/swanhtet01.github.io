@@ -584,6 +584,35 @@ shell sampled at t=428 ms reads `background: rgb(5, 8, 13)` with
 `#root.children.length === 0` — genuinely pre-mount, and dark on the first
 frame. No light flash.
 
+### Known regression this introduced: a failed boot now looks like a slow one
+
+Measured, not theorised. Serving the app with every `/assets/*.js` returning
+503 and waiting 10 s: `#boot-shell` is still `display: flex` with "SUPERMEGA"
+on screen and `#root.children.length === 0`. **The skeleton stays forever, with
+nothing indicating anything is wrong.**
+
+Before this change that same failure produced a blank white page. Blank reads
+as broken and prompts a reload; a skeleton reads as *loading*, and this
+product's users are on connections that genuinely do take many seconds, so they
+are conditioned to wait rather than retry. In the success case the shell is a
+clear win; in the failure case it is a mild regression, and pretending
+otherwise would be dishonest about a change made in the name of perceived speed.
+
+Scope, stated accurately: a returning device with the service worker installed
+is served the precached bundle (35 files) and does not hit this. It bites on a
+**first** visit, before any worker exists, when an asset fetch fails — which is
+also the worst case to mishandle, because it is a first impression.
+
+**Proposed mitigation, not yet built: a pure-CSS stall message.** A
+zero-duration animation with a long `animation-delay` on a hidden element
+reveals a line after ~20 s with no JS, so it survives `script-src 'self'` and
+needs no mount hook — the same constraint the removal rule already works
+within. It is deliberately NOT in this change because the revealed line is
+customer-facing copy, and `DESIGN-PROGRAM.md` P3.8 requires founder sign-off on
+customer-facing sentences (there is live precedent: P3.8 batch 1 is built and
+held in a draft PR for exactly that). Shipping the mechanism is an hour;
+shipping the sentence is a decision.
+
 ### Remaining identified FCP levers
 
 1. **Shrink the 91 KB gz entry set.** Needs its own planning pass.
