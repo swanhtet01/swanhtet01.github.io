@@ -262,12 +262,29 @@ server write.
 *workflow*, not of the *first load*: a fresh or cache-cleared device must
 download the app over HTTPS before any of it exists, and offline operation
 starts only once that load registers and populates the service worker
-(`showroom/index.html:59` registers `/sw.js`, which
-`tools/write_app_release_metadata.mjs:230` generates at release time). A
-founder who arrives at a shop with no connectivity and a fresh phone reaches
-none of the surfaces below. After that first successful load the honest claim
-holds in full: no account, no server, and no network needed to sell, count
-stock, or close the day.
+(`showroom/index.html` loads `/sw-register.js`, which registers `/sw.js`;
+`tools/write_app_release_metadata.mjs` generates both at release time and
+`showroom/scripts/seal-offline-precache.mjs` seals the precache list into the
+worker after the build). A founder who arrives at a shop with no connectivity
+and a fresh phone reaches none of the surfaces below. After that first
+successful load the honest claim holds in full: no account, no server, and no
+network needed to sell, count stock, or close the day.
+
+**Correction, 2026-08-20.** The paragraph above was accurate about *when*
+offline starts and wrong about *whether* it started at all. Until this date the
+registration was an inline `<script>`, and both content policies serving this
+app carry `script-src 'self'` with no hash and no nonce — so the browser
+refused it, no service worker was ever installed, and nothing worked offline on
+any device. Underneath that sat the gap the competitive re-scan logged as G3:
+the precache only ever covered the entry graph, and `/shop/` and `/plant/` are
+a lazy chunk, so the till was not in it either. Both are fixed and both are now
+checked in the gate (`app_shell_inline_script_blocked_by_content_policy` and
+`service_worker_precache_omits_operations_route` in `tools/verify_app_build.mjs`).
+Measured after the fix, with the local server killed: `/shop/` and `/plant/`
+open, a sale line builds on the counter, and the four Shop work modes navigate
+with no failed requests. **F1 still stands** — none of this has been run on real
+Myanmar hardware over a real dropped connection, and the phone test is what
+turns a measured claim into a demonstrated one.
 
 `docs/demo-playbooks/shop.md` §2 is still the correct
 setup path, **but its §3 script is pre-#459 and demos roughly three of the nine
@@ -370,26 +387,22 @@ whole performance queue.
 
 ### Risk 3 — Running the pilot kit and calling it "the pilot" would overclaim the Shop gate
 
-**Evidence.** `hq/portfolio.json`'s `shop-managed-order-close-pilot` requires
-"One authenticated order-to-close and return-exception pilot **on isolated
-hosted tenant**; named operator, baseline, and five-day evidence plan."
-`docs/pilot-kit/README.md` states the kit "produces everything EXCEPT that
-clause", and `docs/pilot-kit/acceptance-checklist.md`'s mapping table marks the
-hosted-tenant row "**NOT satisfied by this kit.** Founder-only" and warns "Do
-not present a completed local rehearsal as if it were that hosted evidence
-run." The failure mode is not technical: it is that after five genuinely good
-days with a real shop, the natural thing to say is "the Shop pilot is done" —
-and the gate is still open, so any downstream claim, invoice justification, or
-enterprise-ladder step built on it is an overclaim in a repo whose entire
-differentiator is that it does not overclaim.
+**Evidence.** `hq/portfolio.json`'s `shop-spa-owner-pilot` requires a named Spa
+owner to complete reviewed client import, reconciled package sale, matching
+treatment redemption, daily close, and recovery on an isolated hosted tenant.
+It also requires setup time, correction effort, and five-day evidence, and
+explicitly rejects sample data as client proof. `docs/pilot-kit/README.md` and
+`docs/pilot-kit/acceptance-checklist.md` therefore frame browser-local work as
+rehearsal only. The failure mode is not technical: five good days with sample
+data still leave the real-client gate open, so downstream claims or invoice
+justification would overstate the evidence.
 
 **Cheapest mitigation.** Zero build cost: schedule step 4 and step 7 of the
 critical path in the same fortnight, exactly as `PRODUCTION-ACTIVATION-RUNBOOK.md`
 §5 already sequences them ("Once the window is open and one real tenant exists,
-run the five-day order-to-close + return-exception evidence plan"). Run the
-local five days as recruitment and operator training; run them again on the
-real tenant as evidence. And write "rehearsal" on the local artifacts, in those
-words, the day they are produced.
+run the five-day evidence plan"). Run the local Spa package flow as recruitment
+and operator training; run it again with the named owner and reviewed client
+data on the real tenant as evidence. Keep "rehearsal" on every local artifact.
 
 ---
 
@@ -428,9 +441,9 @@ the founder can do, per the cited contract in each row.
    together per "The schema-version trap" (critical-path steps 6–7).
 2. **Create and verify tenant #1** — the runbook's "Verify end-to-end" block.
    Activation permits a tenant; it does not create one (critical-path step 8).
-3. **The hosted acceptance run** for `shop-managed-order-close-pilot` on that
-   tenant, using the operator and baseline produced by `docs/pilot-kit/` —
-   runbook §5, and the only thing that closes the Shop `nextGate` in
+3. **The hosted acceptance run** for `shop-spa-owner-pilot` on that tenant,
+   using the named Spa owner, reviewed client data, and baseline produced by
+   `docs/pilot-kit/` — the only thing that closes the Shop `nextGate` in
    `hq/portfolio.json`.
 4. **Invoice → transfer → `confirm-payment` → `grant-entitlement`** via
    `python -m supermega_runtime.billing_rail`, once D1 and D2 exist. Four

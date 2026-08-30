@@ -8,10 +8,17 @@ import {
   LOCAL_WORKSPACE_RESTORE_POINT_KEY,
   applyLocalWorkspaceBackup,
   collectLocalWorkspaceBackup,
+  describeLocalWorkspaceBackupRefusal,
   listLocalWorkspaceStorageKeys,
+  localWorkspaceBackupHeadroomDetail,
+  localWorkspaceBackupHeadroomLabel,
+  localWorkspaceBackupHeadroomMessage,
+  localWorkspaceBackupRefusalMessage,
+  measureLocalWorkspaceBackupHeadroom,
   restoreLocalWorkspaceBackup,
   restoreLocalWorkspaceBackupFromEvidence,
   type LocalWorkspaceBackup,
+  type LocalWorkspaceBackupRefusal,
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
 import { PaymentQrSettingsControls } from './PaymentQr'
@@ -28,7 +35,7 @@ import {
   type ShopLoyaltySettings,
 } from './shop-loyalty'
 import { useManagedIdentity } from './workspace-runtime'
-import { loadCommerceWorkspace } from './commerce-workspace'
+import { commerceWorkspaceArchive, commerceWorkspaceArchiveCsv, loadCommerceWorkspace } from './commerce-workspace'
 import { loadProductionWorkspace, productionMaintenanceDueQueue } from './production-workspace'
 import { projectShopOrderProductionStatus } from './shop-production-status'
 import { projectCrossProductOperatingSummary } from './cross-product-report'
@@ -506,13 +513,36 @@ function collectCurrentBackup() {
   return typeof window === 'undefined' ? null : collectLocalWorkspaceBackup(window.localStorage)
 }
 
-function backupHref(backup: LocalWorkspaceBackup | null) {
-  return backup ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(backup, null, 2))}` : '#'
+// Only asked when there is no backup, so the second serialisation this costs is paid by the
+// device that already cannot produce a file -- never by the ordinary one.
+function collectBackupRefusal(): LocalWorkspaceBackupRefusal | null {
+  return typeof window === 'undefined' ? null : describeLocalWorkspaceBackupRefusal(window.localStorage)
+}
+
+// The bytes of the backup file, and nothing else. Kept as its own function so the artifact
+// can be weighed without a DOM: this string IS the file that lands on the owner's disk, so a
+// test that pins this pins what she gets. The `null, 2` is load-bearing -- an owner who opens
+// this file to check it is looking at the only human-readable copy of her device.
+function backupFileText(backup: LocalWorkspaceBackup) {
+  return JSON.stringify(backup, null, 2)
 }
 
 function backupFilename(backup: LocalWorkspaceBackup | null) {
   const day = backup?.createdAt.slice(0, 10) || new Date().toISOString().slice(0, 10)
   return `supermega-workspace-backup-${day}.json`
+}
+
+// Hand a file to the browser, then let go of it. Both downloads on this page mint an object
+// URL, and an object URL that is never revoked pins its whole buffer for the life of the page
+// -- at the workspace ceiling that is megabytes, on the device least able to spare them. One
+// place that gets the revocation right, rather than two that each have to remember.
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.download = filename
+  anchor.href = url
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export function WorkspaceControlsPage() {
@@ -530,13 +560,23 @@ export function WorkspaceControlsPage() {
   const [notice, setNotice] = useState('')
   const [restoreBusy, setRestoreBusy] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
+
   const [resetBusy, setResetBusy] = useState(false)
-  const backupDownload = useMemo(() => ({ href: backupHref(currentBackup), filename: backupFilename(currentBackup) }), [currentBackup])
-  const recordCount = currentBackup ? Object.keys(currentBackup.records).length : 0
+  const [archiveBusy, setArchiveBusy] = useState(false)
+  const [archiveNotice, setArchiveNotice] = useState('')
+  const backupRefusal = useMemo(() => (currentBackup ? null : collectBackupRefusal()), [currentBackup])
+  // This measures the exact backup offered by the button, not a second storage snapshot.
+  // A device that has crossed the limit has no backup object, so warning and refusal are
+  // mutually exclusive by construction.
+  const backupHeadroom = useMemo(
+    () => (currentBackup ? measureLocalWorkspaceBackupHeadroom(currentBackup) : null),
+    [currentBackup],
+  )
+  const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
     ['Writes', runtime.writesReady ? 'Ready' : 'Locked'],
-    ['Local records', currentBackup ? String(recordCount) : 'Backup unavailable'],
+    ['Local records', currentBackup ? String(recordCount) : `${recordCount} · no backup file possible`],
     ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Open a product and continue working.'],
   ]
   if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
@@ -593,6 +633,75 @@ export function WorkspaceControlsPage() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The previous workspace could not be restored safely.')
       setRestoreBusy(false)
+    }
+  }
+
+  // Built on the click, for the same reason downloadSalesArchive below is -- and for a worse
+  // case than the archive's.
+  //
+  // This used to be a memoised data: URL, built on mount whether or not Download was ever
+  // pressed. Measured 2026-08-21 against a Shop at its enforced 2 MiB ceiling (~1,190
+  // completed sales, a 2,346,066-byte backup file): serialising, pretty-printing and
+  // percent-encoding it cost 15.1 ms of a 23.1 ms mount path on a desktop -- 65% of the
+  // mount -- and left a 3,779,526-character string alive for the life of the page. That is
+  // 1.61x the file it carries, because percent-encoding a pretty-printed JSON encodes every
+  // quote, brace, newline and indent space. A cheap Android tablet pays several times the
+  // desktop figure, and the device nearest the ceiling is both the slowest and the one with
+  // the least memory to spare. Almost nobody presses Download.
+  //
+  // Same 2,346,066 bytes, byte for byte: a Blob carries the string's UTF-8 directly, which is
+  // exactly what the data: URL decoded to. No BOM -- unlike the CSV below, this file is read
+  // back by loadBackupFile, and a BOM is not JSON.
+  // Through downloadBlob, which revokes: keeping a data: URL alive on mount and swapping it
+  // for an object URL that is never released would have traded one megabyte-shaped leak for
+  // another and bought the owner nothing.
+  function downloadWorkspaceBackup() {
+    if (!currentBackup) return
+    downloadBlob(backupFilename(currentBackup), new Blob([backupFileText(currentBackup)], { type: 'application/json;charset=utf-8' }))
+  }
+
+  // Built on demand rather than in a memo. At the workspace ceiling the archive is ~700 KB of
+  // CSV over ~1,250 sales and costs about 80 ms on a desktop -- fine for a button press,
+  // wasteful on every render of a settings page, and this runs on cheap Android tablets.
+  function downloadSalesArchive() {
+    if (archiveBusy) return
+    setArchiveBusy(true)
+    try {
+      const commerce = loadCommerceWorkspace().state
+      const archive = commerceWorkspaceArchive(commerce, new Date().toISOString())
+      if (!archive) {
+        setArchiveNotice('This device could not produce a complete archive, so no file was created. Nothing was changed.')
+        return
+      }
+      if (!archive.orderCount && !archive.closeCount) {
+        setArchiveNotice('There are no sales on this device to archive yet.')
+        return
+      }
+      const filename = `supermega-shop-archive-${archive.generatedAt.slice(0, 10)}-${archive.digest.slice(7, 15)}.csv`
+      // A Blob, not a data: URL. This one is ~700 KB at the ceiling and encodeURIComponent
+      // would make a ~3.5 MB string of it -- the shop nearest the ceiling is the one least
+      // able to afford that. The workspace backup above now follows the same rule, and both
+      // hand off through downloadBlob so neither can forget to revoke.
+      // The U+FEFF byte-order mark every other CSV in this app carries, so a spreadsheet
+      // opens Burmese product and customer names as UTF-8 instead of mojibake.
+      downloadBlob(filename, new Blob([`\uFEFF${commerceWorkspaceArchiveCsv(archive)}`], { type: 'text/csv;charset=utf-8' }))
+      // Every number here is read back off the artifact that was just written, so the sentence
+      // cannot drift from the file. The uncovered count is stated even when it is the boring
+      // case, because "nothing is missing" is only worth saying if the same sentence would
+      // have said so when something was.
+      const notArchived = archive.closeCount - archive.archivedCloseCount
+      setArchiveNotice([
+        `${archive.archivedCloseCount} closed ${archive.archivedCloseCount === 1 ? 'day' : 'days'} and ${archive.archivedOrderCount} ${archive.archivedOrderCount === 1 ? 'sale' : 'sales'} saved to ${filename}.`,
+        archive.uncoveredOrderCount
+          ? `${archive.uncoveredOrderCount} ${archive.uncoveredOrderCount === 1 ? 'sale is' : 'sales are'} not on a closed day yet; ${archive.uncoveredOrderCount === 1 ? 'it is' : 'they are'} listed at the end of the file so nothing is left out.`
+          : 'Every sale on this device is on a closed day and is in the file.',
+        notArchived ? `${notArchived} older ${notArchived === 1 ? 'close was' : 'closes were'} taken before this device recorded who closed the day, so ${notArchived === 1 ? 'its' : 'their'} sales are listed one by one instead.` : '',
+        'Keep this file somewhere other than this device. Shop cannot load it back in.',
+      ].filter(Boolean).join(' '))
+    } catch (error) {
+      setArchiveNotice(error instanceof Error ? error.message : 'The sales archive could not be created.')
+    } finally {
+      setArchiveBusy(false)
     }
   }
 
@@ -674,13 +783,48 @@ export function WorkspaceControlsPage() {
           <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} scope={shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)} />
         </section>
 
-        <section className="core-panel trial-control-panel">
+        {/* Native anchor scrolling fires before this lazy route has rendered the target. The ref
+            repeats it at mount so recovery opens here instead of 2,000px above this panel. */}
+        <section className="core-panel trial-control-panel" id="workspace-recovery" ref={window.location.hash === '#workspace-recovery' ? (node) => node?.scrollIntoView({ block: 'start' }) : undefined}>
           <div><span className="core-eyebrow">Browser workspace</span><h2>Save or restore your work.</h2><p>A restore point stays on this device. A downloaded backup can be kept somewhere safer.</p></div>
           <div className="trial-actions">
             <button className="core-button" onClick={saveRestorePoint} type="button">Save restore point</button>
-            {currentBackup ? <a className="core-button" download={backupDownload.filename} href={backupDownload.href}>Download workspace backup</a> : <button className="core-button" disabled type="button">Backup unavailable</button>}
+            {currentBackup ? <button className="core-button" onClick={downloadWorkspaceBackup} type="button">Download workspace backup</button> : <button className="core-button" disabled type="button">Backup unavailable</button>}
             <label className="core-button">Load backup file<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadBackupFile(file) }} type="file" /></label>
           </div>
+          {/* A disabled button on its own is the shape of the disaster this product already
+              found in its sister POS: the owner is sent here BY the storage meter, finds a
+              dead control, and is told neither why nor what to do instead. role="alert"
+              because she did not open this page idly -- something told her to. */}
+          {backupRefusal ? <p className="form-notice" role="alert">{localWorkspaceBackupRefusalMessage(backupRefusal)}</p> : null}
+          {backupHeadroom && backupHeadroom.level !== 'clear'
+            ? <div
+              className="production-mode-banner storage-durability-banner"
+              data-headroom={backupHeadroom.level}
+              role={backupHeadroom.level === 'urgent' ? 'alert' : undefined}
+            >
+              <span className={`status-pill ${backupHeadroom.level === 'urgent' ? 'danger' : 'pending'}`}>
+                {localWorkspaceBackupHeadroomLabel(backupHeadroom)}
+              </span>
+              <p>
+                {localWorkspaceBackupHeadroomMessage(backupHeadroom)}
+                <small className="storage-headroom-detail">{localWorkspaceBackupHeadroomDetail(backupHeadroom)}</small>
+              </p>
+            </div>
+            : null}
+        </section>
+
+        {/* The sales archive sits BESIDE the workspace backup, not instead of it, and the copy
+            names the difference because the two files answer different questions. The backup
+            is the only one Shop can read back; the archive is the only one a person can read.
+            An owner told to "export a backup" by the storage warning needs to know which file
+            does which, or she will keep the wrong one. */}
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Sales archive</span><h2>Keep a readable copy of your sales.</h2><p>This file lists every trading day you have closed on this device, one row for each sale, as a spreadsheet you or your accountant can open anywhere. It is a record to keep and read — Shop cannot load it back in. To be able to put this device back the way it was, use Download workspace backup above; that is the file Shop can read.</p></div>
+          <div className="trial-actions">
+            <button className="core-button" disabled={archiveBusy} onClick={() => downloadSalesArchive()} type="button">{archiveBusy ? 'Preparing...' : 'Download sales archive'}</button>
+          </div>
+          {archiveNotice ? <p aria-live="polite" className="form-notice" role="status">{archiveNotice}</p> : null}
         </section>
 
         {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} records</small></div><button className="core-button primary" disabled={restoreBusy} onClick={restoreWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}

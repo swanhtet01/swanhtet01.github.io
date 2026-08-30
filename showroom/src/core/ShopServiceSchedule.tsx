@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router'
 
 import {
   ManagedTrialError,
@@ -11,18 +12,32 @@ import {
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   advanceShopServiceBooking,
+  anonymizeShopServiceClient,
   cancelShopServiceBooking,
   mutateShopServiceSchedule,
   planShopServiceScheduleWrite,
   projectShopServiceSchedule,
   readShopServiceSchedule,
+  recordShopServiceClientExport,
   registerShopService,
   registerShopServiceResource,
   scheduleShopServiceBooking,
   shopScheduleVocabulary,
+  shopServiceSaleSku,
+  setShopServiceClientRetention,
+  shopServiceClientAnonymizationReadiness,
+  shopServiceClientCsv,
   type ShopServiceBookingStatus,
   type ShopServiceSchedule,
 } from './shop-service-scheduling'
+import {
+  availableSpaMembershipForBooking,
+  redeemSpaMembershipSession,
+  spaMembershipBalances,
+  type SpaMembershipCommerceView,
+} from './shop-spa-membership'
+
+const emptyMembershipCommerce: SpaMembershipCommerceView = { orders: [] }
 
 const statusLabels: Record<ShopServiceBookingStatus, string> = {
   held: 'Held',
@@ -58,22 +73,49 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false, initiallyOpen = false }: { actor?: string; disabled?: boolean; initiallyOpen?: boolean }) {
+export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = emptyMembershipCommerce, disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: {
+  actor?: string
+  commerce?: SpaMembershipCommerceView
+  disabled?: boolean
+  initiallyOpen?: boolean
+  onScheduleChange?: (schedule: ShopServiceSchedule) => void
+}) {
   const [initial] = useState(initialSchedule)
-  const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
+  const [schedule, setScheduleState] = useState<ShopServiceSchedule | null>(initial.schedule)
+  // Every path that changes the book goes through here, so an observer -- today, the close
+  // screen's "completed but not rung up" list -- cannot miss a completion. Notifying is
+  // strictly read-only: observers receive the book, they do not get to change it.
+  function setSchedule(next: ShopServiceSchedule) {
+    setScheduleState(next)
+    onScheduleChange?.(next)
+  }
   const [notice, setNotice] = useState(initial.error)
   const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)
-  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
+  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', appointmentUpdates: 'declined' as 'allowed' | 'declined', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
   const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
+  const [retentionDraft, setRetentionDraft] = useState(initial.schedule?.privacyPolicy.clientRetentionDays?.toString() ?? '')
+  const [anonymizeReviewClientId, setAnonymizeReviewClientId] = useState('')
   const [managedLoading, setManagedLoading] = useState(true)
   const [managedSaving, setManagedSaving] = useState(false)
   const [managedConnected, setManagedConnected] = useState(false)
+  const [managedPrivacyOwner, setManagedPrivacyOwner] = useState(false)
   const managedIdentityRef = useRef<ManagedIdentity | null>(null)
   const managedVersionRef = useRef<number | null>(null)
   const managedSaveBusyRef = useRef(false)
   const schedulePanelRef = useRef<HTMLDetailsElement>(null)
   const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
+  const membershipBalances = useMemo(() => schedule ? spaMembershipBalances(commerce, schedule) : [], [commerce, schedule])
+  const settledSourceRecordIds = useMemo(() => new Set(commerce.orders.flatMap((order) => order.sourceRecordId && order.status === 'completed' && order.paymentStatus === 'reconciled' && order.refundStatus !== 'due' ? [order.sourceRecordId] : [])), [commerce])
+  const membershipByBookingId = useMemo(() => {
+    if (!schedule || !membershipBalances.length) return new Map<string, (typeof membershipBalances)[number]>()
+    const balancesByCustomerService = new Map(membershipBalances.map((balance) => [`${balance.customer}\u0000${balance.serviceId}`, balance]))
+    const redeemedBookingIds = new Set(schedule.events.filter((event) => event.type === 'package_redeemed').map((event) => event.subjectId))
+    return new Map(schedule.bookings.flatMap((booking) => {
+      const balance = balancesByCustomerService.get(`${booking.customerName.trim()}\u0000${booking.serviceId}`)
+      return booking.status === 'completed' && !redeemedBookingIds.has(booking.id) && balance && balance.remaining > 0 ? [[booking.id, balance] as const] : []
+    }))
+  }, [membershipBalances, schedule])
   // A restaurant sees "Reservations" and a school sees "Classes"; the generic
   // "appointment" made every pack read as the same untailored template. The
   // action notices need it too, so it is derived here rather than at render.
@@ -96,8 +138,10 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
       const managed = await loadManagedServiceSchedule(identity)
       if (!active) return
       managedVersionRef.current = managed.version
+      setManagedPrivacyOwner(Boolean(managed.privacyOwner))
       if (managed.schedule) {
         setSchedule(managed.schedule)
+        setRetentionDraft(managed.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
         window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(managed.schedule))
         setNotice('Schedule loaded from this company account.')
       } else {
@@ -188,6 +232,118 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
     return { actor, reason, happenedAt: new Date().toISOString() }
   }
 
+  async function commitPrivacy(next: ShopServiceSchedule, message: string) {
+    const identity = managedIdentityRef.current
+    if (!identity) {
+      const result = await mutateShopServiceSchedule(planShopServiceScheduleWrite(schedule?.revision ?? null, next))
+      if (!result.ok) {
+        setNotice(result.error)
+        return false
+      }
+      setSchedule(result.schedule)
+      setNotice(message)
+      return true
+    }
+    const expectedVersion = managedVersionRef.current
+    if (expectedVersion === null || managedSaveBusyRef.current) {
+      setNotice(`Wait for the current company ${vocabulary.singular} change to finish.`)
+      return false
+    }
+    managedSaveBusyRef.current = true
+    setManagedSaving(true)
+    try {
+      const saved = await saveManagedServiceSchedule({
+        commandId: crypto.randomUUID(),
+        expectedVersion,
+        identity,
+        schedule: next,
+      })
+      managedVersionRef.current = saved.version
+      if (saved.schedule) {
+        setSchedule(saved.schedule)
+        setRetentionDraft(saved.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
+        try { persistLocal(saved.schedule) } catch { /* The managed copy remains authoritative. */ }
+      }
+      setNotice(`${message} Shared company schedule saved.`)
+      return true
+    } catch (error) {
+      if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
+        try {
+          const current = await loadManagedServiceSchedule(identity)
+          managedVersionRef.current = current.version
+          setManagedPrivacyOwner(Boolean(current.privacyOwner))
+          if (current.schedule) {
+            setSchedule(current.schedule)
+            setRetentionDraft(current.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
+            try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
+          }
+          setNotice(`Another user changed ${vocabulary.plural.toLowerCase()} first. The current shared schedule was reloaded; review and try again.`)
+          return false
+        } catch {
+          // Fall through to a fail-closed warning.
+        }
+      }
+      setNotice(`${error instanceof Error ? error.message : 'Managed save failed.'} Nothing was changed or downloaded.`)
+      return false
+    } finally {
+      managedSaveBusyRef.current = false
+      setManagedSaving(false)
+    }
+  }
+
+  async function downloadClientList() {
+    if (!schedule || (managedConnected && !managedPrivacyOwner)) return
+    if (!globalThis.crypto?.subtle) {
+      setNotice('Secure export evidence is unavailable in this browser. No file was downloaded.')
+      return
+    }
+    try {
+      const csv = shopServiceClientCsv(schedule)
+      const bytes = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(csv)))
+      const digest = `sha256:${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`
+      const next = recordShopServiceClientExport(schedule, digest, proof('Owner downloaded the privacy-minimal client list.'))
+      if (!await commitPrivacy(next, 'Client export receipt recorded.')) return
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'spa-clients.csv'
+      link.click()
+      URL.revokeObjectURL(url)
+      setNotice('Client list downloaded with an attributable receipt. Notes and payment details were excluded.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The client export was not created.')
+    }
+  }
+
+  async function saveClientRetention(event: FormEvent) {
+    event.preventDefault()
+    if (!schedule || (managedConnected && !managedPrivacyOwner)) return
+    try {
+      const days = Number(retentionDraft)
+      const next = setShopServiceClientRetention(schedule, days, proof(`Owner approved a ${days}-day client retention period.`))
+      if (await commitPrivacy(next, `Client retention set to ${days} days.`)) setAnonymizeReviewClientId('')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The client retention rule was not saved.')
+    }
+  }
+
+  async function confirmClientAnonymization() {
+    if (!schedule || (managedConnected && !managedPrivacyOwner) || !anonymizeReviewClientId) return
+    try {
+      const client = schedule.clients.find((candidate) => candidate.id === anonymizeReviewClientId)
+      if (!client) throw new Error('Client record not found.')
+      const next = anonymizeShopServiceClient(
+        schedule,
+        client.id,
+        Array.from(settledSourceRecordIds),
+        proof('Owner reviewed and confirmed client anonymization after retention and financial closure.'),
+      )
+      if (await commitPrivacy(next, `${client.name} anonymized in ${vocabulary.plural.toLowerCase()}.`)) setAnonymizeReviewClientId('')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The client was not anonymized.')
+    }
+  }
+
   function createBooking(event: FormEvent) {
     event.preventDefault()
     if (!schedule) return
@@ -219,6 +375,22 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
       commit(cancelShopServiceBooking(schedule, bookingId, proof('Cancelled by the responsible Shop operator.')), `${capitalizedSingular} cancelled; the resource is available again.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : `The ${vocabulary.singular} could not be cancelled.`)
+    }
+  }
+
+  function redeemPackage(bookingId: string) {
+    if (!schedule) return
+    try {
+      const available = availableSpaMembershipForBooking(commerce, schedule, bookingId)
+      const next = redeemSpaMembershipSession(schedule, commerce, bookingId, proof('Used after the completed treatment was checked by the responsible Spa operator.'))
+      if (next === schedule) {
+        setNotice(`This ${vocabulary.singular} already used its package session.`)
+        return
+      }
+      const remaining = Math.max(0, (available?.remaining ?? 1) - 1)
+      commit(next, `Package session used · ${remaining} left.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The package session could not be used.')
     }
   }
 
@@ -259,19 +431,32 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
   // read as empty moments after provisioning promised a working day. Fall back
   // to what the day actually held rather than claiming there is nothing.
   const agenda = projection.upcoming.length ? projection.upcoming : projection.today
+  const canManageClientPrivacy = !managedConnected || managedPrivacyOwner
+  const settledSources = Array.from(settledSourceRecordIds)
+  const clientPrivacyRows = schedule.clients.map((client) => ({
+    client,
+    readiness: shopServiceClientAnonymizationReadiness(schedule, client.id, settledSources),
+  }))
+  const anonymizeReviewClient = schedule.clients.find((client) => client.id === anonymizeReviewClientId) ?? null
   return <details className="core-panel shop-service-schedule" id="shop-service-schedule" onToggle={(event) => setWorkspaceOpen(event.currentTarget.open)} open={workspaceOpen} ref={schedulePanelRef}>
     <summary><span><small>{vocabulary.plural}</small><strong>{projection.today.length ? `${projection.today.length} today` : 'Schedule services'}</strong></span><span>{projection.awaitingArrival} waiting · {projection.inService} in service</span></summary>
     <div className="service-schedule-body">
       <div className="service-schedule-summary" aria-label={`${vocabulary.plural} summary`}>
         <span><small>Today</small><strong>{projection.today.length}</strong></span>
         <span><small>Expected</small><strong>{formatMmk(projection.expectedRevenueMmk)}</strong></span>
-        <span><small>Services</small><strong>{projection.activeServices}</strong></span>
+        <span><small>Clients</small><strong>{projection.clients}</strong></span>
         <span><small>Staff / rooms</small><strong>{projection.activeResources}</strong></span>
       </div>
+      {schedule.industryPackId === 'spa' && membershipBalances.length ? <div className="service-schedule-summary" aria-label="Prepaid package summary">
+        <span><small>Package customers</small><strong>{new Set(membershipBalances.map((balance) => balance.customer)).size}</strong></span>
+        <span><small>Sessions left</small><strong>{membershipBalances.reduce((total, balance) => total + balance.remaining, 0)}</strong></span>
+        <span><small>Sessions used</small><strong>{membershipBalances.reduce((total, balance) => total + balance.redeemed, 0)}</strong></span>
+      </div> : null}
       <form className="service-booking-form" onSubmit={createBooking}>
         <div><span className="core-eyebrow">New {vocabulary.singular}</span><h3>{vocabulary.holdAction}</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>
-        <label>Contact<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="Phone or reference" required value={bookingDraft.contact} /></label>
+        <label>Contact or client reference *<input disabled={disabled} list="spa-client-contacts" maxLength={160} onChange={(event) => { const contact = event.target.value; const client = schedule.clients.find((candidate) => !candidate.anonymizedAt && candidate.contact === contact); setBookingDraft((current) => ({ ...current, contact, customerName: client?.name ?? current.customerName, appointmentUpdates: client?.appointmentUpdates === 'allowed' ? 'allowed' : 'declined' })) }} placeholder="Phone or walk-in reference" required value={bookingDraft.contact} /><small>Required to distinguish client records. Use a non-contact reference when updates are off.</small><datalist id="spa-client-contacts">{schedule.clients.filter((client) => !client.anonymizedAt).map((client) => <option key={client.id} value={client.contact}>{client.name}</option>)}</datalist></label>
+        <label>Customer updates<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, appointmentUpdates: event.target.value as 'allowed' | 'declined' }))} value={bookingDraft.appointmentUpdates}><option value="declined">No messages</option><option value="allowed">Customer allowed updates</option></select></label>
         <label>Service<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, serviceId: event.target.value }))} required value={bookingDraft.serviceId}>{schedule.services.filter((service) => service.active).map((service) => <option key={service.id} value={service.id}>{service.nameMy ? `${service.name} · ${service.nameMy}` : service.name} · {service.durationMinutes} min · {formatMmk(service.priceMmk)}</option>)}</select></label>
         <label>Staff, room, or equipment<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, resourceId: event.target.value }))} required value={bookingDraft.resourceId}>{schedule.resources.filter((resource) => resource.active).map((resource) => <option key={resource.id} value={resource.id}>{resource.nameMy ? `${resource.name} · ${resource.nameMy}` : resource.name} · {resource.kind}</option>)}</select></label>
         <label>Starts<input disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, startsAt: event.target.value }))} required type="datetime-local" value={bookingDraft.startsAt} /></label>
@@ -283,13 +468,30 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
         {agenda.length ? agenda.slice(0, 12).map((booking) => {
           const service = serviceById.get(booking.serviceId)
           const resource = resourceById.get(booking.resourceId)
+          const saleSku = shopServiceSaleSku(schedule.industryPackId, booking.serviceId)
+          const membership = membershipByBookingId.get(booking.id)
           return <article key={booking.id}>
             <time dateTime={booking.startsAt}><strong>{new Date(booking.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong><small>{new Date(booking.startsAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></time>
             <div><strong>{booking.customerName}</strong><small>{service?.name} · {resource?.name} · {booking.contact}</small>{booking.note ? <em>{booking.note}</em> : null}</div>
-            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
+            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{membership ? <button className="core-button compact" disabled={disabled} onClick={() => redeemPackage(booking.id)} type="button">Use package · {membership.remaining} left</button> : null}{booking.status === 'checked_in' && saleSku ? <Link className="core-button compact" state={{ shopCounterCustomer: booking.customerName, shopCounterSearch: saleSku }} to="/shop/?tab=counter">Charge at counter</Link> : null}{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
           </article>
         }) : <p className="form-notice">Hold the first {vocabulary.singular} above. Nothing is sent to the customer or an external calendar.</p>}
       </section>
+      {schedule.clients.length ? <details className="compact-disclosure service-client-privacy">
+        <summary><span>Clients and privacy</span><small>{schedule.clients.length} minimal records</small></summary>
+        <div>
+          <p>Name, contact, customer-update choice, and visit counts only. Notes and financial records are excluded from export.</p>
+          {canManageClientPrivacy ? <>
+            <form className="service-privacy-policy" onSubmit={saveClientRetention}>
+              <label>Keep identifiable records after the last activity<select disabled={disabled} onChange={(event) => setRetentionDraft(event.target.value)} required value={retentionDraft}><option value="">Choose an owner-approved period</option><option value="365">1 year</option><option value="730">2 years</option><option value="1095">3 years</option><option value="1825">5 years</option></select></label>
+              <button className="core-button compact" disabled={disabled || !retentionDraft} type="submit">Save retention rule</button>
+            </form>
+            <div className="service-privacy-actions"><button className="core-button compact" disabled={disabled} onClick={() => void downloadClientList()} type="button">Download client list</button><small>The export receipt is saved before the file is created.</small></div>
+            <div className="service-client-list">{clientPrivacyRows.map(({ client, readiness }) => <article key={client.id}><div><strong>{client.name}</strong><small>{client.anonymizedAt ? `Anonymized ${new Date(client.anonymizedAt).toLocaleDateString()}` : `${client.contact} · ${client.appointmentUpdates === 'allowed' ? 'Updates allowed' : 'No messages'}`}</small></div><div><small>{readiness.reason}</small>{!client.anonymizedAt ? <button className="text-link" disabled={disabled || !readiness.allowed} onClick={() => setAnonymizeReviewClientId(client.id)} type="button">Review anonymization</button> : null}</div></article>)}</div>
+            {anonymizeReviewClient ? <div className="service-privacy-review" role="alert"><strong>Review permanent anonymization</strong><p>Remove {anonymizeReviewClient.name}'s contact, update choice, and visit notes. Closed financial orders remain unchanged.</p><div><button className="core-button compact danger" disabled={disabled} onClick={() => void confirmClientAnonymization()} type="button">Confirm anonymization</button><button className="text-link" disabled={disabled} onClick={() => setAnonymizeReviewClientId('')} type="button">Cancel</button></div></div> : null}
+          </> : <p className="panel-note">Only a company owner can set retention, export clients, or approve anonymization.</p>}
+        </div>
+      </details> : null}
       <details className="compact-disclosure service-schedule-setup">
         <summary><span>Services and resources</span><small>{schedule.services.length} services · {schedule.resources.length} resources</small></summary>
         <div>

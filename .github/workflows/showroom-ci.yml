@@ -6,6 +6,15 @@ on:
     paths:
       - 'showroom/**'
       - 'hq/**'
+      # docs/ is drift-guarded by tools/test_demo_playbooks.mjs, which IS in the
+      # app:verify chain -- but without these two entries a docs-ONLY pull request
+      # matches no path here, so this workflow never triggers and the guard never
+      # runs on the very change it exists to catch. The drift then surfaces on the
+      # next unrelated pull request that does touch a listed path, attributed to
+      # whoever opened it. Verified 2026-08-24 on PRs #554 and #556: both changed
+      # only docs/ and both showed all-checks-passed with no validate run at all.
+      - 'docs/**'
+      - 'tools/test_demo_playbooks.mjs'
       - 'CURRENT.md'
       - 'api/**'
       - 'api_app.py'

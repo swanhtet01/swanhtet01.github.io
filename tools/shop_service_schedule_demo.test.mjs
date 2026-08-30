@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   GUIDED_SAMPLE_SCHEDULE_ACTOR,
   SHOP_SERVICE_SCHEDULE_SCHEMA,
+  SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   advanceShopServiceBooking,
   cancelShopServiceBooking,
   createShopServiceSchedule,
@@ -20,6 +21,10 @@ import {
   shopScheduleVocabulary,
   validateShopServiceSchedule,
 } from '../showroom/src/core/shop-service-scheduling.ts'
+import {
+  clearUnreadableShopSchedule,
+  prepareUnreadableShopScheduleRecovery,
+} from '../showroom/src/core/shop-recover.ts'
 
 const PLANNING_DAY = '2026-08-07'
 const MIDDAY_MMT = new Date(`${PLANNING_DAY}T05:30:00.000Z`)
@@ -64,6 +69,7 @@ test('real appointment evidence is distinguishable from the guided sample', () =
   const withHumanBooking = scheduleShopServiceBooking(demo, {
     customerName: 'Walk-in customer',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: demo.services[0].id,
     resourceId: demo.resources[1].id,
     startsAt: `${PLANNING_DAY}T10:30:00.000Z`,
@@ -93,6 +99,7 @@ test('an empty schedule can switch industry pack, but any evidence blocks the sw
   const withBooking = scheduleShopServiceBooking(createShopServiceSchedule('retail'), {
     customerName: 'Walk-in',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: empty.services[0].id,
     resourceId: empty.resources[0].id,
     startsAt: `${PLANNING_DAY}T05:00:00.000Z`,
@@ -110,6 +117,7 @@ test('a booking advances through the full lifecycle and terminal states block fu
   const afterBook = scheduleShopServiceBooking(base, {
     customerName: 'Naw Su',
     contact: '09 444 555 666',
+    appointmentUpdates: 'declined',
     serviceId: base.services[0].id,
     resourceId: base.resources[0].id,
     startsAt: `${PLANNING_DAY}T04:00:00.000Z`,
@@ -137,6 +145,7 @@ test('a booking can be cancelled from any non-terminal state and cannot be cance
   const afterBook = scheduleShopServiceBooking(base, {
     customerName: 'Ma Hnin',
     contact: '09 777 888 999',
+    appointmentUpdates: 'declined',
     serviceId: base.services[0].id,
     resourceId: base.resources[0].id,
     startsAt: `${PLANNING_DAY}T06:00:00.000Z`,
@@ -156,6 +165,7 @@ test('a booking can be cancelled from any non-terminal state and cannot be cance
   const afterBook2 = scheduleShopServiceBooking(base, {
     customerName: 'Ko Zaw',
     contact: '09 321 654 987',
+    appointmentUpdates: 'declined',
     serviceId: base.services[0].id,
     resourceId: base.resources[0].id,
     startsAt: `${PLANNING_DAY}T07:00:00.000Z`,
@@ -239,6 +249,45 @@ test('readShopServiceSchedule returns a fresh schedule for null, round-trips val
   )
 })
 
+test('unreadable appointment recovery backs up the device before clearing only the unchanged corrupt record', () => {
+  const records = new Map([[SHOP_SERVICE_SCHEDULE_STORAGE_KEY, '{old unreadable appointment data}']])
+  const storage = {
+    get length() { return records.size },
+    getItem: (key) => records.get(key) ?? null,
+    key: (index) => [...records.keys()][index] ?? null,
+    removeItem: (key) => { records.delete(key) },
+  }
+  const recovery = prepareUnreadableShopScheduleRecovery(storage, '2026-08-22T10:00:00.000Z')
+  assert.equal(recovery.filename, 'supermega-workspace-before-appointment-recovery-2026-08-22.json')
+  assert.equal(recovery.backup.records[SHOP_SERVICE_SCHEDULE_STORAGE_KEY], recovery.raw)
+  assert.equal(records.has(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), true)
+  assert.deepEqual(clearUnreadableShopSchedule(storage, recovery.raw), {
+    cleared: true,
+    storageKey: SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
+  })
+  assert.equal(records.has(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), false)
+})
+
+test('appointment recovery refuses readable or changed records without deleting them', () => {
+  const valid = JSON.stringify(createShopServiceSchedule('spa'))
+  const validRecords = new Map([[SHOP_SERVICE_SCHEDULE_STORAGE_KEY, valid]])
+  const storageFor = (records) => ({
+    get length() { return records.size },
+    getItem: (key) => records.get(key) ?? null,
+    key: (index) => [...records.keys()][index] ?? null,
+    removeItem: (key) => { records.delete(key) },
+  })
+  assert.throws(() => prepareUnreadableShopScheduleRecovery(storageFor(validRecords)), /readable or no longer exists/)
+  assert.equal(validRecords.get(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), valid)
+
+  const changedRecords = new Map([[SHOP_SERVICE_SCHEDULE_STORAGE_KEY, '{old corrupt value}']])
+  const changedStorage = storageFor(changedRecords)
+  const recovery = prepareUnreadableShopScheduleRecovery(changedStorage, '2026-08-22T10:00:00.000Z')
+  changedRecords.set(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, '{new corrupt value}')
+  assert.throws(() => clearUnreadableShopSchedule(changedStorage, recovery.raw), /changed or became readable/)
+  assert.equal(changedRecords.get(SHOP_SERVICE_SCHEDULE_STORAGE_KEY), '{new corrupt value}')
+})
+
 test('booking the same resource during an overlapping window throws', () => {
   const base = createShopServiceSchedule('spa')
   const service = base.services[0]
@@ -248,6 +297,7 @@ test('booking the same resource during an overlapping window throws', () => {
   const withFirst = scheduleShopServiceBooking(base, {
     customerName: 'Ma Aye',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: startA,
@@ -261,6 +311,7 @@ test('booking the same resource during an overlapping window throws', () => {
     () => scheduleShopServiceBooking(withFirst, {
       customerName: 'Ma Su',
       contact: '09 444 555 666',
+      appointmentUpdates: 'declined',
       serviceId: service.id,
       resourceId: resource.id,
       startsAt: overlapStart,
@@ -278,6 +329,7 @@ test('back-to-back bookings on the same resource succeed when windows do not ove
   const withFirst = scheduleShopServiceBooking(base, {
     customerName: 'Ma Aye',
     contact: '09 111 222 333',
+    appointmentUpdates: 'declined',
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: startA,
@@ -289,6 +341,7 @@ test('back-to-back bookings on the same resource succeed when windows do not ove
   const withSecond = scheduleShopServiceBooking(withFirst, {
     customerName: 'Ko Zaw',
     contact: '09 777 888 999',
+    appointmentUpdates: 'declined',
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: adjacentStart,

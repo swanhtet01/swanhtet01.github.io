@@ -135,27 +135,38 @@ jobs:
           CANDIDATE_MODE="$(printf '%s' "$APP_ENV_AUDIT" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(!['isolated_demo','managed_trial_candidate'].includes(value.operatingMode))process.exit(1);process.stdout.write(value.operatingMode)})")"
           case "$CANDIDATE_MODE" in
             managed_trial_candidate)
-              VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs managed_trial)"
-              OPERATING_MODE=managed_trial
+              if VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs managed_trial)"; then
+                OPERATING_MODE=managed_trial
+                RUNTIME_MODE=managed_trial
+              else
+                VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs staged)"
+                OPERATING_MODE=isolated_demo
+                RUNTIME_MODE=staged
+              fi
               ;;
             isolated_demo)
               VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs isolated_demo)"
               OPERATING_MODE=isolated_demo
+              RUNTIME_MODE=isolated_demo
               ;;
           esac
           printf '%s\n' "$VALUE_AUDIT"
           printf 'operating_mode=%s\n' "$OPERATING_MODE" >> "$GITHUB_OUTPUT"
+          printf 'runtime_mode=%s\n' "$RUNTIME_MODE" >> "$GITHUB_OUTPUT"
 
       - name: Enforce exact app runtime database and RLS gate
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
-          SELECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
+          SELECTED_RUNTIME_MODE: ${{ steps.app-environment.outputs.runtime_mode }}
         run: |
-          case "$SELECTED_OPERATING_MODE" in
+          case "$SELECTED_RUNTIME_MODE" in
             managed_trial)
               npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
                 python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
+              ;;
+            staged)
+              echo "Managed credentials are value-verified, but writes remain disabled; production stays isolated_demo while named-user signup is staged."
               ;;
             isolated_demo)
               echo "Managed activation is not selected; production remains isolated_demo."
@@ -171,7 +182,9 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
-        run: npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
+        run: |
+          npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
+            npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
 
       - name: Verify immutable app asset contract
         run: node tools/verify_app_release_live.mjs --artifact-self-test

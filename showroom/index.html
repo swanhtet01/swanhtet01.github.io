@@ -28,18 +28,14 @@
     <meta name="theme-color" content="#f6f4ee" />
     <!-- Zero-flash theme restore. A returning user's theme choice lives in localStorage
          and CoreShell only stamps it onto <html> after React mounts, so without this a
-         dark-theme user saw a light flash on every load. This runs synchronously, before
-         the browser paints, so the CSS in core-app.css that matches
-         :root[data-supermega-theme="dark"] is already active at first paint. Keep the key
-         in sync with THEME_KEY in showroom/src/core/CoreShell.tsx. -->
-    <script>
-      try {
-        if (window.localStorage.getItem('supermega-interface-theme') === 'dark') {
-          document.documentElement.dataset.supermegaTheme = 'dark'
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#05080d')
-        }
-      } catch (e) {}
-    </script>
+         dark-theme user saw a light flash on every load. Still a render-blocking classic
+         script, so it runs before the browser paints and the CSS in core-app.css that
+         matches :root[data-supermega-theme="dark"] is already active at first paint.
+         It is a FILE and not an inline block because the content policy on this app is
+         `script-src 'self'` with no hash and no nonce: an inline script here is refused
+         outright and never runs. Source and the THEME_KEY note live beside the other two
+         shell scripts in tools/write_app_release_metadata.mjs. -->
+    <script src="/theme-restore.js"></script>
     <meta property="og:title" content="SuperMega" />
     <meta
       property="og:description"
@@ -56,10 +52,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))</script>
-    <!-- Vercel Web Analytics: cookieless aggregate pageviews, no PII. Loaded dynamically because
-         /_vercel/insights/ exists only on the deployment edge, never in dist/, and only on the
-         production host so local/dev stays beacon-free. -->
-    <script>if (/(^|\.)supermega\.dev$/.test(location.hostname)) { const insights = document.createElement('script'); insights.defer = true; insights.src = '/_vercel/insights/script.js'; document.head.append(insights) }</script>
+    <!-- Both of these are files rather than inline blocks for the same reason as
+         /theme-restore.js above: `script-src 'self'` refuses inline script, so the
+         registration below silently never ran and the app had no service worker and
+         no offline mode at all. Sources: tools/write_app_release_metadata.mjs. -->
+    <script src="/sw-register.js"></script>
+    <script src="/vercel-insights.js"></script>
   </body>
 </html>

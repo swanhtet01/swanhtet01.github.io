@@ -16,13 +16,24 @@ import {
 } from './create_shop_pilot_handoff.mjs'
 
 import {
+  createShopPilotClientWorkspace,
   decideShopPilotSalesWorkspace,
+  initShopPilotIntakeStarter,
   initShopPilotSalesWorkspace,
+  initShopPilotSalesWorkspaceFromBundle,
+  inspectShopClientLaunchStatus,
   prepareShopPilotSalesWorkspace,
+  prepareShopPilotClientLaunch,
+  renderShopPilotOwnerInputForm,
+  renderShopPilotStarterForm,
+  verifyShopPilotIntakeStarter,
   verifyShopPilotSalesWorkspace,
 } from './manage_shop_pilot_workspace.mjs'
 
 const readyInput = {
+  product: 'shop',
+  pilotMode: 'owner_named',
+  verticalPack: 'spa-services',
   company: 'Test Shop',
   operatorName: 'Test Operator',
   operatorRole: 'Shop manager',
@@ -30,7 +41,21 @@ const readyInput = {
   operationalProblem: 'Reduce manual order re-entry and make close exceptions reviewable.',
   startDate: '2026-08-03',
   reviewDate: '2026-08-07',
-  baseline: { weeklyOrders: 120, medianMinutesPerOrder: 8, weeklyExceptionCount: 12, closeMinutesPerDay: 45 },
+  baseline: {
+    weeklyOrders: 120,
+    medianMinutesPerOrder: 8,
+    weeklyExceptionCount: 12,
+    closeMinutesPerDay: 45,
+  },
+  verticalBaseline: {
+    spaServices: {
+      clientImportRowCount: 40,
+      weeklyPackageSales: 12,
+      weeklyTreatmentRedemptions: 24,
+      medianMinutesPerRedemption: 3,
+      weeklyPackageCorrectionCount: 2,
+    },
+  },
   fixedPilotFeeUsd: 500,
   isolatedNonProductionTenantApproved: true,
   namedOperatorAuthorized: true,
@@ -63,6 +88,9 @@ const shopContactEvent = {
 }
 
 const ownerInput = {
+  product: 'shop',
+  pilotMode: 'owner_named',
+  verticalPack: 'spa-services',
   tenantLabel: readyInput.tenantLabel,
   startDate: readyInput.startDate,
   reviewDate: readyInput.reviewDate,
@@ -73,6 +101,13 @@ const ownerInput = {
   ownerReviewedCommercialDraft: true,
   contactIsNamedOperator: true,
   contactBaselineReviewed: true,
+  spaBaseline: {
+    clientImportRowCount: readyInput.verticalBaseline.spaServices.clientImportRowCount,
+    weeklyPackageSales: readyInput.verticalBaseline.spaServices.weeklyPackageSales,
+    weeklyTreatmentRedemptions: readyInput.verticalBaseline.spaServices.weeklyTreatmentRedemptions,
+    medianMinutesPerRedemption: readyInput.verticalBaseline.spaServices.medianMinutesPerRedemption,
+    weeklyPackageCorrectionCount: readyInput.verticalBaseline.spaServices.weeklyPackageCorrectionCount,
+  },
 }
 
 function readyDecisionArtifacts() {
@@ -97,8 +132,29 @@ function ownerDecisionInput(handoff, reply, decision = 'approve-manual-send') {
 test('builds the exact five-day named-operator handoff required by PILOT-001', () => {
   const handoff = buildShopPilotHandoff(readyInput)
   assert.equal(handoff.status, 'ready-for-private-pilot')
+  assert.equal(handoff.product, 'shop')
+  assert.equal(handoff.pilotMode, 'owner_named')
+  assert.equal(handoff.verticalPack, 'spa-services')
+  assert.deepEqual(Object.keys(handoff.baseline).sort(), [
+    'closeMinutesPerDay',
+    'medianMinutesPerOrder',
+    'weeklyExceptionCount',
+    'weeklyOrders',
+  ])
+  assert.deepEqual(handoff.verticalBaseline.spaServices, readyInput.verticalBaseline.spaServices)
   assert.equal(handoff.pilot.durationDays, 5)
+  assert.equal(handoff.pilot.profile, 'spa-prepaid-membership-v1')
+  assert.equal(handoff.workOrderId, 'shop-spa-owner-pilot')
   assert.equal(handoff.evidencePlan.length, 5)
+  assert.deepEqual(handoff.acceptance.requiredJourney, [
+    'reviewed_client_import',
+    'reconciled_package_sale',
+    'matching_completed_treatment',
+    'immutable_package_redemption',
+    'reviewed_daily_close',
+    'workspace_backup_and_recovery',
+  ])
+  assert.equal(handoff.acceptance.sampleEvidenceCanCloseGate, false)
   assert.deepEqual(handoff.blockers, [])
   assert.equal(handoff.acceptance.improvementClaimAllowedBeforeReview, false)
   assert.equal(handoff.authority.productionActivationAllowed, false)
@@ -126,6 +182,11 @@ test('keeps the handoff blocked until every owner gate is explicit', () => {
 test('rejects weak baselines, invalid dates, and oversized identity data', () => {
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, reviewDate: '2026-08-08' }), /review_date_must_close_five_day_plan/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, baseline: { ...readyInput.baseline, weeklyOrders: 0 } }), /baseline_weekly_orders_invalid/)
+  assert.throws(() => buildShopPilotHandoff({ ...readyInput, verticalBaseline: { spaServices: { ...readyInput.verticalBaseline.spaServices, weeklyPackageSales: 0 } } }), /baseline_weekly_package_sales_invalid/)
+  assert.throws(() => buildShopPilotHandoff({ ...readyInput, product: 'commerce' }), /product_invalid/)
+  assert.throws(() => buildShopPilotHandoff({ ...readyInput, pilotMode: 'anonymous' }), /pilot_mode_invalid/)
+  assert.throws(() => buildShopPilotHandoff({ ...readyInput, verticalPack: 'restaurant' }), /vertical_pack_unsupported/)
+  assert.throws(() => buildShopPilotHandoff({ ...readyInput, pilotProfile: 'generic-retail' }), /pilot_profile_unsupported/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, operatorName: 'x'.repeat(181) }), /operator_name_invalid/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, fixedPilotFeeUsd: -1 }), /fixed_pilot_fee_usd_invalid/)
   assert.throws(() => buildShopPilotHandoff({ ...readyInput, sourceLeadDigest: 'a'.repeat(64) }), /shop_contact_source_binding_incomplete/)
@@ -134,6 +195,14 @@ test('rejects weak baselines, invalid dates, and oversized identity data', () =>
 test('renders a commercial draft without claiming payment, deployment, or improvement', () => {
   const markdown = renderShopPilotHandoff(readyInput)
   assert.match(markdown, /Fixed five-day pilot fee: \*\*\$500\*\*/)
+  assert.match(markdown, /Work order: shop-spa-owner-pilot/)
+  assert.match(markdown, /Product: shop/)
+  assert.match(markdown, /Pilot mode: owner_named/)
+  assert.match(markdown, /Vertical pack: spa-services/)
+  assert.match(markdown, /## Recorded Shop baseline/)
+  assert.match(markdown, /## Spa services vertical pack baseline/)
+  assert.match(markdown, /Weekly prepaid package sales: 12/)
+  assert.match(markdown, /Sample data cannot close the real-client gate/)
   assert.match(markdown, /does not contact the customer, accept payment, deploy software, or prove hosted activation/)
   assert.doesNotMatch(markdown, /guaranteed|production ready|payment accepted/i)
 })
@@ -148,6 +217,8 @@ test('converts a Shop contact event through a separate owner overlay without ret
   assert.match(handoff.source.qualificationDigest, /^[0-9a-f]{64}$/)
   assert.equal(handoff.operator.role, 'Shop manager')
   assert.deepEqual(handoff.baseline, readyInput.baseline)
+  assert.deepEqual(handoff.verticalBaseline.spaServices, readyInput.verticalBaseline.spaServices)
+  assert.equal('spaBaseline' in handoff, false)
   assert.equal(handoff.source.contactEmailRetained, false)
   assert.equal(handoff.source.rawContactDataRetained, false)
   assert.doesNotMatch(serialized, /private@example\.com|private_note|source_url|LEAD-0123456789ABCDEF/)
@@ -157,6 +228,7 @@ test('rejects non-Shop events and refuses to infer that a contact is the pilot o
   assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, workflow: 'website' } }, ownerInput), /shop_contact_event_required/)
   assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, contactIsNamedOperator: false }), /shop_contact_operator_confirmation_required/)
   assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, contactBaselineReviewed: false }), /shop_contact_baseline_review_required/)
+  assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, spaBaseline: { ...ownerInput.spaBaseline, weeklyPackageSales: 0 } }), /baseline_weekly_package_sales_invalid/)
   assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, raw: {} } }, ownerInput), /shop_contact_qualification_required/)
   assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, baseline: { ...readyInput.baseline, weeklyOrders: 121 } }), /shop_contact_baseline_mismatch/)
   assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, lead_id: '' } }, ownerInput), /contact_lead_id_required/)
@@ -172,6 +244,9 @@ test('CLI emits a contact owner template with every authority gate closed', () =
   assert.equal(template.namedOperatorAuthorized, false)
   assert.equal(template.pilotDataHandlingApproved, false)
   assert.equal(template.ownerReviewedCommercialDraft, false)
+  assert.equal(template.product, 'shop')
+  assert.equal(template.pilotMode, 'owner_named')
+  assert.equal(template.verticalPack, 'spa-services')
   assert.equal('company' in template, false)
   assert.equal('operatorName' in template, false)
   assert.equal('operatorRole' in template, false)
@@ -188,7 +263,7 @@ test('CLI writes and verifies one private artifact exclusively while reporting m
     const first = spawnSync(process.execPath, command, { encoding: 'utf8' })
     assert.equal(first.status, 0, first.stderr)
     const receipt = JSON.parse(first.stdout)
-    assert.equal(receipt.contract, 'supermega.shop.pilot_handoff.v2')
+    assert.equal(receipt.contract, 'supermega.shop.pilot_handoff.v3')
     assert.equal(receipt.mode, 'create')
     assert.equal(receipt.status, 'ready-for-private-pilot')
     assert.equal(receipt.externalWritesPerformed, false)
@@ -435,17 +510,136 @@ const contactEvent = {
 }
 
 const readyOwnerInput = {
+  product: 'shop',
+  pilotMode: 'owner_named',
+  verticalPack: 'spa-services',
   tenantLabel: 'workspace-test-isolated-pilot',
   startDate: '2026-08-03',
   reviewDate: '2026-08-07',
   fixedPilotFeeUsd: 500,
   contactIsNamedOperator: true,
   contactBaselineReviewed: true,
+  spaBaseline: {
+    clientImportRowCount: 40,
+    weeklyPackageSales: 12,
+    weeklyTreatmentRedemptions: 24,
+    medianMinutesPerRedemption: 3,
+    weeklyPackageCorrectionCount: 2,
+  },
   isolatedNonProductionTenantApproved: true,
   namedOperatorAuthorized: true,
   pilotDataHandlingApproved: true,
   ownerReviewedCommercialDraft: true,
 }
+
+test('renders a private mobile Shop workspace intake starter with Spa vertical pack and every authority closed', () => {
+  const html = renderShopPilotStarterForm()
+  assert.match(html, /<meta name="viewport"/)
+  assert.match(html, /Content-Security-Policy[^>]+default-src 'none'/)
+  assert.match(html, /connect-src 'none'/)
+  assert.match(html, /form-action 'none'/)
+  assert.match(html, /@media \(max-width: 620px\)/)
+  assert.match(html, /supermega\.shop\.pilot_intake_bundle\.v1/)
+  assert.match(html, /Start your Shop pilot/)
+  assert.match(html, /Shop business name/)
+  assert.match(html, /Spa services vertical pack/)
+  assert.match(html, /Package sale, treatment redemption, and client import/)
+  assert.match(html, /link\.download = 'shop-pilot-intake\.json'/)
+  assert.match(html, /No information was sent/)
+  for (const id of [
+    'company', 'operatorName', 'email', 'operatorRole', 'goal', 'weeklyOrders', 'medianMinutesPerOrder',
+    'weeklyExceptionCount', 'closeMinutesPerDay', 'clientImportRowCount', 'weeklyPackageSales',
+    'weeklyTreatmentRedemptions', 'medianMinutesPerRedemption', 'weeklyPackageCorrectionCount',
+    'tenantLabel', 'fixedPilotFeeUsd', 'startDate', 'reviewDate', 'contactIsOperator',
+    'contactIsNamedOperator', 'contactBaselineReviewed', 'isolatedNonProductionTenantApproved',
+    'namedOperatorAuthorized', 'pilotDataHandlingApproved', 'ownerReviewedCommercialDraft',
+  ]) assert.match(html, new RegExp(`id="${id}"`))
+  assert.doesNotMatch(html, /\b(?:fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage)\b/)
+  assert.doesNotMatch(html, /<input[^>]+checked/i)
+  assert.ok(Buffer.byteLength(html, 'utf8') < 40_000)
+})
+
+test('starts and verifies a blank private Shop intake workspace without client data', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-intake-starter-'))
+  const workspace = join(parent, 'starter')
+  try {
+    const started = await initShopPilotIntakeStarter(workspace)
+    assert.equal(started.stage, 'private-owner-intake-required')
+    assert.equal(started.filesCreated, 3)
+    assert.equal(started.externalWritesPerformed, false)
+    assert.deepEqual((await readdir(workspace)).sort(), ['README.md', 'START-HERE.html', 'starter.json'])
+    const combined = (await Promise.all((await readdir(workspace)).map((name) => readFile(join(workspace, name), 'utf8')))).join('\n')
+    assert.doesNotMatch(combined, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)
+    assert.equal((await verifyShopPilotIntakeStarter(workspace)).verified, true)
+    await writeFile(join(workspace, 'START-HERE.html'), `${renderShopPilotStarterForm()}\nchanged\n`)
+    await assert.rejects(() => verifyShopPilotIntakeStarter(workspace), /shop_pilot_intake_starter_invalid/)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('initializes a protected workspace from one canonical private intake bundle', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-intake-bundle-'))
+  const workspace = join(parent, 'private-workspace')
+  try {
+    const bundle = { contract: 'supermega.shop.pilot_intake_bundle.v1', contactEvent, ownerInput: readyOwnerInput }
+    const initialized = await initShopPilotSalesWorkspaceFromBundle(bundle, workspace)
+    assert.equal(initialized.stage, 'owner-input-required')
+    assert.equal(initialized.externalWritesPerformed, false)
+    assert.deepEqual(JSON.parse(await readFile(join(workspace, 'owner-input.json'), 'utf8')), readyOwnerInput)
+    assert.equal((await verifyShopPilotSalesWorkspace(workspace)).verified, true)
+    assert.equal((await prepareShopPilotSalesWorkspace(workspace)).stage, 'owner-decision-required')
+    const nonOperatorWorkspace = join(parent, 'non-operator')
+    await initShopPilotSalesWorkspaceFromBundle({
+      ...bundle,
+      contactEvent: { ...contactEvent, record: { ...contactEvent.record, raw: { shop: { ...contactEvent.record.raw.shop, contact_is_operator: false } } } },
+    }, nonOperatorWorkspace)
+    await assert.rejects(() => prepareShopPilotSalesWorkspace(nonOperatorWorkspace), /shop_contact_operator_status_required/)
+    await assert.rejects(
+      () => initShopPilotSalesWorkspaceFromBundle({ ...bundle, contract: 'wrong' }, join(parent, 'wrong-contract')),
+      /shop_pilot_intake_bundle_invalid/,
+    )
+    await assert.rejects(
+      () => initShopPilotSalesWorkspaceFromBundle({ ...bundle, ownerInput: { ...readyOwnerInput, contactIsNamedOperator: 'yes' } }, join(parent, 'wrong-owner')),
+      /contact_is_named_operator_invalid/,
+    )
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('renders an offline responsive workspace owner intake form with closed gates', () => {
+  const html = renderShopPilotOwnerInputForm()
+  assert.match(html, /<meta name="viewport"/)
+  assert.match(html, /Content-Security-Policy[^>]+default-src 'none'/)
+  assert.match(html, /connect-src 'none'/)
+  assert.match(html, /form-action 'none'/)
+  assert.match(html, /@media \(max-width: 620px\)/)
+  assert.match(html, /Shop pilot owner intake/)
+  assert.match(html, /Spa services vertical pack/)
+  for (const id of [
+    'tenantLabel',
+    'fixedPilotFeeUsd',
+    'startDate',
+    'reviewDate',
+    'clientImportRowCount',
+    'weeklyPackageSales',
+    'weeklyTreatmentRedemptions',
+    'medianMinutesPerRedemption',
+    'weeklyPackageCorrectionCount',
+    'contactIsNamedOperator',
+    'contactBaselineReviewed',
+    'isolatedNonProductionTenantApproved',
+    'namedOperatorAuthorized',
+    'pilotDataHandlingApproved',
+    'ownerReviewedCommercialDraft',
+  ]) assert.match(html, new RegExp(`id="${id}"`))
+  assert.match(html, /link\.download = 'owner-input\.json'/)
+  assert.match(html, /No information was sent/)
+  assert.doesNotMatch(html, /\b(?:fetch|XMLHttpRequest|sendBeacon|localStorage|sessionStorage)\b/)
+  assert.doesNotMatch(html, /<input[^>]+checked/i)
+  assert.ok(Buffer.byteLength(html, 'utf8') < 30_000)
+})
 
 test('runs the complete private workspace lifecycle without external action', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-sales-workspace-'))
@@ -453,14 +647,33 @@ test('runs the complete private workspace lifecycle without external action', as
   try {
     const initialized = await initShopPilotSalesWorkspace(contactEvent, workspace)
     assert.equal(initialized.stage, 'owner-input-required')
-    assert.equal(initialized.filesCreated, 4)
+    assert.equal(initialized.filesCreated, 5)
     assert.equal(initialized.externalWritesPerformed, false)
-    assert.deepEqual((await readdir(workspace)).sort(), ['README.md', 'contact-event.json', 'owner-input.json', 'workspace.json'])
+    assert.deepEqual((await readdir(workspace)).sort(), ['README.md', 'contact-event.json', 'owner-input-form.html', 'owner-input.json', 'workspace.json'])
 
     const sanitizedContact = await readFile(join(workspace, 'contact-event.json'), 'utf8')
     assert.match(sanitizedContact, /workspace-private@example\.com/)
     assert.doesNotMatch(sanitizedContact, /private_note|private-source|private\.example\.invalid/)
     assert.match(await readFile(join(workspace, 'README.md'), 'utf8'), /Nothing here sends a message, accepts payment, deploys, activates production, or writes hosted data/)
+    const ownerFormPath = join(workspace, 'owner-input-form.html')
+    const ownerForm = await readFile(ownerFormPath, 'utf8')
+    assert.equal(ownerForm, renderShopPilotOwnerInputForm())
+    assert.deepEqual(JSON.parse(await readFile(join(workspace, 'owner-input.json'), 'utf8')).spaBaseline, {
+      clientImportRowCount: null,
+      weeklyPackageSales: null,
+      weeklyTreatmentRedemptions: null,
+      medianMinutesPerRedemption: null,
+      weeklyPackageCorrectionCount: null,
+    })
+    const blankOwner = JSON.parse(await readFile(join(workspace, 'owner-input.json'), 'utf8'))
+    assert.equal(blankOwner.product, 'shop')
+    assert.equal(blankOwner.pilotMode, 'owner_named')
+    assert.equal(blankOwner.verticalPack, 'spa-services')
+    assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-input-required')
+    assert.equal((await inspectShopClientLaunchStatus(workspace)).client.stage, 'owner-input-required')
+    await writeFile(ownerFormPath, `${ownerForm}\nchanged\n`)
+    await assert.rejects(() => verifyShopPilotSalesWorkspace(workspace), /shop_pilot_workspace_manifest_invalid/)
+    await writeFile(ownerFormPath, ownerForm)
     assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-input-required')
 
     await assert.rejects(() => prepareShopPilotSalesWorkspace(workspace), /shop_contact_operator_confirmation_required/)
@@ -469,6 +682,35 @@ test('runs the complete private workspace lifecycle without external action', as
     assert.equal(prepared.stage, 'owner-decision-required')
     assert.equal(prepared.filesCreated, 4)
     assert.equal(prepared.customerContactPerformed, false)
+    const clientWorkspace = join(parent, 'private-client-portal')
+    const clientPortal = await createShopPilotClientWorkspace(workspace, clientWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z')
+    assert.equal(clientPortal.stage, 'protected-shop-workspace-created')
+    assert.equal(clientPortal.productCount, 1)
+    assert.equal(clientPortal.activationStatus, 'not_applied')
+    assert.match(await readFile(join(clientWorkspace, '_templates', 'commerce.csv'), 'utf8'), /SPA-SVC-MASSAGE/)
+    assert.doesNotMatch(await readFile(join(clientWorkspace, 'CONTACT-INTAKE.json'), 'utf8'), /Workspace Operator|workspace-private@example\.com/)
+    const clientLaunchWorkspace = join(parent, 'private-client-launch')
+    const clientLaunch = await prepareShopPilotClientLaunch(workspace, clientLaunchWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z')
+    assert.equal(clientLaunch.stage, 'private-client-launch-dashboard-ready')
+    assert.equal(clientLaunch.productCount, 1)
+    assert.equal(clientLaunch.privateArtifactsCreated, 3)
+    assert.equal(clientLaunch.externalWritesPerformed, false)
+    assert.equal(clientLaunch.tenantWritesPerformed, false)
+    assert.equal(clientLaunch.productionActivationPerformed, false)
+    assert.match(clientLaunch.preparationDigest, /^sha256:[0-9a-f]{64}$/)
+    assert.match(clientLaunch.launchBoardDigest, /^sha256:[0-9a-f]{64}$/)
+    const launchArtifacts = await Promise.all([
+      readFile(join(clientLaunchWorkspace, 'client-preparation.private.json'), 'utf8'),
+      readFile(join(clientLaunchWorkspace, 'client-launch-board.private.json'), 'utf8'),
+      readFile(join(clientLaunchWorkspace, 'START-HERE.html'), 'utf8'),
+    ])
+    assert.doesNotMatch(launchArtifacts.join('\n'), /Workspace Operator|workspace-private@example\.com/)
+    assert.match(launchArtifacts[2], /One clear path to launch/)
+    assert.doesNotMatch(launchArtifacts[2], /<script|fetch\(|XMLHttpRequest|sendBeacon/i)
+    await assert.rejects(
+      () => prepareShopPilotClientLaunch(workspace, clientLaunchWorkspace, 'Responsible delivery operator', '2026-08-02T08:00:00.000Z'),
+      /client_workspace_init_exists/,
+    )
     assert.equal((await verifyShopPilotSalesWorkspace(workspace)).stage, 'owner-decision-required')
     await assert.rejects(() => prepareShopPilotSalesWorkspace(workspace), /shop_pilot_workspace_prepared_outputs_exist/)
 
@@ -525,13 +767,47 @@ test('CLI initializes and verifies a metadata-only private workspace', async () 
   const parent = await mkdtemp(join(tmpdir(), 'supermega-shop-sales-cli-'))
   const eventPath = join(parent, 'event.json')
   const workspace = join(parent, 'private-workspace')
+  const starter = join(parent, 'starter')
+  const bundlePath = join(parent, 'intake.json')
+  const bundledWorkspace = join(parent, 'bundled-workspace')
+  const clientLaunchWorkspace = join(parent, 'client-launch-workspace')
   const tool = resolve('tools/manage_shop_pilot_workspace.mjs')
   try {
     await writeFile(eventPath, JSON.stringify(contactEvent))
+    await writeFile(bundlePath, JSON.stringify({ contract: 'supermega.shop.pilot_intake_bundle.v1', contactEvent, ownerInput: readyOwnerInput }))
+
+    const started = spawnSync(process.execPath, [tool, '--start', '--workspace', starter], { encoding: 'utf8' })
+    assert.equal(started.status, 0, started.stderr)
+    assert.equal(JSON.parse(started.stdout).stage, 'private-owner-intake-required')
+    const starterVerified = spawnSync(process.execPath, [tool, '--verify-starter', '--workspace', starter], { encoding: 'utf8' })
+    assert.equal(starterVerified.status, 0, starterVerified.stderr)
+    assert.equal(JSON.parse(starterVerified.stdout).verified, true)
+
+    const bundleInitialized = spawnSync(process.execPath, [tool, '--init', '--intake-bundle', bundlePath, '--workspace', bundledWorkspace], { encoding: 'utf8' })
+    assert.equal(bundleInitialized.status, 0, bundleInitialized.stderr)
+    assert.equal(JSON.parse(bundleInitialized.stdout).stage, 'owner-input-required')
+    assert.doesNotMatch(bundleInitialized.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)
+    const bundledPrepared = spawnSync(process.execPath, [tool, '--prepare', '--workspace', bundledWorkspace], { encoding: 'utf8' })
+    assert.equal(bundledPrepared.status, 0, bundledPrepared.stderr)
+    const clientLaunch = spawnSync(process.execPath, [
+      tool,
+      '--prepare-client-launch',
+      '--workspace', bundledWorkspace,
+      '--client-workspace', clientLaunchWorkspace,
+      '--implementation-owner', 'Responsible delivery operator',
+    ], { encoding: 'utf8' })
+    assert.equal(clientLaunch.status, 0, clientLaunch.stderr)
+    const launchReceipt = JSON.parse(clientLaunch.stdout)
+    assert.equal(launchReceipt.stage, 'private-client-launch-dashboard-ready')
+    assert.equal(launchReceipt.privateArtifactsCreated, 3)
+    assert.equal(launchReceipt.externalWritesPerformed, false)
+    assert.equal(launchReceipt.productionActivationPerformed, false)
+    assert.doesNotMatch(clientLaunch.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)
+
     const initialized = spawnSync(process.execPath, [tool, '--init', '--contact-event', eventPath, '--workspace', workspace], { encoding: 'utf8' })
     assert.equal(initialized.status, 0, initialized.stderr)
     const receipt = JSON.parse(initialized.stdout)
-    assert.equal(receipt.contract, 'supermega.shop.pilot_sales_workspace.v1')
+    assert.equal(receipt.contract, 'supermega.shop.pilot_sales_workspace.v2')
     assert.equal(receipt.stage, 'owner-input-required')
     assert.equal(receipt.customerContactPerformed, false)
     assert.doesNotMatch(initialized.stdout, /Workspace Test Shop|Workspace Operator|workspace-private@example\.com/)

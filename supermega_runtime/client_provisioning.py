@@ -28,6 +28,10 @@ _KNOWN_CAPABILITIES = frozenset(
         "setup.write",
         "commerce.read",
         "commerce.write",
+        "production.read",
+        "production.write",
+        "website.read",
+        "website.write",
         "company.read",
         "company.write",
         "company.baseline.approve",
@@ -41,8 +45,24 @@ _KNOWN_EVENTS = frozenset(
     {
         "commerce.order.advanced",
         "commerce.order.cancelled",
+        "production.job.advanced",
+        "production.job.cancelled",
+        "website.release.advanced",
+        "website.release.withdrawn",
+        "ecommerce.request.advanced",
+        "ecommerce.request.cancelled",
     }
 )
+_PRODUCT_RUNTIME_PAIRS = {
+    "shop": "commerce",
+    "plant": "production",
+    "website": "website",
+    "ecommerce": "ecommerce",
+}
+_SURFACE_CAPABILITIES = {
+    runtime: frozenset({f"{runtime}.read", f"{runtime}.write"})
+    for runtime in ("commerce", "production", "website", "ecommerce")
+}
 _OBJECT_SOURCES = frozenset({"client-import", "runtime", "immutable-events"})
 _ACCEPTANCE_KINDS = frozenset(
     {"contract", "migration", "rollback", "security", "usability"}
@@ -186,8 +206,8 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
     template_id = _identifier(source["templateId"], "recipe.templateId")
     if recipe_id != f"{product_id}.{template_id}":
         raise _fail("recipe identity must bind its product and template.")
-    if (product_id, runtime_product_id) != ("shop", "commerce"):
-        raise _fail("The v1 executable recipe is limited to the Shop runtime.")
+    if _PRODUCT_RUNTIME_PAIRS.get(product_id) != runtime_product_id:
+        raise _fail("recipe product and runtime identity are incompatible.")
     if template_id not in CLIENT_IMPORT_PROFILE_IDS[runtime_product_id]:
         raise _fail("The recipe template is not supported by the trusted importer.")
     import_spec = CLIENT_IMPORT_OBJECTS[runtime_product_id]
@@ -232,14 +252,15 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
         if role_id == "owner":
             owner_capabilities = frozenset(capabilities)
     _unique(role_ids, "recipe.roles")
-    if owner_capabilities is None or not {
+    required_owner_capabilities = {
         "setup.write",
-        "commerce.write",
+        import_spec.required_capability,
         "company.write",
         "company.baseline.approve",
         "company.control.approve",
         "approvals.decide",
-    }.issubset(owner_capabilities):
+    }
+    if owner_capabilities is None or not required_owner_capabilities.issubset(owner_capabilities):
         raise _fail("The owner role lacks required accountable capabilities.")
 
     object_ids: list[str] = []
@@ -254,12 +275,13 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
             ("id", "surface", "keyField", "source", "requiredCapability"),
         )
         object_id = _identifier(item["id"], f"{field}.id")
-        if item["surface"] != "commerce":
-            raise _fail(f"{field}.surface must remain commerce.")
+        surface = _identifier(item["surface"], f"{field}.surface")
+        if surface not in _SURFACE_CAPABILITIES:
+            raise _fail(f"{field}.surface is unsupported.")
         _field_identifier(item["keyField"], f"{field}.keyField")
         if item["source"] not in _OBJECT_SOURCES:
             raise _fail(f"{field}.source is unsupported.")
-        if item["requiredCapability"] not in {"commerce.read", "commerce.write"}:
+        if item["requiredCapability"] not in _SURFACE_CAPABILITIES[surface]:
             raise _fail(f"{field}.requiredCapability is unsupported.")
         object_ids.append(object_id)
         objects_by_id[object_id] = item
@@ -309,6 +331,9 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
                 raise _fail(f"{transition_field} is not a valid state transition.")
             if transition["event"] not in _KNOWN_EVENTS:
                 raise _fail(f"{transition_field}.event is unsupported.")
+            event_surface = "commerce" if runtime_product_id == "ecommerce" else runtime_product_id
+            if not str(transition["event"]).startswith(f"{event_surface}."):
+                raise _fail(f"{transition_field}.event crossed the product runtime boundary.")
             if transition["approval"] != "named-human":
                 raise _fail(f"{transition_field}.approval must remain named-human.")
             transition_ids.append(transition_id)
@@ -506,6 +531,33 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
         )
     except (TypeError, ValueError) as exc:
         raise _fail("Recipe is not detached canonical JSON.") from exc
+
+
+def derive_client_provisioning_recipe(
+    base_recipe: object,
+    *,
+    template_id: object,
+) -> dict[str, Any]:
+    """Bind a product's reviewed resource recipe to another trusted import template."""
+
+    validated = validate_client_provisioning_recipe(base_recipe)
+    target_template = _identifier(template_id, "template_id")
+    runtime_product = str(validated["runtimeProductId"])
+    if target_template not in CLIENT_IMPORT_PROFILE_IDS[runtime_product]:
+        raise _fail("The requested template is not supported by the trusted importer.")
+    if target_template == validated["templateId"]:
+        return validated
+
+    derived = deepcopy(validated)
+    derived["recipeId"] = f"{derived['productId']}.{target_template}"
+    derived["templateId"] = target_template
+    for mapping in derived["importMappings"]:
+        mapping["workflowTemplateId"] = target_template
+    for migration in derived["migrations"]:
+        for step in migration["steps"]:
+            if step["operation"] == "plan-create-resources":
+                step["id"] = f"introduce-{target_template}-recipe"
+    return validate_client_provisioning_recipe(derived)
 
 
 def build_client_provisioning_plan(

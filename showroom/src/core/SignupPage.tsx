@@ -2,8 +2,9 @@ import { type FormEvent, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
+import { bi } from './i18n-actions'
 import { shopBusinessTemplates } from '../products/shop/business-templates'
-import { shopIndustryPacks } from './shop-service-scheduling'
+import { shopIndustryPacks, type ShopIndustryPackId } from './shop-service-scheduling'
 import { managedTrialAuthConfigured } from './managed-trial'
 import { TRIAL_TERMS } from './trial-terms'
 import {
@@ -16,19 +17,22 @@ import {
   createTrialSignupRecord,
   readTrialSignup,
   signupBusinessChoices,
+  TRIAL_SIGNUP_PRODUCT_CHOICES,
   trialSignupClaimFile,
   trialSignupContactUrl,
   trialSignupDoors,
+  trialSignupProductChoice,
   writeTrialSignup,
+  type TrialSignupProduct,
   type TrialSignupRecord,
 } from './signup-trial'
 import { useSetupWorkspace } from './workspace-runtime'
 
 /**
  * The front door. Everything decidable lives in signup-trial.ts, which a guard can reach; this
- * file is the shell that wires it to the browser. Shop is the only product a trial starts in
- * because it is the one with a trade picker and a working till -- the other three are reachable
- * from the product picker once the owner is inside.
+ * file is the shell that wires it to the browser. The owner chooses one explicit starting product;
+ * Shop keeps its fast starter-catalog path, while Plant, Website, and Ecommerce continue into
+ * their own focused one-step setup with the business identity already carried forward.
  */
 export function SignupPage() {
   const runtime = useOutletContext<RuntimeHealth>()
@@ -37,7 +41,9 @@ export function SignupPage() {
   const [, setSetup] = useSetupWorkspace()
 
   const requestedTrade = new URLSearchParams(location.search).get('template')
+  const requestedProduct = new URLSearchParams(location.search).get('product')
   const [existing, setExisting] = useState<TrialSignupRecord | null>(() => readTrialSignup(window.localStorage))
+  const [selectedProduct, setSelectedProduct] = useState<TrialSignupProduct>(() => trialSignupProductChoice(requestedProduct).id)
   const [businessName, setBusinessName] = useState('')
   const [ownerName, setOwnerName] = useState('')
 
@@ -60,6 +66,7 @@ export function SignupPage() {
   const [notice, setNotice] = useState('')
   const [noticeTone, setNoticeTone] = useState<'quiet' | 'error'>('quiet')
   const [carriedOver, setCarriedOver] = useState(false)
+  const selectedProductChoice = trialSignupProductChoice(selectedProduct)
 
   const managedReady = runtime.status === 'enterprise' && managedTrialAuthConfigured()
   const doors = useMemo(() => trialSignupDoors({ managedReady }), [managedReady])
@@ -72,35 +79,36 @@ export function SignupPage() {
     setNoticeTone('quiet')
     setNotice('Preparing your workspace...')
     try {
-      const trade = choiceId.startsWith('trade:')
+      const trade = selectedProduct === 'commerce' && choiceId.startsWith('trade:')
         ? shopBusinessTemplates.find((template) => template.id === choiceId.slice(6)) ?? null
         : null
-      const chosenPack = choiceId.startsWith('pack:')
+      const chosenPack = selectedProduct === 'commerce' && choiceId.startsWith('pack:')
         ? shopIndustryPacks.find((pack) => pack.id === choiceId.slice(5)) ?? null
         : null
-
-      // Read the pack ACTUALLY IN FORCE off the return value. provisionLocalShopIndustryPack keeps
-      // an existing schedule when an appointment already exists, so the pack it returns is not
-      // always the pack that was asked for -- and every downstream field has to follow the real one.
-      const schedule = provisionLocalShopIndustryPack(trade?.industryPackId ?? chosenPack?.id ?? 'retail')
-      const industryPackId = schedule.industryPackId
-      const pack = shopIndustryPacks.find((candidate) => candidate.id === industryPackId) ?? null
-
-      // Both provisioners RETURN what they did. 'preserved' means the catalog was NOT installed
-      // because this device already carries real Shop data -- an order, a close, something worth
-      // keeping. Discarding this value is how a signup lands someone in a Shop full of a previous
-      // business's stock while claiming it set up theirs.
-      const disposition = trade
-        ? await provisionLocalShopBusinessTemplateSample(trade.id)
-        : await provisionLocalShopWorkingSample(industryPackId, pack?.workflowTemplateId ?? 'retail-wholesale')
+      let industryPackId: ShopIndustryPackId | null = null
+      let shopTemplateId: string | null = null
+      let shopWorkflowTemplateId = ''
+      let disposition: 'installed' | 'current' | 'preserved' | null = null
+      if (selectedProduct === 'commerce') {
+        // Read the pack ACTUALLY IN FORCE off the return value. Existing appointments preserve
+        // their pack, and the catalog sample must follow that authoritative result.
+        const schedule = provisionLocalShopIndustryPack(trade?.industryPackId ?? chosenPack?.id ?? 'retail')
+        industryPackId = schedule.industryPackId
+        const pack = shopIndustryPacks.find((candidate) => candidate.id === industryPackId) ?? null
+        shopTemplateId = trade?.id ?? null
+        shopWorkflowTemplateId = trade?.workflowTemplateId ?? pack?.workflowTemplateId ?? 'retail-wholesale'
+        disposition = trade
+          ? await provisionLocalShopBusinessTemplateSample(trade.id)
+          : await provisionLocalShopWorkingSample(industryPackId, shopWorkflowTemplateId)
+      }
 
       const record = createTrialSignupRecord({
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
         businessName,
         ownerName,
-        product: 'commerce',
-        shopBusinessTemplateId: trade?.id ?? null,
+        product: selectedProduct,
+        shopBusinessTemplateId: shopTemplateId,
         shopIndustryPackId: industryPackId,
         email,
         emailConsent,
@@ -111,7 +119,7 @@ export function SignupPage() {
       // on this page with the real reason rather than landing in a product with no trial recorded.
       const saved = writeTrialSignup(window.localStorage, record)
 
-      const seeded = seedSetupForProduct('commerce', trade?.workflowTemplateId ?? pack?.workflowTemplateId ?? 'retail-wholesale')
+      const seeded = seedSetupForProduct(selectedProduct, shopWorkflowTemplateId)
       const next = {
         ...seeded,
         workspace: saved.businessName,
@@ -129,7 +137,7 @@ export function SignupPage() {
         setCarriedOver(true)
         return
       }
-      navigate('/shop/')
+      navigate(selectedProduct === 'commerce' ? selectedProductChoice.workspacePath : selectedProductChoice.setupPath)
     } catch (error) {
       setNoticeTone('error')
       setNotice(error instanceof Error ? error.message : 'The trial could not be started.')
@@ -159,14 +167,15 @@ export function SignupPage() {
       </div>
       <div className="managed-login-actions">
         {managedDoor?.action === 'sign-in'
-          ? <Link className="core-button primary" to="/login?product=shop">Sign in to your company</Link>
+          ? <Link className="core-button primary" to={`/login?product=${trialSignupProductChoice(record.product).slug}`}>Sign in to your company</Link>
           : <a className="core-button primary" href={trialSignupContactUrl(record)}>Request activation</a>}
-        <button className="core-button" onClick={() => downloadClaim(record)} type="button">Save my claim file</button>
+        <button className="core-button" onClick={() => downloadClaim(record)} type="button">{bi('Save my claim file')}</button>
       </div>
     </section>
   )
 
   if (existing) {
+    const existingProduct = trialSignupProductChoice(existing.product)
     return (
       <div className="workspace-screen managed-login-screen">
         <PageHeading eyebrow="Your trial" title="Your trial is running." copy="It lives on this device. Pick up where you left off." />
@@ -176,10 +185,10 @@ export function SignupPage() {
             <h2>{existing.businessName}</h2>
             {carriedOver
               ? <p>This device already had Shop data, so <strong>nothing was overwritten</strong>. Your existing catalog and records were kept exactly as they were. To load the starter catalog for your trade instead, reset this device first.</p>
-              : <p>Your Shop workspace is ready with a full starter catalog.</p>}
+              : <p>Your {existingProduct.label} trial is ready to continue.</p>}
           </div>
           <div className="managed-login-actions">
-            <Link className="core-button primary" to="/shop/">Open my Shop</Link>
+            <Link className="core-button primary" to={existingProduct.workspacePath}>Open my {existingProduct.label}</Link>
             <Link className="core-button" to="/settings/#controls">{carriedOver ? 'Reset this device' : 'Company controls'}</Link>
           </div>
         </section>
@@ -190,11 +199,11 @@ export function SignupPage() {
 
   return (
     <div className="workspace-screen managed-login-screen">
-      <PageHeading eyebrow="Free trial" title="Start selling today." copy="One form. Your workspace opens with a real starter catalog for your trade." />
+      <PageHeading eyebrow="Free trial" title={`Start with ${selectedProductChoice.label}.`} copy={selectedProductChoice.outcome} />
       <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void startTrial(event)}>
         <div>
           <span className="core-eyebrow">No card, no waiting</span>
-          <h2>Tell us about your business.</h2>
+          <h2>Choose one product and name your business.</h2>
           <p>Everything stays on this device until you ask us for a company account.</p>
         </div>
         {/* Design phase 2 item 11: startTrial's failures are storage/provisioning errors, not a
@@ -203,7 +212,10 @@ export function SignupPage() {
             screen reader user tabbing back after a failed submit hears that something changed,
             rather than a paragraph with no relationship to any control. */}
         <label>Business name<input aria-describedby={noticeTone === 'error' ? 'signup-notice' : undefined} autoComplete="organization" maxLength={120} onChange={(event) => setBusinessName(event.target.value)} required value={businessName} /></label>
-        <label>What kind of business?<select onChange={(event) => setChoiceId(event.target.value)} value={choiceId}>
+        <label>Start with<select onChange={(event) => setSelectedProduct(event.target.value as TrialSignupProduct)} value={selectedProduct}>
+          {TRIAL_SIGNUP_PRODUCT_CHOICES.map((choice) => <option key={choice.id} value={choice.id}>{choice.label} — {choice.outcome}</option>)}
+        </select></label>
+        {selectedProduct === 'commerce' ? <label>What kind of business?<select onChange={(event) => setChoiceId(event.target.value)} value={choiceId}>
           <option value="">Standard starter catalog</option>
           <optgroup label="Shops and trades">
             {tradeChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
@@ -211,7 +223,7 @@ export function SignupPage() {
           <optgroup label="Service businesses">
             {servicePackChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
           </optgroup>
-        </select></label>
+        </select></label> : null}
         <label>Your name (optional)<input autoComplete="name" maxLength={120} onChange={(event) => setOwnerName(event.target.value)} value={ownerName} /></label>
         <label>Email (optional)<input autoComplete="email" maxLength={160} onChange={(event) => setEmail(event.target.value)} type="email" value={email} /></label>
         <label className="signup-consent">
@@ -228,7 +240,7 @@ export function SignupPage() {
             {TRIAL_TERMS.map((term) => <li key={term.title}><strong>{term.title}.</strong> {term.body}</li>)}
           </ol>
         </details>
-        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : 'Start my free trial'}</button>
+        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : `Start my ${selectedProductChoice.label} trial`}</button>
         <p className="form-notice" data-tone={noticeTone} id="signup-notice" role="status">{notice}</p>
       </form>
       <section className="managed-login-panel" aria-label="Company account">
@@ -238,7 +250,7 @@ export function SignupPage() {
           <p>{managedDoor?.detail}</p>
         </div>
         <div className="managed-login-actions">
-          <Link className="core-button" to="/login?product=shop">Company sign in</Link>
+          <Link className="core-button" to={`/login?product=${selectedProductChoice.slug}`}>{bi('Company sign in')}</Link>
         </div>
       </section>
     </div>

@@ -6,12 +6,26 @@
 // on the Stock tab (1.07:1), unreadable SKUs in the catalog import table (2.2:1), and 23
 // vanished labels behind the Ecommerce enterprise controls (1.36:1).
 //
-// Contrast itself cannot be measured without a browser -- it depends on cascade,
-// inheritance and what is actually on screen, and this branch has several cases where
-// static reading gave the WRONG answer in both directions. So this guard does not attempt
-// it. It pins the one thing that is decidable from the stylesheet: a light surface with no
-// dark counterpart is a defect unless it is on a list below, and every entry on those lists
-// carries the reason it is there.
+// Contrast on an ARBITRARY surface cannot be measured without a browser -- it depends on
+// cascade, inheritance and what is actually on screen, and this branch has several cases
+// where static reading gave the WRONG answer in both directions. So the scan below does not
+// attempt it. It pins the one thing that is decidable from the stylesheet: a light surface
+// with no dark counterpart is a defect unless it is on a list below, and every entry on
+// those lists carries the reason it is there.
+//
+// Two later sections DO pin colour outcomes, and are careful about the difference:
+//   - the cascade pins (banner family, and `.theme-dark .core-button`) are pure source
+//     facts -- "this rule must not declare these properties" -- and need no rendering;
+//   - the AA-floor pins recompute a ratio from the CURRENT token values against surface
+//     compositions that were read out of a real browser and recorded here. They are not a
+//     substitute for measuring; they are a ratchet on figures already measured, so that a
+//     token nudged for one screen cannot silently drop another under 4.5:1.
+// Anything this file cannot derive is labelled as RECORDED rather than computed.
+//
+// A GREEN RUN OF THIS FILE IS NOT EVIDENCE THE COLOURS ARE RIGHT. It skips listed surfaces
+// as documented exceptions; text has shipped at 1.01:1 with it fully green; and four light
+// surfaces sat between 4.32:1 and 4.47:1 for as long as the tints have existed while every
+// gate in this repo passed. Measure in a browser, then pin what you measured.
 //
 // If this fails, the fix is usually one of:
 //   - add a `.theme-dark <selector> { background: ... }` rule, or
@@ -354,4 +368,306 @@ for (const [selector, reason] of UNCOVERED_LIGHT_SURFACES) {
   )
 }
 
-console.log(`theme surface contract: ${checks} checks passed (${surfacesScanned} light surfaces scanned, ${THEME_BLIND.size} documented exceptions, ${UNCOVERED_LIGHT_SURFACES.size} parked defects)`)
+// --- the banner-tint cascade trap, pinned -----------------------------------------------
+//
+// A defect this file's scan above CANNOT see, because it is not a light surface with a
+// missing dark counterpart -- it is a dark counterpart that exists and wins when it should
+// not.
+//
+// The Shop's storage and write banners paint their warning tint from plain 0-2-0 rules
+// (`.production-mode-banner[data-write="blocked"]`, `.storage-durability-banner[...]`).
+// `.theme-dark .production-mode-banner` is ALSO 0-2-0 and sat ~890 lines later in
+// core-app.css, so while it declared `background` and `border-color` it won on source order
+// alone and all three tints rendered as a plain untinted panel in dark mode -- measured in
+// the browser at #0d131b, byte-identical to an untinted banner, instead of amber or red.
+//
+// It never needed those two declarations: the banner's BASE rule already sets the same two
+// tokens (`var(--core-line)`, `var(--core-panel)`) and both retint themselves inside
+// .theme-dark, so the only declaration doing real work was the box-shadow. The fix removed
+// the redundant pair rather than escalating the tints to 0-3-0, because escalating repairs
+// the rules that exist today and leaves the trap armed for the next one anybody adds.
+//
+// So: a .theme-dark rule targeting the banner family may set anything EXCEPT the two
+// properties the tints use. Restoring either re-arms the trap silently -- nothing else in
+// this repo would notice, since the stylesheet still parses, the ratchets are unmoved and
+// the tint is translucent rather than a light surface the scan above reaches.
+const BANNER_FAMILY = ['.production-mode-banner', '.storage-durability-banner']
+const TINT_PROPERTIES = /(?:^|[;{\s])(?:background(?:-color)?|border-color)\s*:/
+
+const coreSource = readFileSync('showroom/src/core/core-app.css', 'utf8')
+  .replaceAll('\r\n', '\n')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+
+const bannerThemeRules = []
+for (const match of coreSource.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+  const prelude = match[1].trim()
+  if (!prelude || prelude.startsWith('@')) continue
+  for (const part of prelude.split(',')) {
+    const selector = part.trim().replace(/\s+/g, ' ')
+    if (!selector.startsWith('.theme-dark ')) continue
+    if (!BANNER_FAMILY.some((cls) => selector.includes(cls))) continue
+    bannerThemeRules.push({ selector, body: match[2] })
+  }
+}
+
+check(
+  bannerThemeRules.length > 0,
+  'the banner family still has a .theme-dark rule for this pin to hold to the contract',
+)
+for (const rule of bannerThemeRules) {
+  check(
+    !TINT_PROPERTIES.test(rule.body),
+    `"${rule.selector}" declares background or border-color. It is 0-2-0 and sits AFTER the banner tints, which are also 0-2-0, so it silently defeats them in dark mode -- the exact defect this pin exists for. Declare only what differs from the base rule; the base rule already sets both of these tokens and they retint themselves under .theme-dark.`,
+  )
+}
+
+// ...and the tints being protected must still exist, so the pin above cannot pass vacuously
+// once someone renames or deletes the rules it is guarding.
+const BANNER_TINTS = [
+  '.production-mode-banner[data-write="blocked"]',
+  '.storage-durability-banner[data-durability="evictable"]',
+  '.storage-durability-banner[data-durability="full"]',
+  '.storage-durability-banner[data-headroom="tight"]',
+  '.storage-durability-banner[data-headroom="urgent"]',
+]
+for (const selector of BANNER_TINTS) {
+  check(
+    declaredSelectors.has(selector),
+    `banner tint "${selector}" is still declared -- the .theme-dark pin above protects nothing without it`,
+  )
+}
+
+// --- the SAME trap on the destructive button, pinned the same way ------------------------
+//
+// The banner pin above is written for one family. The trap is not: it fires wherever a
+// `.theme-dark <class>` rule RESTATES a token the base rule already sets, because a restated
+// token paints nothing new on its own target but still out-cascades every equal-specificity
+// variant written earlier in the file.
+//
+// `.core-button` (:180) declares `border: 1px solid var(--core-line-strong)` and
+// `color: var(--core-ink)`. `.theme-dark .core-button` restated BOTH -- no-ops for itself,
+// but it is 0-2-0 and sits ~1550 lines after `.core-button.danger` (:188, also 0-2-0), so
+// the destructive button lost its red text AND its red border in dark mode. Measured in the
+// real dark shell before the fix: color rgb(245,248,251), border-color rgba(166,190,214,.24)
+// -- byte-identical to the plain `.core-button` beside it. A button about to do something
+// irreversible looked exactly like one that was not.
+//
+// `background` is NOT in the forbidden set here, unlike the banner pin: the button's base
+// rule paints a hardcoded `#fff`, so the dark rule genuinely has to override it. That
+// asymmetry is the whole point of the convention -- declare what DIFFERS, nothing else.
+const BUTTON_BASE_RESTATEMENTS = /(?:^|[;{\s])(?:color|border-color)\s*:/
+
+const buttonThemeRules = []
+for (const match of coreSource.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+  const prelude = match[1].trim()
+  if (!prelude || prelude.startsWith('@')) continue
+  for (const part of prelude.split(',')) {
+    const selector = part.trim().replace(/\s+/g, ' ')
+    // Only the bare `.theme-dark .core-button`. The `.primary` and `:hover` variants are
+    // 0-3-0, out-specify `.core-button.danger` on their own merits, and legitimately need
+    // to restate colour -- pinning them would be wrong, not merely strict.
+    if (selector !== '.theme-dark .core-button') continue
+    buttonThemeRules.push({ selector, body: match[2] })
+  }
+}
+
+check(
+  buttonThemeRules.length === 1,
+  `exactly one bare ".theme-dark .core-button" rule for this pin to hold to the contract, got ${buttonThemeRules.length}`,
+)
+for (const rule of buttonThemeRules) {
+  check(
+    !BUTTON_BASE_RESTATEMENTS.test(rule.body),
+    `"${rule.selector}" declares color or border-color. The base rule .core-button already sets both (var(--core-ink), var(--core-line-strong)) and both retint themselves under .theme-dark, so this restates a token rather than overriding one -- and because this rule is 0-2-0 and sits AFTER .core-button.danger (also 0-2-0), it silently strips the destructive button of its red text and red border in dark mode. That is a safety affordance, not a cosmetic one. Declare only what differs from the base rule; here that is "background" alone.`,
+  )
+}
+
+// ...and the variant being protected must still exist and still carry its own colour, so the
+// pin cannot pass vacuously if someone deletes or restyles it.
+check(
+  declaredSelectors.has('.core-button.danger'),
+  '".core-button.danger" is still declared -- the .theme-dark .core-button pin above protects nothing without it',
+)
+const dangerRule = coreSource.match(/(?:^|\})\s*\.core-button\.danger\s*\{([^{}]*)\}/)
+check(
+  Boolean(dangerRule) && /color\s*:\s*var\(--core-danger\)/.test(dangerRule[1]),
+  '".core-button.danger" still paints its text from var(--core-danger); if it stops, the pin above is guarding a rule that no longer says anything',
+)
+
+// --- the light-mode AA floor on the surfaces this repo has actually measured --------------
+//
+// The header above says contrast cannot be decided from the stylesheet, and for an ARBITRARY
+// surface that is still true -- you cannot know what is behind an element without rendering
+// it. What this section pins is narrower and is decidable: for a handful of surfaces whose
+// composition was read out of a real browser and recorded here, recompute the ratio from the
+// CURRENT token values and fail if it drops under the 4.5:1 AA floor.
+//
+// This exists because a green run of this file is NOT evidence the colours are right. It
+// skips listed surfaces as documented exceptions, and text has shipped at 1.01:1 with this
+// suite fully green. These four figures were under the floor for as long as the light tints
+// have existed -- 4.32 to 4.47 -- while every gate in the repo was passing.
+//
+// Each entry names the SELECTOR the text was measured on, not the token and not the surface
+// it is assumed to belong to. A note in core-app.css once recorded "--core-quiet 4.80:1" for
+// a token used on 156 selectors; nobody could check it, and it was wrong. The element was
+// `.storage-headroom-detail`.
+const AA_FLOOR = 4.5
+
+// Resolves a :root token to a literal, following alias chains. Several tokens are declared
+// as aliases (`--core-warning: var(--core-warn)`), and because a var() inside a custom
+// property is substituted against the element the property is DECLARED on, a :root alias
+// freezes to the :root value -- which is exactly what the browser does in light mode, so
+// following the chain here reproduces it. .theme-dark redeclares both the alias and its
+// target, which is why this section only ever speaks about light mode.
+function tokenValue(name, seen = new Set()) {
+  assert.ok(!seen.has(name), `token ${name} does not alias in a cycle`)
+  seen.add(name)
+  const root = coreSource.match(/:root\s*\{([\s\S]*?)\n\}/)
+  assert.ok(root, ':root block is parseable')
+  const found = root[1].match(new RegExp(`(?:^|[;{\\s])${name}\\s*:\\s*([^;]+);`))
+  assert.ok(found, `${name} is declared on :root`)
+  const value = found[1].trim()
+  const alias = value.match(/^var\(\s*(--[a-z-]+)\s*\)$/)
+  return alias ? tokenValue(alias[1], seen) : value
+}
+
+function ruleBody(selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const found = coreSource.match(new RegExp(`(?:^|\\})\\s*${escaped}\\s*\\{([^{}]*)\\}`))
+  assert.ok(found, `rule "${selector}" is declared`)
+  return found[1]
+}
+
+// The file-level parseColour() above returns {luminance, alpha} -- enough for the
+// light-surface scan, but compositing needs the actual channels, so this returns rgba.
+function aaColour(text) {
+  const hex = text.trim().match(/^#([0-9a-f]{6})$/i)
+  if (hex) {
+    const n = parseInt(hex[1], 16)
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 1 }
+  }
+  const rgba = text.trim().match(/^rgba?\(([^)]+)\)$/i)
+  assert.ok(rgba, `colour "${text}" is hex or rgb()/rgba()`)
+  const parts = rgba[1].split(',').map((p) => Number(p.trim()))
+  return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 }
+}
+
+// src-over composite of a translucent layer onto an opaque one -- what the browser paints.
+function composite(top, bottom) {
+  return {
+    r: top.r * top.a + bottom.r * (1 - top.a),
+    g: top.g * top.a + bottom.g * (1 - top.a),
+    b: top.b * top.a + bottom.b * (1 - top.a),
+    a: 1,
+  }
+}
+
+// srgb mix, matching color-mix(in srgb, <top> <pct>%, <bottom>).
+function mix(top, bottom, pct) {
+  const f = pct / 100
+  return { r: top.r * f + bottom.r * (1 - f), g: top.g * f + bottom.g * (1 - f), b: top.b * f + bottom.b * (1 - f), a: 1 }
+}
+
+// Reuses the file's own relativeLuminance()/toLinear() so the AA pins and the light-surface
+// scan can never disagree about what a colour's luminance is.
+function contrast(a, b) {
+  const [hi, lo] = [relativeLuminance(a.r, a.g, a.b), relativeLuminance(b.r, b.g, b.b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+// Pull the text colour from the rule that actually paints it, so that re-pointing a selector
+// at a different token moves the pin with it instead of leaving it measuring a ghost.
+function textColourOf(selector) {
+  const body = ruleBody(selector)
+  const declared = body.match(/(?:^|[;{\s])color\s*:\s*([^;]+)/)
+  assert.ok(declared, `"${selector}" declares a color`)
+  const viaToken = declared[1].trim().match(/^var\(\s*(--[a-z-]+)\s*\)$/)
+  return aaColour(viaToken ? tokenValue(viaToken[1]) : declared[1])
+}
+
+// Pull a banner tint out of its own rule and composite it over the shell background, exactly
+// as the browser does -- the tints are translucent, so the surface is not the declared value.
+function bannerSurface(tintSelector) {
+  const body = ruleBody(tintSelector)
+  const bg = body.match(/(?:^|[;{\s])background\s*:\s*([^;]+)/)
+  assert.ok(bg, `"${tintSelector}" declares a background`)
+  return composite(aaColour(bg[1]), aaColour(tokenValue('--core-bg')))
+}
+
+const AA_PINS = [
+  {
+    text: '.storage-headroom-detail',
+    on: '.storage-durability-banner[data-headroom="tight"]',
+    surface: () => bannerSurface('.storage-durability-banner[data-headroom="tight"]'),
+    was: 4.47,
+  },
+  {
+    text: '.storage-headroom-detail',
+    on: '.storage-durability-banner[data-headroom="urgent"]',
+    surface: () => bannerSurface('.storage-durability-banner[data-headroom="urgent"]'),
+    was: 4.38,
+  },
+  {
+    // The durability and write banners render .status-pill.pending; only the URGENT headroom
+    // banner swaps in .status-pill.danger (CoreApp.tsx:2943). The pending pill on the red
+    // tint is therefore a real combination, not a hypothetical one.
+    text: '.status-pill.pending',
+    on: '.storage-durability-banner[data-durability="evictable"]',
+    surface: () => bannerSurface('.storage-durability-banner[data-durability="evictable"]'),
+    was: 4.42,
+  },
+  {
+    text: '.status-pill.pending',
+    on: '.storage-durability-banner[data-durability="full"]',
+    surface: () => bannerSurface('.storage-durability-banner[data-durability="full"]'),
+    was: 4.32,
+  },
+  {
+    // NOT repaired by this lane -- it was already over the floor at 4.71 and --core-green did
+    // not move. Pinned anyway because it is the tightest figure on the red tint that no token
+    // change is watching, so deepening the tint would drop it silently while every pin above
+    // still passed. Stricter than the defect required, deliberately.
+    text: '.production-mode-banner > a',
+    on: '.storage-durability-banner[data-headroom="urgent"]',
+    surface: () => bannerSurface('.storage-durability-banner[data-headroom="urgent"]'),
+    was: 4.71,
+  },
+  {
+    // Warn text on a 14% warn tint of its own -- text and surface move together, so this one
+    // is only safe to change while watching both. It was 4.34:1 and nobody had filed it.
+    text: '.shop-today-module-grid > a[data-tone="attention"] b',
+    on: 'its own color-mix(--core-warning 14%, --core-panel) background',
+    surface: () => mix(
+      aaColour(tokenValue('--core-warn')), // --core-warning is declared as var(--core-warn)
+      aaColour(tokenValue('--core-panel')),
+      14,
+    ),
+    was: 4.34,
+  },
+]
+
+for (const pin of AA_PINS) {
+  const ratio = contrast(textColourOf(pin.text), pin.surface())
+  check(
+    ratio >= AA_FLOOR,
+    `"${pin.text}" on ${pin.on} computes ${ratio.toFixed(2)}:1 against the ${AA_FLOOR}:1 AA floor. It measured ${pin.was}:1 before the token darkening and was a real, shipped accessibility failure -- light mode is what a shop owner reads in daylight on a cheap tablet. Raise the text token or lighten the tint; do not lower this floor.`,
+  )
+}
+
+// A surface read from the browser that this file CANNOT derive: it is a nested composite of
+// panel backgrounds on the Shop inventory tab. Recorded here as a literal, and labelled as
+// recorded rather than derived so nobody mistakes it for something the parser computed.
+// Measured 2026-08-21 on /shop/?tab=inventory at
+// `section.supplier-performance > div.supplier-performance-heading > small`, 9px.
+// It is the reason the token was darkened instead of the banner tints being lightened: this
+// one is not a banner at all, and a banner-local fix would have left it at 4.43:1.
+const RECORDED_SURFACE_SUPPLIER_HEADING = '#e2edea'
+{
+  const ratio = contrast(aaColour(tokenValue('--core-quiet')), aaColour(RECORDED_SURFACE_SUPPLIER_HEADING))
+  check(
+    ratio >= AA_FLOOR,
+    `--core-quiet on the recorded surface ${RECORDED_SURFACE_SUPPLIER_HEADING} (.supplier-performance-heading small) computes ${ratio.toFixed(2)}:1, under the ${AA_FLOOR}:1 AA floor. It measured 4.43:1 before the token darkening.`,
+  )
+}
+
+console.log(`theme surface contract: ${checks} checks passed (${surfacesScanned} light surfaces scanned, ${THEME_BLIND.size} documented exceptions, ${UNCOVERED_LIGHT_SURFACES.size} parked defects, ${bannerThemeRules.length} banner theme rules and ${buttonThemeRules.length} button theme rule held clear of the properties their base rules already set, ${AA_PINS.length + 1} light-mode AA floors recomputed from current token values)`)

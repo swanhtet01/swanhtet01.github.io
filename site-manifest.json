@@ -814,7 +814,7 @@
       "appRoute": "https://app.supermega.dev/ecommerce/",
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
-      "headline": "Create an online ordering page connected to Shop.",
+      "headline": "Create a Shop-connected ordering page.",
       "views": [
         "Storefront",
         "Cart and quote",
@@ -915,7 +915,7 @@
         "No publishing",
         "No external write"
       ],
-      "description": "Show your Shop catalog online and take order requests a person reviews — stock and price stay bound to the real Shop record.",
+      "description": "Build a Shop-backed catalog and reviewed order requests. Publishing stays separate; Shop remains the stock and price record.",
       "modules": [
         "Storefront from real stock — the catalog is sealed to Shop, so it cannot show what you do not have",
         "Checkout quote — price, delivery and tax decided from Shop policies, valid for 15 minutes",

@@ -4,6 +4,8 @@ import test from 'node:test'
 import {
   ManagedTrialError,
   createSelfServeWorkspace,
+  managedBootstrapHasCapability,
+  managedProductsFromBootstrap,
   normalizeSelfServeClaimCode,
   requestSelfServeWorkspace,
 } from '../showroom/src/core/managed-trial.ts'
@@ -34,7 +36,7 @@ function activationResponse(overrides = {}) {
   return {
     contract: 'supermega.self_serve_workspace_activation.v1',
     status: 'created',
-    workspace: { workspace_id: WORKSPACE_ID, label: BUSINESS_NAME, access: 'owner' },
+    workspace: { workspace_id: WORKSPACE_ID, label: BUSINESS_NAME, access: 'owner', product: 'commerce' },
     claim: { claimCode: CLAIM_CODE, workspaceId: WORKSPACE_ID },
     created_at: '2026-08-16T00:00:00+00:00',
     idempotent_replay: false,
@@ -70,12 +72,14 @@ test('posts the normalized claim and business name to the workspaces endpoint', 
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       claimCode: CLAIM_CODE,
       businessName: BUSINESS_NAME,
+      product: 'commerce',
     })
     assert.deepEqual(workspace, {
       workspaceId: WORKSPACE_ID,
       label: BUSINESS_NAME,
       access: 'owner',
       claimCode: CLAIM_CODE,
+      product: 'commerce',
       created: true,
     })
   } finally {
@@ -93,6 +97,20 @@ test('maps a replayed activation to created: false', async () => {
     const workspace = await requestSelfServeWorkspace(session, CLAIM_CODE, BUSINESS_NAME)
     assert.equal(workspace.created, false)
     assert.equal(workspace.workspaceId, WORKSPACE_ID)
+  } finally {
+    restore()
+  }
+})
+
+test('carries a non-Shop product into the durable activation request', async () => {
+  const response = activationResponse({
+    workspace: { workspace_id: WORKSPACE_ID, label: BUSINESS_NAME, access: 'owner', product: 'website' },
+  })
+  const { calls, restore } = mockFetch(() => jsonResponse(response))
+  try {
+    const workspace = await requestSelfServeWorkspace(session, CLAIM_CODE, BUSINESS_NAME, 'website')
+    assert.equal(JSON.parse(calls[0].init.body).product, 'website')
+    assert.equal(workspace.product, 'website')
   } finally {
     restore()
   }
@@ -193,5 +211,68 @@ test('createSelfServeWorkspace fails closed when managed auth is not configured'
     assert.equal(calls.length, 0)
   } finally {
     restore()
+  }
+})
+
+test('managed product access requires explicit activation-derived entitlements for every product', () => {
+  const identity = { workspaceId: WORKSPACE_ID, userId: session.user.id, email: session.user.email }
+  const bootstrap = {
+    identity: { workspace_id: WORKSPACE_ID, actor_id: session.user.id, actor_kind: 'human' },
+    readiness: {},
+    states: {
+      company: { surface: 'company', version: 0, state: {}, updated_by: '', updated_at: '' },
+      commerce: { surface: 'commerce', version: 0, state: {}, updated_by: '', updated_at: '' },
+      website: { surface: 'website', version: 0, state: {}, updated_by: '', updated_at: '' },
+      setup: { surface: 'setup', version: 0, state: {}, updated_by: '', updated_at: '' },
+    },
+    approvals: [],
+  }
+  assert.deepEqual(managedProductsFromBootstrap(bootstrap, identity), [])
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['commerce'] } }, identity),
+    ['commerce'],
+  )
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['ecommerce'] } }, identity),
+    ['ecommerce'],
+  )
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['production'] } }, identity),
+    [],
+  )
+  assert.throws(
+    () => managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['ecommerce', 'commerce'] } }, identity),
+    (error) => error instanceof ManagedTrialError && error.code === 'managed_bootstrap_invalid',
+  )
+  assert.deepEqual(managedProductsFromBootstrap({ ...bootstrap, states: { company: bootstrap.states.company, setup: bootstrap.states.setup } }, identity), [])
+  assert.throws(
+    () => managedProductsFromBootstrap({ ...bootstrap, identity: { ...bootstrap.identity, workspace_id: 'another-company' } }, identity),
+    (error) => error instanceof ManagedTrialError && error.code === 'managed_identity_changed',
+  )
+})
+
+test('managed staff writes require an explicit valid surface capability', () => {
+  const identity = { workspaceId: WORKSPACE_ID, userId: session.user.id, email: session.user.email }
+  const bootstrap = {
+    identity: { workspace_id: WORKSPACE_ID, actor_id: session.user.id, actor_kind: 'human' },
+    readiness: { capabilities: ['commerce.read', 'company.read'] },
+    states: {},
+    approvals: [],
+  }
+  assert.equal(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'), false)
+  assert.equal(managedBootstrapHasCapability({
+    ...bootstrap,
+    readiness: { capabilities: ['commerce.read', 'commerce.write', 'company.read'] },
+  }, identity, 'commerce.write'), true)
+  assert.equal(managedBootstrapHasCapability({ ...bootstrap, readiness: {} }, identity, 'commerce.write'), false)
+  for (const capabilities of [
+    ['commerce.write', 'commerce.read'],
+    ['commerce.read', 'commerce.read'],
+    ['commerce.read', 'Admin.All'],
+  ]) {
+    assert.throws(
+      () => managedBootstrapHasCapability({ ...bootstrap, readiness: { capabilities } }, identity, 'commerce.write'),
+      (error) => error instanceof ManagedTrialError && error.code === 'managed_bootstrap_invalid',
+    )
   }
 })

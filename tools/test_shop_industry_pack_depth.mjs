@@ -102,6 +102,7 @@ for (const pack of shopIndustryPacks) {
   const booked = scheduleShopServiceBooking(schedule, {
     customerName: 'Daw Sandar',
     contact: '09-700-000-000',
+    appointmentUpdates: 'declined',
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: '2026-08-10T04:00:00.000Z',

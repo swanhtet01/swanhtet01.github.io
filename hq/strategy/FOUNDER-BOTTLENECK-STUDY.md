@@ -172,7 +172,7 @@ exactly the query A2 makes runnable outside the founder's shell.
 
 **Per-design-partner subtotal:** step 4, ~5 days, paid only for the small set
 of early named partners the pilot kit exists for. `docs/pilot-kit/README.md`
-frames the kit as preparation for `shop-managed-order-close-pilot`, not as
+frames the kit as preparation for `shop-spa-owner-pilot`, not as
 onboarding for every customer; an ordinary customer's path is the self-serve
 one in correction 2.
 

@@ -84,8 +84,9 @@ requireContract('release handoff is exact, review-only, and cannot deploy',
   && releaseHandoff.includes("fail('release_handoff_remote_state_changed')")
   && releaseHandoff.includes("fail('release_handoff_live_state_changed')")
   && releaseHandoff.includes("git('ls-remote', '--heads', 'origin', ref)")
-  && releaseHandoff.includes("args: ['/d', '/s', '/c', 'npm.cmd run app:verify']")
-  && releaseHandoff.includes("return { file: 'npm', args: ['run', 'app:verify'] }")
+  && releaseHandoff.includes('file: process.execPath')
+  && releaseHandoff.includes("args: [resolve(root, 'tools', 'run_app_verify.mjs'), '--serial']")
+  && !releaseHandoff.includes("args: ['/d', '/s', '/c', 'npm.cmd run app:verify']")
   && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseHandoff))
 requireContract('diverged release candidates produce one exact no-write integration plan',
   packageJson.scripts?.['release:integration:prepare'] === 'node tools/prepare_release_integration_plan.mjs'
@@ -131,7 +132,7 @@ requireContract('ordered integration batches preserve production safeguards and 
   && releaseIntegrationBatch.includes('function submitAmendmentRequest')
   && releaseIntegrationBatch.includes('function submitCorrectionRequest')
   && releaseIntegrationBatch.includes('commerce.storefront_request.received')
-  && releaseIntegrationBatch.includes('managed schema contract advances through additive v2 through v10 migrations')
+  && releaseIntegrationBatch.includes('managed schema contract advances through additive v2 through v11 migrations')
   && releaseIntegrationBatch.includes('release:integration:batch:prepare')
   && releaseIntegrationBatch.includes('production Supabase target requires separately committed activation authority')
   && releaseIntegrationBatch.includes("resolutionRule: 'preserve_all_upstream_and_candidate_requirements_in_one_tree'")
@@ -267,7 +268,14 @@ requireContract('app content policy refuses framing, injection and unexpected eg
     "frame-ancestors 'none'",
     "form-action 'self'",
     // The built shell emits no inline script, so this exception is never needed
-    // and its absence is the property worth pinning.
+    // and its absence is the property worth pinning. That claim went unchecked and
+    // was FALSE for as long as it stood: the shell carried three inline scripts,
+    // including the service-worker registration, and every one of them was refused
+    // by this very directive -- silently, because a refused inline script logs and
+    // does nothing. The app therefore had no service worker and no offline mode at
+    // all. The shell now loads those three as files; the check that the built shell
+    // really contains no inline script lives in tools/verify_app_build.mjs
+    // (app_shell_inline_script_blocked_by_content_policy) and is asserted below too.
     "script-src 'self'",
     "connect-src 'self' https://*.supabase.co",
   ].every((directive) => appPolicy.includes(directive))
@@ -281,6 +289,8 @@ requireContract('app shell carries the same policy for hosts that cannot set hea
   && appShellPolicy.includes("connect-src 'self' https://*.supabase.co")
   && !/script-src[^;]*unsafe-(inline|eval)/.test(appShellPolicy)
   && !appShellPolicy.includes('frame-ancestors'))
+requireContract('app shell carries no inline script the policy would refuse',
+  ![...appShell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].some((match) => match[1].trim().length))
 requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
@@ -365,11 +375,13 @@ requireContract('retired POS alias blocks release before and after promotion', (
   && retiredAliasVerifier.includes("failures = liveRetiredAliases.length ? ['retired_alias_still_live'] : []")
   && retiredAliasVerifier.includes("contract: 'supermega_retired_vercel_alias_state'"))
 requireContract('all control URLs use explicit project identities', workflow.includes('api "/v9/projects/$APP_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID') && !workflow.includes('/v9/projects/megaos') && !workflow.includes('/v9/projects/supermega-public'))
-requireContract('managed mode is selected only after metadata and effective-value verification', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("['isolated_demo','managed_trial_candidate']") && workflow.includes('verify_managed_runtime_environment_values.mjs managed_trial') && workflow.includes('verify_managed_runtime_environment_values.mjs isolated_demo'))
+requireContract('managed mode is selected only after metadata and effective-value verification', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("runtime_mode=%s") && workflow.includes("['isolated_demo','managed_trial_candidate']") && workflow.includes('verify_managed_runtime_environment_values.mjs managed_trial') && workflow.includes('verify_managed_runtime_environment_values.mjs staged') && workflow.includes('verify_managed_runtime_environment_values.mjs isolated_demo'))
+requireContract('immutable app build inherits the exact audited production environment', workflow.includes('Build the immutable app artifact') && workflow.includes('vercel@56.1.0 env run --environment=production') && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes'))
 requireContract('managed database audit uses the exact app runtime environment before candidate creation',
   workflow.includes('Enforce exact app runtime database and RLS gate')
   && workflow.includes('VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}')
   && workflow.includes('vercel@56.1.0 env run --environment=production')
+  && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema')
   && workflow.includes('python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready')
   && workflow.includes('EXPECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}')
   && appVerifier.includes('selected_operating_mode_runtime_mismatch')

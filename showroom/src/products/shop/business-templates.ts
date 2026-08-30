@@ -83,13 +83,27 @@ export function rebaseWorkingSampleActivity(
     const parsed = Date.parse(value)
     return Number.isFinite(parsed) ? new Date(parsed + provisioned - latest).toISOString() : value
   }
+  // Nothing already recorded may land after provisioning. An order requested in the future is
+  // refused by every accountable transition -- the owner presses the primary button and it does
+  // nothing -- until the clock catches up. Templates are authored by hand, so clamp here rather
+  // than trusting each one to keep its request instant behind its newest sale.
+  const clampToProvisioned = (value: string) => {
+    const parsed = Date.parse(value)
+    if (!Number.isFinite(parsed)) return value
+    const shifted = parsed + provisioned - latest
+    return new Date(Math.min(shifted, provisioned)).toISOString()
+  }
   const { pendingOrder } = activity
+  const requestedAt = clampToProvisioned(pendingOrder.requestedAt)
+  const promisedFor = shift(pendingOrder.promisedFor)
   return {
-    counterSales: activity.counterSales.map((sale) => ({ ...sale, recordedAt: shift(sale.recordedAt) })),
+    counterSales: activity.counterSales.map((sale) => ({ ...sale, recordedAt: clampToProvisioned(sale.recordedAt) })),
     pendingOrder: {
       ...pendingOrder,
-      requestedAt: shift(pendingOrder.requestedAt),
-      promisedFor: shift(pendingOrder.promisedFor),
+      requestedAt,
+      // The promise is the one instant that is meant to be ahead of the client. Keep the authored
+      // interval, but never let a clamped request overtake it.
+      promisedFor: Date.parse(promisedFor) > Date.parse(requestedAt) ? promisedFor : new Date(Date.parse(requestedAt) + 60 * 60 * 1000).toISOString(),
     },
   }
 }
@@ -245,7 +259,10 @@ const shopBusinessTemplateSeeds: readonly ShopBusinessTemplate[] = [
       id: 'fashion-order-1',
       customerName: 'Ma Thiri Win',
       contact: '09-799-666-777',
-      requestedAt: '2026-08-03T08:10:00.000Z',
+      // Must sit at or before the newest counter sale (07:50): rebaseWorkingSampleActivity anchors
+      // that sale to provisioning time, so a later request instant lands in the future and every
+      // payment action on the order silently refuses until the clock catches up.
+      requestedAt: '2026-08-03T06:40:00.000Z',
       promisedFor: '2026-08-06T04:00:00.000Z',
       status: 'pending',
       note: 'Uniform order for a tea shop team. Sizes confirmed by phone.',
@@ -501,6 +518,19 @@ const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> 
     ['REST-SVC-EVENT', 'Private event consultation 45 min', 'pcs', 15_000, 25_000, 999, 0],
   ],
   spa: [
+    // A deposit unit, copied from the restaurant pack's REST-SVC-DEPOSIT rather than invented --
+    // including its NAME SHAPE. paymentStatus is binary, so part-payment cannot be expressed on
+    // an order; it CAN be expressed as an ordinary counter sale, which is an ordinary order with
+    // ordinary evidence that the daily close already understands. Priced as a 10,000 MMK unit so
+    // quantity carries the amount: the shipped bridal package is 325,500 MMK, and ten of these is
+    // the 100,000 a spa would actually ask for up front.
+    //
+    // The amount is deliberately NOT in the name. The price column is the only source of truth
+    // for the price, and a name carrying its own copy of it becomes a lie the moment a shop
+    // raises its deposit -- printing "deposit 10000 MMK" on a 15,000 MMK receipt, with nothing
+    // enforcing the two stay in step. Name-and-price drift is exactly the class of fault
+    // test_industry_pack_sample_pairing.mjs exists to catch, after it bit a real spa pilot.
+    ['SPA-SVC-DEPOSIT', 'Treatment package deposit', 'pcs', 6_000, 10_000, 999, 0],
     ['SPA-SVC-CONSULT', 'Consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
     ['SPA-SVC-MASSAGE', 'Traditional Myanmar massage 60 min', 'pcs', 27_000, 45_000, 999, 0],
     ['SPA-SVC-OIL', 'Aromatic oil massage 90 min', 'pcs', 39_000, 65_000, 999, 0],
@@ -510,6 +540,9 @@ const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> 
     ['SPA-SVC-STEAM', 'Herbal steam 30 min', 'pcs', 10_800, 18_000, 999, 0],
   ],
   gym: [
+    // Same gap, same fix: a gym sells course blocks and memberships up front, and had no row to
+    // take that money against either.
+    ['GYM-SVC-DEPOSIT', 'Training package deposit', 'pcs', 6_000, 10_000, 999, 0],
     ['GYM-SVC-CONSULT', 'Fitness consultation 30 min', 'pcs', 9_000, 15_000, 999, 0],
     ['GYM-SVC-PT', 'Personal training 60 min', 'pcs', 18_000, 30_000, 999, 0],
     ['GYM-SVC-COMPOSITION', 'Body composition check 20 min', 'pcs', 4_800, 8_000, 999, 0],
@@ -517,6 +550,12 @@ const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> 
     ['GYM-SVC-YOGA', 'Yoga session 60 min', 'pcs', 9_000, 15_000, 999, 0],
     ['GYM-SVC-NUTRITION', 'Nutrition plan review 30 min', 'pcs', 12_000, 20_000, 999, 0],
   ],
+  // School has the same gap -- term fees are paid in advance -- and deliberately does NOT get a
+  // deposit row here. verify_app_build.mjs pins the school shop sample's SKU list EQUAL to its
+  // storefront SKU list, in order, so adding one would force a deposit onto the storefront, where
+  // openingStock 999 would also rank it above the coursebooks. That is a merchandising decision
+  // for a person. test_industry_pack_sample_pairing.mjs asserts the pin still exists, so this
+  // note cannot rot into a silent omission.
   school: [
     ['SCHOOL-SVC-ENROLL', 'Enrollment consultation 30 min', 'pcs', 6_000, 10_000, 999, 0],
     ['SCHOOL-SVC-PLACEMENT', 'Placement test 45 min', 'pcs', 3_000, 5_000, 999, 0],
@@ -558,6 +597,19 @@ export function shopBusinessTemplateFromQuery(value: string | null): ShopBusines
 
 export function shopBusinessTemplateSetupPath(id: ShopBusinessTemplateId) {
   return `/settings/?product=shop&template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
+}
+
+export function shopBusinessTemplateManagedCatalogPath(id: ShopBusinessTemplateId) {
+  return `/shop/?template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
+}
+
+export function shopBusinessChoiceFromIndustryPack(id: ShopIndustryPackId) {
+  const matchingTemplates = shopBusinessTemplates.filter((template) => template.industryPackId === id)
+  return matchingTemplates.length === 1 ? `trade:${matchingTemplates[0].id}` : `pack:${id}`
+}
+
+export function shopIndustryPackSetupPath(id: ShopIndustryPackId) {
+  return `/settings/?product=shop&pack=${encodeURIComponent(id)}`
 }
 
 // Item names are the one free-text field here, and they were interpolated raw. No shipped

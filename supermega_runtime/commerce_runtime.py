@@ -221,11 +221,26 @@ _MAX_SUPPORT_SERVICE_EVENTS_PER_CASE = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
-_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
+_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v4"
+_LEGACY_SERVICE_SCHEDULE_SCHEMA_V3 = "supermega.shop.service_schedule.v3"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
 _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
-    {"service_registered", "resource_registered", "booking_scheduled", "booking_advanced", "booking_cancelled"}
+    {
+        "service_registered",
+        "resource_registered",
+        "booking_scheduled",
+        "booking_advanced",
+        "booking_cancelled",
+        "package_redeemed",
+        "client_retention_set",
+        "client_exported",
+        "client_anonymized",
+    }
 )
+_SPA_MEMBERSHIP_PACKAGES = {
+    "service-session": ("SPA-PACK-MASSAGE-5", 5),
+    "service-facial": ("SPA-PACK-FACIAL-3", 3),
+}
 _SUPPORT_INTENT_ID_PATTERN = re.compile(
     r"ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
@@ -279,7 +294,7 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _SERVICE_SCHEDULE_FIELDS = frozenset(
-    {"schema", "industryPackId", "revision", "services", "resources", "bookings", "events"}
+    {"schema", "industryPackId", "revision", "services", "resources", "privacyPolicy", "clients", "bookings", "events"}
 )
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
 _CATALOG_CHANGE_FIELDS = frozenset(
@@ -995,6 +1010,8 @@ def _storefront_request(value: object, field: str) -> dict[str, Any]:
 
 def _validate_service_schedule(value: object) -> dict[str, Any]:
     schedule = _object(value, "commerce state.serviceSchedule")
+    if schedule.get("schema") == _LEGACY_SERVICE_SCHEDULE_SCHEMA_V3:
+        schedule = {**deepcopy(schedule), "schema": _SERVICE_SCHEDULE_SCHEMA, "privacyPolicy": {"clientRetentionDays": None}}
     _exact_fields(
         schedule,
         "commerce state.serviceSchedule",
@@ -1012,9 +1029,10 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
     )
     services = _list(schedule.get("services"), "commerce state.serviceSchedule.services")
     resources = _list(schedule.get("resources"), "commerce state.serviceSchedule.resources")
+    clients = _list(schedule.get("clients"), "commerce state.serviceSchedule.clients")
     bookings = _list(schedule.get("bookings"), "commerce state.serviceSchedule.bookings")
     events = _list(schedule.get("events"), "commerce state.serviceSchedule.events")
-    if len(services) > 100 or len(resources) > 100 or len(bookings) > 500 or len(events) > 1000:
+    if len(services) > 100 or len(resources) > 100 or len(clients) > 500 or len(bookings) > 500 or len(events) > 1000:
         raise TrialValidationError("commerce state.serviceSchedule exceeds managed workspace limits.")
 
     service_ids: list[str] = []
@@ -1025,9 +1043,12 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             service,
             field,
             required=frozenset({"id", "name", "durationMinutes", "priceMmk", "active"}),
+            optional=frozenset({"nameMy"}),
         )
         service_ids.append(_text(service.get("id"), f"{field}.id", maximum=80))
         _text(service.get("name"), f"{field}.name", maximum=160)
+        if service.get("nameMy") is not None:
+            _text(service.get("nameMy"), f"{field}.nameMy", maximum=160)
         duration = _integer(service.get("durationMinutes"), f"{field}.durationMinutes", minimum=1)
         _integer(service.get("priceMmk"), f"{field}.priceMmk", minimum=1)
         if duration > 1440 or not isinstance(service.get("active"), bool):
@@ -1043,14 +1064,76 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             resource,
             field,
             required=frozenset({"id", "name", "kind", "active"}),
+            optional=frozenset({"nameMy"}),
         )
         resource_ids.append(_text(resource.get("id"), f"{field}.id", maximum=80))
         _text(resource.get("name"), f"{field}.name", maximum=160)
+        if resource.get("nameMy") is not None:
+            _text(resource.get("nameMy"), f"{field}.nameMy", maximum=160)
         if resource.get("kind") not in {"staff", "room", "equipment"} or not isinstance(
             resource.get("active"), bool
         ):
             raise TrialValidationError(f"{field} kind or active state is invalid.")
     _unique(resource_ids, "commerce state.serviceSchedule resource ID")
+
+    privacy_policy = _object(schedule.get("privacyPolicy"), "commerce state.serviceSchedule.privacyPolicy")
+    retention_days = privacy_policy.get("clientRetentionDays")
+    if retention_days is None:
+        _exact_fields(privacy_policy, "commerce state.serviceSchedule.privacyPolicy", required=frozenset({"clientRetentionDays"}))
+    else:
+        _exact_fields(privacy_policy, "commerce state.serviceSchedule.privacyPolicy", required=frozenset({"clientRetentionDays", "updatedAt", "updatedBy"}))
+        days = _integer(retention_days, "commerce state.serviceSchedule.privacyPolicy.clientRetentionDays", minimum=30)
+        if days > 3650:
+            raise TrialValidationError("commerce state.serviceSchedule client retention must be at most 3650 days.")
+        _timestamp(privacy_policy.get("updatedAt"), "commerce state.serviceSchedule.privacyPolicy.updatedAt")
+        _text(privacy_policy.get("updatedBy"), "commerce state.serviceSchedule.privacyPolicy.updatedBy", maximum=120)
+
+    client_ids: list[str] = []
+    client_contacts: list[str] = []
+    clients_by_id: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(clients):
+        field = f"commerce state.serviceSchedule.clients[{index}]"
+        client = _object(candidate, field)
+        _exact_fields(
+            client,
+            field,
+            required=frozenset({"id", "name", "contact", "appointmentUpdates", "createdAt", "updatedAt"}),
+            optional=frozenset({"consentRecordedAt", "anonymizedAt", "anonymizedBy"}),
+        )
+        client_id = _text(client.get("id"), f"{field}.id", maximum=80)
+        if re.fullmatch(r"client-(?:legacy-)?[0-9]{4,10}", client_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        client_ids.append(client_id)
+        _text(client.get("name"), f"{field}.name", maximum=160)
+        contact = _text(client.get("contact"), f"{field}.contact", maximum=160)
+        client_contacts.append(contact.casefold())
+        appointment_updates = client.get("appointmentUpdates")
+        if appointment_updates not in {"allowed", "declined", "not_recorded"}:
+            raise TrialValidationError(f"{field}.appointmentUpdates is invalid.")
+        consent_recorded_at = client.get("consentRecordedAt")
+        if appointment_updates == "allowed":
+            _timestamp(consent_recorded_at, f"{field}.consentRecordedAt")
+        elif consent_recorded_at is not None:
+            raise TrialValidationError(f"{field}.consentRecordedAt is invalid.")
+        _timestamp(client.get("createdAt"), f"{field}.createdAt")
+        updated_at = _timestamp(client.get("updatedAt"), f"{field}.updatedAt")
+        has_anonymized_at = "anonymizedAt" in client
+        has_anonymized_by = "anonymizedBy" in client
+        if has_anonymized_at != has_anonymized_by:
+            raise TrialValidationError(f"{field} anonymization evidence is incomplete.")
+        if has_anonymized_at:
+            anonymized_at = _timestamp(client.get("anonymizedAt"), f"{field}.anonymizedAt")
+            _text(client.get("anonymizedBy"), f"{field}.anonymizedBy", maximum=120)
+            if (
+                client.get("name") != f"Former client {client_id}"
+                or client.get("contact") != f"anonymized:{client_id}"
+                or appointment_updates != "not_recorded"
+                or anonymized_at != updated_at
+            ):
+                raise TrialValidationError(f"{field} anonymization is invalid.")
+        clients_by_id[client_id] = client
+    _unique(client_ids, "commerce state.serviceSchedule client ID")
+    _unique(client_contacts, "commerce state.serviceSchedule client contact")
 
     booking_ids: list[str] = []
     normalized_bookings: list[dict[str, Any]] = []
@@ -1062,15 +1145,26 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             field,
             required=frozenset(
                 {
-                    "id", "customerName", "contact", "serviceId", "resourceId", "startsAt",
-                    "endsAt", "status", "note", "createdAt", "updatedAt",
+                    "id", "clientId", "customerName", "contact", "appointmentUpdates", "serviceId",
+                    "resourceId", "startsAt", "endsAt", "status", "note", "createdAt", "updatedAt",
                 }
             ),
         )
         booking_id = _text(booking.get("id"), f"{field}.id", maximum=80)
         booking_ids.append(booking_id)
+        client = clients_by_id.get(booking.get("clientId"))
+        if client is None:
+            raise TrialValidationError(f"{field} references an unknown client.")
         _text(booking.get("customerName"), f"{field}.customerName", maximum=160)
         _text(booking.get("contact"), f"{field}.contact", maximum=160)
+        if booking.get("appointmentUpdates") not in {"allowed", "declined", "not_recorded"}:
+            raise TrialValidationError(f"{field}.appointmentUpdates is invalid.")
+        if (
+            booking.get("customerName") != client.get("name")
+            or booking.get("contact") != client.get("contact")
+            or booking.get("appointmentUpdates") != client.get("appointmentUpdates")
+        ):
+            raise TrialValidationError(f"{field} client details are stale.")
         if booking.get("serviceId") not in service_ids or booking.get("resourceId") not in resource_ids:
             raise TrialValidationError(f"{field} references an unknown service or resource.")
         starts_at = _timestamp(booking.get("startsAt"), f"{field}.startsAt")
@@ -1120,6 +1214,16 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             (event["type"] == "service_registered" and subject_id not in service_ids)
             or (event["type"] == "resource_registered" and subject_id not in resource_ids)
             or (event["type"].startswith("booking_") and subject_id not in booking_ids)
+            or (
+                event["type"] == "package_redeemed"
+                and not any(
+                    booking["id"] == subject_id and booking["status"] == "completed"
+                    for booking in bookings
+                )
+            )
+            or (event["type"] == "client_anonymized" and subject_id not in client_ids)
+            or (event["type"] == "client_exported" and re.fullmatch(r"sha256:[a-f0-9]{64}", subject_id) is None)
+            or (event["type"] == "client_retention_set" and re.fullmatch(r"retention-(?:[3-9][0-9]|[1-9][0-9]{2,3})-days", subject_id) is None)
         ):
             raise TrialValidationError(f"{field} references an unknown subject.")
         _text(event.get("actor"), f"{field}.actor", maximum=120)
@@ -10340,6 +10444,86 @@ def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
     return _validate_service_schedule(value) if value is not None else None
 
 
+def _spa_membership_session_available(
+    commerce: Mapping[str, Any],
+    schedule: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> bool:
+    booking_by_id = {booking["id"]: booking for booking in schedule["bookings"]}
+    booking = booking_by_id.get(event["subjectId"])
+    event_at = datetime.fromisoformat(event["happenedAt"].replace("Z", "+00:00"))
+    if (
+        schedule["industryPackId"] != "spa"
+        or booking is None
+        or booking["status"] != "completed"
+        or booking["customerName"] == "Guest"
+        or event_at < datetime.fromisoformat(booking["updatedAt"].replace("Z", "+00:00"))
+    ):
+        return False
+    package = _SPA_MEMBERSHIP_PACKAGES.get(booking["serviceId"])
+    if package is None:
+        return False
+    package_sku, sessions_per_purchase = package
+    purchased = 0
+    for order in commerce.get("orders", []):
+        paid_at = order.get("paymentReconciledAt")
+        if (
+            order["customer"] != booking["customerName"]
+            or order["status"] != "completed"
+            or order["paymentStatus"] != "reconciled"
+            or order["refundStatus"] != "none"
+            or paid_at is None
+            or datetime.fromisoformat(paid_at.replace("Z", "+00:00")) > event_at
+        ):
+            continue
+        for line in order.get("lines", []):
+            if line["sku"] == package_sku:
+                purchased += line["quantity"] * sessions_per_purchase
+    redeemed = 0
+    for prior in schedule["events"][:-1]:
+        if prior["type"] != "package_redeemed":
+            continue
+        if prior["subjectId"] == booking["id"]:
+            return False
+        prior_booking = booking_by_id.get(prior["subjectId"])
+        if (
+            prior_booking is not None
+            and prior_booking["customerName"] == booking["customerName"]
+            and prior_booking["serviceId"] == booking["serviceId"]
+        ):
+            redeemed += 1
+    return purchased > redeemed
+
+
+def _service_csv_cell(value: object) -> str:
+    text = str(value)
+    safe = f"'{text}" if re.match(r"^[=+\-@\t\r]", text) else text
+    return f'"{safe.replace(chr(34), chr(34) * 2)}"'
+
+
+def _service_client_export_csv(schedule: Mapping[str, Any]) -> str:
+    rows: list[list[object]] = [["Name", "Contact", "Appointment updates", "Consent recorded", "Appointments", "Completed visits"]]
+    bookings = schedule.get("bookings", [])
+    for client in schedule.get("clients", []):
+        if "anonymizedAt" in client:
+            continue
+        client_bookings = [booking for booking in bookings if booking.get("clientId") == client.get("id") and booking.get("status") != "cancelled"]
+        rows.append([
+            client["name"], client["contact"], client["appointmentUpdates"], client.get("consentRecordedAt", ""),
+            len(client_bookings), sum(1 for booking in client_bookings if booking.get("status") == "completed"),
+        ])
+    return "\r\n".join(",".join(_service_csv_cell(value) for value in row) for row in rows)
+
+
+def _service_events_contain_identifier(events: Sequence[Mapping[str, Any]], identifier: str) -> bool:
+    needle = identifier.strip().casefold()
+    return bool(needle) and any(
+        needle in str(event.get(field, "")).casefold()
+        for event in events
+        for field in ("subjectId", "actor", "reason")
+    )
+
+
 def _require_service_schedule_unchanged(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -10385,6 +10569,8 @@ def _validate_service_schedule_saved(
             and latest["subjectId"] == after["services"][-1]["id"]
             and after["services"][-1]["active"] is True
             and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == before["clients"]
             and after["bookings"] == before["bookings"]
         )
     elif event_type == "resource_registered":
@@ -10394,18 +10580,118 @@ def _validate_service_schedule_saved(
             and latest["subjectId"] == after["resources"][-1]["id"]
             and after["resources"][-1]["active"] is True
             and after["services"] == before["services"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == before["clients"]
             and after["bookings"] == before["bookings"]
         )
     elif event_type == "booking_scheduled":
+        booking = after["bookings"][-1] if len(after["bookings"]) == len(before["bookings"]) + 1 else None
+        prior_client = next((client for client in before["clients"] if booking and client["id"] == booking["clientId"]), None)
+        if booking and prior_client:
+            expected_client = {
+                **prior_client,
+                "name": booking["customerName"],
+                "contact": booking["contact"],
+                "appointmentUpdates": booking["appointmentUpdates"],
+                "updatedAt": latest["happenedAt"],
+            }
+            expected_client.pop("consentRecordedAt", None)
+            if booking["appointmentUpdates"] == "allowed":
+                expected_client["consentRecordedAt"] = latest["happenedAt"]
+            expected_clients = [expected_client if client["id"] == expected_client["id"] else client for client in before["clients"]]
+            expected_prior_bookings = [
+                {**candidate, "customerName": expected_client["name"], "contact": expected_client["contact"], "appointmentUpdates": expected_client["appointmentUpdates"]}
+                if candidate["clientId"] == expected_client["id"] else candidate
+                for candidate in before["bookings"]
+            ]
+        elif booking:
+            expected_client = {
+                "id": booking["clientId"], "name": booking["customerName"], "contact": booking["contact"],
+                "appointmentUpdates": booking["appointmentUpdates"], "createdAt": latest["happenedAt"], "updatedAt": latest["happenedAt"],
+            }
+            if booking["appointmentUpdates"] == "allowed":
+                expected_client["consentRecordedAt"] = latest["happenedAt"]
+            expected_clients = [*before["clients"], expected_client]
+            expected_prior_bookings = before["bookings"]
+        else:
+            expected_clients = []
+            expected_prior_bookings = []
         valid_change = (
             len(after["bookings"]) == len(before["bookings"]) + 1
-            and after["bookings"][:-1] == before["bookings"]
+            and after["bookings"][:-1] == expected_prior_bookings
             and latest["subjectId"] == after["bookings"][-1]["id"]
             and after["bookings"][-1]["status"] == "held"
+            and after["bookings"][-1]["appointmentUpdates"] in {"allowed", "declined"}
             and after["bookings"][-1]["createdAt"] == latest["happenedAt"]
             and after["bookings"][-1]["updatedAt"] == latest["happenedAt"]
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == expected_clients
+        )
+    elif event_type == "client_retention_set":
+        match = re.fullmatch(r"retention-([0-9]{2,4})-days", str(latest["subjectId"]))
+        retention_days = int(match.group(1)) if match else None
+        valid_change = (
+            retention_days is not None and 30 <= retention_days <= 3650
+            and before["privacyPolicy"].get("clientRetentionDays") != retention_days
+            and after["privacyPolicy"] == {"clientRetentionDays": retention_days, "updatedAt": latest["happenedAt"], "updatedBy": latest["actor"]}
+            and after["services"] == before["services"] and after["resources"] == before["resources"]
+            and after["clients"] == before["clients"] and after["bookings"] == before["bookings"]
+        )
+    elif event_type == "client_exported":
+        count = sum(1 for client in before["clients"] if "anonymizedAt" not in client)
+        expected_digest = "sha256:" + sha256(_service_client_export_csv(before).encode("utf-8")).hexdigest()
+        valid_change = (
+            latest["subjectId"] == expected_digest
+            and latest["reason"] == f"Exported {count} privacy-minimal client {'record' if count == 1 else 'records'}."
+            and after["services"] == before["services"] and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"] and after["clients"] == before["clients"]
+            and after["bookings"] == before["bookings"]
+        )
+    elif event_type == "client_anonymized":
+        prior_client = next((client for client in before["clients"] if client["id"] == latest["subjectId"]), None)
+        client_bookings = [booking for booking in before["bookings"] if booking["clientId"] == latest["subjectId"]]
+        open_visit = any(booking["status"] in {"held", "confirmed", "checked_in"} for booking in client_bookings)
+        orders_by_source = {order.get("sourceRecordId"): order for order in current["orders"] if order.get("sourceRecordId")}
+        financial_records_closed = all(
+            booking["status"] != "completed" or (
+                (order := orders_by_source.get(f"SHOP-BOOKING-{booking['id']}")) is not None
+                and order.get("status") == "completed" and order.get("paymentStatus") == "reconciled" and order.get("refundStatus") != "due"
+            ) for booking in client_bookings
+        )
+        retention_days = before["privacyPolicy"].get("clientRetentionDays")
+        happened_at = datetime.fromisoformat(latest["happenedAt"].replace("Z", "+00:00"))
+        last_activity = max([datetime.fromisoformat(prior_client["updatedAt"].replace("Z", "+00:00")), *[datetime.fromisoformat(booking["updatedAt"].replace("Z", "+00:00")) for booking in client_bookings]]) if prior_client else None
+        retention_elapsed = isinstance(retention_days, int) and not isinstance(retention_days, bool) and last_activity is not None and happened_at >= last_activity + timedelta(days=retention_days)
+        evidence_identity_free = prior_client is not None and not any(_service_events_contain_identifier(after["events"], value) for value in (prior_client["name"], prior_client["contact"]))
+        expected_client = ({
+            "id": prior_client["id"], "name": f"Former client {prior_client['id']}", "contact": f"anonymized:{prior_client['id']}",
+            "appointmentUpdates": "not_recorded", "createdAt": prior_client["createdAt"], "updatedAt": latest["happenedAt"],
+            "anonymizedAt": latest["happenedAt"], "anonymizedBy": latest["actor"],
+        } if prior_client and "anonymizedAt" not in prior_client else None)
+        expected_clients = [expected_client if client["id"] == latest["subjectId"] else client for client in before["clients"]]
+        expected_bookings = [{**booking, "customerName": f"Former client {latest['subjectId']}", "contact": f"anonymized:{latest['subjectId']}", "appointmentUpdates": "not_recorded", "note": "", "updatedAt": latest["happenedAt"]} if booking["clientId"] == latest["subjectId"] else booking for booking in before["bookings"]]
+        valid_change = (
+            expected_client is not None and not open_visit and financial_records_closed and retention_elapsed and evidence_identity_free
+            and after["services"] == before["services"] and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"] and after["clients"] == expected_clients and after["bookings"] == expected_bookings
+        )
+    elif event_type == "package_redeemed":
+        completed_subject = next(
+            (
+                booking
+                for booking in after["bookings"]
+                if booking["id"] == latest["subjectId"] and booking["status"] == "completed"
+            ),
+            None,
+        )
+        valid_change = (
+            completed_subject is not None
+            and _spa_membership_session_available(current, after, latest)
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+            and after["bookings"] == before["bookings"]
         )
     else:
         before_by_id = {booking["id"]: booking for booking in before["bookings"]}
@@ -10444,6 +10730,8 @@ def _validate_service_schedule_saved(
             and changed["id"] == latest["subjectId"]
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == before["clients"]
         )
     if not valid_change:
         raise TrialValidationError(
@@ -10470,9 +10758,9 @@ def _validate_service_schedule_initialized(
         raise TrialValidationError(
             "service schedule initialization requires a clean industry pack without operating evidence."
         )
-    if not schedule["services"] or not schedule["resources"] or schedule["bookings"]:
+    if not schedule["services"] or not schedule["resources"] or schedule["clients"] or schedule["bookings"] or schedule["privacyPolicy"] != {"clientRetentionDays": None}:
         raise TrialValidationError(
-            "service schedule initialization requires services and resources but no bookings."
+            "service schedule initialization requires services and resources but no clients, bookings, or retained policy."
         )
 
 

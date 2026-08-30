@@ -124,4 +124,25 @@ check(
   'and its full catalog, not a filtered subset',
 )
 
+// --- and it is a PREDICATE, not a normaliser ---------------------------------
+// The whole read side of the workspace leans on this. A state that is validated once and then
+// read many times over -- which is what commerceOrderAcknowledgementReader does, and what
+// commerceDailyCloseExportFrom has done for the archive since it was split out -- is only
+// equivalent to validating on every read if validating an unchanged state is a no-op on that
+// state. Two things have to be true for that, and neither is obvious from the call site:
+//
+//   1. the value that comes back IS the value that went in, not a structural copy. A copy
+//      would mean the first read and the thousandth read were looking at different objects,
+//      and a caller holding the original would be reading something never checked; and
+//   2. validating leaves the subject untouched, so the second validation is being asked about
+//      exactly the state the first one approved.
+//
+// A "cleaning" validator would fail both, and the hoists above it would become silent
+// behaviour changes rather than the pure repetition-removal they are sold as.
+check(validateCommerceState(seed) === seed, 'a valid state comes back as the SAME object, not a structural copy of it')
+const beforeValidation = JSON.stringify(seed)
+validateCommerceState(seed)
+validateCommerceState(seed)
+check(JSON.stringify(seed) === beforeValidation, 'and validating it -- twice -- leaves it byte for byte as it was found')
+
 console.log(`commerce state validator contract: ${checks} checks passed`)

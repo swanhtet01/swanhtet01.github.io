@@ -114,6 +114,12 @@ def _is_publishable_key(value: str) -> bool:
     return bool(payload and payload.get("role") == "anon")
 
 
+def is_supabase_publishable_key(value: str) -> bool:
+    """Return true only for a modern publishable key or legacy anon JWT."""
+
+    return _is_publishable_key(str(value or "").strip())
+
+
 def _canonical_uuid(value: object) -> str:
     candidate = str(value or "").strip()
     try:
@@ -254,6 +260,7 @@ __all__ = [
     "SupabaseAuthConfig",
     "SupabaseAuthUnavailable",
     "VerifiedSupabaseUser",
+    "is_supabase_publishable_key",
     "verify_supabase_user_identity",
     "verify_supabase_user_token",
 ]

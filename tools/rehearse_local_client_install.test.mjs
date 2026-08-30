@@ -10,10 +10,10 @@ import {
   rehearseLocalClientInstall,
 } from './rehearse_local_client_install.mjs'
 
-async function preparedFixture() {
+async function preparedFixture({ presetId, products } = {}) {
   const parent = await mkdtemp(resolve(tmpdir(), 'supermega-local-install-'))
   const directory = resolve(parent, 'client')
-  await initializeClientWorkspace({ directory })
+  await initializeClientWorkspace({ directory, presetId, products })
   const profilePath = resolve(directory, 'client.json')
   const profile = JSON.parse(await readFile(profilePath, 'utf8'))
   await writeFile(profilePath, JSON.stringify({
@@ -55,6 +55,27 @@ test('four prepared products install, replay exactly, and roll back in memory', 
     assert.equal(receipt.controls.hostedWrites, 0)
     assert.match(receipt.digest, /^sha256:[a-f0-9]{64}$/)
     assert.doesNotMatch(JSON.stringify(receipt), /Private installation rehearsal|Founder reviewer/)
+  } finally {
+    await rm(fixture.parent, { recursive: true, force: true })
+  }
+})
+
+test('a Beauty Spa portal installs only Shop, Website, and Ecommerce storage', async () => {
+  const fixture = await preparedFixture({
+    presetId: 'service-business',
+    products: ['commerce', 'website', 'ecommerce'],
+  })
+  try {
+    const receipt = await rehearseLocalClientInstall(
+      fixture.preparation,
+      fixture.preparation.review.confirmation,
+    )
+    assert.deepEqual(receipt.products.map((product) => product.product), ['commerce', 'website', 'ecommerce'])
+    assert.equal(receipt.metrics.productCount, 3)
+    assert.equal(receipt.metrics.localStorageKeysCreated, 3)
+    assert.equal(receipt.controls.rollbackVerified, true)
+    assert.equal(receipt.controls.unrelatedStatePreserved, true)
+    assert.equal(receipt.controls.productionActivationPerformed, false)
   } finally {
     await rm(fixture.parent, { recursive: true, force: true })
   }

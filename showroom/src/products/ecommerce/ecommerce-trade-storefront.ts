@@ -71,6 +71,16 @@ export type EcommerceTradeStorefront = {
 // bakery alone, item 6 adds hardware as the delivery/cash_on_delivery example its acceptance
 // criterion names.
 const TRADE_STOREFRONT: Readonly<Partial<Record<ShopBusinessTemplateId, EcommerceTradeStorefront>>> = {
+  'beauty-spa': {
+    // The Spa Website and onboarding samples already promise appointment-led treatments while
+    // Ecommerce currently carries only the two real home-care SKUs. Keep the storefront honest:
+    // it can collect product requests for pickup, but it does not pretend to book an appointment.
+    summary: (businessName) => `Browse ${businessName}'s home-care products after your treatment -- request items for pickup and confirm availability before collection.`,
+    collections: { featured: 'Home care', rest: 'More for your routine' },
+    note: 'Demo spa listing: confirm treatment suitability, counter stock, and pickup time before launch.',
+    preferredSkus: ['SPA-OIL-100ML', 'SPA-COMPRESS'],
+    guidedOrder: { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' },
+  },
   bakery: {
     summary: (businessName) => `Browse ${businessName}'s fresh bread, cakes and pastries -- order ahead for a cake, or pick up what's ready today.`,
     collections: { featured: 'Fresh today', rest: 'Order ahead' },

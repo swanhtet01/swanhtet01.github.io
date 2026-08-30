@@ -233,7 +233,7 @@ for (const token of [
   'id="products"',
   '>Products<',
   'Choose one product to try.',
-  'Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.',
+  'Name the business, choose its type, and start with one guided job. Real client data stays optional until the workflow makes sense.',
   'id="model" aria-label="Free and managed SuperMega"',
   'Free product. Managed intelligence.',
   'Run the products free. Add managed company intelligence when the workflow proves value.',
@@ -255,7 +255,7 @@ for (const token of [
   'id="website"',
   'https://app.supermega.dev/settings/?product=website',
   'id="ecommerce"',
-  'Create an online ordering page connected to Shop.',
+  'Create a Shop-connected ordering page.',
   'https://app.supermega.dev/settings/?product=ecommerce',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
@@ -289,6 +289,8 @@ for (const product of publicProducts) {
   const landing = pages.get(landingRoute)?.html || ''
   const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
+  const allModules = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
+  const launchModules = allModules.slice(0, manifest.templatePackPolicy.maxEnabledModulesAtLaunch)
   for (const token of [
     product.eyebrow,
     `<h1>${product.headline}</h1>`,
@@ -297,15 +299,13 @@ for (const product of publicProducts) {
     `href="/contact/?product=${product.id}">${setupLabel}</a>`,
     'Free browser sample',
     'Mobile-ready workflows',
-    // Product pages now lead with the FULL module list and the free/premium/managed
-    // story (design tribunal: the site showed 3-4 features of 12-14 and two products
-    // had no description at all). The free tier still leads, and the claims boundary
-    // is unchanged — these pins moved with the copy, not around it.
-    'free on your device.',
-    'The whole working business is the free part.',
-    'Every module listed above',
-    'Leaving is always free',
-    'Priced per shop — talk to us',
+    'Start here',
+    `${launchModules.length} core ${product.name} workflows.`,
+    'Advanced tools stay inside the workspace and appear when they are relevant.',
+    'Use the core workflow before adding complexity.',
+    `The ${launchModules.length} core workflows above`,
+    'Separate client portal',
+    'No automatic send or payment',
     'No account or model call required',
     'aria-label="Security boundary"',
     'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
@@ -315,9 +315,13 @@ for (const product of publicProducts) {
     if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
   }
   if (landing.includes(`href="${product.appRoute}"`)) fail('landing_direct_product_route_present', { route: landingRoute })
-  for (const capability of (product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views)) {
+  for (const capability of launchModules) {
     if (!landing.includes(capability)) fail('landing_module_missing', { route: landingRoute, capability })
   }
+  for (const capability of allModules.slice(manifest.templatePackPolicy.maxEnabledModulesAtLaunch)) {
+    if (landing.includes(capability)) fail('advanced_module_exposed_before_relevance', { route: landingRoute, capability })
+  }
+  if ((landing.match(/<div class="solution-modules"[\s\S]*?<\/div>/)?.[0].match(/<span><i>/g) || []).length !== launchModules.length) fail('launch_module_count_wrong', { route: landingRoute })
 }
 
 const contact = pages.get('/contact/')?.html || ''

@@ -42,6 +42,8 @@ const dormantSchedulerEnvironment = [
 ]
 const managedTrial = [
   env('SUPERMEGA_DATABASE_URL', { type: 'secret' }),
+  env('SUPERMEGA_TRIAL_SCHEMA_VERSION', { type: 'plain' }),
+  env('SUPERMEGA_SUPABASE_PROJECT_REF', { type: 'plain' }),
   env('SUPERMEGA_TRIAL_WRITES_ENABLED', { type: 'plain' }),
   env('VITE_SUPABASE_URL', { type: 'plain' }),
   env('VITE_SUPABASE_PUBLISHABLE_KEY', { type: 'plain' }),
@@ -63,6 +65,8 @@ assert.notEqual(partialManaged.status, 0, 'partial_managed_app_allowed')
 assert.ok(parse(partialManaged).failures.includes('managed_trial_environment_incomplete'))
 assert.ok(parse(partialManaged).missing.includes('VITE_SUPABASE_URL'))
 assert.ok(parse(partialManaged).missing.includes('VITE_SUPABASE_PUBLISHABLE_KEY'))
+assert.ok(parse(partialManaged).missing.includes('SUPERMEGA_TRIAL_SCHEMA_VERSION'))
+assert.ok(parse(partialManaged).missing.includes('SUPERMEGA_SUPABASE_PROJECT_REF'))
 
 const serverOnlyManaged = run('app', [managedTrial[0], managedTrial[1], managedGateway])
 assert.notEqual(serverOnlyManaged.status, 0, 'managed_mode_without_browser_auth_allowed')
@@ -71,6 +75,19 @@ assert.ok(parse(serverOnlyManaged).failures.includes('managed_trial_environment_
 const managedWithGateway = run('app', [...managedTrial, managedGateway])
 assert.equal(managedWithGateway.status, 0, 'optional_gateway_identity_rejected')
 assert.equal(parse(managedWithGateway).operatingMode, 'managed_trial_candidate')
+
+const managedWithSelfServe = run('app', [
+  ...managedTrial,
+  env('SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW', { type: 'plain' }),
+])
+assert.equal(managedWithSelfServe.status, 0, 'optional_self_serve_window_rejected')
+
+const persistedReleaseCommit = run('app', [
+  ...managedTrial,
+  env('SUPERMEGA_RELEASE_COMMIT', { type: 'plain' }),
+])
+assert.notEqual(persistedReleaseCommit.status, 0, 'stale_persisted_release_commit_allowed')
+assert.ok(parse(persistedReleaseCommit).cleanupCandidates.includes('SUPERMEGA_RELEASE_COMMIT'))
 
 const dormantScheduler = run('app', dormantSchedulerEnvironment)
 assert.notEqual(dormantScheduler.status, 0, 'dormant_scheduler_environment_allowed')
@@ -192,4 +209,4 @@ const redaction = run('app', [
 assert.equal(redaction.status, 0, 'redaction_fixture_failed')
 assert.equal(`${redaction.stdout}${redaction.stderr}`.includes(sentinel), false, 'environment_value_disclosed')
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 23 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 25 }, null, 2))

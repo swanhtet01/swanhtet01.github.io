@@ -28,7 +28,7 @@ function isChunkFailure(error: unknown) {
   if (!error) return false
   const name = (error as { name?: unknown }).name
   const message = (error as { message?: unknown }).message
-  return CHUNK_FAILURE.test(`${typeof name === 'string' ? name : ''} ${typeof message === 'string' ? message : ''}`)
+  return CHUNK_FAILURE.test(`${String(name ?? '')} ${String(message ?? '')}`)
 }
 
 type RouteErrorBoundaryProps = {
@@ -41,18 +41,28 @@ type RouteErrorBoundaryProps = {
 type RouteErrorBoundaryState = {
   error: Error | null
   stale: boolean
+  offline: boolean
 }
 
+// There is a third cause, and it needs its own answer: the device has no connection and this
+// chunk is not in the offline cache. Telling that reader to reload is actively wrong -- a reload
+// re-serves the same cached shell and asks for the same missing file again. navigator.onLine is
+// only trusted in the false direction, which is the safe one: a browser reporting offline really
+// has no network, while one reporting online may still be behind a captive portal. So a false
+// reading picks this branch and anything else falls through to the stale-deploy copy above.
+const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
+
 export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, RouteErrorBoundaryState> {
-  state: RouteErrorBoundaryState = { error: null, stale: false }
+  state: RouteErrorBoundaryState = { error: null, stale: false, offline: false }
 
   static getDerivedStateFromError(error: Error): RouteErrorBoundaryState {
-    return { error, stale: isChunkFailure(error) }
+    const stale = isChunkFailure(error)
+    return { error, stale, offline: stale && isOffline() }
   }
 
   componentDidUpdate(previous: RouteErrorBoundaryProps) {
     if (this.state.error && previous.resetKey !== this.props.resetKey) {
-      this.setState({ error: null, stale: false })
+      this.setState({ error: null, stale: false, offline: false })
     }
   }
 
@@ -67,21 +77,31 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, Route
   }
 
   render() {
-    const { error, stale } = this.state
+    const { error, stale, offline } = this.state
     if (!error) return this.props.children
+
+    const heading = offline
+      ? 'This screen is not available offline'
+      : stale ? 'This page needs reloading' : 'This screen could not open'
+    const explanation = offline
+      ? 'You are offline and this part of SuperMega has not been saved on this device. Connect to the internet, then reload to open it.'
+      : stale
+        ? 'SuperMega was updated while this tab was open, so part of it is missing. Reload to get the current version.'
+        : 'Something in this screen failed to start. Your other products are unaffected.'
 
     return (
       <div className="route-error" role="alert">
-        <strong>{stale ? 'This page needs reloading' : 'This screen could not open'}</strong>
-        <p>
-          {stale
-            ? 'SuperMega was updated while this tab was open, so part of it is missing. Reload to get the current version.'
-            : 'Something in this screen failed to start. Your other products are unaffected.'}
-        </p>
+        <strong>{heading}</strong>
+        <p>{explanation}</p>
         <p className="route-error-data">Your saved work on this device has not been changed.</p>
         <div className="route-error-actions">
+          {/* Reload stays offered in every state, including offline. React.lazy caches a
+              rejected import for the life of the page, so once a chunk has failed nothing short
+              of a reload can retry it -- which is exactly why the offline sentence tells the
+              reader to reconnect FIRST and then reload, rather than promising a reload alone
+              will help. The product list is precached, so that link works with no network. */}
           <button onClick={() => window.location.reload()} type="button">Reload</button>
-          {!stale ? <a href="/">Go to product list</a> : null}
+          {!stale || offline ? <a href="/">Go to product list</a> : null}
         </div>
         <details>
           <summary>Technical detail</summary>

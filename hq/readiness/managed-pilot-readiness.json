@@ -1,22 +1,24 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
-  "asOf": "2026-08-19T10:43:25.694Z",
-  "sourceDigest": "sha256:867ee42c04f8fdeb5a9792c05a153ba8047dc3947f8cf76bdab0d93f249ad07e",
+  "asOf": "2026-08-22T07:44:43.854Z",
+  "sourceDigest": "sha256:6df97a9099b856ee4db6be4f673ee35e5a4086005e1cfa5f7a04a6c02d30d4e4",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 2,
+    "blockingGateCount": 1,
     "nextAction": {
       "kind": "founder_decision",
-      "decisionId": "bounded-managed-pilot-rehearsal",
+      "decisionId": "managed-production-activation",
       "requires": [
-        "approve_preview_branch_target",
-        "approve_self_serve_activation_window"
+        "approve_runtime_role_provisioning",
+        "approve_first_named_owner_identity",
+        "approve_exact_production_release",
+        "approve_managed_activation_window"
       ],
-      "targetEnvironment": "preview_branch",
+      "targetEnvironment": "production",
       "operatorProductId": "shop",
-      "maximumLifetimeHours": 24
+      "maximumLifetimeHours": null
     }
   },
   "founderDecision": {
@@ -24,19 +26,19 @@
     "authority": "proposal_only",
     "createsAuthority": false,
     "approvalReceipt": null,
-    "decision": "Approve one bounded managed-pilot rehearsal.",
+    "decision": "Approve one exact managed production activation.",
     "target": {
       "provider": "supabase",
-      "environment": "preview_branch",
-      "production": false,
+      "environment": "production",
+      "production": true,
       "startsWithProductionData": false,
       "requiredServices": [
         "database",
         "auth",
         "storage"
       ],
-      "maximumLifetimeHours": 24,
-      "deleteAfterEvidence": true,
+      "maximumLifetimeHours": null,
+      "deleteAfterEvidence": false,
       "providerUsageChargesAcknowledged": false
     },
     "operator": {
@@ -49,30 +51,32 @@
       "acceptanceEvidenceRequired": true
     },
     "proposedActions": [
-      "create_one_preview_branch",
-      "apply_reviewed_migrations_to_preview",
-      "provision_one_self_serve_preview_tenant",
-      "run_hosted_isolation_storage_recovery_proof",
-      "delete_preview_branch_after_evidence"
+      "provision_dedicated_runtime_login",
+      "validate_runtime_connection",
+      "create_first_named_owner",
+      "activate_one_shop_workspace",
+      "stage_managed_vercel_environment",
+      "deploy_exact_reviewed_release",
+      "run_post_activation_tenant_isolation_proof"
     ],
     "doesNotAuthorize": [
-      "production_database_change",
-      "production_deploy",
       "customer_message",
       "payment",
       "stock_move",
-      "managed_product_activation",
-      "hosted_scheduler_activation"
+      "hosted_scheduler_activation",
+      "additional_tenant_activation",
+      "billing_activation",
+      "autonomous_external_write"
     ]
   },
   "securityAudit": {
     "contract": "supermega.supabase-security-advisor-audit.v2",
-    "asOf": "2026-08-13T06:40:00.000Z",
+    "asOf": "2026-08-20T17:02:04.312+06:30",
     "targetClassification": "protected-production",
     "advisorStatus": "clear",
     "findingCount": 0,
-    "liveSchemaVersion": 10,
-    "localTargetVersion": 10,
+    "liveSchemaVersion": 11,
+    "localTargetVersion": 11,
     "versionDrift": 0,
     "browserRolesDenied": true,
     "metadataRlsEnabled": true,
@@ -113,7 +117,7 @@
     {
       "id": "hosted_postgres17",
       "status": "ready-hosted",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v10 with zero drift from local target v10.",
+      "evidence": "Protected production is PostgreSQL 17 at managed schema v11 with zero drift from local target v11.",
       "nextAction": "Keep the hosted schema at the local target and the audit current."
     },
     {
@@ -137,14 +141,14 @@
     {
       "id": "security",
       "status": "ready-hosted",
-      "evidence": "Advisor is clear on protected managed schema v10 with metadata RLS enabled and zero drift from local target v10.",
-      "nextAction": "Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal."
+      "evidence": "Advisor is clear on protected managed schema v11 with metadata RLS enabled and zero drift from local target v11.",
+      "nextAction": "Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs."
     },
     {
       "id": "self_serve_pilot",
-      "status": "blocked",
-      "evidence": "Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS: window refusal before the store, one isolated owner tenant, exact idempotent replay, cross-actor claim_code_conflict, event immutability (SQLSTATE 55000), and cross-tenant invisibility. Production remains at v10, so applying the reviewed v11 self-serve grants and opening the activation window is the founder production_activation decision.",
-      "nextAction": "Run hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md as the founder production_activation decision: apply the reviewed v11 migration to production, set the store schema version to 11, open the activation window, then enable writes."
+      "status": "ready-hosted",
+      "evidence": "Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS, and protected production now carries the reviewed v11 grants. Runtime-login provisioning, the first named owner, deployment, and the activation window remain under the separate production_activation decision.",
+      "nextAction": "Keep the six-proof evidence current; execute runtime-login provisioning and the first named-owner activation only through the exact founder-approved production handoff."
     },
     {
       "id": "production_activation",
@@ -159,10 +163,10 @@
       "localStatus": "release-candidate-local",
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
-      "workOrderId": "shop-managed-order-close-pilot",
-      "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-      "blockingReason": "Needs founder-selected operator and approved isolated tenant; automation cannot substitute founder decisions.",
-      "requiredProof": "One authenticated order-to-close and return-exception pilot on isolated hosted tenant; named operator, baseline, and five-day evidence plan."
+      "workOrderId": "shop-spa-owner-pilot",
+      "proposedWork": "Shop: carry one named Spa owner from reviewed import through package sale, completed treatment, one package redemption, daily close, and recovery on an isolated managed tenant.",
+      "blockingReason": "The native candidate is locally verified. A named owner, reviewed client data, protected release, and approved isolated tenant are still required; sample evidence cannot close the pilot.",
+      "requiredProof": "One named Spa owner completes reviewed import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant; record setup time, correction effort, and five-day evidence without treating sample data as client proof."
     },
     {
       "productId": "plant",
@@ -218,11 +222,11 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:80b72cbe7eb32b2c7786a37f67d9875f91916bc244c064f34660be4d07aac2c4"
+      "digest": "sha256:cc61a7ccf1f1f6d2164448c7e29097884814b467705d83351c65c4237f665730"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:9b2ae8247f34513bfe1ac160baf2543d208ece0e82ece38a545e1feab03770b2"
+      "digest": "sha256:b160ca85da2753a5ce470b9c6a60d261997ff42fe3f171f988f281c6a56bc8b3"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -230,7 +234,7 @@
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
-      "digest": "sha256:a3fe4fdf06e0a1bd0b4e0be1a63a1f91bb0fda03d1ccd085eab85935157e98c3"
+      "digest": "sha256:59edf60b5e7eae3a52ca37819c063789993f7c235fccf74968906289ad667d6b"
     },
     {
       "path": "hq/readiness/hosted-storage-privacy-proof.json",
@@ -246,15 +250,15 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:ed147bdbfa1be55448020ca344b1ed75998e52033e419fb7e7fedd618578bb68"
+      "digest": "sha256:538c9c979b74d41563028f96c32ac340693a02a6cb20d5a9e63bd34fe87c4439"
     },
     {
       "path": "package.json",
-      "digest": "sha256:215885ad0788e4a6a727149ba8780b5eccfe599ceb26b1023d318ba62e6867b1"
+      "digest": "sha256:6ab18de152b808058925b58dd5101004d3235de1c5146d1130000ddb85762105"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:f432ecec624de248b531057e0b903c1a9ca71182b5b8376b981f4cb3a2a15b28"
+      "digest": "sha256:9d4874bd708ef350c811101d503720d54993f599caeb47f5cda1331fb5f9c7ba"
     }
   ]
 }

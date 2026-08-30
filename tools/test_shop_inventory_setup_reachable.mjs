@@ -9,8 +9,7 @@
 //
 //   1. The setup screen refused any shop with more than EIGHT stocked catalog items. Eight is
 //      the LOCATION limit; the contract allows a thousand stock units. All seven business
-//      templates seed twelve or thirteen, and a real device carries more still because the
-//      template catalog installs alongside the demo seed.
+//      templates seed well over eight, so the old UI bound rejected real client catalogs.
 //
 //   2. validateCommerceState passed itemSkus -- built in CATALOG order -- to
 //      projectShopInventory, which requires canonical order. So once a foundation existed,
@@ -86,8 +85,8 @@ for (const template of shopBusinessTemplates) {
 }
 check(widest > 8, `the widest template stocks ${widest} items -- more than the 8 the screen used to allow, so this guard is not vacuous`)
 
-// A real device carries the template catalog AND the demo seed, so the true count is larger
-// than any template alone. That is the number the bound has to clear.
+// A selected client template replaces the generic demo catalog. The setup bound must clear the
+// exact client catalog without quietly carrying unrelated SM-* products into the new workspace.
 const template = shopBusinessTemplates.find((candidate) => candidate.id === 'auto-parts')
 const installed = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
   sampleId: template.id,
@@ -98,8 +97,9 @@ const installed = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
 check(Boolean(installed), 'a business template catalog installs onto the seed')
 const stockItems = installed.items.filter((item) => Number.isSafeInteger(item.onHand) && item.onHand > 0)
 check(
-  stockItems.length > widest,
-  `a real device stocks ${stockItems.length} items -- more than the template's ${widest} alone`,
+  installed.items.length === shopBusinessTemplateCommerceItems(template.id).length
+    && !installed.items.some((item) => item.sku.startsWith('SM-')),
+  `a real device contains exactly the selected ${template.name.en} catalog with no generic demo products`,
 )
 check(
   stockItems.length <= SHOP_INVENTORY_MAX_STOCK_UNITS,

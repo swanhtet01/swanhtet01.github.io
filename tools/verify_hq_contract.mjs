@@ -87,6 +87,7 @@ const databaseImplementationPaths = [
   'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
   'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
   'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  'supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql',
   'supabase/rehearsal/20260804_public_browser_quarantine.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
@@ -231,7 +232,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.workOrder?.trim()
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 14
+  && portfolio.completedLocalAutomations.length === 15
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -280,6 +281,9 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[13]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[13]?.workOrderId === 'ecommerce-contact-correction-request'
   && portfolio.completedLocalAutomations[13]?.checkpoint === 'ENG-146'
+  && portfolio.completedLocalAutomations[14]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[14]?.workOrderId === 'shop-spa-membership-native'
+  && portfolio.completedLocalAutomations[14]?.checkpoint === 'ENG-147'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
@@ -867,8 +871,13 @@ requireContract('Shop uses the stable commerce runtime',
   && product('shop')?.compatibilityPath === '/operations/commerce/'
   && product('shop')?.surfaces?.join(',') === 'Sell,Orders,Stock'
   && product('shop')?.job?.includes('versioned per-order tax calculation')
+  && product('shop')?.job?.includes('native Spa prepaid-package sales and completed-treatment redemption')
   && product('shop')?.job?.includes('balanced review-only accounting handoff')
-  && product('shop')?.templateContract?.productId === 'commerce')
+  && product('shop')?.templateContract?.productId === 'commerce'
+  && product('shop')?.localAutomation?.workOrderId === 'shop-spa-owner-pilot'
+  && product('shop')?.nextGate?.includes('reconciled package sale')
+  && product('shop')?.nextGate?.includes('matching treatment redemption')
+  && product('shop')?.nextGate?.includes('sample data as client proof'))
 requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',
   enterpriseRoadmap.includes('Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1`')
   && enterpriseRoadmap.includes('Checkpoint `39b7fc2` adds `supermega.commerce.order-calculation.v2`')
@@ -1025,8 +1034,8 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 11
-  && databaseRehearsal.migration?.schemaVersion === 10
+  && databaseRehearsal.migration?.count === 12
+  && databaseRehearsal.migration?.schemaVersion === 11
   && databaseRehearsal.migration?.productionValidatorReady === true
   && Object.keys(databaseRehearsal.checks || {}).length === 56
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
@@ -1069,25 +1078,26 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.overall?.hostedActivationReady === false
   && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
   && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
-  && managedPilotReadiness.overall?.nextAction?.decisionId === 'bounded-managed-pilot-rehearsal'
-  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_preview_branch_target,approve_self_serve_activation_window'
-  && managedPilotReadiness.overall?.nextAction?.targetEnvironment === 'preview_branch'
+  && managedPilotReadiness.overall?.nextAction?.decisionId === 'managed-production-activation'
+  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_runtime_role_provisioning,approve_first_named_owner_identity,approve_exact_production_release,approve_managed_activation_window'
+  && managedPilotReadiness.overall?.nextAction?.targetEnvironment === 'production'
   && managedPilotReadiness.overall?.nextAction?.operatorProductId === 'shop'
-  && managedPilotReadiness.overall?.nextAction?.maximumLifetimeHours === 24
+  && managedPilotReadiness.overall?.nextAction?.maximumLifetimeHours === null
   && managedPilotReadiness.products?.map((product) => product.productId).join(',') === 'shop,plant,website,ecommerce'
   && managedPilotReadiness.products?.every((product) => product.managedPilotStatus === 'blocked' && product.automationStatus === 'owner-gated')
   && managedPilotReadiness.founderDecision?.status === 'required'
   && managedPilotReadiness.founderDecision?.authority === 'proposal_only'
   && managedPilotReadiness.founderDecision?.createsAuthority === false
   && managedPilotReadiness.founderDecision?.approvalReceipt === null
-  && managedPilotReadiness.founderDecision?.target?.environment === 'preview_branch'
-  && managedPilotReadiness.founderDecision?.target?.production === false
+  && managedPilotReadiness.founderDecision?.target?.environment === 'production'
+  && managedPilotReadiness.founderDecision?.target?.production === true
   && managedPilotReadiness.founderDecision?.target?.startsWithProductionData === false
-  && managedPilotReadiness.founderDecision?.target?.maximumLifetimeHours === 24
-  && managedPilotReadiness.founderDecision?.target?.deleteAfterEvidence === true
+  && managedPilotReadiness.founderDecision?.target?.maximumLifetimeHours === null
+  && managedPilotReadiness.founderDecision?.target?.deleteAfterEvidence === false
   && managedPilotReadiness.founderDecision?.operator?.productId === 'shop'
-  && managedPilotReadiness.founderDecision?.proposedActions?.includes('delete_preview_branch_after_evidence')
-  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('production_database_change')
+  && managedPilotReadiness.founderDecision?.proposedActions?.includes('provision_dedicated_runtime_login')
+  && managedPilotReadiness.founderDecision?.proposedActions?.includes('deploy_exact_reviewed_release')
+  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('additional_tenant_activation')
   && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('hosted_scheduler_activation')
   && managedPilotReadiness.controls?.externalWritesPerformed === false
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
@@ -1101,7 +1111,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.selfServePilot?.proofComplete === true
   && managedPilotReadiness.selfServePilot?.contract === 'supermega.self-serve-pilot-proof.v1'
   && managedPilotReadiness.selfServePilot?.schemaVersionProven === 11
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'self_serve_pilot')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'self_serve_pilot')?.status === 'ready-hosted'
   && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
   && managedPilotReadiness.securityAudit?.findingCount === supabaseSecurityAudit.advisor?.findingCount
@@ -1117,8 +1127,8 @@ requireContract('managed pilot readiness is derived and fail closed',
   && supabaseSecurityAudit.targetClassification === 'protected-production'
   && Number.isInteger(supabaseSecurityAudit.managedBackend?.liveSchemaVersion)
   && supabaseSecurityAudit.managedBackend.liveSchemaVersion >= 7
-  && supabaseSecurityAudit.managedBackend.liveSchemaVersion <= 10
-  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 10
+  && supabaseSecurityAudit.managedBackend.liveSchemaVersion <= 11
+  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 11
   && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
   && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === (supabaseSecurityAudit.managedBackend.liveSchemaVersion >= 9)
   && supabaseSecurityAudit.conclusion?.productionMutationAuthorized === false

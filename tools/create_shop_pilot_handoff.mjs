@@ -3,9 +3,14 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const SHOP_PILOT_HANDOFF_CONTRACT = 'supermega.shop.pilot_handoff.v2'
+export const SHOP_PILOT_HANDOFF_CONTRACT = 'supermega.shop.pilot_handoff.v3'
 export const SHOP_PILOT_REPLY_DRAFT_CONTRACT = 'supermega.shop.pilot_reply_draft.v1'
 export const SHOP_PILOT_OWNER_DECISION_CONTRACT = 'supermega.shop.pilot_owner_decision.v1'
+export const SHOP_PILOT_PRODUCT = 'shop'
+export const SHOP_PILOT_MODE = 'owner_named'
+export const SHOP_PILOT_VERTICAL_PACK = 'spa-services'
+export const SHOP_SPA_PILOT_PROFILE = 'spa-prepaid-membership-v1'
+export const SHOP_SPA_WORK_ORDER_ID = 'shop-spa-owner-pilot'
 
 const MAX_TEXT = 180
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -48,6 +53,27 @@ function optionalDigest(value, field) {
   if (value === undefined) return null
   if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) throw new Error(`${field}_invalid`)
   return value
+}
+
+function normalizeShopPilotMetadata(value, { defaultMissing = false } = {}) {
+  const product = value.product === undefined && defaultMissing ? SHOP_PILOT_PRODUCT : boundedText(value.product, 'product', 40)
+  const pilotMode = value.pilotMode === undefined && defaultMissing ? SHOP_PILOT_MODE : boundedText(value.pilotMode, 'pilot_mode', 40)
+  const verticalPack = value.verticalPack === undefined && defaultMissing ? SHOP_PILOT_VERTICAL_PACK : boundedText(value.verticalPack, 'vertical_pack', 80)
+  if (product !== SHOP_PILOT_PRODUCT) throw new Error('product_invalid')
+  if (pilotMode !== SHOP_PILOT_MODE) throw new Error('pilot_mode_invalid')
+  if (verticalPack !== SHOP_PILOT_VERTICAL_PACK) throw new Error('vertical_pack_unsupported')
+  return { product, pilotMode, verticalPack }
+}
+
+function normalizeSpaServicesBaseline(value) {
+  const source = value.verticalBaseline?.spaServices ?? value.spaBaseline ?? value.baseline
+  return {
+    clientImportRowCount: boundedNumber(source?.clientImportRowCount, 'baseline_client_import_row_count', { min: 1, max: 100_000, integer: true }),
+    weeklyPackageSales: boundedNumber(source?.weeklyPackageSales, 'baseline_weekly_package_sales', { min: 1, max: 100_000, integer: true }),
+    weeklyTreatmentRedemptions: boundedNumber(source?.weeklyTreatmentRedemptions, 'baseline_weekly_treatment_redemptions', { min: 1, max: 100_000, integer: true }),
+    medianMinutesPerRedemption: boundedNumber(source?.medianMinutesPerRedemption, 'baseline_median_minutes_per_redemption', { min: 0.1, max: 1_440 }),
+    weeklyPackageCorrectionCount: boundedNumber(source?.weeklyPackageCorrectionCount, 'baseline_weekly_package_correction_count', { min: 0, max: 100_000, integer: true }),
+  }
 }
 
 function shopQualificationFromContactEvent(event) {
@@ -187,6 +213,7 @@ export function sanitizeShopPilotContactEvent(event) {
 export function shopPilotInputFromContactEvent(event, ownerInput) {
   const sanitizedEvent = sanitizeShopPilotContactEvent(event)
   if (!ownerInput || typeof ownerInput !== 'object' || Array.isArray(ownerInput)) throw new Error('shop_owner_input_required')
+  if (sanitizedEvent.record.raw.shop.contact_is_operator !== true) throw new Error('shop_contact_operator_status_required')
   if (ownerInput.contactIsNamedOperator !== true) throw new Error('shop_contact_operator_confirmation_required')
   if (ownerInput.contactBaselineReviewed !== true) throw new Error('shop_contact_baseline_review_required')
   const leadId = sanitizedEvent.record.lead_id
@@ -203,14 +230,19 @@ export function shopPilotInputFromContactEvent(event, ownerInput) {
     }
     if (JSON.stringify(legacyBaseline) !== JSON.stringify(qualification.baseline)) throw new Error('shop_contact_baseline_mismatch')
   }
-  const { operatorRole: _legacyOperatorRole, baseline: _legacyBaseline, ...reviewedOwnerInput } = ownerInput
+  const metadata = normalizeShopPilotMetadata(ownerInput, { defaultMissing: true })
+  const { operatorRole: _legacyOperatorRole, baseline: _legacyBaseline, spaBaseline: _spaBaseline, verticalBaseline: _verticalBaseline, product: _product, pilotMode: _pilotMode, verticalPack: _verticalPack, ...reviewedOwnerInput } = ownerInput
 
   return {
     ...reviewedOwnerInput,
+    ...metadata,
     company: sanitizedEvent.record.company,
     operatorName: sanitizedEvent.record.name,
     operatorRole: qualification.operatorRole,
     baseline: qualification.baseline,
+    verticalBaseline: {
+      spaServices: normalizeSpaServicesBaseline(ownerInput),
+    },
     operationalProblem: sanitizedEvent.record.goal,
     sourceLeadDigest: sha256(leadId),
     sourceQualificationDigest: sha256(JSON.stringify(qualification)),
@@ -219,6 +251,11 @@ export function shopPilotInputFromContactEvent(event, ownerInput) {
 
 export function buildShopPilotHandoff(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('shop_pilot_input_required')
+  const metadata = normalizeShopPilotMetadata(input, { defaultMissing: true })
+  const pilotProfile = input.pilotProfile === undefined
+    ? SHOP_SPA_PILOT_PROFILE
+    : boundedText(input.pilotProfile, 'pilot_profile', 80)
+  if (pilotProfile !== SHOP_SPA_PILOT_PROFILE) throw new Error('pilot_profile_unsupported')
 
   const start = dateOnly(input.startDate, 'start_date')
   const review = dateOnly(input.reviewDate, 'review_date')
@@ -238,6 +275,8 @@ export function buildShopPilotHandoff(input) {
 
   return {
     contract: SHOP_PILOT_HANDOFF_CONTRACT,
+    workOrderId: SHOP_SPA_WORK_ORDER_ID,
+    ...metadata,
     status: blockers.length === 0 ? 'ready-for-private-pilot' : 'blocked-owner-review',
     company: boundedText(input.company, 'company'),
     operator: {
@@ -245,6 +284,10 @@ export function buildShopPilotHandoff(input) {
       role: boundedText(input.operatorRole, 'operator_role'),
     },
     pilot: {
+      product: metadata.product,
+      pilotMode: metadata.pilotMode,
+      verticalPack: metadata.verticalPack,
+      profile: pilotProfile,
       tenantLabel: boundedText(input.tenantLabel, 'tenant_label'),
       operationalProblem: boundedText(input.operationalProblem, 'operational_problem', 500),
       startDate: start.value,
@@ -256,6 +299,9 @@ export function buildShopPilotHandoff(input) {
       medianMinutesPerOrder: boundedNumber(input.baseline?.medianMinutesPerOrder, 'baseline_median_minutes_per_order', { min: 0.1, max: 1_440 }),
       weeklyExceptionCount: boundedNumber(input.baseline?.weeklyExceptionCount, 'baseline_weekly_exception_count', { min: 0, max: 100_000, integer: true }),
       closeMinutesPerDay: boundedNumber(input.baseline?.closeMinutesPerDay, 'baseline_close_minutes_per_day', { min: 0, max: 1_440 }),
+    },
+    verticalBaseline: {
+      spaServices: normalizeSpaServicesBaseline(input),
     },
     commercialDraft: {
       fixedPilotFeeUsd: boundedNumber(input.fixedPilotFeeUsd, 'fixed_pilot_fee_usd', { min: 1, max: 100_000, integer: true }),
@@ -273,6 +319,7 @@ export function buildShopPilotHandoff(input) {
     blockers,
     authority: {
       namedHumanConfirmsOrdersAndClose: true,
+      namedHumanConfirmsSpaServicesVerticalPack: true,
       observationAndApprovedPilotWritesOnly: true,
       customerMessagesAllowed: false,
       providerPaymentsAllowed: false,
@@ -281,11 +328,11 @@ export function buildShopPilotHandoff(input) {
       deploymentAllowed: false,
     },
     evidencePlan: [
-      { day: 1, focus: 'Baseline and operator walkthrough', proof: 'Record the baseline metrics and complete one observation-only walkthrough.' },
-      { day: 2, focus: 'Order entry and review', proof: 'Create and human-confirm test orders; record completion time and corrections.' },
-      { day: 3, focus: 'Daily close and exception', proof: 'Run a reviewed close and one controlled exception without external posting.' },
-      { day: 4, focus: 'Return and recovery', proof: 'Rehearse one return exception plus reload and safe retry evidence.' },
-      { day: 5, focus: 'Replay, export, and acceptance', proof: 'Verify retained evidence, compare measurements, and record the operator decision.' },
+      { day: 1, focus: 'Shop baseline and Spa services vertical pack client import review', proof: 'Record the Shop baseline, then review the Spa services vertical pack client import and resolve every row before applying sample data.' },
+      { day: 2, focus: 'Spa services vertical pack package sale', proof: 'Create and human-confirm a package sale for the reviewed client; reconcile payment and record completion time and corrections.' },
+      { day: 3, focus: 'Spa services vertical pack treatment redemption', proof: 'Complete the matching treatment, record one immutable redemption, and prove mismatched or ineligible redemptions are refused.' },
+      { day: 4, focus: 'Daily close and recovery', proof: 'Run a reviewed close, reload the workspace, and prove safe retry without duplicate sale, treatment, or redemption events.' },
+      { day: 5, focus: 'Replay, export, and owner acceptance', proof: 'Verify retained package balance and evidence, compare measurements, create a backup, and record the owner decision.' },
     ],
     acceptance: {
       requiredMeasurements: [
@@ -294,7 +341,20 @@ export function buildShopPilotHandoff(input) {
         'close_minutes_per_day',
         'operator_corrections',
         'reload_and_retry_result',
+        'client_import_minutes',
+        'package_sale_minutes',
+        'treatment_redemption_minutes',
+        'package_balance_result',
       ],
+      requiredJourney: [
+        'reviewed_client_import',
+        'reconciled_package_sale',
+        'matching_completed_treatment',
+        'immutable_package_redemption',
+        'reviewed_daily_close',
+        'workspace_backup_and_recovery',
+      ],
+      sampleEvidenceCanCloseGate: false,
       improvementClaimAllowedBeforeReview: false,
       activationDecision: 'owner-review-required',
     },
@@ -317,6 +377,7 @@ export function renderShopPilotHandoff(input) {
   const dayLines = handoff.evidencePlan
     .map(({ day, focus, proof }) => `- Day ${day} - **${focus}:** ${proof}`)
     .join('\n')
+  const spaBaseline = handoff.verticalBaseline.spaServices
 
   return `# PRIVATE - SuperMega Shop five-day pilot handoff
 
@@ -328,17 +389,30 @@ This private artifact contains operator and company information. Do not commit, 
 
 - Company: ${markdownText(handoff.company)}
 - Named operator: ${markdownText(handoff.operator.name)} (${markdownText(handoff.operator.role)})
+- Product: ${handoff.product}
+- Pilot mode: ${handoff.pilotMode}
+- Vertical pack: ${handoff.verticalPack}
 - Isolated tenant label: ${markdownText(handoff.pilot.tenantLabel)}
+- Pilot profile: ${handoff.pilot.profile}
+- Work order: ${handoff.workOrderId}
 - Operational problem: ${markdownText(handoff.pilot.operationalProblem)}
 - Pilot window: ${handoff.pilot.startDate} through ${handoff.pilot.reviewDate}
 ${handoff.source.contactEventBound ? `- Source lead digest: \`${handoff.source.leadDigest}\` (email and raw contact data excluded)\n- Reviewed qualification digest: \`${handoff.source.qualificationDigest}\`` : '- Source: direct private owner intake'}
 
-## Recorded baseline
+## Recorded Shop baseline
 
 - Weekly orders: ${handoff.baseline.weeklyOrders}
 - Median minutes per order: ${handoff.baseline.medianMinutesPerOrder}
 - Weekly exceptions: ${handoff.baseline.weeklyExceptionCount}
 - Daily close minutes: ${handoff.baseline.closeMinutesPerDay}
+
+## Spa services vertical pack baseline
+
+- Client rows prepared for reviewed client import: ${spaBaseline.clientImportRowCount}
+- Weekly prepaid package sales: ${spaBaseline.weeklyPackageSales}
+- Weekly treatment redemptions: ${spaBaseline.weeklyTreatmentRedemptions}
+- Median minutes per treatment redemption: ${spaBaseline.medianMinutesPerRedemption}
+- Weekly package corrections: ${spaBaseline.weeklyPackageCorrectionCount}
 
 ## Five-day evidence plan
 
@@ -346,9 +420,9 @@ ${dayLines}
 
 ## Acceptance review
 
-- Compare median order time, exception rate, close time, operator corrections, and reload/retry evidence with the recorded baseline.
+- Compare import time, package-sale time, treatment-redemption time, package balance, close time, operator corrections, and reload/retry evidence with the recorded baseline.
 - Record failures and operator interventions; do not convert missing evidence into a success claim.
-- A named human confirms orders and close. Customer messaging, provider payment, accounting posting, deployment, and production activation remain outside this pilot.
+- A named human confirms client import, package sale, treatment, redemption, and close. Sample data cannot close the real-client gate. Customer messaging, provider payment, accounting posting, deployment, and production activation remain outside this pilot.
 - Review date: **${handoff.pilot.reviewDate}**.
 
 ## Start gates
@@ -383,10 +457,11 @@ Hi ${handoff.operator.name},
 Thanks for describing the workflow at ${handoff.company}. We have prepared a private five-day Shop pilot draft for ${handoff.pilot.startDate} through ${handoff.pilot.reviewDate}.
 
 The proposed pilot covers:
-- reviewed Shop order entry and confirmation;
-- one daily close and controlled exception;
-- one return, reload, and safe-retry rehearsal; and
-- a final evidence export and operator acceptance review.
+- the generic Shop order, exception, reload/retry, and daily close workflow;
+- Spa services vertical pack: reviewed client import and correction;
+- Spa services vertical pack: one reconciled package sale;
+- Spa services vertical pack: one matching completed treatment redemption; and
+- a final package-balance review, backup, and owner acceptance decision.
 
 The fixed pilot-fee draft is ${usd(handoff.commercialDraft.fixedPilotFeeUsd)}. Payment and tax terms still require separate confirmation before any payment is accepted.
 
@@ -471,10 +546,20 @@ async function main() {
   }
   if (args.length === 1 && args[0] === '--owner-example') {
     process.stdout.write(`${JSON.stringify({
+      product: SHOP_PILOT_PRODUCT,
+      pilotMode: SHOP_PILOT_MODE,
+      verticalPack: SHOP_PILOT_VERTICAL_PACK,
       tenantLabel: 'example-shop-isolated-pilot',
       startDate: '2026-08-03',
       reviewDate: '2026-08-07',
       fixedPilotFeeUsd: 500,
+      spaBaseline: {
+        clientImportRowCount: '',
+        weeklyPackageSales: '',
+        weeklyTreatmentRedemptions: '',
+        medianMinutesPerRedemption: '',
+        weeklyPackageCorrectionCount: '',
+      },
       contactIsNamedOperator: false,
       contactBaselineReviewed: false,
       isolatedNonProductionTenantApproved: false,
@@ -486,6 +571,9 @@ async function main() {
   }
   if (args.length === 1 && args[0] === '--example') {
     process.stdout.write(`${JSON.stringify({
+      product: SHOP_PILOT_PRODUCT,
+      pilotMode: SHOP_PILOT_MODE,
+      verticalPack: SHOP_PILOT_VERTICAL_PACK,
       company: 'Example Shop',
       operatorName: 'Example Operator',
       operatorRole: 'Shop manager',
@@ -493,7 +581,21 @@ async function main() {
       operationalProblem: 'Reduce manual order re-entry and make daily close exceptions reviewable.',
       startDate: '2026-08-03',
       reviewDate: '2026-08-07',
-      baseline: { weeklyOrders: 120, medianMinutesPerOrder: 8, weeklyExceptionCount: 12, closeMinutesPerDay: 45 },
+      baseline: {
+        weeklyOrders: 120,
+        medianMinutesPerOrder: 8,
+        weeklyExceptionCount: 12,
+        closeMinutesPerDay: 45,
+      },
+      verticalBaseline: {
+        spaServices: {
+          clientImportRowCount: 40,
+          weeklyPackageSales: 12,
+          weeklyTreatmentRedemptions: 24,
+          medianMinutesPerRedemption: 3,
+          weeklyPackageCorrectionCount: 2,
+        },
+      },
       fixedPilotFeeUsd: 500,
       isolatedNonProductionTenantApproved: false,
       namedOperatorAuthorized: false,

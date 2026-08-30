@@ -37,6 +37,7 @@ export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
+export const COMMERCE_WORKSPACE_ARCHIVE_SCHEMA = 'supermega.commerce.workspace-archive.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -45,6 +46,19 @@ export const COMMERCE_LOCK = 'supermega-commerce-workspace-v2'
 export type CommerceItem = {
   sku: string
   name: string
+  // Burmese display name, carried alongside `name` rather than widening `name` to {en, my}:
+  // `name` is snapshotted onto every order line and printed on receipts, so changing its type
+  // would invalidate saved workspaces and stored orders.
+  //
+  // OPTIONAL, and it has to stay optional. Catalog items are PERSISTED under COMMERCE_KEY, and
+  // every catalog written before this field existed carries no Burmese name -- as does every
+  // catalog an owner imports from her own CSV, which has no column for one. Requiring it would
+  // turn an ordinary existing workspace into an unreadable one.
+  //
+  // Only rows that sell a bookable service ever receive it, from the pack's own translations via
+  // withShopServiceMyanmarNames. Retail goods have no Myanmar name anywhere in this codebase and
+  // must not be given machine-made ones.
+  nameMy?: string
   variant?: string
   onHand: number
   reorderAt: number
@@ -2517,6 +2531,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     itemSkus.push(sku)
     itemBySku.set(sku, candidate)
     canonicalText(candidate.name, `items[${index}].name`)
+    if (candidate.nameMy !== undefined) canonicalText(candidate.nameMy, `items[${index}].nameMy`)
     if (candidate.variant !== undefined) canonicalText(candidate.variant, `items[${index}].variant`)
     assertSafeInteger(candidate.onHand, `items[${index}].onHand`)
     assertSafeInteger(candidate.reorderAt, `items[${index}].reorderAt`)
@@ -5432,11 +5447,23 @@ function commerceOrderAcknowledgementProjection(
   ]
 }
 
-export function commerceOrderAcknowledgement(
-  state: CommerceState,
+// Split out on the same terms as commerceDailyCloseExportFrom further down, and for a worse
+// case. The Shop screen holds one acknowledgement per order and rebuilds them from a state that
+// is a NEW OBJECT after every sale, so validateCommerceState ran once per order all day.
+// Measured 2026-08-21 on a Shop driven to its enforced 2 MiB ceiling through the real
+// transitions (1,262 orders, 1,081 completed, 2,097,406 bytes): one validation is 31-36 ms and
+// is 97.1% of what one acknowledgement costs, so the map cost about 50 SECONDS after every
+// sale (three runs, medians 47.6 s, 50.6 s, 54.5 s).
+//
+// Hoisting the validation is sound rather than a shortcut, because validateCommerceState is a
+// PREDICATE and not a normaliser: it returns its argument by reference and leaves it byte for
+// byte as it found it. One validation of a state object therefore says exactly what a thousand
+// say about that same object. What changes here is how many times one state is checked, never
+// whether it is -- this function is module-private and every way in validates first.
+function commerceOrderAcknowledgementFrom(
+  current: CommerceState,
   orderId: string,
 ): CommerceOrderAcknowledgement | null {
-  const current = validateCommerceState(state)
   const order = current.orders.find((candidate) => candidate.id === orderId)
   if (!order?.calculation || !order.fulfilment || !order.fulfilmentReference || !order.promisedAt) return null
   const lineSnapshots = validatedOrderLineSnapshots(order)
@@ -5532,6 +5559,36 @@ export function commerceOrderAcknowledgement(
   return {
     ...artifact,
     digest: `sha256:${sha256Hex(JSON.stringify(commerceOrderAcknowledgementProjection(artifact)))}`,
+  }
+}
+
+export function commerceOrderAcknowledgement(
+  state: CommerceState,
+  orderId: string,
+): CommerceOrderAcknowledgement | null {
+  return commerceOrderAcknowledgementFrom(validateCommerceState(state), orderId)
+}
+
+// One validated state, and a way to ask it for acknowledgements one at a time.
+//
+// A screen listing orders needs two things the single-order entry point cannot give it at any
+// sane price: many acknowledgements from ONE state, and only the ones it actually shows. This
+// returns a reader bound to a state that has been validated exactly once, so a caller can ask
+// for whichever orders it renders and pay for nothing else. Asking twice for the same order
+// returns the same artifact -- built once, then remembered for the life of the reader, which
+// lives exactly as long as the state it validated.
+//
+// The reader is the ONLY way out of this module to the unvalidated builder, and it cannot be
+// constructed without validating: an invalid state throws here, at construction, rather than
+// once per order at the call sites.
+export function commerceOrderAcknowledgementReader(state: CommerceState) {
+  const current = validateCommerceState(state)
+  const built = new Map<string, CommerceOrderAcknowledgement | null>()
+  return (orderId: string): CommerceOrderAcknowledgement | null => {
+    if (built.has(orderId)) return built.get(orderId) ?? null
+    const artifact = commerceOrderAcknowledgementFrom(current, orderId)
+    built.set(orderId, artifact)
+    return artifact
   }
 }
 
@@ -5644,11 +5701,23 @@ export function commerceStorefrontRequests(state: CommerceState) {
   return state.storefrontRequests ?? []
 }
 
+// Read on every workspace change -- which is once per sale -- so this validates the state it
+// was handed rather than a deep copy of it. The copy that used to open this function bought
+// nothing: validateCommerceState is a PREDICATE and not a normaliser, returning its argument
+// by reference and leaving it byte for byte as it found it (pinned in
+// test_commerce_state_validator.mjs), so there was never a mutation here for a caller to be
+// defended against. Nor was the copy what kept callers unaliased -- every order and request
+// this function hands back is cloned individually on its way out, below.
+//
+// Measured 2026-08-24 on a Shop driven to its enforced 2 MiB ceiling through the real
+// transitions (2,229 orders, 2,090,587 bytes) with the buying contract's own ceiling of 100
+// storefront requests: the copy was 11 ms of the 129 ms this call costs. Pinned by count
+// rather than by clock in test_ecommerce_order_coexistence.mjs (5d).
 export function commerceStorefrontOrderTimeline(
   state: CommerceState,
   requests: CommerceStorefrontRequest[] = commerceStorefrontRequests(state),
 ): CommerceStorefrontOrderTimelineEntry[] {
-  const current = validateCommerceState(structuredClone(state))
+  const current = validateCommerceState(state)
   const seenIds = new Set<string>()
   for (const request of requests) {
     if (seenIds.has(request.id)) throw new Error(`Duplicate Ecommerce request ${request.id} cannot be projected.`)
@@ -6373,9 +6442,11 @@ export function registerCommerceItem(state: CommerceState, item: CommerceItem, p
   const sku = optionalText(item.sku)
   const name = optionalText(item.name)
   const variant = item.variant === undefined ? undefined : optionalText(item.variant)
+  const nameMy = item.nameMy === undefined ? undefined : optionalText(item.nameMy)
   if (!validProof(proof)
     || !sku || sku !== item.sku || sku.length > 80
     || !name || name !== item.name || name.length > 180
+    || (item.nameMy !== undefined && (nameMy !== item.nameMy || item.nameMy.length > 180))
     || (item.variant !== undefined && (variant !== item.variant || item.variant.length > 180))
     || !Number.isSafeInteger(item.onHand) || item.onHand < 0
     || !Number.isSafeInteger(item.reorderAt) || item.reorderAt < 0
@@ -6468,9 +6539,35 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
       return null
     }
   }
-  const seedAnchor = commerceSeedAnchor(base)
+  const policySeedCapturedAt = (base.promotionPolicies ?? []).find(
+    (policy) => policy.proof.actionId === 'ACT-DEMO-PROMOTION-WELCOME',
+  )?.proof.capturedAt
+  const policySeedAnchor = policySeedCapturedAt ? Date.parse(policySeedCapturedAt) : Number.NaN
+  const seedAnchor = commerceSeedAnchor(base) ?? (Number.isFinite(policySeedAnchor) ? policySeedAnchor : null)
   if (seedAnchor === null) return null
-  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce(seedAnchor))) return null
+  const seed = createSeedCommerce(seedAnchor)
+  let cleanClientBase: CommerceState
+  try {
+    cleanClientBase = validateCommerceState({
+      ...seed,
+      items: [],
+      orders: [],
+      movements: [],
+      catalogBaselines: [],
+      purchaseBudgetEnvelopes: [],
+      purchaseOrders: [],
+    })
+  } catch {
+    return null
+  }
+  if (JSON.stringify(base) !== JSON.stringify(seed)
+    && JSON.stringify(base) !== JSON.stringify(cleanClientBase)) return null
+  // A selected client template is the workspace, not an extra category inside SuperMega's
+  // generic demo shop. Once the exact, untouched seed has been proven above, remove its products,
+  // orders, stock evidence, catalog baselines, and procurement example before registering the
+  // client rows. Reusable checkout policies remain available to Ecommerce. Any owner-modified
+  // workspace still fails the exact-seed comparison and is preserved unchanged.
+  base = cleanClientBase
   if (requestedItems.some((item) => base.items.some((existing) => existing.sku === item.sku))) return null
 
   let next = base
@@ -6545,6 +6642,7 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
     const saleNumber = n + 1
     const orderId = saleOrderIds[n]
     const reserveActionId = `${activityPrefix}SALE-${saleNumber}-RESERVE`
+    const settleActionId = `${activityPrefix}SALE-${saleNumber}-SETTLE`
     const completeActionId = `${activityPrefix}SALE-${saleNumber}-COMPLETE`
     if (!validTimestamp(sale?.recordedAt) || !Array.isArray(sale?.lines) || !sale.lines.length) return null
     const salePayment = optionalText(sale.payment)
@@ -6566,6 +6664,15 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
       if (reservedSoFar === null || reservedSoFar > item.onHand) return null
       reservedQuantityBySku.set(item.sku, reservedSoFar)
     }
+    // A counter sale is money taken and then goods handed over: the customer pays at the till and
+    // walks out with the purchase. Stage it in that order -- payment reconciled first, completion
+    // after -- exactly as the demo seed's ORD-1039 does.
+    //
+    // Staging it 'completed' with payment left 'pending' put a permanent primary "Reconcile
+    // payment" button on the owner's first screen that could never succeed: validateCommerceState
+    // requires completion.capturedAt >= paymentReconciledAt, and a real till only ever stamps a
+    // proof from the present clock, which is always later than this backdated completion.
+    const paidAt = new Date(Date.parse(sale.recordedAt) + 5 * 60 * 1000).toISOString()
     const completedAt = new Date(Date.parse(sale.recordedAt) + 15 * 60 * 1000).toISOString()
     const reserveProof: CommerceActionProof = { actionId: reserveActionId, capturedAt: sale.recordedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample sale ${saleNumber}.`, evidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-RESERVE` }
     newOrders.push({
@@ -6578,7 +6685,12 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
       ...(orderLines.length === 1 ? { itemSku: orderLines[0].sku } : {}),
       quantity: orderQuantity,
       payment: salePayment,
-      paymentStatus: 'pending',
+      paymentStatus: 'reconciled',
+      paymentReconciledAt: paidAt,
+      paymentReconciliationActionId: settleActionId,
+      paymentReconciledBy: WORKING_SAMPLE_SETUP_ACTOR,
+      paymentReconciliationReason: `Counter payment taken for the ${sampleName} working sample.`,
+      paymentEvidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-SETTLE`,
       refundStatus: 'none',
       fulfilment: 'pickup',
       fulfilmentReference: `Counter ${orderId}`,
@@ -8360,6 +8472,13 @@ export function reconcileCommercePayment(state: CommerceState, orderId: string, 
       && order.paymentEvidenceReference === proof.evidenceReference ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId)) return null
+  // The record keeps payment at or before handover (validateCommerceState enforces
+  // completion.capturedAt >= paymentReconciledAt), so a proof stamped after this order was
+  // completed cannot be written without breaking the chronology. Refuse it here instead of
+  // letting validateCommerceState throw out of a transition: returning null is what every other
+  // refusal in this module does, and it is what the callers are written to handle.
+  if (order.completion
+    && (timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(order.completion.capturedAt) as bigint)) return null
   return validateCommerceState({
     ...state,
     orders: state.orders.map((candidate) => candidate.id === orderId ? {
@@ -9669,8 +9788,13 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
   ]
 }
 
-export function commerceDailyCloseExport(state: CommerceState, closeId: string): CommerceDailyCloseExport | null {
-  const current = validateCommerceState(state)
+// Split out of commerceDailyCloseExport so a caller that already holds a VALIDATED state can
+// export many closes without paying validateCommerceState once per close. At the byte ceiling
+// that validation dominates everything else: commerceWorkspaceArchive exports every close a
+// shop has ever taken, and re-validating a 2 MiB workspace tens of times over is the
+// difference between an archive a cheap Android tablet can produce and one it cannot. The
+// public entry point below still validates, so its contract is unchanged.
+function commerceDailyCloseExportFrom(current: CommerceState, closeId: string): CommerceDailyCloseExport | null {
   const close = current.closes.find((candidate) => candidate.id === closeId)
   if (!close?.businessDate
     || !close.orderIds
@@ -9747,6 +9871,10 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
     ...artifact,
     digest: `sha256:${sha256Hex(JSON.stringify(commerceDailyCloseExportProjection(artifact)))}`,
   }
+}
+
+export function commerceDailyCloseExport(state: CommerceState, closeId: string): CommerceDailyCloseExport | null {
+  return commerceDailyCloseExportFrom(validateCommerceState(state), closeId)
 }
 
 function commerceCsvCell(value: string | number | null | string[]) {
@@ -9942,6 +10070,299 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     null,
     artifact.digest,
   ]))
+  return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
+}
+
+// ---------------------------------------------------------------------------
+// Workspace archive -- every trading day this device has closed, in one file.
+//
+// WHY THIS EXISTS. The headroom meter (storage-durability.ts) tells an owner near the
+// workspace ceiling to "export a backup from Settings so these records are safe off the
+// device". Two files could have answered that and neither did the whole job:
+//
+//  - The workspace backup (local-workspace-backup.ts) is genuinely lossless and Shop can
+//    genuinely load it back. But it is a map of storage keys to raw JSON strings. Nobody
+//    can read it, and no accountant can be handed it.
+//  - commerceDailyCloseExport produces a readable, digest-sealed CSV -- but the only place
+//    it is surfaced (CoreApp.tsx, the "Last close" disclosure) builds it for latestClose
+//    and nothing else. A shop 38 trading days into its history could download day 38 and
+//    had no route to days 1-37 at all.
+//
+// So the gap was not "a lossless artifact" -- one already ships. It was that a shop's own
+// trading history had no readable form. This archive is that form: it walks every close,
+// reusing the export builder that already exists rather than defining a second projection
+// of the same records.
+//
+// WHAT IT IS NOT. It cannot be loaded back into Shop. There is no importer, and
+// CommerceDailyCloseExportOrder is a narrower record than CommerceOrder, so an importer
+// built on it would be lossy. That is declared in-band as `restorable: false` and said in
+// the owner's own words in the interface, because an export whose limits are only written
+// in a pull request is an export that will be trusted for something it cannot do.
+//
+// COMPLETENESS IS THE WHOLE POINT. An archive that quietly drops a record type is worse
+// than no archive, because the owner stops looking. Two record classes can legitimately
+// fail to reach a close export and both were silently droppable:
+//
+//  - A legacy close taken before evidence fields existed: commerceDailyCloseExportFrom
+//    returns null for it (missing actionId/operator/reason/evidenceReference).
+//  - An order not on any exported close: today's un-closed sales, cancellations, and every
+//    order belonging to a close that fell into the case above.
+//
+// Rather than filter those away, each one becomes a named gap row, and the artifact fails
+// closed unless archived + uncovered accounts for every order in the workspace. The counts
+// are derived from the state being archived on every build; none of them is a constant.
+export type CommerceWorkspaceArchiveGap = {
+  kind: 'close_without_evidence' | 'order_not_on_an_archived_close'
+  id: string
+  detail: string
+}
+
+export type CommerceWorkspaceArchive = {
+  schema: typeof COMMERCE_WORKSPACE_ARCHIVE_SCHEMA
+  workspaceSchema: typeof COMMERCE_WORKSPACE_SCHEMA
+  generatedAt: string
+  closeCount: number
+  archivedCloseCount: number
+  orderCount: number
+  archivedOrderCount: number
+  uncoveredOrderCount: number
+  archivedTotalMmk: number
+  closes: CommerceDailyCloseExport[]
+  gaps: CommerceWorkspaceArchiveGap[]
+  // The posture triple, in the shape the other accountant-facing artifacts use: what this
+  // file cannot do, stated inside the file.
+  restorable: false
+  externalWritesPerformed: false
+  digest: string
+}
+
+function commerceWorkspaceArchiveProjection(artifact: Omit<CommerceWorkspaceArchive, 'digest'>) {
+  return [
+    artifact.schema,
+    artifact.workspaceSchema,
+    artifact.generatedAt,
+    artifact.closeCount,
+    artifact.archivedCloseCount,
+    artifact.orderCount,
+    artifact.archivedOrderCount,
+    artifact.uncoveredOrderCount,
+    artifact.archivedTotalMmk,
+    artifact.restorable,
+    artifact.externalWritesPerformed,
+    // The close digests, not the closes: each close is already sealed by its own
+    // projection, so re-flattening every order here would only duplicate that work at the
+    // exact scale where the cost matters.
+    artifact.closes.map((close) => [close.closeId, close.businessDate, close.digest]),
+    artifact.gaps.map((gap) => [gap.kind, gap.id, gap.detail]),
+  ]
+}
+
+/**
+ * Build a readable archive of every trading day this workspace has closed.
+ *
+ * Read-only by construction: the state is validated once, every close is projected through
+ * the existing export builder, and nothing is written back. Returns null rather than an
+ * incomplete archive if the coverage arithmetic does not account for every order.
+ */
+export function commerceWorkspaceArchive(state: CommerceState, generatedAt: string): CommerceWorkspaceArchive | null {
+  if (!validTimestamp(generatedAt)) return null
+  const current = validateCommerceState(state)
+
+  const closes: CommerceDailyCloseExport[] = []
+  const gaps: CommerceWorkspaceArchiveGap[] = []
+  for (const close of current.closes) {
+    const exported = commerceDailyCloseExportFrom(current, close.id)
+    if (exported) {
+      closes.push(exported)
+      continue
+    }
+    gaps.push({
+      kind: 'close_without_evidence',
+      id: close.id,
+      detail: `Closed ${close.businessDate ?? 'on an unrecorded date'} without the evidence record an export needs, so its ${close.orderIds?.length ?? close.orders} ${(close.orderIds?.length ?? close.orders) === 1 ? 'sale is' : 'sales are'} listed individually below.`,
+    })
+  }
+
+  // Unconditional by design: an order is in this file or it has a row saying it is not, and
+  // there is no third branch that could quietly swallow one. An earlier revision looked up
+  // which close had claimed the order so the row could name it, and that lookup was both
+  // unreachable in practice — a close carries all eight snapshot fields or none, so a close
+  // that cannot be exported has no orderIds to claim with — and a place where a stray
+  // `continue` would drop a record with nothing to catch it.
+  const archivedOrderIds = new Set(closes.flatMap((close) => close.orders.map((order) => order.orderId)))
+  for (const order of current.orders) {
+    if (archivedOrderIds.has(order.id)) continue
+    gaps.push({
+      kind: 'order_not_on_an_archived_close',
+      id: order.id,
+      detail: `Not on a closed day in this file — ${order.status}, payment ${order.paymentStatus}.`,
+    })
+  }
+
+  const archivedOrderCount = archivedOrderIds.size
+  const uncoveredOrderCount = gaps.filter((gap) => gap.kind === 'order_not_on_an_archived_close').length
+  // Fail closed on the one thing this artifact promises. If some order is neither archived
+  // nor named as a gap, the file would understate the shop's history without saying so --
+  // exactly the silence this whole batch exists to remove.
+  if (archivedOrderCount + uncoveredOrderCount !== current.orders.length) return null
+
+  const archivedTotalMmk = closes.reduce((sum, close) => sum + close.totalMmk, 0)
+  if (!Number.isSafeInteger(archivedTotalMmk)) return null
+
+  const artifact: Omit<CommerceWorkspaceArchive, 'digest'> = {
+    schema: COMMERCE_WORKSPACE_ARCHIVE_SCHEMA,
+    workspaceSchema: COMMERCE_WORKSPACE_SCHEMA,
+    generatedAt,
+    closeCount: current.closes.length,
+    archivedCloseCount: closes.length,
+    orderCount: current.orders.length,
+    archivedOrderCount,
+    uncoveredOrderCount,
+    archivedTotalMmk,
+    closes,
+    gaps,
+    restorable: false,
+    externalWritesPerformed: false,
+  }
+  return {
+    ...artifact,
+    digest: `sha256:${sha256Hex(JSON.stringify(commerceWorkspaceArchiveProjection(artifact)))}`,
+  }
+}
+
+export function commerceWorkspaceArchiveCsv(artifact: CommerceWorkspaceArchive) {
+  // Verify before serialising, the way the support-workload and ledger-journal builders do.
+  // commerceDailyCloseCsv does not, and this is the artifact an owner is told to keep for
+  // years -- a tampered or hand-edited archive must refuse to re-serialise rather than
+  // quietly produce a file that disagrees with its own seal.
+  const { digest, ...unsigned } = artifact
+  if (artifact.schema !== COMMERCE_WORKSPACE_ARCHIVE_SCHEMA
+    || digest !== `sha256:${sha256Hex(JSON.stringify(commerceWorkspaceArchiveProjection(unsigned)))}`) {
+    throw new Error('Workspace archive integrity check failed.')
+  }
+  const header = [
+    'archive_schema',
+    'archive_digest',
+    'generated_at',
+    'record_type',
+    'record_detail',
+    'restorable',
+    'close_count',
+    'archived_close_count',
+    'order_count',
+    'archived_order_count',
+    'uncovered_order_count',
+    'close_id',
+    'business_date',
+    'closed_at',
+    'operator',
+    'evidence_reference',
+    'close_digest',
+    'order_id',
+    'order_created_at',
+    'payment_method',
+    'payment_reconciled_at',
+    'payment_evidence_reference',
+    'currency',
+    'catalog_revision',
+    'tax_configuration_revision',
+    'tax_code',
+    'tax_jurisdiction_code',
+    'tax_effective_from',
+    'tax_rate_basis_points',
+    'listed_subtotal_mmk',
+    'subtotal_mmk',
+    'tax_mode',
+    'tax_mmk',
+    'original_total_mmk',
+    'total_mmk',
+    'corrections_json',
+    'calculation_status',
+    'payment_exception_order_ids',
+    'stock_exception_skus',
+  ]
+  const blank = new Array(header.length - 11).fill(null) as Array<string | number | null | string[]>
+  const lead = (recordType: string, detail: string | null): Array<string | number | null | string[]> => [
+    artifact.schema,
+    artifact.digest,
+    artifact.generatedAt,
+    recordType,
+    detail,
+    'no',
+    artifact.closeCount,
+    artifact.archivedCloseCount,
+    artifact.orderCount,
+    artifact.archivedOrderCount,
+    artifact.uncoveredOrderCount,
+  ]
+  const rows: Array<Array<string | number | null | string[]>> = [[
+    ...lead('archive', `Every trading day this device has closed. ${artifact.archivedCloseCount} of ${artifact.closeCount} closed ${artifact.closeCount === 1 ? 'day' : 'days'} and ${artifact.archivedOrderCount} of ${artifact.orderCount} ${artifact.orderCount === 1 ? 'sale' : 'sales'} are in this file. Shop cannot load this file back in.`),
+    ...blank,
+  ]]
+  for (const close of artifact.closes) {
+    rows.push([
+      ...lead('close', null),
+      close.closeId,
+      close.businessDate,
+      close.closedAt,
+      close.operator,
+      close.evidenceReference,
+      close.digest,
+      null, null, null, null, null,
+      'MMK',
+      null, null, null, null, null, null, null, null, null, null, null,
+      close.totalMmk,
+      null,
+      null,
+      close.paymentExceptionOrderIds,
+      close.stockExceptionSkus,
+    ])
+    for (const order of close.orders) {
+      rows.push([
+        ...lead('order', null),
+        close.closeId,
+        close.businessDate,
+        close.closedAt,
+        null,
+        null,
+        close.digest,
+        order.orderId,
+        order.orderCreatedAt,
+        order.paymentMethod,
+        order.paymentReconciledAt,
+        order.paymentEvidenceReference,
+        order.currency,
+        order.catalogRevision,
+        order.taxConfigurationRevision,
+        order.taxCode,
+        order.taxJurisdictionCode,
+        order.taxEffectiveFrom,
+        order.taxRateBasisPoints,
+        order.listedSubtotalMmk,
+        order.subtotalMmk,
+        order.taxMode,
+        order.taxMmk,
+        order.originalTotalMmk,
+        order.totalMmk,
+        JSON.stringify(order.corrections),
+        order.calculationStatus,
+        null,
+        null,
+      ])
+    }
+  }
+  for (const gap of artifact.gaps) {
+    rows.push([
+      ...lead(gap.kind === 'close_without_evidence' ? 'close_not_archived' : 'sale_not_archived', gap.detail),
+      gap.kind === 'close_without_evidence' ? gap.id : null,
+      null, null, null, null, null,
+      gap.kind === 'close_without_evidence' ? null : gap.id,
+      // No money columns are filled on a gap row: a gap says a record is NOT in this file,
+      // and inventing a currency or a zero total for it would let a reader sum the archive
+      // and believe the sum covered everything.
+      ...new Array(header.length - 18).fill(null) as Array<string | number | null | string[]>,
+    ])
+  }
   return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
 }
 

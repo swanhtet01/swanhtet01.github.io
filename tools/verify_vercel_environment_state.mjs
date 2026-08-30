@@ -97,6 +97,8 @@ if (kind === 'app') {
   const core = schedulerActive ? schedulerEnvironment : []
   const managedRuntime = [
     'SUPERMEGA_DATABASE_URL',
+    'SUPERMEGA_TRIAL_SCHEMA_VERSION',
+    'SUPERMEGA_SUPABASE_PROJECT_REF',
     'SUPERMEGA_TRIAL_WRITES_ENABLED',
   ]
   const managedBrowserAuth = [
@@ -104,7 +106,11 @@ if (kind === 'app') {
     'VITE_SUPABASE_PUBLISHABLE_KEY',
   ]
   const managedTrial = [...managedRuntime, ...managedBrowserAuth]
-  const optional = ['SUPERMEGA_CORS_ORIGINS', 'SUPERMEGA_TRIAL_IDENTITY_SECRET']
+  const optional = [
+    'SUPERMEGA_CORS_ORIGINS',
+    'SUPERMEGA_TRIAL_IDENTITY_SECRET',
+    'SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW',
+  ]
   requireKeys(core)
   const managedCount = managedTrial.filter((key) => productionKeys.has(key)).length
   const managedSignalCount = [...managedTrial, 'SUPERMEGA_TRIAL_IDENTITY_SECRET']

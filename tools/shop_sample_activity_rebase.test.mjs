@@ -82,3 +82,22 @@ test('every shipped template rebases to current activity', () => {
     )
   }
 })
+
+// A request instant that survives the rebase into the FUTURE is refused by every accountable
+// transition until the clock catches up -- the owner presses the primary button and nothing
+// happens. Templates are authored by hand, so this is clamped rather than trusted; fashion
+// shipped 20 minutes past its newest sale and silently refused for its first 20 minutes.
+test('no shipped template dates its sample activity into the future', () => {
+  const provisionedAt = '2027-03-04T11:00:00.000Z'
+  const provisioned = Date.parse(provisionedAt)
+  for (const template of shopBusinessTemplates) {
+    const activity = rebaseWorkingSampleActivity(template, provisionedAt)
+    for (const sale of activity.counterSales) {
+      assert.ok(Date.parse(sale.recordedAt) <= provisioned, `${template.id} ${sale.id} is recorded in the future`)
+    }
+    assert.ok(
+      Date.parse(activity.pendingOrder.requestedAt) <= provisioned,
+      `${template.id} pending order is requested in the future, so its payment action refuses until the clock catches up`,
+    )
+  }
+})

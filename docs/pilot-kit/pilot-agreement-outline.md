@@ -5,8 +5,8 @@ NOT LEGAL ADVICE. This is an outline of talking points to align on with the desi
 ## What the partner gets
 
 - The working Shop product, free, on their own device. The approved framing is `Free product. Managed intelligence.` — the free lane needs `No account or model call required`, and the pilot runs entirely in it.
-- Five founder-led days on their real workflow: orders to close plus the return exception, with the founder on-site per the [acceptance checklist](acceptance-checklist.md).
-- Their own measured numbers, before and after: baseline first, then the five pilot measurements (`median_minutes_per_order`, `weekly_exception_rate`, `close_minutes_per_day`, `operator_corrections`, `reload_and_retry_result`). The numbers belong to them.
+- Five founder-led days rehearsing reviewed client import, prepaid package sale, matching treatment redemption, daily close, and recovery, with the founder on-site per the [acceptance checklist](acceptance-checklist.md).
+- Their own measured numbers, before and after: the operating baseline plus `client_import_minutes`, `package_sale_minutes`, `treatment_redemption_minutes`, `package_balance_result`, `close_minutes_per_day`, `operator_corrections`, and `reload_and_retry_result`. The numbers belong to them.
 - A backup of their workspace at the end (`Download workspace backup`), whatever they decide.
 
 ## What the partner gives
@@ -20,7 +20,7 @@ NOT LEGAL ADVICE. This is an outline of talking points to align on with the desi
 
 - The pilot runs browser-local on the shop's own device. Setup states it directly: `Stays on this device. Nothing is sent or published.` SuperMega's servers receive no customer records, no sales, and no stock data during the pilot.
 - The shop's identity stays private on SuperMega's side. The sales workflow's reporting boundary applies: notes leaving the private workspace carry stage and hashes, never the contact's name, email, or company (`docs/supermega-shop-sales-agent.md`).
-- If the founder later runs the approved hosted rehearsal, it is bounded and disposable: an isolated `preview_branch`, never production, starting with no production data, `maximumLifetimeHours` of 24, and deleted after the evidence is captured (`delete_preview_branch_after_evidence`). That rehearsal needs its own separate founder decision (`bounded-managed-pilot-rehearsal`) and is not part of the five pilot days.
+- If the founder later approves hosted activation, the separate decision is `managed-production-activation`. It binds the dedicated runtime login, first named owner, exact production release, and managed activation window. The first Shop workspace is durable production data, not a disposable preview; rollback closes writes and suspends access without deleting the customer's records. That activation is not part of the five browser-local pilot days.
 
 ## Money
 

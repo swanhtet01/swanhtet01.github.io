@@ -1,15 +1,31 @@
-import { lazy, Suspense, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
+import { bi } from './i18n-actions'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
+import {
+  managedProductIsVisible,
+  managedProductPath,
+  productSwitcherVisible,
+  resolveManagedProductHome,
+  resolveManagedProductRoute,
+} from './managed-product-access'
+import { currentManagedWorkspace } from './managed-workspace-selection'
 import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
+const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
+
+function signupProductSlug(product: SetupProductId) {
+  if (product === 'commerce') return 'shop'
+  if (product === 'production') return 'plant'
+  return product
+}
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -91,19 +107,9 @@ const checkingRuntime: RuntimeHealth = {
 
 const LAST_PRODUCT_KEY = 'supermega.last-product.v1'
 const DEFAULT_ENTRY_PRODUCT: ClientSolutionId = 'commerce'
-const productWorkspacePaths: Record<ClientSolutionId, string> = {
-  commerce: '/shop/',
-  production: '/plant/',
-  website: '/website/',
-  ecommerce: '/ecommerce/',
-}
 
 function isClientSolutionId(value: unknown): value is ClientSolutionId {
   return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
-}
-
-function productWorkspacePath(product: ClientSolutionId) {
-  return productWorkspacePaths[product]
 }
 
 function readLastProduct(storage: Pick<Storage, 'getItem'>): ClientSolutionId | null {
@@ -126,12 +132,6 @@ function rememberLastProduct(storage: Pick<Storage, 'setItem'>, product: ClientS
 type NavigationItem = { to: string; label: string; end?: boolean }
 
 const productsNavigation: NavigationItem = { to: '/?choose=1', label: 'Switch product', end: true }
-const productNavigation: Record<ClientSolutionId, NavigationItem> = {
-  commerce: { to: '/shop/', label: 'Shop' },
-  production: { to: '/plant/', label: 'Plant' },
-  website: { to: '/website/', label: 'Website' },
-  ecommerce: { to: '/ecommerce/', label: 'Ecommerce' },
-}
 
 const THEME_KEY = 'supermega-interface-theme'
 const SETUP_KEY = 'supermega.setup.v3'
@@ -214,6 +214,92 @@ function setupProductFromQuery(value: string | null) {
 function managedLoginPath(product: string | null) {
   const slug = product === 'commerce' ? 'shop' : product === 'production' ? 'plant' : product === 'website' || product === 'ecommerce' ? product : null
   return slug ? `/login?product=${slug}` : '/login'
+}
+
+type ManagedPortalAccess =
+  | { status: 'local'; products: readonly ClientSolutionId[]; workspaceId: '' }
+  | { status: 'checking'; products: readonly ClientSolutionId[]; workspaceId: string }
+  | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; workspaceId: string }
+  | {
+      status: 'ready'
+      products: readonly ClientSolutionId[]
+      workspaceId: string
+      companyName: string
+      companyRole: 'owner' | 'operator' | 'viewer'
+      accountEmail: string
+    }
+  | { status: 'error'; products: readonly ClientSolutionId[]; workspaceId: string; message: string }
+
+const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
+const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
+
+function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
+  const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
+  const [resolved, setResolved] = useState<{ key: string; access: ManagedPortalAccess }>({ key: 'local', access: localPortalAccess })
+
+  useEffect(() => {
+    if (!enabled || !selectedWorkspace) return undefined
+    let active = true
+    void import('./managed-trial')
+      .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
+        const identity = await currentManagedIdentity()
+        if (!active) return
+        if (!identity || identity.workspaceId !== selectedWorkspace) {
+          setResolved({ key: accessKey, access: { status: 'reauthenticate', products: [], workspaceId: selectedWorkspace } })
+          return
+        }
+        const [bootstrap, directory] = await Promise.all([
+          loadManagedBootstrap(identity),
+          discoverManagedWorkspacesForCurrentSession(),
+        ])
+        if (!active) return
+        const company = directory.workspaces.find((workspace) => workspace.workspaceId === selectedWorkspace)
+        if (!company || directory.userId !== identity.userId) {
+          throw new Error('This company is no longer assigned to the signed-in account. Sign in again.')
+        }
+        setResolved({
+          key: accessKey,
+          access: {
+            status: 'ready',
+            products: managedProductsFromBootstrap(bootstrap, identity),
+            workspaceId: selectedWorkspace,
+            companyName: company.label,
+            companyRole: company.access,
+            accountEmail: directory.email,
+          },
+        })
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setResolved({
+          key: accessKey,
+          access: {
+            status: 'error',
+            products: [],
+            workspaceId: '',
+            message: error instanceof Error ? error.message : 'Company product access could not be verified.',
+          },
+        })
+      })
+    return () => { active = false }
+  }, [accessKey, enabled, selectedWorkspace])
+
+  if (!enabled || !selectedWorkspace) return localPortalAccess
+  if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
+  return resolved.access
+}
+
+function PortalAccessPanel({ title, copy, action }: { title: string; copy: string; action?: ReactNode }) {
+  return (
+    <section className="workspace-screen managed-login-screen" aria-live="polite">
+      <div className="managed-login-panel">
+        <span className="core-eyebrow">Company portal</span>
+        <h1>{title}</h1>
+        <p>{copy}</p>
+        {action ? <div className="heading-actions">{action}</div> : null}
+      </div>
+    </section>
+  )
 }
 
 function useRuntimeHealth() {
@@ -358,23 +444,34 @@ export function CoreLayout() {
   const customerSettingsRoute = location.pathname.startsWith('/settings/')
   const internalBuilderRoute = location.pathname.startsWith('/internal/client-builder')
   const settingsProduct = customerSettingsRoute ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
+  const requestedProduct = routeProduct ?? settingsProduct
+  const selectedManagedWorkspace = typeof window !== 'undefined' ? currentManagedWorkspace() : ''
+  const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
   const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
+  const signupPath = routeProduct
+    ? `/signup?product=${signupProductSlug(routeProduct)}`
+    : settingsProduct
+      ? `/signup?product=${signupProductSlug(settingsProduct)}`
+      : '/signup'
   const setupRoute = customerSettingsRoute || internalBuilderRoute
   const setupNavigation: NavigationItem = internalBuilderRoute
     ? { to: '/internal/client-builder/', label: 'Client builder' }
     : settingsProduct
       ? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }
       : { to: '/settings/#controls', label: 'Recovery' }
-  const activeNavigation: NavigationItem[] = routeProduct
-    ? [productNavigation[routeProduct], productsNavigation]
-    : setupRoute
-      ? [setupNavigation, productsNavigation]
-      : [productsNavigation]
-  const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []
+  const canSwitchProduct = runtime.status !== 'checking'
+    && productSwitcherVisible(portalAccess.status, portalAccess.products)
+  const activeNavigation: NavigationItem[] = internalBuilderRoute
+    ? [setupNavigation]
+    : (routeProduct || setupRoute) && canSwitchProduct
+      ? [productsNavigation]
+      : []
+  const mobileNavigation = activeNavigation
+  const showSignupLink = !accountEntryRoute && !routeProduct && !setupRoute
   // Design phase 3 "bottom-nav work modes", Shop slice: on phones the fixed
   // bottom bar carries Shop's four task modes instead of the two-link product
   // nav. Resolution of the active tab is shared with OperationsPage
@@ -401,6 +498,12 @@ export function CoreLayout() {
             ? 'Plant'
             : 'Products'
   const navigationClass = (_to: string, isActive: boolean) => isActive ? 'active' : ''
+  const managedRouteDecision = portalAccess.status === 'ready'
+    ? resolveManagedProductRoute(requestedProduct, portalAccess.products)
+    : { kind: 'allow' as const }
+  const managedProductAllowed = !requestedProduct
+    || portalAccess.status === 'local'
+    || (portalAccess.status === 'ready' && managedRouteDecision.kind === 'allow')
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -454,13 +557,13 @@ export function CoreLayout() {
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
-        <nav className="core-nav" aria-label="Application">
+        {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
-        </nav>
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link signup-shell-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company login</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        </nav> : null}
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{showSignupLink ? <Link className="account-shell-link signup-shell-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link className="account-shell-link mobile-signup-topbar-link" to="/signup">Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{showSignupLink ? <Link className="account-shell-link mobile-signup-topbar-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -471,18 +574,32 @@ export function CoreLayout() {
             users inside one product. It is a plain Link with no active state:
             on /?choose=1 routeProduct is null and this bar never renders. */}
         {routeProduct === 'commerce'
-          ? <nav className="mobile-nav mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{tab.label}</Link>)}<Link to="/?choose=1">Products</Link></nav>
+          ? <nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{bi(tab.label)}</Link>)}{canSwitchProduct ? <Link to="/?choose=1">Switch</Link> : null}</nav>
           : mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">
-            <RouteErrorBoundary resetKey={location.pathname}><Outlet context={runtime} /></RouteErrorBoundary>
+            <ManagedPortalAccessContext.Provider value={portalAccess}>
+              <RouteErrorBoundary resetKey={location.pathname}>
+                {requestedProduct && portalAccess.status === 'checking'
+                  ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
+                  : requestedProduct && portalAccess.status === 'reauthenticate'
+                    ? <Navigate replace to={companyLoginPath} />
+                    : requestedProduct && portalAccess.status === 'error'
+                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Product access needs attention" />
+                      : requestedProduct && !managedProductAllowed
+                        ? managedRouteDecision.kind === 'redirect'
+                          ? <Navigate replace to={managedRouteDecision.path} />
+                          : <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
+                        : <Outlet context={runtime} />}
+              </RouteErrorBoundary>
+            </ManagedPortalAccessContext.Provider>
           </div>
           {/* The navigator is its own lazy chunk, so a stale deploy can fail it independently
               of the route. Outside a boundary that failure escapes to the root and unmounts
               the entire shell — the exact blank page the boundary exists to prevent, reached
               by a different door. It is secondary furniture, so its own boundary is enough:
               the route content beside it keeps working. */}
-          {routeProduct ? <RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary> : null}
+          {routeProduct && managedProductAllowed ? <RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary> : null}
         </main>
       </div>
     </div>
@@ -512,21 +629,45 @@ const customerProducts = [
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
   const location = useLocation()
+  const portalAccess = useContext(ManagedPortalAccessContext)
   const params = new URLSearchParams(location.search)
   const route = productDemoPath(params.get('demo'))
   const choosingProduct = params.get('choose') === '1'
   const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
     ? readLastProduct(window.localStorage)
     : null
+  if (portalAccess.status === 'checking') {
+    return <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
+  }
+  if (portalAccess.status === 'reauthenticate') return <Navigate replace to={managedLoginPath(lastProduct)} />
+  if (portalAccess.status === 'error') {
+    return <PortalAccessPanel action={<Link className="button" to={managedLoginPath(lastProduct)}>Sign in again</Link>} copy={portalAccess.message} title="Product access needs attention" />
+  }
+  if (portalAccess.status === 'ready') {
+    const requestedRouteProduct = route ? productFromPathname(route) : null
+    const decision = resolveManagedProductHome({
+      requestedProduct: requestedRouteProduct,
+      requestedPath: route,
+      rememberedProduct: lastProduct,
+      choosingProduct,
+      assignedProducts: portalAccess.products,
+    })
+    return decision.kind === 'launcher'
+      ? <ProductHomePage />
+      : <Navigate replace to={decision.path} />
+  }
   return route
     ? <Navigate replace to={route} />
     : choosingProduct
       ? <ProductHomePage />
-      : <Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
+      : <Navigate replace to={managedProductPath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
 }
 
 export function ProductHomePage() {
+  const portalAccess = useContext(ManagedPortalAccessContext)
+  const managedPortal = portalAccess.status === 'ready'
   const productSetups = useMemo(() => {
+    if (managedPortal) return null
     if (typeof window === 'undefined') return null
     return {
       commerce: readProductSetup(window.localStorage, 'commerce'),
@@ -534,7 +675,7 @@ export function ProductHomePage() {
       website: readProductSetup(window.localStorage, 'website'),
       ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
     }
-  }, [])
+  }, [managedPortal])
   const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
   const nextSetupStep = (() => {
     if (!productSetups) return null
@@ -542,8 +683,24 @@ export function ProductHomePage() {
   })()
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
-      {!anyStarted ? (
+      {managedPortal
+        ? <PageHeading copy="Only products assigned to this company are shown." eyebrow="Company portal" title="Company products" />
+        : <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />}
+      {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
+        <div>
+          <span>Active company</span>
+          <strong>{portalAccess.companyName}</strong>
+          <small>{portalAccess.accountEmail}</small>
+        </div>
+        <div className="company-portal-role">
+          <span>{portalAccess.companyRole}</span>
+          <Link to="/login">Switch company</Link>
+        </div>
+      </section> : null}
+      {managedPortal && portalAccess.products.length === 0
+        ? <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
+        : null}
+      {!managedPortal && !anyStarted ? (
         <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — set it up once, and it connects to all other products through one catalog and order flow.</p>
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
@@ -551,6 +708,7 @@ export function ProductHomePage() {
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
+          if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
           const setup = productSetups?.[setupKey]
           const workspaceName = setup?.startedAt ? setup.workspace : null
           return <Link aria-label={`Open ${name} workspace`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
@@ -565,8 +723,9 @@ export function ProductHomePage() {
             </Link>
         })}
       </nav>
-      <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense>
-      <p className="product-home-note">Your product workspaces stay separate. Opening a sample does not change another product.</p>
+      {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products} /></Suspense> : null}
+      {!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
+      <p className="product-home-note">{managedPortal ? 'Each product keeps its own workspace, roles, and data access. Only purchased product connections appear above.' : 'Your product workspaces stay separate. Opening a sample does not change another product.'}</p>
     </div>
   )
 }

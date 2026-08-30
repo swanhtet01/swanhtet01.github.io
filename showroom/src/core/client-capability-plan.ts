@@ -166,6 +166,16 @@ export function clientCapabilityDependencyLabel(id: string) {
   return capabilityLabels.get(id) ?? id.replaceAll('-', ' ')
 }
 
+export function clientCapabilityIdsForProducts(products: readonly ClientSolutionId[]) {
+  const selected = new Set(products)
+  return new Set([
+    ...platformCatalog.map((capability) => capability.id),
+    ...Object.entries(catalog).flatMap(([product, capabilities]) => selected.has(product as ClientSolutionId)
+      ? capabilities.map((capability) => capability.id)
+      : []),
+  ])
+}
+
 export function productCapabilitySummary(product: ClientSolutionId) {
   const capabilities = productCapabilityCatalog(product)
   return {

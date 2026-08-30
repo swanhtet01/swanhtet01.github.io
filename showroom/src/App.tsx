@@ -38,8 +38,7 @@ function setupProductFromQuery(value: string | null) {
   const product = value?.toLowerCase()
   if (product === 'shop' || product === 'commerce') return 'commerce' as const
   if (product === 'plant' || product === 'production') return 'production' as const
-  if (product === 'website') return 'website' as const
-  if (product === 'ecommerce') return 'ecommerce' as const
+  if (product === 'website' || product === 'ecommerce') return product
   return null
 }
 
@@ -59,7 +58,7 @@ function SettingsEntry() {
     return <Suspense fallback={<ProductLoading name="product setup" />}><ProductOnboardingPage product={product} /></Suspense>
   }
 
-  if (location.hash === '#controls') {
+  if (location.hash === '#controls' || location.hash === '#workspace-recovery') {
     return <Suspense fallback={<ProductLoading name="workspace controls" />}><WorkspaceControlsPage /></Suspense>
   }
 

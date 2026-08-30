@@ -19,14 +19,22 @@ from supermega_runtime.managed_context import (
 )
 from supermega_runtime.managed_activation import (
     ACTIVATION_PLAN_CONTRACT,
+    ACTIVATION_REQUERY_EVIDENCE_CONTRACT,
     ACTIVATION_RECEIPT_CONTRACT,
+    MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT,
     SUSPENSION_RECEIPT_CONTRACT,
+    TRIAL_SCHEMA_VERSION,
     ManagedActivationConflict,
     ManagedActivationError,
     ManagedWorkspaceProvisioner,
+    build_activation_requery_evidence,
     compile_activation_plan,
+    compile_multi_product_activation_plan,
     main,
     validate_activation_plan,
+    validate_activation_receipt,
+    validate_managed_trial_request,
+    validate_multi_product_activation_plan,
     _validate_admin_target,
 )
 
@@ -48,7 +56,12 @@ ADMIN_CA_SHA256 = "sha256:" + "1" * 64
 def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
     workspace = "Mingalar Fresh Mart"
     owner = "Swan Htet"
-    template = "production-control" if product == "production" else "retail-wholesale"
+    template = {
+        "commerce": "retail-wholesale",
+        "production": "production-control",
+        "website": "lead-generation",
+        "ecommerce": "social-storefront",
+    }[product]
     started_at = _fixture_timestamp(30)
     reviewed_at = _fixture_timestamp(25)
     checkpoint_digest = "sha256:" + "2" * 64
@@ -117,9 +130,12 @@ def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
 
 
 def approved_ai_context(outcome: dict[str, object]) -> dict[str, object]:
-    product = "plant" if outcome["product"] == "production" else "shop"
-    template = "production-control" if product == "plant" else "retail-wholesale"
-    behavior_product = "production" if product == "plant" else "commerce"
+    product, template, behavior_product = {
+        "commerce": ("shop", "retail-wholesale", "commerce"),
+        "production": ("plant", "production-control", "production"),
+        "website": ("website", "lead-generation", "website"),
+        "ecommerce": ("ecommerce", "social-storefront", "ecommerce"),
+    }[str(outcome["product"])]
     body: dict[str, object] = {
         "contract": "supermega.ai_context_export.v1",
         "version": 1,
@@ -226,19 +242,30 @@ def managed_trial_request() -> dict[str, object]:
     }
 
 
-def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+def managed_trial_request_for(product_slug: str = "shop") -> dict[str, object]:
     request = managed_trial_request()
     request["productSlug"] = product_slug
-    if product_slug in {"plant", "production"}:
-        request["product"] = "Plant"
-        request["templateId"] = "production-control"
-        request["templateName"] = "Production control"
-        request["managedWorkspaceProvisioningPacket"]["product"] = "Plant"  # type: ignore[index]
-        request["managedWorkspaceProvisioningPacket"]["template"] = "Production control"  # type: ignore[index]
-        outcome = pilot_outcome_report("production")
+    product_label, template_id, template_name, report_product = {
+        "shop": ("Shop", "retail-wholesale", "Retail and wholesale", "commerce"),
+        "plant": ("Plant", "production-control", "Production control", "production"),
+        "website": ("Website", "lead-generation", "Lead generation", "website"),
+        "ecommerce": ("Ecommerce", "social-storefront", "Social storefront", "ecommerce"),
+    }[product_slug]
+    if product_slug != "shop":
+        request["product"] = product_label
+        request["templateId"] = template_id
+        request["templateName"] = template_name
+        request["managedWorkspaceProvisioningPacket"]["product"] = product_label  # type: ignore[index]
+        request["managedWorkspaceProvisioningPacket"]["template"] = template_name  # type: ignore[index]
+        outcome = pilot_outcome_report(report_product)
         request["pilotOutcomeReport"] = outcome
         request["approvedAiContext"] = approved_ai_context(outcome)
         request["managedWorkspaceProvisioningPacket"]["dataPackage"]["pilotOutcomeDigest"] = outcome["reportDigest"]  # type: ignore[index]
+    return request
+
+
+def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+    request = managed_trial_request_for(product_slug)
     return compile_activation_plan(
         request,
         workspace_id="mingalar-fresh-mart",
@@ -264,6 +291,8 @@ class FakeDatabase:
         self.current_user = "postgres"
         self.provisioning_role_privileged = True
         self.session_active = True
+        self.auth_users: set[str] = {OWNER_ID}
+        self.anonymous_auth_users: set[str] = set()
 
     def connect(self, _database_url: str):
         return FakeConnection(self)
@@ -331,7 +360,7 @@ class FakeCursor:
                     if len(self.database.statements) > 1
                     else False,
                     "provisioning_role_privileged": self.database.provisioning_role_privileged,
-                    "schema_version": 10,
+                    "schema_version": TRIAL_SCHEMA_VERSION,
                     "backend_role_safe": True,
                     "access_select": True,
                     "access_insert": True,
@@ -347,6 +376,14 @@ class FakeCursor:
             ]
         elif "supabase_session_is_active" in sql:
             self.rows = [{"active": self.database.session_active}]
+        elif "from auth.users" in sql:
+            member_id = str(values[0])
+            self.rows = [{
+                "member_exists": (
+                    member_id in self.database.auth_users
+                    and member_id not in self.database.anonymous_auth_users
+                )
+            }]
         elif "from app_private.approval_requests" in sql and sql.startswith("select"):
             approval_id, workspace_id, command_id, _approval_order = values
             matches = [
@@ -440,7 +477,7 @@ class FakeCursor:
             workspace_id, actor_id = values
             for row in self.database.memberships:
                 if row["workspace_id"] == workspace_id and row["actor_id"] == actor_id and row["status"] == "active":
-                    row["status"] = "suspended"
+                    row["status"] = "revoked" if "set status = 'revoked'" in sql else "suspended"
                     self.rows = [{"updated_at": self.database.clock}]
                     break
         elif sql.startswith("insert into app_private.workspace_events"):
@@ -467,12 +504,49 @@ class FakeCursor:
 
 
 class ManagedActivationPlanTests(unittest.TestCase):
+    def test_managed_trial_request_validator_returns_only_redacted_binding(self) -> None:
+        validated = validate_managed_trial_request(managed_trial_request_for("ecommerce"))
+        self.assertEqual(validated["contract"], "supermega.managed_trial_request.v1")
+        self.assertEqual(validated["product"], "ecommerce")
+        self.assertEqual(validated["workspaceLabel"], "Mingalar Fresh Mart")
+        self.assertEqual(validated["ownerLabel"], "Swan Htet")
+        self.assertEqual(validated["templateId"], "social-storefront")
+        self.assertRegex(validated["requestDigest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertFalse(validated["rawRecordsIncluded"])
+        self.assertFalse(validated["secretValuesExposed"])
+        self.assertNotIn("raw", validated)
+
+    def test_multi_product_plan_is_one_tenant_with_union_capabilities(self) -> None:
+        plan = compile_multi_product_activation_plan(
+            [managed_trial_request_for("shop"), managed_trial_request_for("plant")],
+            workspace_id="mingalar-fresh-mart",
+            owner_actor_id=OWNER_ID,
+            approval_id=APPROVAL_ID,
+            approved_by="Swan Htet",
+            approved_at=_fixture_timestamp(5),
+            project_ref=PROJECT_REF,
+            release_commit=RELEASE_COMMIT,
+            admin_ca_sha256=ADMIN_CA_SHA256,
+            now=NOW,
+        )
+        self.assertEqual(plan["contract"], MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT)
+        self.assertEqual(plan["products"], ["shop", "plant"])
+        self.assertIn("commerce.write", plan["ownerCapabilities"])
+        self.assertIn("production.write", plan["ownerCapabilities"])
+        self.assertEqual(len(plan["sourcePlans"]), 2)
+        self.assertEqual(validate_multi_product_activation_plan(plan), plan)
+
+        tampered = deepcopy(plan)
+        tampered["products"].reverse()
+        with self.assertRaises(ManagedActivationError):
+            validate_multi_product_activation_plan(tampered)
+
     def test_plan_is_deterministic_redacted_and_capability_scoped(self) -> None:
         first = activation_plan()
         second = activation_plan()
         self.assertEqual(first, second)
         self.assertEqual(first["contract"], ACTIVATION_PLAN_CONTRACT)
-        self.assertEqual(first["target"]["schemaVersion"], 10)
+        self.assertEqual(first["target"]["schemaVersion"], TRIAL_SCHEMA_VERSION)
         self.assertEqual(first["target"]["adminCaSha256"], ADMIN_CA_SHA256)
         self.assertIn("commerce.write", first["ownerCapabilities"])
         self.assertNotIn("production.write", first["ownerCapabilities"])
@@ -599,6 +673,81 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         with self.assertRaisesRegex(ManagedActivationError, "session is no longer active"):
             self.authorize()
         self.assertEqual(self.database.approvals, [])
+
+    def test_multi_product_plan_applies_one_membership_with_union_capabilities(self) -> None:
+        self.plan = compile_multi_product_activation_plan(
+            [managed_trial_request_for("shop"), managed_trial_request_for("plant")],
+            workspace_id="mingalar-fresh-mart",
+            owner_actor_id=OWNER_ID,
+            approval_id=APPROVAL_ID,
+            approved_by="Swan Htet",
+            approved_at=_fixture_timestamp(5),
+            project_ref=PROJECT_REF,
+            release_commit=RELEASE_COMMIT,
+            admin_ca_sha256=ADMIN_CA_SHA256,
+            now=NOW,
+        )
+        self.authorize()
+        activated = self.provisioner.apply(self.plan)
+        self.assertEqual(activated["contract"], ACTIVATION_RECEIPT_CONTRACT)
+        self.assertEqual(len(self.database.memberships), 1)
+        capabilities = self.database.memberships[0]["capabilities"]
+        self.assertIn("commerce.write", capabilities)
+        self.assertIn("production.write", capabilities)
+        event = next(iter(self.database.events.values()))
+        self.assertEqual(event["payload_json"]["products"], ["shop", "plant"])
+        evidence = build_activation_requery_evidence(
+            self.plan,
+            activated,
+            self.provisioner.inspect(self.plan),
+            observed_at=NOW,
+        )
+        self.assertEqual(evidence["activation"]["products"], ["shop", "plant"])
+
+    def test_activation_receipt_requires_a_matching_read_only_database_requery(self) -> None:
+        self.authorize()
+        receipt = self.provisioner.apply(self.plan)
+        inspection = self.provisioner.inspect(self.plan)
+        evidence = build_activation_requery_evidence(
+            self.plan,
+            receipt,
+            inspection,
+            observed_at=NOW,
+        )
+
+        self.assertEqual(evidence["contract"], ACTIVATION_REQUERY_EVIDENCE_CONTRACT)
+        self.assertEqual(evidence["status"], "database_activation_verified")
+        self.assertEqual(evidence["activation"]["receiptDigest"], receipt["projectionDigest"])
+        self.assertEqual(evidence["activation"]["products"], ["shop"])
+        self.assertEqual(
+            evidence["activation"]["ownerApprovalDigest"],
+            f"sha256:{sha256(APPROVAL_ID.encode('utf-8')).hexdigest()}",
+        )
+        self.assertEqual(evidence["proofs"]["databaseMutationStatementsExecuted"], 0)
+        self.assertTrue(evidence["controls"]["hostedDatabaseReadPerformed"])
+        self.assertTrue(evidence["controls"]["databaseReadOnly"])
+        self.assertFalse(evidence["controls"]["portalSmokePerformed"])
+        self.assertFalse(evidence["controls"]["activationMutationPerformedByThisCommand"])
+        self.assertEqual(
+            evidence["remainingGates"],
+            [
+                "exact_release_live_verification_required",
+                "named_owner_portal_smoke_required",
+                "cross_tenant_denial_smoke_required",
+            ],
+        )
+
+        tampered_receipt = deepcopy(receipt)
+        tampered_receipt["workspaceId"] = "another-workspace"
+        with self.assertRaisesRegex(ManagedActivationError, "does not match"):
+            validate_activation_receipt(tampered_receipt, self.plan)
+        with self.assertRaisesRegex(ManagedActivationError, "exact active tenant"):
+            build_activation_requery_evidence(
+                self.plan,
+                receipt,
+                {**inspection, "membershipCount": 2},
+                observed_at=NOW,
+            )
 
     def test_apply_replay_suspend_and_suspension_replay_are_idempotent(self) -> None:
         preflight = self.provisioner.inspect(self.plan)
@@ -750,6 +899,81 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
 
 
 class ManagedActivationCliTests(unittest.TestCase):
+    def test_requery_writes_create_only_read_only_activation_evidence(self) -> None:
+        database = FakeDatabase()
+        plan = activation_plan()
+        provisioner = ManagedWorkspaceProvisioner(
+            "postgresql://ignored",
+            connection_factory=database.connect,
+        )
+        provisioner.authorize(
+            plan,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+            decision_note="Owner reviewed the exact workspace, release, and plan digest.",
+        )
+        receipt = provisioner.apply(plan)
+        inspection = provisioner.inspect(plan)
+
+        class StubProvisioner:
+            def __init__(self, _database_url: str) -> None:
+                pass
+
+            def inspect(self, _plan: object) -> dict[str, object]:
+                return inspection
+
+        with tempfile.TemporaryDirectory() as directory:
+            plan_path = Path(directory) / "plan.json"
+            receipt_path = Path(directory) / "receipt.json"
+            database_url_path = Path(directory) / "admin-url.txt"
+            output_path = Path(directory) / "requery.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            database_url_path.write_text(
+                "postgresql://postgres:secret@db.example.invalid:5432/postgres?sslmode=require",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with (
+                mock.patch("supermega_runtime.managed_activation._validate_admin_target"),
+                mock.patch("supermega_runtime.managed_activation.ManagedWorkspaceProvisioner", StubProvisioner),
+                contextlib.redirect_stdout(output),
+            ):
+                exit_code = main(
+                    [
+                        "requery",
+                        "--plan-file", str(plan_path),
+                        "--database-url-file", str(database_url_path),
+                        "--receipt-file", str(receipt_path),
+                        "--output", str(output_path),
+                    ]
+                )
+            result = json.loads(output.getvalue())
+            evidence = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(result["status"], "database_activation_verified")
+            self.assertEqual(result["remainingGateCount"], 3)
+            self.assertNotIn("workspaceId", result)
+            self.assertNotIn("ownerActorId", result)
+            self.assertEqual(evidence["contract"], ACTIVATION_REQUERY_EVIDENCE_CONTRACT)
+            self.assertFalse(evidence["controls"]["tenantWritesPerformed"])
+
+            with (
+                mock.patch("supermega_runtime.managed_activation._validate_admin_target"),
+                mock.patch("supermega_runtime.managed_activation.ManagedWorkspaceProvisioner", StubProvisioner),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                second_exit_code = main(
+                    [
+                        "requery",
+                        "--plan-file", str(plan_path),
+                        "--database-url-file", str(database_url_path),
+                        "--receipt-file", str(receipt_path),
+                        "--output", str(output_path),
+                    ]
+                )
+            self.assertEqual(second_exit_code, 1)
+
     def test_pre_authorized_compensation_does_not_depend_on_mutable_release_aliases(self) -> None:
         class StubProvisioner:
             def __init__(self, _database_url: str) -> None:
@@ -906,6 +1130,48 @@ class ManagedActivationCliTests(unittest.TestCase):
             plan = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(plan["contract"], ACTIVATION_PLAN_CONTRACT)
             self.assertFalse(plan["secretValuesExposed"])
+
+    def test_prepare_command_accepts_four_reviewed_products_for_one_tenant(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            request_paths = []
+            for product in ("shop", "plant", "website", "ecommerce"):
+                path = root / f"{product}.json"
+                path.write_text(
+                    json.dumps(managed_trial_request_for(product)),
+                    encoding="utf-8",
+                )
+                request_paths.append(path)
+            output_path = root / "tenant-plan.json"
+            certificate_path = root / "supabase-ca.crt"
+            certificate_path.write_text(
+                "-----BEGIN CERTIFICATE-----\nTEST-CA\n-----END CERTIFICATE-----\n",
+                encoding="ascii",
+            )
+            arguments = ["prepare"]
+            for request_path in request_paths:
+                arguments.extend(("--request-file", str(request_path)))
+            arguments.extend(
+                (
+                    "--workspace-id", "mingalar-fresh-mart",
+                    "--owner-actor-id", OWNER_ID,
+                    "--approval-id", APPROVAL_ID,
+                    "--approved-by", "Swan Htet",
+                    "--approved-at", datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                    "--project-ref", PROJECT_REF,
+                    "--release-commit", RELEASE_COMMIT,
+                    "--admin-ca-file", str(certificate_path),
+                    "--output", str(output_path),
+                )
+            )
+            self.assertEqual(main(arguments), 0)
+            plan = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["contract"], MULTI_PRODUCT_ACTIVATION_PLAN_CONTRACT)
+            self.assertEqual(plan["products"], ["shop", "plant", "website", "ecommerce"])
+            self.assertEqual(len(plan["sourcePlans"]), 4)
+            self.assertIn("commerce.write", plan["ownerCapabilities"])
+            self.assertIn("production.write", plan["ownerCapabilities"])
+            self.assertIn("website.write", plan["ownerCapabilities"])
 
 
 if __name__ == "__main__":

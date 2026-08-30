@@ -2,6 +2,7 @@ import { readdir, readFile as readRawFile, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 
 import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
 
@@ -35,6 +36,7 @@ let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let shopBusinessTemplateRuntimeChecks = 0
+let managedGuidedOnboardingCopyRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
 let shopOperatingFlowRuntimeChecks = 0
@@ -54,7 +56,7 @@ let shopProcurementDecisionRuntimeChecks = 0
 let behaviorTrailRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource, i18nActionsSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -101,6 +103,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
   readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8'),
   readFile(resolve(root, 'tools', 'ensure_supermega_scheduler.ps1'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-tabs.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'i18n-actions.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
@@ -128,6 +131,7 @@ const plantEquipmentMaintenanceStrategySource = await readFile(resolve(root, 'sh
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
 const ecommerceBuyingWorkspaceSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
 const workspaceControlsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'WorkspaceControlsPage.tsx'), 'utf8')
+const downloadFileSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'download-file.ts'), 'utf8')
 const productOnboardingPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
 const productOnboardingRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts'), 'utf8')
 const shopBusinessTemplatesSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts'), 'utf8')
@@ -156,8 +160,12 @@ const productionMaterialHandoffSource = await readFile(resolve(root, 'showroom',
 const shopProductionHandoffUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopProductionHandoff.tsx'), 'utf8')
 const productionMaterialHandoffPython = await readFile(resolve(root, 'supermega_runtime', 'production_material_handoff.py'), 'utf8')
 const managedTrialRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'trial_runtime.py'), 'utf8')
+const hostedProductAcceptanceVerifierSource = await readFile(resolve(root, 'tools', 'verify_hosted_product_acceptance.mjs'), 'utf8')
+const clientPortalLaunchProofSource = await readFile(resolve(root, 'tools', 'assemble_client_portal_launch_proof.mjs'), 'utf8')
+const rootPackageSource = await readFile(resolve(root, 'package.json'), 'utf8')
 const serviceRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'runtime.py'), 'utf8')
 const localDevSource = await readFile(resolve(root, 'tools', 'verify_local_app_dev.mjs'), 'utf8')
+const localAppRunnerSource = await readFile(resolve(root, 'tools', 'run_local_app.mjs'), 'utf8')
 const appLiveVerifierSource = await readFile(resolve(root, 'tools', 'verify_app_release_live.mjs'), 'utf8')
 const businessCommandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'business-command.ts'), 'utf8')
 const companyBriefRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'company_brief.py'), 'utf8')
@@ -180,6 +188,21 @@ const pilotOutcomeHookSource = await readFile(resolve(root, 'showroom', 'src', '
 const companyBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'company-backup.ts'), 'utf8')
 const companyBackupUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'CompanyBackupPanel.tsx'), 'utf8')
 const workspaceStatusPanelSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'WorkspaceStatusPanel.tsx'), 'utf8')
+
+if (!managedActivationSource.includes('ACTIVATION_REQUERY_EVIDENCE_CONTRACT = "supermega.managed_workspace_activation_requery_evidence.v2"')
+  || !managedActivationSource.includes('def validate_activation_receipt(')
+  || !managedActivationSource.includes('def build_activation_requery_evidence(')
+  || !managedActivationSource.includes('"status": "database_activation_verified"')
+  || !managedActivationSource.includes('"hostedDatabaseReadPerformed": True')
+  || !managedActivationSource.includes('"databaseReadOnly": True')
+  || !managedActivationSource.includes('"activationMutationPerformedByThisCommand": False')
+  || !managedActivationSource.includes('"exact_release_live_verification_required"')
+  || !managedActivationSource.includes('"named_owner_portal_smoke_required"')
+  || !managedActivationSource.includes('"cross_tenant_denial_smoke_required"')
+  || !managedActivationSource.includes('if output.exists():')
+  || !managedActivationSource.includes('"products": list(plan["products"] if "products" in plan else [plan["product"]])')
+  || !managedActivationSource.includes('"ownerApprovalDigest": f"sha256:{sha256(str(plan[\'approval\'][\'approvalId\']).encode(\'utf-8\')).hexdigest()}"')
+  || !managedActivationSource.includes('"remainingGateCount": len(evidence["remainingGates"])')) fail('managed_activation_requery_evidence_missing')
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
@@ -306,10 +329,24 @@ if (!coreCssSource.includes('.orders-module { overflow-y: auto; padding: 0 2px 1
   || !coreCssSource.includes('.orders-module > .order-workspace { flex: 0 0 auto; }')) fail('shop_orders_workspace_can_shrink_out_of_view')
 if (!coreCssSource.includes('details:not([open]) > :not(summary) { display: none; }')) fail('closed_details_visibility_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopTodayUiSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_today_side_effect_added')
-if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
+if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v4")
   || !shopServiceScheduleSource.includes("type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'")
   || !shopServiceScheduleSource.includes('provisionEmptyShopServiceSchedule')
   || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA')
+  || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V2')
+  || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V3')
+  || !shopServiceScheduleSource.includes('type ShopServiceClient')
+  || !shopServiceScheduleSource.includes("appointmentUpdates: ShopServiceAppointmentUpdates")
+  || !shopServiceScheduleSource.includes('setShopServiceClientRetention')
+  || !shopServiceScheduleSource.includes('recordShopServiceClientExport')
+  || !shopServiceScheduleSource.includes('shopServiceClientAnonymizationReadiness')
+  || !shopServiceScheduleSource.includes('anonymizeShopServiceClient')
+  || !shopServiceScheduleUiSource.includes('Customer updates')
+  || !shopServiceScheduleUiSource.includes('Contact or client reference *')
+  || !shopServiceScheduleUiSource.includes('Use a non-contact reference when updates are off.')
+  || !shopServiceScheduleUiSource.includes('spa-client-contacts')
+  || !shopServiceScheduleUiSource.includes('Clients and privacy')
+  || !shopServiceScheduleUiSource.includes('Every download') && !shopServiceScheduleUiSource.includes('export receipt is saved before')
   || !shopServiceScheduleSource.includes('scheduleShopServiceBooking')
   || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
   || !shopServiceScheduleSource.includes('registerShopServiceResource')
@@ -317,9 +354,13 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   // The schedule words belong to the pack: a restaurant books reservations and a
   // school books classes. A literal "appointment" in the UI is the regression.
   || !shopServiceScheduleSource.includes('export function shopScheduleVocabulary(')
+  || !shopServiceScheduleSource.includes('export function shopServiceSaleSku(')
   || !shopServiceScheduleUiSource.includes('shopScheduleVocabulary(schedule?.industryPackId ?? ')
+  || !shopServiceScheduleUiSource.includes('shopServiceSaleSku(schedule.industryPackId, booking.serviceId)')
+  || !shopServiceScheduleUiSource.includes('Charge at counter')
+  || !shopServiceScheduleUiSource.includes('shopCounterSearch: saleSku')
   || !shopServiceScheduleUiSource.includes('{vocabulary.holdAction}')
-  || shopServiceScheduleUiSource.split('\n').some((line) => !line.trimStart().startsWith('//') && /appointment/i.test(line))
+  || shopServiceScheduleUiSource.split('\n').some((line) => !line.trimStart().startsWith('//') && /appointment/i.test(line.replaceAll('appointmentUpdates', '')))
   || !shopServiceScheduleUiSource.includes('const agenda = projection.upcoming.length ? projection.upcoming : projection.today')
   || !shopServiceScheduleUiSource.includes('{agenda.length ? agenda.slice(0, 12).map((booking) => {')
   || !shopServiceScheduleUiSource.includes('Services and resources')
@@ -330,6 +371,8 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleUiSource.includes("scrollIntoView({ block: 'start' })")
   || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
   || !coreSource.includes("initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}")
+  || !coreSource.includes('const [query, setQuery] = useState(initialQuery)')
+  || !coreSource.includes('restoredDraft?.customer || initialCustomer')
   || !coreCssSource.includes('.service-booking-form')
   || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'supabase', 'openai', 'anthropic'].some((marker) => `${shopServiceScheduleSource}\n${shopServiceScheduleUiSource}`.toLowerCase().includes(marker.toLowerCase()))) fail('shop_service_schedule_crossed_external_boundary')
@@ -344,10 +387,17 @@ if (!managedTrialSource.includes('loadManagedServiceSchedule')
   || !managedTrialRuntimeSource.includes('@router.post("/commerce/service-schedule")')
   || !managedTrialRuntimeSource.includes('principal.actor_kind != "human"')
   || !managedTrialRuntimeSource.includes('_reject_client_identity(body.schedule')
+  || !managedTrialRuntimeSource.includes('_require_spa_owner_schedule_action')
+  || !managedTrialRuntimeSource.includes('privacy_owner')
+  || !managedTrialRuntimeSource.includes('_current_utc_timestamp()')
   || !managedTrialRuntimeSource.includes('commerce.service_schedule.initialized')
   || !managedCommerceRuntime.includes('commerce.service_schedule.saved')
   || !managedCommerceRuntime.includes('_validate_service_schedule_initialized')
   || !managedCommerceRuntime.includes('_validate_service_schedule_saved')
+  || !managedCommerceRuntime.includes('client_retention_set')
+  || !managedCommerceRuntime.includes('client_exported')
+  || !managedCommerceRuntime.includes('client_anonymized')
+  || !managedCommerceRuntime.includes('_service_client_export_csv')
   || !managedCommerceRuntime.includes('contains overlapping bookings')
   || !managedCommerceRuntime.includes('service schedule evidence history is immutable')
   || !managedTrialStoreRuntime.includes('commerce.service_schedule.initialized')
@@ -502,13 +552,129 @@ if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
   || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
+// The app is served under `script-src 'self'` with no hash and no nonce, from both the
+// vercel.json response header and index.html's own meta tag. An inline <script> under that
+// policy is REFUSED -- it does not warn, it simply never runs. The service-worker registration
+// used to be inline, so it never executed, no worker was ever installed, and the product's
+// headline "works offline" claim was false end to end: measured 2026-08-20 in Chromium against
+// a built dist/, three refused inline scripts, zero registrations, zero caches. The shell now
+// loads three files instead, and this check is what keeps it that way.
+const inlineShellScripts = [indexSource, rootPageSource]
+  .flatMap((source) => [...source.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)])
+  .filter((match) => match[1].trim().length)
+if (inlineShellScripts.length) fail(`app_shell_inline_script_blocked_by_content_policy:${inlineShellScripts.length}`)
+for (const shellScript of ['/theme-restore.js', '/sw-register.js', '/vercel-insights.js']) {
+  // Both the source template and the BUILT shell. The shipped document is the one that decides
+  // whether a worker ever registers, and checking only the template is the same unchecked-claim
+  // shape this change is fixing elsewhere.
+  if (!indexSource.includes(`<script src="${shellScript}"></script>`)
+    || !rootPageSource.includes(`<script src="${shellScript}"></script>`)) fail(`missing_shell_script_tag:${shellScript}`)
+  if (!await exists(resolve(dist, shellScript.replace(/^\//, '')))) fail(`missing_shell_script_file:${shellScript}`)
+}
+const swRegisterPath = resolve(dist, 'sw-register.js')
+if (!(await readFile(swRegisterPath, 'utf8').catch(() => '')).includes("serviceWorker.register('/sw.js')")) {
+  fail('service_worker_not_registered')
+}
 const swPath = resolve(dist, 'sw.js')
 if (!await exists(swPath)) fail('missing_service_worker')
 else {
   const swSource = await readFile(swPath, 'utf8')
   if (!swSource.includes('supermega-app-') || !swSource.includes('/assets/')) fail('service_worker_contract_invalid')
-  if (!indexSource.includes("serviceWorker.register('/sw.js')")) fail('service_worker_not_registered')
+  // G3: the offline precache used to be whatever the worker could scrape out of index.html,
+  // which is the entry graph and nothing else -- the till (/shop/) and the shop floor (/plant/)
+  // are a lazy chunk, so neither was ever precached and a first-run offline open of the counter
+  // failed. showroom/scripts/seal-offline-precache.mjs now derives the list from Vite's manifest
+  // and seals it in post-build; these checks are what make a regression loud instead of silent.
+  // The unsealed worker is deliberately valid JavaScript so `vite dev` can serve it, which means
+  // an unsealed worker would not crash -- it would quietly precache nothing. The markers are what
+  // make that state visible, so their survival into dist/ is the failure.
+  if (swSource.includes('__SUPERMEGA_PRECACHE_FILES__') || swSource.includes('__SUPERMEGA_PRECACHE_BUILD__')) {
+    fail('service_worker_precache_not_sealed')
+  }
+  const precacheBlock = /const PRECACHE = (\[[\s\S]*?\n\])/.exec(swSource)?.[1]
+  let precache = []
+  try { precache = JSON.parse(precacheBlock ?? '') } catch { /* handled below */ }
+  if (!Array.isArray(precache) || !precache.length) fail('service_worker_precache_list_missing')
+  else {
+    // The operations route artifact, by the same chunk name this file already pins below.
+    if (!precache.some((url) => /^\/assets\/core-app-[^/]+\.js$/.test(url))) fail('service_worker_precache_omits_operations_route')
+    // Everything the built document loads, so the shell the worker falls back to can boot.
+    for (const asset of rootPageSource.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)) {
+      if (!precache.includes(asset[1])) fail(`service_worker_precache_omits_shell_asset:${asset[1]}`)
+    }
+    for (const url of precache) {
+      if (!await exists(resolve(dist, url.replace(/^\//, '')))) fail(`service_worker_precache_names_missing_file:${url}`)
+    }
+    // Each release must produce a DIFFERENT worker, or the browser never re-installs it and the
+    // precache silently keeps the previous release's asset hashes. The cache name carries the
+    // sealed build digest for exactly that reason.
+    if (!/const BUILD = '[0-9a-f]{16}'/.test(swSource)
+      || !swSource.includes("const CACHE = 'supermega-app-")
+      || !swSource.includes("' + BUILD")) fail('service_worker_cache_name_not_release_scoped')
+    // Offline navigations to /shop/ and /plant/ have nothing cached under those URLs -- the host
+    // rewrites them to /index.html -- so without the shell fallback they hit the browser's own
+    // network-error page and the app never runs. The lookup is scoped to THIS release's cache
+    // because a retained predecessor also holds a '/' document and an unscoped cross-cache match
+    // resolves in creation order, which would boot the previous release's shell offline.
+    if (!swSource.includes("request.mode === 'navigate'")
+      || !swSource.includes("cache.match('/')")) {
+      fail('service_worker_navigation_fallback_missing')
+    }
+    // A dead link rejects fetch() at once, but a degraded or captive one hangs for the browser's
+    // own timeout and the till stays blank through all of it even though everything it needs is
+    // already on the device.
+    if (!swSource.includes('const NAVIGATION_NETWORK_TIMEOUT_MS = 3000')
+      || !swSource.includes("Promise.race([settled, expired])")) fail('service_worker_navigation_has_no_network_timeout')
+    // Cross-origin responses must never enter this cache: the app talks to Supabase from the page,
+    // cache matching ignores the Authorization header, and a stored reply would be replayed offline.
+    if (!swSource.includes('if (url.origin !== self.location.origin) return')) {
+      fail('service_worker_caches_cross_origin_responses')
+    }
+    // addAll() accepts the host's 200 SPA-document answer for a path it no longer has, which would
+    // fill the cache with HTML under .js URLs and serve it forever from the cache-first branch.
+    if (swSource.includes('cache.addAll(')
+      || !swSource.includes("throw new Error('precache_document_returned_for_' + url)")) {
+      fail('service_worker_precache_accepts_document_for_asset')
+    }
+    // A failed install must not leave an empty cache behind: it would be retained as the
+    // predecessor at the next release and evict the cache an open tab is still served from. But it
+    // must only delete a cache THIS install created -- the digest does not cover the worker's own
+    // source, so a worker-only release reopens the live cache under an unchanged name, and wiping
+    // that on one flaky fetch would strand a device that was working offline a moment earlier.
+    if (!swSource.includes('const preexisting = (await caches.keys()).includes(CACHE)')
+      || !swSource.includes('if (!preexisting) await caches.delete(CACHE)')) {
+      fail('service_worker_failed_install_deletes_a_live_cache')
+    }
+    // An unsealed worker must do nothing at all. `vite dev` serves the unsealed file, whose cache
+    // name contains the placeholder and therefore never changes -- its shell files would freeze
+    // for the life of the origin, /sw-register.js among them.
+    if (!swSource.includes("const SEALED = !BUILD.startsWith('unsealed')")
+      || !swSource.includes('await self.registration.unregister()')
+      || !swSource.includes('if (!SEALED) return')) fail('service_worker_unsealed_build_is_not_inert')
+    // Every file the webmanifest declares must be precached, or an offline install has no icon.
+    for (const shellIcon of ['/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png']) {
+      if (!swSource.includes(`"${shellIcon}"`)) fail(`service_worker_shell_omits_icon:${shellIcon}`)
+    }
+    // A till stays open all day, and a tab held across a deploy still asks for the PREVIOUS
+    // release's chunk hashes. Deleting every other cache on activate stranded exactly that tab
+    // (measured 2026-08-20, including with the device offline, where the old cache was the only
+    // possible source). One predecessor is retained; deletion is scoped to our own prefix so a
+    // brand-version change still collects the older names and nothing foreign is touched.
+    if (!swSource.includes("key.startsWith(CACHE_PREFIX)")
+      || !swSource.includes("const previous = await previousCacheName()")
+      || !swSource.includes("key !== CACHE && key !== previous")
+      // The predecessor must be the newest NON-EMPTY cache; an empty leftover from a worker
+      // killed mid-install would otherwise be retained and evict the one an open tab needs.
+      || !swSource.includes("if ((await (await caches.open(ours[index])).keys()).length) return ours[index]")) {
+      fail('service_worker_deletes_cache_open_tabs_still_use')
+    }
+    // A deploy makes a replaced asset answer 200 with the SPA fallback document rather than 404,
+    // and storing that under a .js URL poisons it for the life of the cache, offline included.
+    if (!swSource.includes("includes('text/html')")) fail('service_worker_caches_html_under_asset_urls')
+  }
 }
+// The build must not ship the Vite manifest it used to derive the precache list.
+if (await exists(resolve(dist, '.vite', 'manifest.json'))) fail('vite_manifest_shipped_in_artifact')
 
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
@@ -1032,6 +1198,8 @@ if (coreSource.includes('function ProductTrialContext')
   || coreSource.includes('>All products</Link>')
   || (coreSource.match(/Resume order/g) ?? []).length !== 1) fail('configured_product_navigation_or_recovery_actions_redundant')
 if (!viteConfigSource.includes("process.env.SUPERMEGA_LOCAL_API?.trim()")
+  || !viteConfigSource.includes("cacheDir: resolve(projectRoot, '../.tmp/vite-cache')")
+  || viteConfigSource.includes("cacheDir: resolve(projectRoot, 'node_modules/.vite')")
   || !viteConfigSource.includes("? { '/api': { target: localApi, changeOrigin: true } }")
   || !viteConfigSource.includes("name: 'supermega-local-health'")
   || !viteConfigSource.includes('configureServer(server)')
@@ -1047,15 +1215,14 @@ if (!viteConfigSource.includes("process.env.SUPERMEGA_LOCAL_API?.trim()")
   || !viteConfigSource.includes('response.statusCode = 200')
   || !viteConfigSource.includes("response.end(request.method === 'HEAD' ? undefined : isolatedHealthBody)")
   || (viteConfigSource.match(/if \(!localApi\) server\.middlewares\.use\(isolatedHealthMiddleware\)/g) ?? []).length !== 2) fail('local_health_not_truthful_or_fail_closed')
+if (!localAppRunnerSource.includes("SUPERMEGA_OTEL_DISABLED: '1'")) fail('local_app_console_telemetry_not_disabled')
 if (coreSource.includes('const setupTemplates =') || coreSource.includes('const setupEntryPoints =')) fail('workflow_contract_duplicated')
 if (!coreShellSource.includes("const productsNavigation: NavigationItem = { to: '/?choose=1', label: 'Switch product', end: true }")
-  || !coreShellSource.includes("commerce: { to: '/shop/', label: 'Shop' }")
-  || !coreShellSource.includes("production: { to: '/plant/', label: 'Plant' }")
-  || !coreShellSource.includes("website: { to: '/website/', label: 'Website' }")
-  || !coreShellSource.includes("ecommerce: { to: '/ecommerce/', label: 'Ecommerce' }")
-  || !coreShellSource.includes('? [productNavigation[routeProduct], productsNavigation]')
+  || !coreShellSource.includes("productSwitcherVisible(portalAccess.status, portalAccess.products)")
+  || !coreShellSource.includes("(routeProduct || setupRoute) && canSwitchProduct")
+  || coreShellSource.includes('const productNavigation:')
   || !coreShellSource.includes("? { to: '/internal/client-builder/', label: 'Client builder' }")
-  || !coreShellSource.includes('? [setupNavigation, productsNavigation]')
+  || !coreShellSource.includes('internalBuilderRoute\n    ? [setupNavigation]')
   || coreShellSource.includes('const navigation = [')
   || coreShellSource.includes("{ to: '/work/', label: 'HQ'")
   || coreShellSource.includes("{ to: '/operations/', label: 'Products'")) fail('first_run_navigation_not_simple')
@@ -1072,7 +1239,10 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || !coreShellSource.includes('const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null')
   || !coreShellSource.includes('const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))')
   || !coreShellSource.includes('const accountEntryRoute = loginRoute || sensitiveAccountRoute')
-  || !coreShellSource.includes('to={companyLoginPath}>Company login</Link>')
+  // Lockstep with DESIGN-PROGRAM batch 2 (Option B): the sidebar door renders through
+  // bi('Company login'), whose table entry is pending_native_review, so the visible
+  // output is still the exact English string this pin has always protected.
+  || !coreShellSource.includes("to={companyLoginPath}>{bi('Company login')}</Link>")
   || !coreShellSource.includes('aria-label="Company login"')
   || coreShellSource.includes('to={companyLoginPath}>Company sign in</Link>')
   || coreShellSource.includes('aria-label="Company sign in"')
@@ -1083,23 +1253,19 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   // discoverable door to Company login).
   || coreCssSource.includes('.core-topbar .mobile-account-link')
   || !coreCssSource.includes('.core-topbar .runtime-badge { display: none; }')) fail('managed_account_entry_not_discoverable')
-const shellNavigationContract = coreShellSource.slice(
-  coreShellSource.indexOf('const productNavigation:'),
-  coreShellSource.indexOf('\n}', coreShellSource.indexOf('const productNavigation:')) + 2,
-)
-const shellProductRoutes = [...shellNavigationContract.matchAll(/\{ to: '\/([a-z][a-z0-9-]*)\/', label: '[^']+' \}/g)].map((match) => match[1])
-if (shellProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('shell_product_navigation_drift')
-if (shellNavigationContract.includes("{ to: '/settings/', label: 'Settings' }")) fail('internal_setup_exposed_in_primary_navigation')
+if (coreShellSource.includes("{ to: '/settings/', label: 'Settings' }")) fail('internal_setup_exposed_in_primary_navigation')
 if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : 'Recovery')")
   || !coreShellSource.includes("? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }")
   || !coreShellSource.includes("{ to: '/settings/#controls', label: 'Recovery' }")
   || !coreShellSource.includes('const setupRoute = customerSettingsRoute || internalBuilderRoute')
-  || !coreShellSource.includes('const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []')
+  || !coreShellSource.includes('const mobileNavigation = activeNavigation')
   || !coreShellSource.includes('mobileNavigation.length > 0 ? <nav className="mobile-nav"')
   || !coreShellSource.includes('aria-label="Current product navigation"')
   || !coreShellSource.includes('activeNavigation.map((item)')
   || !coreShellSource.includes('mobileNavigation.map((item)')
-  || !coreCssSource.includes('grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line);')
+  || !coreShellSource.includes("const showSignupLink = !accountEntryRoute && !routeProduct && !setupRoute")
+  || !coreShellSource.includes("{canSwitchProduct ? <Link to=\"/?choose=1\">Switch</Link> : null}")
+  || !coreCssSource.includes('grid-template-columns: repeat(auto-fit,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line);')
   || !coreCssSource.includes('overflow: hidden; border-top: 1px solid var(--core-line);')
   || coreShellSource.includes('aria-label="Mobile product navigation"')
   || coreCssSource.includes('.mobile-nav a:first-child { display: none; }')) fail('client_setup_navigation_separation_missing')
@@ -1117,12 +1283,13 @@ if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settin
 // dropping it strands mobile Shop users inside one product.
 if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from './commerce-tabs'")
   || !coreShellSource.includes("const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(")
-  || !coreShellSource.includes('<nav className="mobile-nav mobile-task-nav" aria-label="Shop task shortcuts">')
+  || !coreShellSource.includes("<nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label=\"Shop task shortcuts\">")
   || !coreShellSource.includes('{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? \'page\' : undefined}')
   || !coreShellSource.includes('to={`/shop/?tab=${tab.id}`}')
-  || !coreShellSource.includes('<Link to="/?choose=1">Products</Link></nav>')
+  || !coreShellSource.includes('{canSwitchProduct ? <Link to="/?choose=1">Switch</Link> : null}</nav>')
   || coreShellSource.includes('mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <NavLink')
-  || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(5,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.mobile-nav.mobile-task-nav.has-switch { grid-template-columns: repeat(5,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }')) fail('shop_mobile_task_nav_missing')
 if (!coreShellSource.includes("theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
   || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
@@ -1262,8 +1429,64 @@ if (!coreShellSource.includes("const LAST_PRODUCT_KEY = 'supermega.last-product.
   || !coreShellSource.includes('? readLastProduct(window.localStorage)')
   || !coreShellSource.includes(': choosingProduct')
   || !coreShellSource.includes('? <ProductHomePage />')
-  || !coreShellSource.includes('<Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />')
+  || !coreShellSource.includes('<Navigate replace to={managedProductPath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />')
   || !coreShellSource.includes('if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)')) fail('remembered_product_entry_missing')
+if (!managedTrialSource.includes('export function managedProductsFromBootstrap(')
+  || !managedTrialSource.includes('const explicit = verified.readiness.productEntitlements')
+  || !managedTrialSource.includes("code: 'managed_bootstrap_invalid'")
+  || !managedTrialSource.includes("if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)")
+  || managedTrialSource.includes("products.push('commerce')")
+  || managedTrialSource.includes("products.push('production')")
+  || managedTrialSource.includes("products.push('website')")
+  || managedTrialSource.includes("products.push('ecommerce')")
+  || !managedTrialSource.includes('bootstrap omits the immutable activation-derived entitlement list')
+  || !coreShellSource.includes("const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)")
+  || !coreShellSource.includes("void import('./managed-trial')")
+  || !coreShellSource.includes('currentManagedWorkspace()')
+  || !coreShellSource.includes("from './managed-product-access'")
+  || !coreShellSource.includes('resolveManagedProductRoute(requestedProduct, portalAccess.products)')
+  || !coreShellSource.includes('resolveManagedProductHome({')
+  || !coreShellSource.includes('if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null')
+  || !coreShellSource.includes('!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null')
+  || !coreShellSource.includes('title="No products assigned"')) fail('managed_product_portal_isolation_missing')
+if (!managedTrialStoreRuntime.includes('"capabilities": sorted(self.capabilities)')
+  || !managedTrialSource.includes('export function managedBootstrapHasCapability(')
+  || !managedTrialSource.includes('if (capabilities === undefined) return false')
+  || !workspaceRuntimeSource.includes("managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write')")
+  || !workspaceRuntimeSource.includes("managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write')")
+  || !websiteWorkspaceSource.includes("managedBootstrapHasCapability(bootstrap, identity, 'website.write')")
+  || !websiteSource.includes("const portalViewOnly = storageMode === 'managed' && !canWrite")
+  || !ecommerceSource.includes("managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')")
+  || !ecommerceSource.includes('const portalViewOnly = Boolean(managedIdentity && !managedCanWrite)')) fail('managed_staff_portals_not_capability_aware')
+if (!managedTrialStoreRuntime.includes('PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"')
+  || !managedTrialStoreRuntime.includes('def record_product_acceptance(')
+  || !managedTrialStoreRuntime.includes('def get_product_acceptance(')
+  || !managedTrialStoreRuntime.includes('state_digest=f"sha256:{_canonical_fingerprint(\'product_state\', state.state)}"')
+  || !managedTrialStoreRuntime.includes('if product_value not in self._product_entitlements(')
+  || !managedTrialRuntimeSource.includes('@router.post("/product-acceptance")')
+  || !managedTrialRuntimeSource.includes('@router.get("/product-acceptance/{probe_id}")')
+  || !managedTrialRuntimeSource.includes('"product_state_mutated": False')
+  || !hostedProductAcceptanceVerifierSource.includes("supermega.hosted_product_acceptance_smoke.v2")
+  || !hostedProductAcceptanceVerifierSource.includes('production_handoff_confirmation_required')
+  || !hostedProductAcceptanceVerifierSource.includes('deterministicProbeId')
+  || !hostedProductAcceptanceVerifierSource.includes('prerequisitePortalArtifactDigest')
+  || !hostedProductAcceptanceVerifierSource.includes('prerequisite_portal_changed')
+  || !hostedProductAcceptanceVerifierSource.includes('trial_membership_required')
+  || !rootPackageSource.includes('client:portal:hosted-acceptance:self-test')) fail('hosted_product_acceptance_contract_missing')
+if (!clientPortalLaunchProofSource.includes("CLIENT_PORTAL_LAUNCH_PROOF_CONTRACT = 'supermega.client_portal_launch_proof.v1'")
+  || !clientPortalLaunchProofSource.includes("const ACTIVATION_CONTRACT = 'supermega.managed_workspace_activation_requery_evidence.v2'")
+  || !clientPortalLaunchProofSource.includes("const ACCEPTANCE_CONTRACT = 'supermega.hosted_product_acceptance_smoke.v2'")
+  || !clientPortalLaunchProofSource.includes('validateReleaseHandoffPacket')
+  || !clientPortalLaunchProofSource.includes('launch_release_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_workspace_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_owner_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_product_set_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_acceptance_portal_artifact_mismatch')
+  || !clientPortalLaunchProofSource.includes('launch_acceptance_portal_binding_mismatch')
+  || !clientPortalLaunchProofSource.includes("status: 'ready_for_named_use'")
+  || !clientPortalLaunchProofSource.includes('rawClientIdentifiersPersisted: false')
+  || !clientPortalLaunchProofSource.includes("lifecycle: 'available_post_launch'")
+  || !rootPackageSource.includes('client:portal:launch-proof:self-test')) fail('client_portal_launch_proof_contract_missing')
 if (!operationalReportSource.includes('The source failed validation; no sample values were substituted.')
   || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
   || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
@@ -2679,7 +2902,7 @@ if (!appSource.includes("lazy(() => import('./core/SettingsPage')")
   || !appSource.includes("setupProductFromQuery(new URLSearchParams(location.search).get('product'))")
   || !appSource.includes('<ProductOnboardingPage product={product} />')
   || !appSource.includes('<ProductLoading name="product setup" />')
-  || !settingsEntryContract.includes("if (location.hash === '#controls')")
+  || !settingsEntryContract.includes("if (location.hash === '#controls' || location.hash === '#workspace-recovery')")
   || !settingsEntryContract.includes('<ProductLoading name="workspace controls" />')
   || !settingsEntryContract.includes('<WorkspaceControlsPage />')
   || settingsEntryContract.includes('<SettingsPage />')
@@ -2695,7 +2918,14 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || !workspaceControlsPageSource.includes('title="Status and recovery"')
   || !workspaceControlsPageSource.includes('Product setup and internal client tools stay separate.')
   || !workspaceControlsPageSource.includes('Download workspace backup')
-  || !workspaceControlsPageSource.includes('const backupDownload = useMemo(')
+  // Was `const backupDownload = useMemo(` -- a memoised data: URL built on mount whether or
+  // not Download was ever pressed, at 15.1 ms and 3.78 MB on a device at the workspace
+  // ceiling. Replaced by the click handler, and pinned STRICTER: the shape is named, the
+  // revocation is required beside it, and the eager form is forbidden outright so it cannot
+  // come back the way it arrived.
+  || !workspaceControlsPageSource.includes('function downloadWorkspaceBackup()')
+  || !workspaceControlsPageSource.includes('onClick={downloadWorkspaceBackup}')
+  || workspaceControlsPageSource.includes('data:application/json')
   || !workspaceControlsPageSource.includes('Save restore point')
   || !workspaceControlsPageSource.includes('Load backup file')
   || !workspaceControlsPageSource.includes('Restore previous workspace')
@@ -2710,6 +2940,34 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || workspaceControlsPageSource.includes('SettingsPage')
   || workspaceControlsPageSource.includes("from './CoreApp'")
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => workspaceControlsPageSource.includes(marker))) fail('customer_workspace_controls_not_isolated_or_safe')
+
+// An object URL that is minted and never revoked pins its whole buffer for the life of the
+// page, and at the workspace ceiling that buffer is megabytes -- the same leak, on the same
+// device, that moving the backup off a mount-time data: URL exists to remove.
+//
+// downloadBlob is the one place allowed to mint one, and it must release it. Every other
+// caller has to go through it: an unscoped `includes` for the revoke would be satisfied by
+// whichever download still had a copy of the dance, so each handler is weighed on its own
+// body instead.
+const downloadBlobHelper = workspaceControlsPageSource.slice(
+  workspaceControlsPageSource.indexOf('function downloadBlob(filename: string, blob: Blob)'),
+  workspaceControlsPageSource.indexOf('export function WorkspaceControlsPage()'),
+)
+if (!downloadBlobHelper.includes('URL.createObjectURL(blob)')
+  || !downloadBlobHelper.includes('window.setTimeout(() => URL.revokeObjectURL(url), 0)')) fail('workspace_controls_download_helper_leaks_object_url')
+for (const [handler, next] of [
+  ['function downloadWorkspaceBackup()', 'function downloadSalesArchive()'],
+  ['function downloadSalesArchive()', 'async function resetWorkspace()'],
+]) {
+  const start = workspaceControlsPageSource.indexOf(handler)
+  const end = workspaceControlsPageSource.indexOf(next, start + handler.length)
+  const body = start < 0 || end < 0 ? '' : workspaceControlsPageSource.slice(start, end)
+  if (!body
+    || !body.includes('downloadBlob(')
+    || body.includes('URL.createObjectURL(')
+    || body.includes('encodeURIComponent(')) fail(`workspace_controls_download_leaks_object_url:${handler}`)
+}
+
 if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
   // /signup used to redirect here, which was a dead end: /login is gated on
@@ -2926,7 +3184,13 @@ const productOutcomeIndex = productOnboardingPageSource.indexOf('First useful re
 const productWorkspaceIndex = productOnboardingPageSource.indexOf('onboardingJourney.actionLabel', productOutcomeIndex)
 const productBoundaryIndex = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.', productWorkspaceIndex)
 const productRepeatEntryIndex = productOnboardingPageSource.indexOf('if (workspaceStarted) {')
-const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce') {", productRepeatEntryIndex)
+// Pinned WITH their managedIdentity guards, so this contract also fails if a guard is removed.
+// The browser-local Shop and Plant provisioners write to window.localStorage, which a managed
+// workspace never reads; running them for a signed-in owner reported a trade catalog, or a job
+// and floor, as installed when it was not. See hq/research/MANAGED-TEMPLATE-PROVISIONING.md and
+// verifyManagedGuidedOnboardingCopyRuntime below.
+const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce' && !managedIdentity) {", productRepeatEntryIndex)
+const productPlantProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'production' && !managedIdentity) {", productRepeatEntryIndex)
 if (settingsAdvancedIndex < 0
   || settingsRestorePointIndex < settingsAdvancedIndex
   || !settingsPageSource.includes('className="setup-complete settings-restore-point"')
@@ -2936,7 +3200,8 @@ if (settingsAdvancedIndex < 0
   || productWorkspaceIndex < productOutcomeIndex
   || productBoundaryIndex < productWorkspaceIndex
   || productRepeatEntryIndex < 0
-  || productProvisioningIndex < productRepeatEntryIndex) fail('product_setup_primary_action_hierarchy_wrong')
+  || productProvisioningIndex < productRepeatEntryIndex
+  || productPlantProvisioningIndex < productProvisioningIndex) fail('product_setup_primary_action_hierarchy_wrong')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
@@ -2976,7 +3241,10 @@ if (!coreSource.includes("from './commerce-order-draft'")
   || !rejectedEcommerceNavigationBlock.includes("navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })")
   || !coreSource.includes('Loading orders')
   || !coreSource.includes('Confirmed order left a saved recovery copy')
-  || !coreSource.includes('Recovery unavailable')
+  // Pinned as the whole order-draft expression rather than the bare 'Recovery unavailable'
+  // label: PR #505's stuck-till panel introduced a second occurrence of that label, after
+  // which the short form could no longer fail even if this composer control were deleted.
+  || !coreSource.includes("orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'")
   || !coreSource.includes('expectedInvalidFingerprint: invalidFingerprintAtDiscard')
   || !coreSource.includes('Unfinished order saved on this device')
   || !coreSource.includes('Source-message and Ecommerce links are never recovered.')
@@ -3019,7 +3287,7 @@ if (!ecommerceSource.includes('Stock, payment, delivery, and the final order sta
   || !ecommerceSource.includes('current edits were kept for review')
   || !ecommerceSource.includes('loadManagedBootstrap(identity)')
   || !managedStorefrontSource.includes('result.command_id !== expected.commandId')
-  || !ecommerceSource.includes('disabled={catalogHydrating || draftBusy}')
+  || !ecommerceSource.includes('disabled={portalViewOnly || catalogHydrating || draftBusy}')
   || !ecommerceSource.includes('selectionReviewRequired')
   || !ecommerceSource.includes('Open recovery settings')
   || !ecommerceSource.includes('Saved products no longer in this Shop')
@@ -3176,7 +3444,8 @@ if (addToCartStart < 0
   || !ecommerceSource.includes('onCartChange={setBuyingCart}')
   || !ecommerceSource.includes('onDraft={openShopDraft}')
   || !ecommerceSource.includes('onOpenManagedRequest={managedIdentity ?')
-  || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}')
+  || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}')
+  || !ecommerceSource.includes('disabled={portalViewOnly || catalogHydrating}')
   || !ecommerceSource.includes("onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}")
   || storefrontSavePreviewAdvanceCount !== 2
   || managedStorefrontSave < 0
@@ -3278,6 +3547,14 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('latestRequest.quote.payment.adapter === effectivePaymentAdapter')
   || !ecommerceBuyingUiSource.includes('paymentAdapter: effectivePaymentAdapter')
   || !ecommerceBuyingUiSource.includes('const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])')
+  // The buyer screen's cancellation, amendment and reschedule loops read acknowledgements out
+  // of ONE reader memoized on the workspace, never one validation per intent. They sit in the
+  // component body rather than a memo, so the per-call shape re-validated the whole workspace
+  // on every keystroke: 100 validations and 5.8 s per render at the buying contract's enforced
+  // ceiling. The behaviour is pinned in test_ecommerce_order_coexistence.mjs section 5; these
+  // two lines are what stop the per-call shape creeping back into this file specifically.
+  || !ecommerceBuyingUiSource.includes('const readOrderAcknowledgement = useMemo(() => commerceOrderAcknowledgementReader(commerceState), [commerceState])')
+  || ecommerceBuyingUiSource.includes('commerceOrderAcknowledgement(commerceState')
   || !ecommerceBuyingUiSource.includes('const usingSamplePaymentFallback = !onRecordManagedRequest')
   || !ecommerceBuyingUiSource.includes('&& configuredPaymentPolicies.length === 0')
   || !ecommerceBuyingUiSource.includes('currentPaymentPolicies: checkoutPaymentPolicies')
@@ -3569,7 +3846,73 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !coreSource.includes('prepareManagedEcommerceShopDraftV2')
   || !coreSource.includes('setExtraOrderLines(remainingLines.map')
   || !coreSource.includes('separate Shop action gate')) fail('managed_ecommerce_inbox_contract_missing')
-if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
+// An inventory, not a sample. This guard was a single `includes('src/products')` pin, which
+// said nothing about the other source roots -- and showroom/src/analytics/ shipped underneath
+// it: metrics-collector.ts is imported by main.tsx and seven product modules, and eslint never
+// saw the directory. Proven 2026-08-21 by putting two hard errors (no-explicit-any,
+// no-unused-vars) in that file: `npm --prefix showroom run lint` stayed at its 17-warning
+// baseline and exit 0, and this check stayed green.
+//
+// Two things this deliberately does NOT do, because each was a way the same failure comes
+// back. It does not test the script with `includes()`: `src/products` is a PREFIX of
+// `src/products-legacy`, so a substring pin is satisfied by a rename that drops the real
+// directory, and it is satisfied by `--ignore-pattern src/analytics`, which names the path in
+// order to skip it. Arguments are tokenised and matched exactly, and anything ESLint would
+// read as a flag (or the value following an ignore flag) is not a target. And it does not look
+// at directories only: a loose `showroom/src/feature-flags.ts` next to App.tsx is the same
+// defect one level up, so top-level TypeScript files are inventoried too.
+const showroomLintScript = String(appPackage.scripts?.lint ?? '')
+const showroomLintArguments = showroomLintScript.split(/\s+/).filter(Boolean)
+const showroomLintTargets = new Set()
+const showroomLintIgnorePatterns = []
+for (let index = 1; index < showroomLintArguments.length; index += 1) {
+  const argument = showroomLintArguments[index]
+  // An ignore flag's value is not a target -- it names a path in ORDER TO SKIP IT.
+  // --ignore-path points at a file whose contents this cannot read, so it is recorded
+  // as a pattern that matches everything and fails the check outright.
+  if (argument === '--ignore-pattern') { showroomLintIgnorePatterns.push(showroomLintArguments[index + 1] ?? '*'); index += 1; continue }
+  if (argument === '--ignore-path') { showroomLintIgnorePatterns.push('*'); index += 1; continue }
+  if (argument.startsWith('-')) continue
+  showroomLintTargets.add(argument)
+}
+const showroomSourceRoot = resolve(root, 'showroom', 'src')
+const showroomSourceEntries = await readdir(showroomSourceRoot, { withFileTypes: true })
+const requiredShowroomLintTargets = []
+for (const entry of showroomSourceEntries) {
+  if (entry.isDirectory()) {
+    const contents = await walk(resolve(showroomSourceRoot, entry.name))
+    if (contents.some((path) => /\.tsx?$/.test(path))) requiredShowroomLintTargets.push(`src/${entry.name}`)
+  } else if (/\.tsx?$/.test(entry.name)) {
+    requiredShowroomLintTargets.push(`src/${entry.name}`)
+  }
+}
+// `eslint src` (or `eslint .`) reaches every one of them; only an enumerated script needs
+// the target inventory.
+const showroomLintsEverySource = showroomLintTargets.has('src') || showroomLintTargets.has('.')
+// ...but a broad target is NOT proof of coverage on its own, and treating it as proof was
+// this guard's own version of the defect it was written to catch. Found by review 2026-08-21
+// and reproduced before changing anything: with `eslint src --ignore-pattern src/analytics`,
+// two hard errors in showroom/src/analytics/metrics-collector.ts left `npm --prefix showroom
+// run lint` at its 17-warning baseline and exit 0, while `npx eslint src/analytics` reported
+// them -- and this check stayed green, because the broad-target shortcut returned early
+// before any ignore was considered. Coverage is (reached by a target) AND (not subtracted by
+// an ignore), in both branches: an enumerated script can name a root and then ignore it too.
+//
+// Glob semantics are deliberately NOT reimplemented here -- that would be one more place to
+// be subtly wrong, in a check whose whole purpose is not being subtly wrong. It fails closed
+// instead: an ignore pattern subtracts a root if it names that root or a parent of it, and
+// any pattern still holding a wildcard after trailing stars are stripped is treated as
+// subtracting everything.
+const showroomLintIgnores = showroomLintIgnorePatterns.map((pattern) =>
+  pattern.replace(/^\.\//, '').replace(/\/?\*+$/, '').replace(/\/$/, ''))
+const showroomLintIgnoresTarget = (target) => showroomLintIgnores.some((pattern) =>
+  pattern === '' || pattern.includes('*') || pattern === target || target.startsWith(`${pattern}/`))
+const unlintedShowroomSourceTargets = requiredShowroomLintTargets
+  .filter((target) => !(showroomLintsEverySource || showroomLintTargets.has(target)) || showroomLintIgnoresTarget(target))
+  .sort()
+if (unlintedShowroomSourceTargets.length) {
+  fail(`prototype_sources_not_linted:${unlintedShowroomSourceTargets.join('|')}`)
+}
 if (!websiteSource.includes('Nothing has been deployed.')
   || !websiteSource.includes('Nothing was deployed.')
   || websiteSource.includes('Approved site file saved and confirmed. No deployment occurred.')
@@ -3695,7 +4038,8 @@ if (!websiteModelSource.includes("contract: 'supermega.website.working-sample.v1
   || !productOnboardingPageSource.includes('await activateLocalWebsiteWorkingSample({')
   || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'}")
   || !websiteSource.includes('websiteTodayContext')) fail('website_working_sample_activation_missing')
-if ((websiteSource.match(/\{websiteAgentActionLabel\}<\/button>/g) ?? []).length !== 1
+if ((websiteSource.match(/onClick=\{runWebsiteAutopilot\}/g) ?? []).length !== 1
+  || !websiteSource.includes("{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>")
   || websiteSource.includes('onClick={openStarterSetup}')
   || />\s*Customize demo\s*<\/button>/.test(websiteSource)) fail('website_duplicate_starter_action_present')
 if (!websiteModelSource.includes("siteName: 'Mingalar Fresh Mart'")
@@ -3764,7 +4108,6 @@ if (!websiteSource.includes('Recovery settings')
   || !productSetupSource.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY')
   || !handoffSource.includes('export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }')
   || coreSource.includes("import('../products/website/website-model')")
-  || coreSource.includes("import('../products/product-handoff')")
   || coreSource.includes("from '../products/website/website-model'")
   || !websiteCssSource.includes('.website-notice-action')) fail('website_session_recovery_missing_or_eager')
 if (!websiteModelSource.includes('repairInvalidWebsiteWorkspace')
@@ -3833,7 +4176,7 @@ if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') >
 const websiteUnifiedCss = websiteCssSource.slice(websiteCssSource.lastIndexOf('/* Unified Website workflow'))
 if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
   || !websiteSource.includes('className="website-action-bar"')
-  || !websiteSource.includes("storageMode === 'managed' ? canReview ? (")
+  || !websiteSource.includes("storageMode === 'managed' ? canReview && !portalViewOnly ? (")
   || websiteSource.includes('The four-page prototype limit is reached')
   || websiteSource.includes('This prototype is capped at four pages.')
   || !websiteSource.includes('className="website-primary-actions"')
@@ -3848,7 +4191,7 @@ if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
   || websiteSource.includes('splitPreview')
   || websiteSource.includes('className="website-mobile-seo-settings"')
   || ['.website-workspace-nav', '.website-mobile-mode-nav', '.website-mobile-page-bar', '.website-mobile-site-settings', '.website-surface-controls', '.website-split-control', '[data-split='].some((selector) => websiteCssSource.includes(selector))) fail('website_unified_action_bar_missing')
-if (!websiteSource.includes("storageMode === 'managed' ? canReview ? (")
+if (!websiteSource.includes("storageMode === 'managed' ? canReview && !portalViewOnly ? (")
   || !websiteSource.includes("storageMode !== 'session-only' ? (")
   || !websiteSource.includes("view === 'publish' && storageMode === 'session-only'")
   || !websiteSource.includes('<PublishWorkspace')
@@ -4052,6 +4395,15 @@ if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
   || !coreSource.includes("data-order-receipt=\"view\"")
   || !coreSource.includes('onViewReceipt={setReceiptAck}')
   || !coreSource.includes('<ReceiptDialog ack={receiptAck}')) fail('customer_receipt_ui_missing')
+// The acknowledgement download used to be a memoised data: URL per order, on a memo keyed on
+// `commerce` -- 1,852,602 bytes rebuilt and retained on every sale at the workspace ceiling.
+// Pinned STRICTER than the href it replaced: the file function is named, the click handler is
+// required, and the eager form is forbidden outright so it cannot come back the way it came.
+if (!coreSource.includes('function orderAcknowledgementFileText(artifact: CommerceOrderAcknowledgement)')
+  || !coreSource.includes('function OrderReceiptActions(')
+  || !coreSource.includes('downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)]')
+  || coreSource.includes('data:text/plain')
+  || coreSource.includes('href={acknowledgement.href}')) fail('order_acknowledgement_download_eager_again')
 if (!coreSource.includes('aria-label="Shop attention"')
   || !coreSource.includes('to="/shop/?tab=inventory"')
   || !coreSource.includes("useState<'manual' | 'message' | 'online'>('manual')")
@@ -4240,6 +4592,15 @@ if ([
   "from '../../core/managed-trial'",
 ].some((marker) => websiteSource.includes(marker))) fail('website_still_writes_order_intake')
 if (!commerceIntakeSource.includes('acceptWebsiteEcommerceHandoff') || !commerceIntakeSource.includes('matches.length === 1') || !commerceIntakeSource.includes('createWebsiteOrderDraft(context.handoff.id') || !commerceIntakeSource.includes('I reviewed this SKU, quantity, and Website evidence.')) fail('commerce_intake_approval_contract_missing')
+if (coreSource.includes("import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'")
+  || coreSource.includes("import { readWebsiteEcommerceHandoff")
+  || !coreSource.includes("lazy(() => import('../products/WebsiteCommerceIntake')")
+  || !coreSource.includes("void import('../products/product-handoff')")
+  || !coreSource.includes('if (managedIdentity || !confirmedLocalShop) return undefined')
+  || !coreSource.includes('[confirmedLocalShop, managedIdentity]')
+  || !coreSource.includes("localWebsiteIntakeRead.status === 'ready'")
+  || !coreSource.includes('Older Website order could not be checked.')
+  || !coreSource.includes('No order was created or changed.')) fail('legacy_website_intake_eager_or_fail_open')
 if (!commerceIntakeSource.includes('await completeWebsiteOrderDraft')
   || !commerceIntakeSource.includes('opaque customer reference generated on completion')
   || !commerceIntakeSource.includes('Create ready order')
@@ -4426,6 +4787,10 @@ if (!coreSource.includes('data-tax-configuration="versioned"')
   || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
+  // Same reason, same shape: 758,928 bytes of percent-encoded CSV on the same per-sale memo.
+  || !coreSource.includes('function closeExportFileText(artifact: CommerceDailyCloseExport)')
+  || !coreSource.includes('downloadBlob(latestCloseDownload.filename, new Blob([closeExportFileText(latestCloseDownload.artifact)]')
+  || coreSource.includes('href={latestCloseDownload.href}')
   || !commerceSource.includes('supermega.commerce.daily-close-export.v3')
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
@@ -4509,8 +4874,48 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes('Math.ceil(orders.length / pageSize)')
   || !coreSource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
 if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !workspaceRuntimeSource.includes('result.version !== current.version + 1') || !workspaceRuntimeSource.includes('validateCommerceState(result.state)') || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'") || !workspaceRuntimeSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !workspaceRuntimeSource.includes('const latest = loadCommerceWorkspace()') || !workspaceRuntimeSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
+if (!coreSource.includes('initializeManagedTemplateCatalog')
+  || !coreSource.includes('shopBusinessTemplateCommerceItems(managedTemplateId)')
+  || !coreSource.includes('I reviewed the starter prices, opening counts, and reorder levels.')
+  || !coreSource.includes('No sales or customer records were added.')
+  || !productOnboardingPageSource.includes('shopBusinessTemplateManagedCatalogPath(selectedBusinessTemplate.id)')) fail('managed_template_catalog_activation_missing')
+if (!productOnboardingPageSource.includes('navigate(plantIndustryPackManagedPlanPath(plantIndustryPackId))')
+  || !coreSource.includes('plantIndustryPackIdFromSearch(productionLocation.search)')
+  || !coreSource.includes('...managedPlantStarterPlan(plantIndustryPackId)')
+  || !coreSource.includes('I reviewed these values against a real plan.')
+  || !coreSource.includes('no production history will be invented')
+  || !coreSource.includes('if (!planDraft.reviewed')
+  || !coreSource.includes("jobs: [{ id: firstJobId, line, product, target: jobTarget, output: 0")
+  || !coreSource.includes("machines: [{ id: machineId, name: machineName, state: 'running' }]")
+  || !plantIndustryPacksSource.includes('export function managedPlantStarterPlan')
+  || !plantIndustryPacksSource.includes('export function plantIndustryPackManagedPlanPath')) fail('managed_plant_starter_plan_activation_missing')
 if ((workspaceRuntimeSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
 if (!workspaceRuntimeSource.includes('confirmation?: AccountableAction') || !workspaceRuntimeSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !workspaceRuntimeSource.includes('result.idempotent_replay') || !workspaceRuntimeSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
+// A frozen command proof blocks Cancel and Escape while the outcome is unknown. Once a submit has
+// come back with an error the outcome IS known -- nothing applied -- and the only remaining
+// control was "Retry same confirmation", which reuses the frozen timestamp and fails identically.
+// That left reloading the app as the operator's sole escape from the dialog.
+if (!coreSource.includes('const confirmationLocked = Boolean(action.confirmation) && !error')
+  || !coreSource.includes('disabled={busy || confirmationLocked} onClick={onCancel}')
+  || !coreSource.includes('if (!busy && !confirmationLocked) onCancel()')
+  || coreSource.includes('disabled={busy || Boolean(action.confirmation)} onClick={onCancel}')) fail('failed_confirmation_traps_operator_in_dialog')
+// Validator strings name array indexes and internal fields. Shop owners read this dialog at a
+// counter; the technical text stays available under a disclosure, never as the whole message.
+if (!coreSource.includes('function ownerFacingActionError(detail: string)')
+  || !coreSource.includes('{ownerFacingActionError(error)}')
+  || !coreSource.includes('className="action-error-detail"')
+  || !coreSource.includes('<summary>Technical detail</summary>')
+  || !coreCssSource.includes('.action-error-detail > summary { min-height: 2.75rem;')) fail('raw_validator_error_shown_to_shop_owner')
+// A completed order keeps payment at or before handover, so it can never accept a proof stamped
+// now. Offering "Reconcile payment" as its primary action promises what the transition refuses.
+if (!coreSource.includes("const reconcileIsPrimary = !settleSaleIsPrimary && needsPayment && order.status === 'ready'")
+  || !commerceSource.includes('(timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(order.completion.capturedAt) as bigint)) return null')) fail('completed_order_offers_a_payment_action_that_always_refuses')
+// The sample counter sales a trade template installs are money already taken. Staged 'pending'
+// they became permanently unclearable -- completed orders cannot be cancelled either -- and their
+// takings never reached a daily close.
+if (!commerceSource.includes('const paidAt = new Date(Date.parse(sale.recordedAt) + 5 * 60 * 1000).toISOString()')
+  || !commerceSource.includes('paymentReconciledAt: paidAt,')
+  || !commerceSource.includes('paymentReconciliationActionId: settleActionId,')) fail('working_sample_counter_sales_not_recorded_as_paid')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!commerceSource.includes('registerCommerceItem')
   || !commerceSource.includes('export function importCommerceCatalog')
@@ -5238,7 +5643,26 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes("firstTaskPath: '/plant/?tab=production'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/website/'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/ecommerce/'")
-  || !productOnboardingPageSource.includes('const onboardingJourney = onboardingJourneys[product]')
+  // The journey the screen advertises. A company account gets the browser-local journey with the
+  // managed overrides applied, because "Complete a sample sale" on "a realistic catalog and stock
+  // are ready" -- and "Run a sample production job" on "a scheduled job, materials, and line are
+  // ready" -- are false for it. There is no catalog to tap and no job to open. All three halves
+  // are pinned: the local journey is still the base, and each managed override is still applied
+  // on top of it.
+  || !productOnboardingPageSource.includes('const onboardingJourney = managedCommerce')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...managedTemplateJourney }')
+  || !productOnboardingPageSource.includes('Nothing is created until you confirm its values and source.')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_PLANT_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_WEBSITE_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes('{ ...onboardingJourneys[product], ...MANAGED_ECOMMERCE_ONBOARDING_JOURNEY }')
+  || !productOnboardingPageSource.includes(': onboardingJourneys[product]')
+  || !productOnboardingPageSource.includes('const [managedIdentity, , managedIdentitySettled] = useManagedIdentity')
+  || !productOnboardingPageSource.includes('managedOnboardingAccountCheckPending(runtime.status, managedIdentitySettled)')
+  || !productOnboardingPageSource.includes('if (accountCheckPending) {')
+  || !productOnboardingPageSource.includes("if (product === 'website' && !managedIdentity) {")
+  || !productOnboardingPageSource.includes("if (product === 'ecommerce' && !managedIdentity) {")
+  || !productOnboardingPageSource.includes('disabled={!workflowReady || workspaceBusy || accountCheckPending}')
+  || !productOnboardingPageSource.includes("managedIdentity ? 'Uses this company account. Nothing is published or sent externally.'")
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
   || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup)')
@@ -5347,8 +5771,19 @@ if (!productSetupSource.includes('templateId: string')
   || productOnboardingPageSource.includes('product-onboarding-demo-action')
   || !productOnboardingPageSource.includes('This setup affects {onboardingProduct.name} only. Your other products stay separate.')
   || !productOnboardingPageSource.includes('Need help bringing real data?')
+  || !productOnboardingPageSource.includes("notice.startsWith('Saved appointments are unreadable')")
+  || !productOnboardingPageSource.includes('prepareUnreadableShopScheduleRecovery(window.localStorage)')
+  || !productOnboardingPageSource.includes('clearUnreadableShopSchedule(window.localStorage, recovery.raw)')
+  || !productOnboardingPageSource.includes('Download backup and clear appointments')
+  || !productOnboardingPageSource.includes('Valid or changed appointments are never cleared.')
+  || !productOnboardingPageSource.includes('to="/settings/#workspace-recovery">Review all recovery options</Link>')
+  || !productOnboardingPageSource.includes('className="product-onboarding-recovery" role="alert"')
+  || !appSource.includes("location.hash === '#controls' || location.hash === '#workspace-recovery'")
+  || !workspaceControlsPageSource.includes('className="core-panel trial-control-panel" id="workspace-recovery"')
+  || !workspaceControlsPageSource.includes("ref={window.location.hash === '#workspace-recovery' ? (node) => node?.scrollIntoView({ block: 'start' }) : undefined}")
   || !coreCssSource.includes('.product-onboarding-help { margin: 0;')
   || !coreCssSource.includes('.product-onboarding-help a:hover { color: var(--core-green); }')
+  || !coreCssSource.includes('.product-onboarding-recovery { display: grid;')
   || productOnboardingPageSource.includes('const [dataSetupOpen, setDataSetupOpen] = useState(false)')
   || productOnboardingPageSource.includes('onToggle={(event) => setDataSetupOpen(event.currentTarget.open)}')
   || productOnboardingPageSource.includes('<ClientDataOnboarding')
@@ -5400,7 +5835,7 @@ if (!productSetupSource.includes('templateId: string')
   || coreCssSource.includes('.product-onboarding-sample {')
   || !coreCssSource.includes('.product-onboarding-grid { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.product-onboarding-primary .core-button { width: 100%; }')
-  || !coreCssSource.includes('.demo-preset-select,\n.demo-pack-select { display: grid;')
+  || !coreCssSource.replaceAll('\r\n', '\n').includes('.demo-preset-select,\n.demo-pack-select { display: grid;')
   || !coreCssSource.includes('.setup-existing-package')
   || !coreCssSource.includes('.client-system-details > .client-foundation-summary')
   || !coreCssSource.includes('.demo-solution-card[data-selected="true"]')
@@ -5591,8 +6026,9 @@ const shopCounterRouteContract = coreSource.slice(coreSource.indexOf("if (tab ==
 if (!shopCounterContract.includes('Tap an item to add it')
   || !shopCounterContract.includes('industryPack.firstWorkflow')
   || !shopCounterContract.includes('sampleCatalogActive')
+  || !shopCounterContract.includes("? 'Existing Shop catalog'")
   || !shopCounterContract.includes('sample items are loaded.')
-  || !shopCounterContract.includes('Existing Shop catalog data was preserved.')
+  || !shopCounterContract.includes('Your existing items were kept. The ${industryPack.name} appointment schedule is separate.')
   || !shopCounterContract.includes('to="/shop/?tab=orders#shop-service-schedule"')
   || !shopCounterContract.includes("['Cash', 'KBZPay', 'WavePay']")
   || !shopCounterContract.includes('function addSearchMatch(event: KeyboardEvent<HTMLInputElement>)')
@@ -5636,6 +6072,105 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !coreCssSource.includes('.shop-mobile-cart')
   || !coreCssSource.includes('.shop-current-sale.is-open')) fail('shop_counter_direct_demo_missing')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
+// ERP-COMPETITIVE-ROADMAP G1 — the counter slice is wired for Burmese.
+//
+// WHAT IS ACTUALLY AT RISK HERE, and why these are not decorative pins. The whole
+// batch is safe to ship ahead of native review for exactly one reason: bi() renders
+// English for anything not 'confirmed' (showroom/src/core/i18n-actions.ts rule 1).
+// That single line is the difference between "not translated yet" and an unreviewed
+// guess on a real till, and until now nothing in the belt held it. Losing the gate
+// would not fail any other check, and it would not look like a regression: the
+// surface would simply start rendering ~30 drafted strings nobody signed off.
+const paymentQrSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PaymentQr.tsx'), 'utf8')
+const i18nActionsTable = i18nActionsSource.slice(i18nActionsSource.indexOf('const ACTION_TRANSLATIONS'), i18nActionsSource.indexOf('export function bi('))
+if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') return en")
+  // Lockstep pair: bi() emits the class and core-app.css styles it. Split them and the
+  // phone bottom bar silently goes back to ellipsising away the Burmese half of a
+  // five-across work-mode label -- invisible to every other check in this file.
+  || !i18nActionsSource.includes("createElement('span', { className: 'bi-label' }")
+  || !coreCssSource.includes('.mobile-nav a .bi-label')
+  || !coreCssSource.includes('.product-task-tabs button .bi-label')
+  // The four Shop work modes and the counter/receipt labels have table entries, so a
+  // native reviewer's sign-off is a one-line status flip with zero call-site churn.
+  || !i18nActionsTable.includes("'Today':")
+  || !i18nActionsTable.includes("'Sell':")
+  || !i18nActionsTable.includes("'Orders':")
+  || !i18nActionsTable.includes("'Stock':")
+  || !i18nActionsTable.includes("'Review order':")
+  || !i18nActionsTable.includes("'Create order':")
+  || !i18nActionsTable.includes("'Print receipt':")
+  // The documented refusal. 'Products' in the phone bottom bar opens the SuperMega
+  // product chooser, NOT the shop's goods, one cell away from the Stock tab. The
+  // refusal is recorded in i18n-actions.ts; this is what keeps someone from closing
+  // the "gap" later by adding the obvious wrong word.
+  || i18nActionsTable.includes("'Products':")
+  // Call sites, both navigations and the counter's own controls.
+  || !coreShellSource.includes('>{bi(tab.label)}</Link>')
+  // Plant's task strip renders from the SAME <nav>, so the commerce guard is what
+  // keeps the four Plant/Shop-shared tab ids out of this exact-match table's blast
+  // radius: a later batch confirming a 'Jobs' or 'Problems' entry for some other
+  // surface must not silently make Plant's tabs bilingual without a Plant decision.
+  || !coreSource.includes("type=\"button\">{view === 'commerce' ? bi(tab.label) : tab.label}</button>")
+  // The merchant payment QR dialog opens from the counter's own sale details, and
+  // its Close is the same CONFIRMED key the receipt uses -- unwired, one non-cash
+  // sale would show a Burmese Close and an English Close side by side.
+  || !paymentQrSource.includes("{bi('Scan to pay')}")
+  || !paymentQrSource.includes("{bi('Amount due')}")
+  || !paymentQrSource.includes("{bi('Close')}")
+  || !i18nActionsTable.includes("'Scan to pay':")
+  || !shopCounterContract.includes("{bi('Tap an item to add it')}")
+  || !shopCounterContract.includes("{bi('Current sale')}")
+  || !shopCounterContract.includes("{bi('Clear')}")
+  || !shopCounterContract.includes("{bi('Total')}")
+  || !shopCounterContract.includes("{disabled ? bi('Sales paused') : bi('Review order')}")) fail('shop_counter_bilingual_wiring_missing')
+// The product tile's accessible NAME is assembled by REFERENCE -- aria-labelledby
+// for the identifying nodes, aria-describedby for the numeric ones -- because an
+// aria-label on a button replaces its whole subtree, which is how the tile came to
+// announce neither the price, nor the stock level, nor the quantity in the sale,
+// nor item.nameMy (the Burmese product name the OWNER typed in).
+//
+// This is a lockstep guard, and it is here because the failure is silent. Rename or
+// conditionally drop one referenced id and the name does not go missing -- it falls
+// back to content-derived naming, which measures as "Rice 5kgဆန်350012 in stock2":
+// no action verb and the price fused to the stock count. That is a plausible-looking
+// string, so nothing downstream would notice, and no other check in this belt reads
+// an accessible name.
+//
+// FLOOR before ceiling, per the initial-JS guard's rule: an id list that collapses to
+// empty must fail, not pass vacuously on a set with nothing left to check.
+const shopTileButton = shopCounterContract.slice(
+  shopCounterContract.indexOf('<button aria-describedby='),
+  shopCounterContract.indexOf('className="shop-product-tile"') + 60)
+const shopTileLabelledBy = shopCounterContract.match(/const labelledBy = \[([^\]]*)\]/)
+const shopTileDescribedBy = shopCounterContract.match(/const describedBy = \[([^\]]*)\]/)
+const shopTileReferenced = [shopTileLabelledBy?.[1] ?? '', shopTileDescribedBy?.[1] ?? '']
+  .flatMap((list) => [...list.matchAll(/\b([a-z][A-Za-z]*Id)\b/g)].map((m) => m[1]))
+const shopTileUnique = [...new Set(shopTileReferenced)]
+if (!shopTileLabelledBy || !shopTileDescribedBy
+  // Floor: the six ids the tile actually references. Fewer means an id list was
+  // emptied or the destructuring shape changed, and the checks below would then be
+  // asserting over nothing.
+  || shopTileUnique.length < 6
+  // Every referenced id must be BOTH declared and placed on a rendered node.
+  || shopTileUnique.some((id) => !shopCounterContract.includes(`const ${id} = \`shop-tile-`))
+  || shopTileUnique.some((id) => !shopCounterContract.includes(`id={${id}}`))
+  // The shared action phrase is a literal in the labelledby list, so it needs its own
+  // node, and it must go through bi() rather than being hardcoded English.
+  || !shopTileLabelledBy[1].includes("'shop-tile-action'")
+  // aria-hidden is load-bearing, not decoration: .sr-only clips visually only, so
+  // dropping it puts a stray "Add to this sale" line into catalog browsing -- audible
+  // even on an empty catalog with no tile to name. It does not weaken the name, since
+  // a directly-referenced node counts hidden or not (measured on all three shapes).
+  || !shopCounterContract.includes('<span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi(\'Add to this sale\')}</span>')
+  || !i18nActionsTable.includes("'Add to this sale':")
+  // The regression this whole block exists to prevent: putting an aria-label back on
+  // the tile silently re-overrides the subtree and every reference above goes dead.
+  || shopTileButton.includes('aria-label=')
+  || !shopTileButton.includes('aria-labelledby={labelledBy}')
+  || !shopTileButton.includes('aria-describedby={describedBy}')
+  // The quantity badge keeps its own aria-label: it is what aria-describedby resolves
+  // to for the "N in sale" half of the description.
+  || !shopCounterContract.includes('aria-label={`${quantity} in sale`}')) fail('shop_tile_accessible_name_not_referenced')
 // Roadmap S3 PR1 — customer loyalty points, accrual only (shop-loyalty.ts).
 // Pins the boundaries that make a points ledger safe in this codebase:
 //   - balances stay a pure projection over the DEVICE-LOCAL key (the managed
@@ -5714,7 +6249,165 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   || !coreSource.includes('Redeem points · ')
   || !coreSource.includes('loyalty={receiptLoyalty}')
   || !receiptDialogSource.includes('Points balance')
+  // G1 counter slice: the receipt dialog's own labels go through bi(), while the
+  // PRINTED acknowledgement stays one declared language. See the scope note in
+  // ReceiptDialog.tsx -- that document is evidence, not a customer slip.
+  || !receiptDialogSource.includes("{bi('Print receipt')}")
+  || !receiptDialogSource.includes("{bi('Total')}")
+  || !receiptDialogSource.includes("{bi('Close')}")
+  || !receiptDialogSource.includes('<!DOCTYPE html>\n<html lang="en">')
   || !workspaceControlsPageSource.includes('Points are redeemed as a discount recorded on the order — 1 point = 1 MMK')) fail('shop_loyalty_redemption_contract_missing')
+// G2 receipt print geometry. A counter receipt goes on a continuous thermal ROLL, so the
+// printed document carries a roll layout by default and a sheet layout only when the print
+// service reports sheet-sized media. Prefix pins on the branch conditions and on `@page {
+// margin:`, not on the values inside them, so tuning an inset or a font size does not trip
+// this -- the roll inset in particular is the number the file marks UNVERIFIED and expects
+// the founder device test to revise.
+//
+// The negative is the one that earns its keep. `size: <length> auto` READS like the way to
+// say "80mm wide, length decided by the roll", and it is what a competitive-scan note
+// recommended -- but the `size` grammar takes `auto` alone, one length (a SQUARE page), or
+// two lengths, never a length beside `auto` in either order. A browser discards the whole
+// declaration and falls back to sheet geometry, so a receipt built on it looks finished,
+// passes every gate, and fixes nothing on real paper. Measured in Chromium: `size: 80mm
+// auto` renders a 215.9x279.4mm page, identical to declaring no size at all.
+//
+// Two things the pattern has to get right. It anchors `size` on a non-identifier boundary,
+// or it would also fire on `background-size: 40mm auto` -- the idiomatic way to scale a
+// logo, exactly what a shop-logo receipt feature would add, failing the gate under a key
+// that names the wrong problem. And it accepts any unit and BOTH orders, because
+// `size: auto 80mm` and `size: 20rem auto` are equally invalid and equally silent.
+//
+// Scoped to the RECEIPT_PRINT_STYLES template rather than the whole file, because the
+// comment above it necessarily SPELLS the invalid declaration out in order to warn about
+// it -- the same carve-out check_css_contracts.mjs makes for hex in comments, and for the
+// same reason: turning the warning into the violation would punish the note. The slice
+// bounds are checked rather than passed straight to String.slice, which treats a -1 end as
+// length - 1 and would silently widen the scan to the rest of the file on a rename.
+const receiptStylesStart = receiptDialogSource.indexOf('const RECEIPT_PRINT_STYLES = `')
+const receiptStylesEnd = receiptDialogSource.indexOf('function openPrintWindow(')
+const receiptPrintStyles = receiptStylesStart >= 0 && receiptStylesEnd > receiptStylesStart
+  ? receiptDialogSource.slice(receiptStylesStart, receiptStylesEnd)
+  : ''
+const receiptRollBranchStart = receiptPrintStyles.indexOf('@media print {')
+const receiptRollBranchEnd = receiptPrintStyles.indexOf('@media print and (max-width:')
+const receiptRollBranch = receiptRollBranchStart >= 0 && receiptRollBranchEnd > receiptRollBranchStart
+  ? receiptPrintStyles.slice(receiptRollBranchStart, receiptRollBranchEnd)
+  : ''
+if (!receiptDialogSource.includes('<style>${RECEIPT_PRINT_STYLES}')
+  || !receiptPrintStyles
+  || !receiptRollBranch
+  || !receiptRollBranch.includes('@page { margin:')
+  || !receiptPrintStyles.includes('@media print and (max-width: 65mm) {')
+  || !receiptPrintStyles.includes('@media print and (min-width: 90mm) {')
+  || !/@media print and \(min-width: 90mm\) \{[^}]*@page \{ margin:/.test(receiptPrintStyles)
+  || /(?<![-\w])size\s*:\s*(?:[\d.]+[a-z%]+\s+auto|auto\s+[\d.]+[a-z%]+)/i.test(receiptPrintStyles)) fail('receipt_roll_print_geometry_missing')
+// Roadmap §2 item 5 -- anomaly flags on the close (shop-close-anomaly-flags.ts).
+// A shop owner closing the till is told what was unusual about the day without
+// having to know what to look for. The value of that depends entirely on it
+// never saying something false, so the pins here are the four ways it could:
+//   1. IT IS A PROJECTION, NOT A FEATURE WITH STATE. The module's only import is
+//      a TYPE import -- erased at build, so the module can reach nothing: no
+//      write path, no storage, no network. It also reads NO CLOCK, so "today"
+//      means "the most recent close" and replaying the same state always gives
+//      the same answer. A stored anomaly would be a claim outliving the data
+//      that justified it, which is why nothing here is stored.
+//   2. THIN DATA FAILS QUIET. Under a full trading week of prior closes the
+//      surface says it is still learning and raises nothing -- a shop with three
+//      closes is never handed an invented "usual day".
+//   3. A MEASURE IS ONLY READ WHERE IT WAS RECORDED. A legacy close carries no
+//      payment-exception list and a close saved without a drawer count carries
+//      no variance; reading either as a zero would drag the median down and
+//      manufacture a spike out of an ordinary day, so both read null and the
+//      close simply sits out of that measure's baseline.
+//   4. GUIDED SAMPLES RAISE NOTHING (CLAUDE.md proof-counter rule) -- identified
+//      by the ACT-DEMO- actionId prefix on the order's own stock movement OR by
+//      the working sample's SETUP-SAMPLE- order-id prefix, never by an actor
+//      string, and excluded from the baseline as well as from the subject
+//      position. Two markers because re-seeding a working sample DELETES its
+//      movements and orders while leaving `closes` untouched, which would leave
+//      an old all-sample close reading as real trading. The test is "touches ANY
+//      sample order", not "is made entirely of them": commerceCloseExpectation
+//      sweeps every completed, reconciled, unclosed order into the day whatever
+//      its origin, and createSeedCommerce ships ORD-1039 already reconciled, so
+//      a seeded workspace's FIRST close is normally mixed and its `total` is a
+//      sum across both. Such a close is dropped whole rather than netted out --
+//      the close records no per-order amounts, so subtracting would re-derive
+//      them from data a working-sample re-seed deletes and order corrections
+//      move. An empty or absent order list is NOT a sample: missing evidence
+//      must not become a verdict about records that do not exist.
+//   5. AN ALL-CLEAR SPEAKS ONLY FOR WHAT WAS COMPARED. `comparedMeasures` names
+//      the measures that had both a value on this close and a full baseline, and
+//      the "nothing stood out" sentence is built from that list -- a shop that
+//      never counts its drawer must not be told its drawer looked normal.
+// The arithmetic itself (thresholds, zero medians, window bounds, purity) is
+// pinned EXECUTABLY in tools/test_shop_close_anomaly.mjs. That file cannot be
+// its own chain step (package.json is digest-bound), so commerce:close:verify
+// imports it -- the gate step that already owns the daily close. Both halves are
+// pinned below: a string pin cannot see broken arithmetic, and an unrun test
+// cannot see a deleted string.
+const shopCloseAnomalySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-close-anomaly-flags.ts'), 'utf8')
+const commerceCloseTestSource = await readFile(resolve(root, 'tools', 'test_commerce_daily_close.mjs'), 'utf8')
+const shopCloseAnomalyImports = shopCloseAnomalySource.split('\n').filter((line) => line.startsWith('import ')).join('\n')
+if (shopCloseAnomalyImports !== "import type { CommerceClose, CommerceState } from './commerce-workspace.ts'"
+  || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'localStorage', 'sessionStorage', 'new Date', 'Date.now', 'Date.parse', 'mutateCommerce', 'saveCommerceClose', 'validateCommerceState'].some((marker) => shopCloseAnomalySource.includes(marker))
+  || !shopCloseAnomalySource.includes('export const SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS = 7')
+  || !shopCloseAnomalySource.includes('export const SHOP_CLOSE_ANOMALY_BASELINE_WINDOW = 14')
+  || !shopCloseAnomalySource.includes('export const SHOP_CLOSE_ANOMALY_MULTIPLE = 4')
+  // Thin data: both gates, the whole-surface one and the per-measure one.
+  || !shopCloseAnomalySource.includes('if (baseline.length < SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS) {')
+  || !shopCloseAnomalySource.includes("      state: 'building_baseline',")
+  || !shopCloseAnomalySource.includes('      baselineDaysNeeded: SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS - baseline.length,\n      comparedMeasures: [],\n      flags: [],')
+  || !shopCloseAnomalySource.includes('if (observations.length < SHOP_CLOSE_ANOMALY_MIN_BASELINE_DAYS) return null')
+  // A close that did not record a measure reads null and is left out of that
+  // measure's observations -- never counted as a zero.
+  || !shopCloseAnomalySource.includes('read: (close) => close.settlement ? Math.abs(close.settlement.totalVarianceMmk) : null')
+  || !shopCloseAnomalySource.includes('read: (close) => close.paymentExceptionOrderIds ? close.paymentExceptionOrderIds.length : null')
+  || !shopCloseAnomalySource.includes('if (value !== null) observations.push(value)')
+  // A zero median has no ratio: the claim becomes "higher than every day in the
+  // window", and no multiple is stated. Takings opts out of that rule entirely.
+  || !shopCloseAnomalySource.includes('if (!spec.spikeOnZeroMedian) return null')
+  || !shopCloseAnomalySource.includes("basis: 'above_every_baseline_day', multipleOfMedian: null")
+  // Guided samples, by actionId prefix and never by actor string.
+  || !shopCloseAnomalySource.includes("const SAMPLE_ACTION_ID_PREFIX = 'ACT-DEMO-'")
+  || !shopCloseAnomalySource.includes("const SAMPLE_ORDER_ID_PREFIX = 'SETUP-SAMPLE-'")
+  || !shopCloseAnomalySource.includes('movement.actionId.startsWith(SAMPLE_ACTION_ID_PREFIX)')
+  || !shopCloseAnomalySource.includes('return sampleOrderIds.has(orderId) || orderId.startsWith(SAMPLE_ORDER_ID_PREFIX)')
+  || !shopCloseAnomalySource.includes('if (!orderIds || orderIds.length === 0) return false')
+  || !shopCloseAnomalySource.includes('return orderIds.some((orderId) => shopCloseOrderIsGuidedSample(orderId, sampleOrderIds))')
+  || shopCloseAnomalySource.includes('orderIds.every(')
+  || !shopCloseAnomalySource.includes('.filter((close) => !shopCloseTouchesGuidedSample(close, sampleOrderIds))')
+  // The median the threshold and the ratio use is EXACT. Rounding it moves the
+  // threshold: over [0,0,0,0,1,1,1,1] a day with 2 unpaid orders is exactly 4x.
+  || !shopCloseAnomalySource.includes('baselineMedian: shopCloseAnomalyMedian(observations),')
+  || shopCloseAnomalySource.includes('Math.round(shopCloseAnomalyMedian(')
+  // An all-clear names only what was compared, and a zero-order close never
+  // raises a downward takings flag (the accountable-snapshot flow).
+  || !shopCloseAnomalySource.includes('comparedMeasures.push(spec.measure)')
+  || !shopCloseAnomalySource.includes('if (spec.watchLow && subject.orders > 0 && todayValue * SHOP_CLOSE_ANOMALY_MULTIPLE <= baselineMedian)')
+  // The executable half runs inside the chain step that owns the daily close.
+  || !commerceCloseTestSource.includes("await import('./test_shop_close_anomaly.mjs')")
+  // The Shop close surface reads it, and says which of the four states it is in
+  // rather than rendering an empty box when there is nothing to report.
+  || !coreSource.includes('const closeAnomaly = useMemo(() => projectShopCloseAnomalyFlags(commerce), [commerce])')
+  || !coreSource.includes('data-close-anomaly={closeAnomaly.state}')
+  || !coreSource.includes("closeAnomaly.state === 'no_close' ? null")
+  || !coreSource.includes('Until then there is no usual day to compare against.')
+  // The all-clear claims only that no threshold was crossed -- everything
+  // between a quarter and four times the usual day lands in it.
+  || !coreSource.includes('`Nothing in your ${closeAnomalyComparedPhrase(closeAnomaly.comparedMeasures)} was far enough from your usual day to be worth raising.`')
+  // The block names the close it read -- the projection means "the most recent
+  // close", not "today", and a morning reader must not be shown yesterday's
+  // drawer as though it were still countable.
+  || !coreSource.includes('{closeAnomaly.businessDate ? `${closeAnomaly.businessDate} against your usual day`')
+  // The baseline phrase names the set that was actually compared, and the
+  // percentage is recomputed from the exposed figures, not from the rounded
+  // multiple.
+  || !coreSource.includes('const closeAnomalyBaselinePhrase = (flag: ShopCloseAnomalyFlag) => flag.baselineDays === flag.windowDays')
+  || !coreSource.includes('more than on any of the ${flag.baselineDays} earlier closes that recorded it')
+  || !coreSource.includes('const percentOfUsual = flag.baselineMedian > 0 ? Math.round((flag.todayValue / flag.baselineMedian) * 100) : 0')
+  || !coreCssSource.includes('.close-anomaly { display: grid;')
+  || !coreCssSource.includes('.close-anomaly-list { display: grid;')) fail('shop_close_anomaly_contract_missing')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('supplierSourcingDraft')
@@ -6537,7 +7230,12 @@ if (!coreSource.includes('const commerceTab = activeCommerceTab(requestedTab)')
   || !coreSource.includes("const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'")
   || !coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab")
   || !coreSource.includes("!requestedTabIsCanonical")) fail('product_default_tab_not_canonicalized')
-if (!coreSource.includes('{unitCount ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}')
+// Lockstep with the G1 counter slice: the cart's Clear control renders through
+// bi('Clear'), whose table entry is CONFIRMED, so this is one of the two places on
+// the counter where Burmese actually reaches the operator today. The control, its
+// handler and its conditional rendering are what this pin has always protected and
+// they are unchanged; only the label is now composed.
+if (!coreSource.includes('{unitCount ? <button className="text-link" onClick={clearSale} type="button">{bi(\'Clear\')}</button> : null}')
   || !coreSource.includes('{unitCount ? <><div className="shop-sale-details">')
   || !coreSource.includes('disabled={disabled} onClick={reviewSale}')
   || !coreCssSource.includes('.shop-item-search input { min-height: 44px;')) fail('shop_counter_progressive_disclosure_missing')
@@ -7501,10 +8199,10 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.resources.at(-1).kind === 'staff' && state.events.at(-1).type === 'resource_registered', 'shop_service_resource_registration_failed')
     const serviceId = state.services.at(-1).id
     const resourceId = state.resources.at(-1).id
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client A', contact: '09-000-000', serviceId, resourceId, startsAt: '2026-07-29T04:00:00.000Z', note: 'First visit' }, proof(3, 'Reviewed booking request'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client A', contact: '09-000-000', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T04:00:00.000Z', note: 'First visit' }, proof(3, 'Reviewed booking request'))
     const bookingId = state.bookings[0].id
     assert(state.bookings[0].endsAt === '2026-07-29T05:30:00.000Z' && state.bookings[0].status === 'held', 'shop_service_booking_duration_or_initial_state_wrong')
-    assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-111-111', serviceId, resourceId, startsAt: '2026-07-29T05:00:00.000Z' }, proof(4, 'Conflicting request')), 'shop_service_booking_conflict_succeeded')
+    assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-111-111', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T05:00:00.000Z' }, proof(4, 'Conflicting request')), 'shop_service_booking_conflict_succeeded')
     const projected = model.projectShopServiceSchedule(state, new Date('2026-07-29T04:15:00.000Z'))
     assert(projected.today.length === 1 && projected.upcoming.length === 1 && projected.expectedRevenueMmk === 75_000 && projected.awaitingArrival === 1, 'shop_service_schedule_projection_wrong')
     state = model.advanceShopServiceBooking(state, bookingId, proof(5, 'Customer confirmed'))
@@ -7515,11 +8213,11 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.bookings[0].status === 'completed' && state.events.length === state.revision, 'shop_service_booking_completion_or_evidence_failed')
     assertThrows(() => model.advanceShopServiceBooking(state, bookingId, proof(8, 'Invalid extra advance')), 'shop_service_completed_booking_advanced')
     assertThrows(() => model.cancelShopServiceBooking(state, bookingId, proof(9, 'Invalid cancellation')), 'shop_service_completed_booking_cancelled')
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(10, 'Second reviewed booking'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(10, 'Second reviewed booking'))
     const cancellableId = state.bookings.at(-1).id
     state = model.cancelShopServiceBooking(state, cancellableId, proof(11, 'Customer cancelled'))
     assert(state.bookings.at(-1).status === 'cancelled', 'shop_service_booking_cancellation_failed')
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(12, 'Replacement reviewed booking'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(12, 'Replacement reviewed booking'))
     assert(state.bookings.at(-1).status === 'held', 'shop_service_cancelled_slot_not_reusable')
     assertThrows(() => model.validateShopServiceSchedule({ ...state, events: state.events.slice(1) }), 'shop_service_missing_evidence_accepted')
     assertThrows(() => model.readShopServiceSchedule('{"schema":"wrong"}'), 'shop_service_invalid_storage_accepted')
@@ -7545,7 +8243,9 @@ async function verifyShopBusinessTemplateRuntime() {
     || ['Date.now', 'Math.random', 'new Date()', 'crypto.randomUUID', 'performance.now', 'fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'localStorage'].some((marker) => shopBusinessTemplatesSource.includes(marker))
     || !productOnboardingRuntimeSource.includes('export async function provisionLocalShopBusinessTemplateSample')
     || !productOnboardingPageSource.includes('provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)')
-    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
+    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(query.get('template'))")
+    || !productOnboardingPageSource.includes("shopBusinessChoiceFromIndustryPack(pack.id)")
+    || !shopBusinessTemplatesSource.includes('export function shopIndustryPackSetupPath(')
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
     || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
@@ -7612,10 +8312,169 @@ async function verifyShopBusinessTemplateRuntime() {
       && model.shopBusinessTemplateFromQuery(' PHARMACY ') === 'pharmacy'
       && model.shopBusinessTemplateFromQuery('unknown-type') === null
       && model.shopBusinessTemplateFromQuery(null) === null, 'shop_business_template_query_selection_wrong')
-    assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy', 'shop_business_template_setup_path_wrong')
+    assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy'
+      && model.shopBusinessTemplateManagedCatalogPath('beauty-spa') === '/shop/?template=beauty-spa'
+      && model.shopIndustryPackSetupPath('spa') === '/settings/?product=shop&pack=spa'
+      && model.shopBusinessChoiceFromIndustryPack('spa') === 'trade:beauty-spa'
+      && model.shopBusinessChoiceFromIndustryPack('gym') === 'pack:gym', 'shop_business_template_setup_path_wrong')
     assertThrows(() => model.shopBusinessTemplate('unknown'), 'shop_business_unknown_template_accepted')
   } catch (error) {
     fail(`shop_business_template_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+// What a signed-in (managed) owner is told when she sets up any customer product.
+//
+// This is the contract file for that screen, so the copy contract lives here beside the source
+// pins above rather than behind its own npm script. It is driven against the EXPORTED strings,
+// not a transcription of them: a transcription would pass while saying anything at all.
+//
+// The defect it locks out, measured end to end in hq/research/MANAGED-TEMPLATE-PROVISIONING.md
+// for Shop and re-measured the same way for Plant: startGuidedWorkspace ran the browser-local
+// provisioners for EVERY caller. They succeeded -- disposition 'installed', zero fetch calls --
+// against window.localStorage, which a managed workspace never reads, so the company workspace
+// stayed at version 0 and rendered 'managed-unprovisioned' while onboarding said otherwise.
+async function verifyManagedGuidedOnboardingCopyRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    managedGuidedOnboardingCopyRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts')).href}?managed-guided-onboarding-copy-verify=${Date.now()}`)
+
+    for (const [status, settled, expected] of [
+      ['checking', false, true],
+      ['checking', true, true],
+      ['enterprise', false, true],
+      ['enterprise', true, false],
+      ['demo', false, false],
+      ['demo', true, false],
+    ]) {
+      assert(model.managedOnboardingAccountCheckPending(status, settled) === expected,
+        `managed_onboarding_identity_gate_wrong:${status}:${settled}`)
+    }
+
+    // Every claim of a completed install, in the wordings this product actually uses. A managed
+    // owner must not read any of them, because none of them are true for her.
+    const installClaims = [
+      /\binstalled\b/i,
+      /\bcatalog is ready\b/i,
+      /\bstarter data (is|was|has been) (added|installed|loaded)\b/i,
+      /\bsample records (are|were|have been) (added|created|installed)\b/i,
+      /\bwe (will )?add(ed)? realistic sample records\b/i,
+      /\byour catalog and stock are ready\b/i,
+      /\bsample (sale|production job)\b/i,
+      /\b(materials|line) are ready\b/i,
+    ]
+
+    for (const [label, copy] of [
+      ['managed_shop_notice', model.managedShopOnboardingNotice('Spa and beauty')],
+      ['managed_shop_hint', model.MANAGED_SHOP_ONBOARDING_HINT],
+      ['managed_shop_intro', model.MANAGED_SHOP_ONBOARDING_INTRO],
+      ['managed_shop_journey_outcome', model.MANAGED_SHOP_ONBOARDING_JOURNEY?.outcome],
+      ['managed_shop_journey_detail', model.MANAGED_SHOP_ONBOARDING_JOURNEY?.detail],
+      ['managed_shop_journey_action', model.MANAGED_SHOP_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_plant_notice', model.managedPlantOnboardingNotice('Food and beverage')],
+      ['managed_plant_hint', model.MANAGED_PLANT_ONBOARDING_HINT],
+      ['managed_plant_intro', model.MANAGED_PLANT_ONBOARDING_INTRO],
+      ['managed_plant_journey_outcome', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.outcome],
+      ['managed_plant_journey_detail', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.detail],
+      ['managed_plant_journey_action', model.MANAGED_PLANT_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_website_hint', model.MANAGED_WEBSITE_ONBOARDING_HINT],
+      ['managed_website_intro', model.MANAGED_WEBSITE_ONBOARDING_INTRO],
+      ['managed_website_journey_outcome', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.outcome],
+      ['managed_website_journey_detail', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.detail],
+      ['managed_website_journey_action', model.MANAGED_WEBSITE_ONBOARDING_JOURNEY?.actionLabel],
+      ['managed_ecommerce_hint', model.MANAGED_ECOMMERCE_ONBOARDING_HINT],
+      ['managed_ecommerce_intro', model.MANAGED_ECOMMERCE_ONBOARDING_INTRO],
+      ['managed_ecommerce_journey_outcome', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.outcome],
+      ['managed_ecommerce_journey_detail', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.detail],
+      ['managed_ecommerce_journey_action', model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY?.actionLabel],
+    ]) {
+      assert(typeof copy === 'string' && copy.trim().length > 0, `${label}_missing`)
+      for (const claim of installClaims) assert(!claim.test(copy), `${label}_makes_install_claim:${claim}`)
+    }
+
+    // Shop: keeps the trade she picked, says plainly nothing was added, names the next step.
+    const shopNotice = model.managedShopOnboardingNotice('Spa and beauty')
+    assert(shopNotice.includes('Spa and beauty'), 'managed_shop_notice_drops_business_type')
+    assert(/first real item/i.test(shopNotice), 'managed_shop_notice_names_no_next_step')
+    assert(/nothing was added|no sample records|do not get sample records/i.test(shopNotice), 'managed_shop_notice_omits_the_absence')
+    assert(/Open Shop/i.test(shopNotice), 'managed_shop_notice_omits_destination')
+    // ...and makes NO claim that her trade was saved, because for a company account it is not.
+    // Both browser-local writes that would have kept it are now guarded, and what does survive --
+    // the derived workflow template on the setup record -- cannot distinguish her trade: six of
+    // the ten trades persist identically as 'retail-wholesale', and the picker shows "Standard
+    // sample" on her next visit. A sentence like "<trade> is saved as your business type" is
+    // exactly the technically-not-false claim this contract exists to keep out.
+    assert(
+      !/\bsaved as your\b|\bis saved\b|\bwe(?:'ve| have) saved\b|\bkept on file\b/i.test(shopNotice),
+      'managed_shop_notice_claims_the_trade_was_saved',
+    )
+    assert(/first real item/i.test(model.MANAGED_SHOP_ONBOARDING_HINT), 'managed_shop_hint_hides_what_the_tap_does')
+    // Built from the argument, not a fixed string that happens to mention a spa.
+    assert(
+      model.managedShopOnboardingNotice('Bakery').includes('Bakery')
+      && !model.managedShopOnboardingNotice('Bakery').includes('Spa and beauty'),
+      'managed_shop_notice_ignores_business_type',
+    )
+
+    // Plant: the same three jobs, but it must name what a managed Plant ACTUALLY asks for next --
+    // one real job AND the machine that runs it, per CoreApp's "Create the real operating plan"
+    // boundary. Copy mirroring Shop's "first real item" would be a second, smaller lie about the
+    // very screen it routes her to, so "item" is refused outright.
+    const plantNotice = model.managedPlantOnboardingNotice('Food and beverage')
+    assert(plantNotice.includes('Food and beverage'), 'managed_plant_notice_drops_plant_type')
+    assert(/first real job/i.test(plantNotice), 'managed_plant_notice_names_no_next_step')
+    assert(/nothing was added|no jobs|do not get sample records/i.test(plantNotice), 'managed_plant_notice_omits_the_absence')
+    assert(/Open Plant/i.test(plantNotice), 'managed_plant_notice_omits_destination')
+    // The mirror image of the Shop assertion above, and the asymmetry is deliberate: Plant DOES
+    // say "saved" because savePlantIndustryPackId runs for a managed account and
+    // readPlantIndustryPackId returns the same pack id back into the picker -- an exact round-trip
+    // for all five packs. If that save is ever moved inside the guard, this claim stops being true
+    // and this line is what should fail.
+    assert(/\bis saved as your plant type\b/i.test(plantNotice), 'managed_plant_notice_drops_its_true_persistence_claim')
+    assert(!/\bitem\b/i.test(plantNotice), 'managed_plant_notice_promises_a_shop_item')
+    assert(/first real job/i.test(model.MANAGED_PLANT_ONBOARDING_HINT), 'managed_plant_hint_hides_what_the_tap_does')
+    assert(/machine/i.test(model.MANAGED_PLANT_ONBOARDING_JOURNEY.detail), 'managed_plant_journey_detail_omits_the_machine')
+    assert(!/\bitem\b/i.test(model.MANAGED_PLANT_ONBOARDING_JOURNEY.detail), 'managed_plant_journey_detail_promises_a_shop_item')
+    assert(
+      model.managedPlantOnboardingNotice('Apparel').includes('Apparel')
+      && !model.managedPlantOnboardingNotice('Apparel').includes('Food and beverage'),
+      'managed_plant_notice_ignores_plant_type',
+    )
+
+    // Neither journey may redirect her elsewhere: Shop and Plant each return their managed setup
+    // boundary before reading the requested tab, so the existing first-task paths already land
+    // her exactly where this copy promises.
+    assert(!('firstTaskPath' in model.MANAGED_SHOP_ONBOARDING_JOURNEY), 'managed_shop_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_PLANT_ONBOARDING_JOURNEY), 'managed_plant_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_WEBSITE_ONBOARDING_JOURNEY), 'managed_website_journey_redirects')
+    assert(!('firstTaskPath' in model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY), 'managed_ecommerce_journey_redirects')
+
+    assert(/no browser sample/i.test(model.MANAGED_WEBSITE_ONBOARDING_HINT), 'managed_website_hint_hides_local_boundary')
+    assert(/homepage/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.outcome), 'managed_website_journey_has_no_first_result')
+    assert(/mobile and desktop/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.detail), 'managed_website_journey_hides_preview_work')
+    assert(/Website/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.actionLabel), 'managed_website_journey_hides_destination')
+    assert(/no sample orders/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_HINT), 'managed_ecommerce_hint_hides_order_boundary')
+    assert(/online store/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.outcome), 'managed_ecommerce_journey_has_no_first_result')
+    assert(/payment/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail)
+      && /Shop handoff/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail), 'managed_ecommerce_journey_hides_connected_setup')
+    assert(/Ecommerce/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.actionLabel), 'managed_ecommerce_journey_hides_destination')
+
+    // The two lanes must stay distinguishable. Copy-pasting Shop's wording into Plant is the
+    // most likely way this regresses, and it would read as correct.
+    assert(model.MANAGED_SHOP_ONBOARDING_HINT !== model.MANAGED_PLANT_ONBOARDING_HINT, 'managed_hints_are_identical')
+    assert(model.MANAGED_SHOP_ONBOARDING_INTRO !== model.MANAGED_PLANT_ONBOARDING_INTRO, 'managed_intros_are_identical')
+    assert(model.MANAGED_SHOP_ONBOARDING_JOURNEY.outcome !== model.MANAGED_PLANT_ONBOARDING_JOURNEY.outcome, 'managed_journey_outcomes_are_identical')
+    assert(new Set([
+      model.MANAGED_SHOP_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_PLANT_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.outcome,
+      model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.outcome,
+    ]).size === 4, 'managed_product_journeys_are_not_distinct')
+  } catch (error) {
+    fail(`managed_guided_onboarding_copy_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -8806,11 +9665,112 @@ async function verifyClientOnboardingRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-onboarding-verify=${Date.now()}`)
     const capabilityModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-capability-plan.ts')).href}?client-capability-verify=${Date.now()}`)
+    const extensionModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-extension-manifest.ts')).href}?client-extension-verify=${Date.now()}`)
     const websiteLeadModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-lead-verify=${Date.now()}`)
     const plantPacks = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts')).href}?plant-packs-verify=${Date.now()}`)
     assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
+    const spaPreset = model.clientDemoPresets.find((preset) => preset.id === 'service-business')
+    const spaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Private spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
+    assert(spaBlueprint.products.map((product) => product.product).join(',') === 'commerce,website,ecommerce', 'client_demo_spa_connected_products_missing')
+    const spaExtension = await extensionModel.buildClientExtensionManifest(spaBlueprint, {
+      id: 'ext-spa-membership',
+      label: 'Spa membership packages',
+      outcome: 'Track reviewed packages and remaining sessions under Shop authority.',
+      baseProduct: 'commerce',
+      domain: 'customer',
+      mode: 'reviewed-write',
+      records: ['membership_plan', 'membership_balance', 'membership_redemption'],
+      roles: ['Spa manager', 'Front desk operator'],
+      dependsOn: ['shop-order-to-cash', 'shop-customer-credit', 'platform-approval'],
+      acceptanceCriteria: ['A named operator can draft without charging.', 'A reviewed Shop payment creates one idempotent balance.'],
+    }, '2026-08-21T00:00:00.000Z')
+    const spaExtensionVerification = await extensionModel.verifyClientExtensionManifest(spaExtension, spaBlueprint)
+    assert(spaExtension.schema === extensionModel.CLIENT_EXTENSION_MANIFEST_SCHEMA && spaExtension.controls.activationStatus === 'not-implemented', 'client_extension_activation_boundary_missing')
+    assert(spaExtension.authority.crossProductWritesAllowed === false && spaExtension.authority.requestedActions.join(',') === 'read,draft,propose-write', 'client_extension_authority_too_broad')
+    assert(spaExtensionVerification.digest === spaExtension.digest && spaExtensionVerification.blueprintDigest === spaExtension.blueprintDigest, 'client_extension_blueprint_binding_missing')
+    const otherSpaBlueprint = model.buildClientDemoBlueprint({ workspace: 'Other spa client', owner: 'Implementation owner', presetId: spaPreset.id, selections: spaPreset.selections })
+    await rejects(() => extensionModel.verifyClientExtensionManifest(spaExtension, otherSpaBlueprint), 'client_extension_cross_tenant_blueprint_accepted')
+    await rejects(() => extensionModel.verifyClientExtensionManifest({ ...spaExtension, outcome: 'Changed after review.' }, spaBlueprint), 'client_extension_tamper_accepted')
+    const extensionDigest = (character) => `sha256:${character.repeat(64)}`
+    const spaExtensionPlan = await extensionModel.buildClientExtensionActivationPlan(spaExtension, spaBlueprint, {
+      implementationVersion: 1,
+      implementationDigest: extensionDigest('1'),
+      migrationDigest: extensionDigest('2'),
+      rollbackDigest: extensionDigest('3'),
+      securityReviewDigest: extensionDigest('4'),
+      securityReviewedBy: 'Named security reviewer',
+      securityReviewedAt: '2026-08-21T01:00:00.000Z',
+      approvedBy: spaBlueprint.client.owner,
+      approvedAt: '2026-08-21T02:00:00.000Z',
+    })
+    const canonicalExtensionFixture = (value) => {
+      if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return JSON.stringify(value)
+      if (Array.isArray(value)) return `[${value.map(canonicalExtensionFixture).join(',')}]`
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalExtensionFixture(value[key])}`).join(',')}}`
+    }
+    const portalPayload = {
+      contract: 'supermega.client_portal_activation_manifest.v1',
+      version: 1,
+      status: 'approved_plan_not_applied',
+      tenant: { workspaceId: '11111111-1111-4111-8111-111111111111', workspaceLabel: spaBlueprint.client.workspace, ownerActorId: '22222222-2222-4222-8222-222222222222', ownerLabel: spaBlueprint.client.owner, products: ['shop', 'website', 'ecommerce'] },
+      portal: { bundleDigest: extensionDigest('5'), productBindings: [{ product: 'shop', runtimeProduct: 'commerce' }, { product: 'website', runtimeProduct: 'website' }, { product: 'ecommerce', runtimeProduct: 'ecommerce' }], crossTenantReadsAllowed: false, crossProductWritesAllowed: false },
+      customSolutions: { activationStatus: 'not_applied', tenantBound: true, purchasedBaseProductRequired: true, securityReviewRequired: true, namedOwnerApprovalRequired: true, crossProductWritesAllowed: false },
+      authority: { humanApprovalBound: true, tenantWritesPerformed: false, providerCallsPerformed: false, externalMessagesSent: false, deploymentPerformed: false, productionActivationPerformed: false },
+    }
+    const portalManifest = { ...portalPayload, manifestDigest: `sha256:${createHash('sha256').update(canonicalExtensionFixture(portalPayload)).digest('hex')}` }
+    const portalBinding = await extensionModel.buildClientExtensionPortalBinding(spaExtension, spaExtensionPlan, spaBlueprint, portalManifest)
+    assert(portalBinding.schema === extensionModel.CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA && portalBinding.tenant.workspaceId === portalManifest.tenant.workspaceId, 'client_extension_portal_tenant_binding_missing')
+    assert(portalBinding.module.productEntitlement === 'shop' && portalBinding.authority.baseProductPurchased === true, 'client_extension_portal_product_entitlement_missing')
+    assert(portalBinding.authority.status === 'approved-not-applied' && portalBinding.authority.tenantWritesPerformed === false && portalBinding.controls.separateActivationRequired === true, 'client_extension_portal_binding_crossed_activation_boundary')
+    await rejects(() => extensionModel.buildClientExtensionPortalBinding(spaExtension, spaExtensionPlan, spaBlueprint, { ...portalManifest, tenant: { ...portalManifest.tenant, workspaceLabel: 'Other tenant' } }), 'client_extension_portal_cross_tenant_binding_accepted')
+    const runtimeAuthorization = await extensionModel.buildClientExtensionRuntimeAuthorization(portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, {
+      environment: 'pilot',
+      releaseCommit: 'a'.repeat(40),
+      approvedBy: portalBinding.tenant.ownerLabel,
+      approvedByActorId: portalBinding.tenant.ownerActorId,
+      approvedAt: '2026-08-21T03:00:00.000Z',
+      expiresAt: '2026-08-21T04:00:00.000Z',
+      idempotencyKey: 'activate:private-spa:ext-spa-membership:v1',
+    })
+    assert(runtimeAuthorization.schema === extensionModel.CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA && runtimeAuthorization.portalBindingDigest === portalBinding.digest, 'client_extension_runtime_authorization_binding_missing')
+    assert(runtimeAuthorization.authority.status === 'authorized-not-applied' && runtimeAuthorization.authority.tenantConfigurationWriteAllowed === true && runtimeAuthorization.authority.customerRecordWritesAllowed === false && runtimeAuthorization.authority.writesPerformed === false, 'client_extension_runtime_authorization_too_broad')
+    assert(runtimeAuthorization.controls.exactLiveReleaseRequiredAtExecution === true && runtimeAuthorization.controls.oneTimeIdempotencyRequired === true && runtimeAuthorization.controls.receiptRequired === true, 'client_extension_runtime_execution_controls_missing')
+    const executableAuthorization = await extensionModel.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, '2026-08-21T03:30:00.000Z')
+    assert(executableAuthorization.executable === true && executableAuthorization.executionAt === '2026-08-21T03:30:00.000Z', 'client_extension_runtime_authorization_window_not_enforced')
+    await rejects(() => extensionModel.verifyClientExtensionRuntimeAuthorization(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, '2026-08-21T04:00:00.001Z'), 'client_extension_expired_runtime_authorization_accepted')
+    await rejects(() => extensionModel.buildClientExtensionRuntimeAuthorization(portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, { environment: 'pilot', releaseCommit: 'a'.repeat(40), approvedBy: portalBinding.tenant.ownerLabel, approvedByActorId: 'another-actor', approvedAt: '2026-08-21T03:00:00.000Z', expiresAt: '2026-08-21T04:00:00.000Z', idempotencyKey: 'activate:private-spa:ext-spa-membership:v1' }), 'client_extension_runtime_cross_owner_authorization_accepted')
+    const activationReceipt = await extensionModel.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, {
+      activatedAt: '2026-08-21T03:30:00.000Z',
+      activatedByActorId: portalBinding.tenant.ownerActorId,
+      idempotencyKey: runtimeAuthorization.target.idempotencyKey,
+      runtimeRelease: { commit: runtimeAuthorization.target.releaseCommit, brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' },
+      tenantConfigRevision: 1,
+      tenantConfigDigest: extensionDigest('7'),
+      executionEvidenceDigest: extensionDigest('8'),
+      rollbackReady: true,
+      customerRecordWritesPerformed: false,
+      providerCallsPerformed: false,
+      deploymentPerformed: false,
+      externalMessagesSent: false,
+      crossTenantWritesPerformed: false,
+      crossProductWritesPerformed: false,
+    })
+    assert(activationReceipt.schema === extensionModel.CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA && activationReceipt.authorizationDigest === runtimeAuthorization.digest && activationReceipt.execution.status === 'active', 'client_extension_activation_receipt_binding_missing')
+    assert(activationReceipt.authority.tenantConfigurationWritePerformed === true && activationReceipt.authority.customerRecordWritesPerformed === false && activationReceipt.authority.providerCallsPerformed === false && activationReceipt.authority.deploymentPerformed === false, 'client_extension_activation_receipt_authority_wrong')
+    await rejects(() => extensionModel.buildClientExtensionActivationReceipt(runtimeAuthorization, portalBinding, spaExtension, spaExtensionPlan, spaBlueprint, portalManifest, { activatedAt: '2026-08-21T03:30:00.000Z', activatedByActorId: portalBinding.tenant.ownerActorId, idempotencyKey: runtimeAuthorization.target.idempotencyKey, runtimeRelease: { commit: runtimeAuthorization.target.releaseCommit, brandVersion: 'jade-v3', contextVersion: '2026-08-21.1', catalogVersion: '2026-08-21.1' }, tenantConfigRevision: 1, tenantConfigDigest: extensionDigest('7'), executionEvidenceDigest: extensionDigest('8'), rollbackReady: true, customerRecordWritesPerformed: false, providerCallsPerformed: true, deploymentPerformed: false, externalMessagesSent: false, crossTenantWritesPerformed: false, crossProductWritesPerformed: false }), 'client_extension_activation_provider_write_accepted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
     assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
+    const starterJobIds = new Set()
+    for (const pack of plantPacks.plantIndustryPacks) {
+      const starter = plantPacks.managedPlantStarterPlan(pack.id)
+      starterJobIds.add(starter.jobId)
+      assert(starter.line === pack.setup.workCentreName && starter.machineId === `${pack.setup.workCentrePrefix}-01` && starter.machineName === `${pack.setup.workCentreName} 01`, `managed_plant_${pack.id}_starter_not_bound_to_pack`)
+      assert(starter.target === '1' && !('output' in starter) && !('events' in starter) && !('issues' in starter), `managed_plant_${pack.id}_starter_invents_history`)
+      const path = plantPacks.plantIndustryPackManagedPlanPath(pack.id)
+      assert(plantPacks.plantIndustryPackIdFromSearch(path.slice(path.indexOf('?'))) === pack.id, `managed_plant_${pack.id}_route_drops_pack`)
+    }
+    assert(starterJobIds.size === plantPacks.plantIndustryPacks.length, 'managed_plant_starter_job_ids_not_unique')
+    assert(plantPacks.plantIndustryPackIdFromSearch('?pack=unsupported') === null, 'managed_plant_invalid_pack_not_rejected')
     const objectIds = new Set()
     for (const productProfile of solutionProducts) {
       const product = productProfile.runtimeId
@@ -8898,7 +9858,9 @@ async function verifyClientOnboardingRuntime() {
     }, '2026-07-29T00:15:00.000Z'), 'website_closed_lead_reopened')
     assert(websiteLeadModel.restoreWebsiteLeadLedger({ ...closedLeadLedger, unexpected: true }) === null, 'website_lead_unknown_field_accepted')
 
-    assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
+    const clientDemoPresetIds = model.clientDemoPresets.map((preset) => preset.id)
+    assert(clientDemoPresetIds.join(',') === 'social-seller,retail-network,food-service,manufacturing,bakery,fashion,service-business'
+      && new Set(clientDemoPresetIds).size === clientDemoPresetIds.length, 'client_demo_presets_missing_or_duplicated')
     assert(capabilityModel.clientCapabilityDependencyLabel('platform-identity') === 'Identity and role boundaries'
       && capabilityModel.clientCapabilityDependencyLabel('shop-order-to-cash') === 'Order to cash'
       && capabilityModel.clientCapabilityDependencyLabel('future-control') === 'future control', 'client_capability_dependency_labels_wrong')
@@ -8962,21 +9924,37 @@ async function verifyClientOnboardingRuntime() {
     const manufacturingBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Factory', owner: 'General manager', presetId: 'manufacturing', selections: manufacturingPreset.selections })
     assert(manufacturingBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce', 'client_demo_manufacturing_product_order_drifted')
     assert(manufacturingBlueprint.integrations.length === 3 && manufacturingBlueprint.integrations.some((integration) => integration.from === 'ecommerce' && integration.to === 'commerce'), 'client_demo_integrations_missing')
+    const bakeryPreset = model.clientDemoPresets.find((preset) => preset.id === 'bakery')
+    const bakeryBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Bakery', owner: 'Bakery manager', presetId: 'bakery', selections: bakeryPreset.selections })
+    const bakeryShopProduct = bakeryBlueprint.products.find((product) => product.product === 'commerce')
+    const bakeryPlantProduct = bakeryBlueprint.products.find((product) => product.product === 'production')
+    const bakeryEcommerceProduct = bakeryBlueprint.products.find((product) => product.product === 'ecommerce')
+    const bakeryShopSkus = new Set(bakeryShopProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+    const bakeryEcommerceSkus = bakeryEcommerceProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+    assert(bakeryBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce'
+      && bakeryShopProduct.sampleCsv.includes('BREAD-WHITE,"White sandwich loaf"')
+      && bakeryPlantProduct.sampleCsv.includes('JOB-BAKE-001,"White sandwich loaf"')
+      && bakeryEcommerceSkus.length >= 2
+      && bakeryEcommerceSkus.every((sku) => bakeryShopSkus.has(sku) && !sku.includes('-SVC-')),
+    'client_demo_bakery_cross_product_template_drifted')
+    const fashionPreset = model.clientDemoPresets.find((preset) => preset.id === 'fashion')
+    const fashionBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Fashion', owner: 'Fashion manager', presetId: 'fashion', selections: fashionPreset.selections })
+    const fashionShopProduct = fashionBlueprint.products.find((product) => product.product === 'commerce')
+    const fashionPlantProduct = fashionBlueprint.products.find((product) => product.product === 'production')
+    const fashionWebsiteProduct = fashionBlueprint.products.find((product) => product.product === 'website')
+    const fashionEcommerceProduct = fashionBlueprint.products.find((product) => product.product === 'ecommerce')
+    const fashionShopSkus = new Set(fashionShopProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0]))
+    const fashionEcommerceSkus = fashionEcommerceProduct.sampleCsv.split(/\r?\n/).slice(1).filter(Boolean).map((line) => line.split(',')[0])
+    assert(fashionPlantProduct.sampleCsv.includes('JOB-FASHION-001,"Cotton T-shirt medium white"')
+      && fashionWebsiteProduct.sampleCsv.includes('Fashion & clothing for shoppers looking for clothing and accessories in their own size')
+      && fashionEcommerceSkus.length >= 2
+      && fashionEcommerceSkus.every((sku) => fashionShopSkus.has(sku)),
+    'client_demo_fashion_cross_product_template_drifted')
     const customPlantPreview = await model.createClientImportPreview(model.clientImportTemplate('production', 'production-control'), 'production', undefined, 'custom-plant.csv', 'production-control')
     const customPlantPackage = model.buildClientImportStagingPackage(customPlantPreview, { workflowTemplateId: 'production-control', workspace: 'Integrated Factory', owner: 'General manager', plantIndustryPackId: 'batch-process' })
     assert(customPlantPackage.plantIndustryPackId === 'batch-process', 'client_demo_custom_plant_pack_not_bound')
-    const schoolBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
-    assert(schoolBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
-    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({
-      workspace: 'Learning Centre',
-      owner: 'School administrator',
-      presetId: 'service-business',
-      shopIndustryPackId: 'school',
-      selections: [
-        ...model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections,
-        { product: 'ecommerce', templateId: 'social-storefront' },
-      ],
-    })
+    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
+    assert(schoolIntegratedBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
     const schoolShopProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'commerce')
     const schoolWebsiteProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'website')
     const schoolEcommerceProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'ecommerce')
@@ -11782,8 +12760,11 @@ async function verifyCommerceRuntime() {
       items: cafeSampleItems,
       capturedAt: '2026-07-23T09:00:00.000Z',
     })
-    assert(cafeWorkingSample?.items.length === model.createSeedCommerce().items.length + 2
+    assert(cafeWorkingSample?.items.length === cafeSampleItems.length
       && cafeWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
+      && !cafeWorkingSample.items.some((item) => item.sku.startsWith('SM-'))
+      && cafeWorkingSample.orders.length === 0
+      && cafeWorkingSample.purchaseOrders.length === 0
       && model.commerceWorkingSampleCatalogId(cafeWorkingSample) === 'cafe',
     'commerce_working_sample_was_not_installed_or_identified')
     const replayedCafeWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {
@@ -19341,6 +20322,7 @@ await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyShopServiceScheduleRuntime()
 await verifyShopBusinessTemplateRuntime()
+await verifyManagedGuidedOnboardingCopyRuntime()
 await verifyShopProductionDemandRuntime()
 await verifyShopDemandIntelligenceRuntime()
 try { await verifyDeviceImageStoreBlockedOpenRuntime() } catch (error) {
@@ -19416,7 +20398,357 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // chip, and the settings panel). Raised to 3_050_000: covers the measured
 // number with ~18_824 bytes of headroom, the same order of headroom the
 // previous two ceilings gave.
-if (bytes > 3_050_000) fail(`artifact_budget:${bytes}`)
+// Tenant-aware portal routing adds a small lazy entitlement boundary while the
+// initial-route budget remains independently enforced above. Keep total output
+// growth bounded to a narrow 10 KB allowance rather than weakening that gate.
+// RAISE 2026-08-20 (durable local writes and client error reporting, PR #505):
+// fresh native-loader dist measured 3_063_086 after storage durability,
+// crash-safe retry state, and the user-visible persistence error boundary.
+// The merged 2026-08-21 release, including tenant-aware portals and current
+// main's Shop close-anomaly projection, measures 3_076_280 bytes from a fresh
+// build. It remains 5_720 bytes below the existing 3_082_000 ceiling, so this
+// merge deliberately does not raise the artifact budget.
+// RE-MEASURED 2026-08-21 after integrating the day-one template reconciliation
+// fix with the Spa client journey: fresh dist/ is 3_080_236 bytes. The existing
+// ceiling remains unchanged; the separate initial-route and chunk limits below
+// continue to prevent hiding bundle growth inside this total.
+// RAISE 2026-08-20 (roadmap §2 item 5, anomaly flags on the close): fresh
+// `npm run app:build` measures 3_052_850 -- 2_850 bytes over -- after one real
+// product feature (the shop-close-anomaly-flags projection plus the
+// close-surface block that reads it). Raised to 3_070_000: covers the measured
+// number with ~17_150 bytes of headroom, the same order of headroom the
+// previous three ceilings gave. NOTE for whoever lands next: re-measure on a
+// fresh dist/ rather than carrying this number over -- it was taken without
+// any other in-flight branch's CSS or components.
+// MEASUREMENT 2026-08-21 (day-one Shop template fixes, rebased onto the anomaly-flags
+// raise above): taking that NOTE at its word, this is a fresh `npm run app:build`
+// measured AFTER combining both branches rather than either side's pre-rebase number.
+// Combined dist/ measures 3_057_542 -- 4_692 bytes above this branch's own pre-rebase
+// 3_050_627, which is the anomaly-flags close surface landing alongside the working-sample
+// counter sales staged as reconciled, the accountable gate releasing the operator after a
+// failed confirmation, and owner-language error copy with the validator text behind a
+// disclosure. The existing 3_070_000 ceiling already covers it with ~12_458 bytes of
+// headroom, so it is kept rather than raised again.
+// RE-CONFIRMED 2026-08-21 after rebasing onto #522: measured again on a fresh dist/
+// rather than carried over. Still 3_057_542 -- #522 wired orphaned tests and changed
+// tools/, not showroom/src, so the emitted assets are byte-for-byte the same build.
+// MEASUREMENT 2026-08-21 (G3, the app had no service worker at all -- #519): the
+// shipped additions are three shell scripts (theme-restore.js, sw-register.js,
+// vercel-insights.js, ~600 B) that USED to be inline <script> blocks and were
+// therefore refused outright by `script-src 'self'` -- which is why the worker had
+// never registered and nothing worked offline -- plus the sealed precache list in
+// sw.js derived from Vite's own manifest by showroom/scripts/seal-offline-precache.mjs.
+// The lifecycle fixes taken on review (retain the previous release's cache so a till
+// held open across a deploy keeps its chunks; fold the unhashed shell files' CONTENTS
+// into the build digest so editing one actually ships; guarded precache, origin guard,
+// navigation timeout) are worker source only -- no new files, no app code. They cost
+// less than they look because their rationale lives in the generator rather than inside
+// the worker template: the shipped sw.js went 12_186 -> 7_285 bytes. The worker is
+// downloaded on install AND on every update check, so prose in it is prose on a metered
+// connection -- the same argument the precache exclusion list is built on.
+// Build via the ROOT `npm run app:build`, never `npm --prefix showroom run build`: the
+// latter skips app:release:write, so sw.js never gets its placeholder and the precache
+// seal fails (caught at :537, but it wastes a measurement).
+// Re-measured on a fresh dist/ with #520/#521/#522 and this branch all present:
+// 3_064_424 bytes, ~5_576 under the 3_070_000 ceiling, which is kept rather
+// than raised. No app code was shrunk to fit.
+// RAISE 2026-08-21 (re-measurement, not a feature): origin/main at f39dfe50 measures
+// 3_064_548 on a fresh dist/ -- only ~5_452 under the ceiling, where every previous
+// raise deliberately left ~17_000-19_000. At that margin the next branches trip this
+// guard for reasons that have nothing to do with their own content, which is how a
+// budget stops being read as a signal. #524 already paid that tax: it removed a chunk
+// boundary and real duplication to land 81 bytes under, rather than raise the number.
+//
+// WHAT THE GROWTH BOUGHT, and why the raw total overstates it. The whole +6_429 from
+// #519 is one file: sw.js went 1_654 -> 8_155 (+6_501), the app code moved +310, and
+// index.html/404.html together SHRANK 382 bytes as their inline blocks became files.
+// sw.js is never on any route's critical path -- it is fetched once as the worker
+// script. So this guard charged #519 for precisely the change that most reduces what a
+// shop actually pays: after install the till is offline-capable and repeat visits cost
+// ~0 wire bytes.
+//
+// THE WIRE COST, measured because the raw total does not imply it. Shop route, gzip -9
+// over the entry chunk plus its real transitive closure (document graph + core-app +
+// the Shop screens it lazily pulls; Plant and the ecommerce buying lifecycle excluded
+// because the counter does not pull them):
+//     Shop counter first paint   451_954 gzip (441.4 KB) / 379_824 brotli (370.9 KB)
+//     Shop route, every tab      478_840 gzip (467.6 KB) / 403_327 brotli (393.9 KB)
+// Same measurement at f39dfe50^ (before the worker): 451_529 and 478_414 gzip. The
+// route grew 425 bytes gzipped, 0.09%. The thing the owner feels did not regress; only
+// the thing this guard counts did.
+//
+// LOCAL vs CI, because entries above have compared the two without saying so: the
+// only build-varying field is dist/__release.json's `commit`, which is "local" here
+// and the 40-char SHA under CI's SUPERMEGA_RELEASE_COMMIT. CI therefore measures ~35
+// bytes MORE than the same tree does locally (3_064_583 for this one). Nothing else
+// in dist/ carries it, and the build is otherwise byte-identical run to run -- two
+// consecutive fresh builds both measured 3_064_548.
+//
+// Raised to 3_085_000: covers the measured 3_064_548 with ~20_452 bytes of headroom,
+// the same order the ~17_150 / ~18_824 / ~19_123 raises above gave. No app code was
+// shrunk and no user-visible text was touched to fit this number.
+//
+// PROPOSED, NOT DONE HERE: this ceiling sums raw on-disk bytes across all of dist/,
+// which counts chunks no single visitor downloads and -- as above -- can move opposite
+// to the wire cost. A truer guard is the Shop route's COMPRESSED closure, which the
+// numbers above show is already computable from the built assets, and which the
+// initial_javascript_budget below already walks a smaller version of. Swapping what a
+// guard means is a bigger change than editing its number, so it deserves its own review
+// rather than riding along with a re-measurement.
+// REPLACED 2026-08-21 (this PR): the ceiling above summed raw on-disk bytes across all
+// of dist/. The measurement recorded in the #519 entry proves that proxy can move
+// OPPOSITE to what a shop owner pays -- it charged #519 +6_429 for a file (sw.js) that
+// is on no route's critical path, while the till's actual wire cost moved 425 bytes and
+// the page shells got SMALLER. It also fails the inverse: 40 KB shoved into the till's
+// critical path is invisible to it if some unrelated chunk shrinks to offset. The
+// history above is kept because the next person needs the argument, not just the number.
+//
+// The raw total is DEMOTED here, not deleted, and not re-tuned. It is now a blowout
+// backstop for the parts of dist/ the route guard cannot see -- sw.js, the PWA icon set,
+// the lazily-loaded Shop tabs, and the other three products' chunks. Widened to
+// 3_250_000 against a measured 3_074_787, which is deliberately far too loose to be a
+// per-feature budget: it should never trip on ordinary product work, and if it does
+// trip, something is structurally wrong rather than merely large. Do NOT raise it to
+// land a feature -- that was the old contract and it is the one being retired. The thing
+// the old ceiling was standing in for is now guarded directly, and harder, just below.
+if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
+
+// ---------------------------------------------------------------------------
+// THE SHOP ROUTE'S COMPRESSED WIRE COST -- what a till pays to open, measured the
+// way the CDN actually serves it.
+//
+// WHICH CLOSURE: first paint, not "every tab visited". First paint is the only number
+// every Shop owner unconditionally pays -- nobody rings up a sale without downloading
+// all of it -- and it is the one the owner feels on a metered phone before the app can
+// take money. "Every tab visited" is paid by nobody in particular: it folds in tabs many
+// shops never open, and below core-app it cannot be split from Plant at all (the same
+// chunk serves /shop and /plant, chosen by a runtime prop), so a "Shop" number built
+// from it would quietly bill the shop for Plant. Bytes deferred into a lazy tab are
+// genuinely cheaper and are meant to read as cheaper here; the demoted total above is
+// what still covers them.
+//
+// GZIP OR BROTLI: brotli, at quality 3, because that is what app.supermega.dev returns.
+// Verified against the live edge rather than assumed -- fetch one asset three ways:
+//     -H 'Accept-Encoding: br, gzip'  ->  Content-Encoding: br   (gzip only without br)
+//     -H 'Accept-Encoding: identity'  ->  237_143 bytes
+//     -H 'Accept-Encoding: br'        ->   77_043 bytes
+// and 77_043 is brotliCompressSync(raw, QUALITY 3).length EXACTLY. Vercel compresses on
+// the fly, so it is q3, not the q11 a local `brotli -11` gives (64_679 for that same
+// file). Two consequences worth writing down: the brotli -11 column in the #519 entry
+// above is ~19% below anything a user ever receives and must not be used as a ceiling;
+// and Vercel's br q3 is LARGER than its own gzip (77_043 vs 75_475), so brotli is both
+// what almost every client negotiates and the worse of the two outcomes. Guarding it
+// covers the gzip-only client too.
+//
+// HOW THE CLOSURE IS COMPUTED: from the bundler's own dependency manifest, never a
+// chunk list. Vite emits __vite__mapDeps into the entry chunk -- the exact asset set the
+// browser fetches for each dynamic import. The walk is: the document, every <script src>
+// and stylesheet it links, the static-import closure of the module entry, and the
+// mapDeps list whose HEAD entry is the operations route chunk. Only one name appears
+// here, `core-app`, and it is not incidental: it is a named manualChunks target in
+// showroom/vite.config.ts and is already pinned twice in this file
+// (product_operations_eagerly_loaded_on_home, operations_route_artifact_missing). Every
+// other member is discovered. A new chunk the route starts pulling is covered the day it
+// lands; that is the decay this repo keeps finding, closed by construction.
+//
+// It also corrects a boundary drawn by hand: the mapDeps list puts website-model and
+// website-leads on the Shop route (core-app -> capability-tiers -> website-model). A
+// hand-picked "Shop chunks" list would have missed 13.6 KB the till really downloads.
+// Re-checked what the #519 measurement excluded, and it still holds: PlantOrderFoundation
+// and ecommerce-buying-lifecycle are reached only by core-app's OWN dynamic imports, so
+// they sit outside first paint, as do all six Shop tab chunks.
+//
+// MEASURED 2026-08-21 on origin/main f3cacb09, fresh `npm run app:build` (the ROOT one;
+// `npm --prefix showroom run build` skips app:release:write and fails the precache seal):
+//     Shop first paint, 24 assets   467_765 brotli q3 (456.8 KB) / 452_137 gzip -9
+//     raw on-disk, same 24 assets   1_748_937
+// LOCAL vs CI: identical, exactly. The ~35-byte gap the entry above records is entirely
+// dist/__release.json's `commit` ("local" vs a 40-char SHA), and __release.json is on no
+// route's critical path, so it is not in this closure. Verified by rebuilding with
+// SUPERMEGA_RELEASE_COMMIT set to a 40-char value: 467_765 both ways, while the raw
+// total moved 3_074_752 -> 3_074_787. This guard therefore needs no headroom for that
+// difference at all, which is a reason to prefer it beyond the accounting.
+//
+// SIZED FROM REAL BUILDS, not estimated. Three fresh builds of this repo's own history,
+// each measured by this same walk:
+//     42aaa6c6  pre-#519    464_717 br q3  (449_041 gzip -9)   raw total 3_058_119
+//     f39dfe50  #519        465_032 br q3  (449_464 gzip -9)   raw total 3_064_548
+//     f3cacb09  main today  467_765 br q3  (452_137 gzip -9)   raw total 3_074_787
+// #519 cost the till 315 bytes and cost the OLD guard 6_429 -- a 20x misattribution, and
+// the direction that matters: the file it was charged for is the one that makes repeat
+// visits free. (The gzip column reproduces #526's independently taken +425 as +423, from
+// a different closure rule, which is the cross-check that the boundary here is sane.)
+// The four PRs between #519 and today moved it +2_733 in total, ~680 bytes each.
+//
+// Ceiling 475_000: 7_235 bytes of headroom, 1.55%, so roughly ten PRs of that observed
+// shape before it trips -- a slower cadence than the raw ceiling above, which was raised
+// four times in two days. It still trips on a single real regression: 40 KB of ordinary
+// product code added to a module CoreApp.tsx statically imports (+42_133 raw, in the
+// shared capability-tiers chunk) measures +8_211 here and fails this check, while being
+// invisible to a raw total that any other chunk's shrinkage could offset. Both
+// directions were run against real builds, not argued; the PR records them. When it trips, re-measure on a fresh dist/ and record what the growth bought,
+// exactly as the entries above do -- do not carry 467_765 forward.
+//
+// MEASUREMENT 2026-08-21 (dead-CSS reclaim, this PR -- a REDUCTION, and neither ceiling
+// moves). Every entry above records growth and asks what it bought. This one records the
+// opposite and is written the same way, because a budget nobody ever sees fall is a budget
+// that only ever ratchets. Baseline on origin/main 1bad0fa8, fresh ROOT `npm run app:build`:
+//     before   468_668 br q3   raw total 3_080_903   (6_332 under this ceiling)
+//     after    466_260 br q3   raw total 3_065_323   (8_740 under this ceiling)
+// -2_408 on the wire, -15_580 raw. The change is the deletion of 167 rule blocks / 17_613
+// source bytes from showroom/src/core/core-app.css whose selectors need a class token that
+// exists nowhere in the app. Liveness was decided against the BUILT bundle, not the source
+// tree: all 40 class tokens that left the stylesheet appear in zero bytes of dist/**.js and
+// dist/**.html, so no selector that could have matched an element was touched and the
+// rendered result is identical by construction. Two false positives a source-only scan
+// produces were caught and kept: `.theme-dark` (CoreShell builds it as `theme-${theme}`)
+// and website-product.css's `.view-content`/`.view-publish` (WebsiteProduct builds them as
+// 'view-' + view) -- template-literal AND concatenation class construction both have to be
+// modelled before a rule can be called dead.
+// NOTHING PRODUCT-FACING WAS CUT, and nothing was cut to fit a number: no copy, no
+// accessibility affordance, no error handling, no behaviour. Six dead-but-PINNED families
+// were deliberately left in place rather than moving their pins to make the number better
+// (.setup-launch-pack/-rows :5553-5556, .setup-pack-summary :5579, .setup-workflow-review
+// :5577-5578, .company-brief-disclosure :2027/:2029, .plant-production-module :2392 plus
+// verify_app_release_live :510-512) -- ~3_700 further source bytes that are real waste but
+// whose pins are 44px touch-target and live-site guards. Retiring those is a pin-moving
+// review of its own, not a byte-reclaim ride-along.
+// The px ratchet in tools/check_css_contracts.mjs self-lowered 2_435 -> 2_268 and hex
+// 99 -> 98 for core-app.css as a side effect, which tightens that guard permanently.
+// The 475_000 ceiling is deliberately NOT lowered to the new number: the point of the work
+// was to give real features room, and re-tightening it here would hand that room straight
+// back.
+//
+// MEASUREMENT 2026-08-21 (Shop eager-download reclaim, this PR). Baseline on origin/main
+// 47321d24 (#535), fresh ROOT `npm run app:build`:
+//     before   467_326 br q3   raw total 3_070_313   (7_674 under this ceiling)
+//     after    467_500 br q3   raw total 3_070_434   (7_500 under this ceiling)
+// +174 on the wire, well inside the ~680-bytes-per-PR cadence this block records above, and
+// no ceiling moves. What it bought is not wire bytes but RUNTIME bytes, which this guard
+// cannot see: 2,611,530 bytes of percent-encoded string that the Shop screen used to build
+// and retain -- 1,852,602 across one data: URL per order plus 758,928 for the close CSV --
+// measured on a Shop driven to its enforced 2 MiB ceiling through the real transitions
+// (1,453 orders, 1,244 completed). Both memos are keyed on `commerce`, a new object after
+// every sale, so a till rebuilt all of it on every sale for files almost nobody downloads.
+// Measured per asset: +91 into core-app (whose RAW size FALLS 46 bytes) and +78 into the
+// shared capability-tiers chunk, where Rollup places the new leaf helper download-file.ts.
+// It was paid down from +305 by de-duplicating the receipt control pair that the order list
+// and the archive each carried a byte-identical copy of, and by inlining two single-use
+// wrappers. NO COPY, no
+// affordance and no behaviour was cut to reach it; the four remaining CSV data: URLs on that
+// screen were measured (10,305 / 83,244 bytes, and two that produce nothing on a realistic
+// workspace) and deliberately LEFT rather than changed for consistency.
+let shopRouteWireBytes = 0
+let shopRouteAssetCount = 0
+const CDN_BROTLI_QUALITY = 3
+const compressedWireBytes = async (path) => {
+  const buffer = await readRawFile(path)
+  return brotliCompressSync(buffer, {
+    params: {
+      [zlibConstants.BROTLI_PARAM_QUALITY]: CDN_BROTLI_QUALITY,
+      [zlibConstants.BROTLI_PARAM_SIZE_HINT]: buffer.length,
+    },
+  }).length
+}
+const staticImportSpecifiers = (source) => [...source.matchAll(
+  /(?:^|[;\n}])\s*import(?:[^('";]*?from)?\s*["']\.\/([^"']+\.js)["']/g,
+)].map((match) => match[1])
+const bundlerDependencyTable = (source) => {
+  const table = source.match(/__vite__mapDeps=\(i,m=__vite__mapDeps,d=\(m\.f\|\|\(m\.f=(\[[^\]]*\])\)\)\)/)
+  if (!table) return null
+  try {
+    const parsed = JSON.parse(table[1])
+    return Array.isArray(parsed) && parsed.every((entry) => typeof entry === 'string') ? parsed : null
+  } catch { return null }
+}
+const bundlerRouteAssets = (source, table, routePattern) => {
+  const reached = new Set()
+  for (const call of source.matchAll(/__vite__mapDeps\(\[([0-9,]+)\]\)/g)) {
+    const indexes = call[1].split(',').map((index) => Number.parseInt(index, 10))
+    // Vite always emits the dynamically imported chunk as the head of its own dep list,
+    // so the head names the route and the tail is everything that import drags along.
+    if (!routePattern.test(table[indexes[0]] ?? '')) continue
+    for (const index of indexes) if (typeof table[index] === 'string') reached.add(table[index])
+  }
+  return [...reached]
+}
+// Self-test the three parsers against a fixture shaped like real minified output, because
+// a walk that silently matches nothing would pass this guard vacuously rather than fail
+// it. The floor further down is the second half of the same defence.
+{
+  const fixture = 'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/core-app-A1.js","assets/shared-B2.js","assets/other-C3.js"])))=>i.map(i=>d[i]);\n'
+    + 'import{x}from"./shared-B2.js";import"./bare-D4.js";\n'
+    + 'const a=V.lazy(()=>St(()=>import("./core-app-A1.js").then(i=>i.O),__vite__mapDeps([0,1])));'
+    + 'const b=V.lazy(()=>St(()=>import("./other-C3.js"),__vite__mapDeps([2,1])));'
+  const table = bundlerDependencyTable(fixture)
+  const specifiers = staticImportSpecifiers(fixture)
+  if (specifiers.join(',') !== 'shared-B2.js,bare-D4.js') fail(`wire_cost_static_import_parser_wrong:${specifiers.join(',')}`)
+  if (!table || table.length !== 3 || table[0] !== 'assets/core-app-A1.js') fail('wire_cost_dependency_table_parser_wrong')
+  else {
+    // The route's own dep list, and nothing another route's import pulls.
+    const routed = bundlerRouteAssets(fixture, table, /^assets\/core-app-[^/]+\.js$/).sort().join(',')
+    if (routed !== 'assets/core-app-A1.js,assets/shared-B2.js') fail(`wire_cost_route_asset_parser_wrong:${routed}`)
+    // ...and it really can come back empty, which is why the closure is floored below.
+    if (bundlerRouteAssets(fixture, table, /^assets\/no-such-chunk-[^/]+\.js$/).length !== 0) fail('wire_cost_route_asset_parser_overmatches')
+  }
+  if (bundlerDependencyTable('const x=1') !== null) fail('wire_cost_dependency_table_parser_overmatches')
+}
+// An object URL minted and never revoked pins its whole buffer for the life of the page, and
+// at the workspace ceiling that buffer is megabytes -- the same leak, on the same device, that
+// moving these downloads off render-time data: URLs exists to remove. This is the one place on
+// the Shop route allowed to mint one, and it must release it.
+if (!downloadFileSource.includes('export function downloadBlob(filename: string, blob: Blob)')
+  || !downloadFileSource.includes('URL.createObjectURL(blob)')
+  || !downloadFileSource.includes('window.setTimeout(() => URL.revokeObjectURL(url), 0)')) fail('shared_download_helper_leaks_object_url')
+const documentScripts = [...rootPageSource.matchAll(/<script[^>]+src="\/([^"]+)"/g)].map((match) => match[1])
+const documentStyles = [...rootPageSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)].map((match) => match[1])
+const moduleEntryAsset = documentScripts.find((path) => /^assets\/[^/]+\.js$/.test(path))
+const routeEntrySource = moduleEntryAsset && await exists(resolve(dist, moduleEntryAsset))
+  ? await readFile(resolve(dist, moduleEntryAsset), 'utf8')
+  : null
+const routeDependencyTable = routeEntrySource ? bundlerDependencyTable(routeEntrySource) : null
+if (!routeEntrySource) fail('shop_route_module_entry_missing')
+else if (!routeDependencyTable) fail('shop_route_dependency_table_missing')
+else {
+  const documentGraph = new Set()
+  const visitDocumentAsset = async (asset) => {
+    if (documentGraph.has(asset)) return
+    if (!/^assets\/[A-Za-z0-9_.-]+\.js$/.test(asset)) {
+      fail(`shop_route_asset_invalid:${asset}`)
+      return
+    }
+    if (!await exists(resolve(dist, asset))) {
+      fail(`shop_route_asset_missing:${asset}`)
+      return
+    }
+    documentGraph.add(asset)
+    for (const specifier of staticImportSpecifiers(await readFile(resolve(dist, asset), 'utf8'))) {
+      await visitDocumentAsset(`assets/${specifier}`)
+    }
+  }
+  await visitDocumentAsset(moduleEntryAsset)
+  const routeAssets = bundlerRouteAssets(routeEntrySource, routeDependencyTable, /^assets\/core-app-[^/]+\.js$/)
+  if (!routeAssets.length) fail('shop_route_operations_chunk_unreachable')
+  const shopRouteClosure = [...new Set(['index.html', ...documentScripts, ...documentStyles, ...documentGraph, ...routeAssets])]
+  if (shopRouteClosure.some((path) => /^assets\/(?:website-model|website-leads)-[^/]+\.js$/.test(path))) {
+    fail('shop_route_eagerly_loads_website_compatibility')
+  }
+  const missingClosureAssets = (await Promise.all(shopRouteClosure.map(async (path) => (
+    await exists(resolve(dist, path)) ? null : path
+  )))).filter(Boolean)
+  if (missingClosureAssets.length) fail(`shop_route_closure_asset_missing:${missingClosureAssets.join('|')}`)
+  else {
+    shopRouteAssetCount = shopRouteClosure.length
+    shopRouteWireBytes = (await Promise.all(shopRouteClosure.map((path) => (
+      compressedWireBytes(resolve(dist, path))
+    )))).reduce((total, size) => total + size, 0)
+    // FLOOR before ceiling. A guard that can only fail upward is one broken regex away
+    // from passing on an empty set, which has already happened once in this repo.
+    if (shopRouteClosure.length < 12) fail(`shop_route_closure_implausible:${shopRouteClosure.length}`)
+    if (shopRouteWireBytes < 300_000) fail(`shop_route_wire_cost_implausible:${shopRouteWireBytes}`)
+    if (shopRouteWireBytes > 475_000) fail(`shop_route_wire_cost:${shopRouteWireBytes}`)
+  }
+}
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -19444,6 +20776,16 @@ else {
   const initialJavascriptBytes = (await Promise.all([...initialJavascriptAssets].map(async (asset) => (
     await stat(resolve(dist, 'assets', asset))
   ).size))).reduce((total, size) => total + size, 0)
+  // FLOOR before ceiling -- the same rule the shop-route closure above states, applied to the
+  // other graph walk. This budget AND the eager-load check below both read
+  // initialJavascriptAssets, so a walk that stops resolving specifiers (a bundler output-format
+  // change the regex above no longer matches) makes both pass while seeing only the entry
+  // chunk. Proven 2026-08-21 by breaking that regex: the graph fell from 4 assets / 294,567
+  // bytes to 1 / 249,633 and the gate still reported ok:true, with the eager-load check
+  // scanning a one-asset set. Raise the ceiling for real product value as usual; when a real
+  // reduction trips the floor, lower the floor in the same commit and say what shrank.
+  if (initialJavascriptAssets.size < 3) fail(`initial_javascript_graph_implausible:${initialJavascriptAssets.size}`)
+  if (initialJavascriptBytes < 260_000) fail(`initial_javascript_budget_implausible:${initialJavascriptBytes}`)
   if (initialJavascriptBytes > 300_000) fail(`initial_javascript_budget:${initialJavascriptBytes}`)
   if ([...initialJavascriptAssets].some((asset) => /^(?:core-app|commerce-model|operating-models|shop-planning-models|website-model)-/.test(asset))) {
     fail('product_operations_eagerly_loaded_on_home')
@@ -19517,7 +20859,10 @@ else {
   // Raised from 40_000 on 2026-08-19 (S3 PR1): the customer-points settings section
   // (LoyaltySettingsControls + honest device-local copy) measured 41,350 bytes.
   // Real product surface, same raise-on-value rule.
-  if (workspaceControlsBytes > 44_000
+  // Raised from 44_000 on 2026-08-21 after main added measured multi-product backup refusal
+  // diagnostics. The merged chunk is 44,215 bytes and now tells an owner why no backup file can
+  // be produced instead of leaving a disabled escape hatch. Keep less than 0.8 KB headroom.
+  if (workspaceControlsBytes > 45_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')
@@ -19932,4 +21277,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes, shopRouteAssetCount, shopRouteWireBytes }, null, 2))

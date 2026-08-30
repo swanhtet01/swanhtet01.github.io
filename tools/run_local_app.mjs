@@ -73,6 +73,10 @@ function isolatedEnvironment(uiUrl) {
     ANTHROPIC_API_KEY: '',
     OPENAI_API_KEY: '',
     SUPERMEGA_ORDER_INTAKE_PROVIDER: '',
+    // Routine local product work should not serialize every FastAPI request as a
+    // multi-kilobyte console span. Dedicated telemetry tests exercise tracing;
+    // this isolated runner stays quiet, cheaper, and easier to diagnose.
+    SUPERMEGA_OTEL_DISABLED: '1',
     CRON_SECRET: '',
     SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS: '',
     SUPERMEGA_CLOUD_TASKS_WORKER_URL: '',

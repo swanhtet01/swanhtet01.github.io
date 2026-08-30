@@ -117,6 +117,7 @@ class SelfServeWorkspaceTests(unittest.TestCase):
         *,
         claim_code: str = CLAIM_CODE,
         business_name: str = BUSINESS_NAME,
+        product: str = "commerce",
         session: str | None = OWNER_SESSION,
         client: TestClient | None = None,
     ):
@@ -124,7 +125,7 @@ class SelfServeWorkspaceTests(unittest.TestCase):
         return (client or self.client).post(
             "/api/trial/v1/workspaces",
             headers=headers,
-            json={"claimCode": claim_code, "businessName": business_name},
+            json={"claimCode": claim_code, "businessName": business_name, "product": product},
         )
 
     def _owner_readiness(self, workspace_id: str, actor_id: str = OWNER_ACTOR_ID):
@@ -171,15 +172,17 @@ class SelfServeWorkspaceTests(unittest.TestCase):
         self.assertEqual(body["workspace"]["workspace_id"], workspace_id)
         self.assertEqual(body["workspace"]["label"], BUSINESS_NAME)
         self.assertEqual(body["workspace"]["access"], "owner")
+        self.assertEqual(body["workspace"]["product"], "commerce")
         self.assertEqual(body["claim"]["claimCode"], CLAIM_CODE)
         self.assertEqual(body["claim"]["workspaceId"], workspace_id)
         self.assertFalse(body["idempotent_replay"])
         self.assertTrue(body["external_writes_performed"])
         self.assertFalse(body["secret_values_exposed"])
-        # The tenant exists with an owner membership carrying full capabilities.
+        # The tenant exists with owner controls plus only the selected product.
         readiness = self._owner_readiness(workspace_id)
         self.assertTrue(readiness.membership_ready)
         self.assertEqual(readiness.capabilities, SELF_SERVE_OWNER_CAPABILITIES)
+        self.assertEqual(readiness.product_entitlements, ("commerce",))
         # The claim linkage record joins the device trial to the tenant.
         link = self.store._self_serve_links[CLAIM_CODE]
         self.assertEqual(link["workspace_id"], workspace_id)
@@ -225,6 +228,33 @@ class SelfServeWorkspaceTests(unittest.TestCase):
         self.assertEqual(
             conflicting.json()["detail"]["code"], "trial_idempotency_conflict"
         )
+
+    def test_same_claim_cannot_change_its_product_entitlement(self) -> None:
+        with activation_window("open"):
+            first = self._post(product="commerce")
+            conflicting = self._post(product="website")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(conflicting.status_code, 409)
+        self.assertEqual(
+            conflicting.json()["detail"]["code"], "trial_idempotency_conflict"
+        )
+
+    def test_website_activation_grants_only_website_product_access(self) -> None:
+        with activation_window("open"):
+            response = self._post(claim_code="SM-WXYZ-7890", product="website")
+        self.assertEqual(response.status_code, 200)
+        workspace_id = self_serve_workspace_id("SM-WXYZ-7890")
+        readiness = self._owner_readiness(workspace_id)
+        self.assertEqual(readiness.product_entitlements, ("website",))
+        self.assertIn("website.write", readiness.capabilities)
+        self.assertNotIn("commerce.write", readiness.capabilities)
+        self.assertNotIn("production.write", readiness.capabilities)
+
+    def test_unknown_product_is_rejected_without_creating_a_tenant(self) -> None:
+        with activation_window("open"):
+            response = self._post(claim_code="SM-WXYZ-7890", product="agents")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.store._self_serve_links, {})
 
     def test_invalid_claim_format_is_rejected(self) -> None:
         invalid_claims = (
@@ -408,7 +438,7 @@ class SelfServeWelcomeEmailTests(unittest.TestCase):
         return self.client.post(
             "/api/trial/v1/workspaces",
             headers={"x-test-signup-session": session},
-            json={"claimCode": claim_code, "businessName": BUSINESS_NAME},
+            json={"claimCode": claim_code, "businessName": BUSINESS_NAME, "product": "commerce"},
         )
 
     def test_new_tenant_sends_exactly_one_welcome_with_exact_fields(self) -> None:

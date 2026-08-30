@@ -5,6 +5,12 @@ import { spawnSync } from 'node:child_process'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import {
+  buildShopPilotHandoff,
+  sanitizeShopPilotContactEvent,
+  shopPilotInputFromContactEvent,
+} from './create_shop_pilot_handoff.mjs'
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v3'
 export const CLIENT_DEMO_PREPARATION_VALIDATION_CONTRACT = 'supermega.client_demo_preparation_validation.v1'
@@ -49,6 +55,8 @@ const OPERATING_UNIT_KIND = Object.freeze({
   'retail-network': 'retail',
   'food-service': 'food-service',
   manufacturing: 'plant',
+  bakery: 'food-service',
+  fashion: 'plant',
   'service-business': 'service',
 })
 const CHANNEL_BY_PRODUCT = Object.freeze({
@@ -527,6 +535,65 @@ export async function initializeClientWorkspaceFromContact({ directory, event, r
     contactIntakeDigest: contactIntake.digest,
     requestedProduct: contactIntake.client.requestedProduct,
   }
+}
+
+export function buildShopPilotClientIntake(event, ownerInput, implementationOwner, reviewedAt = new Date().toISOString()) {
+  const contact = sanitizeShopPilotContactEvent(event)
+  const pilotInput = shopPilotInputFromContactEvent(contact, ownerInput)
+  const handoff = buildShopPilotHandoff(pilotInput)
+  if (handoff.status !== 'ready-for-private-pilot') fail('shop_pilot_client_workspace_owner_approval_required')
+  const canonicalReviewedAt = canonicalTimestamp(reviewedAt)
+  if (!canonicalReviewedAt) fail('shop_pilot_client_workspace_review_time_invalid')
+  const workspace = boundedPrivateText(pilotInput.tenantLabel, 'shop_pilot_client_workspace_name_invalid', 60, { singleLine: true })
+  const owner = boundedPrivateText(implementationOwner, 'shop_pilot_client_workspace_owner_invalid', 80, { singleLine: true })
+  const body = {
+    contract: CLIENT_CONTACT_INTAKE_CONTRACT,
+    source: {
+      event: 'supermega.contact.created',
+      leadDigest: sha256(contact.record.lead_id),
+      companyDigest: sha256(contact.record.company),
+      submittedAt: canonicalReviewedAt,
+    },
+    client: {
+      workspace,
+      implementationOwner: owner,
+      presetId: 'service-business',
+      products: ['commerce'],
+      requestedProduct: 'commerce',
+    },
+    request: {
+      goal: pilotInput.operationalProblem,
+      requestedTemplate: 'beauty-spa',
+    },
+    review: {
+      reviewedAt: canonicalReviewedAt,
+      companyReviewed: true,
+      goalReviewed: true,
+      privateWorkspaceApproved: true,
+    },
+    controls: {
+      privateArtifact: true,
+      requesterNameRetained: false,
+      requesterEmailRetained: false,
+      rawContactRetained: false,
+      externalWritesPerformed: false,
+      modelCallsPerformed: false,
+      activationStatus: 'not_applied',
+    },
+  }
+  return verifyClientContactIntake({ ...body, digest: sha256(JSON.stringify(body)) })
+}
+
+export async function initializeClientWorkspaceFromShopPilot({ directory, event, ownerInput, implementationOwner, reviewedAt }) {
+  const contactIntake = buildShopPilotClientIntake(event, ownerInput, implementationOwner, reviewedAt)
+  return initializeClientWorkspaceFiles({
+    directory,
+    presetId: contactIntake.client.presetId,
+    products: contactIntake.client.products,
+    workspace: contactIntake.client.workspace,
+    owner: contactIntake.client.implementationOwner,
+    contactIntake,
+  })
 }
 
 export async function verifyContactClientWorkspace(directory) {

@@ -38,7 +38,7 @@ infra required first.
 
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
-| E1 | Product photos (Shopify/Wix/TikTok Shop are photo-first; our storefront is text-only) | `CommerceStorefrontMerchandising` (`commerce-workspace.ts` ~1059-1065) and `StorefrontPreviewItem` (`storefront-model.ts` ~20-27) have no image field at all | Extended (#483): storefront preview cards flip photo-FIRST via `:has()` when a photo exists (4:3 cover image layout; no-photo cards and non-`:has()` browsers keep the artwork card byte-identically). **SHIPPED 2026-08-19** (#459): `product-image-store.ts` IndexedDB store, downscale-on-ingest; inventory rows + counter tiles + storefront preview. One deliberate deviation from this row's sketch: NO `imageId` on the workspace record — the deployed managed backend enforces exact-field item contracts (`commerce_runtime.py` `_ITEM_FIELDS`), so the SKU→photo binding lives in IndexedDB next to the blob |
+| E1 | Product photos (Shopify/Wix/TikTok Shop are photo-first; our storefront is text-only) | `CommerceStorefrontMerchandising` (`commerce-workspace.ts` ~1059-1065) and `StorefrontPreviewItem` (`storefront-model.ts` ~20-27) have no image field at all | Extended (#483): storefront preview cards flip photo-FIRST via `:has()` when a photo exists (4:3 cover image layout; no-photo cards and non-`:has()` browsers keep the artwork card byte-identically). **SHIPPED 2026-08-19** (#459): `product-image-store.ts` IndexedDB store, downscale-on-ingest; inventory rows + counter tiles + storefront preview. One deliberate deviation from this row's sketch: NO `imageId` on the workspace record — the deployed managed backend enforces exact-field item contracts (`commerce_runtime.py` `_ITEM_FIELDS`), so the SKU→photo binding lives in IndexedDB next to the blob. Photos in the EXPORTED/published site were traced 2026-08-20: the published artifact carries no product to hang a photo on, so the gate is one founder scope call (does the published site carry a catalog at all), not hosted infrastructure. Given that, embedding is buildable device-locally, with a trilemma over where the bytes live — full evidence and the withdrawn over-claims in §3 item 3 |
 | E2 | Channel list is stale for Myanmar 2026 (Facebook VPN-only; Telegram/TikTok commerce growing) | `channel-order-intake.ts:5` hardcodes `['Messenger', 'Viber', 'Phone']`; no Telegram/TikTok option; not verifier-pinned | **SHIPPED 2026-08-19** (#459): Telegram + TikTok in the manual intake const + copy + contract test; the managed AI enum deliberately untouched (extending it requires re-running the golden-set eval) |
 | E3 | Abandoned-cart / follow-up messaging | No expiry/reminder logic in `storefront-request.ts`; recovery requires outbound messaging infra that does not exist | FD — hosted messaging, credential, founder consent. Parked |
 
@@ -141,9 +141,116 @@ status column in §1 for each. The operative forward sequence is now:
    the Control tab's recall-lot trace already has an exact-match resolution
    and a no-match state, so it is the cheapest next scan target if a client
    asks for it.
-3. E1 photo follow-through if wanted: photos in the exported/published site
-   are a separate decision (published markup is built by `website-export.ts`,
-   untouched so far).
+3. **E1 photo follow-through — TRACED 2026-08-20, gated on ONE founder scope
+   call, not on hosted infrastructure. Read this whole entry before spending a
+   lane on it; the first draft of it overstated two of its four legs and both
+   are withdrawn below.** This item used to read "photos in the
+   exported/published site are a separate decision (published markup is built by
+   `website-export.ts`, untouched so far)". It is a separate decision, and the
+   decision is narrower and more answerable than "photos": it is **whether the
+   published site carries a product catalog at all**.
+   - **The prerequisite, and the only real blocker: there is no product in the
+     published site to attach a photo to.** `WebsiteArtifact`
+     (`website-model.ts:114-121`) is `schema`/`siteName`/`fingerprint`/
+     `contentDigest`/`source`/`pages`; a page (`:105-112`) is navigation + hero
+     + `PageSection[]` + seo, and a section (`:69-74`) is `id`/`eyebrow`/
+     `title`/`body`. All text. `buildWebsiteHtml`'s `renderPage` emits a hero
+     and text cards — no SKU, no price, no catalog row reaches the published
+     file. The `catalog-showcase` template's `/catalog` page
+     (`website-starter.ts:17,154`) is prose. `WebsiteCommerceIntake.tsx` is an
+     in-app order-handoff surface and emits no published markup. Ecommerce ships
+     no HTML export at all — its only downloads are the order-import CSV
+     (`EcommerceProduct.tsx:557`), an order-review JSON packet (:711), and a
+     go-live activation JSON packet (:1545,
+     `downloadManagedStoreActivationPacket`). So this is not a photo change.
+     Publishing a catalog is a new customer-facing surface and a scope call
+     against the "finite reviewable site" wedge (`portfolio.json`, and the W1
+     row in §1). **That call is the founder's and nothing below is reachable
+     without it.**
+   - ~~"Adding a catalog to the artifact destroys existing workspaces."~~
+     **WITHDRAWN — overstated, and Codex was right to hit it on #512.**
+     `isWebsiteArtifact` (`:1725-1743`) is an exact-key contract plus a
+     `contentDigest` recomputation, and a present-but-invalid retained artifact
+     does null the whole `restoreWorkspace` result (the shape
+     `verify_app_build.mjs` ~11431 pins as
+     `website_tampered_artifact_was_accepted`). But that is the cost of a
+     migration-less change, not an inevitability: `restoreV2` (`:1482`, called
+     at `:1397` and `:1468`) is a live forward-migration hook that already
+     normalizes stored `localPublishes` on load, and `isWebsiteWorkspace`
+     (`:1494-1502`) shows the optional-key idiom — `Object.hasOwn` gating the
+     `hasExactKeys` list for `openingPlan`/`workingSample`/`releaseRecords`/
+     `leadLedger` — which leaves old records digest-identical because
+     `canonicalDigest` runs over the keys actually present. Schema extension
+     here is routine. Budget a migration; do not treat this as a wall.
+   - ~~"Embedding photos breaks the pure/deterministic export."~~ **WITHDRAWN —
+     Codex's ordering defeats it.** The pins are real
+     (`website_static_artifact_export_missing_or_side_effectful`, ~3733, fails
+     the build if `website-export.ts` so much as *contains* `fetch(`,
+     `localStorage`, `sessionStorage`, or `XMLHttpRequest`;
+     `website_artifact_export_not_deterministic`, ~11416, deep-compares two
+     `createWebsiteHtmlDownload` calls). But nothing forces the blob read to
+     happen at export. `recordLocalPublish` (`WebsiteProduct.tsx`) and
+     `mutateWebsiteWorkspace` are both already async, so photos can be resolved
+     before the seal and the exporter stays a pure synchronous function of its
+     input. Both pins survive that design untouched.
+   - **What actually remains is a trilemma about where the bytes live, and it
+     is the thing to put in front of the founder.** Pick any two:
+     (a) photo bytes appear in the published file; (b) the published file is
+     determined by the sealed, approved artifact, so it reproduces identically
+     on any device; (c) photo bytes stay out of localStorage.
+     - *Seal the bytes into the artifact* → (a)+(b), gives up (c). The seal is
+       reachable only through the workspace: `recordWebsiteSnapshot` (`:1016`)
+       builds `artifact: createWebsiteArtifact(workspace)` — a verifier-pinned
+       exact string (`website_approved_artifact_persistence_missing`) taking the
+       workspace and nothing else. The workspace is persisted by
+       `storage.setItem(WEBSITE_STORAGE_KEY, encoded)` (`:1095`), re-serialized
+       whole on every write with a read-back and a second parse+serialize to
+       confirm it. Every snapshot prepends another `LocalPublishRecord`
+       (`:1034`) carrying its own full artifact copy. So this route puts photo
+       bytes in localStorage, N copies over — the one place
+       `product-image-store.ts:5-9` explicitly forbids them ("Photo blobs must
+       not enter localStorage… They must not be inlined into workspace JSON for
+       the same reason — every persistence, sync-outbox, and backup path
+       serializes that record"). It has a hard measurable ceiling, not a soft
+       one: `supermega.website.workspace.v2` is a portable backup key
+       (`company-backup.ts:30`), and restore throws "Backup record N is too
+       large" above `MAX_RECORD_BYTES = 4MB` (`:21,326`), with a 12MB whole-
+       snapshot cap on create (`:19,361`) — on top of the ~5MB origin
+       localStorage quota shared with every other product. At 137-411KB per
+       photo (below), a 4-page site (`MAX_WEBSITE_PAGES = 4`, `:14`) with six
+       photos is 0.8-2.5MB per retained artifact, and the second retained
+       publish can alone exceed the 4MB record bound and break company backup.
+     - *Resolve from IndexedDB in the async download handler* → (a)+(c), gives
+       up (b). `buildWebsiteHtml` would take a second pre-resolved argument, so
+       the pins still hold, and nothing enters localStorage. But the emitted
+       bytes are then no longer determined by the sealed artifact: photos are
+       per-origin IndexedDB keyed `[scope, sku]`
+       (`product-image-store.ts:55-62`) and deliberately excluded from company
+       backup (`:25-30`; `company-backup.ts:102` names photos as the
+       not-portable call), so a second device signed into the same managed
+       company computes the same scope string, finds an empty database, and
+       exports a text-only file. **The owner re-uploads and the live site
+       silently loses every picture.** Moving retained artifacts into IndexedDB
+       to escape the quota lands in this same case for the same reason.
+     - *Ship nothing* → (b)+(c), today's state.
+   Size, which is a tradeoff to show the founder rather than a blocker: a full
+   3-page starter export is **11,123 bytes** today. One photo at the ingest
+   bound (1280px long edge, JPEG q0.8, `product-image-store.ts:69-70`,
+   ~100-300KB) is 137-411KB as a data URI — **12x to 37x the entire current file
+   for a single picture** — and a ten-item catalog lands at 1.4-4.1MB in one
+   uncacheable HTML file the owner hand-uploads over a Myanmar mobile
+   connection. The published CSP (`default-src 'none'`, no `img-src`,
+   `website-export.ts:204`) also blocks `data:` images today and would have to
+   be widened.
+   So: ask the founder (a) does the published site carry a catalog, and if yes
+   (b) which corner of the trilemma — accepting a localStorage ceiling, or
+   accepting that a republish from a second device is text-only, or funding
+   hosted image storage (FD, item 5) which is the only option that buys all
+   three. A cheap honest interim while that sits: say on the publish screen that
+   the downloaded site file is text-only, so an owner who has uploaded photos
+   learns it before uploading rather than after. That is customer-facing copy
+   and needs sign-off on the sentence, same rule as `DESIGN-PROGRAM.md` P3.8
+   batch 1.
 4. AI item 1 (order-intake eval) is server-only and spends no hosted gate, but
    **it cannot run from an agent lane at all** — this line previously said it
    "can run in parallel any time" and that sent a 2026-08-20 attempt at it.

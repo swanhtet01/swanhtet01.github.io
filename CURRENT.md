@@ -1,6 +1,6 @@
 # SuperMega current direction
 
-Last confirmed: 2026-08-11
+Last confirmed: 2026-08-21
 Authority: this file, `site-manifest.json`, and `hq/portfolio.json`
 
 SuperMega builds simple operating products for Myanmar businesses. The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce**. Bounded **AI assistance** is a shared capability inside those products, not a fifth product. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
@@ -18,7 +18,7 @@ AI assistance may prepare work inside these four products only when it exposes i
 
 ## Product status
 
-- **Shop** — available at `/shop/` in the live isolated app under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
+- **Shop** — available at `/shop/` in the live isolated app under the stable internal `commerce` runtime. The reviewed local candidate adds native Spa prepaid packages whose reconciled sales and completed-treatment redemptions remain in the same accountable Shop record. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — available at `/plant/` in the live isolated app under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — available at `/website/` in the live isolated app; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
 - **Ecommerce** — available at `/ecommerce/` in the live isolated app. It reads versioned Shop catalogue data, builds a multi-item cart, produces a deterministic 15-minute quote, recovers across reload, and sends one duplicate-safe multi-line handoff into Shop. Tax, shipping, and payment remain explicit adapter boundaries; no charge occurs. Only Shop's accountable confirmation can create an order or reserve stock. Hosted managed persistence is not yet proven.

@@ -1326,3 +1326,109 @@ test('normalizeProduction accepts a v2 workspace and rejects invalid input', () 
   // {} has no jobs/issues/machines arrays → migrateLegacyProduction throws.
   assert.throws(() => normalizeProduction({}))
 })
+
+// ==============================================================================================
+// The browser-local (signed-out) Plant provisioning lane, executed end to end.
+//
+// Everything above drives the pure constructors -- installProductionWorkingSampleJobs and
+// appendGuidedSampleProductionActivity -- with a hand-built job list. This block drives the REAL
+// provisioner through the REAL write boundary: provisionLocalPlantWorkingSample ->
+// mutateProductionWorkingSample -> window.localStorage. That is the lane a signed-out owner
+// actually gets from Plant setup, and it is the thing most likely to break silently while the
+// managed lane is being made honest.
+//
+// Context: startGuidedWorkspace used to run this provisioner for EVERY caller, managed or not.
+// mutateProductionWorkingSample is window.localStorage, which a managed Plant never reads, so a
+// signed-in owner was told her jobs, floor and line were ready while the company workspace stayed
+// at version 0 and ProductionPage rendered 'managed-unprovisioned'. Measured before the guard was
+// added: disposition 'installed' with ZERO fetch calls, across all five plant packs. The guard is
+// pinned in tools/verify_app_build.mjs. What is asserted HERE is the other half -- that adding it
+// changed nothing whatsoever for the signed-out owner. These assertions were run against unfixed
+// origin/main first and were already green, so they lock existing behaviour rather than
+// describing new behaviour.
+import { provisionLocalPlantWorkingSample } from '../showroom/src/core/product-onboarding-runtime.ts'
+import { clientImportTemplate, createClientImportPreview } from '../showroom/src/core/client-onboarding.ts'
+
+test('the browser-local lane still installs every plant pack through the real write boundary', async () => {
+  const fetchCalls = []
+  const realFetch = globalThis.fetch
+  const realWindow = globalThis.window
+  const realLocalStorage = globalThis.localStorage
+  const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  globalThis.fetch = async (...args) => {
+    fetchCalls.push(String(args[0]))
+    throw new Error('the browser-local onboarding lane must not make network calls')
+  }
+  // Node's own `navigator` global is a read-only accessor (Node 21+), so it cannot be assigned.
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { locks: { request: async (_name, _options, callback) => callback() } },
+    configurable: true,
+  })
+
+  try {
+    assert.equal(plantIndustryPacks.length, 5, 'all five shipped plant packs are present')
+
+    for (const pack of plantIndustryPacks) {
+      // mutateProductionWorkspace refuses to write into a store that was never initialized, so
+      // the seed goes in first -- exactly as loadProductionWorkspace does in the browser.
+      const map = new Map([[PRODUCTION_KEY, JSON.stringify(createSeedProduction())]])
+      const store = {
+        getItem: (key) => (map.has(key) ? map.get(key) : null),
+        setItem: (key, value) => { map.set(key, value) },
+        removeItem: (key) => { map.delete(key) },
+      }
+      globalThis.window = { localStorage: store }
+      globalThis.localStorage = store
+
+      const disposition = await provisionLocalPlantWorkingSample(pack.id, '', 'Daw Hla Myaing')
+      assert.equal(disposition, 'installed', `${pack.id}: a signed-out install still reports 'installed'`)
+
+      const state = validateProductionState(JSON.parse(map.get(PRODUCTION_KEY)))
+      assert.equal(productionWorkingSamplePackId(state), pack.id, `${pack.id}: the installed sample is stamped with this pack`)
+      // The jobs are DERIVED from the pack's own sample CSV -- the same source the provisioner
+      // reads -- rather than transcribed here, so this stays a statement about the lane and not
+      // about today's sample content. A pack whose CSV changes still has to land its own rows.
+      const preview = await createClientImportPreview(
+        clientImportTemplate('production', '', { plantIndustryPackId: pack.id }),
+        'production', undefined, `sample-${pack.id}.csv`, '',
+      )
+      assert.ok(preview.rows.length > 0, `${pack.id}: the pack ships a sample job CSV`)
+      assert.equal(state.jobs.length, preview.rows.length, `${pack.id}: every sample row landed as a job`)
+      assert.equal(new Set(state.jobs.map((job) => job.id)).size, state.jobs.length, `${pack.id}: the jobs are distinct`)
+      for (const row of preview.rows) {
+        const job = state.jobs.find((candidate) => candidate.id === row.values.jobCode)
+        assert.ok(job, `${pack.id}: sample job ${row.values.jobCode} landed`)
+        assert.equal(job.line, row.values.line, `${pack.id}: ${job.id} kept the pack's own line`)
+        assert.equal(job.product, row.values.productName, `${pack.id}: ${job.id} kept the pack's own product`)
+        assert.equal(job.target, Number(row.values.targetQuantity), `${pack.id}: ${job.id} kept its target`)
+        assert.equal(job.output, 0, `${pack.id}: ${job.id} starts with no output recorded against it`)
+        assert.equal(job.owner, 'Daw Hla Myaing', `${pack.id}: ${job.id} carries the owner setup was given`)
+      }
+      // The floor and the opening issue are what turn a job list into a plant the owner can see
+      // running. Generic packs install onto the SHARED SEED floor -- the pack setup carries no
+      // machines or opening issue of its own -- so those are asserted as present, not as the
+      // pack's own. Per-trade floors belong to plant BUSINESS templates, whose provisioning path
+      // hands installProductionWorkingSampleJobs its own machines and issue.
+      assert.ok(state.machines.length > 0, `${pack.id}: the sample floor still lands`)
+      assert.ok(state.issues.length > 0, `${pack.id}: the opening issue still lands`)
+      assert.equal(state.events.length, state.jobs.length, `${pack.id}: the install is evidenced once per job`)
+      assert.ok(isGuidedSampleProduction(state), `${pack.id}: the installed workspace is still a replaceable guided sample`)
+      // Measured, and pinned deliberately: the GENERIC pack path installs jobs and stops. It does
+      // not call appendGuidedSampleProductionActivity -- only the plant business-template path
+      // does (covered by tools/test_plant_business_templates.mjs). A signed-out owner on a generic
+      // pack gets jobs to run, not a shift already part-run, and that distinction is the lane's
+      // real behaviour rather than an oversight to paper over here.
+      assert.equal(
+        hasGuidedSampleProductionActivity(state), false,
+        `${pack.id}: the generic pack path installs jobs without pre-running a shift`,
+      )
+    }
+
+    assert.equal(fetchCalls.length, 0, `the browser-local lane made no network calls, got ${JSON.stringify(fetchCalls)}`)
+  } finally {
+    globalThis.fetch = realFetch
+    globalThis.window = realWindow
+    globalThis.localStorage = realLocalStorage
+    if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator)
+  }
+})

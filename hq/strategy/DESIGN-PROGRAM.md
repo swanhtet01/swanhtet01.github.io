@@ -602,6 +602,34 @@ standalone geometry PR ever; the 9px→10px class of change is exactly the
 big-bang sweep the judges banned. Progress metric: the distinct-value
 count in this table, re-measured whenever this doc is next revised.
 
+**Half-retired class families (added 2026-08-21 by the dead-CSS reclaim PR).**
+That PR deleted 167 rule blocks from core-app.css whose selectors need a class
+token that exists nowhere in the app. Ten families could only be deleted
+*partially*, because their remaining rules are comma-joined with a live
+selector and those joined selectors are verifier-pinned — leaving a stylesheet
+that reads as if the component is still fully styled when it is not. The
+sharpest case is `.segmented-control`: its selected-state rule
+(`button[aria-pressed="true"]`) and `.wide` modifier are gone, but its layout,
+hover, mobile and 44px touch-target rules survive beside `.view-tabs`. Anyone
+reintroducing a segmented control from what the file appears to offer gets a
+control that lays out and hovers correctly and has **no visual selected state**
+— silently unusable, and invisible in review because `.view-tabs` keeps its own
+`[aria-selected="true"]` rule. The same shape applies to
+`.core-main.has-trial-context`, `.command-grid`, `.attention-list`,
+`.module-today`, `.ops-today-grid`, `.catalog-import-autopilot`,
+`.setup-product-grid`, `.product-trial-actions` and `.lifecycle-grid`. Attrition
+rule: the next pass that is *already* moving one of those pinned strings drops
+the dead member from its selector list in passing and says so. Never a
+standalone PR, and never reopen a pin just to finish one of these.
+
+Also parked here, from the same PR: six families are dead but PINNED outright
+(`.setup-launch-pack`/`-rows`, `.setup-pack-summary`, `.setup-workflow-review`,
+`.company-brief-disclosure`, `.plant-production-module`) — ~3,700 source bytes
+of genuine waste whose pins are 44px touch-target and live-site guards
+(`verify_app_build.mjs` :5553-5556, :5579, :5577-5578, :2027/:2029, :2392, and
+`verify_app_release_live.mjs` :510-512). Retiring them is a pin-moving review
+of its own with a negative test per pin, not a byte-reclaim ride-along.
+
 ### Phase-3 exit
 
 Phase 3 is done when: ecommerce live-declaration hex = preview-frame
@@ -745,6 +773,151 @@ plan...").
    "misleading", those stay English-only until someone phrases them.
 
 No implementation before both answers are recorded in this section.
+
+### Batch 3 — the counter slice (SHIPPED, drafts pending). ERP-COMPETITIVE-ROADMAP §6.4 G1
+
+Wired 2026-08-21. Scope is the surface a cashier touches and nothing else: the
+four Shop work modes (`commerce-tabs.ts`, rendered by both the phone bottom bar
+and the in-page toolbar — the in-page call is guarded on `view === 'commerce'`
+so Plant's strip, which shares that `<nav>`, stays outside this table's blast
+radius), the sales counter, the payment-QR dialog the counter opens for a
+non-cash sale, and the receipt dialog. Settings, onboarding, Plant, Website and
+Ecommerce are untouched.
+
+This is BATCH 1 of the slice, not the slice. What it cannot reach, and why, is
+listed in ERP-COMPETITIVE-ROADMAP §6.4 G1's status note: string attributes
+(`aria-label`, `placeholder`) cannot take a ReactNode at all, and parameterised
+strings ("{n} in stock", "{n} items") are the exact-match limitation the Option
+B analysis above already names. Roughly half the counter's words are in those
+two classes. Whoever picks this up next: those need a mechanism decision, in the
+same shape as the Option A/B/C note above, before any more call sites move.
+
+31 new full-phrase entries (the table goes 61 -> 92; the confirmed count stays
+exactly 33, which is the check that this batch invented no Burmese anyone can
+see), every one `pending_native_review`, drafted only from
+(a) the confirmed verbs already in the table and (b) Burmese nouns this app
+already ships in `shop-ledger-accounts.ts` / `shop-service-scheduling.ts`. The
+`sourced:` comments mark the second class; every other entry carries the specific
+call the reviewer has to make. Two entries were REFUSED rather than drafted and
+the refusal is recorded in the table and pinned in the verifier — `Products` in
+the bottom bar (it opens the product chooser, not the shop's goods, one cell away
+from the Stock tab) and the `Cash / KBZPay / WavePay` payment triple.
+
+What the surface shows today: no change, except the two strings whose table
+entries were ALREADY confirmed and are now reached from the counter slice —
+`Clear` (cart header) and `Close` (receipt dialog). Measured with a scratch flip
+of all 29 drafts to `confirmed` (reverted before commit) at 1280×900 and 375×812
+in both themes: no horizontal document scroll, no element past the viewport, and
+every Burmese half inside its container on all four work modes and the receipt.
+
+Findings from the code review on this batch, applied before merge and worth
+keeping: `overflow-wrap: anywhere` was removed from `.bi-label` (it splits
+Burmese mid-cluster and drops a flex item's min-content to one glyph — the
+reasoning is in the CSS); the in-page tab call was scoped to commerce; the
+payment-QR dialog was pulled INTO the slice rather than left out, because its
+Close is the same already-confirmed key the receipt uses and one non-cash sale
+would otherwise show a Burmese Close beside an English one; and the module's
+safety rule 2 was rewritten, because batch 3's `sourced:` entries deliberately
+break the "every translation is new" invariant it stated.
+
+One mechanism addition, and only one: `bi()` now tags its wrapper
+`class="bi-label"`. The phone bottom bar is five cells across a 375px viewport
+under `nowrap`/`ellipsis`, which would have ellipsised away exactly the Burmese
+half; the class is what lets `core-app.css` let that one label wrap. No media
+query was added (`.mobile-nav` is already `display: none` above its breakpoint),
+so the px ratchet is untouched.
+
+**Still blocked, unchanged:** the two questions above. Batch 3 adds a third for
+the same reviewer — see the per-entry comments, of which `Create order`
+(reserves stock, does not take money), `Stock` (goods, not shares) and
+`Print receipt` (two loanwords in one label) are the ones most likely to come
+back wrong.
+
+**A language setting was NOT added, deliberately.** It is not required for G1's
+counter slice: `bi()` renders English AND Burmese together, so a Burmese-first
+cashier reads the half they need without choosing anything, and a setting would
+buy only the removal of the English half. What that removal actually costs and
+buys is a founder/native question, not an engineering one — whether a Yangon
+counter wants a Burmese-only till at all, whether the owner and the cashier want
+different answers on the same device, and what happens to the ~70% of the app
+that has no Burmese yet when a device says "Burmese only". That is its own
+planning pass. The device-local shape is ready when it is wanted: the
+`shopLoyaltyScopeForWorkspace` / `shop-loyalty.ts` settings pattern is the house
+convention and needs no CommerceState change.
+
+### Batch 4 — the mechanism decision batch 3 asked for (DECIDED, not yet built)
+
+`hq/strategy/G1-STRING-MECHANISM-DECISION.md`, 2026-08-21. Batch 3 said the two
+classes it could not reach — string attributes and parameterised strings — need
+a mechanism decision "in the same shape as the Option A/B/C note above, before
+any more call sites move". That document is it. Summary, so this section is
+readable without opening it:
+
+- **String attributes: no new function.** Move the string out of the attribute
+  into a content slot and call today's `bi()` — `aria-labelledby` where visible
+  text already exists, an `sr-only` node where it does not, and
+  `aria-labelledby` + `aria-describedby` where the control has data as well as
+  an action. This is a rendering-site change, **not** a translation-policy
+  change: every string it reaches becomes an ordinary Option B entry.
+- **Recommended PENDING AT VERIFICATION, not decided** — and the reason matters
+  for anyone reading the first revision of that document. It originally argued
+  that a node "keeps the halves separable" where a joined string cannot. That
+  is **retracted**: the accessible name computation returns a **flat string**,
+  and Chrome 152 was measured over the DevTools Protocol confirming that
+  `aria-label`, an `sr-only` child with `lang="my"`, `aria-labelledby`, and
+  `lang` on the element all compute the **byte-identical** name with no
+  language field anywhere. R1 and a string-returning `biAttr()` give a screen
+  reader the same thing. R1 still wins, on narrower grounds — no second
+  renderer and no second pinned gate, two sites needing no table entry that
+  satisfy WCAG 2.5.3 structurally, and it is the only route to the
+  subtree-override fix and to `item.nameMy`. What would settle it: a real
+  screen reader on the target device. There is none in this sandbox.
+- **Parameterised strings: extend B's entry shape from a literal to a
+  template.** The key is the English template with its placeholders; the value
+  carries a Burmese template with its own placeholder positions; the composer
+  substitutes into each half independently behind the same confirmed-only gate.
+  B's defining property is preserved — the reviewer still writes and signs off
+  the whole phrase, hole included, and chooses where the hole sits.
+- **Both ship ahead of native sign-off**, because both fall back to English
+  through the existing gate. That property is why they were chosen over the
+  alternatives.
+- **The true scope is smaller than batch 3 implied.** 14 attribute sites on the
+  counter slice, not a class — 10 `aria-label`, all reachable, and the wiring
+  for them is neither founder- nor native-gated. `ReceiptDialog` contributes
+  zero. `Find or scan an item` was never an attribute. Of the 4 sites R1 cannot
+  reach, only **one** (the QR image's `alt`) is actually an accessible name:
+  both placeholders are visual-only, and the `title` duplicates a converted
+  `aria-label`.
+- **Gating is not what the first revision said, twice over.** Because every
+  mechanism lands on the same flat string, the founder question — should a
+  screen reader read a name in two languages? — reaches **any** name-bearing
+  string, R1's included, not three leftover sites. And it is not a question
+  about a *first* flip either: batch 3 already shipped it. 7 call sites across
+  4 files render an already-`confirmed` entry inside a `<button>` or `<Link>`
+  (`Cancel`, `Clear`, `Close`, `Open`, `Back` — 4 of the 7 on the cashier
+  path), so those controls' accessible names are mixed-language flat strings on
+  merged `main` today. The AT check is therefore **validation of shipped
+  behaviour**, it is the most overdue item in that document, and it carries a
+  defined remediation path: flipping the affected entries back to
+  `pending_native_review` returns every site to English in one line each — cheap
+  by construction, but visible to users, so a founder call on a marginal
+  result. Wiring stays ungated.
+- **Option A stays rejected** and Option C is untouched; §5 of that document
+  argues it explicitly against this section rather than around it.
+- **Two new questions for the reviewer packet**, numbered 4 and 5 there:
+  numeral script (founder — Burmese vs Arabic digits inside a `{n}` template;
+  blocks *confirming* the first count template, not building the mechanism),
+  and whether a screen reader should ever read a control's name in two
+  languages (founder).
+- The census also found a live accessibility defect unrelated to Burmese: the
+  counter's product tile `aria-label` overrides its own subtree, so a
+  screen-reader user hears neither the price, nor the stock level, nor
+  `item.nameMy`. The fix is `aria-labelledby` for the action plus
+  `aria-describedby` for the data — **not** naming the tile from its contents,
+  which was the first revision's proposal and which loses the verb entirely
+  (measured: it also fuses the price to the stock count). A useful side effect:
+  it turns the tile's and the steppers' three parameterised labels into static
+  keys, removing them from R2's dependency list.
 
 ## Verification recipe for design PRs
 

@@ -17,11 +17,13 @@ import {
   CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT,
   CLIENT_INTAKE_WORKSPACE_CONTRACT,
   buildClientContactIntake,
+  buildShopPilotClientIntake,
   buildClientDemoRehearsalPlan,
   buildClientDemoRehearsalResult,
   clientDemoPreparationSummary,
   initializeClientWorkspace,
   initializeClientWorkspaceFromContact,
+  initializeClientWorkspaceFromShopPilot,
   prepareClientDemo,
   verifyClientContactIntake,
   verifyContactClientWorkspace,
@@ -32,6 +34,44 @@ import {
   writeClientDemoRehearsalPlan,
   writeClientDemoRehearsalResult,
 } from './prepare_client_demo.mjs'
+
+function readySpaOwnerInput(overrides = {}) {
+  return {
+    tenantLabel: 'private-spa-workspace',
+    startDate: '2026-08-24',
+    reviewDate: '2026-08-28',
+    fixedPilotFeeUsd: 500,
+    contactIsNamedOperator: true,
+    contactBaselineReviewed: true,
+    spaBaseline: {
+      clientImportRowCount: 120,
+      weeklyPackageSales: 14,
+      weeklyTreatmentRedemptions: 31,
+      medianMinutesPerRedemption: 4,
+      weeklyPackageCorrectionCount: 2,
+    },
+    isolatedNonProductionTenantApproved: true,
+    namedOperatorAuthorized: true,
+    pilotDataHandlingApproved: true,
+    ownerReviewedCommercialDraft: true,
+    ...overrides,
+  }
+}
+
+function spaContactEvent() {
+  return {
+    event: 'supermega.contact.created',
+    record: {
+      lead_id: 'SPA-202608220001-DEADBEEF',
+      workflow: 'commerce',
+      company: 'Example Wellness Studio',
+      name: 'Example Operator',
+      email: 'operator@example.invalid',
+      goal: 'Make package sales and treatment redemption reliable.',
+      raw: { shop: { operator_role: 'Spa manager', weekly_orders: 45, median_minutes_per_order: 8, weekly_exception_count: 3, close_minutes_per_day: 25, contact_is_operator: true } },
+    },
+  }
+}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const TOOL = resolve(ROOT, 'tools', 'prepare_client_demo.mjs')
@@ -582,6 +622,59 @@ test('owner-reviewed contact creates and verifies a usable private workspace wit
     await assert.rejects(verifyContactClientWorkspace(directory), /client_contact_workspace_binding_invalid/)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('approved Spa intake creates one isolated beauty-and-spa Shop portal workspace without requester identity', async () => {
+  const parent = await mkdtemp(resolve(tmpdir(), 'supermega-spa-client-workspace-'))
+  const directory = resolve(parent, 'portal')
+  try {
+    const intake = buildShopPilotClientIntake(spaContactEvent(), readySpaOwnerInput(), 'Responsible delivery operator', '2026-08-22T08:00:00.000Z')
+    assert.equal(intake.client.presetId, 'service-business')
+    assert.deepEqual(intake.client.products, ['commerce'])
+    assert.equal(intake.request.requestedTemplate, 'beauty-spa')
+    assert.equal(intake.controls.activationStatus, 'not_applied')
+    assert.doesNotMatch(JSON.stringify(intake), /Example Operator|operator@example\.invalid/)
+
+    const initialized = await initializeClientWorkspaceFromShopPilot({
+      directory,
+      event: spaContactEvent(),
+      ownerInput: readySpaOwnerInput(),
+      implementationOwner: 'Responsible delivery operator',
+      reviewedAt: '2026-08-22T08:00:00.000Z',
+    })
+    assert.equal(initialized.productCount, 1)
+    assert.equal(initialized.containsClientData, true)
+    assert.equal(initialized.activationStatus, 'not_applied')
+    const profile = JSON.parse(await readFile(resolve(directory, 'client.json'), 'utf8'))
+    assert.equal(profile.presetId, 'service-business')
+    assert.deepEqual(profile.products, ['commerce'])
+    assert.match(await readFile(resolve(directory, '_templates', 'commerce.csv'), 'utf8'), /SPA-SVC-MASSAGE/)
+    const privateFiles = `${await readFile(resolve(directory, 'CONTACT-INTAKE.json'), 'utf8')}\n${await readFile(resolve(directory, 'START-HERE.md'), 'utf8')}`
+    assert.doesNotMatch(privateFiles, /Example Operator|operator@example\.invalid/)
+    assert.equal((await verifyContactClientWorkspace(directory)).ok, true)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('Spa portal creation fails closed before writing when any owner gate is missing', async () => {
+  const parent = await mkdtemp(resolve(tmpdir(), 'supermega-spa-client-blocked-'))
+  const directory = resolve(parent, 'portal')
+  try {
+    await assert.rejects(
+      initializeClientWorkspaceFromShopPilot({
+        directory,
+        event: spaContactEvent(),
+        ownerInput: readySpaOwnerInput({ pilotDataHandlingApproved: false }),
+        implementationOwner: 'Responsible delivery operator',
+        reviewedAt: '2026-08-22T08:00:00.000Z',
+      }),
+      /shop_pilot_client_workspace_owner_approval_required/,
+    )
+    await assert.rejects(stat(directory))
+  } finally {
+    await rm(parent, { recursive: true, force: true })
   }
 })
 

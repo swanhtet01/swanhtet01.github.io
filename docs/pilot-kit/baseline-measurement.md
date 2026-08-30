@@ -1,8 +1,8 @@
 # Shop pilot baseline measurement form
 
-Fill this in WITH the shop owner, in person, before day 1 of the five-day pilot. Print it or copy it into a private note; it stays in the founder's private workspace.
+Fill this in WITH the Spa owner, in person, before day 1 of the five-day pilot. Keep it in the founder's private workspace.
 
-Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v4`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `bounded-managed-pilot-rehearsal` can be prepared, and the Shop work order `shop-managed-order-close-pilot` names its own requirement plainly: "named operator, baseline, and five-day evidence plan" (`hq/portfolio.json`). The four derived numbers in section 4 are exactly the baseline fields the pilot handoff generator (tools/create_shop_pilot_handoff.mjs, npm script `client:pilot:handoff`) refuses to run without.
+Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v4`) requires a measured baseline (`measuredBaselineRequired`) before the founder decision `managed-production-activation` can produce accepted Shop-pilot evidence. The Shop work order `shop-spa-owner-pilot` requires a named Spa owner, reviewed client import, package sale, matching treatment redemption, daily close, recovery, and five-day evidence (`hq/portfolio.json`). Section 4 contains both the Shop operating baseline and the Spa-specific fields required by tools/create_shop_pilot_handoff.mjs and npm script `client:pilot:handoff`.
 
 ## Rules of measurement
 
@@ -23,14 +23,14 @@ Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness
 
 ## 2. The measured process (what)
 
-The Shop work order `shop-managed-order-close-pilot` pins the process: one order taken from creation to close, plus the return exception. Capture it in the owner's words.
+The Shop work order `shop-spa-owner-pilot` pins the process: import one client, sell and reconcile one prepaid package, complete the matching treatment, redeem one package use, close the day, and prove recovery. Capture the current manual equivalent in the owner's words.
 
 | Field | Value |
 | --- | --- |
 | The process in one sentence | |
-| Where an order starts (walk-in, phone call, social message, ...) | |
-| Where an order ends (payment in hand, goods handed over, book updated) | |
-| How a return or wrong order is handled today | |
+| Where a booking or package sale starts (walk-in, phone call, social message, ...) | |
+| Where it ends (payment reconciled, treatment completed, package balance updated, book closed) | |
+| How a wrong package, treatment, payment, or client record is corrected today | |
 | Where the record lives today (notebook, phone, nowhere) | |
 
 ## 3. Observed runs (minimum three)
@@ -44,7 +44,7 @@ One row per observed run of the real process, timed start to end.
 | 3 | | | | | |
 | more... | | | | | |
 
-## 4. Derived baseline — the four numbers the handoff requires
+## 4. Derived baseline — operating and Spa-package measurements
 
 | Field | Contract name | How to derive it | Value |
 | --- | --- | --- | --- |
@@ -52,6 +52,11 @@ One row per observed run of the real process, timed start to end.
 | Median minutes per order | `median_minutes_per_order` | Middle value of the observed run timings in section 3 | |
 | Weekly exception count | `weekly_exception_count` | Returns, wrong orders, and payment mismatches in a normal week | |
 | Daily close minutes | `close_minutes_per_day` | Minutes the owner spends closing the day (counting cash, updating the book) | |
+| Client rows prepared for import | `client_import_row_count` | Count the real client rows the owner has reviewed for the first import | |
+| Weekly prepaid package sales | `weekly_package_sales` | Count completed package sales from the current book or payment records | |
+| Weekly treatment redemptions | `weekly_treatment_redemptions` | Count package uses actually consumed by completed matching treatments | |
+| Median minutes per redemption | `median_minutes_per_redemption` | Middle timing from at least three current package-balance updates | |
+| Weekly package corrections | `weekly_package_correction_count` | Wrong client, treatment, package, payment, refund, or balance corrections in a normal week | |
 
 ## 5. Errors and cost
 
@@ -72,13 +77,14 @@ One row per observed run of the real process, timed start to end.
 
 ## Worked example — entirely fictional
 
-Golden Valley Trading is the fictional example business the app itself uses (setup shows `Example: Golden Valley Trading`). Every number below is invented for illustration.
+Golden Lotus Spa is an entirely fictional example. Every person and number below is invented for illustration.
 
-- Business name: Golden Valley Trading. Named operator: Ma Thiri (fictional), counter lead. Founder observed on-site on 2026-08-12, morning shift.
-- Process in one sentence: a customer orders at the counter or by phone, Ma Thiri writes it in the day book, collects payment, hands over goods, and crosses it off; returns are re-entered by hand.
-- Observed runs: run 1 took 9 minutes, run 2 took 7 minutes, run 3 took 8 minutes. Run 2 had one error — wrong change given, 5,000 kyat lost.
+- Business name: Golden Lotus Spa. Named operator: Ma Thiri (fictional), Spa manager. Founder observed on-site on 2026-08-12, morning shift.
+- Process in one sentence: a client buys a massage package, Ma Thiri records payment and remaining uses in a notebook, then manually reduces the balance after each completed treatment.
+- Observed runs: package-balance updates took 4, 3, and 2 minutes. One run initially used the wrong client row and required correction before the balance changed.
 - Derived baseline: weekly orders 120 (counted from last week's day book), median minutes per order 8 (middle of 7, 8, 9), weekly exception count 12, daily close minutes 45.
-- Errors and cost: 1 of 3 observed runs had an error; total observed error cost 5,000 kyat.
+- Spa services vertical pack baseline: 40 reviewed client rows, 12 weekly package sales, 24 weekly treatment redemptions, median 3 minutes per redemption, and 2 weekly package corrections.
+- Errors and cost: 1 of 3 observed balance updates needed correction; no invented financial saving is claimed.
 - Sign-off: owner confirmed; operator agreed; start Monday 2026-08-17, review Friday 2026-08-21 (start plus four days).
 
-These fictional numbers match the handoff generator's own built-in example payload (weekly orders 120, median 8, exceptions 12, close 45), so the founder can print that example from the generator and recognize the shape, and can dry-run the whole private workspace flow with fictional data via `npm.cmd run client:pilot:workspace:self-test`.
+These fictional numbers match the handoff generator's built-in example payload, so the owner can recognize the shape and dry-run the private workspace flow with fictional data via `npm.cmd run client:pilot:workspace:self-test`. They can never close the real-client gate.

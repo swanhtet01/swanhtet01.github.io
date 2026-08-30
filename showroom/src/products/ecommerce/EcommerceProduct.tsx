@@ -23,6 +23,7 @@ import {
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
+  managedBootstrapHasCapability,
   ManagedTrialError,
   requireManagedSurfaceState,
   saveManagedCommerceCommand,
@@ -276,6 +277,7 @@ export function EcommerceProduct() {
   const [localCommerceState, setLocalCommerceState] = useState<CommerceState>(initialState.commerceState)
   const [catalogHydrating, setCatalogHydrating] = useState(true)
   const [managedIdentity, setManagedIdentity] = useState<ManagedIdentity | null>(null)
+  const [managedCanWrite, setManagedCanWrite] = useState(false)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
   const [savedDraft, setSavedDraft] = useState<SavedStorefrontState | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
@@ -333,6 +335,7 @@ export function EcommerceProduct() {
         setManagedIdentity(identity)
         const bootstrap = await loadManagedBootstrap(identity)
         if (!current) return
+        setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'))
         const view = resolveManagedStorefront(
           identity,
           requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
@@ -368,6 +371,7 @@ export function EcommerceProduct() {
       .catch((error) => {
         if (!current) return
         setManagedInbox(null)
+        setManagedCanWrite(false)
         setCatalog({
           source: 'unavailable',
           items: [],
@@ -503,6 +507,7 @@ export function EcommerceProduct() {
   const selectionReviewRequired = missingSavedSkus.length > 0 && !missingSelectionReviewed
   const draftStorageBlocked = !managedIdentity
     && (draftReadStatus === 'invalid' || draftReadStatus === 'unavailable')
+  const portalViewOnly = Boolean(managedIdentity && !managedCanWrite)
 
   useEffect(() => {
     let current = true
@@ -764,6 +769,7 @@ export function EcommerceProduct() {
   }
 
   async function saveManagedStorefront(identity: ManagedIdentity) {
+    if (!managedCanWrite) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     if (!globalThis.crypto?.randomUUID) {
       throw new Error('Secure command identity is unavailable. Nothing was saved.')
     }
@@ -774,6 +780,9 @@ export function EcommerceProduct() {
       throw new Error('The company account changed. Reload before saving.')
     }
     const bootstrap = await loadManagedBootstrap(identity)
+    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
+    setManagedCanWrite(writeAllowed)
+    if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     const view = resolveManagedStorefront(
       identity,
       requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
@@ -1060,12 +1069,16 @@ export function EcommerceProduct() {
 
   async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
     const identity = managedIdentity
+    if (!managedCanWrite) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
     const currentIdentity = await currentManagedIdentity()
     if (!currentIdentity
       || currentIdentity.workspaceId !== identity.workspaceId
       || currentIdentity.userId !== identity.userId) throw new Error('The company account changed. Reload before sending this request to Shop.')
     const bootstrap = await loadManagedBootstrap(identity)
+    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
+    setManagedCanWrite(writeAllowed)
+    if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     const view = resolveManagedStorefront(identity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
     if (!view?.saved) throw new Error('Save the managed storefront before sending a customer request to Shop.')
     setManagedInbox(view.inbox)
@@ -2029,11 +2042,11 @@ export function EcommerceProduct() {
           <div className="ecommerce-copy-fields">
             <label>
               <span>Store name</span>
-              <input disabled={catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} />
+              <input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} />
             </label>
             <label>
               <span>Short description</span>
-              <textarea disabled={catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
+              <textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
             </label>
           </div>
 
@@ -2065,7 +2078,7 @@ export function EcommerceProduct() {
                 <button
                   aria-pressed={selected}
                   className="ecommerce-catalog-item"
-                  disabled={catalogHydrating || draftBusy || (!selected && selectedSkus.length >= 8)}
+                  disabled={portalViewOnly || catalogHydrating || draftBusy || (!selected && selectedSkus.length >= 8)}
                   key={item.sku}
                   onClick={() => toggleSku(item.sku)}
                   type="button"
@@ -2089,7 +2102,9 @@ export function EcommerceProduct() {
             role="status"
           >
             <div>
-              <strong>{catalogHydrating
+              <strong>{portalViewOnly
+                ? 'View only'
+                : catalogHydrating
                 ? 'Checking saved store'
                 : localFingerprintPending
                 ? 'Checking saved customer view'
@@ -2106,7 +2121,9 @@ export function EcommerceProduct() {
                 ? `Saved to company · revision ${savedDraft?.revision}`
                   : `Saved on this device · revision ${savedDraft?.revision}`
                 : savedDraft ? 'Unsaved changes' : 'Not saved yet'}</strong>
-              <small>{catalogHydrating
+              <small>{portalViewOnly
+                ? 'Ask a company owner to assign Ecommerce operator access.'
+                : catalogHydrating
                 ? 'Editing unlocks after the local or managed Shop scope is confirmed.'
                 : localFingerprintPending
                 ? 'Comparing the saved fingerprint with the current Shop-backed customer view.'
@@ -2122,10 +2139,11 @@ export function EcommerceProduct() {
                 : null}
             </div>
             {!savedDraftIsCurrent ? <div className="ecommerce-save-actions">
-              {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
+              {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={portalViewOnly || catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
               <button
                 className="core-button primary"
-                disabled={!hasUnsavedStorefront
+                disabled={portalViewOnly
+                  || !hasUnsavedStorefront
                   || !previewResult.preview
                   || !digest
                   || Boolean(digestError)
@@ -2209,7 +2227,7 @@ export function EcommerceProduct() {
                           aria-controls="ecommerce-buying-workspace"
                           aria-label={`${buyingCart.some((line) => line.sku === item.sku) ? 'View' : 'Add'} ${displayName} ${buyingCart.some((line) => line.sku === item.sku) ? 'in cart' : 'to cart'}`}
                           className="storefront-request-button"
-                          disabled={catalogHydrating}
+                          disabled={portalViewOnly || catalogHydrating}
                           onClick={() => addToCart(item.sku)}
                           type="button"
                         >
@@ -2246,7 +2264,7 @@ export function EcommerceProduct() {
               onOpenReschedule={(intent: EcommerceOrderRescheduleIntent) => navigate('/shop/?tab=orders', { state: { ecommerceOrderRescheduleIntent: intent } })}
               onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
-              onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}
+              onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}
               onRequestStateChange={setCustomerRequestState}
               preview={previewResult.preview}
               scope={buyingScope}

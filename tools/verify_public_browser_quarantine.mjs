@@ -77,13 +77,15 @@ async function privilege(database, kind, role, objectName, privilegeName) {
 const sql = await readFile(sqlPath, 'utf8')
 const { audit, database, expectedTables } = await fixture()
 
-// The audit describes the live catalog on the approved v7 -> v10 path. Before the quarantine it
-// records the legacy browser grants; after it (browserGrantHardeningRequired false) it records
-// them empty. The local rehearsal below seeds its own grants either way, so this stays a valid
-// regression proof that the packet re-quarantines a database that regained grants.
-if (!Number.isInteger(audit.managedBackend?.liveSchemaVersion)
+// The audit describes the live catalog on the reviewed v7 -> v13 path. The
+// local rehearsal seeds unsafe grants itself, so it proves the quarantine can
+// safely re-close a database even when the current live audit is already clear.
+if (audit.contract !== 'supermega.supabase-security-advisor-audit.v2'
+  || !Number.isInteger(audit.managedBackend?.liveSchemaVersion)
   || audit.managedBackend.liveSchemaVersion < 7
-  || audit.managedBackend.liveSchemaVersion > 10) fail('public_quarantine_live_schema_drifted')
+  || audit.managedBackend.liveSchemaVersion > 13
+  || audit.managedBackend.localTargetVersion !== audit.managedBackend.liveSchemaVersion
+  || audit.managedBackend.versionDrift !== 0) fail('public_quarantine_live_schema_drifted')
 if (audit.catalog?.businessRowsRead !== 0) fail('public_quarantine_business_data_boundary_invalid')
 const expectedAuditPrivileges = audit.conclusion?.browserGrantHardeningRequired === false ? '' : tablePrivileges.join(',')
 if (audit.catalog?.tables?.some((table) => (
@@ -93,6 +95,13 @@ if (audit.catalog?.tables?.some((table) => (
   || table.anonPrivileges?.join(',') !== expectedAuditPrivileges
   || table.authenticatedPrivileges?.join(',') !== expectedAuditPrivileges
 ))) fail('public_quarantine_source_grants_invalid')
+if (audit.catalog?.sequences?.length !== expectedSequences.length
+  || audit.catalog.sequences.some((sequence, index) => (
+    sequence?.schema !== 'public'
+    || sequence.name !== expectedSequences[index]
+    || sequence.anonPrivileges?.join(',') !== (audit.conclusion?.browserGrantHardeningRequired === false ? '' : sequencePrivileges.join(','))
+    || sequence.authenticatedPrivileges?.join(',') !== (audit.conclusion?.browserGrantHardeningRequired === false ? '' : sequencePrivileges.join(','))
+  ))) fail('public_quarantine_source_sequence_grants_invalid')
 
 await database.exec(sql)
 

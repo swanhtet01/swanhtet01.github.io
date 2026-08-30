@@ -1,10 +1,11 @@
 # Production activation runbook — the founder's one turnkey decision
 
-Status: READY — the self-serve end-to-end proof is complete (six-for-six,
+Status: READY FOR FOUNDER REVIEW, NOT AUTHORIZED — the self-serve end-to-end proof is complete (six-for-six,
 `hq/readiness/self-serve-pilot-proof.json`, approvalId
 `self-serve-proof-v11c-20260816`), so the env names and ordering below are
 proof-confirmed. Nothing here is executed by writing it; only the founder runs
-these steps. Author: tech lead. Date: 2026-08-16 (updated 2026-08-19).
+these steps. Production remains `protected-unapproved`. Author: tech lead.
+Date: 2026-08-16 (updated 2026-08-20).
 
 This is the single consolidated `production_activation` decision. Every
 technical proof it depends on is done on isolated infrastructure; this
@@ -13,19 +14,23 @@ self-serve product real for customers. Read top to bottom before running.
 
 ## 0. Preconditions (all satisfied before this runbook is valid)
 
-- hosted_postgres17: proven (v8-v10 applied to production OPS-745; advisor clear).
-- security: proven (OPS-747, advisor clear, quarantine applied).
+- hosted_postgres17: proven; protected production is PostgreSQL 17 at managed
+  schema v11 with zero drift from the local v11 target.
+- security: proven; the current advisor audit is clear, browser access to
+  current application objects is denied, and application-owner defaults do not
+  reopen browser grants. Provider-owned defaults remain monitored separately.
 - hosted_storage_privacy: proven on isolated branch (OPS-752, six-for-six).
 - managed_persistence: proven on isolated branch (OPS-759, seven-for-seven).
 - self_serve_pilot: SEVEN hosted defects fixed (fix/self-serve-remediation) and
   proven end-to-end on a deleted isolated v11 branch — six-for-six through the
   session pooler under real RLS. Evidence: `hq/readiness/self-serve-pilot-proof.json`
   (approvalId `self-serve-proof-v11c-20260816`). This precondition is SATISFIED.
-- The remediation branch is merged to trunk and released (paired release, live
-  verified) so the deployed app carries the seven fixes + the env-configurable
-  store version. **This is the one precondition still open — do not run steps
-  B-D until that release is live.** (Step A, applying v11, is safe prep at any
-  time: additive, opens nothing by itself.)
+- Migration v11 is already live on protected production. Do not apply it again
+  as an activation step.
+- The exact candidate must be merged to trunk and released as a paired,
+  live-verified app/public commit. **This and the founder approval receipt are
+  the open preconditions; do not provision the runtime login or run steps B-D
+  until both exist.**
 
 ## 1. What this decision does (and what stays reversible)
 
@@ -35,7 +40,7 @@ path fail-closes.
 
 | Step | Action | Reversibility |
 |---|---|---|
-| A | Apply migration v11 to PRODUCTION Supabase (zvtzwcimpvvtkowflhda) | Additive (a CHECK widen + 2 INSERT policies + 2 grants); a v12 could revoke, but v11 opens nothing by itself — the window flag (step C) is the real switch |
+| A | Reconfirm schema v11 and the clear read-only security audit; then provision the dedicated `supermega_trial_login` only through the reviewed production handoff | Re-running the read-only audit changes nothing. The login can be rotated separately and receives only the backend membership proven by the provisioner |
 | B | Set `SUPERMEGA_TRIAL_SCHEMA_VERSION=11` on the app runtime env | Flip back to 10 anytime; store fail-closes if it disagrees with the live schema |
 | C | Set `SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW=open` + the target-binding env | Set to anything else (or unset) → endpoint 503s again. This is THE customer-facing switch |
 | D | Set `SUPERMEGA_TRIAL_WRITES_ENABLED=true` (production writes on) | The one genuinely consequential, hardest-to-reverse step: once real customer tenants exist, they exist |
@@ -48,11 +53,21 @@ opens the door; step D lets writes land. You can do A-B, watch, then C-D.
 Env names/values below are proof-confirmed (the six-proof audit exercised this
 exact store configuration through the production connection path):
 
-**Step A — apply v11 to production** (Supabase MCP or dashboard SQL editor):
-- Apply `supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql`
-  verbatim against project zvtzwcimpvvtkowflhda.
-- Verify: `select schema_version from app_private.trial_schema_meta;` → 11.
-- Verify advisor still clear (get_advisors security → 0 ERROR / 0 WARN).
+**Step A — reconfirm v11, then provision the dedicated runtime login:**
+- Re-run the read-only schema/security audit and verify
+  `app_private.trial_schema_meta.schema_version` is 11 with no applicable
+  Security Advisor warning or error.
+- Keep the committed target `protected-unapproved` until the founder approves
+  the exact release, first named owner, runtime-role provisioning, and activation
+  window in one reviewed receipt.
+- After that receipt and its separate `activation-approved` guard commit exist,
+  run `tools/provision_supermega_runtime_role.py` with the production admin URL
+  and generated runtime password supplied only through ignored files. Require
+  `--expected-project-ref zvtzwcimpvvtkowflhda`, `--production-handoff`, the
+  exact approval UUID, and `--apply`.
+- Save the sanitized evidence receipt and validate a TLS runtime connection as
+  `supermega_trial_login`. Never put either database URL or password on the
+  command line, in Git, in a browser, or in a client-visible environment value.
 
 **Step B — tell the store to expect v11** (Vercel env, app runtime project):
 - `SUPERMEGA_TRIAL_SCHEMA_VERSION=11` (exactly the digits `11`).
@@ -70,8 +85,8 @@ exact store configuration through the production connection path):
 
 **Step D — enable production writes** (Vercel env):
 - `SUPERMEGA_TRIAL_WRITES_ENABLED=true`
-- The runtime login role must have the v11 INSERT grants (they ship in v11) and
-  the tolerated Supabase `postgres` membership (fix 5 accepts it).
+- The dedicated runtime login must pass the exact role-attribute, membership,
+  TLS, and no-ownership postconditions before writes are enabled.
 
 **Verify end-to-end (do this yourself before announcing):**
 - Sign up on app.supermega.dev, get a claim code, submit the activation request,
@@ -90,9 +105,8 @@ exact store configuration through the production connection path):
 
 ## 4. What you should NOT do
 
-- Do not set `SUPERMEGA_TRIAL_SCHEMA_VERSION=11` before v11 is applied to
-  production (step B before step A) — the store will fail-closed and the trial
-  path breaks.
+- Do not proceed if the read-only audit no longer reports schema 11 or if the
+  dedicated runtime-login postconditions fail.
 - Do not open the window (C) before B — the endpoint would try to write against
   a v10 schema that can't accept it (the exact bug the proof caught).
 - Do not enable writes (D) before you've personally verified a tenant creates

@@ -15,6 +15,7 @@
 // MENU-MOHINGA -- intentionally match no shipped catalog. Only the industry-pack pairing that
 // onboarding actually installs is asserted here.
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -26,7 +27,8 @@ const bundle = await build({
     contents: `
       export { clientImportTemplate, createClientImportPreview } from './client-onboarding.ts'
       export { shopIndustryPacks, shopIndustryPack, createShopServiceSchedule } from './shop-service-scheduling.ts'
-      export { shopBusinessTemplates } from '../products/shop/business-templates.ts'
+      export { shopBusinessTemplates, isShopServiceSku, shopBusinessTemplateSaleTotalMmk } from '../products/shop/business-templates.ts'
+      export { withShopServiceMyanmarNames } from './shop-service-scheduling.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/pack-pairing-entry.ts',
@@ -41,7 +43,8 @@ const bundle = await build({
 
 const {
   clientImportTemplate, createClientImportPreview, shopIndustryPacks, shopIndustryPack,
-  shopBusinessTemplates, createShopServiceSchedule,
+  shopBusinessTemplates, createShopServiceSchedule, isShopServiceSku,
+  shopBusinessTemplateSaleTotalMmk, withShopServiceMyanmarNames,
 } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
@@ -201,5 +204,139 @@ for (const pack of shopIndustryPacks) {
     )
   }
 }
+
+
+// --- a service business must be able to take a DEPOSIT ------------------------
+// The row above proves a treatment can be charged for. It does not prove the business can take
+// money BEFORE the work happens, and for a service trade that is everyday money rather than an
+// edge case: the spa ships a bridal package worth 325,500 MMK, held days ahead, and nobody runs
+// that business by collecting the whole sum on the morning.
+//
+// `paymentStatus` is binary -- an order is pending or reconciled, with nothing in between -- and
+// widening it is a much larger change than this. The restaurant pack already solved the same
+// problem the small way, with a REST-SVC-DEPOSIT catalog row: a deposit becomes an ordinary
+// counter sale, which means it is an ordinary order, with ordinary evidence, that the daily
+// close already understands. Copying that pattern is the whole fix.
+const depositPacks = ['restaurant', 'spa', 'gym']
+const catalogRows = (packId) => dataRows(clientImportTemplate('commerce', undefined, { shopIndustryPackId: packId }))
+  .map((line) => { const cells = line.split(','); return { sku: cells[0].trim(), name: cells[1].trim(), reorderAt: Number(cells[3]), priceMmk: Number(cells[4]) } })
+
+for (const packId of depositPacks) {
+  const deposit = catalogRows(packId).find((item) => /deposit/i.test(item.name))
+  check(Boolean(deposit), `${packId} pack: sells a deposit, so work can be booked against money already taken`)
+  check(Number.isSafeInteger(deposit?.priceMmk) && deposit?.priceMmk > 0,
+    `${packId} pack: its deposit carries a whole-MMK unit price, got ${deposit?.priceMmk}`)
+  // A deposit is a unit of money, not a thing on a shelf. reorder_at 0 keeps it out of stock
+  // alerts and out of the close's stock exceptions, exactly as the treatment rows are.
+  check(deposit?.reorderAt === 0, `${packId} pack: its deposit never raises a stock alert, got reorder_at ${deposit?.reorderAt}`)
+  check(isShopServiceSku(deposit?.sku ?? ''),
+    `${packId} pack: its deposit is a service SKU, so storefront ranking demotes it rather than merchandising it`)
+  const storefrontSkus = firstColumn(clientImportTemplate('ecommerce', undefined, { shopIndustryPackId: packId }))
+  check(!storefrontSkus.includes(deposit?.sku ?? ''),
+    `${packId} pack: and it is not put on the storefront, where a deposit is not a thing to browse`)
+}
+
+// The template route has to carry it too, or an owner who picks the trade gets a catalog that
+// cannot take a deposit while an owner who picks the bare pack gets one that can.
+for (const template of shopBusinessTemplates.filter((candidate) => depositPacks.includes(candidate.industryPackId))) {
+  check(template.catalog.some((item) => /deposit/i.test(item.name)),
+    `${template.id} trade: its catalog sells a deposit`)
+}
+
+// The package this is FOR. If the bridal order's value ever stops being far larger than a single
+// treatment, the argument for a deposit row weakens and someone should re-read this block.
+const beautySpa = shopBusinessTemplates.find((template) => template.id === 'beauty-spa')
+const bridalOrder = beautySpa?.pendingOrder
+const bridalTotal = bridalOrder ? shopBusinessTemplateSaleTotalMmk(beautySpa.id, bridalOrder) : 0
+check(bridalTotal > 300_000, `the spa's staged package is large enough to need part-payment, got ${bridalTotal.toLocaleString()} MMK`)
+const spaDeposit = catalogRows('spa').find((item) => /deposit/i.test(item.name))
+check(bridalTotal % spaDeposit.priceMmk === 0 || spaDeposit.priceMmk <= bridalTotal / 3,
+  `and the deposit unit is small enough to express a sensible part-payment against it, got ${spaDeposit.priceMmk.toLocaleString()} MMK against ${bridalTotal.toLocaleString()}`)
+
+// School is DELIBERATELY not in depositPacks, and this is the constraint that stopped it rather
+// than an oversight. verify_app_build.mjs pins the school shop sample's SKU list EQUAL to its
+// storefront SKU list, in order, so a deposit row added to the catalog would force a deposit
+// onto the storefront -- where openingStock 999 also makes it outrank the coursebooks. That is a
+// merchandising decision for a person, not a drive-by. If this check ever fails, the pin is gone
+// and school can have its deposit row.
+const schoolShopSkus = firstColumn(clientImportTemplate('commerce', undefined, { shopIndustryPackId: 'school' }))
+const schoolStorefrontSkus = firstColumn(clientImportTemplate('ecommerce', undefined, { shopIndustryPackId: 'school' }))
+check(schoolShopSkus.join(',') === schoolStorefrontSkus.join(','),
+  'school still pins its shop catalog and storefront to the same SKU list, which is why it has no deposit row yet')
+
+// --- Burmese treatment names must reach the counter ---------------------------
+// The appointment book shows a treatment in Burmese and the counter showed the same treatment in
+// English, while the translation sat in shop-service-scheduling.ts and was thrown away by the
+// copy that builds catalog rows. The owner reads one screen in her language and the next in
+// someone else's.
+//
+// withShopServiceMyanmarNames carries the pack's existing nameMy onto the catalog item for
+// SERVICE rows only. It invents nothing: retail goods have no Myanmar name in this codebase and
+// must not acquire one from a build script -- that needs a native trade writer.
+const spaItems = catalogRows('spa').map((item) => ({ sku: item.sku, name: item.name, onHand: 999, reorderAt: item.reorderAt, price: item.priceMmk }))
+const spaNamed = withShopServiceMyanmarNames(spaItems, 'spa')
+check(spaNamed.length === spaItems.length, 'naming returns the same catalog, row for row')
+
+const spaServices = createShopServiceSchedule('spa').services
+for (const service of spaServices) {
+  const item = spaNamed.find((candidate) => candidate.name === service.name || candidate.name.startsWith(`${service.name} `))
+  check(item?.nameMy === service.nameMy,
+    `spa: "${service.name}" reaches the counter as ${service.nameMy}, got ${item?.nameMy}`)
+}
+
+const retailGoods = spaNamed.filter((item) => !isShopServiceSku(item.sku))
+check(retailGoods.length > 0, 'the spa catalog still carries retail goods alongside its treatments')
+check(retailGoods.every((item) => item.nameMy === undefined),
+  `no Myanmar retail copy is invented, got ${retailGoods.filter((item) => item.nameMy !== undefined).map((item) => item.sku).join(', ')}`)
+
+// Every pack with Burmese service names must reach the counter the same way, or the spa is a
+// special case that quietly rots.
+for (const pack of shopIndustryPacks) {
+  const named = withShopServiceMyanmarNames(
+    catalogRows(pack.id).map((item) => ({ sku: item.sku, name: item.name, onHand: 999, reorderAt: item.reorderAt, price: item.priceMmk })),
+    pack.id,
+  )
+  for (const service of createShopServiceSchedule(pack.id).services) {
+    if (service.nameMy === undefined) continue
+    const item = named.find((candidate) => candidate.name === service.name || candidate.name.startsWith(`${service.name} `))
+    check(item?.nameMy === service.nameMy, `${pack.id}: "${service.name}" carries its Burmese name to the counter`)
+  }
+}
+
+// --- the Burmese must survive the build as Myanmar, not as mojibake -----------
+// A sister product shipped every Burmese string CP1252 double-encoded and 351 mojibake marks
+// reached its bundle, because shell output mangles Myanmar script and the first person to look
+// at it read real corruption as a terminal artifact. So this asserts CODEPOINTS on the value
+// that came through the bundler, not glyphs on a screen.
+//
+// U+1000..U+109F is the Myanmar block. U+FFFD is the replacement character a failed decode
+// leaves behind. The C1-range letters are the tell of a UTF-8 sequence read as CP1252 and
+// re-encoded -- "မ" arriving as "á".
+const MYANMAR = /^[က-႟​’ ()\/]+$/
+const MOJIBAKE = /[�À-ÿŒœŠšŽžƒˆ˜†-•…‰‹›€™]/
+let burmeseValues = 0
+for (const pack of shopIndustryPacks) {
+  const named = withShopServiceMyanmarNames(
+    catalogRows(pack.id).map((item) => ({ sku: item.sku, name: item.name, onHand: 999, reorderAt: item.reorderAt, price: item.priceMmk })),
+    pack.id,
+  )
+  for (const item of named) {
+    if (item.nameMy === undefined) continue
+    burmeseValues += 1
+    check(MYANMAR.test(item.nameMy), `${item.sku}: its Burmese name is Myanmar codepoints, got ${JSON.stringify(item.nameMy)}`)
+    check(!MOJIBAKE.test(item.nameMy), `${item.sku}: its Burmese name carries no double-encoding marks, got ${JSON.stringify(item.nameMy)}`)
+    check([...item.nameMy].every((character) => character.codePointAt(0) > 0x7f || ' ()/'.includes(character)),
+      `${item.sku}: its Burmese name did not decay to ASCII`)
+  }
+}
+check(burmeseValues >= 25, `every pack's treatments reach the counter in Burmese, got ${burmeseValues} named rows`)
+
+// A wiring check, not a behaviour check: the helper is worthless if the two provisioning paths
+// stop calling it. Both build CommerceItems from a CSV preview, which is exactly where the
+// Burmese name was being dropped.
+const runtimeSource = await readFile('showroom/src/core/product-onboarding-runtime.ts', 'utf8')
+check((runtimeSource.match(/withShopServiceMyanmarNames/g) ?? []).length >= 3,
+  'both onboarding routes still carry Burmese names onto the catalog they install')
+
 
 console.log(`industry pack sample pairing contract: ${checks} checks passed`)

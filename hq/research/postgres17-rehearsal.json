@@ -1,10 +1,10 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-19T10:43:25.694Z",
+  "recordedAt": "2026-08-22T07:44:43.854Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "e569b02c379662949bdbe9af473ec0fc007a3303",
+  "implementationCommit": "46501c0aca45120a4df1e1c879804fdedc9769aa",
   "implementation": {
-    "digest": "sha256:d133fe3bfd18a3fdd54c0e4a63c265bcc4b60a5ad78b866bfbc10bc2f18e1dfb",
+    "digest": "sha256:b89bcbb3c54838325146482dbfdb2e2ddd1bbcf29fd674376d85b263d38dbade",
     "paths": [
       "supermega_runtime/managed_context.py",
       "supermega_runtime/managed_activation.py",
@@ -16,6 +16,7 @@
       "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
       "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
       "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+      "supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "tools/activate_supermega_database.ps1",
       "tools/rehearse_supermega_postgres17.py",
@@ -24,8 +25,8 @@
       "tools/verify_managed_runtime_environment_values.mjs"
     ]
   },
-  "implementationDigest": "sha256:d133fe3bfd18a3fdd54c0e4a63c265bcc4b60a5ad78b866bfbc10bc2f18e1dfb",
-  "implementationFileCount": 16,
+  "implementationDigest": "sha256:b89bcbb3c54838325146482dbfdb2e2ddd1bbcf29fd674376d85b263d38dbade",
+  "implementationFileCount": 17,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -47,11 +48,12 @@
     "archiveBytes": 333927270,
     "observedArchiveSha256": "ef9b1e5e23d2e8a83914ba13d9dc536a72210fba53fd1808ff1f7e06bb22b106",
     "tlsActive": true,
-    "loopbackOnly": true
+    "loopbackOnly": true,
+    "startMode": "windows_direct_sandbox"
   },
   "migration": {
-    "count": 11,
-    "schemaVersion": 10,
+    "count": 12,
+    "schemaVersion": 11,
     "productionValidatorReady": true
   },
   "runtime": {
@@ -123,7 +125,7 @@
   "recovery": {
     "backupNonempty": true,
     "format": "pg_dump_custom",
-    "restoredSchemaVersion": 10
+    "restoredSchemaVersion": 11
   },
   "storage": {
     "catalogMode": "local_private_fixture",

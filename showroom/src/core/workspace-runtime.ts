@@ -25,6 +25,7 @@ import { requestStorageDurability } from './storage-durability'
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
+  managedBootstrapHasCapability,
   ManagedTrialError,
   requireManagedSurfaceState,
   saveManagedCommerceCommand,
@@ -499,13 +500,13 @@ type CommerceWorkspaceView = {
   writeReady: boolean
 }
 
-function managedCommerceView(record: ManagedStateRecord, workspaceId: string): CommerceWorkspaceView {
+function managedCommerceView(record: ManagedStateRecord, workspaceId: string, writeReady: boolean): CommerceWorkspaceView {
   if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Shop returned an invalid state envelope.')
   if (record.version === 0) {
     if (Object.keys(record.state).length) throw new Error('Managed Shop has state without a valid revision.')
-    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Shop catalog yet.', writeReady: false }
+    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Shop catalog yet.', writeReady }
   }
-  return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
+  return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady }
 }
 
 export type CommerceStuckRecovery = {
@@ -559,6 +560,29 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
   }, [localSnapshot, managedIdentity, managedSnapshot])
 
+  // Shop first-open is the moment durable storage starts to matter, and it matters for a
+  // company account exactly as much as for a signed-out one. UNCONDITIONAL ON PURPOSE:
+  // signing in moves the workspace ledger server-side, but several Shop stores stay
+  // device-local under a `managed:<workspaceId>` scope with no server copy at all --
+  // product photos and payment-QR blobs (product-image-store.ts / payment-qr-store.ts,
+  // both explicitly outside company backups), the unfinished order draft
+  // (commerce-order-draft.ts) and loyalty settings (shop-loyalty.ts). Browser eviction
+  // takes those permanently whoever is signed in, so every Shop gets to ask.
+  //
+  // Deliberately its own effect rather than a line inside the managed/local branch below.
+  // Reached from that branch it fired for company accounts anyway -- managedIdentity is
+  // null until /api/health answers and useManagedIdentity is enabled, so the local arm
+  // always ran first and the module memo made that first call the only one of the session
+  // -- which left the code doing the right thing for a reason that read as a bug.
+  //
+  // Fired here rather than in main.tsx so the marketing site never asks, and deliberately
+  // not awaited -- the answer only drives a warning banner, so it must not delay recovery,
+  // the first write, or first paint. Memoised inside the module, so the several surfaces
+  // that mount this hook still produce exactly one request per page session.
+  useEffect(() => {
+    void requestStorageDurability()
+  }, [])
+
   useEffect(() => {
     if (managedIdentity) {
       let active = true
@@ -571,13 +595,6 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       }
     }
     let active = true
-    // Shop first-open on a local (signed-out) workspace is the moment durable storage
-    // starts to matter: from here on, this browser holds the only copy of the shop's
-    // records. Fired here rather than in main.tsx so the marketing site never asks, and
-    // deliberately not awaited -- the answer only drives a warning banner, so it must
-    // not delay recovery, the first write, or first paint. Memoised inside the module,
-    // so the several surfaces that mount this hook still produce exactly one request.
-    void requestStorageDurability()
     recoverLocalCommerceSyncOutbox()
       .then((status) => {
         if (!active || identityRef.current) return
@@ -688,7 +705,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       .then((bootstrap) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const record = requireManagedSurfaceState(bootstrap, 'commerce', 'Shop')
-        const next = managedCommerceView(record, managedIdentity.workspaceId)
+        const next = managedCommerceView(record, managedIdentity.workspaceId, managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'))
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
@@ -790,7 +807,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     const workspaceId = managedIdentity.workspaceId
     const current = snapshotRef.current
     const initializing = eventType === 'commerce.workspace.initialized'
-    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
+    const modeReady = current.writeReady && (initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null)
     if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
       throw new Error(current.error || 'Managed Shop is not ready for writes.')
     }
@@ -813,13 +830,14 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         throw new Error('Managed Shop returned an invalid command result.')
       }
       const accepted = validateCommerceState(result.state)
-      let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
+      let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: current.writeReady }
       if (result.idempotent_replay) {
         const bootstrap = await loadManagedBootstrap(managedIdentity)
         if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the replay could be reconciled.')
         const refreshed = managedCommerceView(
           requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
           workspaceId,
+          managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'),
         )
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
           throw new Error('Managed Shop could not reconcile the committed command with current state.')
@@ -837,6 +855,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
           const refreshed = managedCommerceView(
             requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
             workspaceId,
+            managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'),
           )
           const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
@@ -861,7 +880,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
 
   const visible = managedIdentity ? managedSnapshot : localSnapshot
   const canWrite = managedIdentity
-    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
+    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady && syncStatus.status === 'ready'
   return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange] as const
 }
@@ -877,13 +896,13 @@ type ProductionWorkspaceView = {
   writeReady: boolean
 }
 
-function managedProductionView(record: ManagedStateRecord, workspaceId: string): ProductionWorkspaceView {
+function managedProductionView(record: ManagedStateRecord, workspaceId: string, writeReady: boolean): ProductionWorkspaceView {
   if (record.surface !== 'production' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Plant returned an invalid state envelope.')
   if (record.version === 0) {
     if (Object.keys(record.state).length) throw new Error('Managed Plant has state without a valid revision.')
-    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Plant plan yet.', writeReady: false }
+    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Plant plan yet.', writeReady }
   }
-  return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
+  return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady }
 }
 
 export function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) {
@@ -923,7 +942,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
       .then((bootstrap) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const record = requireManagedSurfaceState(bootstrap, 'production', 'Plant')
-        const next = managedProductionView(record, managedIdentity.workspaceId)
+        const next = managedProductionView(record, managedIdentity.workspaceId, managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write'))
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
@@ -989,7 +1008,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
     const workspaceId = managedIdentity.workspaceId
     const current = snapshotRef.current
     const initializing = eventType === 'production.workspace.initialized'
-    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
+    const modeReady = current.writeReady && (initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null)
     if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
       throw new Error(current.error || 'Managed Plant is not ready for writes.')
     }
@@ -1012,13 +1031,14 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
         throw new Error('Managed Plant returned an invalid command result.')
       }
       const accepted = validateProductionState(result.state)
-      let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
+      let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: current.writeReady }
       if (result.idempotent_replay) {
         const bootstrap = await loadManagedBootstrap(managedIdentity)
         if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the replay could be reconciled.')
         const refreshed = managedProductionView(
           requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
           workspaceId,
+          managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write'),
         )
         if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
           throw new Error('Managed Plant could not reconcile the committed command with current state.')
@@ -1036,6 +1056,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
           const refreshed = managedProductionView(
             requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
             workspaceId,
+            managedBootstrapHasCapability(bootstrap, managedIdentity, 'production.write'),
           )
           const conflict = { ...refreshed, error: '' }
           snapshotRef.current = conflict
@@ -1060,7 +1081,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
 
   const visible = managedIdentity ? managedSnapshot : localSnapshot
   const canWrite = managedIdentity
-    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
+    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady
   return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite] as const
 }
@@ -1103,21 +1124,59 @@ export function useSetupWorkspace() {
   return [setup, updateSetup] as const
 }
 
+// The two halves of "is this definitely a signed-out shop", pulled out as pure functions
+// so the question can be ENUMERATED in a suite rather than asserted by eye. Both are used
+// by the code below and by CoreApp; neither is test-only scaffolding.
+//
+// The distinction they exist for is the af705d42 bug: runtime.status starts at 'checking',
+// which leaves useManagedIdentity disabled, which makes managedIdentity null -- so on first
+// mount a signed-IN operator is indistinguishable from a local shop to any check of the
+// shape `if (!managedIdentity)`. Anything that fires on being signed OUT has to wait for
+// both answers.
+
+// Whether the identity probe has answered for the CURRENT `enabled`. When the hook is
+// disabled there is nothing to wait for, so it is trivially settled -- the caller is
+// responsible for also checking that health itself has answered.
+export function managedIdentitySettled(enabled: boolean, probed: boolean): boolean {
+  return enabled ? probed : true
+}
+
+// The full gate. All three must hold: health answered at all, the identity probe settled
+// behind it, and no managed identity came back.
+export function localShopConfirmed(runtimeStatus: string, settled: boolean, managedIdentity: unknown): boolean {
+  return runtimeStatus !== 'checking' && settled && !managedIdentity
+}
+
+// Third tuple element is `settled`: whether the identity question has actually been
+// ANSWERED, as opposed to merely not answered yet. A null identity on its own is
+// ambiguous -- it means "signed out" only once `settled` is true, and "nobody has asked"
+// before that -- and every caller that branches on being signed OUT needs the difference.
+// Callers that only branch on being signed IN can keep ignoring it.
 export function useManagedIdentity(enabled: boolean) {
   const [identity, setIdentity] = useState<ManagedIdentity | null>(null)
+  const [probed, setProbed] = useState(false)
 
   useEffect(() => {
     if (!enabled) return undefined
     let active = true
     currentManagedIdentity()
       .then((current) => {
-        if (active) setIdentity(current)
+        if (active) { setIdentity(current); setProbed(true) }
       })
       .catch(() => {
-        if (active) setIdentity(null)
+        if (active) { setIdentity(null); setProbed(true) }
       })
     return () => { active = false }
   }, [enabled])
 
-  return [enabled ? identity : null, setIdentity] as const
+  // Derived during render rather than stored by the effect, deliberately. If the effect
+  // set it, the render that first flips `enabled` false->true would still carry the
+  // previous `settled: true`, and useEffect runs AFTER paint -- so a signed-in session
+  // would paint one frame looking signed out. Deriving it from `enabled` makes it false on
+  // the very same render that enabled it, which closes that frame.
+  //
+  // `enabled` here is `runtime.status === 'enterprise'`, which settles once and does not
+  // oscillate; if it ever did, a second true would report settled from the first probe.
+  const settled = managedIdentitySettled(enabled, probed)
+  return [enabled ? identity : null, setIdentity, settled] as const
 }

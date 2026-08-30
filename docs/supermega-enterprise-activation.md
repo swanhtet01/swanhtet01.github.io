@@ -61,6 +61,17 @@ The preflight is read-only and fail-closed. It requires PostgreSQL 17, hostname-
 uv run python -m supermega_runtime.managed_activation prepare --request-file .tmp\managed-trial-request.json --workspace-id <WORKSPACE_ID> --owner-actor-id <SUPABASE_AUTH_USER_UUID> --approval-id <REVIEWED_APPROVAL_ID> --approved-by <NAMED_OWNER> --approved-at <UTC_ISO_TIMESTAMP> --project-ref <NON_PRODUCTION_PROJECT_REF> --release-commit <EXACT_REVIEWED_COMMIT> --admin-ca-file .tmp\supermega-rehearsal-ca.crt --output .tmp\managed-activation-plan.json
 ```
 
+For a client with one or more purchased products, bind the verified private preparation, the per-product portal recipes, every exact managed-trial request, and the current managed activation plan into one tenant activation manifest. Repeat `--managed-request` in canonical product order (`shop`, `plant`, `website`, `ecommerce`) and include only products present in the portal bundle:
+
+```powershell
+npm run client:portal:prepare -- --preparation .tmp\client-preparation.json --output .tmp\client-portal-bundle.json
+npm run client:portal:verify -- --bundle .tmp\client-portal-bundle.json --preparation .tmp\client-preparation.json
+npm run client:portal:bind -- --bundle .tmp\client-portal-bundle.json --preparation .tmp\client-preparation.json --activation-plan .tmp\managed-activation-plan.json --managed-request .tmp\shop-request.json --managed-request .tmp\website-request.json --managed-request .tmp\ecommerce-request.json --output .tmp\client-portal-activation.json
+npm run client:portal:activation:verify -- --manifest .tmp\client-portal-activation.json --bundle .tmp\client-portal-bundle.json --preparation .tmp\client-preparation.json --activation-plan .tmp\managed-activation-plan.json --managed-request .tmp\shop-request.json --managed-request .tmp\website-request.json --managed-request .tmp\ecommerce-request.json
+```
+
+The manifest is a no-write handoff, not activation. It fails closed if the workspace, named owner, product set, product order, template, source-request digest, recipe plan, setup route, release target, or custom-extension policy drifts. It retains the executable managed activation plan, binds one owner membership to the exact purchased products, preserves Ecommerce's Shop-backed commerce surface without granting Ecommerce to Shop-only tenants, and performs no tenant, provider, deployment, message, or production write.
+
 10. Save the non-production runtime URL in an ignored local file such as `.tmp/supermega-nonproduction-database-url.txt`. Save a separate least-privilege, read-only catalog URL for the same project's Storage audit in `.tmp/supermega-nonproduction-storage-audit-url.txt`. Retain the administrative migration URL in `.tmp/supermega-rehearsal-admin-url.txt` only for the bounded membership operation. All URLs must identify the same explicit project ref; the activation validator rejects cross-project evidence, non-Supabase hosts, URL-level routing overrides, unbound pooler usernames, and the transaction-mode pooler for administrative activation. Never pass a database URL directly on the command line.
 11. Run the read-only database, browser-auth, activation-plan, and workspace-state audit:
 

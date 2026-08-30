@@ -17,7 +17,7 @@ The pitch, verbatim from approved copy (eyebrow `Shop operations`):
 3. Press `Create Shop and start selling`. The app provisions the industry sample and opens the first task at `/shop/?tab=counter`. The stated first result is `Complete a sample sale`.
 4. Confirm the sidebar badge reads `Demo mode` and the counter heading shows the working-sample pack context.
 
-Parallel-lane note: a Shop business-template deep link into guided setup is landing in a parallel lane; its planned format is a "?template=" query parameter added to the settings route (for example "?product=shop&template=retail"). It is not in the app at this commit — do not add a template parameter to app URLs in a live demo. Template selection happens inside setup today. The only live `template` parameters are on the public contact page (the `Template, if known` field) and in the app-generated contact links quoted in section 5.
+Shop trade links may include a reviewed `template` query parameter, such as ?product=shop&template=mini-mart. Guided setup resolves it to the matching trade and industry pack, keeps the business-type picker visible, and provisions that local working sample only after the user submits setup. Service businesses without a trade template use the `pack` parameter, such as ?product=shop&pack=spa. Unknown values fail back to an explicit setup choice; never describe a query parameter alone as client activation.
 
 ## 3. Demo script
 

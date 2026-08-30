@@ -203,7 +203,7 @@ export function buildReleaseHandoff(input) {
       forceUpdateAllowed: false,
     },
     verification: {
-      command: 'npm run app:verify',
+      command: 'npm run app:verify:local -- --serial',
       passed: true,
       verifiedCommit: candidateCommit,
       workflowAuthority,
@@ -263,7 +263,10 @@ function run(file, args, { inherit = false, allowFailure = false } = {}) {
     encoding: 'utf8',
     env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
     maxBuffer: 16 * 1024 * 1024,
-    timeout: 10 * 60 * 1_000,
+    // The canonical Windows runner executes hundreds of gates serially on the
+    // Ally. Match the guarded production workflow's 35-minute hard bound so a
+    // complete green run is possible without permitting an unbounded process.
+    timeout: 35 * 60 * 1_000,
     windowsHide: true,
     stdio: inherit ? 'inherit' : undefined,
   })
@@ -292,9 +295,10 @@ function remoteHead(ref) {
 }
 
 function appVerifyCommand() {
-  if (process.platform !== 'win32') return { file: 'npm', args: ['run', 'app:verify'] }
-  const command = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe')
-  return { file: command, args: ['/d', '/s', '/c', 'npm.cmd run app:verify'] }
+  return {
+    file: process.execPath,
+    args: [resolve(root, 'tools', 'run_app_verify.mjs'), '--serial'],
+  }
 }
 
 async function boundedJson(url) {
