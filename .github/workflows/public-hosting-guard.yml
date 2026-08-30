@@ -10,15 +10,18 @@ on:
       - 'CNAME'
       - 'tools/bootstrap_supermega_ops.ps1'
       - 'tools/deploy_website_actions.ps1'
+  # NOTE (2026-08-31): the pull_request trigger is deliberately NOT path-filtered.
+  # This workflow produces a check that branch protection requires. A required check
+  # only satisfies the rule if it actually REPORTS on the pull request, and a
+  # path-filtered trigger means it never starts on a pull request that misses the
+  # filter -- so such a pull request sits permanently at "required status checks are
+  # expected" and can never merge, however green it is. Measured on live PRs: ones
+  # touching only showroom/, docs/ or hq/ reported validate and nothing else.
+  # The push and schedule triggers below keep their filters; only the PR trigger is
+  # broad, and every job here is read-only.
   pull_request:
     branches:
       - main
-    paths:
-      - '.github/workflows/public-hosting-guard.yml'
-      - '.github/workflows/showroom-pages.yml'
-      - 'CNAME'
-      - 'tools/bootstrap_supermega_ops.ps1'
-      - 'tools/deploy_website_actions.ps1'
   workflow_dispatch:
   schedule:
     - cron: '5 2 * * 1'
