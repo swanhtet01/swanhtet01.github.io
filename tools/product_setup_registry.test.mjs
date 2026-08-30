@@ -11,11 +11,15 @@ const {
   conflictingOwnerRecord,
   managedTemplateDoorRequiresReview,
   normalizeSetup,
+  plantPackSaveAllowed,
   readProductSetup,
   rememberProductSetup,
   resolveSetupTemplateDoor,
   resolveSetupVariantDoor,
   seedSetupForProduct,
+  setupDoorQueryAfterChoice,
+  setupVariantMatchesSource,
+  shopTemplateDoorState,
 } = await import(moduleUrl)
 const onboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
 
@@ -121,6 +125,40 @@ test('the same saved Plant pack needs no redundant choice', () => {
   })
 })
 
+test('resolving one compound Plant door choice preserves the other unresolved choice', () => {
+  assert.equal(
+    setupDoorQueryAfterChoice('plant', 'production-control', 'food-beverage', 'template'),
+    'product=plant&pack=food-beverage',
+  )
+  assert.equal(
+    setupDoorQueryAfterChoice('plant', 'production-control', 'food-beverage', 'variant'),
+    'product=plant&template=production-control',
+  )
+  const continueSavedTemplateSource = onboardingSource.slice(
+    onboardingSource.indexOf('function continueSavedTemplate()'),
+    onboardingSource.indexOf('function useRequestedTemplate()'),
+  )
+  assert.doesNotMatch(continueSavedTemplateSource, /setPlantIndustryPackId/)
+})
+
+test('a preserved local Plant cannot be relabelled while reviewed managed setup stays separate', () => {
+  assert.equal(plantPackSaveAllowed(false, 'preserved'), false)
+  assert.equal(plantPackSaveAllowed(false, 'installed'), true)
+  assert.equal(plantPackSaveAllowed(false, 'current'), true)
+  assert.equal(plantPackSaveAllowed(true, null), true)
+  assert.equal(plantPackSaveAllowed(true, 'preserved'), false)
+  assert.equal(setupVariantMatchesSource('apparel', 'food-beverage'), false)
+  assert.equal(setupVariantMatchesSource('apparel', 'apparel'), true)
+  assert.equal(setupVariantMatchesSource('apparel', null), true)
+})
+
+test('Shop trade presentation remains neutral until local or managed identity is known', () => {
+  assert.equal(shopTemplateDoorState('bakery', false, false), 'checking')
+  assert.equal(shopTemplateDoorState('bakery', true, false), 'local-active')
+  assert.equal(shopTemplateDoorState('bakery', false, true), 'managed-unapplied')
+  assert.equal(shopTemplateDoorState(null, false, false), 'none')
+})
+
 test('only a requested trade on a ready managed Shop requires the blocking review boundary', () => {
   assert.equal(managedTemplateDoorRequiresReview(true, 'managed-ready', 'bakery'), true)
   assert.equal(managedTemplateDoorRequiresReview(true, 'managed-unprovisioned', 'bakery'), false)
@@ -139,17 +177,30 @@ test('Plant pack mismatch stays blocked until an explicit reviewed choice and la
     'setPlantPackChangeSelected(true)',
     'setPlantPackChangeSelected(hasSavedPlantSetup && id !== savedPlantIndustryPackId)',
     'if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack)',
+    "clearSetupDoorDimension('template')",
+    "clearSetupDoorDimension('variant')",
+    'if (!setupVariantMatchesSource(plantIndustryPackId, linkedPlantTemplate?.industryPackId))',
+    'was not provisioned or saved.',
+    'if (!plantPackSaveAllowed(false, plantProvisionDisposition))',
+    'Existing Plant records were kept.',
     'savePlantIndustryPackId(plantIndustryPackId, window.localStorage)',
   ]) assert.ok(onboardingSource.includes(token), `Plant pack review guard missing: ${token}`)
+  assert.ok(
+    onboardingSource.indexOf('if (!setupVariantMatchesSource(plantIndustryPackId, linkedPlantTemplate?.industryPackId))')
+      < onboardingSource.indexOf('plantProvisionDisposition = await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)'),
+    'a conflicting Shop-linked Plant pack must stop before provisioning',
+  )
   assert.ok(
     onboardingSource.indexOf('if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack)')
       < onboardingSource.indexOf('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)'),
     'Plant pack choice must fail closed before the saved pack can change',
   )
   assert.ok(
-    onboardingSource.indexOf('await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)')
+    onboardingSource.indexOf('plantProvisionDisposition = await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)')
+      < onboardingSource.indexOf('if (!plantPackSaveAllowed(false, plantProvisionDisposition))')
+      && onboardingSource.indexOf('if (!plantPackSaveAllowed(false, plantProvisionDisposition))')
       < onboardingSource.indexOf('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)'),
-    'Plant pack persistence must follow successful local provisioning',
+    'Plant pack persistence must follow provisioning and its preserved-workspace refusal',
   )
 })
 

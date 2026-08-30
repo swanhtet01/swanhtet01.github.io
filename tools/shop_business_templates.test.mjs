@@ -28,7 +28,9 @@ test('a trade URL cannot relabel or operate an existing managed catalog', () => 
     'Continue existing managed Shop',
     'to="/shop/?tab=counter"',
   ]) assert.ok(coreAppSource.includes(token), `managed trade boundary missing: ${token}`)
-  assert.match(coreAppSource, /managedIdentity && requestedShopTemplate\s*\? `The \$\{requestedShopTemplate\.name\.en\} public request is not applied/)
+  assert.ok(coreAppSource.includes('shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))'))
+  assert.ok(coreAppSource.includes('Checking workspace access before applying the ${requestedShopTemplate.name.en} sample. Nothing has been applied.'))
+  assert.match(coreAppSource, /requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate\s*\? `The \$\{requestedShopTemplate\.name\.en\} public request is not applied/)
 })
 
 test('registry carries exactly the 10 supported Myanmar business types', () => {

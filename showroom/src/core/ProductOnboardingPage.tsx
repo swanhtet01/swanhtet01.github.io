@@ -12,6 +12,7 @@ import {
 } from './pilot-outcome'
 import { currentProductionShiftClose } from './production-workspace'
 import {
+  plantPackSaveAllowed,
   productContracts,
   managedTrialRequestUrl,
   readProductSetup,
@@ -19,7 +20,11 @@ import {
   resolveSetupTemplateDoor,
   resolveSetupVariantDoor,
   seedSetupForProduct,
+  setupDoorQueryAfterChoice,
+  setupVariantMatchesSource,
   templateFor,
+  type SetupDoorDimension,
+  type SetupProvisionDisposition,
   type SetupProductId,
   type SetupState,
 } from './product-setup'
@@ -42,8 +47,10 @@ import {
   provisionLocalShopBusinessTemplateSample,
   provisionLocalShopIndustryPack,
   provisionLocalShopWorkingSample,
+  readLocalShopBusinessTemplateId,
   readLocalShopIndustryPackId,
 } from './product-onboarding-runtime'
+import { plantBusinessTemplateForShopTemplateId } from '../products/plant/business-templates'
 import {
   shopBusinessTemplate,
   shopBusinessChoiceFromIndustryPack,
@@ -338,16 +345,19 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     })
   }
 
-  function clearTemplateDoorQuery() {
-    navigate(`/settings/?product=${encodeURIComponent(onboardingProduct.slug)}`, { replace: true })
+  function clearSetupDoorDimension(resolvedDimension: SetupDoorDimension) {
+    const query = setupDoorQueryAfterChoice(
+      onboardingProduct.slug,
+      templateDoorSelection.requestedTemplate?.id,
+      requestedPlantIndustryPackId,
+      resolvedDimension,
+    )
+    navigate(`/settings/?${query}`, { replace: true })
   }
 
   function continueSavedTemplate() {
     if (!pendingRequestedWorkflowTemplate) return
-    if (product === 'production') {
-      setPlantIndustryPackId(readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
-    }
-    clearTemplateDoorQuery()
+    clearSetupDoorDimension('template')
     setNotice(`Continuing the saved ${onboardingTemplate.name} setup. The requested ${pendingRequestedWorkflowTemplate.name} starting point was not applied.`)
   }
 
@@ -361,7 +371,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       startedAt: undefined,
       savedAt: undefined,
     })
-    clearTemplateDoorQuery()
+    clearSetupDoorDimension('template')
     setNotice(`${requested.name} is selected for reviewed setup. Existing ${onboardingProduct.name} records were not overwritten; setup will run only after you submit this form.`)
   }
 
@@ -369,7 +379,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     if (!pendingRequestedPlantIndustryPack) return
     setPlantIndustryPackId(savedPlantIndustryPackId)
     setPlantPackChangeSelected(false)
-    clearTemplateDoorQuery()
+    clearSetupDoorDimension('variant')
     setNotice(`Continuing the saved ${plantIndustryPack(savedPlantIndustryPackId).name} Plant type. The requested ${pendingRequestedPlantIndustryPack.name} pack was not applied.`)
   }
 
@@ -378,7 +388,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     const requested = pendingRequestedPlantIndustryPack
     setPlantIndustryPackId(requested.id)
     setPlantPackChangeSelected(true)
-    clearTemplateDoorQuery()
+    clearSetupDoorDimension('variant')
     setNotice(`${requested.name} is selected for reviewed setup. Existing Plant records and the saved plant type were not changed; provisioning runs only after you submit this form.`)
   }
 
@@ -413,6 +423,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       // then reached the owner stamped as a completed setup: the appointment book left on the old
       // industry, the catalog never installed, the workspace never written -- interface advanced.
       let carriedOver = false
+      let plantProvisionDisposition: SetupProvisionDisposition | null = null
       // `&& !managedIdentity` mirrors the ecommerce branch below, and the asymmetry between them
       // WAS the bug: these provisioners write to window.localStorage, a store a managed Shop never
       // reads, so for a signed-in owner they reported a trade template as installed while the
@@ -435,13 +446,22 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       // packs -- while the company workspace stayed at version 0 and ProductionPage rendered
       // 'managed-unprovisioned'. See managedPlantOnboardingNotice in product-onboarding-runtime.ts.
       if (product === 'production' && !managedIdentity) {
-        await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
+        const linkedPlantTemplate = plantBusinessTemplateForShopTemplateId(readLocalShopBusinessTemplateId(window.localStorage))
+        if (!setupVariantMatchesSource(plantIndustryPackId, linkedPlantTemplate?.industryPackId)) {
+          const linkedPackName = plantIndustryPack(linkedPlantTemplate?.industryPackId ?? savedPlantIndustryPackId).name
+          setNotice(`The existing Shop sample links this device to ${linkedPackName} Plant. The requested ${selectedPlantIndustryPack.name} type was not provisioned or saved.`)
+          return
+        }
+        plantProvisionDisposition = await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
+        if (!plantPackSaveAllowed(false, plantProvisionDisposition)) {
+          setNotice(`Existing Plant records were kept. The requested ${selectedPlantIndustryPack.name} type was not saved or applied because this workspace could not be replaced safely.`)
+          return
+        }
       }
-      // Save the reviewed device preference only after local provisioning succeeds. A rejected
-      // or failed pack request must leave both the production record and the retained Plant type
-      // untouched. Managed Plant has no local sample write, but still saves this device preference
-      // after the owner submits the same reviewed form.
-      if (product === 'production') {
+      // Local preference follows only an installed/current sample. Managed Plant deliberately
+      // has no browser sample write; its explicit form submit saves the device-only choice before
+      // routing to the separate company-plan review, where nothing is written without confirmation.
+      if (product === 'production' && plantPackSaveAllowed(Boolean(managedIdentity), plantProvisionDisposition)) {
         savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
         setPlantPackChangeSelected(false)
       }

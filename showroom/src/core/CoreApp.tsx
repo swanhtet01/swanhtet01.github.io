@@ -29,6 +29,7 @@ import {
   SHOP_ORDER_DRAFT_RESET_PREFIX,
   clientSetupPath,
   managedTemplateDoorRequiresReview,
+  shopTemplateDoorState,
   type SetupProductId,
 } from './product-setup'
 import {
@@ -1124,10 +1125,13 @@ export function OperationsPage({ product }: { product: ProductId }) {
   }
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
+  const requestedShopTemplateState = shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))
   const productCopy = view === 'commerce'
-    ? managedIdentity && requestedShopTemplate
+    ? requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate
       ? `The ${requestedShopTemplate.name.en} public request is not applied to this company catalog until a separate managed review.`
-      : requestedShopTemplate && commerceTab === 'counter'
+      : requestedShopTemplateState === 'checking' && requestedShopTemplate
+        ? `Checking workspace access before applying the ${requestedShopTemplate.name.en} sample. Nothing has been applied.`
+      : requestedShopTemplateState === 'local-active' && requestedShopTemplate && commerceTab === 'counter'
       ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
       : {
         today: 'See today’s next job and key numbers.',

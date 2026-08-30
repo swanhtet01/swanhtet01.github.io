@@ -148,6 +148,63 @@ export function resolveSetupVariantDoor<T extends string>(
   }
 }
 
+export type SetupDoorDimension = 'template' | 'variant'
+
+// Resolving one dimension of a compound public door must not silently resolve the
+// other. Only validated ids reach this helper; unknown query values are discarded by
+// their source-owned registries before the remaining URL is constructed.
+export function setupDoorQueryAfterChoice(
+  productSlug: string,
+  requestedTemplateId: string | null | undefined,
+  requestedVariantId: string | null | undefined,
+  resolvedDimension: SetupDoorDimension,
+) {
+  const params = new URLSearchParams({ product: productSlug })
+  if (resolvedDimension !== 'template' && requestedTemplateId) params.set('template', requestedTemplateId)
+  if (resolvedDimension !== 'variant' && requestedVariantId) params.set('pack', requestedVariantId)
+  return params.toString()
+}
+
+export type SetupProvisionDisposition = 'installed' | 'current' | 'preserved'
+
+// A local Plant preference may follow only an exact installed/current sample. A
+// preserved workspace is authoritative and must not be relabelled. Managed setup has
+// no local sample by design; its preference is saved only by the explicit reviewed
+// form submit before routing to the separate company-plan review.
+export function plantPackSaveAllowed(
+  hasManagedIdentity: boolean,
+  localProvisionDisposition: SetupProvisionDisposition | null,
+) {
+  return hasManagedIdentity
+    ? localProvisionDisposition === null
+    : localProvisionDisposition === 'installed'
+    || localProvisionDisposition === 'current'
+}
+
+// A source-bound local trade may select a more specific Plant sample than the
+// generic pack request. Refuse a contradictory request before either sample or
+// preference is written; matching and unbound requests can continue.
+export function setupVariantMatchesSource<T extends string>(
+  requestedId: T,
+  sourceBoundId: T | null | undefined,
+) {
+  return !sourceBoundId || requestedId === sourceBoundId
+}
+
+export type ShopTemplateDoorState = 'none' | 'checking' | 'local-active' | 'managed-unapplied'
+
+// A null identity is ambiguous until the identity probe settles. Public trade copy
+// can describe an active sample only after the local-workspace gate is confirmed.
+export function shopTemplateDoorState(
+  requestedTemplateId: string | null | undefined,
+  confirmedLocalShop: boolean,
+  hasManagedIdentity: boolean,
+): ShopTemplateDoorState {
+  if (!requestedTemplateId) return 'none'
+  if (confirmedLocalShop) return 'local-active'
+  return hasManagedIdentity ? 'managed-unapplied' : 'checking'
+}
+
 // A public Shop trade is not evidence that an existing managed catalog has that
 // shape. A ready company workspace therefore needs an explicit review boundary;
 // unprovisioned workspaces keep using their existing reviewed creation form.
