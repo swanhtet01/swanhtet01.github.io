@@ -24,6 +24,9 @@ const APPROVAL_ENV = 'SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL'
 const TOKEN_ENVS = ['GITHUB_TOKEN', 'GH_TOKEN']
 const API_BASE = `https://api.github.com/repos/${REPOSITORY}`
 const SHA_PATTERN = /^[0-9a-f]{40}$/
+const WRITE_CONFIRMED_PERFORMED = 'confirmed_performed'
+const WRITE_CONFIRMED_NOT_PERFORMED = 'confirmed_not_performed'
+const WRITE_OUTCOME_UNKNOWN = 'outcome_unknown'
 
 function fail(code) {
   throw new Error(code)
@@ -31,6 +34,66 @@ function fail(code) {
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function githubWriteControls({ attempted, outcome }) {
+  const performedByOutcome = {
+    [WRITE_CONFIRMED_PERFORMED]: true,
+    [WRITE_CONFIRMED_NOT_PERFORMED]: false,
+    [WRITE_OUTCOME_UNKNOWN]: null,
+  }
+  if (!(outcome in performedByOutcome)) fail('github_main_protection_apply_write_outcome_invalid')
+  if (!attempted && outcome !== WRITE_CONFIRMED_NOT_PERFORMED) fail('github_main_protection_apply_write_outcome_invalid')
+  const performed = performedByOutcome[outcome]
+  return {
+    githubWriteAttempted: attempted,
+    githubWritesPerformed: performed,
+    githubWriteOutcome: outcome,
+    githubWriteRetryAllowed: false,
+    repositorySettingsMutated: performed,
+  }
+}
+
+function safeFailureCode(error) {
+  const code = String(error?.message || 'github_main_protection_apply_failed')
+  return /^[a-z0-9_:-]{1,240}$/.test(code) ? code : 'github_main_protection_apply_failed'
+}
+
+function writeFailure(code, { attempted, outcome }) {
+  const error = new Error(code)
+  error.writeOutcome = { attempted, outcome }
+  return error
+}
+
+function throwWithWriteOutcome(error, attempted) {
+  if (isRecord(error?.writeOutcome)) throw error
+  throw writeFailure(
+    attempted ? 'github_main_protection_apply_write_outcome_unknown' : safeFailureCode(error),
+    {
+      attempted,
+      outcome: attempted ? WRITE_OUTCOME_UNKNOWN : WRITE_CONFIRMED_NOT_PERFORMED,
+    },
+  )
+}
+
+export function buildGitHubMainProtectionApplyFailureReceipt(error) {
+  const writeOutcome = isRecord(error?.writeOutcome)
+    ? error.writeOutcome
+    : { attempted: false, outcome: WRITE_CONFIRMED_NOT_PERFORMED }
+  return {
+    ok: false,
+    contract: GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
+    error: safeFailureCode(error),
+    controls: {
+      ...githubWriteControls(writeOutcome),
+      branchMutated: false,
+      pullRequestCreated: false,
+      mergePerformed: false,
+      deploymentPerformed: false,
+      supabaseMutated: false,
+      credentialValueExposed: false,
+    },
+  }
 }
 
 function digest(value) {
@@ -237,8 +300,7 @@ export function buildApplyPlan({ proposalReceipt, gitState = currentGitState(), 
     ],
     controls: {
       githubWritesApproved: approval.approved,
-      githubWritesPerformed: false,
-      repositorySettingsMutated: false,
+      ...githubWriteControls({ attempted: false, outcome: WRITE_CONFIRMED_NOT_PERFORMED }),
       branchMutated: false,
       pullRequestCreated: false,
       mergePerformed: false,
@@ -280,7 +342,10 @@ export function validateApplyReport(packet, { expectedMode = null } = {}) {
   if (!isRecord(packet.token) || packet.token.valueExposed !== false) fail('github_main_protection_apply_report_token_invalid')
   if (packet.mode === 'plan_only_no_github_write') {
     if (packet.ok !== true
+      || packet.controls?.githubWriteAttempted !== false
       || packet.controls?.githubWritesPerformed !== false
+      || packet.controls?.githubWriteOutcome !== WRITE_CONFIRMED_NOT_PERFORMED
+      || packet.controls?.githubWriteRetryAllowed !== false
       || packet.controls?.repositorySettingsMutated !== false
       || packet.controls?.branchMutated !== false
       || packet.controls?.pullRequestCreated !== false
@@ -309,7 +374,10 @@ export function validateApplyReport(packet, { expectedMode = null } = {}) {
       fail('github_main_protection_apply_plan_requirements_invalid')
     }
   } else if (packet.mode === 'executed_owner_approved_github_settings_write') {
-    if (packet.controls?.githubWritesPerformed !== true
+    if (packet.controls?.githubWriteAttempted !== true
+      || packet.controls?.githubWritesPerformed !== true
+      || packet.controls?.githubWriteOutcome !== WRITE_CONFIRMED_PERFORMED
+      || packet.controls?.githubWriteRetryAllowed !== false
       || packet.controls?.repositorySettingsMutated !== true
       || packet.controls?.branchMutated !== false
       || packet.controls?.credentialValueExposed !== false
@@ -332,97 +400,113 @@ export async function applyGitHubMainProtectionWithClient({
   request = fetch,
   expectedHead = null,
 } = {}) {
-  if (!gitState.clean) fail('github_main_protection_apply_worktree_dirty')
-  const proposal = proposalReceipt?.packet
-  if (!isRecord(proposal)) fail('github_main_protection_apply_proposal_required')
-  const expected = normalizedExpectedHead(expectedHead, { required: true })
-  if (String(gitState.head || '').toLowerCase() !== expected) fail('github_main_protection_apply_expected_head_mismatch')
-  const approval = validateOwnerApproval({ proposal, env, execute: true })
-  const token = tokenFromEnv(env)
-  if (!token) fail('github_main_protection_apply_token_required')
-  const apiVersion = proposal.githubApi?.apiVersion
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(apiVersion || ''))) fail('github_main_protection_apply_api_version_invalid')
+  let githubWriteAttempted = false
+  try {
+    if (!gitState.clean) fail('github_main_protection_apply_worktree_dirty')
+    const proposal = proposalReceipt?.packet
+    if (!isRecord(proposal)) fail('github_main_protection_apply_proposal_required')
+    const expected = normalizedExpectedHead(expectedHead, { required: true })
+    if (String(gitState.head || '').toLowerCase() !== expected) fail('github_main_protection_apply_expected_head_mismatch')
+    const approval = validateOwnerApproval({ proposal, env, execute: true })
+    const token = tokenFromEnv(env)
+    if (!token) fail('github_main_protection_apply_token_required')
+    const apiVersion = proposal.githubApi?.apiVersion
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(apiVersion || ''))) fail('github_main_protection_apply_api_version_invalid')
 
-  const before = await githubRequest({
-    path: '/rulesets',
-    token: token.value,
-    apiVersion,
-    request,
-  })
-  if (!before.ok) fail(`github_main_protection_apply_rulesets_fetch_failed:${before.status}`)
-  const selected = selectRulesetAction(before.json)
-  const write = await githubRequest({
-    path: selected.action === 'create' ? '/rulesets' : `/rulesets/${selected.rulesetId}`,
-    method: selected.method,
-    token: token.value,
-    apiVersion,
-    body: proposal.proposedRuleset,
-    request,
-  })
-  if (!write.ok) fail(`github_main_protection_apply_write_failed:${write.status}`)
-
-  const [branch, rulesets] = await Promise.all([
-    githubRequest({ path: '/branches/main', token: token.value, apiVersion, request }),
-    githubRequest({ path: '/rulesets', token: token.value, apiVersion, request }),
-  ])
-  if (!branch.ok) fail(`github_main_protection_apply_branch_verify_fetch_failed:${branch.status}`)
-  if (!rulesets.ok) fail(`github_main_protection_apply_rulesets_verify_fetch_failed:${rulesets.status}`)
-  const verification = assessGitHubMainProtection({ branch: branch.json, rulesets: rulesets.json })
-  if (!verification.ok) fail('github_main_protection_apply_verification_failed')
-
-  const body = {
-    ok: true,
-    contract: GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
-    digestScope: 'utf8_compact_json_without_digest',
-    mode: 'executed_owner_approved_github_settings_write',
-    repository: REPOSITORY,
-    proposal: {
-      path: proposalReceipt.path || null,
-      digest: proposalReceipt.digest || null,
-      packetDigest: proposal.digest,
+    const before = await githubRequest({
+      path: '/rulesets',
+      token: token.value,
       apiVersion,
-    },
-    candidate: {
-      branch: gitState.branch || null,
-      head: gitState.head || null,
-      clean: true,
-      expectedHead: expected,
-      expectedHeadMatched: true,
-      expectedHeadRequiredForExecute: true,
-    },
-    action: {
-      kind: selected.action,
+      request,
+    })
+    if (!before.ok) fail(`github_main_protection_apply_rulesets_fetch_failed:${before.status}`)
+    const selected = selectRulesetAction(before.json)
+    githubWriteAttempted = true
+    const write = await githubRequest({
+      path: selected.action === 'create' ? '/rulesets' : `/rulesets/${selected.rulesetId}`,
       method: selected.method,
-      path: selected.path,
-      status: write.status,
-      rulesetId: selected.rulesetId ?? write.json?.id ?? null,
-    },
-    approval,
-    token: {
-      present: true,
-      env: token.key,
-      valueExposed: false,
-    },
-    verification: {
+      token: token.value,
+      apiVersion,
+      body: proposal.proposedRuleset,
+      request,
+    })
+    if (!write.ok) {
+      const confirmedNotPerformed = write.status >= 400 && write.status < 500
+      throw writeFailure(
+        confirmedNotPerformed
+          ? `github_main_protection_apply_write_failed:${write.status}`
+          : 'github_main_protection_apply_write_outcome_unknown',
+        {
+          attempted: true,
+          outcome: confirmedNotPerformed ? WRITE_CONFIRMED_NOT_PERFORMED : WRITE_OUTCOME_UNKNOWN,
+        },
+      )
+    }
+
+    const [branch, rulesets] = await Promise.all([
+      githubRequest({ path: '/branches/main', token: token.value, apiVersion, request }),
+      githubRequest({ path: '/rulesets', token: token.value, apiVersion, request }),
+    ])
+    if (!branch.ok) fail(`github_main_protection_apply_branch_verify_fetch_failed:${branch.status}`)
+    if (!rulesets.ok) fail(`github_main_protection_apply_rulesets_verify_fetch_failed:${rulesets.status}`)
+    const verification = assessGitHubMainProtection({ branch: branch.json, rulesets: rulesets.json })
+    if (!verification.ok) fail('github_main_protection_apply_verification_failed')
+
+    const body = {
       ok: true,
-      contract: verification.contract,
-      observedRequiredChecks: verification.observedRequiredChecks,
-      activeMainRulesets: verification.evidence.activeMainRulesets,
-    },
-    controls: {
-      githubWritesApproved: true,
-      githubWritesPerformed: true,
-      repositorySettingsMutated: true,
-      branchMutated: false,
-      pullRequestCreated: false,
-      mergePerformed: false,
-      deploymentPerformed: false,
-      supabaseMutated: false,
-      credentialValueExposed: false,
-    },
+      contract: GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
+      digestScope: 'utf8_compact_json_without_digest',
+      mode: 'executed_owner_approved_github_settings_write',
+      repository: REPOSITORY,
+      proposal: {
+        path: proposalReceipt.path || null,
+        digest: proposalReceipt.digest || null,
+        packetDigest: proposal.digest,
+        apiVersion,
+      },
+      candidate: {
+        branch: gitState.branch || null,
+        head: gitState.head || null,
+        clean: true,
+        expectedHead: expected,
+        expectedHeadMatched: true,
+        expectedHeadRequiredForExecute: true,
+      },
+      action: {
+        kind: selected.action,
+        method: selected.method,
+        path: selected.path,
+        status: write.status,
+        rulesetId: selected.rulesetId ?? write.json?.id ?? null,
+      },
+      approval,
+      token: {
+        present: true,
+        env: token.key,
+        valueExposed: false,
+      },
+      verification: {
+        ok: true,
+        contract: verification.contract,
+        observedRequiredChecks: verification.observedRequiredChecks,
+        activeMainRulesets: verification.evidence.activeMainRulesets,
+      },
+      controls: {
+        githubWritesApproved: true,
+        ...githubWriteControls({ attempted: true, outcome: WRITE_CONFIRMED_PERFORMED }),
+        branchMutated: false,
+        pullRequestCreated: false,
+        mergePerformed: false,
+        deploymentPerformed: false,
+        supabaseMutated: false,
+        credentialValueExposed: false,
+      },
+    }
+    assertNoSecretEcho(body)
+    return signed(body)
+  } catch (error) {
+    throwWithWriteOutcome(error, githubWriteAttempted)
   }
-  assertNoSecretEcho(body)
-  return signed(body)
 }
 
 function parseArgs(argv) {
@@ -559,17 +643,7 @@ async function main() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(JSON.stringify({
-      ok: false,
-      contract: GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
-      error: String(error?.message || 'github_main_protection_apply_failed').slice(0, 240),
-      controls: {
-        githubWritesPerformed: false,
-        repositorySettingsMutated: false,
-        branchMutated: false,
-        credentialValueExposed: false,
-      },
-    }, null, 2))
+    console.error(JSON.stringify(buildGitHubMainProtectionApplyFailureReceipt(error), null, 2))
     process.exitCode = 1
   })
 }

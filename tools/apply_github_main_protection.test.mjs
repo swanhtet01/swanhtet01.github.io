@@ -5,6 +5,7 @@ import {
   GITHUB_MAIN_PROTECTION_APPLY_CONTRACT,
   applyGitHubMainProtectionWithClient,
   buildApplyPlan,
+  buildGitHubMainProtectionApplyFailureReceipt,
   selectRulesetAction,
   validateApplyReport,
   validateOwnerApproval,
@@ -80,6 +81,15 @@ function fakeRequest({ beforeRulesets = [], afterRulesets = null, writeStatus = 
   return { request, calls }
 }
 
+async function failureReceipt(action) {
+  try {
+    await action()
+    assert.fail('expected GitHub main-protection apply failure')
+  } catch (error) {
+    return buildGitHubMainProtectionApplyFailureReceipt(error)
+  }
+}
+
 test('builds a plan-only applicator report without token or write execution', () => {
   const plan = buildApplyPlan({ proposalReceipt: proposalReceipt(), gitState: gitState(), env: {} })
   assert.equal(plan.contract, GITHUB_MAIN_PROTECTION_APPLY_CONTRACT)
@@ -87,7 +97,10 @@ test('builds a plan-only applicator report without token or write execution', ()
   assert.equal(plan.mode, 'plan_only_no_github_write')
   assert.match(plan.digest, /^sha256:[0-9a-f]{64}$/)
   assert.equal(validateApplyReport(plan, { expectedMode: 'plan_only_no_github_write' }), plan)
+  assert.equal(plan.controls.githubWriteAttempted, false)
   assert.equal(plan.controls.githubWritesPerformed, false)
+  assert.equal(plan.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(plan.controls.githubWriteRetryAllowed, false)
   assert.equal(plan.controls.repositorySettingsMutated, false)
   assert.equal(plan.token.present, false)
   assert.equal(plan.candidate.expectedHead, gitState().head)
@@ -153,7 +166,10 @@ test('executes create path only with approval, token, and post-write verificatio
   })
   assert.equal(result.ok, true)
   assert.equal(result.action.kind, 'create')
+  assert.equal(result.controls.githubWriteAttempted, true)
   assert.equal(result.controls.githubWritesPerformed, true)
+  assert.equal(result.controls.githubWriteOutcome, 'confirmed_performed')
+  assert.equal(result.controls.githubWriteRetryAllowed, false)
   assert.match(result.digest, /^sha256:[0-9a-f]{64}$/)
   assert.equal(validateApplyReport(result, { expectedMode: 'executed_owner_approved_github_settings_write' }), result)
   assert.equal(result.controls.branchMutated, false)
@@ -194,13 +210,92 @@ test('executes update path for exactly one existing named ruleset', async () => 
 test('fails closed when post-write read-only verification does not pass', async () => {
   const proposed = proposalReceipt()
   const { request } = fakeRequest({ beforeRulesets: [], afterRulesets: [] })
-  await assert.rejects(() => applyGitHubMainProtectionWithClient({
+  const receipt = await failureReceipt(() => applyGitHubMainProtectionWithClient({
     proposalReceipt: proposed,
     env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
     gitState: gitState(),
     expectedHead: gitState().head,
     request,
-  }), /github_main_protection_apply_verification_failed/)
+  }))
+  assert.equal(receipt.error, 'github_main_protection_apply_write_outcome_unknown')
+  assert.equal(receipt.controls.githubWriteAttempted, true)
+  assert.equal(receipt.controls.githubWritesPerformed, null)
+  assert.equal(receipt.controls.githubWriteOutcome, 'outcome_unknown')
+  assert.equal(receipt.controls.githubWriteRetryAllowed, false)
+  assert.equal(receipt.controls.repositorySettingsMutated, null)
+})
+
+test('write transport, malformed response, and read-back failures stay unknown without write retry', async () => {
+  const proposed = proposalReceipt()
+  const execute = (request) => applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    expectedHead: gitState().head,
+    request,
+  })
+
+  for (const failureKind of ['transport', 'malformed-response', 'read-back']) {
+    const base = fakeRequest({ beforeRulesets: [], afterRulesets: [{ id: 9, ...proposed.packet.proposedRuleset }] })
+    let writeCalls = 0
+    const request = async (url, options = {}) => {
+      const path = new URL(url).pathname.replace('/repos/swanhtet01/swanhtet01.github.io', '')
+      if (options.method === 'POST') {
+        writeCalls += 1
+        if (failureKind === 'transport') throw new Error('socket_closed_after_request_start')
+        if (failureKind === 'malformed-response') {
+          return { ok: true, status: 201, async text() { return '{' } }
+        }
+      }
+      if (failureKind === 'read-back' && writeCalls === 1 && path === '/branches/main') {
+        throw new Error('read_back_connection_lost')
+      }
+      return base.request(url, options)
+    }
+    const receipt = await failureReceipt(() => execute(request))
+    assert.equal(writeCalls, 1)
+    assert.equal(receipt.error, 'github_main_protection_apply_write_outcome_unknown')
+    assert.equal(receipt.controls.githubWriteAttempted, true)
+    assert.equal(receipt.controls.githubWritesPerformed, null)
+    assert.equal(receipt.controls.githubWriteOutcome, 'outcome_unknown')
+    assert.equal(receipt.controls.githubWriteRetryAllowed, false)
+    assert.equal(receipt.controls.repositorySettingsMutated, null)
+    assert.doesNotMatch(JSON.stringify(receipt), /github_pat_testtokennotprinted/)
+  }
+})
+
+test('explicit client rejection and pre-write validation retain confirmed no-write evidence', async () => {
+  const proposed = proposalReceipt()
+  const rejected = fakeRequest({ beforeRulesets: [], writeStatus: 422 })
+  const rejectedReceipt = await failureReceipt(() => applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    expectedHead: gitState().head,
+    request: rejected.request,
+  }))
+  assert.equal(rejected.calls.filter((call) => call.method === 'POST').length, 1)
+  assert.equal(rejectedReceipt.controls.githubWriteAttempted, true)
+  assert.equal(rejectedReceipt.controls.githubWritesPerformed, false)
+  assert.equal(rejectedReceipt.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(rejectedReceipt.controls.githubWriteRetryAllowed, false)
+  assert.equal(rejectedReceipt.controls.repositorySettingsMutated, false)
+
+  const before = fakeRequest()
+  const preWriteReceipt = await failureReceipt(() => applyGitHubMainProtectionWithClient({
+    proposalReceipt: proposed,
+    env: { SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL: approval, GITHUB_TOKEN: 'github_pat_testtokennotprinted_1234567890' },
+    gitState: gitState(),
+    expectedHead: 'f'.repeat(40),
+    request: before.request,
+  }))
+  assert.deepEqual(before.calls, [])
+  assert.equal(preWriteReceipt.error, 'github_main_protection_apply_expected_head_mismatch')
+  assert.equal(preWriteReceipt.controls.githubWriteAttempted, false)
+  assert.equal(preWriteReceipt.controls.githubWritesPerformed, false)
+  assert.equal(preWriteReceipt.controls.githubWriteOutcome, 'confirmed_not_performed')
+  assert.equal(preWriteReceipt.controls.githubWriteRetryAllowed, false)
+  assert.equal(preWriteReceipt.controls.repositorySettingsMutated, false)
 })
 
 test('rejects missing or mismatched expected head before any GitHub write path', async () => {
