@@ -43,17 +43,18 @@ npm.cmd run client:pilot:workspace -- --verify --workspace "<private-workspace>"
 
 ## Day-0 baseline and observed pilot evidence
 
-After the owner has captured the private baseline, use the deterministic packet tools before any pilot-day recording. The private baseline JSON must use distinct `runId` values across order, package-redemption, and daily-close streams. Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot; never treat a stale release gate as pilot-ready.
+After the owner has captured the private baseline, commit it through one new atomic baseline-completion directory before any pilot-day recording. The private baseline JSON must use distinct `runId` values across order, package-redemption, and daily-close streams. The completion command validates and verifies all four artifacts before committing the directory; require the sealed receipt digest as `owner_safe_baseline_completion_receipt_digest`. Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot; never treat a stale release gate as pilot-ready.
 
 ```powershell
-npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"
-npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"
-npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"
+npm.cmd run shop:pilot:baseline-complete -- --input "<private-baseline-input.json>" --output-dir "<private-baseline-completion-directory>"
+npm.cmd run shop:pilot:baseline-complete -- --verify-dir "<private-baseline-completion-directory>"
 npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"
-npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"
+npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<private-baseline-completion-directory>/owner-safe-baseline-packet.json" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"
 npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"
 npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"
 ```
+
+Do not hand-edit or manually replace any file in the completion directory, and do not recreate the owner-safe packet with the retired separate lint/generate/verify flow. The launch gate may consume only `<private-baseline-completion-directory>/owner-safe-baseline-packet.json` after `--verify-dir` succeeds and `owner-safe-baseline-completion-receipt.json` remains sealed. On an existing directory, partial output, digest mismatch, or validation failure, stop and preserve the evidence for owner review.
 
 During the five-day private pilot, create and validate one private run input per real observed run before recording it:
 

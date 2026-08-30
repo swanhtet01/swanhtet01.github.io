@@ -168,7 +168,9 @@ const kitSourcePaths = [
   'docs/supermega-shop-sales-agent.md',
   'tools/create_shop_pilot_handoff.mjs',
   'tools/prepare_shop_pilot_baseline_packet.mjs',
+  'tools/complete_shop_pilot_baseline.mjs',
   'tools/prepare_shop_pilot_day0_readiness_packet.mjs',
+  'tools/prepare_shop_pilot_day0_owner_baseline_action_card.mjs',
   'tools/record_shop_pilot_observed_run.mjs',
   'tools/verify_shop_pilot_launch_gate.mjs',
 ]
@@ -215,23 +217,40 @@ const kitBaseline = read(`${kitDir}/baseline-measurement.md`)
 for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day', 'client_import_row_count', 'weekly_package_sales', 'weekly_treatment_redemptions', 'median_minutes_per_redemption', 'weekly_package_correction_count']) {
   check(kitBaseline.includes(`\`${fieldName}\``), `pilot_kit_baseline_field:${fieldName}`)
 }
-const baselineLintCommand = 'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"'
-const baselineGenerateCommand = 'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"'
-const baselineVerifyCommand = 'npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"'
-const launchGateReportCommand = 'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<owner-safe-baseline-packet.json>" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"'
+const baselineCompleteCommand = 'npm.cmd run shop:pilot:baseline-complete -- --input "<private-baseline-input.json>" --output-dir "<private-baseline-completion-directory>"'
+const baselineCompleteVerifyCommand = 'npm.cmd run shop:pilot:baseline-complete -- --verify-dir "<private-baseline-completion-directory>"'
+const intakePacketCommand = 'npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"'
+const launchGateReportCommand = 'npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<private-baseline-completion-directory>/owner-safe-baseline-packet.json" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"'
 const launchGateVerifyCommand = 'npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"'
 const day0ReleaseBoundCommand = 'npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"'
-check(kitBaseline.includes(baselineLintCommand), 'pilot_kit_baseline_lint_command')
-check(kitBaseline.includes('`baseline_input_ready`'), 'pilot_kit_baseline_lint_ready_status')
-check(kitBaseline.indexOf(baselineLintCommand) >= 0
-  && kitBaseline.indexOf(baselineLintCommand) < kitBaseline.indexOf(baselineGenerateCommand), 'pilot_kit_baseline_lint_before_generate')
-check(kitBaseline.includes('do not generate or hand-edit the owner-safe packet'), 'pilot_kit_baseline_no_hand_edit')
-check(kitBaseline.includes(baselineVerifyCommand), 'pilot_kit_baseline_verify_command')
-check(kitBaseline.indexOf(baselineGenerateCommand) >= 0
-  && kitBaseline.indexOf(baselineGenerateCommand) < kitBaseline.indexOf(baselineVerifyCommand), 'pilot_kit_baseline_generate_before_verify')
-check(kitBaseline.includes(launchGateReportCommand), 'pilot_kit_launch_gate_report_command')
-check(kitBaseline.includes(launchGateVerifyCommand), 'pilot_kit_launch_gate_verify_command')
-check(kitBaseline.includes(day0ReleaseBoundCommand), 'pilot_kit_day0_release_bound_command')
+const retiredBaselineCommands = [
+  'npm.cmd run shop:pilot:baseline-packet -- --lint-input "<private-baseline-input.json>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --input "<private-baseline-input.json>" --output "<owner-safe-baseline-packet.json>" --markdown-output "<owner-safe-baseline-packet.md>"',
+  'npm.cmd run shop:pilot:baseline-packet -- --verify "<owner-safe-baseline-packet.json>"',
+]
+const atomicBaselineSequence = [
+  baselineCompleteCommand,
+  baselineCompleteVerifyCommand,
+  intakePacketCommand,
+  launchGateReportCommand,
+  launchGateVerifyCommand,
+  day0ReleaseBoundCommand,
+]
+const salesAgentGuide = read('docs/supermega-shop-sales-agent.md')
+for (const [label, guide] of [['pilot_kit', kitBaseline], ['sales_agent', salesAgentGuide]]) {
+  let priorCommandIndex = -1
+  for (const command of atomicBaselineSequence) {
+    const commandIndex = guide.indexOf(command)
+    check(commandIndex > priorCommandIndex, `${label}_atomic_baseline_command_order:${command}`)
+    priorCommandIndex = commandIndex
+  }
+  check(guide.includes('`owner_safe_baseline_completion_receipt_digest`'), `${label}_completion_signal`)
+  check(guide.includes('`owner-safe-baseline-completion-receipt.json`'), `${label}_sealed_completion_receipt`)
+  check(guide.includes('Do not hand-edit or manually replace any file in the completion directory'), `${label}_no_manual_replacement`)
+  for (const retiredCommand of retiredBaselineCommands) {
+    check(!guide.includes(retiredCommand), `${label}_retired_manual_baseline_command_absent:${retiredCommand}`)
+  }
+}
 check(kitReadme.includes('must include the current release handoff plus GitHub protection snapshot'), 'pilot_kit_readme_day0_release_binding')
 
 const kitAcceptance = read(`${kitDir}/acceptance-checklist.md`)
