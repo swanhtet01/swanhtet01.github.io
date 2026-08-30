@@ -112,6 +112,29 @@ function digest(value: unknown) {
   return `sha256:${sha256Hex(JSON.stringify(value))}`
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (!value || typeof value !== 'object') return value
+
+  const source = value as Record<string, unknown>
+  return Object.keys(source)
+    .sort()
+    .reduce<Record<string, unknown>>((result, key) => {
+      result[key] = canonicalize(source[key])
+      return result
+    }, {})
+}
+
+function canonicalSet(values: unknown[]) {
+  return values
+    .map(canonicalize)
+    .sort((left, right) => {
+      const leftJson = JSON.stringify(left)
+      const rightJson = JSON.stringify(right)
+      return leftJson < rightJson ? -1 : leftJson > rightJson ? 1 : 0
+    })
+}
+
 function safeTimestamp(value: string) {
   const parsed = Date.parse(value)
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
@@ -462,18 +485,18 @@ export function projectEcommerceShopExceptionEvidence(
       requestCount: buying.requests.length,
       exceptionIntentCount: records.length,
     }),
-    shopStateDigest: digest({
+    shopStateDigest: digest(canonicalize({
       schema: commerce.schema,
       orderCount: commerce.orders.length,
       linkedOrderCount: linkedShopOrders.length,
-      linkedOrderStatuses: linkedShopOrders.map((order) => order.status).sort(),
-    }),
-    exceptionIntentSetDigest: digest(records.map((record) => ({
+      linkedOrders: canonicalSet(linkedShopOrders),
+    })),
+    exceptionIntentSetDigest: digest(canonicalSet(records.map((record) => ({
       kind: record.kind,
       state: record.state,
       hasReplacement: !!record.replacementRequestId,
       externalEffectCount: record.externalEffectCount,
-    }))),
+    })))),
     sourceRequestSetDigest: digest(Array.from(sourceRequestIds).sort()),
     ecommerceOperatorReviewDigest,
     shopOperatorReviewDigest,

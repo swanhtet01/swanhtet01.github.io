@@ -124,9 +124,27 @@ function makeReadyWorkspace(sourceBrief = brief()) {
   check(r.metrics.approvalEvidenceCount === 3, 'approval binds all evidence')
   check(r.metrics.artifactPageCount === 3, 'retained artifact page count')
   check(/^sha256:[0-9a-f]{64}$/.test(r.evidence.briefDigest), 'brief digest is sha256')
+  check(r.evidence.expectedBriefRequirementsDigest === r.evidence.retainedBriefRequirementsDigest, 'retained site matches every brief-derived requirement')
   check(/^sha256:[0-9a-f]{64}$/.test(r.acceptanceDigest), 'acceptance digest is sha256')
   check(!JSON.stringify(r).includes('owner-reviewer'), 'projection does not expose raw owner reviewer')
   check(!JSON.stringify(r).includes('SuperMega Test Site'), 'projection does not expose raw business name')
+}
+
+// 1a. Complete brief-derived matching remains digest-only in owner-facing output.
+{
+  const privateBrief = brief({
+    businessName: 'Private Business Marker',
+    audience: 'Private Audience Marker',
+    offer: 'Private Offer Marker',
+    proof: 'Private Proof Marker',
+    contactHref: 'https://example.com/private-contact-marker',
+  })
+  const r = projectWebsiteManagedBriefAcceptance(makeReadyWorkspace(privateBrief), input({ brief: privateBrief }))
+  const serialized = JSON.stringify(r)
+  check(r.readyForManagedRehearsal === true, 'complete private brief can be accepted when retained content matches')
+  for (const marker of ['Private Business Marker', 'Private Audience Marker', 'Private Offer Marker', 'Private Proof Marker', 'private-contact-marker']) {
+    check(!serialized.includes(marker), `${marker} is not exposed`)
+  }
 }
 
 // 2. Invalid brief blocks readiness even if workspace is otherwise accepted.
@@ -144,11 +162,25 @@ function makeReadyWorkspace(sourceBrief = brief()) {
   check(r.gates.find((gate) => gate.id === 'brief_valid')?.passed === false, 'brief_valid gate fails')
 }
 
-// 4. Brief/site mismatch blocks readiness.
+// 4. Every individually stale brief field blocks retained-site acceptance.
 {
-  const r = projectWebsiteManagedBriefAcceptance(makeReadyWorkspace(), input({ brief: brief({ businessName: 'Different Site' }) }))
-  check(r.readyForManagedRehearsal === false, 'business mismatch blocks')
-  check(r.gates.find((gate) => gate.id === 'brief_business_matches_site')?.passed === false, 'business match gate fails')
+  const staleFields = [
+    ['templateId', 'catalog-showcase'],
+    ['businessName', 'Different Site'],
+    ['audience', 'customers comparing a different need'],
+    ['offer', 'Request a different supported next step.'],
+    ['proof', 'A different supportable fact was reviewed for this stale brief.'],
+    ['contactHref', 'https://example.com/different-contact'],
+  ]
+  for (const [field, value] of staleFields) {
+    const r = projectWebsiteManagedBriefAcceptance(makeReadyWorkspace(), input({ brief: brief({ [field]: value }) }))
+    check(r.readyForManagedRehearsal === false, `${field} mismatch blocks`)
+    check(r.gates.find((gate) => gate.id === 'brief_requirements_match_site')?.passed === false, `${field} requirement gate fails`)
+    check(r.evidence.expectedBriefRequirementsDigest !== r.evidence.retainedBriefRequirementsDigest, `${field} changes the expected requirements digest`)
+    if (field === 'businessName') {
+      check(r.gates.find((gate) => gate.id === 'brief_business_matches_site')?.passed === false, 'business identity gate still fails')
+    }
+  }
 }
 
 // 5. Missing responsive evidence prevents current approval and readiness.

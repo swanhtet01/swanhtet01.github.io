@@ -1,6 +1,7 @@
 import { sha256Hex } from './managed-trial-proof.ts'
 import {
   createWebsiteArtifact,
+  createInitialWorkspace,
   evidenceRequirements,
   getCurrentApproval,
   getCurrentEvidence,
@@ -10,7 +11,11 @@ import {
   workspaceFingerprint,
   type WebsiteWorkspace,
 } from '../products/website/website-model.ts'
-import { websiteStarterBriefIssues, type WebsiteStarterBrief } from '../products/website/website-starter.ts'
+import {
+  applyWebsiteStarterBrief,
+  websiteStarterBriefIssues,
+  type WebsiteStarterBrief,
+} from '../products/website/website-starter.ts'
 
 export const WEBSITE_MANAGED_BRIEF_ACCEPTANCE_CONTRACT = 'supermega.website-managed-brief-acceptance.v1' as const
 
@@ -24,6 +29,7 @@ export type WebsiteManagedBriefAcceptanceInput = {
 export type WebsiteManagedBriefAcceptanceGateId =
   | 'brief_valid'
   | 'brief_business_matches_site'
+  | 'brief_requirements_match_site'
   | 'brief_timestamp_valid'
   | 'readiness_checks_pass'
   | 'current_evidence_complete'
@@ -56,6 +62,8 @@ export type WebsiteManagedBriefAcceptanceMetrics = {
 
 export type WebsiteManagedBriefAcceptanceEvidence = {
   briefDigest: string
+  expectedBriefRequirementsDigest: string
+  retainedBriefRequirementsDigest: string
   briefCapturedAt: string
   workspaceFingerprint: string
   contentRevision: number
@@ -95,6 +103,23 @@ function reviewDigest(value: string | undefined) {
   return value && digestPattern.test(value) ? value.toLowerCase() : null
 }
 
+function briefDerivedRequirements(workspace: WebsiteWorkspace) {
+  return {
+    siteName: workspace.siteName,
+    selectedPageId: workspace.selectedPageId,
+    pages: workspace.pages.map((page) => ({
+      id: page.id,
+      internalName: page.internalName,
+      slug: page.slug,
+      navigation: page.navigation,
+      hero: page.hero,
+      sections: page.sections,
+      seo: page.seo,
+      updatedAt: page.updatedAt,
+    })),
+  }
+}
+
 export function projectWebsiteManagedBriefAcceptance(
   workspace: WebsiteWorkspace,
   input: WebsiteManagedBriefAcceptanceInput,
@@ -102,6 +127,12 @@ export function projectWebsiteManagedBriefAcceptance(
   const source = websiteSource(workspace)
   const fingerprint = workspaceFingerprint(workspace)
   const briefIssues = websiteStarterBriefIssues(input.brief)
+  const expectedBriefWorkspace = applyWebsiteStarterBrief(createInitialWorkspace(), input.brief, input.briefCapturedAt)
+  const expectedBriefRequirementsDigest = digest(briefDerivedRequirements(expectedBriefWorkspace))
+  const retainedBriefRequirementsDigest = digest(briefDerivedRequirements(workspace))
+  const briefRequirementsMatch = briefIssues.length === 0
+    && safeTimestamp(input.briefCapturedAt)
+    && expectedBriefRequirementsDigest === retainedBriefRequirementsDigest
   const checks = readinessChecks(workspace, fingerprint)
   const currentEvidence = getCurrentEvidence(workspace)
   const approval = getCurrentApproval(workspace)
@@ -141,6 +172,13 @@ export function projectWebsiteManagedBriefAcceptance(
       reason: normalizedLine(input.brief.businessName) === normalizedLine(workspace.siteName)
         ? 'Brief business name matches the retained site identity.'
         : 'Brief business name does not match the retained site identity.',
+    },
+    {
+      id: 'brief_requirements_match_site',
+      passed: briefRequirementsMatch,
+      reason: briefRequirementsMatch
+        ? 'Every brief-derived requirement matches the retained site content.'
+        : 'The retained site content does not match every requirement derived from this brief.',
     },
     {
       id: 'brief_timestamp_valid',
@@ -223,6 +261,8 @@ export function projectWebsiteManagedBriefAcceptance(
       proof: normalizedLine(input.brief.proof),
       contactHref: normalizedLine(input.brief.contactHref),
     }),
+    expectedBriefRequirementsDigest,
+    retainedBriefRequirementsDigest,
     briefCapturedAt: input.briefCapturedAt,
     workspaceFingerprint: fingerprint,
     contentRevision: source.contentRevision,

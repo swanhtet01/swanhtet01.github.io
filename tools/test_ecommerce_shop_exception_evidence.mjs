@@ -36,7 +36,9 @@ function check(condition, label) {
 
 const SOURCE_REQUEST_ID = 'ECR-459AAB25-5BDD-4687-BABA-82FD4E6A1578'
 const REPLACEMENT_REQUEST_ID = 'ECR-5B600C08-A8C2-469F-B6EA-222BB38D9483'
+const SECOND_SOURCE_REQUEST_ID = 'ECR-6C711D19-B9D3-47A0-87FB-333CC49EA594'
 const ORDER_ID = 'ord-ecommerce-1'
+const SECOND_ORDER_ID = 'ord-ecommerce-2'
 const ECOM_REVIEW = `sha256:${'a'.repeat(64)}`
 const SHOP_REVIEW = `sha256:${'b'.repeat(64)}`
 
@@ -84,6 +86,17 @@ function supportIntent(overrides = {}) {
     evidenceReference: `ECOMMERCE-SUPPORT:${idempotencyKey.slice(4)}:${ORDER_ID}:${SOURCE_REQUEST_ID}`,
     ...overrides,
   }
+}
+
+function secondSupportIntent() {
+  const idempotencyKey = 'ESI-2E3F4051-6B7C-4D8E-9F0A-B1C2D3E4F506'
+  return supportIntent({
+    id: `ESR-${idempotencyKey.slice(4)}`,
+    idempotencyKey,
+    orderId: SECOND_ORDER_ID,
+    sourceRequestId: SECOND_SOURCE_REQUEST_ID,
+    evidenceReference: `ECOMMERCE-SUPPORT:${idempotencyKey.slice(4)}:${SECOND_ORDER_ID}:${SECOND_SOURCE_REQUEST_ID}`,
+  })
 }
 
 function amendmentIntent(overrides = {}) {
@@ -184,6 +197,55 @@ function gate(result, id) {
   check(result.readyForPilotExceptionReview === false, 'empty exception set is not ready')
   check(gate(result, 'ecommerce_exception_intents_present').passed === false, 'missing exception gate fails')
   check(gate(result, 'replacement_review_intent_present').passed === false, 'missing replacement gate fails')
+}
+
+// 2a. Every commercially relevant linked-order field is digest-bound without disclosure.
+{
+  const baseline = project()
+  const mutations = [
+    ['total', shopOrder({ total: 13000 })],
+    ['lines', shopOrder({ lines: [{ sku: 'SKU-PRIVATE', name: 'Private line item', quantity: 2, unitPriceMmk: 6500 }] })],
+    ['payment', shopOrder({ payment: 'kbzpay_manual' })],
+    ['customer', shopOrder({ customer: 'Private Customer Changed' })],
+  ]
+  for (const [label, order] of mutations) {
+    const changed = project(undefined, commerce({ orders: [order] }))
+    check(changed.evidence.shopStateDigest !== baseline.evidence.shopStateDigest, `${label} mutation changes Shop state digest`)
+    check(changed.exceptionEvidenceDigest !== baseline.exceptionEvidenceDigest, `${label} mutation changes final evidence digest`)
+  }
+
+  const privateProjection = project(undefined, commerce({ orders: [shopOrder({
+    customer: 'Private Customer Changed',
+    lines: [{ sku: 'SKU-PRIVATE', name: 'Private line item', quantity: 2, unitPriceMmk: 6500 }],
+  })] }))
+  const serialized = JSON.stringify(privateProjection)
+  check(!serialized.includes('Private line item'), 'linked line identity is not exposed')
+  check(!serialized.includes('Private Customer Changed'), 'linked customer identity is not exposed')
+}
+
+// 2b. Equivalent linked-order and intent sets digest identically regardless of source ordering.
+{
+  const firstOrder = shopOrder()
+  const secondOrder = shopOrder({
+    id: SECOND_ORDER_ID,
+    customer: 'Second Private Customer',
+    sourceRecordId: SECOND_SOURCE_REQUEST_ID,
+    total: 9000,
+  })
+  const firstSupport = supportIntent()
+  const secondSupport = secondSupportIntent()
+  const requests = [sourceRequest(), sourceRequest(REPLACEMENT_REQUEST_ID), sourceRequest(SECOND_SOURCE_REQUEST_ID)]
+  const forward = project(
+    buying({ requests, supportIntents: [firstSupport, secondSupport] }),
+    commerce({ orders: [firstOrder, secondOrder] }),
+  )
+  const reversed = project(
+    buying({ requests: [...requests].reverse(), supportIntents: [secondSupport, firstSupport] }),
+    commerce({ orders: [secondOrder, firstOrder] }),
+  )
+  check(forward.evidence.shopStateDigest === reversed.evidence.shopStateDigest, 'Shop state digest is order deterministic')
+  check(forward.evidence.exceptionIntentSetDigest === reversed.evidence.exceptionIntentSetDigest, 'intent set digest is order deterministic')
+  check(forward.exceptionEvidenceDigest === reversed.exceptionEvidenceDigest, 'final evidence digest is order deterministic')
 }
 
 // 3. Missing replacement request fails the replacement retention gate.
