@@ -275,14 +275,15 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </article>)}
     </section>
 
-    <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" open>
+    <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" data-state={profitControl.state} open>
       <summary><span><strong>Profit control</strong><small>Current leak → accountable owner → objective closure</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Controlled'}</b></summary>
       <div className="shop-today-module-grid">
-        {profitControl.priorities.map((priority) => <Link data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
+        {profitControl.priorities.map((priority) => <Link data-priority-id={priority.id} data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
           <span>
             <strong>{priority.title}</strong>
             <small>{priority.impact}</small>
             <small>{priority.ownerRole} · {priority.dueLabel}</small>
+            <small><strong>Next action:</strong> {priority.actionLabel}</small>
             <small>Closed when: {priority.closureCondition}</small>
           </span>
           <b>{formatShopProfitControlMetric(priority.metric)}</b>

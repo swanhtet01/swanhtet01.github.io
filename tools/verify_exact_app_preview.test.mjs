@@ -16,6 +16,7 @@ import { sha256Digest } from './rendered_proof_provenance.mjs'
 import {
   EXACT_APP_PREVIEW_CASE_MATRIX,
   EXACT_APP_PREVIEW_CONTRACT,
+  SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION,
   buildExactAppPreviewReport,
   collectCurrentVerifierBinding,
   derivePublicHomepageExpectedText,
@@ -222,6 +223,23 @@ async function operationsFixture({ origins = previewOrigins, cameraDenied = fals
 
 function rawCase(spec, index) {
   const payload = screenshotPayload(index)
+  const profitControl = spec.surface === 'shop_profit_control' ? {
+    ok: true,
+    fixture: { source: 'fresh_isolated_browser_context', browserStorageHandEdited: false },
+    ...SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION,
+    viewportWidth: spec.width,
+    viewportHeight: spec.height,
+    documentScrollWidth: spec.width,
+    accessibility: {
+      ok: true,
+      requiredMinimumPx: spec.mobile ? 44 : null,
+      roundingTolerancePx: spec.mobile ? 0.25 : null,
+      checked: 1,
+      minimumObservedWidthPx: spec.mobile ? 366 : 640,
+      minimumObservedHeightPx: spec.mobile ? 94 : 126,
+    },
+    network: { externalRequestCount: 0, failedRequestCount: 0 },
+  } : null
   return {
     name: spec.id,
     route: spec.route,
@@ -231,6 +249,7 @@ function rawCase(spec, index) {
     path: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.route,
     bodyLength: 2048 + index,
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
+    profitControl,
     claimBoundary: spec.surface === 'ecommerce' ? { ok: true } : null,
     screenshot: {
       file: spec.screenshot,
@@ -243,6 +262,12 @@ function rawCase(spec, index) {
     ok: true,
     failures: [],
   }
+}
+
+function caseIndex(id) {
+  const index = EXACT_APP_PREVIEW_CASE_MATRIX.findIndex((entry) => entry.id === id)
+  assert.notEqual(index, -1, `missing case ${id}`)
+  return index
 }
 
 function screenshotPayload(index) {
@@ -363,7 +388,7 @@ test('requires one exact generation or validation argument set', () => {
   )
 })
 
-test('builds and validates the exact ten-case technical preview proof', async () => {
+test('builds and validates the exact twelve-case technical preview proof', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
   const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
   const publicExpectedText = await loadPublicHomepageExpectedText()
@@ -413,7 +438,7 @@ test('builds and validates the exact ten-case technical preview proof', async ()
     screenshotPayloads: screenshotPayloads(),
   })
   assert.equal(report.contract, EXACT_APP_PREVIEW_CONTRACT)
-  assert.equal(report.cases.length, 10)
+  assert.equal(report.cases.length, 12)
   assert.deepEqual(report.cases.map((entry) => entry.id), EXACT_APP_PREVIEW_CASE_MATRIX.map((entry) => entry.id))
   assert.equal(report.cases.every((entry) => entry.mutatingRequestCount === 0), true)
   assert.equal(report.cases.every((entry) => entry.browserContextIsolated === true), true)
@@ -427,7 +452,7 @@ test('builds and validates the exact ten-case technical preview proof', async ()
   assert.equal(Object.hasOwn(report.controls, 'providerWritesPerformed'), false)
   assert.equal(Object.hasOwn(report.controls, 'databaseConnectionsPerformed'), false)
   assert.equal(validation.technicalRenderedPreviewPassed, true)
-  assert.equal(validation.screenshots.length, 10)
+  assert.equal(validation.screenshots.length, 12)
   assert.equal(validation.exactPreviewAccepted, false)
 })
 
@@ -451,7 +476,7 @@ test('rejects swapped, missing, extra, wrong-route, wrong-viewport, and wrong-sc
   sharedContext[2].browserContextIsolated = false
   await assert.rejects(() => reportFixture({ cases: sharedContext }), /exact_app_preview_case_invalid:shop_desktop/)
   const wrongScreenshot = clone(validCases)
-  wrongScreenshot[6].screenshot.file = 'other.png'
+  wrongScreenshot[caseIndex('website_desktop')].screenshot.file = 'other.png'
   await assert.rejects(() => reportFixture({ cases: wrongScreenshot }), /exact_app_preview_case_screenshot_file_invalid:website_desktop/)
   const duplicateScreenshot = clone(validCases)
   duplicateScreenshot[1].screenshot.bytes = duplicateScreenshot[0].screenshot.bytes
@@ -459,15 +484,55 @@ test('rejects swapped, missing, extra, wrong-route, wrong-viewport, and wrong-sc
   await assert.rejects(() => reportFixture({ cases: duplicateScreenshot }), /exact_app_preview_screenshot_identity_duplicate/)
 })
 
+test('rejects the twenty-three Shop Today route, semantic, evidence, and accessibility adversaries', async () => {
+  const desktopIndex = caseIndex('shop_profit_control_desktop')
+  const mobileIndex = caseIndex('shop_profit_control_mobile')
+  const baseCases = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
+  const mutate = (change) => {
+    const cases = clone(baseCases)
+    change(cases, cases[desktopIndex], cases[mobileIndex])
+    return cases
+  }
+  const adversaries = [
+    ['missing desktop case', mutate((cases) => cases.splice(desktopIndex, 1)), /exact_app_preview_case_matrix_invalid/],
+    ['missing mobile case', mutate((cases) => cases.splice(mobileIndex, 1)), /exact_app_preview_case_matrix_invalid/],
+    ['wrong pathname', mutate((cases, desktop) => { desktop.path = '/shop/profit/?tab=today' }), /exact_app_preview_case_invalid:shop_profit_control_desktop/],
+    ['missing tab', mutate((cases, desktop) => { desktop.path = '/shop/' }), /exact_app_preview_case_invalid:shop_profit_control_desktop/],
+    ['duplicate tab', mutate((cases, desktop) => { desktop.path = '/shop/?tab=today&tab=today' }), /exact_app_preview_case_invalid:shop_profit_control_desktop/],
+    ['extra query', mutate((cases, desktop) => { desktop.path = '/shop/?tab=today&template=mini-mart' }), /exact_app_preview_case_invalid:shop_profit_control_desktop/],
+    ['non-empty hash', mutate((cases, desktop) => { desktop.hash = '#priority' }), /exact_app_preview_case_invalid:shop_profit_control_desktop/],
+    ['controlled state', mutate((cases, desktop) => { desktop.profitControl.state = 'controlled' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['missing heading', mutate((cases, desktop) => { desktop.profitControl.heading = '' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['missing priority title', mutate((cases, desktop) => { desktop.profitControl.priority.title = '' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['mismatched impact', mutate((cases, desktop) => { desktop.profitControl.priority.impact = 'Unbound claim.' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['missing accountable owner', mutate((cases, desktop) => { desktop.profitControl.priority.ownerRole = '' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['missing due point', mutate((cases, desktop) => { desktop.profitControl.priority.dueLabel = '' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['mismatched metric', mutate((cases, desktop) => { desktop.profitControl.priority.metric = '1 catalog item' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['missing action label', mutate((cases, desktop) => { desktop.profitControl.priority.actionLabel = '' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['wrong action target', mutate((cases, desktop) => { desktop.profitControl.priority.target = '/contact/' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['missing objective closure', mutate((cases, desktop) => { desktop.profitControl.priority.closureCondition = '' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['missing read-only boundary', mutate((cases, desktop) => { desktop.profitControl.boundary = '' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['overclaiming boundary', mutate((cases, desktop) => { desktop.profitControl.boundary = 'Profit proven and customer ready.' }), /exact_app_preview_profit_control_semantics_invalid:shop_profit_control_desktop/],
+    ['browser storage hand edit', mutate((cases, desktop) => { desktop.profitControl.fixture.browserStorageHandEdited = true }), /exact_app_preview_profit_control_fixture_invalid:shop_profit_control_desktop/],
+    ['external request', mutate((cases, desktop) => { desktop.profitControl.network.externalRequestCount = 1 }), /exact_app_preview_profit_control_network_invalid:shop_profit_control_desktop/],
+    ['failed request', mutate((cases, desktop) => { desktop.profitControl.network.failedRequestCount = 1 }), /exact_app_preview_profit_control_network_invalid:shop_profit_control_desktop/],
+    ['sub-44 mobile target', mutate((cases, desktop, mobile) => { mobile.profitControl.accessibility.minimumObservedHeightPx = 43.5 }), /exact_app_preview_profit_control_accessibility_invalid:shop_profit_control_mobile/],
+  ]
+  assert.equal(adversaries.length, 23)
+  for (const [label, cases, error] of adversaries) {
+    await assert.rejects(() => reportFixture({ cases }), error, label)
+  }
+})
+
 test('rejects browser writes and missing Shop or Ecommerce flow proof', async () => {
   const mutating = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
-  mutating[4].network = { mutatingRequestCount: 1, mutatingRequests: [{ method: 'POST', path: '/api/write' }] }
+  mutating[caseIndex('plant_desktop')].network = { mutatingRequestCount: 1, mutatingRequests: [{ method: 'POST', path: '/api/write' }] }
   await assert.rejects(() => reportFixture({ cases: mutating }), /exact_app_preview_browser_write_observed:plant_desktop/)
   const shop = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
   shop[2].layout.aboveFold = false
   await assert.rejects(() => reportFixture({ cases: shop }), /exact_app_preview_shop_flow_invalid:shop_desktop/)
   const ecommerce = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
-  ecommerce[8].claimBoundary.ok = false
+  ecommerce[caseIndex('ecommerce_desktop')].claimBoundary.ok = false
   await assert.rejects(() => reportFixture({ cases: ecommerce }), /exact_app_preview_ecommerce_claim_invalid:ecommerce_desktop/)
 })
 

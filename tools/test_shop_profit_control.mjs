@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -66,7 +67,13 @@ function check(condition, label) {
 {
   const board = projectShopProfitControl(baseline({ catalogItemCount: 0, incomingRequestCount: 2 }))
   check(board.priorities[0].id === 'catalog_missing', 'missing catalog outranks waiting demand')
+  check(board.state === 'blocked', 'source-controlled empty catalog fixture is non-controlled')
+  check(board.priorities[0].title === 'Load the first sellable catalog', 'catalog priority keeps the exact title')
+  check(board.priorities[0].impact === 'Shop cannot measure sales, stock risk, or margin without reviewed items and opening stock.', 'catalog priority keeps the exact impact')
+  check(board.priorities[0].ownerRole === 'Shop owner' && board.priorities[0].dueLabel === 'Before pilot day one', 'catalog priority keeps accountable owner and due point')
+  check(board.priorities[0].actionLabel === 'Open catalog' && board.priorities[0].target === '/shop/?tab=inventory#shop-catalog-import', 'catalog priority keeps exact next action and target')
   check(board.priorities[0].closureCondition.includes('reviewed item'), 'catalog priority carries a measurable closure condition')
+  check(formatShopProfitControlMetric(board.priorities[0].metric) === '0 catalog items', 'catalog priority keeps its exact objective metric')
 }
 
 {
@@ -120,6 +127,14 @@ for (const [field, value] of [
   let threw = false
   try { projectShopProfitControl(baseline({ canWrite: 'yes' })) } catch { threw = true }
   check(threw, 'write gate rejects non-boolean input')
+}
+
+{
+  const todaySource = (await readFile('showroom/src/core/ShopToday.tsx', 'utf8')).replace(/\r\n?/g, '\n')
+  check(todaySource.includes('data-state={profitControl.state}'), 'Profit Control surface exposes the exact projected state')
+  check(todaySource.includes('data-priority-id={priority.id}'), 'Profit Control priority identity stays model-bound')
+  check(todaySource.includes('<small><strong>Next action:</strong> {priority.actionLabel}</small>'), 'the exact model action label is visibly rendered inside its target link')
+  check(todaySource.includes('to={priority.target}'), 'the visible action remains bound to the exact model target')
 }
 
 console.log(`test_shop_profit_control: ${checks} checks passed`)

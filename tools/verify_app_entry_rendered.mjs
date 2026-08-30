@@ -434,6 +434,94 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
   }
 }
 
+async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlledFixture) {
+  const deadline = Date.now() + 10_000
+  let state = null
+  while (Date.now() < deadline) {
+    state = await evalInPage(cdp, sessionId, `(() => {
+      const panel = document.querySelector('details[aria-label="Shop profit control"]');
+      const summary = panel?.querySelector('summary');
+      const heading = summary?.querySelector('strong');
+      const explanation = summary?.querySelector('small');
+      const status = summary?.querySelector(':scope > b');
+      const priority = panel?.querySelector('.shop-today-module-grid a[data-priority-id]');
+      const priorityTitle = priority?.querySelector('strong');
+      const smalls = [...(priority?.querySelectorAll('small') || [])];
+      const impact = smalls[0]?.textContent?.trim() || '';
+      const ownerDue = smalls[1]?.textContent?.trim() || '';
+      const action = smalls.find((entry) => entry.textContent?.trim().startsWith('Next action:'));
+      const closure = smalls.find((entry) => entry.textContent?.trim().startsWith('Closed when:'));
+      const metric = priority?.querySelector(':scope > b');
+      const boundary = [...(panel?.querySelectorAll('p.panel-note') || [])]
+        .find((entry) => entry.textContent?.trim().startsWith('Read-only projection from the current Shop record.'));
+      const ownerDueParts = ownerDue.split(' · ');
+      const targets = [...(panel?.querySelectorAll('.shop-today-module-grid a[href]') || [])].map((entry) => {
+        const box = entry.getBoundingClientRect();
+        return {
+          named: Boolean(entry.textContent?.trim()),
+          focusable: entry.tabIndex >= 0,
+          width: box.width,
+          height: box.height,
+        };
+      });
+      return {
+        ariaLabel: panel?.getAttribute('aria-label') || '',
+        heading: heading?.textContent?.trim() || '',
+        explanation: explanation?.textContent?.trim() || '',
+        state: panel?.getAttribute('data-state') || '',
+        status: status?.textContent?.trim() || '',
+        priority: priority ? {
+          id: priority.getAttribute('data-priority-id') || '',
+          title: priorityTitle?.textContent?.trim() || '',
+          impact,
+          ownerRole: ownerDueParts[0] || '',
+          dueLabel: ownerDueParts.slice(1).join(' · '),
+          actionLabel: (action?.textContent || '').replace(/^Next action:\s*/, '').trim(),
+          target: priority.getAttribute('href') || '',
+          closureCondition: (closure?.textContent || '').replace(/^Closed when:\s*/, '').trim(),
+          metric: metric?.textContent?.trim() || '',
+          actionLabelVisible: Boolean(action && action.getClientRects().length),
+          accessibleNamePresent: Boolean(priority.textContent?.trim()),
+        } : null,
+        boundary: boundary?.textContent?.trim() || '',
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+        accessibility: {
+          ok: targets.length > 0
+            && targets.every((entry) => entry.named && entry.focusable)
+            && (!${mobile ? 'true' : 'false'} || targets.every((entry) => entry.width + 0.25 >= 44 && entry.height + 0.25 >= 44)),
+          requiredMinimumPx: ${mobile ? '44' : 'null'},
+          roundingTolerancePx: ${mobile ? '0.25' : 'null'},
+          checked: targets.length,
+          minimumObservedWidthPx: targets.length ? Math.min(...targets.map((entry) => entry.width)) : null,
+          minimumObservedHeightPx: targets.length ? Math.min(...targets.map((entry) => entry.height)) : null,
+        },
+      };
+    })()`)
+    if (state?.priority && state?.boundary && state?.accessibility?.checked) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  const checks = {
+    panelPresent: state?.ariaLabel === 'Shop profit control',
+    panelOpenAndNonControlled: Boolean(state?.state && state.state !== 'controlled' && state.status !== 'Controlled'),
+    priorityPresent: Boolean(state?.priority),
+    actionVisible: state?.priority?.actionLabelVisible === true,
+    targetPresent: Boolean(state?.priority?.target),
+    boundaryPresent: Boolean(state?.boundary),
+    accessible: state?.accessibility?.ok === true,
+    noHorizontalOverflow: Number(state?.documentScrollWidth || 0) <= Number(state?.viewportWidth || 0) + 1,
+  }
+  return {
+    ok: Object.values(checks).every(Boolean),
+    fixture: {
+      source: sourceControlledFixture ? 'fresh_isolated_browser_context' : 'browser_storage_seeded',
+      browserStorageHandEdited: !sourceControlledFixture,
+    },
+    ...state,
+  }
+}
+
 async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   const started = await evalInPage(cdp, sessionId, `(() => {
     const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Start sample order');
@@ -527,6 +615,10 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
 }
 
 export async function verifyCase(cdp, origin, testCase) {
+  const hasSeed = Object.prototype.hasOwnProperty.call(testCase, 'seed')
+  if (testCase.sourceControlledFixture && hasSeed) {
+    throw new Error('source-controlled rendered proof cannot install a browser-storage seed')
+  }
   let browserContextId = null
   if (testCase.isolatedBrowserContext) {
     const context = await cdp.send('Target.createBrowserContext', { disposeOnDetach: true })
@@ -542,6 +634,8 @@ export async function verifyCase(cdp, origin, testCase) {
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
   const errors = []
   const networkRequests = []
+  const networkRequestUrls = new Map()
+  const failedNetworkRequests = []
   const disposers = []
   try {
     await cdp.send('Page.enable', {}, sessionId)
@@ -554,7 +648,9 @@ export async function verifyCase(cdp, origin, testCase) {
       deviceScaleFactor: testCase.mobile ? 3 : 1,
       mobile: Boolean(testCase.mobile),
     }, sessionId)
-    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: seedScript(testCase.seed || {}) }, sessionId)
+    if (!testCase.sourceControlledFixture) {
+      await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: seedScript(hasSeed ? testCase.seed : {}) }, sessionId)
+    }
     disposers.push(
       cdp.on(sessionId, 'Runtime.consoleAPICalled', (event) => {
         if (event.type !== 'error') return
@@ -570,7 +666,13 @@ export async function verifyCase(cdp, origin, testCase) {
         if (!/favicon/i.test(text)) errors.push(`log: ${text}`.trim())
       }),
       cdp.on(sessionId, 'Network.requestWillBeSent', (event) => {
-        networkRequests.push({ method: String(event.request?.method || ''), url: String(event.request?.url || '') })
+        const url = String(event.request?.url || '')
+        networkRequests.push({ method: String(event.request?.method || ''), url })
+        if (typeof event.requestId === 'string' && url) networkRequestUrls.set(event.requestId, url)
+      }),
+      cdp.on(sessionId, 'Network.loadingFailed', (event) => {
+        const url = networkRequestUrls.get(event.requestId)
+        if (url && /^https?:/iu.test(url)) failedNetworkRequests.push(url)
       }),
     )
 
@@ -591,6 +693,9 @@ export async function verifyCase(cdp, origin, testCase) {
     await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
+      : null
+    const rawShopProfitControl = testCase.exerciseShopProfitControl
+      ? await exerciseShopProfitControl(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
       : null
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
@@ -622,11 +727,26 @@ export async function verifyCase(cdp, origin, testCase) {
     const ecommerceViewportMatches = !ecommerceClaimBoundary
       || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
+    const profitControlViewportMatches = !rawShopProfitControl
+      || Math.abs((rawShopProfitControl.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((rawShopProfitControl.viewportHeight ?? 0) - testCase.height) <= 1
     const mutatingRequests = networkRequests.filter((entry) => !['GET', 'HEAD', 'OPTIONS'].includes(entry.method)).map((entry) => {
       let path = entry.url
       try { path = new URL(entry.url).pathname } catch {}
       return { method: entry.method, path }
     })
+    const externalRequestCount = networkRequests.filter((entry) => {
+      try {
+        const url = new URL(entry.url)
+        return ['http:', 'https:'].includes(url.protocol) && url.origin !== origin
+      } catch {
+        return false
+      }
+    }).length
+    const shopProfitControl = rawShopProfitControl ? {
+      ...rawShopProfitControl,
+      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
+    } : null
     const failures = [
       ...finalLocation.failures,
       ...(finalRendered?.bodyLength > 0 ? [] : ['blank page']),
@@ -643,6 +763,14 @@ export async function verifyCase(cdp, origin, testCase) {
         ? [`counter horizontal overflow: ${shopCounter.documentScrollWidth}px document in ${shopCounter.viewportWidth}px viewport`]
         : []),
       ...(counterViewportMatches ? [] : [`counter viewport changed from ${testCase.width}x${testCase.height} to ${shopCounter?.viewportWidth ?? 'unknown'}x${shopCounter?.viewportHeight ?? 'unknown'}`]),
+      ...(shopProfitControl && !shopProfitControl.ok ? ['Shop Profit Control semantic or accessibility contract failed'] : []),
+      ...(shopProfitControl && shopProfitControl.documentScrollWidth > shopProfitControl.viewportWidth + 1
+        ? [`Shop Profit Control horizontal overflow: ${shopProfitControl.documentScrollWidth}px document in ${shopProfitControl.viewportWidth}px viewport`]
+        : []),
+      ...(shopProfitControl && !shopProfitControl.accessibility?.ok ? ['Shop Profit Control accessibility or mobile touch-target contract failed'] : []),
+      ...(shopProfitControl && shopProfitControl.network.externalRequestCount !== 0 ? ['Shop Profit Control made an external request'] : []),
+      ...(shopProfitControl && shopProfitControl.network.failedRequestCount !== 0 ? ['Shop Profit Control had a failed request'] : []),
+      ...(profitControlViewportMatches ? [] : [`Shop Profit Control viewport changed from ${testCase.width}x${testCase.height} to ${shopProfitControl?.viewportWidth ?? 'unknown'}x${shopProfitControl?.viewportHeight ?? 'unknown'}`]),
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
       ...(mutatingRequests.length ? [`unexpected browser network writes: ${mutatingRequests.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`] : []),
@@ -664,6 +792,7 @@ export async function verifyCase(cdp, origin, testCase) {
           && finalRendered.documentScrollWidth <= finalRendered.viewportWidth + 1),
       },
       layout: shopCounter,
+      profitControl: shopProfitControl,
       claimBoundary: ecommerceClaimBoundary,
       screenshot,
       network: { mutatingRequestCount: mutatingRequests.length, mutatingRequests },

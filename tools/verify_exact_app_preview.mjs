@@ -62,6 +62,8 @@ export const EXACT_APP_PREVIEW_CASE_MATRIX = Object.freeze([
   { id: 'public_mobile', surface: 'public', route: '/', width: 390, height: 844, mobile: true, screenshot: 'public-home-mobile-390x844.png' },
   { id: 'shop_desktop', surface: 'shop', route: '/shop/?template=mini-mart', width: 1280, height: 900, mobile: false, screenshot: 'shop-counter-mini-mart-desktop-1280x900.png' },
   { id: 'shop_mobile', surface: 'shop', route: '/shop/?template=mini-mart', width: 390, height: 844, mobile: true, screenshot: 'shop-counter-mini-mart-mobile-390x844.png' },
+  { id: 'shop_profit_control_desktop', surface: 'shop_profit_control', route: '/shop/?tab=today', width: 1280, height: 900, mobile: false, screenshot: 'shop-profit-control-desktop-1280x900.png' },
+  { id: 'shop_profit_control_mobile', surface: 'shop_profit_control', route: '/shop/?tab=today', width: 390, height: 844, mobile: true, screenshot: 'shop-profit-control-mobile-390x844.png' },
   { id: 'plant_desktop', surface: 'plant', route: '/plant/', width: 1280, height: 900, mobile: false, screenshot: 'plant-working-sample-desktop-1280x900.png' },
   { id: 'plant_mobile', surface: 'plant', route: '/plant/', width: 390, height: 844, mobile: true, screenshot: 'plant-working-sample-mobile-390x844.png' },
   { id: 'website_desktop', surface: 'website', route: '/website/', width: 1280, height: 900, mobile: false, screenshot: 'website-working-sample-desktop-1280x900.png' },
@@ -69,6 +71,28 @@ export const EXACT_APP_PREVIEW_CASE_MATRIX = Object.freeze([
   { id: 'ecommerce_desktop', surface: 'ecommerce', route: '/ecommerce/', width: 1280, height: 900, mobile: false, screenshot: 'ecommerce-local-request-desktop-1280x900.png' },
   { id: 'ecommerce_mobile', surface: 'ecommerce', route: '/ecommerce/', width: 390, height: 844, mobile: true, screenshot: 'ecommerce-local-request-mobile-390x844.png' },
 ])
+
+export const SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION = Object.freeze({
+  ariaLabel: 'Shop profit control',
+  heading: 'Profit control',
+  explanation: 'Current leak → accountable owner → objective closure',
+  state: 'blocked',
+  status: '1 critical · 1 open',
+  priority: Object.freeze({
+    id: 'catalog_missing',
+    title: 'Load the first sellable catalog',
+    impact: 'Shop cannot measure sales, stock risk, or margin without reviewed items and opening stock.',
+    ownerRole: 'Shop owner',
+    dueLabel: 'Before pilot day one',
+    actionLabel: 'Open catalog',
+    target: '/shop/?tab=inventory#shop-catalog-import',
+    closureCondition: 'At least one reviewed item exists with price, stock, and reorder evidence.',
+    metric: '0 catalog items',
+    actionLabelVisible: true,
+    accessibleNamePresent: true,
+  }),
+  boundary: 'Read-only projection from the current Shop record. A card clears only when its source metric changes; this panel does not contact anyone, move money or stock, or write a completion claim.',
+})
 
 function fail(code) {
   throw new Error(code)
@@ -454,9 +478,86 @@ function exactShopResolvedPath(value) {
     && parsed.searchParams.get('template') === 'mini-mart'
 }
 
+function exactShopProfitControlResolvedPath(value) {
+  return value === '/shop/?tab=today'
+}
+
 function expectedResolvedPath(spec, value) {
   if (spec.surface === 'shop') return exactShopResolvedPath(value)
+  if (spec.surface === 'shop_profit_control') return exactShopProfitControlResolvedPath(value)
   return value === spec.route
+}
+
+function normalizeShopProfitControl(value, spec) {
+  if (spec.surface !== 'shop_profit_control') {
+    if (value !== null && value !== undefined) fail(`exact_app_preview_profit_control_unexpected:${spec.id}`)
+    return null
+  }
+  exactKeys(value, [
+    'ok', 'fixture', 'ariaLabel', 'heading', 'explanation', 'state', 'status', 'priority', 'boundary',
+    'viewportWidth', 'viewportHeight', 'documentScrollWidth', 'accessibility', 'network',
+  ], `exact_app_preview_profit_control_shape_invalid:${spec.id}`)
+  exactKeys(value.fixture, ['source', 'browserStorageHandEdited'], `exact_app_preview_profit_control_fixture_shape_invalid:${spec.id}`)
+  if (value.fixture.source !== 'fresh_isolated_browser_context' || value.fixture.browserStorageHandEdited !== false) {
+    fail(`exact_app_preview_profit_control_fixture_invalid:${spec.id}`)
+  }
+  exactKeys(value.priority, [
+    'id', 'title', 'impact', 'ownerRole', 'dueLabel', 'actionLabel', 'target', 'closureCondition', 'metric',
+    'actionLabelVisible', 'accessibleNamePresent',
+  ], `exact_app_preview_profit_control_priority_shape_invalid:${spec.id}`)
+  const semantics = {
+    ariaLabel: value.ariaLabel,
+    heading: value.heading,
+    explanation: value.explanation,
+    state: value.state,
+    status: value.status,
+    priority: value.priority,
+    boundary: value.boundary,
+  }
+  if (value.ok !== true || JSON.stringify(semantics) !== JSON.stringify(SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION)) {
+    fail(`exact_app_preview_profit_control_semantics_invalid:${spec.id}`)
+  }
+  if (value.viewportWidth !== spec.width || value.viewportHeight !== spec.height
+    || !Number.isFinite(value.documentScrollWidth) || value.documentScrollWidth < 1
+    || value.documentScrollWidth > spec.width + 1) {
+    fail(`exact_app_preview_profit_control_viewport_invalid:${spec.id}`)
+  }
+  exactKeys(value.accessibility, [
+    'ok', 'requiredMinimumPx', 'roundingTolerancePx', 'checked', 'minimumObservedWidthPx', 'minimumObservedHeightPx',
+  ], `exact_app_preview_profit_control_accessibility_shape_invalid:${spec.id}`)
+  const requiredMinimumPx = spec.mobile ? 44 : null
+  const roundingTolerancePx = spec.mobile ? 0.25 : null
+  if (value.accessibility.ok !== true
+    || value.accessibility.requiredMinimumPx !== requiredMinimumPx
+    || value.accessibility.roundingTolerancePx !== roundingTolerancePx
+    || !Number.isInteger(value.accessibility.checked) || value.accessibility.checked < 1 || value.accessibility.checked > 3
+    || !Number.isFinite(value.accessibility.minimumObservedWidthPx) || value.accessibility.minimumObservedWidthPx <= 0
+    || !Number.isFinite(value.accessibility.minimumObservedHeightPx) || value.accessibility.minimumObservedHeightPx <= 0
+    || (spec.mobile && (value.accessibility.minimumObservedWidthPx + 0.25 < 44
+      || value.accessibility.minimumObservedHeightPx + 0.25 < 44))) {
+    fail(`exact_app_preview_profit_control_accessibility_invalid:${spec.id}`)
+  }
+  exactKeys(value.network, ['externalRequestCount', 'failedRequestCount'], `exact_app_preview_profit_control_network_shape_invalid:${spec.id}`)
+  if (value.network.externalRequestCount !== 0 || value.network.failedRequestCount !== 0) {
+    fail(`exact_app_preview_profit_control_network_invalid:${spec.id}`)
+  }
+  return {
+    ok: true,
+    fixture: { source: 'fresh_isolated_browser_context', browserStorageHandEdited: false },
+    ...SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION,
+    viewportWidth: spec.width,
+    viewportHeight: spec.height,
+    documentScrollWidth: value.documentScrollWidth,
+    accessibility: {
+      ok: true,
+      requiredMinimumPx,
+      roundingTolerancePx,
+      checked: value.accessibility.checked,
+      minimumObservedWidthPx: value.accessibility.minimumObservedWidthPx,
+      minimumObservedHeightPx: value.accessibility.minimumObservedHeightPx,
+    },
+    network: { externalRequestCount: 0, failedRequestCount: 0 },
+  }
 }
 
 function normalizeBrowserCase(value, spec, expectedOrigin) {
@@ -491,8 +592,11 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
   if (spec.surface === 'ecommerce' && value.claimBoundary?.ok !== true) {
     fail(`exact_app_preview_ecommerce_claim_invalid:${spec.id}`)
   }
+  const profitControl = normalizeShopProfitControl(value.profitControl, spec)
   const primaryFlow = spec.surface === 'shop'
     ? 'counter_checkout_ready_above_fold'
+    : spec.surface === 'shop_profit_control'
+      ? 'profit_control_priority_action_and_closure_visible'
     : spec.surface === 'ecommerce'
       ? 'browser_local_request_boundary_visible'
       : spec.surface === 'plant'
@@ -510,6 +614,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
     viewport: { width: spec.width, height: spec.height, mobile: spec.mobile },
     bodyLength: value.bodyLength,
     primaryFlow,
+    profitControl,
     screenshot,
     browserContextIsolated: true,
     noHorizontalOverflow: true,
@@ -522,7 +627,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
 function normalizeStoredCase(value, spec, expectedOrigin) {
   exactKeys(value, [
     'id', 'surface', 'route', 'renderedOrigin', 'renderedHash', 'resolvedPath', 'viewport', 'bodyLength', 'primaryFlow',
-    'screenshot', 'browserContextIsolated', 'noHorizontalOverflow', 'runtimeClean',
+    'profitControl', 'screenshot', 'browserContextIsolated', 'noHorizontalOverflow', 'runtimeClean',
     'mutatingRequestCount', 'passed',
   ], `exact_app_preview_stored_case_shape_invalid:${spec.id}`)
   exactKeys(value.viewport, ['width', 'height', 'mobile'], `exact_app_preview_stored_viewport_shape_invalid:${spec.id}`)
@@ -535,6 +640,7 @@ function normalizeStoredCase(value, spec, expectedOrigin) {
     path: value.resolvedPath,
     bodyLength: value.bodyLength,
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
+    profitControl: value.profitControl,
     claimBoundary: spec.surface === 'ecommerce' ? { ok: true } : null,
     screenshot: value.screenshot,
     browserContextIsolated: value.browserContextIsolated,
@@ -869,6 +975,7 @@ async function readScreenshotPayloads(report, reportPath) {
 
 function expectedPath(spec) {
   if (spec.surface === 'shop') return exactShopResolvedPath
+  if (spec.surface === 'shop_profit_control') return exactShopProfitControlResolvedPath
   return spec.route
 }
 
@@ -880,6 +987,17 @@ function expectedText(spec, publicHomepageExpectedText) {
     return [...publicHomepageExpectedText]
   }
   if (spec.surface === 'shop') return ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL DEMO']
+  if (spec.surface === 'shop_profit_control') return [
+    SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.heading,
+    SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.explanation,
+    SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.title,
+    SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.impact,
+    `${SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.ownerRole} · ${SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.dueLabel}`,
+    `Next action: ${SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.actionLabel}`,
+    `Closed when: ${SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.closureCondition}`,
+    SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.metric,
+    SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.boundary,
+  ]
   if (spec.surface === 'plant') return ['Plant', 'working sample', "These dates belong to this browser-local sample, not today's production."]
   if (spec.surface === 'website') return ['Website', 'Make this website yours', 'Nothing has been deployed.']
   return ['Ecommerce', 'Try one customer order', 'Start sample order']
@@ -897,12 +1015,14 @@ function browserCase(spec, origin, publicHomepageExpectedText) {
     expectedPathLabel: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.route,
     expectedText: expectedText(spec, publicHomepageExpectedText),
     exerciseShopCounter: spec.surface === 'shop',
+    exerciseShopProfitControl: spec.surface === 'shop_profit_control',
+    sourceControlledFixture: spec.surface === 'shop_profit_control',
     exerciseEcommerceClaimBoundary: spec.surface === 'ecommerce',
     isolatedBrowserContext: true,
     noHorizontalOverflow: true,
     screenshotName: spec.screenshot.replace(/\.png$/i, ''),
     timeoutMs: 60_000,
-    seed: {},
+    ...(spec.surface === 'shop_profit_control' ? {} : { seed: {} }),
   }
 }
 
