@@ -153,18 +153,29 @@ status column in §1 for each. The operative forward sequence is now:
      premise also died with (a): post-#567 `jsTransferBeforeFcpBytes` is 19,068 --
      the 254 KB entry chunk has not finished when the page paints. Do not reopen
      this looking for the bytes; they were measured and they do not pay.
-   - **THE ACTUAL BIGGEST LEVER IS NOT LISTED ABOVE: the render-blocking chain.**
-     Removing the stylesheet measured **-2,290 ms**, twice the entire entry set
-     for a third of the bytes, and `/theme-restore.js` is a further ~400 ms of
-     pure latency. **This should be item 1 of the next cycle.** It needs its own
-     planning pass and it is not a free edit: `theme-restore.js` cannot simply be
-     inlined (`script-src 'self'` refuses inline script, `verify_app_build.mjs`
-     enforces that, and that exact failure is why the service worker never
-     registered for months), and it cannot simply be deferred without
-     reintroducing the light flash it exists to prevent. Doing it means a
-     `sha256` CSP source kept in lockstep in two places — a security-surface
-     change worth real seconds, which is why it deserves a pass rather than a
-     patch.
+   - **The biggest lever was never listed here, and its larger half is now
+     SHIPPED.** The render-blocking chain, not the entry set, is where the
+     seconds were.
+     - **Stylesheet: DONE.** `showroom/vite.config.ts`'s `asyncStylesheetPlugin`
+       rewrites Vite's emitted `<link rel="stylesheet">` into `/css-async.js`,
+       which appends it after parsing. Measured on the real build: **FCP 3,236
+       -> 1,492 ms**, and **4,400 -> 1,492 ms cumulative with the boot shell,
+       a 66% reduction.** No unstyled flash (stylesheet live 835 ms before
+       mount, zero bad frames). The Shop first-paint closure walk was taught the
+       new shape IN THE SAME COMMIT — without that the 230 KB stylesheet would
+       have silently left the closure and the byte guard would have gone blind
+       while still reporting ok. Verified both ways: the closure still measures
+       458,562 br q3 across 25 assets, and removing the `data-href` branch fails
+       the build rather than passing.
+     - **Still open: `/theme-restore.js`, ~400 ms of pure latency.** It is a
+       253-byte render-blocking script, so nearly all of that cost is the round
+       trip. It cannot simply be inlined (`script-src 'self'` refuses inline
+       script, `verify_app_build.mjs` enforces that, and that exact failure is
+       why the service worker never registered for months) and it cannot be
+       deferred without reintroducing the light flash it exists to prevent.
+       Doing it means a `sha256` CSP source kept in lockstep in two places — a
+       security-surface change worth ~400 ms, which is why it deserves its own
+       pass rather than a patch. **This is what remains of item 1.**
    - **Unrelated but urgent, found on the way (#570):** the pre-FCP entry graph
      is **299,995 bytes against a 300,000 ceiling**. Five bytes. The next change
      touching any module in that graph fails the build. #570 makes the margin
