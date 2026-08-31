@@ -119,9 +119,14 @@ in AI-NATIVE-ARCHITECTURE.md 4.1; tools/resolve_vercel_rollback_target.mjs).
 
 ~~Highest leverage: execute the founder-approved 24h preview-branch rehearsal
 with the OPS-754 instrument; it converts four blocked gates into evidence.~~
-**DONE 2026-08-16 (recorded here 2026-08-30).** It did convert the gates: the
-ledger went from 4 blocking to 1, and the one that remains is
-`production_activation`, which is founder-only. Do not re-run this rehearsal.
+**DONE 2026-08-16 (recorded here 2026-08-30).** Attribution corrected after
+Codex flagged it: this rehearsal moved the ledger **4 -> 3**, which is what
+`hq/WORKBOARD.md`'s OPS-759 row and `hq/TIMELINE.md` both record. The count is
+**1** today, but the other two gates were closed by later, independent work --
+crediting all three to this proof would let a reader treat two separate
+readiness requirements as satisfied by a persistence rehearsal that did not
+touch them. The one that remains is `production_activation`, which is
+founder-only. Do not re-run this rehearsal.
 
 ## 3. Auditability: A-
 
@@ -377,12 +382,20 @@ duplicates the deferred (dense-data-grid, realtime-broadcast) or rejected
    which already satisfies the underlying need this recommendation asked for.
    No `researchGate` entry is needed for this item.
 5. Scheduled hosted restore drills using the OPS-754 recovery proof.
-   Why: backup that has never restored hosted is a hope, not a control;
-   disposable Supabase preview branches are already the proven pattern
-   (storage-privacy proof, OPS-752). Cost: branch-hours only. Gate: the
-   managed_persistence readiness gate must pass first, then a NEW
-   researchGate entry "restore-drills" bound by the reviewed 25/day
-   scheduler ceiling (OPS-026) and delete-after-evidence.
+   **Rewritten 2026-08-30 — both of this item's premises were falsified by
+   the correction in section 2 above, and Codex was right that leaving them
+   here sends anyone following the reference to stale gating.**
+   ~~Why: backup that has never restored hosted is a hope, not a control~~ --
+   it HAS restored hosted, once: proof 6 (`workspace_backup_restore_roundtrip`,
+   result `roundtrip_exact`) ran on 2026-08-16.
+   ~~Gate: the managed_persistence readiness gate must pass first~~ — it has
+   passed; the gate reads `ready-hosted`.
+   What actually remains is **cadence, not first execution**: one run is
+   evidence that the mechanism works, not a control that it keeps working.
+   Disposable Supabase preview branches are the proven pattern (storage-privacy
+   proof OPS-752, and this rehearsal). Cost: branch-hours only. Gate: a NEW
+   researchGate entry "restore-drills" bound by the reviewed 25/day scheduler
+   ceiling (OPS-026) and delete-after-evidence.
 
 ---
 
