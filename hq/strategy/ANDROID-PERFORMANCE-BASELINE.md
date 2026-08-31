@@ -707,6 +707,44 @@ now measures **458,562 br q3 across 25 assets** (was 457,284 across 24 — the n
 shell script is the 25th), so the 230KB stylesheet is demonstrably still inside
 it. Had it dropped out, that number would have collapsed to roughly 180,000.
 
+### Transport caveat: this harness is HTTP/1.1, production is HTTP/2
+
+Verified 2026-08-31, and it changes how much weight some numbers here can carry.
+`tools/perf/measure-android-baseline.mjs` serves over `node:http` — **HTTP/1.1**,
+so the browser applies its six-connections-per-origin limit and each request
+carries its own connection cost. Vercel serves **HTTP/2**: one multiplexed
+connection, no six-connection cap, and no per-request round trip once it is open.
+
+What this does NOT affect: render-blocking is a parser behaviour, not a
+transport one. A `<link rel="stylesheet">` in `<head>` blocks first paint on
+any protocol, so the shipped async-stylesheet change and the boot shell both
+hold. Byte-cost findings (the entry-set honest zero) are also transport-neutral
+— 40 KB gz still takes 40 KB gz of a 50 KB/s pipe.
+
+What it DOES put in question is every finding whose mechanism is **request
+contention**, because that mechanism is largely an artefact of HTTP/1.1's
+connection limit:
+
+- the p6 result (deleting four `modulepreload` links moved FCP −436 ms while
+  removing zero bytes);
+- section 3's "six requests in flight, and the stylesheet's share is set by how
+  many competitors exist" model in `ENTRY-SET-REDUCTION-PLAN.md`;
+- the 2026-08-20 rejection of `modulepreload` at +1.5 s, which is the same
+  physics;
+- and the **~400 ms attributed to `/theme-restore.js`**, which is a 253-byte
+  same-origin file. Under HTTP/2 on an already-open connection that is nowhere
+  near a full round trip.
+
+None of those is refuted — they are correctly measured on the profile this
+document defines, and the relative ordering probably survives. But their
+magnitudes are upper bounds for production, and the theme-restore figure is the
+one most likely to shrink, because it is almost entirely per-request cost on a
+file too small for bytes to matter. **Do not spend a security-surface pass on a
+`sha256` CSP source for it until it has been re-measured over HTTP/2.** That
+re-measurement — teaching the harness `node:http2`, or pointing it at a preview
+deployment — is the cheaper prerequisite and is worth doing before any further
+contention-driven work.
+
 ### Remaining identified FCP levers
 
 1. **Shrink the 91 KB gz entry set.** Needs its own planning pass.
