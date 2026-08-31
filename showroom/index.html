@@ -48,9 +48,83 @@
       name="twitter:description"
       content="Shop sells and tracks stock. Plant runs production. Website builds pages. Ecommerce creates Shop-connected ordering."
     />
+    <!--
+      Boot shell. FCP measured 3,940 ms on `/` against a 3,690 ms load event
+      (ANDROID-PERFORMANCE-BASELINE.md) -- the document finished loading and
+      still painted nothing, because #root is empty until React renders and an
+      empty body has no content to paint. This gives the browser something
+      real to paint as soon as the 4 KB document parses, ahead of the 91 KB gz
+      entry set and ahead of core-app.css.
+
+      Rules this has to obey, all of them load-bearing:
+      * The CSS is INLINE. Pointing at a stylesheet would make first paint wait
+        on the same fetch the app already waits on, which is the whole problem.
+        `style-src` carries 'unsafe-inline' so this is allowed; `script-src` is
+        'self' with no hash, so an inline SCRIPT here would be silently refused
+        (see the note on /theme-restore.js) -- hence the removal is pure CSS.
+      * `#root:not(:empty) + #boot-shell` retires the shell the instant React
+        commits anything, with no JS and no mount hook to forget. `:empty`
+        rather than `:has(*)` because this ships to old Android WebViews.
+      * The colours are duplicated from core-app.css `--core-bg` (#f6f4ee /
+        #05080d) rather than referenced, because that file has not loaded yet
+        at the moment this paints. If those tokens change, change them here
+        too -- verify_app_build.mjs fails the build if they drift.
+      * theme-restore.js stamps data-supermega-theme BEFORE paint, so the dark
+        rule below is correct on the very first frame and a dark-theme user
+        never sees a light flash.
+    -->
+    <style>
+      #boot-shell{position:fixed;inset:0;z-index:-1;background:#f6f4ee;display:flex;flex-direction:column;gap:14px;padding:18px;font-family:Geist,Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+      #root:not(:empty)+#boot-shell{display:none}
+      .boot-shell__mark{color:#0b745e;font-size:.75rem;font-weight:800;letter-spacing:.1em}
+      .boot-shell__line{background:rgba(11,116,94,.1);border-radius:8px;height:14px}
+      .boot-shell__line--wide{width:62%}
+      .boot-shell__line--tall{flex:1;min-height:120px}
+      :root[data-supermega-theme="dark"] #boot-shell{background:#05080d}
+      :root[data-supermega-theme="dark"] .boot-shell__line{background:rgba(120,214,190,.12)}
+      /* The stall notice. Without it a failed boot is indistinguishable from a slow one:
+         #root stays empty, so the removal rule above never fires and the skeleton sits there
+         looking like progress. Measured on this branch — every /assets/*.js served 503, and
+         after 10s the shell is still display:flex with #root empty. Before the shell existed
+         the same failure painted a blank page, which at least reads as broken; a skeleton
+         reads as loading, and these users are on connections slow enough that waiting is the
+         rational response. So the shell traded an obvious failure for a plausible one, and
+         this pays that back.
+
+         CSS, not JS, on purpose: the case being handled IS "the JavaScript did not run", so a
+         script-driven timer cannot fire, and a zero-duration animation with a long delay works
+         under script-src 'self' with nothing to load. 20s is deliberately past a bad-3G cold
+         load (measured worst case here ~4.4s pre-optimisation) so a merely slow connection
+         does not get told something is wrong.
+
+         NOT disabled under prefers-reduced-motion. The animation moves nothing — it is a timer
+         wearing an animation's clothes — and suppressing it would deny the notice to exactly
+         the users most likely to have configured that setting. Reduced motion means less
+         movement, not less information. */
+      .boot-shell__stall{opacity:0;margin-top:auto;font-size:.8125rem;line-height:1.5;color:#3d3a34;animation:boot-shell-stall 1ms linear 20s forwards}
+      .boot-shell__stall a{color:#0b745e;font-weight:600}
+      @keyframes boot-shell-stall{to{opacity:1}}
+      :root[data-supermega-theme="dark"] .boot-shell__stall{color:#c9d3cf}
+      :root[data-supermega-theme="dark"] .boot-shell__stall a{color:#78d6be}
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-shell" aria-hidden="true">
+      <span class="boot-shell__mark">SUPERMEGA</span>
+      <div class="boot-shell__line boot-shell__line--wide"></div>
+      <div class="boot-shell__line boot-shell__line--tall"></div>
+      <div class="boot-shell__line boot-shell__line--wide"></div>
+      <!-- Wording is deliberately non-committal: at 20s we do not KNOW whether the boot failed
+           or the connection is simply bad, and claiming failure on a slow link would be crying
+           wolf at the users who least need it. "Taking longer than usual" is true either way.
+           The second sentence is lifted verbatim from RouteErrorBoundary's shipped copy, and
+           the link's label matches its Reload button, so a person who has seen one recognises
+           the other. A plain anchor, not a button: window.location.reload() needs the JS that
+           by hypothesis is not running. -->
+      <p class="boot-shell__stall">SuperMega is taking longer than usual to start. Your saved
+        work on this device has not been changed. <a href=".">Reload</a></p>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- Both of these are files rather than inline blocks for the same reason as
          /theme-restore.js above: `script-src 'self'` refuses inline script, so the

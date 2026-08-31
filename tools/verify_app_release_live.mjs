@@ -102,9 +102,17 @@ if (artifactSelfTest) {
     readFile(resolve(root, 'site-manifest.json'), 'utf8').then(JSON.parse),
     readdir(assetsDir),
   ])
+  // The third pattern is load-bearing. The stylesheet is no longer a render-blocking <link>:
+  // showroom/vite.config.ts rewrites it to `<script src="/css-async.js" data-href="...">` so
+  // first paint stops waiting on 230KB (FCP 3,236ms -> 1,492ms, measured). Without the
+  // data-href match the CSS never enters assetCorpus and every value that lives only in the
+  // stylesheet -- the brand accent among them -- silently stops being checked. CI caught
+  // exactly that as missing_current_release_asset:launcher:#0b745e, which is the good outcome;
+  // the bad one is a corpus that quietly shrinks and keeps passing.
   const rootAssetPaths = [
     ...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g),
     ...rootHtml.matchAll(/<link[^>]+href="([^"]+\.(?:js|css))"/g),
+    ...rootHtml.matchAll(/<script[^>]+src="\/css-async\.js"[^>]+data-href="([^"]+)"/g),
   ].map((match) => match[1].replace(/^\//, ''))
   const assetCorpus = (await Promise.all(rootAssetPaths.map((path) => readFile(resolve(distDir, path), 'utf8')))).join('\n')
   if (assetNames.some((name) => /^ProductHomeReadiness-[A-Za-z0-9_-]+\.js$/.test(name))) {
@@ -364,7 +372,14 @@ if (cloud.status === 'ready' && cloud.scheduler?.activation_enabled !== true) th
 
 const rootHtml = pages.get('/')
 const scriptPaths = [...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1])
-const cssPaths = [...rootHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1])
+// Same two shapes as the local walk above, and for the same reason: the stylesheet reaches the
+// document through /css-async.js's data-href, not a <link>, so matching only the link form
+// would leave the CSS out of the live corpus entirely.
+const cssPaths = [
+  ...[...rootHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1]),
+  ...[...rootHtml.matchAll(/<script[^>]+src="\/css-async\.js"[^>]+data-href="([^"]+)"/g)].map((match) => match[1]),
+]
+if (!cssPaths.length) throw new Error('live_release_found_no_stylesheet')
 const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (path) => (await get(path)).body))).join('\n')
 if (/assets\/ProductHomeReadiness-[A-Za-z0-9_-]+\.js/.test(assetCorpus)) {
   throw new Error('retired_product_home_readiness_chunk_present')

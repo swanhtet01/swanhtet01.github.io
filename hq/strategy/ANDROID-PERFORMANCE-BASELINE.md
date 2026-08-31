@@ -69,7 +69,12 @@ node tools/perf/measure-android-baseline.mjs --runs 3 --out baseline.json
   (gzip-encoded, Script resources only); JS source/executed bytes from
   `Profiler.takePreciseCoverage` (detailed, block-level); ScriptDuration /
   TaskDuration from `Performance.getMetrics`.
-- The build's `dist/` contains no `sw.js`, so the service-worker registration
+- **[STALE as of 2026-08-30 — see "the instrument was measuring its own cache"
+  at the foot of this document. This premise died when G3 shipped a real
+  service worker, and every run of the harness between then and 2026-08-30
+  reported medians that were roughly 10x optimistic. The numbers in the table
+  below predate that and are sound; a re-run before the fix would not be.]**
+  The build's `dist/` contains no `sw.js`, so the service-worker registration
   in `showroom/index.html:59` 404s and no SW cache interferes with runs.
 
 ## Per-route results (median of 3 cold loads)
@@ -489,3 +494,296 @@ including the two it was intended to help. Not shipped.
   counts to settle, so it cannot by itself distinguish "moved off the critical
   path" from "never loaded" — that is what `jsTransferBeforeFcpBytes` was added
   for, and the early-tap probe covers the interaction axis neither of them sees.
+
+---
+
+## 2026-08-30: the instrument was measuring its own cache, and the app shell landed
+
+Two findings, one of which invalidates a slice of this document's own future.
+
+### 1. The harness was reporting ~10x optimistic medians
+
+`Network.setCacheDisabled` disables the HTTP cache and nothing else. It does
+not touch a service worker's Cache Storage. This document's methodology note
+said runs were clean because "`dist/` contains no `sw.js`" — true when it was
+written, and false the moment G3 shipped a real service worker. From then on,
+run 1 of each route registered the worker and precached 35 files (1.98 MB),
+and every run after it was served entirely out of Cache Storage.
+
+Measured on `/`, three runs, before the fix:
+
+| Run | FCP (ms) | load (ms) | JS transfer (B) |
+|---|---|---|---|
+| 1 (cold) | 4,440 | 4,215 | 99,209 |
+| 2 | 400 | 243 | **0** |
+| 3 | 392 | 230 | **0** |
+| **reported median** | **400** | **243** | **0** |
+
+A median of 400 ms for a route that actually takes 4,440 ms cold. The zero
+transfer bytes are the tell, and they were being reported in the output all
+along.
+
+Fixed in `tools/perf/measure-android-baseline.mjs` by clearing the origin's
+storage (`Storage.clearDataForOrigin`, `storageTypes: 'all'`) per run, which
+restores the cold navigation the script claims to measure. Post-fix control on
+the same unmodified build: `/` FCP 4,400 ms / load 4,207 ms, `/?choose=1` FCP
+4,516 ms / load 4,249 ms — consistent run to run, and back in line with the
+original table.
+
+**How to tell whether a given number was affected — and the good news for this
+document.** The pollution has a specific signature: because the median of three
+runs lands on one of the two warm runs, a polluted median is *sub-second* and
+carries *zero* JS transfer bytes. It does not look like a slightly-optimistic
+cold number; it looks like a 400 ms one.
+
+G3 landed 2026-08-20 (`677b61e1`, merged as #519 on 2026-08-21), so everything
+recorded here on or after that date was at risk. Checked every measured figure
+in this document against the signature: none of them show it. The 2026-08-20
+corrections section quotes 3,804 / 3,840 / 3,884 ms controls and a 5,372 ms
+modulepreload result; the tap-through probe quotes ~931 ms. All cold-range.
+**So the recorded numbers stand, including the two rejected optimizations and
+the prohibitions that rest on them — do not discard them on account of this
+bug.** What was at risk was any *future* run, and the fix lands before one.
+
+If you find a sub-second median with zero transfer bytes anywhere, that row is
+a cache hit and must be re-run.
+
+### 2. Recommendation 3 (static app-shell skeleton) — SHIPPED, and it works
+
+`showroom/index.html` now carries a boot shell: inline critical CSS plus a few
+skeleton blocks, retired by `#root:not(:empty)+#boot-shell{display:none}` the
+instant React commits. No JS — `script-src 'self'` refuses inline script, and
+`verify_app_build.mjs` enforces that separately, so the removal had to be pure
+CSS. The CSS is inline rather than in `core-app.css` because pointing at the
+stylesheet would make first paint wait on the very fetch that is the problem.
+
+Measured cold, 3 runs each, same build, same profile, before and after:
+
+| Route | FCP before | FCP after | Δ | load before | load after |
+|---|---|---|---|---|---|
+| `/` | 4,400 ms | **3,280 ms** | **−1,120 ms (−25.5%)** | 4,207 ms | 4,247 ms |
+| `/?choose=1` | 4,516 ms | **3,244 ms** | **−1,272 ms (−28.2%)** | 4,249 ms | 4,228 ms |
+
+Load is flat, so the win is not bought from somewhere else, and long-task
+totals are unchanged (`/`: 956 → 962 ms; chooser: 503 → 476 ms).
+
+**This item's own prediction was wrong, and by a lot.** It said a skeleton
+"moves first visual feedback to well under 1 s on this profile". It does not:
+FCP is 3.2 s, not sub-second. The reason is that a render-blocking
+`<script src="/theme-restore.js">` and a 35 KB stylesheet still sit between the
+document and first paint, and on a 400 ms RTT / 50 KB/s pipe those cost roughly
+two seconds before the skeleton is allowed to draw. A −1.1 s improvement for
+~1 KB of HTML is a good trade, but do not carry "under 1 s" forward as
+achievable without also moving those two blockers — and note that
+`theme-restore.js` cannot simply be deferred, because it exists to prevent a
+dark-theme user seeing a light flash.
+
+Dark theme verified rather than assumed: with
+`supermega-interface-theme=dark` in localStorage and CPU throttled x20, the
+shell sampled at t=428 ms reads `background: rgb(5, 8, 13)` with
+`#root.children.length === 0` — genuinely pre-mount, and dark on the first
+frame. No light flash.
+
+### Known regression this introduced: a failed boot now looks like a slow one
+
+Measured, not theorised. Serving the app with every `/assets/*.js` returning
+503 and waiting 10 s: `#boot-shell` is still `display: flex` with "SUPERMEGA"
+on screen and `#root.children.length === 0`. **The skeleton stays forever, with
+nothing indicating anything is wrong.**
+
+Before this change that same failure produced a blank white page. Blank reads
+as broken and prompts a reload; a skeleton reads as *loading*, and this
+product's users are on connections that genuinely do take many seconds, so they
+are conditioned to wait rather than retry. In the success case the shell is a
+clear win; in the failure case it is a mild regression, and pretending
+otherwise would be dishonest about a change made in the name of perceived speed.
+
+Scope, stated accurately: a returning device with the service worker installed
+is served the precached bundle (35 files) and does not hit this. It bites on a
+**first** visit, before any worker exists, when an asset fetch fails — which is
+also the worst case to mishandle, because it is a first impression.
+
+**Proposed mitigation, not yet built: a pure-CSS stall message.** A
+zero-duration animation with a long `animation-delay` on a hidden element
+reveals a line after ~20 s with no JS, so it survives `script-src 'self'` and
+needs no mount hook — the same constraint the removal rule already works
+within. It is deliberately NOT in this change because the revealed line is
+customer-facing copy, and `DESIGN-PROGRAM.md` P3.8 requires founder sign-off on
+customer-facing sentences (there is live precedent: P3.8 batch 1 is built and
+held in a draft PR for exactly that). Shipping the mechanism is an hour;
+shipping the sentence is a decision.
+
+### SHIPPED: the stylesheet no longer blocks first paint
+
+**FCP 3,236 -> 1,484 ms. −1,752 ms, −54%.** Measured 2026-08-30 on the fixed
+harness, 3 cold runs per arm, both arms built from the same commit WITH the boot
+shell present.
+
+The mechanism is the boot shell's own trick applied one level up. `index.html`
+carries a render-blocking `<link rel="stylesheet">` to a **230,018-byte** file.
+The boot shell's CSS is fully inline, so it needs none of it to paint — but the
+render-blocking link stalls first paint anyway. The variant replaces that link
+with a small external script that injects it:
+
+```js
+var l = document.createElement('link')
+l.rel = 'stylesheet'
+l.href = document.currentScript.getAttribute('data-href')
+document.head.appendChild(l)
+```
+
+External, not inline, for the same reason as `/theme-restore.js`: `script-src`
+is `'self'` with no hash. This is the existing three-shell-script pattern, not a
+new one.
+
+**The end state is verified identical**, which is what rules out "it is only
+fast because the page is broken": control and variant both finish with 2
+stylesheets, **1,813 CSS rules**, the same `Geist, Inter, ui-sans-serif` stack,
+the same `rgb(246, 244, 238)` body background and the same mounted tree.
+
+Stacked on the boot shell, that is **4,400 -> 1,484 ms from the original
+baseline: −2,916 ms, a 66% reduction.**
+
+**Why this is recorded as a lead and not shipped.** Three things are genuinely
+open, and one of them is a warning about this document's own method:
+
+1. **FOUC: MEASURED CLEAN.** A `requestAnimationFrame` probe keyed on the
+   stylesheet's own presence in `document.styleSheets` (not on a guessed
+   colour) gives, on the async variant: stylesheet live at **3,498 ms**, boot
+   shell retired and React mounted at **4,353 ms** — **855 ms of margin**, and
+   **zero** frames with content mounted and no stylesheet. The control shows
+   the same ordering (3,230 / 4,289). The change does not introduce a flash.
+
+   Recorded because it nearly went the other way: my FIRST probe watched for a
+   background colour, used the wrong sentinel, and reported that the stylesheet
+   never applied at all and that the app rendered unstyled for 92 samples. Both
+   false. A broken *check* is indistinguishable from a broken *feature*, and a
+   −1.7 s win was one bad assertion away from being discarded. Key the probe on
+   the thing itself, not on a proxy for it.
+2. **THE BLOCKER, and it is not obvious: this change would blind a size guard.**
+   `verify_app_build.mjs:20734` builds the Shop first-paint closure by regexing
+   the built document for stylesheet links:
+   `matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)`. Replace that
+   link with a `<script src="/css-async.js" data-href="...">` and
+   `documentStyles` is EMPTY — the 230,018-byte stylesheet silently leaves the
+   closure, the measured 457,284 br q3 collapses to roughly 180,000, and the
+   guard that rations Shop's first paint stops seeing the largest thing in it.
+   That is exactly the failure mode this file already documents at ~20780
+   ("a walk that stops resolving specifiers makes both pass while seeing only
+   the entry chunk"), and shipping it would trade a real perf win for a blind
+   ratchet. **Any implementation MUST teach the closure walk to follow
+   `data-href` in the same commit, and re-measure the closure to confirm the
+   stylesheet is still counted.** The floor check will catch it if you forget —
+   but only if the floor is not lowered to accommodate the drop, which is the
+   tempting wrong move.
+3. Still open: `css-async.js` must be generated by
+   `tools/write_app_release_metadata.mjs` like the other three shell scripts
+   (it writes to `public-app/`, pre-build), the rewrite itself belongs in a
+   Vite `transformIndexHtml` plugin beside the existing `localHealthPlugin`
+   (`showroom/vite.config.ts` is not digest-bound), the offline precache list
+   grows from 35 files, and `404.html`/the public shell need deciding on
+   separately — `rootPageSource` is checked for the three shell scripts today.
+
+**Shipped on the real build**, not the throwaway variant: FCP median **1,492 ms**
+(runs 1,472 / 1,492 / 1,492), FOUC clean with the stylesheet live at 3,524 ms
+against a 4,359 ms mount — **835 ms of margin, zero unstyled frames**. Gate
+652/652, lint 0 errors.
+
+**A SECOND asset walk had to be taught the same shape, and the local gate does
+not cover it.** `tools/verify_app_release_live.mjs` builds its release-asset
+corpus from the root document the same way, in two places. CI failed on
+`missing_current_release_asset:launcher:#0b745e` — the brand accent lives only
+in the stylesheet, so with the `<link>` gone the CSS never entered the corpus
+and every value checked from it stopped being checked. Same blindness as the
+closure walk, in a file the 652-step gate never runs: **`run_app_verify.mjs` is
+NOT a superset of CI**, and this is the counter-example. Both walks now match
+`data-href`, both were mutation-tested against CI's exact error, and the live
+walk throws `live_release_found_no_stylesheet` if it ever finds none.
+
+The closure guard was taught the new shape in the same commit, and the fix was
+verified by breaking it: with the `data-href` branch removed the build fails
+`shop_route_closure_found_no_stylesheet` rather than passing blind. The closure
+now measures **458,562 br q3 across 25 assets** (was 457,284 across 24 — the new
+shell script is the 25th), so the 230KB stylesheet is demonstrably still inside
+it. Had it dropped out, that number would have collapsed to roughly 180,000.
+
+### Transport caveat: this harness is HTTP/1.1, production is HTTP/2
+
+Verified 2026-08-31, and it changes how much weight some numbers here can carry.
+`tools/perf/measure-android-baseline.mjs` serves over `node:http` — **HTTP/1.1**,
+so the browser applies its six-connections-per-origin limit and each request
+carries its own connection cost. Vercel serves **HTTP/2**: one multiplexed
+connection, no six-connection cap, and no per-request round trip once it is open.
+
+What this does NOT affect — **now measured over real HTTP/2, not argued.** `tools/perf/measure-android-baseline.mjs` now takes
+`--transport h1|h2`; `h2` serves over TLS with ALPN (`node:http2`, a throwaway
+`openssl` localhost cert, browser launched with `--ignore-certificate-errors`).
+**h1 stays the default deliberately** — every row recorded here before
+2026-08-31 was taken that way, and silently changing the default would make old
+and new numbers incomparable. Each run records `negotiatedProtocol` and a run
+that asked for h2 but got http/1.1 **throws** rather than reporting, because
+`allowHTTP1: true` makes that fallback possible and a mislabelled measurement is
+exactly the kind of error that survives into a document and gets acted on.
+
+The shipped change was re-run against a control built by restoring the blocking
+`<link>` into the same `dist`:
+
+| Transport | blocking `<link>` | async (shipped) | delta |
+|---|---|---|---|
+| HTTP/1.1 | 3,240 ms | 1,468 ms | **−1,772 ms** |
+| **HTTP/2** | 3,176 ms | **1,500 ms** | **−1,676 ms** |
+
+**95% of the win survives the transport production actually uses.** Render-
+blocking is a parser behaviour, not a transport one: a `<link rel="stylesheet">`
+in `<head>` blocks first paint on any protocol. Note also that the two *blocking*
+arms are within 64 ms of each other, so the six-connection limit is not what
+makes that arm slow — the parser block is.
+
+So the shipped async-stylesheet change and the boot shell both hold. Byte-cost findings (the entry-set honest zero) are also transport-neutral
+— 40 KB gz still takes 40 KB gz of a 50 KB/s pipe.
+
+What it DOES put in question is every finding whose mechanism is **request
+contention**, because that mechanism is largely an artefact of HTTP/1.1's
+connection limit:
+
+- the p6 result (deleting four `modulepreload` links moved FCP −436 ms while
+  removing zero bytes);
+- section 3's "six requests in flight, and the stylesheet's share is set by how
+  many competitors exist" model in `ENTRY-SET-REDUCTION-PLAN.md`;
+- the 2026-08-20 rejection of `modulepreload` at +1.5 s, which is the same
+  physics;
+- and the **~400 ms attributed to `/theme-restore.js`**, which is a 253-byte
+  same-origin file. Under HTTP/2 on an already-open connection that is nowhere
+  near a full round trip.
+
+None of those is refuted, and **none of them has been re-measured over h2
+either** — only the stylesheet arm was, above. They are correctly measured on
+the profile this document defines, and the relative ordering probably survives. But their
+magnitudes are upper bounds for production, and the theme-restore figure is the
+one most likely to shrink, because it is almost entirely per-request cost on a
+file too small for bytes to matter. **Do not spend a security-surface pass on a
+`sha256` CSP source for it until it has been re-measured over HTTP/2.** That
+re-measurement — teaching the harness `node:http2`, or pointing it at a preview
+deployment — is the cheaper prerequisite and is worth doing before any further
+contention-driven work.
+
+### Remaining identified FCP levers
+
+1. **Shrink the 91 KB gz entry set.** Needs its own planning pass.
+2. **The 35 KB render-blocking stylesheet.**
+3. **`/theme-restore.js` — a 253-byte file costing a whole round trip.** Worth
+   naming precisely because there is an obvious-looking fix that is a trap.
+   The file is tiny, so its ~400 ms cost on this profile is almost entirely
+   latency, and inlining it would remove that from the critical path. **Do not
+   simply inline it.** `script-src 'self'` has no `'unsafe-inline'`, so an
+   inline block is silently REFUSED — that exact failure is why the service
+   worker never registered for months (G3), and `verify_app_build.mjs` now
+   fails the build on any inline `<script>` in the shell specifically to keep
+   it from recurring. Making this work would mean adding a `'sha256-...'`
+   source to the policy in BOTH `index.html`'s meta and `vercel.json`, keeping
+   the hash in lockstep with the script body, and deliberately relaxing a
+   guard whose comment explains why it exists. That is a security-surface
+   change, not a perf tweak, and it needs its own pass with that framing —
+   the payoff is roughly 400 ms, which is real but does not justify doing it
+   carelessly.
+

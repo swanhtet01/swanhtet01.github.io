@@ -13,19 +13,29 @@
 // Usage:
 //   node tools/perf/measure-android-baseline.mjs [--runs 3] [--out results.json]
 //     [--routes "/,/shop/?tab=counter"] [--chromium /path/to/chrome]
+//     [--transport h1|h2]
+//
+// --transport h2 serves over TLS + ALPN so the browser negotiates real HTTP/2,
+// which is what production (Vercel) speaks. Default stays h1 because every number
+// recorded in ANDROID-PERFORMANCE-BASELINE.md before 2026-08-31 was taken that way
+// and changing the default silently would make old and new rows incomparable.
+// h2 needs `openssl` on PATH for a throwaway localhost cert, and launches the
+// browser with --ignore-certificate-errors, which is why it is opt-in.
 //
 // Requires: an existing showroom/dist build (run `npm --prefix showroom run build`
 // first) and a Chromium binary (default: newest /opt/pw-browsers/chromium-*/,
 // override with --chromium or $CHROMIUM_BIN).
 
 import { createServer } from 'node:http'
-import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs'
+import { createSecureServer } from 'node:http2'
+import { execFileSync } from 'node:child_process'
+import { createReadStream, existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
-import { createGzip } from 'node:zlib'
+import { createGzip, gzipSync } from 'node:zlib'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const distDir = join(repoRoot, 'showroom', 'dist')
@@ -72,6 +82,11 @@ if (!Number.isInteger(runsPerRoute) || runsPerRoute < 1) {
 }
 const outFile = argValue('--out', '')
 const routes = argValue('--routes', '') ? argValue('--routes', '').split(',') : DEFAULT_ROUTES
+const transport = argValue('--transport', 'h1')
+if (transport !== 'h1' && transport !== 'h2') {
+  console.error(`--transport must be h1 or h2, got: ${transport}`)
+  process.exit(1)
+}
 
 function findChromium() {
   const explicit = argValue('--chromium', process.env.CHROMIUM_BIN || '')
@@ -104,7 +119,63 @@ const MIME = {
 }
 const GZIP_TYPES = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.webmanifest'])
 
+// Throwaway localhost cert for --transport h2. Browsers refuse HTTP/2 without TLS
+// (h2c is not supported), so measuring the transport production uses requires one.
+// Generated per run into the OS temp dir and never reused or committed.
+function makeThrowawayCert() {
+  const dir = mkdtempSync(join(tmpdir(), 'supermega-perf-cert-'))
+  const key = join(dir, 'key.pem')
+  const cert = join(dir, 'cert.pem')
+  try {
+    execFileSync('openssl', [
+      'req', '-x509', '-newkey', 'rsa:2048', '-keyout', key, '-out', cert,
+      '-days', '1', '-nodes', '-subj', '/CN=localhost',
+    ], { stdio: 'ignore' })
+  } catch {
+    console.error('--transport h2 needs `openssl` on PATH for a throwaway localhost certificate.')
+    process.exit(1)
+  }
+  return { key: readFileSync(key), cert: readFileSync(cert), dir }
+}
+
 function startServer() {
+  // One handler, two transports. The h2 path answers on the `stream` event and the
+  // h1 path on `request`; `allowHTTP1: true` keeps the secure server usable either way.
+  const respond = (send404, sendFile) => (pathname) => {
+    let filePath = normalize(join(distDir, pathname))
+    if (filePath !== distDir && !filePath.startsWith(distDir + sep)) return send404(403)
+    let ext = extname(filePath)
+    const exists = existsSync(filePath) && statSync(filePath).isFile()
+    if (!exists) {
+      if (ext) return send404(404)
+      filePath = join(distDir, 'index.html')
+      ext = '.html'
+    }
+    sendFile(filePath, MIME[ext] || 'application/octet-stream', GZIP_TYPES.has(ext))
+  }
+  if (transport === 'h2') {
+    const { key, cert } = makeThrowawayCert()
+    const server = createSecureServer({ key, cert, allowHTTP1: true })
+    server.on('stream', (stream, headers) => {
+      let pathname
+      try {
+        pathname = decodeURIComponent(new URL(headers[':path'] || '/', 'https://localhost').pathname)
+      } catch {
+        stream.respond({ ':status': 400 }); stream.end(); return
+      }
+      respond(
+        (status) => { stream.respond({ ':status': status }); stream.end() },
+        (filePath, type, gzip) => {
+          const body = gzip ? gzipSync(readFileSync(filePath)) : readFileSync(filePath)
+          stream.respond({ ':status': 200, 'content-type': type, ...(gzip ? { 'content-encoding': 'gzip' } : {}) })
+          stream.end(body)
+        },
+      )(pathname)
+    })
+    return new Promise((resolveStarted) => {
+      server.listen(0, '127.0.0.1', () => resolveStarted(server))
+    })
+  }
   const server = createServer((req, res) => {
     let pathname
     try {
@@ -228,6 +299,9 @@ async function launchChromium(bin, userDataDir) {
       '--no-default-browser-check',
       '--remote-debugging-port=0',
       `--user-data-dir=${userDataDir}`,
+      // Only under --transport h2, and only for the throwaway localhost cert above.
+      // Never added on the default h1 path.
+      ...(transport === 'h2' ? ['--ignore-certificate-errors'] : []),
       'about:blank',
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },
@@ -308,6 +382,18 @@ async function measureRoute(cdp, origin, route) {
     await cdp.send('Performance.enable', {}, sessionId)
     await cdp.send('Profiler.enable', {}, sessionId)
     await cdp.send('Network.setCacheDisabled', { cacheDisabled: true }, sessionId)
+    // `Network.setCacheDisabled` disables the HTTP cache and NOTHING ELSE. It does
+    // not touch a service worker's Cache Storage, so once dist/ started shipping a
+    // real sw.js (G3 -- before that this file's premise "dist/ contains no sw.js"
+    // held and this line was unnecessary), run 1 registered the worker and precached
+    // 35 files, and every run after it was served entirely out of Cache Storage:
+    // measured 2026-08-30 on `/` as 4,440ms/99,209 B cold, then 400ms/0 B and
+    // 392ms/0 B, reported as a 400ms median. That is a ~10x optimistic number for
+    // an instrument whose whole job is to be the citable baseline. Clearing the
+    // origin's storage per run restores the cold navigation this script claims to
+    // measure; it also drops localStorage, which is correct here -- the documented
+    // route semantics for `/` are a fresh visitor's redirect to the default product.
+    await cdp.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' }, sessionId)
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE_RATE }, sessionId)
     await cdp.send('Network.emulateNetworkConditions', NET, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', DEVICE, sessionId)
@@ -317,12 +403,18 @@ async function measureRoute(cdp, origin, route) {
 
     // network accounting: transfer bytes per resource type
     const requests = new Map() // requestId -> { type, url }
+    let negotiatedProtocol = null
     const transfer = { Script: 0, Stylesheet: 0, Document: 0, other: 0 }
     const perScriptTransfer = new Map()
     let lastNetworkActivity = Date.now()
     disposers.push(
       cdp.on(sessionId, 'Network.responseReceived', (p) => {
         requests.set(p.requestId, { type: p.type, url: p.response.url })
+        // Record what was actually negotiated. `allowHTTP1: true` on the secure server means
+        // --transport h2 CAN silently fall back to http/1.1, and a run that quietly measured
+        // the wrong transport is worse than one that failed: it looks like an answer. This is
+        // asserted below rather than trusted.
+        if (!negotiatedProtocol && p.response.protocol) negotiatedProtocol = p.response.protocol
         lastNetworkActivity = Date.now()
       }),
       // dataReceived keeps the quiet-detector honest while a large body streams
@@ -401,8 +493,15 @@ async function measureRoute(cdp, origin, route) {
     const { metrics } = await cdp.send('Performance.getMetrics', {}, sessionId)
     const metric = (name) => metrics.find((m) => m.name === name)?.value ?? null
 
+    // Fail rather than report a number taken over the wrong transport. `allowHTTP1: true`
+    // makes a silent h2 -> http/1.1 fallback possible, and a mislabelled measurement is the
+    // kind of error that survives into a document and gets acted on.
+    if (transport === 'h2' && negotiatedProtocol && negotiatedProtocol !== 'h2') {
+      throw new Error(`transport_negotiation_failed: asked for h2, browser negotiated ${negotiatedProtocol}`)
+    }
     return {
       route,
+      negotiatedProtocol,
       ...page,
       jsTransferBytes: transfer.Script,
       cssTransferBytes: transfer.Stylesheet,
@@ -451,7 +550,7 @@ async function main() {
   }
   const chromiumBin = findChromium()
   const server = await startServer()
-  const origin = `http://127.0.0.1:${server.address().port}`
+  const origin = `${transport === 'h2' ? 'https' : 'http'}://127.0.0.1:${server.address().port}`
   const userDataDir = await mkdtemp(join(tmpdir(), 'perf-baseline-'))
   const { proc, wsUrl } = await launchChromium(chromiumBin, userDataDir)
   const cdp = await Cdp.connect(wsUrl)

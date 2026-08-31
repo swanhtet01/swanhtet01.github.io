@@ -559,6 +559,36 @@ if (!indexSource.includes('<title>SuperMega</title>')
 // headline "works offline" claim was false end to end: measured 2026-08-20 in Chromium against
 // a built dist/, three refused inline scripts, zero registrations, zero caches. The shell now
 // loads three files instead, and this check is what keeps it that way.
+// Boot shell (first-paint skeleton). It exists because FCP measured 4,400ms against a
+// 4,207ms load event on `/`: the document had finished loading and still painted nothing,
+// because #root is empty until React commits and an empty body has no content to paint.
+// Adding it moved FCP to 3,280ms (-1,120ms) on `/` and 3,244ms (-1,272ms) on the chooser,
+// measured cold on the throttled Android profile. Three things have to stay true or it
+// silently stops working, and two of them fail OPEN rather than loudly:
+//   1. the removal rule. Without it the skeleton is a permanent overlay covering the app.
+//   2. `:empty`, not `:has(*)` -- this ships to old Android WebViews.
+//   3. the duplicated background colours. They are inline because core-app.css has NOT
+//      loaded at the moment the shell paints, so they cannot reference --core-bg. If the
+//      token moves and this copy does not, a dark-theme user gets a light flash back.
+for (const bootShellPin of [
+  '<div id="boot-shell" aria-hidden="true">',
+  '#root:not(:empty)+#boot-shell{display:none}',
+]) {
+  if (!indexSource.includes(bootShellPin)) fail(`boot_shell_contract_broken:${bootShellPin.slice(0, 40)}`)
+}
+{
+  const coreAppCss = await readFile(resolve(root, 'showroom', 'src', 'core', 'core-app.css'), 'utf8')
+  const lightBg = coreAppCss.match(/--core-bg:\s*(#[0-9a-fA-F]{3,8})/)?.[1]
+  const darkBg = coreAppCss.match(/:root\[data-supermega-theme="dark"\]\s*\{\s*--core-bg:\s*(#[0-9a-fA-F]{3,8})/)?.[1]
+  if (!lightBg || !darkBg) fail('boot_shell_theme_tokens_unreadable')
+  if (!indexSource.includes(`#boot-shell{position:fixed;inset:0;z-index:-1;background:${lightBg};`)) {
+    fail(`boot_shell_light_background_drifted_from_core_bg:${lightBg}`)
+  }
+  if (!indexSource.includes(`:root[data-supermega-theme="dark"] #boot-shell{background:${darkBg}}`)) {
+    fail(`boot_shell_dark_background_drifted_from_core_bg:${darkBg}`)
+  }
+}
+
 const inlineShellScripts = [indexSource, rootPageSource]
   .flatMap((source) => [...source.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)])
   .filter((match) => match[1].trim().length)
@@ -20701,7 +20731,20 @@ if (!downloadFileSource.includes('export function downloadBlob(filename: string,
   || !downloadFileSource.includes('URL.createObjectURL(blob)')
   || !downloadFileSource.includes('window.setTimeout(() => URL.revokeObjectURL(url), 0)')) fail('shared_download_helper_leaks_object_url')
 const documentScripts = [...rootPageSource.matchAll(/<script[^>]+src="\/([^"]+)"/g)].map((match) => match[1])
-const documentStyles = [...rootPageSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)].map((match) => match[1])
+// Two shapes, and the second one is load-bearing. The stylesheet is no longer a render-blocking
+// <link>: showroom/vite.config.ts's asyncStylesheetPlugin rewrites it to
+// `<script src="/css-async.js" data-href="/assets/index-<hash>.css">` so first paint stops
+// waiting on 230KB the boot shell does not need (3,236ms -> 1,484ms FCP, measured). If this walk
+// only matched the <link> form it would find NOTHING, the stylesheet would silently drop out of
+// the Shop first-paint closure, and the byte guard below would keep reporting ok while no longer
+// seeing the largest file in it -- the same blindness this file already warns about at the
+// initial_javascript_budget walk. The floor check is the backstop; do not lower the floor to
+// accommodate a drop here, investigate it.
+const documentStyles = [
+  ...[...rootPageSource.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/([^"]+)"/g)].map((match) => match[1]),
+  ...[...rootPageSource.matchAll(/<script[^>]+src="\/css-async\.js"[^>]+data-href="\/([^"]+)"/g)].map((match) => match[1]),
+]
+if (!documentStyles.length) fail('shop_route_closure_found_no_stylesheet')
 const moduleEntryAsset = documentScripts.find((path) => /^assets\/[^/]+\.js$/.test(path))
 const routeEntrySource = moduleEntryAsset && await exists(resolve(dist, moduleEntryAsset))
   ? await readFile(resolve(dist, moduleEntryAsset), 'utf8')
