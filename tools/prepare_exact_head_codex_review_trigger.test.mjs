@@ -17,14 +17,14 @@ import {
 const head = 'a'.repeat(40)
 const base = 'b'.repeat(40)
 const tree = 'c'.repeat(40)
-const now = new Date('2026-08-31T09:00:00.000Z')
+const now = new Date('2026-08-31T10:00:00.000Z')
 const authority = { handoff: { candidate: head, fileDigest: `sha256:${'1'.repeat(64)}`, bodyDigest: `sha256:${'2'.repeat(64)}` }, protection: { healthy: true, fileDigest: `sha256:${'3'.repeat(64)}`, bodyDigest: `sha256:${'4'.repeat(64)}` } }
 const gitState = { branch: 'codex/release-stack-integration-rehearsal-20260825', head, tree, origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', clean: true }
 const tools = [{ path: 'tools/prepare_exact_head_codex_review_trigger.mjs', digest: `sha256:${'5'.repeat(64)}` }, { path: 'tools/apply_exact_head_codex_review_trigger.mjs', digest: `sha256:${'6'.repeat(64)}` }]
 
 function state(overrides = {}) {
   return {
-    pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T08:04:23.000Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } },
+    pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T09:48:04Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } },
     checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'success' }] },
     reviews: [], comments: [], ...overrides,
   }
@@ -43,11 +43,15 @@ test('plan is read-only, digest-bound, exact-head, and hard-codes the sole comme
   assert.equal(packet.controls.githubWritesPerformed, false)
   assert.equal(packet.controls.issueCommentPosted, false)
   assert.equal(packet.observed.currentHeadTriggerCount, 0)
+  assert.equal(packet.pullRequest.headUpdatedAt, '2026-08-31T09:48:04.000Z')
   assert.equal(validateExactHeadCodexReviewPlan(packet, { now }), packet)
 })
 
 test('plan fails closed for a current-head trigger, head/base/check/review drift, and stale or changed packets', async () => {
-  await assert.rejects(plan(state({ comments: [{ id: 44, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T08:05:00.000Z' }] })), /exact_head_codex_review_current_head_trigger_exists/)
+  await assert.rejects(plan(state({ comments: [{ id: 44, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T09:49:00.000Z' }] })), /exact_head_codex_review_current_head_trigger_exists/)
+  await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-08-31T09:48:04+00:00' } })), /exact_head_codex_review_pr_updated_at_invalid/)
+  await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-02-29T09:48:04Z' } })), /exact_head_codex_review_pr_updated_at_invalid/)
+  await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-08-31T09:48:04.12Z' } })), /exact_head_codex_review_pr_updated_at_invalid/)
   await assert.rejects(plan(state({ checks: { check_runs: [{ id: 1, name: 'validate', status: 'in_progress', conclusion: null }] } })), /exact_head_codex_review_checks_not_terminal_green/)
   await assert.rejects(plan(state({ checks: { check_runs: [{ id: 1, name: 'Codex review', status: 'completed', conclusion: 'success' }] } })), /exact_head_codex_review_named_check_exists/)
   await assert.rejects(plan(state({ reviews: [{ id: 9, commit_id: head }] })), /exact_head_codex_review_exists/)
@@ -73,7 +77,7 @@ test('default GitHub collector exhausts later pages before accepting checks, rev
       if (path.endsWith('/pulls/561')) return response(200, state().pr)
       if (path.includes('/check-runs')) return response(200, { check_runs: kind === 'checks' && page === '2' ? [{ id: 300, name: 'check-late', status: 'completed', conclusion: 'failure' }] : kind === 'checks' ? greenChecks : state().checks.check_runs }, kind === 'checks' && !page ? link('/commits/' + head + '/check-runs') : null)
       if (path.endsWith('/reviews')) return response(200, kind === 'reviews' && page === '2' ? [{ id: 300, commit_id: head }] : kind === 'reviews' ? oldReviews : [], kind === 'reviews' && !page ? link('/pulls/561/reviews') : null)
-      if (path.endsWith('/comments')) return response(200, kind === 'comments' && page === '2' ? [{ id: 300, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T08:05:00.000Z' }] : kind === 'comments' ? oldComments : [], kind === 'comments' && !page ? link('/issues/561/comments') : null)
+      if (path.endsWith('/comments')) return response(200, kind === 'comments' && page === '2' ? [{ id: 300, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T09:49:00.000Z' }] : kind === 'comments' ? oldComments : [], kind === 'comments' && !page ? link('/issues/561/comments') : null)
       throw new Error(`unexpected path ${path}`)
     }
     await assert.rejects(collectExactHeadCodexReviewPlan({ authority, fetchJson: fetchGitHubJson, gitState, now, toolDigests: Promise.resolve(tools) }), code)

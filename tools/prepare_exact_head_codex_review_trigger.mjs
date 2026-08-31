@@ -28,7 +28,7 @@ function compactDigest(value) { return `sha256:${createHash('sha256').update(Str
 function signed(body) { return { ...body, digest: compactDigest(JSON.stringify(body)) } }
 function exactSha(value, code) { const normalized = String(value || '').trim().toLowerCase(); if (!SHA.test(normalized)) fail(code); return normalized }
 function exactNumber(value, code) { const number = Number(value); if (!Number.isSafeInteger(number) || number < 1) fail(code); return number }
-function exactDate(value, code) { const text = String(value || ''); const date = new Date(text); if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(text) || !Number.isFinite(date.getTime()) || date.toISOString() !== text) fail(code); return date }
+function exactDate(value, code) { const text = String(value || ''); const canonical = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(text) ? text.replace('Z', '.000Z') : text; const date = new Date(canonical); if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(text) || !Number.isFinite(date.getTime()) || date.toISOString() !== canonical) fail(code); return date }
 function noSecrets(value) { if (/Bearer\s+[A-Za-z0-9._-]+|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|https?:\/\/[^\s"']+:[^\s"']+@/i.test(JSON.stringify(value))) fail('exact_head_codex_review_secret_echo') }
 
 export function sourceToolDigests(read = (path) => readFile(path, 'utf8')) {
