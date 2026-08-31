@@ -142,10 +142,38 @@ function assertAuthorityPackets(handoff, protection) {
   }
 }
 
-export async function fetchGitHubJson(path) {
+function nextPagePath(response, currentPath, itemCount) {
+  const link = response.headers?.get?.('link') || null
+  if (!link) { if (itemCount >= 100) fail('exact_head_codex_review_pagination_incomplete'); return null }
+  const match = link.split(',').map((entry) => entry.trim()).map((entry) => /^<([^>]+)>;\s*rel="next"$/.exec(entry)).find(Boolean)
+  if (!match) { if (itemCount >= 100) fail('exact_head_codex_review_pagination_incomplete'); return null }
+  let next; try { next = new URL(match[1]) } catch { fail('exact_head_codex_review_pagination_invalid') }
+  const expected = new URL(API_BASE)
+  if (next.origin !== expected.origin || !next.pathname.startsWith(expected.pathname) || next.href === new URL(`${API_BASE}${currentPath}`).href) fail('exact_head_codex_review_pagination_invalid')
+  return `${next.pathname.slice(expected.pathname.length)}${next.search}`
+}
+
+async function fetchGitHubResponse(path) {
   const response = await fetch(`${API_BASE}${path}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'supermega-exact-head-codex-review-plan' } })
   if (!response.ok) fail(`exact_head_codex_review_read_failed:${response.status}`)
-  try { return await response.json() } catch { fail('exact_head_codex_review_read_json_invalid') }
+  try { return { response, json: await response.json() } } catch { fail('exact_head_codex_review_read_json_invalid') }
+}
+
+async function fetchAllPages(path, select) {
+  let next = path; const pages = []
+  for (let page = 0; next && page < 100; page += 1) {
+    const current = next; const { response, json } = await fetchGitHubResponse(current); const items = select(json)
+    if (!Array.isArray(items)) fail('exact_head_codex_review_pagination_shape_invalid')
+    pages.push(...items); next = nextPagePath(response, current, items.length)
+  }
+  if (next) fail('exact_head_codex_review_pagination_limit_exceeded')
+  return pages
+}
+
+export async function fetchGitHubJson(path) {
+  if (/\/check-runs(?:\?|$)/.test(path)) return { check_runs: await fetchAllPages(path, (json) => json?.check_runs) }
+  if (/\/(?:reviews|comments)(?:\?|$)/.test(path)) return fetchAllPages(path, (json) => json)
+  return (await fetchGitHubResponse(path)).json
 }
 
 function parseArgs(argv) { const args = [...argv]; const options = { pr: 561, handoff: null, protection: null, output: null, verify: null, selfTest: false }; while (args.length) { const arg = args.shift(); if (arg === '--pr' && args[0]) options.pr = exactNumber(args.shift(), 'exact_head_codex_review_pr_invalid'); else if (arg === '--handoff' && args[0]) options.handoff = args.shift(); else if (arg === '--protection' && args[0]) options.protection = args.shift(); else if (arg === '--output' && args[0]) options.output = args.shift(); else if (arg === '--verify' && args[0]) options.verify = args.shift(); else if (arg === '--self-test') options.selfTest = true; else fail('exact_head_codex_review_plan_usage_invalid') } if (options.selfTest && (options.output || options.verify || options.handoff || options.protection)) fail('exact_head_codex_review_plan_usage_invalid'); if (!options.selfTest && !options.verify && (!options.handoff || !options.protection || !options.output)) fail('exact_head_codex_review_plan_inputs_required'); return options }

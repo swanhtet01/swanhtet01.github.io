@@ -5,6 +5,7 @@ import {
   EXACT_HEAD_CODEX_REVIEW_BODY,
   EXACT_HEAD_CODEX_REVIEW_PLAN_TTL_MS,
   collectExactHeadCodexReviewPlan,
+  fetchGitHubJson,
   validateExactHeadCodexReviewPlan,
 } from './prepare_exact_head_codex_review_trigger.mjs'
 
@@ -25,6 +26,7 @@ function state(overrides = {}) {
 }
 function fetcher(value) { return async (path) => path.startsWith('/pulls/') && path.endsWith('/reviews?per_page=100') ? value.reviews : path.startsWith('/issues/') ? value.comments : path.startsWith('/commits/') ? value.checks : value.pr }
 async function plan(value = state()) { return collectExactHeadCodexReviewPlan({ authority, fetchJson: fetcher(value), gitState, now, toolDigests: Promise.resolve(tools) }) }
+function response(status, json, link = null) { return { ok: status >= 200 && status < 300, status, headers: { get: (name) => name.toLowerCase() === 'link' ? link : null }, async json() { return json } } }
 
 test('plan is read-only, digest-bound, exact-head, and hard-codes the sole comment body', async () => {
   const packet = await plan()
@@ -50,4 +52,28 @@ test('plan fails closed for a current-head trigger, head/base/check/review drift
 test('plan rejects non-canonical local state and malformed authority without exposing credentials', async () => {
   await assert.rejects(collectExactHeadCodexReviewPlan({ authority, fetchJson: fetcher(state()), gitState: { ...gitState, clean: false }, now, toolDigests: Promise.resolve(tools) }), /exact_head_codex_review_local_state_invalid/)
   await assert.rejects(collectExactHeadCodexReviewPlan({ authority: { ...authority, protection: { ...authority.protection, healthy: false } }, fetchJson: fetcher(state()), gitState, now, toolDigests: Promise.resolve(tools) }), /exact_head_codex_review_authority_invalid/)
+})
+
+test('default GitHub collector exhausts later pages before accepting checks, reviews, or prior triggers', async () => {
+  const originalFetch = globalThis.fetch
+  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100&page=2>; rel="next"`
+  const oldComments = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-30T20:00:00.000Z' }))
+  const oldReviews = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, commit_id: 'd'.repeat(40) }))
+  const greenChecks = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `check-${index}`, status: 'completed', conclusion: 'success' }))
+  async function expectLatePageFailure(kind, code) {
+    globalThis.fetch = async (url) => {
+      const parsed = new URL(String(url)); const page = parsed.searchParams.get('page'); const path = parsed.pathname
+      if (path.endsWith('/pulls/561')) return response(200, state().pr)
+      if (path.includes('/check-runs')) return response(200, { check_runs: kind === 'checks' && page === '2' ? [{ id: 300, name: 'check-late', status: 'completed', conclusion: 'failure' }] : kind === 'checks' ? greenChecks : state().checks.check_runs }, kind === 'checks' && !page ? link('/commits/' + head + '/check-runs') : null)
+      if (path.endsWith('/reviews')) return response(200, kind === 'reviews' && page === '2' ? [{ id: 300, commit_id: head }] : kind === 'reviews' ? oldReviews : [], kind === 'reviews' && !page ? link('/pulls/561/reviews') : null)
+      if (path.endsWith('/comments')) return response(200, kind === 'comments' && page === '2' ? [{ id: 300, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T08:05:00.000Z' }] : kind === 'comments' ? oldComments : [], kind === 'comments' && !page ? link('/issues/561/comments') : null)
+      throw new Error(`unexpected path ${path}`)
+    }
+    await assert.rejects(collectExactHeadCodexReviewPlan({ authority, fetchJson: fetchGitHubJson, gitState, now, toolDigests: Promise.resolve(tools) }), code)
+  }
+  try {
+    await expectLatePageFailure('checks', /exact_head_codex_review_checks_not_terminal_green/)
+    await expectLatePageFailure('reviews', /exact_head_codex_review_exists/)
+    await expectLatePageFailure('comments', /exact_head_codex_review_current_head_trigger_exists/)
+  } finally { globalThis.fetch = originalFetch }
 })
