@@ -715,10 +715,23 @@ so the browser applies its six-connections-per-origin limit and each request
 carries its own connection cost. Vercel serves **HTTP/2**: one multiplexed
 connection, no six-connection cap, and no per-request round trip once it is open.
 
-What this does NOT affect: render-blocking is a parser behaviour, not a
-transport one. A `<link rel="stylesheet">` in `<head>` blocks first paint on
-any protocol, so the shipped async-stylesheet change and the boot shell both
-hold. Byte-cost findings (the entry-set honest zero) are also transport-neutral
+What this does NOT affect — **now measured over real HTTP/2, not argued.** The
+harness gained an `h2` mode (TLS + ALPN, `node:http2`, browser launched with
+`--ignore-certificate-errors`), and the shipped change was re-run against a
+control built by restoring the blocking `<link>` into the same `dist`:
+
+| Transport | blocking `<link>` | async (shipped) | delta |
+|---|---|---|---|
+| HTTP/1.1 | 3,240 ms | 1,468 ms | **−1,772 ms** |
+| **HTTP/2** | 3,176 ms | **1,500 ms** | **−1,676 ms** |
+
+**95% of the win survives the transport production actually uses.** Render-
+blocking is a parser behaviour, not a transport one: a `<link rel="stylesheet">`
+in `<head>` blocks first paint on any protocol. Note also that the two *blocking*
+arms are within 64 ms of each other, so the six-connection limit is not what
+makes that arm slow — the parser block is.
+
+So the shipped async-stylesheet change and the boot shell both hold. Byte-cost findings (the entry-set honest zero) are also transport-neutral
 — 40 KB gz still takes 40 KB gz of a 50 KB/s pipe.
 
 What it DOES put in question is every finding whose mechanism is **request
@@ -735,8 +748,9 @@ connection limit:
   same-origin file. Under HTTP/2 on an already-open connection that is nowhere
   near a full round trip.
 
-None of those is refuted — they are correctly measured on the profile this
-document defines, and the relative ordering probably survives. But their
+None of those is refuted, and **none of them has been re-measured over h2
+either** — only the stylesheet arm was, above. They are correctly measured on
+the profile this document defines, and the relative ordering probably survives. But their
 magnitudes are upper bounds for production, and the theme-restore figure is the
 one most likely to shrink, because it is almost entirely per-request cost on a
 file too small for bytes to matter. **Do not spend a security-surface pass on a
