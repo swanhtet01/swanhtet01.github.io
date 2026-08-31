@@ -689,6 +689,17 @@ open, and one of them is a warning about this document's own method:
 against a 4,359 ms mount — **835 ms of margin, zero unstyled frames**. Gate
 652/652, lint 0 errors.
 
+**A SECOND asset walk had to be taught the same shape, and the local gate does
+not cover it.** `tools/verify_app_release_live.mjs` builds its release-asset
+corpus from the root document the same way, in two places. CI failed on
+`missing_current_release_asset:launcher:#0b745e` — the brand accent lives only
+in the stylesheet, so with the `<link>` gone the CSS never entered the corpus
+and every value checked from it stopped being checked. Same blindness as the
+closure walk, in a file the 652-step gate never runs: **`run_app_verify.mjs` is
+NOT a superset of CI**, and this is the counter-example. Both walks now match
+`data-href`, both were mutation-tested against CI's exact error, and the live
+walk throws `live_release_found_no_stylesheet` if it ever finds none.
+
 The closure guard was taught the new shape in the same commit, and the fix was
 verified by breaking it: with the `data-href` branch removed the build fails
 `shop_route_closure_found_no_stylesheet` rather than passing blind. The closure
