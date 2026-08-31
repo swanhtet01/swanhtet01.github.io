@@ -178,14 +178,14 @@ export async function fetchGitHubJson(path) {
 
 function parseArgs(argv) { const args = [...argv]; const options = { pr: 561, handoff: null, protection: null, output: null, verify: null, selfTest: false }; while (args.length) { const arg = args.shift(); if (arg === '--pr' && args[0]) options.pr = exactNumber(args.shift(), 'exact_head_codex_review_pr_invalid'); else if (arg === '--handoff' && args[0]) options.handoff = args.shift(); else if (arg === '--protection' && args[0]) options.protection = args.shift(); else if (arg === '--output' && args[0]) options.output = args.shift(); else if (arg === '--verify' && args[0]) options.verify = args.shift(); else if (arg === '--self-test') options.selfTest = true; else fail('exact_head_codex_review_plan_usage_invalid') } if (options.selfTest && (options.output || options.verify || options.handoff || options.protection)) fail('exact_head_codex_review_plan_usage_invalid'); if (!options.selfTest && !options.verify && (!options.handoff || !options.protection || !options.output)) fail('exact_head_codex_review_plan_inputs_required'); return options }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2))
+export async function main(argv = process.argv.slice(2), dependencies = {}) {
+  const options = parseArgs(argv)
   if (options.selfTest) { console.log(JSON.stringify({ ok: true, contract: `${EXACT_HEAD_CODEX_REVIEW_TRIGGER_PLAN_CONTRACT}.self-test`, githubWritesPerformed: false }, null, 2)); return }
   if (options.verify) { const receipt = await readExactHeadCodexReviewPlan(options.verify); console.log(JSON.stringify({ ok: true, contract: receipt.packet.contract, path: receipt.path, fileDigest: receipt.fileDigest, digest: receipt.packet.digest, githubWritesPerformed: false }, null, 2)); return }
   const [handoff, protection] = await Promise.all([readAuthority(options.handoff, 'handoff'), readAuthority(options.protection, 'protection')])
   assertAuthorityPackets(handoff, protection)
   const candidate = handoff.packet?.candidate?.commit
-  const plan = await collectExactHeadCodexReviewPlan({ prNumber: options.pr, authority: { handoff: { candidate, fileDigest: handoff.fileDigest, bodyDigest: handoff.bodyDigest }, protection: { healthy: protection.packet?.assessment?.ok === true && Array.isArray(protection.packet?.assessment?.failures) && protection.packet.assessment.failures.length === 0, fileDigest: protection.fileDigest, bodyDigest: protection.bodyDigest } } })
+  const plan = await collectExactHeadCodexReviewPlan({ ...dependencies, prNumber: options.pr, fetchJson: fetchGitHubJson, authority: { handoff: { candidate, fileDigest: handoff.fileDigest, bodyDigest: handoff.bodyDigest }, protection: { healthy: protection.packet?.assessment?.ok === true && Array.isArray(protection.packet?.assessment?.failures) && protection.packet.assessment.failures.length === 0, fileDigest: protection.fileDigest, bodyDigest: protection.bodyDigest } } })
   const output = resolve(options.output); await mkdir(dirname(output), { recursive: true }); await writeFile(output, `${JSON.stringify(plan, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' }); console.log(JSON.stringify({ ok: true, contract: plan.contract, output, fileDigest: compactDigest(await readFile(output, 'utf8')), digest: plan.digest, githubWritesPerformed: false }, null, 2))
 }
 

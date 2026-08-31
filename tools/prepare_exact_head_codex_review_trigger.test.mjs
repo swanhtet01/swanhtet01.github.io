@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -6,6 +10,7 @@ import {
   EXACT_HEAD_CODEX_REVIEW_PLAN_TTL_MS,
   collectExactHeadCodexReviewPlan,
   fetchGitHubJson,
+  main,
   validateExactHeadCodexReviewPlan,
 } from './prepare_exact_head_codex_review_trigger.mjs'
 
@@ -27,6 +32,8 @@ function state(overrides = {}) {
 function fetcher(value) { return async (path) => path.startsWith('/pulls/') && path.endsWith('/reviews?per_page=100') ? value.reviews : path.startsWith('/issues/') ? value.comments : path.startsWith('/commits/') ? value.checks : value.pr }
 async function plan(value = state()) { return collectExactHeadCodexReviewPlan({ authority, fetchJson: fetcher(value), gitState, now, toolDigests: Promise.resolve(tools) }) }
 function response(status, json, link = null) { return { ok: status >= 200 && status < 300, status, headers: { get: (name) => name.toLowerCase() === 'link' ? link : null }, async json() { return json } } }
+function digest(value) { return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}` }
+function sealed(body) { return { ...body, digest: digest(JSON.stringify(body)) } }
 
 test('plan is read-only, digest-bound, exact-head, and hard-codes the sole comment body', async () => {
   const packet = await plan()
@@ -76,4 +83,45 @@ test('default GitHub collector exhausts later pages before accepting checks, rev
     await expectLatePageFailure('reviews', /exact_head_codex_review_exists/)
     await expectLatePageFailure('comments', /exact_head_codex_review_current_head_trigger_exists/)
   } finally { globalThis.fetch = originalFetch }
+})
+
+test('CLI main uses the exhaustive GET-only collector to write an exact no-write plan', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-exact-head-codex-review-'))
+  const handoffPath = join(directory, 'handoff.json')
+  const protectionPath = join(directory, 'protection.json')
+  const outputPath = join(directory, 'plan.json')
+  const handoff = sealed({ contract: 'supermega.release-handoff.v2', repository: 'swanhtet01/swanhtet01.github.io', candidate: { commit: head, clean: true }, verification: { passed: true, verifiedCommit: head }, authority: { pushApproved: false, mergeApproved: false, workflowDispatchApproved: false, deploymentApproved: false, domainChangeApproved: false, providerMutationApproved: false, remoteWritesPerformed: false, providerWritesPerformed: false, credentialValuesInspected: false } })
+  const protection = sealed({ contract: 'supermega.github-main-protection-snapshot.v1', repository: 'swanhtet01/swanhtet01.github.io', assessment: { ok: true, failures: [] }, controls: { githubApiMethods: ['GET'], githubWritesPerformed: false, repositorySettingsMutated: false, branchMutated: false, pullRequestCreated: false, mergePerformed: false, deploymentPerformed: false, supabaseMutated: false, credentialValueExposed: false } })
+  await writeFile(handoffPath, JSON.stringify(handoff), 'utf8')
+  await writeFile(protectionPath, JSON.stringify(protection), 'utf8')
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100&page=2>; rel="next"`
+  const greenChecks = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `check-${index}`, status: 'completed', conclusion: 'success' }))
+  const oldReviews = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, commit_id: 'd'.repeat(40) }))
+  const oldComments = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-30T20:00:00.000Z' }))
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(String(url)); const path = parsed.pathname; const page = parsed.searchParams.get('page')
+    calls.push(path)
+    if (path.endsWith('/pulls/561')) return response(200, state().pr)
+    if (path.includes('/check-runs')) return response(200, page === '2' ? state().checks : { check_runs: greenChecks }, page ? null : link(`/commits/${head}/check-runs`))
+    if (path.endsWith('/reviews')) return response(200, page === '2' ? [] : oldReviews, page ? null : link('/pulls/561/reviews'))
+    if (path.endsWith('/comments')) return response(200, page === '2' ? [] : oldComments, page ? null : link('/issues/561/comments'))
+    throw new Error(`unexpected path ${path}`)
+  }
+  try {
+    await main(['--pr', '561', '--handoff', handoffPath, '--protection', protectionPath, '--output', outputPath], { gitState, now, toolDigests: Promise.resolve(tools) })
+    const output = JSON.parse(await readFile(outputPath, 'utf8'))
+    assert.equal(output.action.body, EXACT_HEAD_CODEX_REVIEW_BODY)
+    assert.equal(output.pullRequest.head, head)
+    assert.equal(output.controls.githubWritesPerformed, false)
+    assert.equal(output.observed.exactHeadChecks.length, 101)
+    assert.equal(output.observed.codexReviewComments.length, 100)
+    assert.equal(calls.filter((path) => path.includes('/check-runs')).length, 2)
+    assert.equal(calls.filter((path) => path.endsWith('/reviews')).length, 2)
+    assert.equal(calls.filter((path) => path.endsWith('/comments')).length, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+    await rm(directory, { recursive: true, force: true })
+  }
 })
