@@ -12,6 +12,7 @@ import {
   EXACT_HEAD_CODEX_REVIEW_PLAN_TTL_MS,
   EXACT_HEAD_CODEX_REVIEW_REPOSITORY,
   collectExactHeadCodexReviewPlan,
+  fetchGitHubJson,
   localGitState,
   readExactHeadCodexReviewPlan,
   sourceToolDigests,
@@ -71,7 +72,7 @@ async function githubJson(path, { method = 'GET', body = null, tokenValue = null
 function sameState(plan, fresh) { return fresh.pullRequest.number === plan.pullRequest.number && fresh.pullRequest.base === plan.pullRequest.base && fresh.pullRequest.head === plan.pullRequest.head && fresh.pullRequest.headUpdatedAt === plan.pullRequest.headUpdatedAt && JSON.stringify(fresh.observed.exactHeadChecks) === JSON.stringify(plan.observed.exactHeadChecks) && JSON.stringify(fresh.observed.codexReviewComments) === JSON.stringify(plan.observed.codexReviewComments) && fresh.observed.exactHeadReviews.length === 0 && fresh.observed.reviewNamedChecks.length === 0 && fresh.observed.currentHeadTriggerCount === 0 }
 async function currentPlanState(plan, { fetchJson, gitState, now, toolDigests }) { const fresh = await collectExactHeadCodexReviewPlan({ prNumber: plan.pullRequest.number, authority: plan.authority, fetchJson, gitState, now, toolDigests }); if (!sameState(plan, fresh)) fail('exact_head_codex_review_trigger_state_drift'); return fresh }
 
-export async function applyExactHeadCodexReviewTrigger({ plan, planPayload = null, planFileDigest = null, fetchJson, request = fetch, confirmer = confirmExactHeadCodexReviewOwnerClick, env = process.env, gitState = localGitState(), now = () => new Date(), toolDigests = sourceToolDigests(), nonce = () => randomBytes(32).toString('hex') } = {}) {
+export async function applyExactHeadCodexReviewTrigger({ plan, planPayload = null, planFileDigest = null, fetchJson = fetchGitHubJson, request = fetch, confirmer = confirmExactHeadCodexReviewOwnerClick, env = process.env, gitState = localGitState(), now = () => new Date(), toolDigests = sourceToolDigests(), nonce = () => randomBytes(32).toString('hex') } = {}) {
   let attempted = false; let outcome = null; let consumed = false
   try {
     validateExactHeadCodexReviewPlan(plan, { now: now() })

@@ -56,6 +56,27 @@ test('Windows dialog is default-No and a timeout fails closed through the mocked
   assert.throws(() => confirmExactHeadCodexReviewOwnerClick('test', { platform: 'win32', spawn: () => ({ error: { code: 'ETIMEDOUT' } }) }), /exact_head_codex_review_trigger_owner_timed_out/)
 })
 
+test('default CLI collector performs only the required GET preflight reads before a mocked default-No decision', async () => {
+  const { plan, payload, current } = await fixture(); const calls = []; const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method || 'GET' })
+    const path = new URL(String(url)).pathname.replace('/repos/swanhtet01/swanhtet01.github.io', '')
+    return response(200, await fetcher(current)(path + new URL(String(url)).search))
+  }
+  try {
+    const execute = options(plan, payload, current, async () => { throw new Error('post must not run') }, { confirmer: () => false })
+    delete execute.fetchJson
+    await assert.rejects(applyExactHeadCodexReviewTrigger(execute), /exact_head_codex_review_trigger_owner_declined/)
+  } finally { globalThis.fetch = originalFetch }
+  assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET', 'GET', 'GET'])
+  assert.deepEqual(calls.map((call) => new URL(call.url).pathname), [
+    '/repos/swanhtet01/swanhtet01.github.io/pulls/561',
+    '/repos/swanhtet01/swanhtet01.github.io/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/check-runs',
+    '/repos/swanhtet01/swanhtet01.github.io/pulls/561/reviews',
+    '/repos/swanhtet01/swanhtet01.github.io/issues/561/comments',
+  ])
+})
+
 test('decline, stale or changed plan, and pre-post head/base/comment drift fail closed without a POST', async () => {
   const { plan, payload, current } = await fixture(); let posts = 0; const request = async () => { posts += 1; return response(201, { id: 1 }) }
   await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { confirmer: () => false })), /exact_head_codex_review_trigger_owner_declined/)

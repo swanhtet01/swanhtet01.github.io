@@ -142,7 +142,7 @@ function assertAuthorityPackets(handoff, protection) {
   }
 }
 
-async function fetchGitHubJson(path) {
+export async function fetchGitHubJson(path) {
   const response = await fetch(`${API_BASE}${path}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'supermega-exact-head-codex-review-plan' } })
   if (!response.ok) fail(`exact_head_codex_review_read_failed:${response.status}`)
   try { return await response.json() } catch { fail('exact_head_codex_review_read_json_invalid') }
