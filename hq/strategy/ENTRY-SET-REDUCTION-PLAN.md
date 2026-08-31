@@ -5,6 +5,35 @@ planning pass `PRODUCT-SUPREMACY-ROADMAP.md` §3 item 1(b) requires before
 implementation of "shrinking the 91.3 KB gz entry set", the last identified FCP
 lever named alongside the static app-shell skeleton that shipped in #567.
 
+> **Update 2026-08-31: this document's headline recommendation SHIPPED, and its
+> mechanism model held up.** Section 3 concluded that the render-blocking
+> stylesheet was worth ~2.3 s — "twice what deleting the entire entry set is
+> worth, for a third of the bytes" — and that FCP is gated by the chain
+> document → `theme-restore.js` → stylesheet, with the `type="module"` entry set
+> competing for bandwidth rather than blocking. That is now implemented on
+> `claude/batch/boot-shell-first-paint`: a build-only Vite plugin rewrites the
+> emitted `<link rel="stylesheet">` into `/css-async.js`, which appends it after
+> parsing. **Measured FCP 3,236 → 1,492 ms, and 4,400 → 1,492 ms cumulative with
+> the boot shell — a 66% reduction.**
+>
+> The shipped −1,744 ms is smaller than p5's −2,284/−2,308, and the gap is the
+> model predicting itself correctly: p5 DELETED the stylesheet, so it never
+> competed for bandwidth at all, while the shipped change only stops it
+> *blocking* — it still downloads and still competes. An independent
+> confirmation of section 3's mechanism rather than a discrepancy.
+>
+> Two verifier walks discovered the stylesheet through `<link rel="stylesheet">`
+> and had to be taught the new shape in the same change, or they would have gone
+> silently blind: the Shop first-paint closure in `verify_app_build.mjs`, and the
+> release-asset corpus in `verify_app_release_live.mjs` (which is NOT in the
+> 652-step gate — CI caught it as
+> `missing_current_release_asset:launcher:#0b745e`).
+>
+> **Everything below stands as written**; the entry set is still an honest zero
+> and C1/the 5-byte ratchet are still the live items. Only the "what to do next"
+> ranking moved, because the thing it ranked first is done. What remains of the
+> render-blocking chain is `/theme-restore.js` and its ~400 ms.
+
 Measured on `claude/batch/boot-shell-first-paint` (`6db8da16`), i.e. **with the
 boot shell present**, using `tools/perf/measure-android-baseline.mjs` after its
 2026-08-30 cache fix (`Storage.clearDataForOrigin`). Same profile as every other
