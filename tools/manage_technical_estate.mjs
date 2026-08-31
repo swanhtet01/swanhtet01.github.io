@@ -3,18 +3,21 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
+
 export const TECHNICAL_ESTATE_CONTRACT = 'supermega.technical-estate.v1'
 
 const root = resolve(import.meta.dirname, '..')
 const output = resolve(root, 'hq', 'technical-estate.json')
-const sources = [
+export const TECHNICAL_ESTATE_DIRECT_SOURCE_PATHS = [
   'hq/portfolio.json',
   'site-manifest.json',
   'vercel.json',
   'package.json',
-  'hq/readiness/managed-pilot-readiness.json',
   'hq/readiness/supabase-security-advisor-audit.json',
 ]
+const MANAGED_READINESS_PATH = 'hq/readiness/managed-pilot-readiness.json'
+export const MANAGED_READINESS_SEMANTIC_RECEIPT_PATH = `${MANAGED_READINESS_PATH}#semantic-projection-v1`
 const PRODUCT_IDS = ['shop', 'plant', 'website', 'ecommerce']
 const OWNER_GATED_ACTIONS = [
   'github_push',
@@ -30,7 +33,7 @@ const OWNER_GATED_ACTIONS = [
   'domain_or_publish_change',
   'managed_activation',
 ]
-const PRODUCT_SOURCE_PATHS = {
+export const TECHNICAL_ESTATE_PRODUCT_SOURCE_PATHS = {
   shop: [
     'showroom/src/App.tsx',
     'showroom/src/core/CoreApp.tsx',
@@ -91,15 +94,29 @@ async function requirePath(path) {
   return { path, kind: metadata.isDirectory() ? 'directory' : 'file' }
 }
 
+export function managedReadinessSemanticProjection(readiness) {
+  const validated = validateManagedPilotReadiness(readiness)
+  const { sourceDigest, sourceReceipts, ...semantic } = validated
+  return semantic
+}
+
+export function technicalEstateSourceReceipts(texts, readiness) {
+  return [
+    ...TECHNICAL_ESTATE_DIRECT_SOURCE_PATHS.map((path) => ({ path, digest: digest(texts.get(path)) })),
+    { path: MANAGED_READINESS_SEMANTIC_RECEIPT_PATH, digest: digest(managedReadinessSemanticProjection(readiness)) },
+  ]
+}
+
 async function buildTechnicalEstate() {
   const texts = new Map()
-  for (const path of sources) texts.set(path, await readText(path))
+  for (const path of TECHNICAL_ESTATE_DIRECT_SOURCE_PATHS) texts.set(path, await readText(path))
+  texts.set(MANAGED_READINESS_PATH, await readText(MANAGED_READINESS_PATH))
 
   const portfolio = JSON.parse(texts.get('hq/portfolio.json'))
   const siteManifest = JSON.parse(texts.get('site-manifest.json'))
   const vercelConfig = JSON.parse(texts.get('vercel.json'))
   const packageManifest = JSON.parse(texts.get('package.json'))
-  const readiness = JSON.parse(texts.get('hq/readiness/managed-pilot-readiness.json'))
+  const readiness = JSON.parse(texts.get(MANAGED_READINESS_PATH))
   const securityAudit = JSON.parse(texts.get('hq/readiness/supabase-security-advisor-audit.json'))
 
   const products = portfolio.products.map((product) => {
@@ -119,7 +136,7 @@ async function buildTechnicalEstate() {
       publicAppRoute: siteProduct.appRoute,
       runtimeSurface: product.runtimeSurface ?? product.id,
       compatibilityPath: product.compatibilityPath ?? null,
-      sourcePaths: PRODUCT_SOURCE_PATHS[product.id],
+      sourcePaths: TECHNICAL_ESTATE_PRODUCT_SOURCE_PATHS[product.id],
       releaseWorkflow: '.github/workflows/supermega-public-release.yml',
       ownerGate: product.localAutomation.status,
       workOrderId: product.localAutomation.workOrderId,
@@ -138,7 +155,7 @@ async function buildTechnicalEstate() {
       securityAuditAsOf: securityAudit.asOf,
     },
     sourceDigest: digest({
-      sourceReceipts: sources.map((path) => ({ path, digest: digest(texts.get(path)) })),
+      sourceReceipts: technicalEstateSourceReceipts(texts, readiness),
       productIds: products.map((product) => product.productId),
     }),
     canonicalSource: {
@@ -225,7 +242,7 @@ async function buildTechnicalEstate() {
       autoMergeAllowed: false,
       localSubagentsAllowedByDefault: false,
     },
-    sourceReceipts: sources.map((path) => ({ path, digest: digest(texts.get(path)) })),
+    sourceReceipts: technicalEstateSourceReceipts(texts, readiness),
   }
 }
 
@@ -250,7 +267,10 @@ export function validateTechnicalEstate(estate) {
     if (product.classification !== 'customer-product') fail(`technical_estate_product_classification_invalid:${product.productId}`)
     if (!Array.isArray(product.sourcePaths) || product.sourcePaths.length < 3) fail(`technical_estate_product_sources_missing:${product.productId}`)
   }
-  if (!Array.isArray(estate.sourceReceipts) || estate.sourceReceipts.length !== sources.length) fail('technical_estate_source_receipts_invalid')
+  const expectedReceiptPaths = [...TECHNICAL_ESTATE_DIRECT_SOURCE_PATHS, MANAGED_READINESS_SEMANTIC_RECEIPT_PATH]
+  if (!Array.isArray(estate.sourceReceipts)
+    || estate.sourceReceipts.length !== expectedReceiptPaths.length
+    || estate.sourceReceipts.some((receipt, index) => receipt?.path !== expectedReceiptPaths[index] || !/^sha256:[0-9a-f]{64}$/.test(receipt?.digest || ''))) fail('technical_estate_source_receipts_invalid')
   if (!/^sha256:[0-9a-f]{64}$/.test(estate.sourceDigest || '')) fail('technical_estate_source_digest_invalid')
   return estate
 }
