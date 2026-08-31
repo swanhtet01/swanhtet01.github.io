@@ -151,7 +151,68 @@ via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
 Highest leverage: one automated 390px browser journey in CI to replace the
 manual QA lane -- it protects the largest untested surface (CoreApp.tsx).
 
-## 6. Observability: D+
+## 6. Observability: D+ — GRADE STALE, re-derive (corrected 2026-08-31)
+
+> **Two of the four gaps below are no longer true, and the "highest leverage"
+> recommendation at the foot of this section is already complete.** Verified
+> against live source, not inferred:
+>
+> - **Tracing largely shipped — Phase A is 3/5 on its own step 9.** Corrected
+>   2026-08-30 after Codex challenged the flat "shipped" claim, and it was
+>   right to. The implementation plan's step 9 names five workflows to wrap
+>   in manual domain spans; three are wired at the shared `/commands` call
+>   site (`trial_runtime.py:2451` via `_command_domain_span_name`: shop order
+>   confirm, plant job release, ecommerce request submit). AI invocation and
+>   worker cycle are NOT — `worker.cycle.start` exists only as a schema
+>   constant and a redaction fixture — and the code says why: neither is
+>   reachable from that endpoint (`trial_runtime.py:625-627`). So the
+>   infrastructure below is real and in use, but do not read "Phase A" as
+>   complete, and do not close the tracing recommendation on it.
+>   Four packages are pinned in BOTH `requirements.txt:5-8` and
+>   `pyproject.toml:11-14` (`opentelemetry-sdk==1.44.0`,
+>   `-instrumentation-fastapi`, `-instrumentation-psycopg`,
+>   `-exporter-otlp-proto-grpc`). `supermega_runtime/telemetry/` carries
+>   `schema.py` (283 lines), `redact.py` (314) and `tracing.py` (367), and
+>   `runtime.py:36,:1047` calls `instrument_telemetry(app)` additively inside a
+>   try/except so a telemetry fault cannot affect a response. The import
+>   succeeds in a clean checkout. `tests/telemetry/test_redact.py` passes 12/12.
+>   The scrubber drops a span rather than exporting it if scrubbing itself
+>   raises (`tracing.py:90-92`).
+>   **Correction 2026-08-30:** an earlier draft of this line said the scrubber
+>   "fails CLOSED" without qualification. That was wrong, and Codex caught it.
+>   `_sanitized_copy` scrubbed the span name and attributes but copied
+>   `events=span.events` through untouched, and OpenTelemetry's ASGI
+>   instrumentation records every unhandled exception as a span event carrying
+>   `exception.message` (the verbatim `str(exc)`) plus the full stacktrace.
+>   Reproduced end-to-end against the real instrumentation: the exporter
+>   received a customer name, a Myanmar mobile number and an MMK amount in one
+>   event. Fixed on the error-lane branch (`redact.scrub_events`: message
+>   digested, stacktrace dropped, `exception.type` held to `scrub_span_name`)
+>   with a test that fails if the one-line regression returns. Until that
+>   merges, treat this scrubber as closed for attributes and names only.
+> - **Alerting over measured target states shipped.**
+>   `kernel/agent-company-operations.mjs:1861` is headed "founder alerting over
+>   the measured target states" and imports `notifyDetailed` from `alert.mjs`.
+>   Best-effort and fail-closed: without owner Telegram tokens it performs no
+>   I/O, and an alert failure cannot affect the report response.
+>
+> **Still true, with its scope corrected:** the canonical runtime has no error
+> tracking. The manifests it actually ships from carry no Sentry or equivalent
+> (`package.json`, `showroom/`, `kernel/`, `requirements.txt`,
+> `pyproject.toml`). An earlier draft said "any manifest", which Codex
+> correctly flagged as false: `mark1_pilot/requirements.txt:14` declares
+> `sentry-sdk[fastapi]` and `tools/serve_solution.py:3032-3051,3110-3111`
+> initializes it and captures server exceptions. That is a legacy service, not
+> the Vercel runtime, so the production gap is real — but it is a wiring gap
+> next to an existing implementation worth reading first, not a greenfield
+> build. That, not tracing, is now the real highest-leverage gap.
+>
+> The D+ rests on premises that are now false, so it is left visible rather
+> than silently bumped: **re-derive it against the rubric.** The honest input
+> is that three of the four original bullets are closed or partly closed, and
+> what remains is error tracking plus the founder-gated items. Grading is a
+> judgement call and is deliberately not made here.
+
 
 Justification: what exists is thin -- a local metrics collector with four
 emit sites (sale.completed, shift.close.confirmed, order.created,
@@ -161,13 +222,15 @@ and the kernel operations-report (7/30/90-day windows, kernel/README.md).
 
 - No error tracking: no Sentry or equivalent dependency exists in any
   package.json (verified by search), and no error-event lane exists.
-- No tracing: the OpenTelemetry decision is adopt-with-managed-mode with an
-  implementation plan ready (30 named spans, redaction rules --
-  hq/portfolio.json researchGates; hq/NOW.md R&D decisions) but zero
-  packages installed and zero spans emitted.
-- No alerting over measured target states: "alerts over the measured target
-  states" is explicitly future (kernel/README.md Next step 3) -- this part
-  still holds. Narrower correction, 2026-08-19: a failed *live-health* run is
+- ~~No tracing: ... zero packages installed and zero spans emitted.~~
+  **STALE — withdrawn 2026-08-31.** Phase A is shipped, declared, wired and
+  tested; see the correction at the head of this section. What remains is
+  Phase B (managed mode), which is gated by section 5 of the implementation
+  plan, not by engineering.
+- ~~No alerting over measured target states: ... explicitly future -- this
+  part still holds.~~ **STALE — withdrawn 2026-08-31.** It shipped; see the
+  correction at the head of this section. The original narrower correction
+  about live-health alerting, below, stands unchanged. Narrower correction, 2026-08-19: a failed *live-health* run is
   no longer a silent red X -- `supermega-public-live-health.yml`'s "Alert
   owner on failed live verification" step files/comments a GitHub issue on
   red, fail-open, since before this scorecard was written. See section 8
@@ -176,9 +239,19 @@ and the kernel operations-report (7/30/90-day windows, kernel/README.md).
 - Analytics is adopt (implementation-steps-ready) but the no-PII MetricEvent
   aggregate schema has not passed founder PII review or shipped.
 
-Highest leverage: execute the OpenTelemetry local phase now -- the decision
-is already made, the redaction rules are already written, and it requires no
-founder gate until managed mode.
+~~Highest leverage: execute the OpenTelemetry local phase now.~~ **DONE —
+this recommendation is complete as of 2026-08-31 verification; following it
+would redo finished work.**
+
+Highest leverage now: **error tracking**, which is the one bullet in this
+section that survived checking. The canonical runtime's manifests carry no
+Sentry or equivalent and no error-event lane, so a runtime exception in the
+hosted layer is presently invisible. (Scope note, 2026-08-30: `mark1_pilot/`
+does carry `sentry-sdk[fastapi]`; that legacy service is not the Vercel
+runtime, so read this as a wiring gap beside an existing implementation.) Note the adjacent partial: `client-error-reporter.ts`
+exists on the browser side and reports through the metrics surface map, so
+this gap is server-side, not total — scope any work to that before assuming
+a greenfield build.
 
 ## 7. Scalability: B-
 
