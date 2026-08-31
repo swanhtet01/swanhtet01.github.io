@@ -358,8 +358,18 @@ in `tools/`).
 `startStorageQuotaWatch()` run at module scope; move them behind a post-mount
 dynamic import.
 
-**Saving: ~2.4 KB gz** (`metrics-collector` + `client-error-reporter` +
-`storage-durability` ≈ 3.0% of the entry chunk).
+~~**Saving: ~2.4 KB gz**~~ **— WITHDRAWN. The saving does not exist, and Codex
+found why.** Verified against source: `main.tsx` statically imports
+`RouteErrorBoundary` (`:5`) and `client-error-reporter` (`:7`), and
+`client-error-reporter` statically imports `metrics-collector` (`:29`) and
+`storage-durability` (`:30`). All three modules therefore stay in the entry
+chunk regardless of what the startup CALLS do — deferring a call defers work,
+not bytes. Getting these bytes out means redesigning the error-boundary import
+path, which is a different and much larger change than this candidate describes.
+
+This is the sharper version of the risk the next paragraph already gestures at.
+It said the bytes "reappear on the shop route"; in fact they never leave the
+entry chunk at all. **Saving: 0 KB gz.**
 **Expected FCP: 0 ms** — an eighth of a reduction that measured zero.
 **Risk:** this is a *deferral*, not a removal, and all three modules are also
 imported by `CoreApp`/`commerce-workspace`, so the bytes reappear on the shop
@@ -415,9 +425,22 @@ generalisation that is wrong for `showroom/`, and it would wrongly park real
 work — including, separately, anything that ever needs a package added to the
 app rather than to the kernel.
 
-**Rejected on merit instead:** predicted-zero FCP against a measured-zero at a
-larger size, in exchange for swapping the rendering runtime under all four
-products. Behavioural risk enormous, payoff unmeasurable.
+**Rejected on merit instead** — but NOT for the reason the first version of
+this line gave. It said "predicted-zero FCP against a measured-zero at a larger
+size". **There is no measured zero at a larger size, and Codex was right to
+strike it.** The measured zero is p2 at 40.1 KB gz, which is *smaller* than this
+~50-59 KB cut; the next measured point up, p3 at 79.7 KB, is −648 ms. So this
+candidate sits in the unmeasured gap between a zero and a real win — exactly
+what the paragraph above already says, and what the struck line contradicted.
+It is also the ONLY candidate here large enough to reach p3's step, so that
+rationale would have discarded the one option capable of crossing it.
+
+The rejection stands on the other half, which is unaffected: swapping the
+rendering runtime under all four products is an enormous behavioural risk for a
+payoff this document cannot predict, let alone measure. If anyone revisits it,
+the honest first step is cheap — measure a p2.5 at ~55 KB gz and find out
+whether the step is anywhere near there — not to argue from a zero taken at
+the wrong size.
 **Recommendation: rejected, and not because it is blocked.**
 
 ### C6 — Split react-dom into its own manual chunk
@@ -448,7 +471,23 @@ mostly, but not entirely, shakeable.)
 
 1. **C1 — narrow the manifest import.** The only genuinely accidental byte in
    the entry set, measured at −10,332 raw / −3,324 gz. Worth doing **for the
-   budget headroom in §7, not for FCP**, and the PR should say so in those
+   budget headroom in §7, not for FCP** — with one caveat added after Codex
+   challenged it, where the challenge is half right and the half that is wrong
+   matters. Codex observed that lowering the 300,000 ceiling by C1's 10,332
+   bytes leaves 289,663 against 289,668: **five bytes, exactly the margin we
+   started with.** The arithmetic is exact. But the premise is not this repo's
+   stated convention — `verify_app_build.mjs` ~20789 says "raise the ceiling
+   for real product value; when a real reduction trips the FLOOR, lower the
+   floor in the same commit". It prescribes ratcheting the FLOOR on a
+   reduction, never the ceiling. Under the convention as written, C1 leaves
+   289,663 against an unchanged 300,000 — **10,337 bytes of real headroom**,
+   which is the stated benefit and it holds.
+   So: C1 banks headroom **only if the ceiling is left alone**, and that is
+   what the current rule says to do. If a future policy ratchets the ceiling
+   down alongside reductions, C1's benefit is nil and this ranking should be
+   redone — worth writing down, because the ambiguity is real and Codex was
+   right to notice nobody had stated which way it cuts.
+   The PR should say so in those
    words.
 2. **§7 — restate the `initial_javascript_budget` ratchet.** Not a perf change
    at all; an operational hazard with 5 bytes of margin. Highest actual
@@ -459,7 +498,13 @@ mostly, but not entirely, shakeable.)
    this document's numbers.
 4. **C7, C3** — measured-zero FCP, small real bytes, non-zero risk. Skip.
 5. **C4, C6, C5** — rejected: deliberate pinned behaviour, predicted harmful,
-   and founder/cascade-blocked respectively.
+   and (C5) **rejected on merit, NOT blocked**. Corrected after Codex caught
+   this summary contradicting the document: C5's own section and §8 both
+   establish that showroom's package.json is not digest-bound and that the PG17
+   cascade does not apply to it. Calling it "founder/cascade-blocked" here —
+   in the execution summary, which is the part people act on — would wrongly
+   park every future showroom dependency change behind a blocker that does not
+   exist.
 
 **And the honest headline: the highest-value FCP work in this area is not in
 this document's scope.** p5 measured the render-blocking stylesheet at
