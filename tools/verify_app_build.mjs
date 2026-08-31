@@ -20807,7 +20807,14 @@ else {
   // deliberate (see that file's header: it exists so the registry can be exercised by a test
   // rather than pinned as source text), so a hand-written slim table would regress that on
   // purpose. Doing it properly means generating the narrow copy at build time with a check that
-  // it still derives from site-manifest.json. Costed in hq/strategy/ENTRY-SET-REDUCTION-PLAN.md.
+  // it still derives from site-manifest.json.
+  //
+  // The measurement behind that -10,332 figure, and the seven variants that establish the entry
+  // set is NOT worth shrinking for FCP, are costed in hq/strategy/ENTRY-SET-REDUCTION-PLAN.md --
+  // which is delivered by a SEPARATE pull request and may not exist in the tree you are reading.
+  // Codex caught that dangling reference here: a diagnostic that points at a file the reader does
+  // not have is worse than one that points nowhere, because it reads as an instruction. The
+  // numbers you actually need are inline above; the plan is background, not a prerequisite.
   initialEntryGraphBytes = initialJavascriptBytes
   if (initialJavascriptAssets.size < 3) fail(`initial_javascript_graph_implausible:${initialJavascriptAssets.size}`)
   if (initialJavascriptBytes < 260_000) fail(`initial_javascript_budget_implausible:${initialJavascriptBytes}`)
