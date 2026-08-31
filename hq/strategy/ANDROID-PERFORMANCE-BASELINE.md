@@ -715,10 +715,18 @@ so the browser applies its six-connections-per-origin limit and each request
 carries its own connection cost. Vercel serves **HTTP/2**: one multiplexed
 connection, no six-connection cap, and no per-request round trip once it is open.
 
-What this does NOT affect — **now measured over real HTTP/2, not argued.** The
-harness gained an `h2` mode (TLS + ALPN, `node:http2`, browser launched with
-`--ignore-certificate-errors`), and the shipped change was re-run against a
-control built by restoring the blocking `<link>` into the same `dist`:
+What this does NOT affect — **now measured over real HTTP/2, not argued.** `tools/perf/measure-android-baseline.mjs` now takes
+`--transport h1|h2`; `h2` serves over TLS with ALPN (`node:http2`, a throwaway
+`openssl` localhost cert, browser launched with `--ignore-certificate-errors`).
+**h1 stays the default deliberately** — every row recorded here before
+2026-08-31 was taken that way, and silently changing the default would make old
+and new numbers incomparable. Each run records `negotiatedProtocol` and a run
+that asked for h2 but got http/1.1 **throws** rather than reporting, because
+`allowHTTP1: true` makes that fallback possible and a mislabelled measurement is
+exactly the kind of error that survives into a document and gets acted on.
+
+The shipped change was re-run against a control built by restoring the blocking
+`<link>` into the same `dist`:
 
 | Transport | blocking `<link>` | async (shipped) | delta |
 |---|---|---|---|
