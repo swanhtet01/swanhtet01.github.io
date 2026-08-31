@@ -213,6 +213,38 @@ for (const name of ['baseline-measurement.md', 'acceptance-checklist.md', 'pilot
   check(kitReadme.includes(name), `pilot_kit_readme_indexes:${name}`)
 }
 
+const clientReadinessBrief = read('hq/strategy/CLIENT-READINESS-BRIEF.md')
+const shopStrategyBridgeDocuments = [
+  ['shop_playbook', shopPlaybook.replace(/\s+/g, ' ')],
+  ['pilot_kit_readme', kitReadme.replace(/\s+/g, ' ')],
+  ['client_readiness_brief', clientReadinessBrief.replace(/\s+/g, ' ')],
+]
+const shopStrategyBridgeRequired = [
+  'POS-independent Shop Profit Control',
+  'public and owner first-use acquisition and diagnostic wedge',
+  'selects and prioritizes one accountable money leak or operating risk',
+  'shop-spa-owner-pilot remains the first bounded named vertical proof',
+  "Spa is not Shop's product identity",
+  'does not prove all Myanmar trades',
+  'package sale, treatment redemption, daily close, and recovery',
+  'measured correction effort',
+  'Both paths remain owner-gated',
+  'Synthetic, sample, browser-local, and local-rendered evidence cannot close the real pilot',
+]
+for (const [label, document] of shopStrategyBridgeDocuments) {
+  for (const required of shopStrategyBridgeRequired) {
+    check(document.includes(required), `${label}:shop_profit_control_spa_bridge:${required}`)
+  }
+  for (const forbidden of [
+    "Spa is Shop's product identity",
+    'Spa proves all Myanmar trades',
+    'Synthetic evidence closes the real pilot',
+    'Local evidence closes the real pilot',
+  ]) {
+    check(!document.includes(forbidden), `${label}:shop_profit_control_spa_bridge_forbidden:${forbidden}`)
+  }
+}
+
 const kitBaseline = read(`${kitDir}/baseline-measurement.md`)
 for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day', 'client_import_row_count', 'weekly_package_sales', 'weekly_treatment_redemptions', 'median_minutes_per_redemption', 'weekly_package_correction_count']) {
   check(kitBaseline.includes(`\`${fieldName}\``), `pilot_kit_baseline_field:${fieldName}`)

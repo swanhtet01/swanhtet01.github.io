@@ -2,6 +2,14 @@
 
 **This kit is preparation for the managed pilot, not the pilot's acceptance evidence itself.** The Shop work order `shop-spa-owner-pilot`'s actual gate (`hq/portfolio.json`) requires one named Spa owner to complete reviewed client import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant, with setup time, correction effort, and five-day evidence recorded. This kit prepares the operator, baseline, agreement, and rehearsal without pretending sample data is client proof. The authenticated run on an isolated hosted tenant remains a separate, founder-only step.
 
+## Strategy bridge: Profit Control acquisition, Spa proof
+
+POS-independent Shop Profit Control is the public and owner first-use acquisition and diagnostic wedge. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
+
+The existing shop-spa-owner-pilot remains the first bounded named vertical proof. It uses the existing Spa package sale, treatment redemption, daily close, and recovery workflow to validate one real end-to-end operating workflow and measured correction effort. Spa is not Shop's product identity, and success in this bounded vertical does not prove all Myanmar trades.
+
+Both paths remain owner-gated. Synthetic, sample, browser-local, and local-rendered evidence cannot close the real pilot.
+
 ## Why this kit exists
 
 The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v5`, stored at `hq/readiness/managed-pilot-readiness.json`) blocks every managed claim behind the founder decision `managed-production-activation`. It requires four explicit inputs: `approve_runtime_role_provisioning`, `approve_first_named_owner_identity`, `approve_exact_production_release`, and `approve_managed_activation_window`. Its operator block requires a measured baseline (`measuredBaselineRequired`) and acceptance evidence (`acceptanceEvidenceRequired`) alongside verified email, terms acceptance, and tenant-isolation proof. Separately, `shop-spa-owner-pilot` stays `owner-gated`; this local rehearsal cannot substitute for the named client's hosted run.

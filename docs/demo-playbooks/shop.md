@@ -10,6 +10,12 @@ The pitch, verbatim from approved copy (eyebrow `POS-independent Shop Profit Con
 - `Shop Profit Control: see today’s operating money risk.`
 - `A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.`
 
+POS-independent Shop Profit Control is the public and owner first-use acquisition and diagnostic wedge. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
+
+The existing shop-spa-owner-pilot remains the first bounded named vertical proof. It uses the existing Spa package sale, treatment redemption, daily close, and recovery workflow to validate one real end-to-end operating workflow and measured correction effort. Spa is not Shop's product identity, and success in this bounded vertical does not prove all Myanmar trades.
+
+Both paths remain owner-gated. Synthetic, sample, browser-local, and local-rendered evidence cannot close the real pilot.
+
 ## 2. Pre-demo setup
 
 1. Open `https://app.supermega.dev/settings/?product=shop` — the same destination as the `Start free sample` button on the public `/shop/` landing page.

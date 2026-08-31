@@ -27,7 +27,7 @@ import {
 import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText, supabaseCompatibilityVerifierText, competitiveExecutionCutText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText, supabaseCompatibilityVerifierText, competitiveExecutionCutText, pilotKitReadmeText, shopDemoPlaybookText, clientReadinessBriefText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -67,6 +67,9 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
   readFile(resolve(root, 'tools', 'verify_supabase_compatibility.mjs'), 'utf8'),
   readFile(resolve(root, 'hq', 'strategy', 'COMPETITIVE-EXECUTION-CUT.md'), 'utf8'),
+  readFile(resolve(root, 'docs', 'pilot-kit', 'README.md'), 'utf8'),
+  readFile(resolve(root, 'docs', 'demo-playbooks', 'shop.md'), 'utf8'),
+  readFile(resolve(root, 'hq', 'strategy', 'CLIENT-READINESS-BRIEF.md'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
@@ -881,6 +884,29 @@ requireContract('Shop uses the stable commerce runtime',
   && product('shop')?.nextGate?.includes('reconciled package sale')
   && product('shop')?.nextGate?.includes('matching treatment redemption')
   && product('shop')?.nextGate?.includes('sample data as client proof'))
+const shopStrategyBridgeDocuments = [pilotKitReadmeText, shopDemoPlaybookText, clientReadinessBriefText]
+  .map((document) => document.replace(/\s+/g, ' '))
+const shopStrategyBridgeRequired = [
+  'POS-independent Shop Profit Control',
+  'public and owner first-use acquisition and diagnostic wedge',
+  'selects and prioritizes one accountable money leak or operating risk',
+  'shop-spa-owner-pilot remains the first bounded named vertical proof',
+  "Spa is not Shop's product identity",
+  'does not prove all Myanmar trades',
+  'package sale, treatment redemption, daily close, and recovery',
+  'measured correction effort',
+  'Both paths remain owner-gated',
+  'Synthetic, sample, browser-local, and local-rendered evidence cannot close the real pilot',
+]
+const shopStrategyBridgeForbidden = [
+  "Spa is Shop's product identity",
+  'Spa proves all Myanmar trades',
+  'Synthetic evidence closes the real pilot',
+  'Local evidence closes the real pilot',
+]
+requireContract('Shop Profit Control acquisition and bounded Spa proof stay distinct',
+  shopStrategyBridgeDocuments.every((document) => shopStrategyBridgeRequired.every((required) => document.includes(required)))
+  && shopStrategyBridgeDocuments.every((document) => shopStrategyBridgeForbidden.every((forbidden) => !document.includes(forbidden))))
 requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',
   enterpriseRoadmap.includes('Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1`')
   && enterpriseRoadmap.includes('Checkpoint `39b7fc2` adds `supermega.commerce.order-calculation.v2`')

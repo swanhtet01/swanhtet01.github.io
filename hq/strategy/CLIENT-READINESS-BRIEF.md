@@ -399,6 +399,22 @@ whole performance queue.
 
 ### Risk 3 — Running the pilot kit and calling it "the pilot" would overclaim the Shop gate
 
+**Architecture bridge.** POS-independent Shop Profit Control is the public and
+owner first-use acquisition and diagnostic wedge. Its first job selects and
+prioritizes one accountable money leak or operating risk, with the accountable
+role, due point, next action, and objective closure made explicit. It does not
+replace a POS and it does not turn a local projection into customer, pilot, or
+commercial proof.
+
+The existing shop-spa-owner-pilot remains the first bounded named vertical
+proof. It uses the existing Spa package sale, treatment redemption, daily close,
+and recovery workflow to validate one real end-to-end operating workflow and
+measured correction effort. Spa is not Shop's product identity, and success in
+this bounded vertical does not prove all Myanmar trades.
+
+Both paths remain owner-gated. Synthetic, sample, browser-local, and
+local-rendered evidence cannot close the real pilot.
+
 **Evidence.** `hq/portfolio.json`'s `shop-spa-owner-pilot` requires a named Spa
 owner to complete reviewed client import, reconciled package sale, matching
 treatment redemption, daily close, and recovery on an isolated hosted tenant.
