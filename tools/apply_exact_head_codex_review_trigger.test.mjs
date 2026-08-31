@@ -44,7 +44,7 @@ test('owner-approved executor posts one exact body and reads it back against the
   assert.equal(result.controls.githubWritesPerformed, true)
   assert.equal(result.controls.reviewerRequested, false)
   assert.equal(result.controls.deploymentPerformed, false)
-  assert.match(renderExactHeadCodexReviewOwnerConfirmation(plan), /No is the default/)
+  assert.match(renderExactHeadCodexReviewOwnerConfirmation(plan, { now: fixedNow }), /No is the default/)
 })
 
 test('Windows dialog is default-No and a timeout fails closed through the mocked process boundary', () => {
@@ -75,6 +75,44 @@ test('default CLI collector performs only the required GET preflight reads befor
     '/repos/swanhtet01/swanhtet01.github.io/pulls/561/reviews',
     '/repos/swanhtet01/swanhtet01.github.io/issues/561/comments',
   ])
+})
+
+test('GitHub CLI keyring binds the expected active account and keeps its token out of the receipt', async () => {
+  const { plan, payload, current } = await fixture(); const keyringToken = 'keyring-unit-token'; const commands = []
+  const githubCli = (args) => {
+    commands.push(args)
+    if (args[1] === 'status') return { status: 0, stdout: '', stderr: 'Logged in to github.com account swanhtet01 (keyring)\nActive account: true' }
+    if (args[1] === 'token') return { status: 0, stdout: keyringToken, stderr: '' }
+    throw new Error('unexpected gh command')
+  }
+  const request = async (url, init) => {
+    if (init.method === 'POST') { assert.equal(init.headers.authorization, `Bearer ${keyringToken}`); return response(201, { id: 78 }) }
+    assert.match(url, /issues\/comments\/78$/); return response(200, { id: 78, body: EXACT_HEAD_CODEX_REVIEW_BODY, user: { login: 'codex-bot' }, created_at: '2026-08-31T09:00:01.000Z' })
+  }
+  const result = await applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { env: {}, githubCli, nonce: () => 'a'.repeat(64) }))
+  assert.deepEqual(commands, [['auth', 'status', '--hostname', 'github.com'], ['auth', 'token', '--hostname', 'github.com']])
+  assert.deepEqual(result.authentication, { source: 'github_cli_keyring', valueExposed: false })
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(keyringToken))
+})
+
+test('environment tokens remain preferred and malformed or unavailable keyring authentication fails before POST', async () => {
+  const { plan, payload, current } = await fixture(); let posts = 0
+  const request = async (_url, init) => { if (init.method === 'POST') { posts += 1; return response(201, { id: 79 }) }; return response(200, { id: 79, body: EXACT_HEAD_CODEX_REVIEW_BODY, user: { login: 'codex-bot' }, created_at: '2026-08-31T09:00:01.000Z' }) }
+  const environment = await applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { githubCli: () => { throw new Error('keyring must not be read') }, nonce: () => 'b'.repeat(64) }))
+  assert.deepEqual(environment.authentication, { source: 'environment', valueExposed: false })
+  const wrongHost = () => ({ status: 0, stdout: '', stderr: 'Logged in to github.example account swanhtet01 (keyring)\nActive account: true' })
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { env: {}, githubCli: wrongHost })), /exact_head_codex_review_trigger_token_required/)
+  const suffixedAccount = () => ({ status: 0, stdout: '', stderr: 'Logged in to github.com account swanhtet01-other (keyring)\nActive account: true' })
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { env: {}, githubCli: suffixedAccount })), /exact_head_codex_review_trigger_token_required/)
+  const missingKeyring = () => ({ status: 0, stdout: '', stderr: 'Logged in to github.com account swanhtet01\nActive account: true\nkeyring' })
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { env: {}, githubCli: missingKeyring })), /exact_head_codex_review_trigger_token_required/)
+  const mismatched = () => ({ status: 0, stdout: '', stderr: 'Logged in to github.com account another-user (keyring)\nActive account: true' })
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { env: {}, githubCli: mismatched })), /exact_head_codex_review_trigger_token_required/)
+  const tokenFailure = (args) => args[1] === 'status' ? { status: 0, stdout: '', stderr: 'Logged in to github.com account swanhtet01 (keyring)\nActive account: true' } : { status: 1, stdout: '', stderr: 'failed' }
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { env: {}, githubCli: tokenFailure })), /exact_head_codex_review_trigger_token_required/)
+  const emptyToken = (args) => args[1] === 'status' ? { status: 0, stdout: '', stderr: 'Logged in to github.com account swanhtet01 (keyring)\nActive account: true' } : { status: 0, stdout: '   ', stderr: '' }
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { env: {}, githubCli: emptyToken })), /exact_head_codex_review_trigger_token_required/)
+  assert.equal(posts, 1, 'only the environment-authenticated success posts')
 })
 
 test('decline, stale or changed plan, and pre-post head/base/comment drift fail closed without a POST', async () => {

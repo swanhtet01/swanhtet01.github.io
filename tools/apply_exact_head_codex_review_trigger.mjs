@@ -28,6 +28,9 @@ const consumedReceipts = new Set()
 const WRITE_CONFIRMED_PERFORMED = 'confirmed_performed'
 const WRITE_CONFIRMED_NOT_PERFORMED = 'confirmed_not_performed'
 const WRITE_OUTCOME_UNKNOWN = 'outcome_unknown'
+const GITHUB_CLI_HOST = 'github.com'
+const GITHUB_CLI_ACCOUNT = 'swanhtet01'
+const GITHUB_CLI_TOKEN_SOURCE = 'github_cli_keyring'
 
 function fail(code) { throw new Error(code) }
 function record(value) { return value !== null && typeof value === 'object' && !Array.isArray(value) }
@@ -45,8 +48,8 @@ export function buildExactHeadCodexReviewTriggerFailureReceipt(error) {
 function exactNow(value) { const date = value instanceof Date ? value : new Date(value); if (!Number.isFinite(date.getTime())) fail('exact_head_codex_review_trigger_time_invalid'); return date }
 function assertNoSecret(value) { if (/Bearer\s+[A-Za-z0-9._-]+|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}/i.test(JSON.stringify(value))) fail('exact_head_codex_review_trigger_secret_echo') }
 
-export function renderExactHeadCodexReviewOwnerConfirmation(plan) {
-  validateExactHeadCodexReviewPlan(plan)
+export function renderExactHeadCodexReviewOwnerConfirmation(plan, { now = new Date() } = {}) {
+  validateExactHeadCodexReviewPlan(plan, { now })
   return ['SuperMega owner gate', '', 'Approve one exact Codex review trigger comment?', '', `Repository: ${plan.repository}`, `PR: #${plan.pullRequest.number}`, `Base: ${plan.pullRequest.base}`, `Exact head: ${plan.pullRequest.head}`, `Comment body: ${EXACT_HEAD_CODEX_REVIEW_BODY}`, '', 'This posts exactly one review-trigger comment and nothing else.', 'It cannot request reviewers, edit the PR, rerun a workflow, dismiss a security finding, merge, deploy, change settings, mutate a provider, contact a customer, take payment, or move stock.', '', 'This dialog expires after 10 minutes and fails closed unless you choose Yes.', 'No is the default. A Yes receipt is one-use and is consumed before the POST.'].join('\n')
 }
 
@@ -66,13 +69,35 @@ function buildReceipt(plan, now = new Date(), nonce = randomBytes(32).toString('
 }
 function consumeReceipt(receipt, now = new Date()) { if (!record(receipt) || !DIGEST.test(String(receipt.digest || '')) || receipt.digest !== compactDigest(JSON.stringify(Object.fromEntries(Object.entries(receipt).filter(([key]) => key !== 'digest')))) || receipt.decision !== 'approved' || receipt.defaultDecision !== 'decline' || receipt.method !== 'windows_local_owner_click' || receipt.reusable !== false) fail('exact_head_codex_review_trigger_receipt_invalid'); const confirmed = exactNow(receipt.confirmedAt); const expires = exactNow(receipt.expiresAt); const current = exactNow(now); if (expires.getTime() - confirmed.getTime() !== EXACT_HEAD_CODEX_REVIEW_PLAN_TTL_MS || current < confirmed || current >= expires || consumedReceipts.has(receipt.digest)) fail('exact_head_codex_review_trigger_receipt_expired_or_consumed'); consumedReceipts.add(receipt.digest); return receipt }
 
-function token(env = process.env) { for (const key of ['GITHUB_TOKEN', 'GH_TOKEN']) { const value = String(env[key] || '').trim(); if (value) return { key, value } } return null }
+function githubCliDefault(args, { timeout = 30_000 } = {}) {
+  const result = spawnSync('gh', args, { cwd: root, encoding: 'utf8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, maxBuffer: 2_000_000, timeout, windowsHide: true })
+  return { status: result.status ?? 1, stdout: String(result.stdout || '').trim(), stderr: String(result.stderr || '').trim(), errorCode: result.error?.code || null, signal: result.signal || null }
+}
+
+function githubCliKeyringToken(gh = githubCliDefault) {
+  const status = gh(['auth', 'status', '--hostname', GITHUB_CLI_HOST])
+  if (status.status !== 0 || status.errorCode || status.signal) return null
+  const presence = `${status.stdout}\n${status.stderr}`
+  const lines = presence.split(/\r?\n/).map((line) => line.trim())
+  const exactAccount = new RegExp(`^[^A-Za-z]*Logged in to ${GITHUB_CLI_HOST.replace('.', '\\.') } account ${GITHUB_CLI_ACCOUNT}\\s+\\(keyring\\)$`, 'i')
+  if (!lines.some((line) => exactAccount.test(line)) || !lines.some((line) => /^(?:-\s*)?Active account:\s*true$/i.test(line))) return null
+  const token = gh(['auth', 'token', '--hostname', GITHUB_CLI_HOST])
+  if (token.status !== 0 || token.errorCode || token.signal) return null
+  const value = String(token.stdout || '').trim()
+  if (!value || /\s/.test(value)) return null
+  return { value, source: GITHUB_CLI_TOKEN_SOURCE }
+}
+
+function executionToken(env = process.env, gh = githubCliDefault) {
+  for (const key of ['GITHUB_TOKEN', 'GH_TOKEN']) { const value = String(env[key] || '').trim(); if (value) return { value, source: 'environment' } }
+  return githubCliKeyringToken(gh)
+}
 async function githubJson(path, { method = 'GET', body = null, tokenValue = null, request = fetch } = {}) { const headers = { accept: 'application/vnd.github+json', 'user-agent': 'supermega-exact-head-codex-review-trigger' }; if (tokenValue) headers.authorization = `Bearer ${tokenValue}`; if (body !== null) headers['content-type'] = 'application/json'; const response = await request(`${API_BASE}${path}`, { method, headers, body: body === null ? undefined : JSON.stringify(body) }); let json = null; try { json = await response.json() } catch {} return { ok: response.ok, status: response.status, json } }
 
 function sameState(plan, fresh) { return fresh.pullRequest.number === plan.pullRequest.number && fresh.pullRequest.base === plan.pullRequest.base && fresh.pullRequest.head === plan.pullRequest.head && fresh.pullRequest.headUpdatedAt === plan.pullRequest.headUpdatedAt && JSON.stringify(fresh.observed.exactHeadChecks) === JSON.stringify(plan.observed.exactHeadChecks) && JSON.stringify(fresh.observed.codexReviewComments) === JSON.stringify(plan.observed.codexReviewComments) && fresh.observed.exactHeadReviews.length === 0 && fresh.observed.reviewNamedChecks.length === 0 && fresh.observed.currentHeadTriggerCount === 0 }
 async function currentPlanState(plan, { fetchJson, gitState, now, toolDigests }) { const fresh = await collectExactHeadCodexReviewPlan({ prNumber: plan.pullRequest.number, authority: plan.authority, fetchJson, gitState, now, toolDigests }); if (!sameState(plan, fresh)) fail('exact_head_codex_review_trigger_state_drift'); return fresh }
 
-export async function applyExactHeadCodexReviewTrigger({ plan, planPayload = null, planFileDigest = null, fetchJson = fetchGitHubJson, request = fetch, confirmer = confirmExactHeadCodexReviewOwnerClick, env = process.env, gitState = localGitState(), now = () => new Date(), toolDigests = sourceToolDigests(), nonce = () => randomBytes(32).toString('hex') } = {}) {
+export async function applyExactHeadCodexReviewTrigger({ plan, planPayload = null, planFileDigest = null, fetchJson = fetchGitHubJson, request = fetch, confirmer = confirmExactHeadCodexReviewOwnerClick, env = process.env, githubCli = githubCliDefault, gitState = localGitState(), now = () => new Date(), toolDigests = sourceToolDigests(), nonce = () => randomBytes(32).toString('hex') } = {}) {
   let attempted = false; let outcome = null; let consumed = false
   try {
     validateExactHeadCodexReviewPlan(plan, { now: now() })
@@ -81,9 +106,9 @@ export async function applyExactHeadCodexReviewTrigger({ plan, planPayload = nul
     if (!gitState.clean || gitState.branch !== plan.local.branch || gitState.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN || gitState.head !== plan.pullRequest.head || gitState.tree !== plan.local.tree) fail('exact_head_codex_review_trigger_local_state_drift')
     const actualTools = await toolDigests
     if (JSON.stringify(actualTools) !== JSON.stringify(plan.sourceToolDigests)) fail('exact_head_codex_review_trigger_tool_bytes_drift')
-    const auth = token(env); if (!auth) fail('exact_head_codex_review_trigger_token_required')
     await currentPlanState(plan, { fetchJson, gitState, now: now(), toolDigests: Promise.resolve(actualTools) })
-    if (confirmer(renderExactHeadCodexReviewOwnerConfirmation(plan)) !== true) fail('exact_head_codex_review_trigger_owner_declined')
+    const auth = executionToken(env, githubCli); if (!auth) fail('exact_head_codex_review_trigger_token_required')
+    if (confirmer(renderExactHeadCodexReviewOwnerConfirmation(plan, { now: now() })) !== true) fail('exact_head_codex_review_trigger_owner_declined')
     const receipt = buildReceipt(plan, now(), nonce())
     await currentPlanState(plan, { fetchJson, gitState, now: now(), toolDigests: Promise.resolve(actualTools) })
     consumeReceipt(receipt, now()); consumed = true
@@ -98,7 +123,7 @@ export async function applyExactHeadCodexReviewTrigger({ plan, planPayload = nul
     const after = await fetchJson(`/pulls/${plan.pullRequest.number}`)
     if (after?.state !== 'open' || after?.draft !== false || after?.base?.sha !== plan.pullRequest.base || after?.head?.sha !== plan.pullRequest.head) fail('exact_head_codex_review_trigger_post_write_head_drift')
     outcome = WRITE_CONFIRMED_PERFORMED
-    const body = { ok: true, contract: EXACT_HEAD_CODEX_REVIEW_TRIGGER_APPLY_CONTRACT, digestScope: 'utf8_compact_json_without_digest', mode: 'executed_owner_approved_exact_head_comment', repository: EXACT_HEAD_CODEX_REVIEW_REPOSITORY, plan: { digest: plan.digest, fileDigest: planFileDigest }, pullRequest: { number: plan.pullRequest.number, base: after.base.sha, head: after.head.sha, state: after.state, draft: after.draft }, comment: { id: readBack.json.id, body: readBack.json.body, author: readBack.json.user.login, createdAt: readBack.json.created_at, exactHeadBeforeAndAfter: plan.pullRequest.head }, receipt: { digest: receipt.digest, consumed: true, defaultDecision: 'decline', method: 'windows_local_owner_click' }, controls: { ...writeControls({ attempted: true, outcome }), ownerApprovalReceiptConsumed: true, reviewerRequested: false, pullRequestMutated: false, workflowDispatched: false, repositorySettingsMutated: false, mergePerformed: false, deploymentPerformed: false, providerMutated: false, credentialValueExposed: false } }
+    const body = { ok: true, contract: EXACT_HEAD_CODEX_REVIEW_TRIGGER_APPLY_CONTRACT, digestScope: 'utf8_compact_json_without_digest', mode: 'executed_owner_approved_exact_head_comment', repository: EXACT_HEAD_CODEX_REVIEW_REPOSITORY, plan: { digest: plan.digest, fileDigest: planFileDigest }, pullRequest: { number: plan.pullRequest.number, base: after.base.sha, head: after.head.sha, state: after.state, draft: after.draft }, comment: { id: readBack.json.id, body: readBack.json.body, author: readBack.json.user.login, createdAt: readBack.json.created_at, exactHeadBeforeAndAfter: plan.pullRequest.head }, authentication: { source: auth.source, valueExposed: false }, receipt: { digest: receipt.digest, consumed: true, defaultDecision: 'decline', method: 'windows_local_owner_click' }, controls: { ...writeControls({ attempted: true, outcome }), ownerApprovalReceiptConsumed: true, reviewerRequested: false, pullRequestMutated: false, workflowDispatched: false, repositorySettingsMutated: false, mergePerformed: false, deploymentPerformed: false, providerMutated: false, credentialValueExposed: false } }
     assertNoSecret(body); return signed(body)
   } catch (error) {
     if (record(error?.writeOutcome)) throw error
