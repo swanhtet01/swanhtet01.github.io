@@ -73,6 +73,21 @@ function input(overrides = {}) {
   }
 }
 
+function plusUtcDays(date, days) {
+  const value = new Date(`${date}T00:00:00.000Z`)
+  value.setUTCDate(value.getUTCDate() + days)
+  return value.toISOString().slice(0, 10)
+}
+
+function currentCliInput(now = new Date()) {
+  const today = now.toISOString().slice(0, 10)
+  const proposedPilotStartDate = plusUtcDays(today, 30)
+  return input({
+    proposedPilotStartDate,
+    reviewDate: plusUtcDays(proposedPilotStartDate, 4),
+  })
+}
+
 test('builds a public-safe baseline packet from private owner-observed input', () => {
   const packet = buildShopPilotBaselinePacket(input(), { generatedAt: '2026-08-25T00:00:00.000Z' })
   assert.equal(packet.contract, SHOP_PILOT_BASELINE_PACKET_CONTRACT)
@@ -338,7 +353,10 @@ test('template is blank and CLI generates metadata-only packet output', async ()
     assert.notEqual(templateOverwrite.status, 0)
     assert.match(templateOverwrite.stderr, /shop_pilot_baseline_output_exists/)
 
-    await writeFile(inputPath, `${JSON.stringify(input(), null, 2)}\n`)
+    // The CLI intentionally uses the real recording time. Keep this integration
+    // fixture safely ahead of that clock so the test cannot expire on its fixed
+    // historical pilot date while retaining the production fail-closed check.
+    await writeFile(inputPath, `${JSON.stringify(currentCliInput(), null, 2)}\n`)
     const linted = spawnSync(process.execPath, [tool, '--lint-input', inputPath, '--output', preflightPath], { encoding: 'utf8' })
     assert.equal(linted.status, 0, linted.stderr)
     const lintedResult = JSON.parse(linted.stdout)
