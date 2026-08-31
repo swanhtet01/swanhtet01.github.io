@@ -141,11 +141,24 @@ status column in §1 for each. The operative forward sequence is now:
    (c) above — two of the three are closed and the biggest lever is not among
    them.**
 
-   - **(a) is SHIPPED (#567).** The app-shell skeleton moved FCP 4,400 -> 3,280 ms
+   **MERGE-STATE WARNING, and it is not a formality.** Every "SHIPPED" below
+   means *merged into the pull request named beside it*, NOT into `main`. At the
+   time of writing, `main`'s `showroom/index.html` still contains a bare
+   `<div id="root"></div>` — **none of #567, #569 or #570 is an ancestor of this
+   commit**, and this document may well merge before they do. So: if you are
+   reading this from `main` and the change it describes is not in the tree in
+   front of you, the item is **still live work waiting on a merge**, not
+   finished work to skip. Codex caught this exact hazard on #571 (a document
+   telling readers to stop pursuing an improvement that is not in their tree),
+   and it is the same failure this whole re-ranking exists to fix — a document
+   confidently describing a state the code is not in. Check `git log` for the
+   named PR before acting on any row.
+
+   - **(a) is shipped IN #567 (unmerged at time of writing).** The app-shell skeleton moved FCP 4,400 -> 3,280 ms
      on `/` and 4,516 -> 3,244 ms on the chooser, load flat. This item predicted
      "well under 1 s"; it is 3.2 s. That prediction was wrong and is corrected in
      `ANDROID-PERFORMANCE-BASELINE.md` — do not carry it forward.
-   - **(b) is an HONEST ZERO (#569), closed by evidence the way DESIGN-PROGRAM
+   - **(b) is an HONEST ZERO (#569, unmerged), closed by evidence the way DESIGN-PROGRAM
      closed P3.5.** Removing 19.1 KB gz moved FCP +4/-8 ms; removing 40.1 KB gz
      moved it -20/-4 ms. Both inside the +/-88 ms control band, and the entire
      app-authored share of the entry set (~15 KB gz) is SMALLER than the cut that
@@ -156,7 +169,7 @@ status column in §1 for each. The operative forward sequence is now:
    - **The biggest lever was never listed here, and its larger half is now
      SHIPPED.** The render-blocking chain, not the entry set, is where the
      seconds were.
-     - **Stylesheet: DONE.** `showroom/vite.config.ts`'s `asyncStylesheetPlugin`
+     - **Stylesheet: done in #567 (unmerged).** `showroom/vite.config.ts`'s `asyncStylesheetPlugin`
        rewrites Vite's emitted `<link rel="stylesheet">` into `/css-async.js`,
        which appends it after parsing. Measured on the real build: **FCP 3,236
        -> 1,492 ms**, and **4,400 -> 1,492 ms cumulative with the boot shell,
