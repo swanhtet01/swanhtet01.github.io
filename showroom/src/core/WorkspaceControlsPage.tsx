@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
 
-import { getSessionEvents } from '../analytics/metrics-collector'
+import { getRecordedEvents, LOCAL_METRICS_MAX_EVENTS, projectLocalActivityLifecycle } from '../analytics/metrics-collector'
 
 import {
   LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
@@ -456,16 +456,31 @@ function ShopRevenueView() {
 }
 
 function LocalMetricsView() {
-  const events = getSessionEvents()
+  const summary = projectLocalActivityLifecycle(getRecordedEvents())
+  const productLabels = { shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' } as const
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading copy="Session activity. Nothing leaves this device." eyebrow="Analytics" title="Session metrics" />
+      <PageHeading copy="Bounded activity saved on this device across sessions." eyebrow="Analytics" title="Device activity" />
       <div className="settings-control-stack">
-        {events.length === 0
-          ? <p className="form-notice">No events yet. Open a product to begin.</p>
-          : <table><thead><tr><th>Product</th><th>Action</th></tr></thead><tbody>
-              {events.map((e, i) => <tr key={i}><td>{e.product}</td><td>{e.action}</td></tr>)}
-            </tbody></table>}
+        <section className="core-panel system-boundary-panel">
+          <div><span className="core-eyebrow">Evidence boundary</span><h2>Local activity — not observed production telemetry</h2><p>These privacy-minimal counters may span earlier sessions on this device. They contain product, capability, action, and timestamp only.</p></div>
+          <div className="readiness-list">
+            <span><small>Product events</small><strong>{summary.productEventCount}</strong></span>
+            <span><small>HQ and navigation events</small><strong>{summary.hqEventCount}</strong></span>
+            <span><small>Stored events</small><strong>{summary.eventCount} / {LOCAL_METRICS_MAX_EVENTS}</strong></span>
+            <span><small>External telemetry</small><strong>Not observed</strong></span>
+            <span><small>Commercial proof</small><strong>Not proven</strong></span>
+          </div>
+          <p className="authority-note">Activity counts do not prove a customer, pilot, production operation, commercial result, or provider ingestion. The oldest events may be dropped when the device record reaches its {LOCAL_METRICS_MAX_EVENTS}-event limit.</p>
+        </section>
+        {summary.products.map((product) => <section className="core-panel" key={product.product}>
+          <div><span className="core-eyebrow">{productLabels[product.product]}</span></div>
+          <div className="readiness-list">
+            <span><small>Local events</small><strong>{product.eventCount}</strong></span>
+            <span><small>Latest local activity</small><strong>{product.latestAt ? new Date(product.latestAt).toLocaleString() : 'No local activity'}</strong></span>
+          </div>
+        </section>)}
+        {summary.atCapacity ? <p className="form-notice">The local activity record is at its bounded capacity. New events keep replacing the oldest events on this device.</p> : null}
       </div>
     </div>
   )
