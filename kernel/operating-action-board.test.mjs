@@ -250,8 +250,25 @@ test('requires closed actions to include measured result and derives cycle time'
   assert.equal(validated.weeklyReport.closedActionCount, 1)
   assert.equal(validated.weeklyReport.measuredResultCount, 1)
   assert.equal(validated.weeklyReport.closedCycleTimeDaysMedian, 2.5)
+  const unmeasuredClosed = {
+    ...closed,
+    businessImpact: {
+      ...closed.businessImpact,
+      measured: false,
+    },
+  }
   assert.throws(() => validateOperatingActionBoard(board({
-    actions: [action({ status: 'closed' })],
+    actions: [unmeasuredClosed],
+    weeklyReport: buildOperatingActionBoardSummary([unmeasuredClosed]),
+  })), /operating_action_closed_measurement_required/)
+  assert.throws(() => validateOperatingActionBoard(board({
+    actions: [action({
+      status: 'closed',
+      businessImpact: {
+        ...action().businessImpact,
+        measured: true,
+      },
+    })],
     weeklyReport: {
       totalActions: 1,
       openActionCount: 0,

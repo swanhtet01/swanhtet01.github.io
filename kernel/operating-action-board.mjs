@@ -202,6 +202,7 @@ function validateAcceptance(acceptance) {
 function validateClosure(closure, status, openedAt, measured) {
   assertExactFields(closure, ['closedAt', 'closureNote', 'measuredResult'], 'operating_action_closure_invalid')
   if (status === 'closed') {
+    if (measured !== true) fail('operating_action_closed_measurement_required')
     const closedAt = assertTimestamp(closure.closedAt, 'operating_action_closed_at_invalid')
     return {
       closedAt,
