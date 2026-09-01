@@ -23,9 +23,11 @@ const tools = [{ path: 'tools/prepare_exact_head_codex_review_trigger.mjs', dige
 const digest = (value) => `sha256:${createHash('sha256').update(value.replace(/\r\n?/g, '\n')).digest('hex')}`
 
 function api(overrides = {}) {
-  return { pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T08:04:23.000Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } }, checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'success' }] }, reviews: [], comments: [], ...overrides }
+  const value = { pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T08:04:23.000Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } }, checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'success' }] }, reviews: [], comments: [], timeline: [{ event: 'committed', sha: head }], ...overrides }
+  if (!Object.hasOwn(overrides, 'timeline')) value.timeline = [{ event: 'committed', sha: head }, ...value.comments.map((comment) => ({ event: 'commented', id: comment.id }))]
+  return value
 }
-function fetcher(current) { return async (path) => path.startsWith('/pulls/') && path.includes('/reviews') ? current.reviews : path.startsWith('/issues/') ? current.comments : path.startsWith('/commits/') ? current.checks : current.pr }
+function fetcher(current) { return async (path) => path.startsWith('/pulls/') && path.includes('/reviews') ? current.reviews : path.includes('/timeline?') ? current.timeline : path.startsWith('/issues/') ? current.comments : path.startsWith('/commits/') ? current.checks : current.pr }
 async function fixture(current = api()) { const plan = await collectExactHeadCodexReviewPlan({ authority, fetchJson: fetcher(current), gitState, now: fixedNow, toolDigests: Promise.resolve(tools) }); return { plan, payload: JSON.stringify(plan), current } }
 function response(status, json) { return { ok: status >= 200 && status < 300, status, async json() { return json } } }
 function options(plan, payload, current, request, extra = {}) { return { plan, planPayload: payload, planFileDigest: digest(payload), fetchJson: fetcher(current), request, confirmer: () => true, env: { GITHUB_TOKEN: 'unit-test-token' }, gitState, now: () => fixedNow, toolDigests: Promise.resolve(tools), nonce: () => '9'.repeat(64), ...extra } }
@@ -68,12 +70,13 @@ test('default CLI collector performs only the required GET preflight reads befor
     delete execute.fetchJson
     await assert.rejects(applyExactHeadCodexReviewTrigger(execute), /exact_head_codex_review_trigger_owner_declined/)
   } finally { globalThis.fetch = originalFetch }
-  assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET', 'GET', 'GET'])
+  assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET', 'GET', 'GET', 'GET'])
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname), [
     '/repos/swanhtet01/swanhtet01.github.io/pulls/561',
     '/repos/swanhtet01/swanhtet01.github.io/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/check-runs',
     '/repos/swanhtet01/swanhtet01.github.io/pulls/561/reviews',
     '/repos/swanhtet01/swanhtet01.github.io/issues/561/comments',
+    '/repos/swanhtet01/swanhtet01.github.io/issues/561/timeline',
   ])
 })
 
@@ -125,7 +128,7 @@ test('decline, stale or changed plan, and pre-post head/base/comment drift fail 
   await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, checkDrift, request)), /exact_head_codex_review_trigger_state_drift/)
   const reviewDrift = api({ reviews: [{ id: 12, commit_id: head }] })
   await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, reviewDrift, request)), /exact_head_codex_review_exists/)
-  const duplicate = api({ comments: [{ id: 4, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T08:05:00.000Z' }] })
+  const duplicate = api({ comments: [{ id: 4, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T08:05:00.000Z' }], timeline: [{ event: 'committed', sha: head }, { event: 'commented', id: 4 }] })
   await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, duplicate, request)), /exact_head_codex_review_current_head_trigger_exists/)
   await assert.rejects(applyExactHeadCodexReviewTrigger(options({ ...plan, digest: `sha256:${'f'.repeat(64)}` }, payload, current, request)), /exact_head_codex_review_plan_digest_invalid/)
   assert.equal(posts, 0)

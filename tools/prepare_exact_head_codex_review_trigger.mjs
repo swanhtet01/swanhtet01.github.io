@@ -40,13 +40,48 @@ export function localGitState(git = (args) => spawnSync('git', args, { cwd: root
   return { branch: read(['symbolic-ref', '--short', 'HEAD'], 'exact_head_codex_review_git_branch_failed'), head: exactSha(read(['rev-parse', 'HEAD'], 'exact_head_codex_review_git_head_failed'), 'exact_head_codex_review_git_head_invalid'), tree: exactSha(read(['show', '-s', '--format=%T', 'HEAD'], 'exact_head_codex_review_git_tree_failed'), 'exact_head_codex_review_git_tree_invalid'), origin: read(['remote', 'get-url', 'origin'], 'exact_head_codex_review_git_origin_failed'), clean: read(['status', '--porcelain=v1'], 'exact_head_codex_review_git_status_failed') === '' }
 }
 
-function normaliseState({ pr, checks, reviews, comments }) {
+function normaliseTimelineBinding(value, head, codexReviewComments) {
+  if (!record(value) || value.headCommit !== head || !Number.isSafeInteger(value.headCommitOrdinal) || value.headCommitOrdinal < 1 || !Number.isSafeInteger(value.eventCount) || value.eventCount < value.headCommitOrdinal || !Array.isArray(value.codexReviewCommentRelations)) fail('exact_head_codex_review_head_timeline_invalid')
+  const relations = value.codexReviewCommentRelations.map((entry) => ({ id: exactNumber(entry?.id, 'exact_head_codex_review_head_timeline_invalid'), afterHead: entry?.afterHead === true ? true : entry?.afterHead === false ? false : fail('exact_head_codex_review_head_timeline_invalid') }))
+  if (new Set(relations.map((entry) => entry.id)).size !== relations.length || JSON.stringify(relations.map((entry) => entry.id)) !== JSON.stringify(codexReviewComments.map((comment) => comment.id))) fail('exact_head_codex_review_head_timeline_invalid')
+  return { headCommit: head, headCommitOrdinal: value.headCommitOrdinal, eventCount: value.eventCount, codexReviewCommentRelations: relations }
+}
+
+function timelineBinding(timeline, head, codexReviewComments) {
+  if (!Array.isArray(timeline) || !timeline.length) fail('exact_head_codex_review_head_timeline_invalid')
+  const headPositions = []
+  const commitPositions = []
+  const commentPositions = new Map()
+  timeline.forEach((entry, index) => {
+    if (!record(entry) || !String(entry.event || '')) fail('exact_head_codex_review_head_timeline_invalid')
+    if (entry.event === 'committed') {
+      const commit = exactSha(entry.sha, 'exact_head_codex_review_head_timeline_invalid')
+      commitPositions.push(index)
+      if (commit === head) headPositions.push(index)
+    }
+    if (entry.event === 'commented') {
+      const id = exactNumber(entry.id, 'exact_head_codex_review_head_timeline_invalid')
+      if (commentPositions.has(id)) fail('exact_head_codex_review_head_timeline_invalid')
+      commentPositions.set(id, index)
+    }
+  })
+  if (headPositions.length !== 1) fail('exact_head_codex_review_head_timeline_invalid')
+  const headPosition = headPositions[0]
+  if (commitPositions.at(-1) !== headPosition) fail('exact_head_codex_review_head_timeline_invalid')
+  const relations = codexReviewComments.map((comment) => {
+    if (!commentPositions.has(comment.id)) fail('exact_head_codex_review_head_timeline_invalid')
+    return { id: comment.id, afterHead: commentPositions.get(comment.id) > headPosition }
+  })
+  return normaliseTimelineBinding({ headCommit: head, headCommitOrdinal: headPosition + 1, eventCount: timeline.length, codexReviewCommentRelations: relations }, head, codexReviewComments)
+}
+
+function normaliseState({ pr, checks, reviews, comments, timeline = null, headTimeline = null }) {
   if (!record(pr) || pr.base?.repo?.full_name !== EXACT_HEAD_CODEX_REVIEW_REPOSITORY || pr.state !== 'open' || pr.draft !== false) fail('exact_head_codex_review_pr_invalid')
   const number = exactNumber(pr.number, 'exact_head_codex_review_pr_invalid')
   const base = exactSha(pr.base?.sha, 'exact_head_codex_review_base_invalid')
   const head = exactSha(pr.head?.sha, 'exact_head_codex_review_head_invalid')
   const updatedAt = exactDate(pr.updated_at, 'exact_head_codex_review_pr_updated_at_invalid').toISOString()
-  if (!Array.isArray(checks?.check_runs) || !Array.isArray(reviews) || !Array.isArray(comments)) fail('exact_head_codex_review_api_shape_invalid')
+  if (!Array.isArray(checks?.check_runs) || !Array.isArray(reviews) || !Array.isArray(comments) || (timeline === null && headTimeline === null)) fail('exact_head_codex_review_api_shape_invalid')
   const exactChecks = checks.check_runs.map((check) => ({ id: exactNumber(check?.id, 'exact_head_codex_review_check_invalid'), name: String(check?.name || ''), status: String(check?.status || ''), conclusion: check?.conclusion === null ? null : String(check?.conclusion || '') })).sort((left, right) => left.id - right.id)
   if (!exactChecks.length) fail('exact_head_codex_review_checks_missing')
   if (exactChecks.some((check) => !check.name || check.status !== 'completed' || !ACCEPTED_CHECK_CONCLUSIONS.has(check.conclusion))) fail('exact_head_codex_review_checks_not_terminal_green')
@@ -55,9 +90,11 @@ function normaliseState({ pr, checks, reviews, comments }) {
   const exactHeadReviews = reviews.filter((review) => String(review?.commit_id || '').toLowerCase() === head).map((review) => exactNumber(review?.id, 'exact_head_codex_review_review_invalid'))
   if (exactHeadReviews.length) fail('exact_head_codex_review_exists')
   const codexReviewComments = comments.filter((comment) => String(comment?.body || '').trim() === EXACT_HEAD_CODEX_REVIEW_BODY).map((comment) => ({ id: exactNumber(comment?.id, 'exact_head_codex_review_comment_invalid'), createdAt: exactDate(comment?.created_at, 'exact_head_codex_review_comment_invalid').toISOString() })).sort((left, right) => left.id - right.id)
-  const currentHeadTriggers = codexReviewComments.filter((comment) => Date.parse(comment.createdAt) >= Date.parse(updatedAt))
+  const acceptedHeadTimeline = timeline === null ? normaliseTimelineBinding(headTimeline, head, codexReviewComments) : timelineBinding(timeline, head, codexReviewComments)
+  const currentIds = new Set(acceptedHeadTimeline.codexReviewCommentRelations.filter((entry) => entry.afterHead).map((entry) => entry.id))
+  const currentHeadTriggers = codexReviewComments.filter((comment) => currentIds.has(comment.id))
   if (currentHeadTriggers.length) fail('exact_head_codex_review_current_head_trigger_exists')
-  return { number, base, head, updatedAt, checks: exactChecks, reviewNamedChecks, exactHeadReviews, codexReviewComments, currentHeadTriggers }
+  return { number, base, head, updatedAt, checks: exactChecks, reviewNamedChecks, exactHeadReviews, codexReviewComments, currentHeadTriggers, headTimeline: acceptedHeadTimeline }
 }
 
 function validateAuthority(authority, head) {
@@ -71,8 +108,8 @@ export async function collectExactHeadCodexReviewPlan({ prNumber = 561, authorit
   if (!gitState.clean || gitState.branch !== CANONICAL_BRANCH || gitState.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN) fail('exact_head_codex_review_local_state_invalid')
   const pr = await fetchJson(`/pulls/${number}`)
   const head = exactSha(pr?.head?.sha, 'exact_head_codex_review_head_invalid')
-  const [checks, reviews, comments, resolvedToolDigests] = await Promise.all([fetchJson(`/commits/${head}/check-runs?per_page=100&filter=latest`), fetchJson(`/pulls/${number}/reviews?per_page=100`), fetchJson(`/issues/${number}/comments?per_page=100`), toolDigests])
-  const observed = normaliseState({ pr, checks, reviews, comments })
+  const [checks, reviews, comments, timeline, resolvedToolDigests] = await Promise.all([fetchJson(`/commits/${head}/check-runs?per_page=100&filter=latest`), fetchJson(`/pulls/${number}/reviews?per_page=100`), fetchJson(`/issues/${number}/comments?per_page=100`), fetchJson(`/issues/${number}/timeline?per_page=100`), toolDigests])
+  const observed = normaliseState({ pr, checks, reviews, comments, timeline })
   if (gitState.head !== observed.head) fail('exact_head_codex_review_local_head_mismatch')
   const acceptedAuthority = validateAuthority(authority, observed.head)
   const generatedAt = exactDate(now instanceof Date ? now.toISOString() : now, 'exact_head_codex_review_time_invalid')
@@ -83,7 +120,7 @@ export async function collectExactHeadCodexReviewPlan({ prNumber = 561, authorit
     pullRequest: { number: observed.number, state: 'open', draft: false, base: observed.base, head: observed.head, headUpdatedAt: observed.updatedAt },
     local: { branch: gitState.branch, head: gitState.head, tree: gitState.tree, clean: true, origin: gitState.origin },
     authority: acceptedAuthority,
-    observed: { exactHeadChecks: observed.checks, exactHeadReviews: observed.exactHeadReviews, reviewNamedChecks: observed.reviewNamedChecks, codexReviewComments: observed.codexReviewComments, currentHeadTriggerCount: 0 },
+    observed: { exactHeadChecks: observed.checks, exactHeadReviews: observed.exactHeadReviews, reviewNamedChecks: observed.reviewNamedChecks, codexReviewComments: observed.codexReviewComments, headTimeline: observed.headTimeline, currentHeadTriggerCount: 0 },
     action: { kind: 'exact_head_codex_review_issue_comment', method: 'POST', path: `/repos/${EXACT_HEAD_CODEX_REVIEW_REPOSITORY}/issues/${observed.number}/comments`, body: EXACT_HEAD_CODEX_REVIEW_BODY, exactHead: observed.head, reviewerRequestIncluded: false, pullRequestEditIncluded: false },
     sourceToolDigests: resolvedToolDigests,
     readiness: { blockers: [], executeReady: false, ownerApprovalRequired: true },
@@ -99,7 +136,7 @@ export function validateExactHeadCodexReviewPlan(packet, { now = new Date() } = 
   if (!DIGEST.test(String(actualDigest || '')) || actualDigest !== compactDigest(JSON.stringify(body))) fail('exact_head_codex_review_plan_digest_invalid')
   if (packet.ok !== true || packet.contract !== EXACT_HEAD_CODEX_REVIEW_TRIGGER_PLAN_CONTRACT || packet.digestScope !== 'utf8_compact_json_without_digest' || packet.mode !== 'plan_only_no_github_write' || packet.repository !== EXACT_HEAD_CODEX_REVIEW_REPOSITORY || packet.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN || packet.action?.body !== EXACT_HEAD_CODEX_REVIEW_BODY || packet.action?.method !== 'POST' || packet.action?.path !== `/repos/${EXACT_HEAD_CODEX_REVIEW_REPOSITORY}/issues/${packet.pullRequest?.number}/comments` || packet.action?.exactHead !== packet.pullRequest?.head || packet.action?.reviewerRequestIncluded !== false || packet.action?.pullRequestEditIncluded !== false) fail('exact_head_codex_review_plan_invalid')
   const expires = exactDate(packet.expiresAt, 'exact_head_codex_review_plan_expiry_invalid'); const current = now instanceof Date ? now.getTime() : new Date(now).getTime(); if (!Number.isFinite(current) || current >= expires.getTime()) fail('exact_head_codex_review_plan_expired')
-  normaliseState({ pr: { number: packet.pullRequest?.number, state: packet.pullRequest?.state, draft: packet.pullRequest?.draft, base: { repo: { full_name: packet.repository }, sha: packet.pullRequest?.base }, head: { sha: packet.pullRequest?.head }, updated_at: packet.pullRequest?.headUpdatedAt }, checks: { check_runs: packet.observed?.exactHeadChecks }, reviews: packet.observed?.exactHeadReviews.map((id) => ({ id, commit_id: packet.pullRequest?.head })) || [], comments: packet.observed?.codexReviewComments.map((comment) => ({ ...comment, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: comment.createdAt })) || [] })
+  normaliseState({ pr: { number: packet.pullRequest?.number, state: packet.pullRequest?.state, draft: packet.pullRequest?.draft, base: { repo: { full_name: packet.repository }, sha: packet.pullRequest?.base }, head: { sha: packet.pullRequest?.head }, updated_at: packet.pullRequest?.headUpdatedAt }, checks: { check_runs: packet.observed?.exactHeadChecks }, reviews: packet.observed?.exactHeadReviews.map((id) => ({ id, commit_id: packet.pullRequest?.head })) || [], comments: packet.observed?.codexReviewComments.map((comment) => ({ ...comment, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: comment.createdAt })) || [], headTimeline: packet.observed?.headTimeline })
   validateAuthority(packet.authority, packet.pullRequest?.head)
   if (!packet.local?.clean || packet.local?.branch !== CANONICAL_BRANCH || packet.local?.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN || packet.local?.head !== packet.pullRequest?.head || !SHA.test(String(packet.local?.tree || '')) || !Array.isArray(packet.sourceToolDigests) || packet.sourceToolDigests.length !== TOOL_PATHS.length || packet.sourceToolDigests.some((entry, index) => entry?.path !== TOOL_PATHS[index] || !DIGEST.test(String(entry?.digest || ''))) || packet.readiness?.executeReady !== false || packet.readiness?.ownerApprovalRequired !== true || packet.readiness?.blockers?.length !== 0 || packet.controls?.githubWriteOutcome !== 'confirmed_not_performed' || packet.controls?.githubWriteRetryAllowed !== false || CONTROL_FALSE_KEYS.some((key) => packet.controls?.[key] !== false) || Object.keys(packet.controls || {}).length !== CONTROL_FALSE_KEYS.length + 2) fail('exact_head_codex_review_plan_controls_invalid')
   noSecrets(packet)
@@ -173,7 +210,7 @@ async function fetchAllPages(path, select) {
 
 export async function fetchGitHubJson(path) {
   if (/\/check-runs(?:\?|$)/.test(path)) return { check_runs: await fetchAllPages(path, (json) => json?.check_runs) }
-  if (/\/(?:reviews|comments)(?:\?|$)/.test(path)) return fetchAllPages(path, (json) => json)
+  if (/\/(?:reviews|comments|timeline)(?:\?|$)/.test(path)) return fetchAllPages(path, (json) => json)
   return (await fetchGitHubResponse(path)).json
 }
 
