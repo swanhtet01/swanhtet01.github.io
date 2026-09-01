@@ -7,7 +7,7 @@ import { ORPHANED_CI_RECOVERY_PLAN_TTL_MS, collectOrphanedCiRecoveryPlan } from 
 const head = 'a'.repeat(40)
 const base = 'b'.repeat(40)
 const tree = 'c'.repeat(40)
-const now = new Date('2026-09-01T00:20:00.000Z')
+const now = new Date('2099-09-01T00:20:00.000Z')
 const gitState = { branch: 'codex/release-stack-integration-rehearsal-20260825', head, tree, origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', clean: true }
 const tools = [{ path: 'tools/prepare_exact_head_orphaned_ci_recovery.mjs', digest: `sha256:${'1'.repeat(64)}` }, { path: 'tools/apply_exact_head_orphaned_ci_recovery.mjs', digest: `sha256:${'2'.repeat(64)}` }]
 const read = async () => 'name: SuperMega App CI\njobs:\n  validate:\n    timeout-minutes: 10\n'
@@ -18,9 +18,16 @@ function state() {
   const check = { id: 66, name: 'validate', status: 'in_progress', conclusion: null }
   return { pr: { number: 561, state: 'open', draft: false, updated_at: '2026-09-01T00:00:00Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } }, run, job, check, checks: { check_runs: [check, { id: 67, name: 'verify', status: 'completed', conclusion: 'success' }] }, runs: { workflow_runs: [run] }, cancelled: false }
 }
-function fetcher(value) { return async (path) => { if (path === '/pulls/561') return value.pr; if (path === '/actions/runs/33') return value.cancelled ? { ...value.run, status: 'completed', conclusion: 'cancelled' } : value.run; if (path === '/actions/jobs/55') return value.job; if (path === '/check-runs/66') return value.check; if (path.startsWith('/commits/')) return value.checks; if (path.startsWith('/actions/runs?')) return value.runs; throw new Error(`unexpected:${path}`) } }
+function fetcher(value) { return async (path) => { if (path === '/pulls/561') return value.pr; if (path === '/actions/runs/33') return value.cancelled ? { ...value.run, status: 'completed', conclusion: 'cancelled' } : value.run; if (path === '/actions/jobs/55') return value.job; if (path === '/check-runs/66') return value.check; if (path.startsWith('/commits/')) return value.checks; if (path.startsWith('/actions/runs?')) return value.runs; if (path === '/actions/runs/77/jobs?per_page=100') return value.rerunJobs; if (path === '/check-runs/99') return value.rerunCheck; throw new Error(`unexpected:${path}`) } }
 async function plan(value) { return collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'cancel', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) }) }
 function response(status, json = {}) { return { ok: status >= 200 && status < 300, status, async json() { return json } } }
+function queueRerun(value, { headSha = head, workflowId = 44, createdAt = '2026-09-01T00:20:01Z', jobRunId = 77 } = {}) {
+  const run = { ...value.run, id: 77, workflow_id: workflowId, head_sha: headSha, status: 'queued', conclusion: null, created_at: createdAt, updated_at: createdAt }
+  const job = { id: 88, run_id: jobRunId, name: 'validate', status: 'queued', conclusion: null, check_run_url: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/check-runs/99', started_at: null, completed_at: null }
+  value.runs = { workflow_runs: [value.run, run] }
+  value.rerunJobs = { total_count: 1, jobs: [job] }
+  value.rerunCheck = { id: 99, name: 'validate', status: 'queued', conclusion: null }
+}
 
 test('owner-approved cancellation uses exactly one POST and confirms only terminal cancellation', async () => {
   const value = state(); const packet = await plan(value); const calls = []
@@ -73,11 +80,42 @@ test('rerun is a separate cancelled-only action and a one-use receipt cannot rep
   value.checks = { check_runs: [value.check, { id: 67, name: 'verify', status: 'completed', conclusion: 'success' }] }
   value.runs = { workflow_runs: [value.run] }
   const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'rerun', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) })
-  const request = async (url, init) => { assert.equal(init.method, 'POST'); assert.equal(String(url).endsWith('/actions/jobs/55/rerun'), true); return response(201, { id: 55 }) }
+  const request = async (url, init) => { assert.equal(init.method, 'POST'); assert.equal(String(url).endsWith('/actions/jobs/55/rerun'), true); queueRerun(value); return response(201, null) }
   const options = { plan: packet, fetchJson: fetcher(value), request, confirmer: () => true, env: { GITHUB_TOKEN: 'test-token-value' }, gitState, now: () => now, toolDigests: Promise.resolve(tools), read, nonce: () => '6'.repeat(64) }
   const result = await applyOrphanedCiRecovery(options)
   assert.equal(result.controls.workflowRerun, true)
+  assert.deepEqual(result.rerunAcknowledgement, { responseStatus: 201, runId: 77, jobId: 88, checkId: 99, workflowId: 44, head })
+  value.runs = { workflow_runs: [value.run] }
+  delete value.rerunJobs
+  delete value.rerunCheck
   await assert.rejects(applyOrphanedCiRecovery(options), /orphaned_ci_recovery_receipt_expired_or_consumed/)
+})
+
+test('rerun acknowledgement fails closed without one fresh exact workflow run and named job', async () => {
+  const cases = [
+    { name: 'missing run', update: () => {} },
+    { name: 'wrong head', update: (value) => queueRerun(value, { headSha: 'd'.repeat(40) }) },
+    { name: 'wrong workflow', update: (value) => queueRerun(value, { workflowId: 45 }) },
+    { name: 'stale run', update: (value) => queueRerun(value, { createdAt: '2026-08-31T23:59:59Z' }) },
+    { name: 'wrong job binding', update: (value) => queueRerun(value, { jobRunId: 33 }) },
+  ]
+  for (const [index, candidate] of cases.entries()) {
+    const value = state()
+    value.run = { ...value.run, status: 'completed', conclusion: 'cancelled' }
+    value.job = { ...value.job, status: 'completed', conclusion: 'cancelled', completed_at: '2026-09-01T00:01:00Z' }
+    value.check = { ...value.check, status: 'completed', conclusion: 'cancelled' }
+    value.checks = { check_runs: [value.check, { id: 67, name: 'verify', status: 'completed', conclusion: 'success' }] }
+    value.runs = { workflow_runs: [value.run] }
+    const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'rerun', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) })
+    let calls = 0; let error
+    try { await applyOrphanedCiRecovery({ plan: packet, fetchJson: fetcher(value), request: async () => { calls += 1; candidate.update(value); return response(201, null) }, confirmer: () => true, env: { GITHUB_TOKEN: 'test-token-value' }, gitState, now: () => now, toolDigests: Promise.resolve(tools), read, nonce: () => String(index + 7).repeat(64) }) } catch (caught) { error = caught }
+    assert.equal(calls, 1, candidate.name)
+    const receipt = buildOrphanedCiRecoveryFailureReceipt(error)
+    assert.equal(receipt.controls.githubWriteAttempted, true, candidate.name)
+    assert.equal(receipt.controls.githubWritesPerformed, null, candidate.name)
+    assert.equal(receipt.controls.githubWriteOutcome, 'outcome_unknown', candidate.name)
+    assert.equal(receipt.controls.githubWriteRetryAllowed, false, candidate.name)
+  }
 })
 
 test('Windows dialog timeout is fail-closed before any API action', () => {

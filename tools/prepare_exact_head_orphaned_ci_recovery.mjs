@@ -57,21 +57,21 @@ function exactPr(value) {
   if (!record(value) || value.state !== 'open' || value.draft !== false || value.base?.repo?.full_name !== ORPHANED_CI_RECOVERY_REPOSITORY) fail('orphaned_ci_recovery_pr_invalid')
   return { number: positive(value.number, 'orphaned_ci_recovery_pr_invalid'), base: sha(value.base?.sha, 'orphaned_ci_recovery_base_invalid'), head: sha(value.head?.sha, 'orphaned_ci_recovery_head_invalid'), updatedAt: exactDate(value.updated_at, 'orphaned_ci_recovery_pr_updated_at_invalid').toISOString() }
 }
-function exactRun(value, expectedHead, workflow) {
+export function exactRun(value, expectedHead, workflow) {
   const path = String(value?.path || '')
   if (!record(value) || sha(value.head_sha, 'orphaned_ci_recovery_run_head_invalid') !== expectedHead || value.event !== 'pull_request' || String(value.name || '') !== workflow.name || (path !== workflow.path && !path.startsWith(`${workflow.path}@`))) fail('orphaned_ci_recovery_run_invalid')
   const status = String(value.status || ''); const conclusion = value.conclusion === null ? null : String(value.conclusion || '')
   if (!['queued', 'in_progress', 'completed'].includes(status)) fail('orphaned_ci_recovery_run_invalid')
   return { id: positive(value.id, 'orphaned_ci_recovery_run_invalid'), workflowId: positive(value.workflow_id, 'orphaned_ci_recovery_run_invalid'), head: expectedHead, event: 'pull_request', status, conclusion, createdAt: exactDate(value.created_at, 'orphaned_ci_recovery_run_invalid').toISOString(), updatedAt: exactDate(value.updated_at, 'orphaned_ci_recovery_run_invalid').toISOString() }
 }
-function exactJob(value, run) {
+export function exactJob(value, run) {
   if (!record(value) || positive(value.id, 'orphaned_ci_recovery_job_invalid') < 1 || !String(value.name || '') || positive(value.run_id, 'orphaned_ci_recovery_job_invalid') !== run.id) fail('orphaned_ci_recovery_job_invalid')
   const match = new RegExp(`^${API_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\/check-runs\\/(\\d+)$`).exec(String(value.check_run_url || '')); if (!match) fail('orphaned_ci_recovery_job_invalid')
   const status = String(value.status || ''); const conclusion = value.conclusion === null ? null : String(value.conclusion || '')
   if (!['queued', 'in_progress', 'completed'].includes(status)) fail('orphaned_ci_recovery_job_invalid')
   return { id: positive(value.id, 'orphaned_ci_recovery_job_invalid'), name: String(value.name), status, conclusion, checkRunId: positive(match[1], 'orphaned_ci_recovery_job_invalid'), startedAt: value.started_at === null ? null : exactDate(value.started_at, 'orphaned_ci_recovery_job_invalid').toISOString(), completedAt: value.completed_at === null ? null : exactDate(value.completed_at, 'orphaned_ci_recovery_job_invalid').toISOString(), runId: run.id }
 }
-function exactCheck(value, job, checkName) {
+export function exactCheck(value, job, checkName) {
   if (!record(value) || positive(value.id, 'orphaned_ci_recovery_check_invalid') !== job.checkRunId || String(value.name || '') !== checkName) fail('orphaned_ci_recovery_check_invalid')
   const status = String(value.status || ''); const conclusion = value.conclusion === null ? null : String(value.conclusion || '')
   if (!['queued', 'in_progress', 'completed'].includes(status)) fail('orphaned_ci_recovery_check_invalid')

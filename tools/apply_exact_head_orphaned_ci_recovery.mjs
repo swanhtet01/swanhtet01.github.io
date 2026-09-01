@@ -10,6 +10,9 @@ import {
   ORPHANED_CI_RECOVERY_PLAN_TTL_MS,
   ORPHANED_CI_RECOVERY_REPOSITORY,
   collectOrphanedCiRecoveryPlan,
+  exactCheck,
+  exactJob,
+  exactRun,
   fetchGitHubJson,
   localGitState,
   readOrphanedCiRecoveryPlan,
@@ -67,6 +70,37 @@ function sameState(plan, fresh) {
 }
 async function currentState(plan, { fetchJson, gitState, now, toolDigests, read }) { const fresh = await collectOrphanedCiRecoveryPlan({ prNumber: plan.pullRequest.number, runId: plan.target.run.id, jobId: plan.target.job.id, checkName: plan.target.check.name, phase: plan.action.phase, fetchJson, gitState, now, toolDigests, read }); if (!sameState(plan, fresh)) fail('orphaned_ci_recovery_state_drift'); return fresh }
 
+function freshRerunRun(plan, value) {
+  if (!Array.isArray(value?.workflow_runs)) fail('orphaned_ci_recovery_rerun_evidence_invalid')
+  const workflow = { name: plan.workflow.name, path: plan.workflow.path }
+  const originalCreatedAt = Date.parse(plan.target.run.createdAt)
+  const candidates = value.workflow_runs
+    .filter((entry) => Number(entry?.workflow_id) === plan.target.run.workflowId)
+    .map((entry) => exactRun(entry, plan.pullRequest.head, workflow))
+    .filter((entry) => entry.id !== plan.target.run.id && Date.parse(entry.createdAt) > originalCreatedAt)
+  if (candidates.length !== 1 || (candidates[0].status === 'completed' && candidates[0].conclusion === 'cancelled')) fail('orphaned_ci_recovery_rerun_evidence_invalid')
+  return candidates[0]
+}
+
+function freshRerunJob(plan, run, value) {
+  if (!Array.isArray(value?.jobs) || !Number.isSafeInteger(value.total_count) || value.total_count < 1 || value.total_count !== value.jobs.length || value.total_count > 100) fail('orphaned_ci_recovery_rerun_evidence_invalid')
+  const candidates = value.jobs
+    .map((entry) => exactJob(entry, run))
+    .filter((entry) => entry.id !== plan.target.job.id && entry.name === plan.target.job.name)
+  if (candidates.length !== 1 || (candidates[0].status === 'completed' && candidates[0].conclusion === 'cancelled')) fail('orphaned_ci_recovery_rerun_evidence_invalid')
+  return candidates[0]
+}
+
+async function verifyQueuedRerun(plan, fetchJson) {
+  const runs = await fetchJson(`/actions/runs?event=pull_request&head_sha=${plan.pullRequest.head}&per_page=100`)
+  const run = freshRerunRun(plan, runs)
+  const jobs = await fetchJson(`/actions/runs/${run.id}/jobs?per_page=100`)
+  const job = freshRerunJob(plan, run, jobs)
+  const check = exactCheck(await fetchJson(`/check-runs/${job.checkRunId}`), job, plan.target.check.name)
+  if (check.status === 'completed' && check.conclusion === 'cancelled') fail('orphaned_ci_recovery_rerun_evidence_invalid')
+  return { runId: run.id, jobId: job.id, checkId: check.id, workflowId: run.workflowId, head: run.head }
+}
+
 export async function applyOrphanedCiRecovery({ plan, planPayload = null, planFileDigest = null, fetchJson = fetchGitHubJson, request = fetch, confirmer = confirmOrphanedCiRecoveryOwnerClick, env = process.env, gitState = localGitState(), now = () => new Date(), toolDigests = sourceToolDigests(), read = undefined, nonce = () => randomBytes(32).toString('hex') } = {}) {
   let attempted = false; let outcome = null; let receiptConsumed = false
   try {
@@ -90,11 +124,14 @@ export async function applyOrphanedCiRecovery({ plan, planPayload = null, planFi
     if (plan.action.phase === 'cancel') {
       let run; try { run = await fetchJson(`/actions/runs/${plan.target.run.id}`) } catch { throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed) }
       if (run?.status !== 'completed' || run?.conclusion !== 'cancelled') throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed)
-    } else if (!Number.isSafeInteger(response.json?.id) || response.json.id !== plan.target.job.id) {
-      throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed)
+    } else {
+      if (response.status !== 201) throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed)
+      let rerun
+      try { rerun = await verifyQueuedRerun(plan, fetchJson) } catch { throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed) }
+      response = { ...response, rerun }
     }
     outcome = WRITE_CONFIRMED_PERFORMED
-    const body = { ok: true, contract: ORPHANED_CI_RECOVERY_APPLY_CONTRACT, digestScope: 'utf8_compact_json_without_digest', mode: plan.action.phase === 'cancel' ? 'executed_owner_approved_exact_orphan_cancel' : 'executed_owner_approved_exact_job_rerun', repository: plan.repository, plan: { digest: plan.digest, fileDigest: planFileDigest }, target: { pullRequest: plan.pullRequest.number, base: plan.pullRequest.base, head: plan.pullRequest.head, runId: plan.target.run.id, jobId: plan.target.job.id, checkName: plan.target.check.name }, receipt: { digest: ownerReceipt.digest, consumed: true, defaultDecision: 'decline', method: 'windows_local_owner_click' }, controls: { ...controls({ attempted: true, outcome }), workflowCancelled: plan.action.phase === 'cancel', workflowRerun: plan.action.phase === 'rerun', ownerApprovalReceiptConsumed: true, workflowDispatched: false, pullRequestMutated: false, repositorySettingsMutated: false, mergePerformed: false, deploymentPerformed: false, providerMutated: false, credentialValueExposed: false } }
+    const body = { ok: true, contract: ORPHANED_CI_RECOVERY_APPLY_CONTRACT, digestScope: 'utf8_compact_json_without_digest', mode: plan.action.phase === 'cancel' ? 'executed_owner_approved_exact_orphan_cancel' : 'executed_owner_approved_exact_job_rerun', repository: plan.repository, plan: { digest: plan.digest, fileDigest: planFileDigest }, target: { pullRequest: plan.pullRequest.number, base: plan.pullRequest.base, head: plan.pullRequest.head, runId: plan.target.run.id, jobId: plan.target.job.id, checkName: plan.target.check.name }, rerunAcknowledgement: plan.action.phase === 'rerun' ? { responseStatus: response.status, ...response.rerun } : null, receipt: { digest: ownerReceipt.digest, consumed: true, defaultDecision: 'decline', method: 'windows_local_owner_click' }, controls: { ...controls({ attempted: true, outcome }), workflowCancelled: plan.action.phase === 'cancel', workflowRerun: plan.action.phase === 'rerun', ownerApprovalReceiptConsumed: true, workflowDispatched: false, pullRequestMutated: false, repositorySettingsMutated: false, mergePerformed: false, deploymentPerformed: false, providerMutated: false, credentialValueExposed: false } }
     noSecrets(body); return signed(body)
   } catch (error) {
     if (record(error?.writeOutcome)) throw error
