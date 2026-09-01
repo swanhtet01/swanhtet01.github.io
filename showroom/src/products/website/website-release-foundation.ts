@@ -259,7 +259,14 @@ export function normalizeWebsiteDomainHostname(value: unknown) {
   if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error('domain.hostname must contain valid DNS labels.')
   const finalLabel = labels.at(-1) ?? ''
   if (finalLabel.length < 2 || /^\d+$/.test(finalLabel)) throw new Error('domain.hostname must have a public top-level domain.')
-  if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local') || hostname.endsWith('.test') || hostname.endsWith('.invalid') || hostname.endsWith('.example')) throw new Error('domain.hostname must not use a local or reserved suffix.')
+  const reservedExamples = ['example.com', 'example.net', 'example.org']
+  if (hostname === 'localhost'
+    || hostname.endsWith('.localhost')
+    || hostname.endsWith('.local')
+    || hostname.endsWith('.test')
+    || hostname.endsWith('.invalid')
+    || hostname.endsWith('.example')
+    || reservedExamples.some((reserved) => hostname === reserved || hostname.endsWith(`.${reserved}`))) throw new Error('domain.hostname must not use a local or reserved suffix.')
   return hostname
 }
 

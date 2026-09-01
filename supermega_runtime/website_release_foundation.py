@@ -731,8 +731,16 @@ def normalize_website_domain_hostname(value: object) -> str:
     final_label = labels[-1]
     if len(final_label) < 2 or final_label.isdigit():
         raise _fail("domain.hostname must have a public top-level domain.")
-    if hostname == "localhost" or hostname.endswith(
-        (".localhost", ".local", ".test", ".invalid", ".example")
+    reserved_examples = ("example.com", "example.net", "example.org")
+    if (
+        hostname == "localhost"
+        or hostname.endswith(
+            (".localhost", ".local", ".test", ".invalid", ".example")
+        )
+        or any(
+            hostname == reserved or hostname.endswith(f".{reserved}")
+            for reserved in reserved_examples
+        )
     ):
         raise _fail("domain.hostname must not use a local or reserved suffix.")
     return hostname

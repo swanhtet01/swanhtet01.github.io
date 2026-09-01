@@ -142,7 +142,7 @@ const parityHandoff = model.buildWebsiteDomainHandoff({
   },
 })
 check(parityHandoff.packetDigest === 'sha256:beca88a43f6442214cb14b0e1caa2d90b86ba1521ec7245a59c9438ae295a444', 'TypeScript and Python packet digest parity is pinned')
-check(uiSource.includes('Customer domain') && uiSource.includes('www.example.com'), 'owner UI exposes the domain handoff input')
+check(uiSource.includes('Customer domain') && uiSource.includes('Enter a domain you control') && !uiSource.includes('www.example.com'), 'owner UI uses a non-domain instructional placeholder')
 check(uiSource.includes('It is not saved to Website history'), 'owner UI discloses the non-persistent hostname boundary')
 const downloadFunction = uiSource.slice(uiSource.indexOf('function downloadDomainHandoff'), uiSource.indexOf('\n  if (!publishIsCurrent', uiSource.indexOf('function downloadDomainHandoff')))
 check(downloadFunction.includes('buildWebsiteDomainHandoff') && !downloadFunction.includes('saveTransition') && !downloadFunction.includes('setItem'), 'domain download path has no persistence transition')
@@ -158,6 +158,10 @@ for (const invalid of [
   'localhost',
   'shop.local',
   'shop.example',
+  'example.com',
+  'www.example.com',
+  'example.net',
+  'client.example.org',
   '127.0.0.1',
   'singlelabel',
   '-bad.example.com',

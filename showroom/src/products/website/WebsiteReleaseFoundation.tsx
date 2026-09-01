@@ -405,7 +405,7 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
               autoComplete="off"
               inputMode="url"
               onChange={(event) => setDomainHostname(event.target.value)}
-              placeholder="www.example.com"
+              placeholder="Enter a domain you control"
               spellCheck={false}
               value={domainHostname}
             />
