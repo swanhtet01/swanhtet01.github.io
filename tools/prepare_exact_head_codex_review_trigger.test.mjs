@@ -52,6 +52,7 @@ test('plan fails closed for a current-head trigger, head/base/check/review drift
   await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-08-31T09:48:04+00:00' } })), /exact_head_codex_review_pr_updated_at_invalid/)
   await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-02-29T09:48:04Z' } })), /exact_head_codex_review_pr_updated_at_invalid/)
   await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-08-31T09:48:04.12Z' } })), /exact_head_codex_review_pr_updated_at_invalid/)
+  await assert.rejects(plan(state({ checks: { check_runs: [] } })), /exact_head_codex_review_checks_missing/)
   await assert.rejects(plan(state({ checks: { check_runs: [{ id: 1, name: 'validate', status: 'in_progress', conclusion: null }] } })), /exact_head_codex_review_checks_not_terminal_green/)
   await assert.rejects(plan(state({ checks: { check_runs: [{ id: 1, name: 'Codex review', status: 'completed', conclusion: 'success' }] } })), /exact_head_codex_review_named_check_exists/)
   await assert.rejects(plan(state({ reviews: [{ id: 9, commit_id: head }] })), /exact_head_codex_review_exists/)

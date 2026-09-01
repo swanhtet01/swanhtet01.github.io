@@ -27,6 +27,9 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/
 const WRITE_CONFIRMED_PERFORMED = 'confirmed_performed'
 const WRITE_CONFIRMED_NOT_PERFORMED = 'confirmed_not_performed'
 const WRITE_OUTCOME_UNKNOWN = 'outcome_unknown'
+export const ORPHANED_CI_RECOVERY_CANCEL_POLL_ATTEMPTS = 15
+export const ORPHANED_CI_RECOVERY_RERUN_POLL_ATTEMPTS = 15
+export const ORPHANED_CI_RECOVERY_CONFIRM_POLL_INTERVAL_MS = 2_000
 const consumed = new Set()
 
 function fail(code) { throw new Error(code) }
@@ -71,37 +74,50 @@ function sameState(plan, fresh) {
 async function currentState(plan, { fetchJson, gitState, now, toolDigests, read }) { const fresh = await collectOrphanedCiRecoveryPlan({ prNumber: plan.pullRequest.number, runId: plan.target.run.id, jobId: plan.target.job.id, checkName: plan.target.check.name, phase: plan.action.phase, fetchJson, gitState, now, toolDigests, read }); if (!sameState(plan, fresh)) fail('orphaned_ci_recovery_state_drift'); return fresh }
 
 function freshRerunRun(plan, value) {
-  if (!Array.isArray(value?.workflow_runs)) fail('orphaned_ci_recovery_rerun_evidence_invalid')
   const workflow = { name: plan.workflow.name, path: plan.workflow.path }
-  const originalCreatedAt = Date.parse(plan.target.run.createdAt)
-  const candidates = value.workflow_runs
-    .filter((entry) => Number(entry?.workflow_id) === plan.target.run.workflowId)
-    .map((entry) => exactRun(entry, plan.pullRequest.head, workflow))
-    .filter((entry) => entry.id !== plan.target.run.id && Date.parse(entry.createdAt) > originalCreatedAt)
-  if (candidates.length !== 1 || (candidates[0].status === 'completed' && candidates[0].conclusion === 'cancelled')) fail('orphaned_ci_recovery_rerun_evidence_invalid')
-  return candidates[0]
+  const run = exactRun(value, plan.pullRequest.head, workflow)
+  if (run.id !== plan.target.run.id || run.workflowId !== plan.target.run.workflowId || run.runAttempt !== plan.target.run.runAttempt + 1 || (run.status === 'completed' && run.conclusion === 'cancelled')) fail('orphaned_ci_recovery_rerun_evidence_invalid')
+  return run
 }
 
 function freshRerunJob(plan, run, value) {
   if (!Array.isArray(value?.jobs) || !Number.isSafeInteger(value.total_count) || value.total_count < 1 || value.total_count !== value.jobs.length || value.total_count > 100) fail('orphaned_ci_recovery_rerun_evidence_invalid')
   const candidates = value.jobs
     .map((entry) => exactJob(entry, run))
-    .filter((entry) => entry.id !== plan.target.job.id && entry.name === plan.target.job.name)
+    .filter((entry) => entry.id !== plan.target.job.id && entry.checkRunId !== plan.target.job.checkRunId && entry.name === plan.target.job.name)
   if (candidates.length !== 1 || (candidates[0].status === 'completed' && candidates[0].conclusion === 'cancelled')) fail('orphaned_ci_recovery_rerun_evidence_invalid')
   return candidates[0]
 }
 
-async function verifyQueuedRerun(plan, fetchJson) {
-  const runs = await fetchJson(`/actions/runs?event=pull_request&head_sha=${plan.pullRequest.head}&per_page=100`)
-  const run = freshRerunRun(plan, runs)
-  const jobs = await fetchJson(`/actions/runs/${run.id}/jobs?per_page=100`)
+async function readQueuedRerun(plan, fetchJson) {
+  const run = freshRerunRun(plan, await fetchJson(`/actions/runs/${plan.target.run.id}`))
+  const jobs = await fetchJson(`/actions/runs/${run.id}/attempts/${run.runAttempt}/jobs?per_page=100`)
   const job = freshRerunJob(plan, run, jobs)
   const check = exactCheck(await fetchJson(`/check-runs/${job.checkRunId}`), job, plan.target.check.name)
   if (check.status === 'completed' && check.conclusion === 'cancelled') fail('orphaned_ci_recovery_rerun_evidence_invalid')
-  return { runId: run.id, jobId: job.id, checkId: check.id, workflowId: run.workflowId, head: run.head }
+  return { runId: run.id, runAttempt: run.runAttempt, jobId: job.id, checkId: check.id, workflowId: run.workflowId, head: run.head }
 }
 
-export async function applyOrphanedCiRecovery({ plan, planPayload = null, planFileDigest = null, fetchJson = fetchGitHubJson, request = fetch, confirmer = confirmOrphanedCiRecoveryOwnerClick, env = process.env, gitState = localGitState(), now = () => new Date(), toolDigests = sourceToolDigests(), read = undefined, nonce = () => randomBytes(32).toString('hex') } = {}) {
+async function confirmQueuedRerun(plan, fetchJson, sleep) {
+  for (let attempt = 0; attempt < ORPHANED_CI_RECOVERY_RERUN_POLL_ATTEMPTS; attempt += 1) {
+    try { return await readQueuedRerun(plan, fetchJson) } catch {}
+    if (attempt + 1 < ORPHANED_CI_RECOVERY_RERUN_POLL_ATTEMPTS) await sleep(ORPHANED_CI_RECOVERY_CONFIRM_POLL_INTERVAL_MS)
+  }
+  fail('orphaned_ci_recovery_rerun_confirmation_timeout')
+}
+
+async function confirmCancelledRun(plan, fetchJson, sleep) {
+  const workflow = { name: plan.workflow.name, path: plan.workflow.path }
+  for (let attempt = 0; attempt < ORPHANED_CI_RECOVERY_CANCEL_POLL_ATTEMPTS; attempt += 1) {
+    const run = exactRun(await fetchJson(`/actions/runs/${plan.target.run.id}`), plan.pullRequest.head, workflow)
+    if (run.id !== plan.target.run.id || run.workflowId !== plan.target.run.workflowId || run.runAttempt !== plan.target.run.runAttempt) fail('orphaned_ci_recovery_cancel_confirmation_invalid')
+    if (run.status === 'completed' && run.conclusion === 'cancelled') return run
+    if (attempt + 1 < ORPHANED_CI_RECOVERY_CANCEL_POLL_ATTEMPTS) await sleep(ORPHANED_CI_RECOVERY_CONFIRM_POLL_INTERVAL_MS)
+  }
+  fail('orphaned_ci_recovery_cancel_confirmation_timeout')
+}
+
+export async function applyOrphanedCiRecovery({ plan, planPayload = null, planFileDigest = null, fetchJson = fetchGitHubJson, request = fetch, confirmer = confirmOrphanedCiRecoveryOwnerClick, env = process.env, gitState = localGitState(), now = () => new Date(), toolDigests = sourceToolDigests(), read = undefined, nonce = () => randomBytes(32).toString('hex'), sleep = (milliseconds) => new Promise((done) => setTimeout(done, milliseconds)) } = {}) {
   let attempted = false; let outcome = null; let receiptConsumed = false
   try {
     validateOrphanedCiRecoveryPlan(plan, { now: now() })
@@ -122,12 +138,11 @@ export async function applyOrphanedCiRecovery({ plan, planPayload = null, planFi
     if (!response.ok && response.status >= 400 && response.status < 500) throw writeFailure(`orphaned_ci_recovery_post_failed:${response.status}`, true, WRITE_CONFIRMED_NOT_PERFORMED, receiptConsumed)
     if (!response.ok) throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed)
     if (plan.action.phase === 'cancel') {
-      let run; try { run = await fetchJson(`/actions/runs/${plan.target.run.id}`) } catch { throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed) }
-      if (run?.status !== 'completed' || run?.conclusion !== 'cancelled') throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed)
+      try { await confirmCancelledRun(plan, fetchJson, sleep) } catch { throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed) }
     } else {
       if (response.status !== 201) throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed)
       let rerun
-      try { rerun = await verifyQueuedRerun(plan, fetchJson) } catch { throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed) }
+      try { rerun = await confirmQueuedRerun(plan, fetchJson, sleep) } catch { throw writeFailure('orphaned_ci_recovery_write_outcome_unknown', true, WRITE_OUTCOME_UNKNOWN, receiptConsumed) }
       response = { ...response, rerun }
     }
     outcome = WRITE_CONFIRMED_PERFORMED

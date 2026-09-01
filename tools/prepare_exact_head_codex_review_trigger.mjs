@@ -48,6 +48,7 @@ function normaliseState({ pr, checks, reviews, comments }) {
   const updatedAt = exactDate(pr.updated_at, 'exact_head_codex_review_pr_updated_at_invalid').toISOString()
   if (!Array.isArray(checks?.check_runs) || !Array.isArray(reviews) || !Array.isArray(comments)) fail('exact_head_codex_review_api_shape_invalid')
   const exactChecks = checks.check_runs.map((check) => ({ id: exactNumber(check?.id, 'exact_head_codex_review_check_invalid'), name: String(check?.name || ''), status: String(check?.status || ''), conclusion: check?.conclusion === null ? null : String(check?.conclusion || '') })).sort((left, right) => left.id - right.id)
+  if (!exactChecks.length) fail('exact_head_codex_review_checks_missing')
   if (exactChecks.some((check) => !check.name || check.status !== 'completed' || !ACCEPTED_CHECK_CONCLUSIONS.has(check.conclusion))) fail('exact_head_codex_review_checks_not_terminal_green')
   const reviewNamedChecks = exactChecks.filter((check) => /(?:^|[^a-z])(?:codex|review)(?:$|[^a-z])/i.test(check.name))
   if (reviewNamedChecks.length) fail('exact_head_codex_review_named_check_exists')
