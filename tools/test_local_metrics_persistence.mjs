@@ -213,6 +213,8 @@ const sale = (ts = 1) => ({ product: 'shop', capability: 'shop-counter', action:
   ]) check(localMetricsViewSource.includes(text), `device activity view includes owner-safe copy: ${text}`)
   check(localMetricsViewSource.includes('projectLocalActivityLifecycle(getRecordedEvents())'), 'view projects the complete bounded device record')
   check(!localMetricsViewSource.includes('getSessionEvents()'), 'view no longer mislabels the across-session record as one session')
+  check(controlsPageSource.includes('to="/settings/?view=local-metrics#controls">Device activity</Link>'), 'Reports links to the device activity lifecycle with the current label')
+  check(!controlsPageSource.includes('>Session metrics</Link>'), 'the obsolete session-only label cannot return')
 }
 
 console.log(`local metrics persistence: ${checks} checks passed`)

@@ -819,7 +819,7 @@ export function WorkspaceControlsPage() {
             <Link className="core-button" to="/settings/?view=ecommerce-pipeline#controls">Ecommerce pipeline</Link>
             <Link className="core-button" to="/settings/?view=customer-journey#controls">Customer journey</Link>
             <Link className="core-button" to="/settings/?view=cross-product#controls">Order and production status</Link>
-            <Link className="core-button" to="/settings/?view=local-metrics#controls">Session metrics</Link>
+            <Link className="core-button" to="/settings/?view=local-metrics#controls">Device activity</Link>
           </div>
         </section>
 
