@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-26
+Updated: 2026-09-02
 Owner: founder / CEO
 Mode: Codex-only guarded local release candidate; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -12,8 +12,8 @@ Live scheduler configured: `false`
 Live managed persistence ready: `false`
 Live security ready: `false`
 
-Candidate: `d4b2c9b8a4b4ee4807a9f68a58a4e5c5315efd5a` passed 661/661; first gate is GitHub main protection.
-Handoff v2 refreshed paired identity and remote main on 2026-08-25. Operations stay fail-closed pending protected review and release proof.
+Candidate: `6e4cc119145c3d25e506fd82b5668387978b6533` passed v264; main protection is healthy. Current gate: one owner-clicked, lease-enforced review push from `2741ae1201a6af1ce69d9bdecc32084fc4913fc6`.
+Live remains `6647a2b241aa198a490643c5d38f6edb6e4caddc`; merge and deployment authority is false.
 
 ## North-star outcome
 
@@ -72,7 +72,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack live product activation proof; model calls fail closed.
 - The digest-bound managed readiness ledger records protected PostgreSQL 17 at schema v11 with zero local-target drift, metadata RLS, browser-role denial, and a clear Security Advisor. It does not authorize a tenant or production release.
 - Storage privacy, managed persistence, and self-serve isolation have bounded proof records, but the live products remain isolated samples and no named customer tenant is activated.
-- Live HQ and both domains agree on `6647a2b2`; no release drift is present. GitHub main protection is not verified; external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `6647a2b2`; no release drift is present. Main protection is verified, but `6e4cc119` is not pushed, reviewed, merged, or deployed; external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
 - The deleted isolated-v11 self-serve proof covers six RLS and replay controls. A real tenant still awaits the founder `production_activation` decision in `hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
@@ -90,12 +90,9 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Owner-review GitHub `main` protection for exact candidate `d4b2c9b8a4b4ee4807a9f68a58a4e5c5315efd5a`.
-2. Owner-review the normal initial branch push for that exact verified candidate.
-3. Review the published branch, then separately owner-review merge and paired production workflow as
-   separate gates; never infer them from the green local candidate.
-4. Run post-deploy desktop/mobile and tenant-isolation proof on the exact release.
-5. Replace the Spa sample identities with one named owner and reviewed business
-   data, then activate exactly one isolated portal and measure setup and daily use.
-6. Custom work and further SaaS follow that client through the governed extension
-   contract instead of a code fork or another product shell.
+1. With the owner present: fresh `b85d96f4` Spa preview, 16 hosted checks, then v4 pack. Never reuse a timed-out plan.
+2. Owner-review one lease-enforced review-branch push of exact `6e4cc119145c3d25e506fd82b5668387978b6533`.
+3. Bind PR #561 to that head, finish CI/review, then separately gate merge and paired production release.
+4. Require four-route mobile/desktop, isolation, recovery, rollback, runtime-log, and observability receipts.
+5. Replace Spa samples with reviewed owner data and enable one counter only after live-readiness acceptance.
+6. Measure setup, daily work, exception closure, recovery, and owner review; scale the other products from that evidence.
