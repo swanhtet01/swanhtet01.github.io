@@ -16,6 +16,7 @@ const root = resolve(import.meta.dirname, '..')
 const appWorkflow = await readFile(resolve(root, '.github/workflows/supermega-app-deploy.yml'), 'utf8')
 const workflow = await readFile(resolve(root, '.github/workflows/supermega-public-release.yml'), 'utf8')
 const ciWorkflow = await readFile(resolve(root, '.github/workflows/showroom-ci.yml'), 'utf8')
+const renderedJourneyVerifier = await readFile(resolve(root, 'tools/verify_app_entry_rendered.mjs'), 'utf8')
 const dependencyAuditWorkflow = await readFile(resolve(root, '.github/workflows/dependency-security.yml'), 'utf8')
 const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/supermega-public-live-health.yml'), 'utf8')
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
@@ -241,6 +242,20 @@ requireContract('app build contract',
   && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
   && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
+requireContract('CI verifies exact-source desktop and 390px journeys for all four products',
+  ciWorkflow.includes('timeout-minutes: 15')
+  && ciWorkflow.includes('Verify desktop and 390px product journeys')
+  && ciWorkflow.includes('SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}')
+  && ciWorkflow.includes('node tools/verify_app_entry_rendered.mjs')
+  && ciWorkflow.includes('--out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json"')
+  && ciWorkflow.includes('--screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR"')
+  && ciWorkflow.includes('--expected-head "$GITHUB_SHA"')
+  && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify desktop and 390px product journeys')
+  && ['shop', 'plant', 'website', 'ecommerce'].every((product) => renderedJourneyVerifier.includes(`route: '/${product}/`))
+  && renderedJourneyVerifier.includes('width: 390')
+  && renderedJourneyVerifier.includes('height: 844')
+  && renderedJourneyVerifier.includes('noHorizontalOverflow: true')
+  && !ciWorkflow.includes('actions/upload-artifact'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('coordinated release avoids redundant local app install',
   !workflow.includes('Install app dependencies')
