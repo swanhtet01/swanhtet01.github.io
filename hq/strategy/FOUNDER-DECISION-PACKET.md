@@ -49,6 +49,108 @@ said and why it was wrong, rather than silently rewritten:
 
 ---
 
+## P-1 — Repair the `main` ruleset's required check names
+
+**Added 2026-09-01. This was not in the packet's first version, and it should
+have been: it gates the DELIVERY of five decisions already in here (P10/#501,
+P11/#537, P12/#509, P13/#506, P15/#510) plus every other open pull request.
+Approving any of those today changes nothing, because nothing can merge.**
+
+**The finding.** Every pull request in this repository is unmergeable,
+regardless of contents, author or CI result. A merge attempt returns:
+
+```
+New changes require approval from someone other than the last pusher.
+3 of 3 required status checks are expected.
+```
+
+**"3 of 3 expected" never moves as checks go green.** That is the diagnostic.
+If any check this repo emits were among the three required, the count would
+drop as it passed. It does not, at any point.
+
+**Proven by experiment on three pull requests across two agent lanes**, not
+inferred:
+
+| PR | Lane | Diff | Checks | Merge |
+|---|---|---|---|---|
+| #562 | Claude | 3 workflow files | 9 green | blocked |
+| #568 | Claude | 2 files | green | blocked |
+| #561 | **Codex** | **240 files, 426 commits** | **9 green** | blocked |
+
+#562 was built specifically to run this experiment — it removed the `paths:`
+filters so that all nine checks would report on one PR. They did, all green,
+and the merge error was unchanged. #561 then reproduced it independently on a
+Codex-authored branch with a completely different diff, which rules out the
+explanations that could not be eliminated from inside one agent's branches:
+file sets, authorship, branch naming.
+
+**Conclusion: the ruleset requires three check names that no workflow in this
+repository produces.** The seven this repo actually emits are `validate`
+(showroom-ci.yml), `verify` and `release` (kernel-deploy.yml),
+`hosting-contract` (public-hosting-guard.yml), and `Audit app` / `Audit
+kernel` / `Audit platform` / `Audit runtime (pip)` (dependency-security.yml),
+plus third-party GitGuardian.
+
+### What you need to do
+
+Open the `main` branch ruleset in repository settings and compare its required
+status check names against that list. Any name not on it can never report, and
+therefore blocks every PR forever. **I cannot see the rule** — no ruleset-read
+tool exists in my session, so I can observe the symptom precisely and the cause
+only by elimination.
+
+### Two gates, only one broken
+
+1. **Broken.** The three required check names. Founder-side, settings-only, no
+   code change.
+2. **Working as intended.** "Approval from someone other than the last pusher."
+   Fixing (1) does **not** make anything self-merge; you still approve each PR.
+   That is correct and should not be weakened.
+
+### What I will not do
+
+The mechanical "fix" is to add workflows emitting checks named to match the
+rule. **I have refused this and recommend you refuse it too.** It would make
+the required checks report green without anything actually verifying what the
+rule was written to protect — passing a protection signal by faking it. The
+rule would then be worse than absent, because it would look enforced.
+
+**Cost of the fix: minutes. Cost of not fixing it: every piece of finished
+work in this repository stays undelivered, and no decision in this packet that
+depends on a merge can take effect.**
+
+### While you are in there — a second, smaller conflict to settle
+
+**Draft pull requests in this repository get no CI and no automated review.**
+`.github/workflows/showroom-ci.yml`'s `validate` job carries
+`if: github.event_name != 'pull_request' || github.event.pull_request.draft == false`,
+so on a draft it reports conclusion **`skipped`**, not `success` — and Codex
+reviews only on "opened for review" / "marked ready".
+
+That collides directly with the standing instruction agents work under, which
+says to open every PR as a draft. Followed literally, every agent PR here ships
+with neither validation nor review.
+
+Measured on the same two PRs before and after flipping the flag:
+
+| PR | As draft | After marking ready |
+|---|---|---|
+| #566 | `validate` skipped, 0s, no review | success, 6m31s |
+| #567 | `validate` skipped, 0s, no review | success, 6m34s |
+| #568 | opened non-draft | success 6m33s, **two P1 findings within 3 minutes** |
+
+Those two P1s on #568 were both correct and one of them caught a metric that
+would have failed a *correct* evaluation run. Opening non-draft is what surfaced
+them.
+
+**Pick one:** either drop the `draft == false` condition so drafts are
+validated, or tell agents to stop opening drafts here. I have been opening them
+non-draft since discovering this, and will keep doing so until you say
+otherwise — flagging it because it is a deliberate deviation from a standing
+instruction, not an oversight.
+
+---
+
 ## 0. The minimum subset
 
 **One prerequisite, four decisions, plus one conditional, make a first paying
