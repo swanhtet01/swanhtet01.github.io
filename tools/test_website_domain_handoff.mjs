@@ -94,50 +94,63 @@ const approved = model.approveWebsiteReleasePackage(prepared, {
   expectedHeadDigest: prepared.headDigest,
 }).state
 
-function domainTarget(hostname) {
-  return {
-    provider: 'vercel',
-    projectRef: 'owner-bound-at-execution',
-    environment: 'production',
-    protection: 'required',
-    domain: {
-      hostname,
-      ownership: 'unverified_owner_supplied',
-      dnsChange: 'separate_owner_action',
-      tls: 'required',
-      previewAcceptance: 'required_before_activation',
-      ownerActivationApproval: 'required',
-    },
-  }
-}
-
 const plannedState = model.prepareWebsiteDeployPlan(approved, {
   planId: 'website-domain-plan-1',
   packageDigest: candidate.packageDigest,
   approvalId: 'website-domain-release-approval',
-  target: domainTarget('WWW.Mingalar-Spa.COM'),
+  target: { provider: 'vercel', projectRef: 'owner-bound-at-execution', environment: 'production', protection: 'required' },
   previousDeployment: null,
-  proof: proof(3, 'Release manager', 'prepared no-write customer domain handoff'),
+  proof: proof(3, 'Release manager', 'prepared owner-gated deploy plan'),
   expectedHeadDigest: approved.headDigest,
 }).state
 const planned = model.projectWebsiteRelease(plannedState)
+const handoff = model.buildWebsiteDomainHandoff({
+  hostname: 'WWW.Mingalar-Spa.COM',
+  release: {
+    scope: planned.scope,
+    headDigest: planned.headDigest,
+    packageDigest: planned.package.packageDigest,
+    artifactDigest: planned.package.source.artifactDigest,
+    approvalId: planned.approval.id,
+    deployPlanDigest: model.websiteReleaseEvidenceDigest(planned.deployPlan),
+  },
+})
 
-check(planned.status === 'plan_ready', 'domain plan is ready for owner handoff')
-check(planned.deployPlan.target.domain.hostname === 'www.mingalar-spa.com', 'domain is canonicalized')
-check(planned.deployPlan.steps.length === 6, 'domain handoff adds ownership and activation gates')
-check(planned.deployPlan.steps[3].action === 'verify_domain_ownership_and_dns_plan', 'domain ownership check precedes promotion')
-check(planned.deployPlan.steps[5].action === 'attach_verified_domain_and_check_https', 'domain activation is explicit')
-check(planned.deployPlan.domainActivation.status === 'not_executed', 'domain activation is not executed')
-check(planned.deployPlan.domainActivation.ownerApprovalRequired === true, 'domain activation requires owner approval')
-check(planned.deployPlan.domainActivation.providerWritesPerformed === false, 'provider write remains false')
-check(planned.deployPlan.domainActivation.dnsWritesPerformed === false, 'DNS write remains false')
-check(planned.deployPlan.domainActivation.blockers.join(',') === 'domain_ownership_unverified,preview_acceptance_missing,dns_plan_unverified,owner_activation_approval_missing', 'all domain blockers remain explicit')
+check(planned.status === 'plan_ready' && planned.deployPlan.steps.length === 4, 'existing deploy plan remains unchanged')
+check(!Object.hasOwn(planned.deployPlan.target, 'domain'), 'customer hostname is absent from persisted release state')
+check(handoff.contract === model.WEBSITE_DOMAIN_HANDOFF_CONTRACT, 'domain handoff has the exact contract')
+check(handoff.hostname === 'www.mingalar-spa.com', 'ASCII domain is canonicalized')
+check(handoff.release.headDigest === planned.headDigest, 'handoff binds the exact release state')
+check(handoff.release.deployPlanDigest === model.websiteReleaseEvidenceDigest(planned.deployPlan), 'handoff binds the exact deploy plan')
+check(handoff.status === 'not_executed' && handoff.currentGate === 'domain_ownership_unverified', 'handoff starts fail closed')
+check(handoff.stages.length === 7, 'domain lifecycle has seven explicit evidence gates')
+check(handoff.stages.map((stage) => stage.action).join(',') === 'verify_domain_ownership,add_domain_to_provider_project,capture_provider_dns_challenge,apply_exact_dns_mapping,verify_provider_domain_ready,verify_https_and_live_routes,activate_canonical_domain', 'domain lifecycle order is exact')
+check(handoff.stages.every((stage) => stage.status === 'not_executed'), 'every domain stage remains unexecuted')
+check(handoff.rollback.requiredEvidence.join(',') === 'provider_domain_removal_receipt,dns_restore_receipt,https_previous_route_receipt', 'domain rollback has explicit removal and restore evidence')
+check(handoff.rollback.blockers.join(',') === 'known_good_previous_domain_state_missing,owner_rollback_approval_missing', 'domain rollback remains blocked')
+check(Object.values(handoff.controls).every((value) => value === false), 'all handoff write and activation controls remain false')
+check(JSON.stringify(model.validateWebsiteDomainHandoff(handoff)) === JSON.stringify(handoff), 'downloaded packet validates exactly')
+const parityHandoff = model.buildWebsiteDomainHandoff({
+  hostname: 'WWW.Mingalar-Spa.COM',
+  release: {
+    scope: 'website:domain-parity',
+    headDigest: `sha256:${'1'.repeat(64)}`,
+    packageDigest: `sha256:${'2'.repeat(64)}`,
+    artifactDigest: `sha256:${'3'.repeat(64)}`,
+    approvalId: 'website-domain-parity-approval',
+    deployPlanDigest: `sha256:${'4'.repeat(64)}`,
+  },
+})
+check(parityHandoff.packetDigest === 'sha256:beca88a43f6442214cb14b0e1caa2d90b86ba1521ec7245a59c9438ae295a444', 'TypeScript and Python packet digest parity is pinned')
 check(uiSource.includes('Customer domain') && uiSource.includes('www.example.com'), 'owner UI exposes the domain handoff input')
-check(uiSource.includes('This records no DNS or provider change.'), 'owner UI preserves the no-write boundary')
-check(uiSource.includes('preview, DNS, HTTPS, activation, candidate promotion, and rollback all remain unexecuted'), 'owner UI states every remaining gate')
+check(uiSource.includes('It is not saved to Website history'), 'owner UI discloses the non-persistent hostname boundary')
+const downloadFunction = uiSource.slice(uiSource.indexOf('function downloadDomainHandoff'), uiSource.indexOf('\n  if (!publishIsCurrent', uiSource.indexOf('function downloadDomainHandoff')))
+check(downloadFunction.includes('buildWebsiteDomainHandoff') && !downloadFunction.includes('saveTransition') && !downloadFunction.includes('setItem'), 'domain download path has no persistence transition')
 
-check(model.normalizeWebsiteDomainHostname('မင်္ဂလာ.com').endsWith('.com'), 'Myanmar IDN input canonicalizes to a public ASCII hostname')
+check(model.normalizeWebsiteDomainHostname('xn--fa-hia.de') === 'xn--fa-hia.de', 'explicit ASCII punycode is accepted deterministically')
 for (const invalid of [
+  'မင်္ဂလာ.com',
+  'faß.de',
   'https://example.com',
   'example.com/path',
   'example.com:443',
@@ -150,22 +163,14 @@ for (const invalid of [
   '-bad.example.com',
 ]) rejects(() => model.normalizeWebsiteDomainHostname(invalid), `invalid domain rejected: ${invalid}`)
 
-const oldPlanState = model.prepareWebsiteDeployPlan(approved, {
-  planId: 'website-domain-plan-legacy',
-  packageDigest: candidate.packageDigest,
-  approvalId: 'website-domain-release-approval',
-  target: { provider: 'vercel', projectRef: 'owner-bound-at-execution', environment: 'production', protection: 'required' },
-  previousDeployment: null,
-  proof: proof(3, 'Release manager', 'prepared legacy no-domain plan'),
-  expectedHeadDigest: approved.headDigest,
-}).state
-const oldPlan = model.projectWebsiteRelease(oldPlanState).deployPlan
-check(!Object.hasOwn(oldPlan.target, 'domain'), 'legacy target remains byte-shape compatible')
-check(oldPlan.steps.length === 4, 'legacy plan retains its four-step sequence')
-check(oldPlan.domainActivation.blockers[0] === 'customer_domain_not_bound', 'legacy plan truthfully reports missing domain')
+const tampered = structuredClone(handoff)
+tampered.controls.providerWritesPerformed = true
+rejects(() => model.validateWebsiteDomainHandoff(tampered), 'a claimed provider write is rejected')
+const driftedStage = structuredClone(handoff)
+driftedStage.stages[2].action = 'skip_provider_dns_challenge'
+const driftedBody = structuredClone(driftedStage)
+delete driftedBody.packetDigest
+driftedStage.packetDigest = model.websiteReleaseEvidenceDigest(driftedBody)
+rejects(() => model.validateWebsiteDomainHandoff(driftedStage), 'a rehashed lifecycle drift is rejected')
 
-const tampered = structuredClone(plannedState)
-tampered.commands.at(-1).payload.target.domain.hostname = 'other.example.com'
-rejects(() => model.validateWebsiteReleaseState(tampered), 'domain tampering breaks the command digest')
-
-console.log(JSON.stringify({ ok: true, contract: 'supermega.website.domain-handoff.v1', checks }))
+console.log(JSON.stringify({ ok: true, contract: model.WEBSITE_DOMAIN_HANDOFF_CONTRACT, checks }))

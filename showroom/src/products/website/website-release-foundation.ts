@@ -3,6 +3,7 @@ export const WEBSITE_RELEASE_PACKAGE_CONTRACT = 'supermega.website.release_packa
 export const WEBSITE_RELEASE_PROJECTION_CONTRACT = 'supermega.website.release_projection.v1' as const
 export const WEBSITE_DEPLOY_PLAN_CONTRACT = 'supermega.website.deploy_plan.v1' as const
 export const WEBSITE_BRAND_TOKEN_CONTRACT = 'supermega.website.brand_tokens.v1' as const
+export const WEBSITE_DOMAIN_HANDOFF_CONTRACT = 'supermega.website.domain_handoff.v1' as const
 export const EMPTY_WEBSITE_RELEASE_DIGEST = `sha256:${'0'.repeat(64)}`
 export const WEBSITE_RELEASE_STORAGE_PREFIX = 'supermega.website.release-foundation.v1:'
 
@@ -99,25 +100,11 @@ type PrepareDeployPlanCommand = {
   id: string
   packageDigest: string
   approvalId: string
-  target: {
-    provider: 'vercel'
-    projectRef: string
-    environment: 'production'
-    protection: 'required'
-    domain?: WebsiteDomainHandoff
-  }
+  target: { provider: 'vercel'; projectRef: string; environment: 'production'; protection: 'required' }
   previousDeployment: { deploymentId: string; packageDigest: string; artifactDigest: string } | null
   proof: WebsiteReleaseProof
 }
 
-export type WebsiteDomainHandoff = {
-  hostname: string
-  ownership: 'unverified_owner_supplied'
-  dnsChange: 'separate_owner_action'
-  tls: 'required'
-  previewAcceptance: 'required_before_activation'
-  ownerActivationApproval: 'required'
-}
 export type WebsiteReleaseCommandPayload = PreparePackageCommand | UpgradeTemplateCommand | ApproveReleaseCommand | PrepareDeployPlanCommand
 export type WebsiteReleaseCommand = { sequence: number; previousDigest: string; payload: WebsiteReleaseCommandPayload; digest: string }
 export type WebsiteReleaseState = {
@@ -143,16 +130,48 @@ export type WebsiteDeployPlan = {
     status: 'not_executed'
     ownerApprovalRequired: true
   }
-  domainActivation: {
-    hostname: string | null
-    status: 'not_executed'
-    blockers: string[]
-    ownerApprovalRequired: true
-    providerWritesPerformed: false
-    dnsWritesPerformed: false
-  }
   proof: WebsiteReleaseProof
   ownerApprovalRequired: true
+}
+
+export type WebsiteDomainHandoff = {
+  contract: typeof WEBSITE_DOMAIN_HANDOFF_CONTRACT
+  hostname: string
+  release: {
+    scope: string
+    headDigest: string
+    packageDigest: string
+    artifactDigest: string
+    approvalId: string
+    deployPlanDigest: string
+  }
+  status: 'not_executed'
+  currentGate: 'domain_ownership_unverified'
+  stages: Array<{
+    sequence: number
+    action: string
+    requiredEvidence: string
+    authority: string
+    status: 'not_executed'
+  }>
+  rollback: {
+    mode: 'remove_exact_domain_binding_and_restore_previous_canonical'
+    status: 'not_executed'
+    requiredEvidence: string[]
+    blockers: string[]
+    ownerApprovalRequired: true
+  }
+  controls: {
+    workspaceStateWritePerformed: false
+    providerWritesPerformed: false
+    dnsWritesPerformed: false
+    deploymentPerformed: false
+    domainActivated: false
+    customerContacted: false
+    paymentActionPerformed: false
+    stockActionPerformed: false
+  }
+  packetDigest: string
 }
 
 export type WebsiteReleaseProjection = {
@@ -186,6 +205,18 @@ const templateComponents = {
 } as const
 const migrationOperations = ['CMP-HERO:1->2', 'CMP-NAVIGATION:1->2'] as const
 const commandKinds = new Set(['prepare_package', 'upgrade_template', 'approve_release', 'prepare_deploy_plan'])
+const websiteDomainHandoffStages = [
+  { sequence: 1, action: 'verify_domain_ownership', requiredEvidence: 'owner_domain_control_receipt', authority: 'domain_owner', status: 'not_executed' },
+  { sequence: 2, action: 'add_domain_to_provider_project', requiredEvidence: 'provider_add_receipt', authority: 'owner_credentialed_action', status: 'not_executed' },
+  { sequence: 3, action: 'capture_provider_dns_challenge', requiredEvidence: 'get_only_provider_dns_receipt', authority: 'release_reviewer', status: 'not_executed' },
+  { sequence: 4, action: 'apply_exact_dns_mapping', requiredEvidence: 'domain_owner_dns_change_receipt', authority: 'domain_owner_only', status: 'not_executed' },
+  { sequence: 5, action: 'verify_provider_domain_ready', requiredEvidence: 'get_only_provider_verification_receipt', authority: 'release_reviewer', status: 'not_executed' },
+  { sequence: 6, action: 'verify_https_and_live_routes', requiredEvidence: 'https_live_route_receipt', authority: 'release_reviewer', status: 'not_executed' },
+  { sequence: 7, action: 'activate_canonical_domain', requiredEvidence: 'single_use_owner_activation_receipt', authority: 'owner_only', status: 'not_executed' },
+] as const
+const websiteDomainRollbackEvidence = ['provider_domain_removal_receipt', 'dns_restore_receipt', 'https_previous_route_receipt'] as const
+const websiteDomainRollbackBlockers = ['known_good_previous_domain_state_missing', 'owner_rollback_approval_missing'] as const
+const websiteDomainControlKeys = ['workspaceStateWritePerformed', 'providerWritesPerformed', 'dnsWritesPerformed', 'deploymentPerformed', 'domainActivated', 'customerContacted', 'paymentActionPerformed', 'stockActionPerformed'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -221,12 +252,8 @@ function token(value: unknown, field: string) {
 export function normalizeWebsiteDomainHostname(value: unknown) {
   const candidate = text(value, 'domain.hostname', 253).toLowerCase()
   if (candidate.includes('://') || /[/?#@:]/.test(candidate)) throw new Error('domain.hostname must be a hostname without a scheme, port, path, query, fragment, or credentials.')
-  let hostname: string
-  try {
-    hostname = new URL(`https://${candidate}/`).hostname.toLowerCase()
-  } catch {
-    throw new Error('domain.hostname must be a valid public hostname.')
-  }
+  if (!/^[\x20-\x7e]+$/.test(candidate)) throw new Error('domain.hostname must use ASCII or explicit punycode for cross-runtime verification.')
+  const hostname = candidate
   if (!hostname || hostname.length > 253 || hostname.endsWith('.') || hostname.includes('..')) throw new Error('domain.hostname must be a canonical public hostname.')
   const labels = hostname.split('.')
   if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error('domain.hostname must contain valid DNS labels.')
@@ -533,31 +560,10 @@ export function upgradeWebsiteReleasePackage(packageValue: unknown, input: { pac
 }
 
 function deployTarget(value: unknown, field: string): PrepareDeployPlanCommand['target'] {
-  if (!isRecord(value)) throw new Error(`${field} must be an object.`)
-  const hasDomain = Object.prototype.hasOwnProperty.call(value, 'domain')
-  const source = exact(value, field, hasDomain
-    ? ['provider', 'projectRef', 'environment', 'protection', 'domain']
-    : ['provider', 'projectRef', 'environment', 'protection'])
+  const source = exact(value, field, ['provider', 'projectRef', 'environment', 'protection'])
   if (source.provider !== 'vercel' || source.environment !== 'production') throw new Error(`${field} must describe the reviewed Vercel production target.`)
   if (source.protection !== 'required') throw new Error(`${field}.protection must remain required.`)
-  const target: PrepareDeployPlanCommand['target'] = { provider: 'vercel', projectRef: token(source.projectRef, `${field}.projectRef`), environment: 'production', protection: 'required' }
-  if (hasDomain) {
-    const domain = exact(source.domain, `${field}.domain`, ['hostname', 'ownership', 'dnsChange', 'tls', 'previewAcceptance', 'ownerActivationApproval'])
-    if (domain.ownership !== 'unverified_owner_supplied'
-      || domain.dnsChange !== 'separate_owner_action'
-      || domain.tls !== 'required'
-      || domain.previewAcceptance !== 'required_before_activation'
-      || domain.ownerActivationApproval !== 'required') throw new Error(`${field}.domain must preserve every owner and activation gate.`)
-    target.domain = {
-      hostname: normalizeWebsiteDomainHostname(domain.hostname),
-      ownership: 'unverified_owner_supplied',
-      dnsChange: 'separate_owner_action',
-      tls: 'required',
-      previewAcceptance: 'required_before_activation',
-      ownerActivationApproval: 'required',
-    }
-  }
-  return target
+  return { provider: 'vercel', projectRef: token(source.projectRef, `${field}.projectRef`), environment: 'production', protection: 'required' }
 }
 
 function previousDeployment(value: unknown, field: string): PrepareDeployPlanCommand['previousDeployment'] {
@@ -593,9 +599,6 @@ function createDeployPlan(packageValue: WebsiteReleasePackage, approval: NonNull
   const rollback: WebsiteDeployPlan['rollback'] = previous
     ? { mode: 'promote_exact_previous_deployment', deploymentId: previous.deploymentId, packageDigest: previous.packageDigest, artifactDigest: previous.artifactDigest, status: 'not_executed', ownerApprovalRequired: true }
     : { mode: 'blocked_until_previous_deployment_bound', deploymentId: null, packageDigest: null, artifactDigest: null, status: 'not_executed', ownerApprovalRequired: true }
-  const domainBlockers = command.target.domain
-    ? ['domain_ownership_unverified', 'preview_acceptance_missing', 'dns_plan_unverified', 'owner_activation_approval_missing']
-    : ['customer_domain_not_bound']
   return {
     contract: WEBSITE_DEPLOY_PLAN_CONTRACT,
     planId: command.id,
@@ -606,22 +609,90 @@ function createDeployPlan(packageValue: WebsiteReleasePackage, approval: NonNull
       { sequence: 1, action: 'build_prebuilt_candidate', gate: 'local_release_contracts_pass', authority: 'release_manager_review' },
       { sequence: 2, action: 'create_protected_preview', gate: 'exact_project_and_credentials_bound', authority: 'owner_credentialed_action' },
       { sequence: 3, action: 'verify_exact_candidate', gate: 'health_logs_links_mobile_desktop_pass', authority: 'release_reviewer' },
-      ...(command.target.domain ? [{ sequence: 4, action: 'verify_domain_ownership_and_dns_plan', gate: 'owner_domain_control_and_provider_records_verified', authority: 'release_reviewer' }] : []),
-      { sequence: command.target.domain ? 5 : 4, action: 'promote_exact_candidate', gate: 'single_use_owner_approval', authority: 'owner_only' },
-      ...(command.target.domain ? [{ sequence: 6, action: 'attach_verified_domain_and_check_https', gate: 'separate_domain_activation_approval', authority: 'owner_only' }] : []),
+      { sequence: 4, action: 'promote_exact_candidate', gate: 'single_use_owner_approval', authority: 'owner_only' },
     ],
     rollback,
-    domainActivation: {
-      hostname: command.target.domain?.hostname ?? null,
-      status: 'not_executed',
-      blockers: domainBlockers,
-      ownerApprovalRequired: true,
-      providerWritesPerformed: false,
-      dnsWritesPerformed: false,
-    },
     proof: command.proof,
     ownerApprovalRequired: true,
   }
+}
+
+function domainHandoffRelease(value: unknown, field: string): WebsiteDomainHandoff['release'] {
+  const source = exact(value, field, ['scope', 'headDigest', 'packageDigest', 'artifactDigest', 'approvalId', 'deployPlanDigest'])
+  return {
+    scope: token(source.scope, `${field}.scope`),
+    headDigest: digest(source.headDigest, `${field}.headDigest`),
+    packageDigest: digest(source.packageDigest, `${field}.packageDigest`),
+    artifactDigest: digest(source.artifactDigest, `${field}.artifactDigest`),
+    approvalId: token(source.approvalId, `${field}.approvalId`),
+    deployPlanDigest: digest(source.deployPlanDigest, `${field}.deployPlanDigest`),
+  }
+}
+
+export function validateWebsiteDomainHandoff(value: unknown): WebsiteDomainHandoff {
+  const source = exact(value, 'Website domain handoff', ['contract', 'hostname', 'release', 'status', 'currentGate', 'stages', 'rollback', 'controls', 'packetDigest'])
+  if (source.contract !== WEBSITE_DOMAIN_HANDOFF_CONTRACT || source.status !== 'not_executed' || source.currentGate !== 'domain_ownership_unverified') throw new Error('Website domain handoff status is unsupported.')
+  const stages = array(source.stages, 'Website domain handoff.stages', 7, 7).map((candidate, index) => {
+    const row = exact(candidate, `Website domain handoff.stages[${index}]`, ['sequence', 'action', 'requiredEvidence', 'authority', 'status'])
+    if (row.status !== 'not_executed') throw new Error(`Website domain handoff.stages[${index}].status must remain not_executed.`)
+    return {
+      sequence: integer(row.sequence, `Website domain handoff.stages[${index}].sequence`, 1, 7),
+      action: token(row.action, `Website domain handoff.stages[${index}].action`),
+      requiredEvidence: token(row.requiredEvidence, `Website domain handoff.stages[${index}].requiredEvidence`),
+      authority: token(row.authority, `Website domain handoff.stages[${index}].authority`),
+      status: 'not_executed' as const,
+    }
+  })
+  if (canonicalJson(stages) !== canonicalJson(websiteDomainHandoffStages)) throw new Error('Website domain handoff stages drifted from the fail-closed lifecycle.')
+  const rollbackSource = exact(source.rollback, 'Website domain handoff.rollback', ['mode', 'status', 'requiredEvidence', 'blockers', 'ownerApprovalRequired'])
+  const rollback = {
+    mode: rollbackSource.mode,
+    status: rollbackSource.status,
+    requiredEvidence: array(rollbackSource.requiredEvidence, 'Website domain handoff.rollback.requiredEvidence', 3, 3).map((entry, index) => token(entry, `Website domain handoff.rollback.requiredEvidence[${index}]`)),
+    blockers: array(rollbackSource.blockers, 'Website domain handoff.rollback.blockers', 2, 2).map((entry, index) => token(entry, `Website domain handoff.rollback.blockers[${index}]`)),
+    ownerApprovalRequired: boolean(rollbackSource.ownerApprovalRequired, 'Website domain handoff.rollback.ownerApprovalRequired'),
+  }
+  if (rollback.mode !== 'remove_exact_domain_binding_and_restore_previous_canonical'
+    || rollback.status !== 'not_executed'
+    || !rollback.ownerApprovalRequired
+    || canonicalJson(rollback.requiredEvidence) !== canonicalJson(websiteDomainRollbackEvidence)
+    || canonicalJson(rollback.blockers) !== canonicalJson(websiteDomainRollbackBlockers)) throw new Error('Website domain handoff rollback gates drifted.')
+  const controlsSource = exact(source.controls, 'Website domain handoff.controls', [...websiteDomainControlKeys])
+  const controls = Object.fromEntries(websiteDomainControlKeys.map((key) => [key, boolean(controlsSource[key], `Website domain handoff.controls.${key}`)])) as WebsiteDomainHandoff['controls']
+  if (Object.values(controls).some(Boolean)) throw new Error('Website domain handoff cannot claim a write or activation.')
+  const body = {
+    contract: WEBSITE_DOMAIN_HANDOFF_CONTRACT,
+    hostname: normalizeWebsiteDomainHostname(source.hostname),
+    release: domainHandoffRelease(source.release, 'Website domain handoff.release'),
+    status: 'not_executed' as const,
+    currentGate: 'domain_ownership_unverified' as const,
+    stages,
+    rollback,
+    controls,
+  }
+  const packetDigest = digest(source.packetDigest, 'Website domain handoff.packetDigest')
+  if (packetDigest !== websiteReleaseEvidenceDigest(body)) throw new Error('Website domain handoff.packetDigest does not match its content.')
+  return canonicalCopy({ ...body, packetDigest }) as WebsiteDomainHandoff
+}
+
+export function buildWebsiteDomainHandoff(input: { hostname: unknown; release: unknown }) {
+  const body = {
+    contract: WEBSITE_DOMAIN_HANDOFF_CONTRACT,
+    hostname: normalizeWebsiteDomainHostname(input.hostname),
+    release: domainHandoffRelease(input.release, 'release'),
+    status: 'not_executed' as const,
+    currentGate: 'domain_ownership_unverified' as const,
+    stages: canonicalCopy(websiteDomainHandoffStages),
+    rollback: {
+      mode: 'remove_exact_domain_binding_and_restore_previous_canonical' as const,
+      status: 'not_executed' as const,
+      requiredEvidence: [...websiteDomainRollbackEvidence],
+      blockers: [...websiteDomainRollbackBlockers],
+      ownerApprovalRequired: true as const,
+    },
+    controls: Object.fromEntries(websiteDomainControlKeys.map((key) => [key, false])) as WebsiteDomainHandoff['controls'],
+  }
+  return validateWebsiteDomainHandoff({ ...body, packetDigest: websiteReleaseEvidenceDigest(body) })
 }
 
 function replayCommands(commands: WebsiteReleaseCommandPayload[], scope: string): Omit<WebsiteReleaseProjection, 'contract' | 'scope' | 'revision' | 'headDigest'> {

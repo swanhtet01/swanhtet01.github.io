@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import {
   approveWebsiteReleasePackage,
+  buildWebsiteDomainHandoff,
   buildWebsiteReleasePackage,
   createEmptyWebsiteReleaseState,
   loadWebsiteReleaseWorkspace,
@@ -91,7 +92,6 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
             setIncludeMyanmarDraft(nextProjection.draftLocales.includes('my'))
             setAccent(nextProjection.package.brand.palette.accent)
           }
-          if (nextProjection.deployPlan?.target.domain) setDomainHostname(nextProjection.deployPlan.target.domain.hostname)
           return
         }
         const snapshot = loadWebsiteReleaseWorkspace(localStorage, scope)
@@ -111,7 +111,6 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
           setIncludeMyanmarDraft(nextProjection.draftLocales.includes('my'))
           setAccent(nextProjection.package.brand.palette.accent)
         }
-        if (nextProjection.deployPlan?.target.domain) setDomainHostname(nextProjection.deployPlan.target.domain.hostname)
       } catch (error) {
         setState(null)
         setProjection(null)
@@ -284,29 +283,31 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
   async function preparePlan() {
     if (!state || !packageValue || !currentProjection?.approval) return
     const manager = roleActor(packageValue, 'release_manager')
-    const hostname = normalizeWebsiteDomainHostname(domainHostname.trim())
     await saveTransition('plan', (current) => prepareWebsiteDeployPlan(current, {
       planId: `website-plan-${packageValue.packageDigest.slice(7, 23)}`,
       packageDigest: packageValue.packageDigest,
       approvalId: currentProjection.approval!.id,
-      target: {
-        provider: 'vercel',
-        projectRef: 'owner-bound-at-execution',
-        environment: 'production',
-        protection: 'required',
-        domain: {
-          hostname,
-          ownership: 'unverified_owner_supplied',
-          dnsChange: 'separate_owner_action',
-          tls: 'required',
-          previewAcceptance: 'required_before_activation',
-          ownerActivationApproval: 'required',
-        },
-      },
+      target: { provider: 'vercel', projectRef: 'owner-bound-at-execution', environment: 'production', protection: 'required' },
       previousDeployment: null,
       proof: actionProof(manager, 'prepared an owner-gated deployment plan without executing it', currentPublish?.id ?? scope),
       expectedHeadDigest: current.headDigest,
     }))
+  }
+
+  function downloadDomainHandoff() {
+    if (!packageValue || !currentProjection?.approval || !currentProjection.deployPlan) return
+    const packet = buildWebsiteDomainHandoff({
+      hostname: domainHostname,
+      release: {
+        scope: currentProjection.scope,
+        headDigest: currentProjection.headDigest,
+        packageDigest: packageValue.packageDigest,
+        artifactDigest: packageValue.source.artifactDigest,
+        approvalId: currentProjection.approval.id,
+        deployPlanDigest: websiteReleaseEvidenceDigest(currentProjection.deployPlan),
+      },
+    })
+    downloadJson(`website-domain-handoff-${packet.hostname.replaceAll('.', '-')}-${packet.packetDigest.slice(7, 19)}.json`, packet)
   }
 
   if (!publishIsCurrent || !currentPublish?.artifact || !currentApproval) {
@@ -389,7 +390,14 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
         </div>
       ) : status === 'ready_for_plan' ? (
         <div className="website-release-action">
-          <p>The exact package is reviewed. Name the customer-owned domain for the handoff. This records no DNS or provider change.</p>
+          <p>The exact package is reviewed. The rollout plan stays unexecuted and rollback stays blocked until the owner binds a known-good deployment.</p>
+          <button className="website-button is-primary" disabled={managedRoleBlocked || Boolean(busy)} onClick={() => void preparePlan()} type="button">
+            {busy === 'plan' ? 'Preparing...' : 'Prepare rollout plan'}
+          </button>
+        </div>
+      ) : (
+        <div className="website-release-action is-complete">
+          <p><strong>Ready for owner handoff.</strong> Candidate promotion and rollback remain unexecuted. Add a hostname below only to download a separate domain checklist.</p>
           <label>
             <span>Customer domain</span>
             <input
@@ -402,16 +410,12 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
               value={domainHostname}
             />
             {domainHostname && !domainHostnameIsValid
-              ? <small role="alert">Enter a public hostname only, such as www.example.com — no scheme, port, path, or local address.</small>
-              : <small>Hostname only. Ownership, preview acceptance, DNS records, HTTPS, and final activation stay separately verified and owner-approved.</small>}
+              ? <small role="alert">Enter an ASCII public hostname or explicit punycode only — no scheme, port, path, credentials, or local address.</small>
+              : <small>The hostname stays only in this form until download. It is not saved to Website history; ownership, provider add, DNS, HTTPS, activation, and rollback remain separate gates.</small>}
           </label>
-          <button className="website-button is-primary" disabled={!domainHostnameIsValid || managedRoleBlocked || Boolean(busy)} onClick={() => void preparePlan()} type="button">
-            {busy === 'plan' ? 'Preparing...' : 'Prepare rollout plan'}
+          <button className="website-button is-secondary" disabled={!domainHostnameIsValid} onClick={downloadDomainHandoff} type="button">
+            Download domain handoff
           </button>
-        </div>
-      ) : (
-        <div className="website-release-action is-complete">
-          <p><strong>Ready for owner handoff.</strong> {currentProjection?.deployPlan?.domainActivation.hostname ?? 'Customer domain not bound'} remains unverified; preview, DNS, HTTPS, activation, candidate promotion, and rollback all remain unexecuted.</p>
           <button
             className="website-button is-secondary"
             onClick={() => downloadJson(`website-release-${packageValue?.packageDigest.slice(7, 19)}.json`, { state, projection: currentProjection })}
