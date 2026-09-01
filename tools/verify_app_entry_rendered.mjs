@@ -370,10 +370,14 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
       const openOrderInput = document.querySelector('.shop-open-order-choice input[type="checkbox"]');
       const openOrderLabel = document.querySelector('.shop-open-order-choice');
       const reviewControl = document.querySelector('.shop-review-sale');
+      const currentSale = document.querySelector('.shop-current-sale');
       const quantityButtons = [...document.querySelectorAll('.shop-quantity-stepper button')].map(target);
       const touchTargets = isMobile
         ? [target(productTile), ...paymentButtons, target(openOrderLabel), target(reviewControl), ...quantityButtons].filter(Boolean)
         : [];
+      const drawerTransitionSettled = !isMobile || Boolean(currentSale
+        && getComputedStyle(currentSale).transform === 'none'
+        && Number.parseFloat(getComputedStyle(currentSale).opacity) === 1);
       const semanticChecks = {
         productTileLabelled: Boolean(productTile?.getAttribute('aria-labelledby') && productTile?.getAttribute('aria-describedby')),
         paymentButtonCount: paymentButtons.length,
@@ -413,21 +417,26 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
         openOrderChoice: rect('.shop-open-order-choice'),
         total: rect('.shop-current-sale > footer'),
         reviewButton: rect('.shop-review-sale'),
+        drawerTransitionSettled,
         accessibility,
       };
     })()`)
     if (expectedText.every((needle) => (state?.text || '').includes(needle))
-      && state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton) break
+      && state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton
+      && (!mobile || state?.drawerTransitionSettled)) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
   const missingText = expectedText.filter((needle) => !(state?.text || '').includes(needle))
+  const drawerSettled = !mobile || state?.drawerTransitionSettled === true
   const aboveFold = ['payment', 'openOrderChoice', 'total', 'reviewButton'].every((key) => {
     const box = state?.[key]
     return box && box.top >= -1 && box.bottom <= state.viewportHeight + 1
   })
   return {
-    ok: missingText.length === 0 && Boolean(state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton),
-    error: missingText.length ? `counter checkout missing text: ${missingText.join(', ')}` : '',
+    ok: missingText.length === 0 && drawerSettled && Boolean(state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton),
+    error: missingText.length
+      ? `counter checkout missing text: ${missingText.join(', ')}`
+      : drawerSettled ? '' : 'mobile current-sale drawer transition did not settle',
     aboveFold,
     ...state,
     text: undefined,
