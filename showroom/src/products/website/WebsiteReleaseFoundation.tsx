@@ -6,6 +6,7 @@ import {
   createEmptyWebsiteReleaseState,
   loadWebsiteReleaseWorkspace,
   mutateWebsiteReleaseWorkspace,
+  normalizeWebsiteDomainHostname,
   prepareWebsiteDeployPlan,
   prepareWebsiteReleasePackage,
   projectWebsiteRelease,
@@ -65,6 +66,7 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
   const [projection, setProjection] = useState<WebsiteReleaseProjection | null>(null)
   const [releaseManager, setReleaseManager] = useState(managedActorId || currentApproval?.reviewer || '')
   const [releaseReviewer, setReleaseReviewer] = useState(currentApproval?.reviewer || '')
+  const [domainHostname, setDomainHostname] = useState('')
   const [includeMyanmarDraft, setIncludeMyanmarDraft] = useState(true)
   const [accent, setAccent] = useState('#087f5b')
   const [reviewConfirmed, setReviewConfirmed] = useState(false)
@@ -89,6 +91,7 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
             setIncludeMyanmarDraft(nextProjection.draftLocales.includes('my'))
             setAccent(nextProjection.package.brand.palette.accent)
           }
+          if (nextProjection.deployPlan?.target.domain) setDomainHostname(nextProjection.deployPlan.target.domain.hostname)
           return
         }
         const snapshot = loadWebsiteReleaseWorkspace(localStorage, scope)
@@ -108,6 +111,7 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
           setIncludeMyanmarDraft(nextProjection.draftLocales.includes('my'))
           setAccent(nextProjection.package.brand.palette.accent)
         }
+        if (nextProjection.deployPlan?.target.domain) setDomainHostname(nextProjection.deployPlan.target.domain.hostname)
       } catch (error) {
         setState(null)
         setProjection(null)
@@ -195,6 +199,14 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
       ? roleActor(packageValue ?? null, 'release_manager')
       : ''
   const managedRoleBlocked = Boolean(managed && assignedStepActor && assignedStepActor !== managedActorId)
+  const domainHostnameIsValid = (() => {
+    try {
+      normalizeWebsiteDomainHostname(domainHostname)
+      return true
+    } catch {
+      return false
+    }
+  })()
 
   async function saveTransition(
     kind: 'review' | 'plan',
@@ -272,11 +284,25 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
   async function preparePlan() {
     if (!state || !packageValue || !currentProjection?.approval) return
     const manager = roleActor(packageValue, 'release_manager')
+    const hostname = normalizeWebsiteDomainHostname(domainHostname.trim())
     await saveTransition('plan', (current) => prepareWebsiteDeployPlan(current, {
       planId: `website-plan-${packageValue.packageDigest.slice(7, 23)}`,
       packageDigest: packageValue.packageDigest,
       approvalId: currentProjection.approval!.id,
-      target: { provider: 'vercel', projectRef: 'owner-bound-at-execution', environment: 'production', protection: 'required' },
+      target: {
+        provider: 'vercel',
+        projectRef: 'owner-bound-at-execution',
+        environment: 'production',
+        protection: 'required',
+        domain: {
+          hostname,
+          ownership: 'unverified_owner_supplied',
+          dnsChange: 'separate_owner_action',
+          tls: 'required',
+          previewAcceptance: 'required_before_activation',
+          ownerActivationApproval: 'required',
+        },
+      },
       previousDeployment: null,
       proof: actionProof(manager, 'prepared an owner-gated deployment plan without executing it', currentPublish?.id ?? scope),
       expectedHeadDigest: current.headDigest,
@@ -363,14 +389,29 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
         </div>
       ) : status === 'ready_for_plan' ? (
         <div className="website-release-action">
-          <p>The exact package is reviewed. The plan will stay unexecuted and rollback stays blocked until the owner binds a known-good deployment.</p>
-          <button className="website-button is-primary" disabled={managedRoleBlocked || Boolean(busy)} onClick={() => void preparePlan()} type="button">
+          <p>The exact package is reviewed. Name the customer-owned domain for the handoff. This records no DNS or provider change.</p>
+          <label>
+            <span>Customer domain</span>
+            <input
+              autoCapitalize="none"
+              autoComplete="off"
+              inputMode="url"
+              onChange={(event) => setDomainHostname(event.target.value)}
+              placeholder="www.example.com"
+              spellCheck={false}
+              value={domainHostname}
+            />
+            {domainHostname && !domainHostnameIsValid
+              ? <small role="alert">Enter a public hostname only, such as www.example.com — no scheme, port, path, or local address.</small>
+              : <small>Hostname only. Ownership, preview acceptance, DNS records, HTTPS, and final activation stay separately verified and owner-approved.</small>}
+          </label>
+          <button className="website-button is-primary" disabled={!domainHostnameIsValid || managedRoleBlocked || Boolean(busy)} onClick={() => void preparePlan()} type="button">
             {busy === 'plan' ? 'Preparing...' : 'Prepare rollout plan'}
           </button>
         </div>
       ) : (
         <div className="website-release-action is-complete">
-          <p><strong>Ready for owner handoff.</strong> Candidate promotion and rollback both remain unexecuted.</p>
+          <p><strong>Ready for owner handoff.</strong> {currentProjection?.deployPlan?.domainActivation.hostname ?? 'Customer domain not bound'} remains unverified; preview, DNS, HTTPS, activation, candidate promotion, and rollback all remain unexecuted.</p>
           <button
             className="website-button is-secondary"
             onClick={() => downloadJson(`website-release-${packageValue?.packageDigest.slice(7, 19)}.json`, { state, projection: currentProjection })}

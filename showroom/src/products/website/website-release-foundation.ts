@@ -99,9 +99,24 @@ type PrepareDeployPlanCommand = {
   id: string
   packageDigest: string
   approvalId: string
-  target: { provider: 'vercel'; projectRef: string; environment: 'production'; protection: 'required' }
+  target: {
+    provider: 'vercel'
+    projectRef: string
+    environment: 'production'
+    protection: 'required'
+    domain?: WebsiteDomainHandoff
+  }
   previousDeployment: { deploymentId: string; packageDigest: string; artifactDigest: string } | null
   proof: WebsiteReleaseProof
+}
+
+export type WebsiteDomainHandoff = {
+  hostname: string
+  ownership: 'unverified_owner_supplied'
+  dnsChange: 'separate_owner_action'
+  tls: 'required'
+  previewAcceptance: 'required_before_activation'
+  ownerActivationApproval: 'required'
 }
 export type WebsiteReleaseCommandPayload = PreparePackageCommand | UpgradeTemplateCommand | ApproveReleaseCommand | PrepareDeployPlanCommand
 export type WebsiteReleaseCommand = { sequence: number; previousDigest: string; payload: WebsiteReleaseCommandPayload; digest: string }
@@ -127,6 +142,14 @@ export type WebsiteDeployPlan = {
     artifactDigest: string | null
     status: 'not_executed'
     ownerApprovalRequired: true
+  }
+  domainActivation: {
+    hostname: string | null
+    status: 'not_executed'
+    blockers: string[]
+    ownerApprovalRequired: true
+    providerWritesPerformed: false
+    dnsWritesPerformed: false
   }
   proof: WebsiteReleaseProof
   ownerApprovalRequired: true
@@ -193,6 +216,24 @@ function token(value: unknown, field: string) {
   const candidate = text(value, field, 180)
   if (!tokenPattern.test(candidate)) throw new Error(`${field} must be a canonical token.`)
   return candidate
+}
+
+export function normalizeWebsiteDomainHostname(value: unknown) {
+  const candidate = text(value, 'domain.hostname', 253).toLowerCase()
+  if (candidate.includes('://') || /[/?#@:]/.test(candidate)) throw new Error('domain.hostname must be a hostname without a scheme, port, path, query, fragment, or credentials.')
+  let hostname: string
+  try {
+    hostname = new URL(`https://${candidate}/`).hostname.toLowerCase()
+  } catch {
+    throw new Error('domain.hostname must be a valid public hostname.')
+  }
+  if (!hostname || hostname.length > 253 || hostname.endsWith('.') || hostname.includes('..')) throw new Error('domain.hostname must be a canonical public hostname.')
+  const labels = hostname.split('.')
+  if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error('domain.hostname must contain valid DNS labels.')
+  const finalLabel = labels.at(-1) ?? ''
+  if (finalLabel.length < 2 || /^\d+$/.test(finalLabel)) throw new Error('domain.hostname must have a public top-level domain.')
+  if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local') || hostname.endsWith('.test') || hostname.endsWith('.invalid') || hostname.endsWith('.example')) throw new Error('domain.hostname must not use a local or reserved suffix.')
+  return hostname
 }
 
 function integer(value: unknown, field: string, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
@@ -492,10 +533,31 @@ export function upgradeWebsiteReleasePackage(packageValue: unknown, input: { pac
 }
 
 function deployTarget(value: unknown, field: string): PrepareDeployPlanCommand['target'] {
-  const source = exact(value, field, ['provider', 'projectRef', 'environment', 'protection'])
+  if (!isRecord(value)) throw new Error(`${field} must be an object.`)
+  const hasDomain = Object.prototype.hasOwnProperty.call(value, 'domain')
+  const source = exact(value, field, hasDomain
+    ? ['provider', 'projectRef', 'environment', 'protection', 'domain']
+    : ['provider', 'projectRef', 'environment', 'protection'])
   if (source.provider !== 'vercel' || source.environment !== 'production') throw new Error(`${field} must describe the reviewed Vercel production target.`)
   if (source.protection !== 'required') throw new Error(`${field}.protection must remain required.`)
-  return { provider: 'vercel', projectRef: token(source.projectRef, `${field}.projectRef`), environment: 'production', protection: 'required' }
+  const target: PrepareDeployPlanCommand['target'] = { provider: 'vercel', projectRef: token(source.projectRef, `${field}.projectRef`), environment: 'production', protection: 'required' }
+  if (hasDomain) {
+    const domain = exact(source.domain, `${field}.domain`, ['hostname', 'ownership', 'dnsChange', 'tls', 'previewAcceptance', 'ownerActivationApproval'])
+    if (domain.ownership !== 'unverified_owner_supplied'
+      || domain.dnsChange !== 'separate_owner_action'
+      || domain.tls !== 'required'
+      || domain.previewAcceptance !== 'required_before_activation'
+      || domain.ownerActivationApproval !== 'required') throw new Error(`${field}.domain must preserve every owner and activation gate.`)
+    target.domain = {
+      hostname: normalizeWebsiteDomainHostname(domain.hostname),
+      ownership: 'unverified_owner_supplied',
+      dnsChange: 'separate_owner_action',
+      tls: 'required',
+      previewAcceptance: 'required_before_activation',
+      ownerActivationApproval: 'required',
+    }
+  }
+  return target
 }
 
 function previousDeployment(value: unknown, field: string): PrepareDeployPlanCommand['previousDeployment'] {
@@ -531,6 +593,9 @@ function createDeployPlan(packageValue: WebsiteReleasePackage, approval: NonNull
   const rollback: WebsiteDeployPlan['rollback'] = previous
     ? { mode: 'promote_exact_previous_deployment', deploymentId: previous.deploymentId, packageDigest: previous.packageDigest, artifactDigest: previous.artifactDigest, status: 'not_executed', ownerApprovalRequired: true }
     : { mode: 'blocked_until_previous_deployment_bound', deploymentId: null, packageDigest: null, artifactDigest: null, status: 'not_executed', ownerApprovalRequired: true }
+  const domainBlockers = command.target.domain
+    ? ['domain_ownership_unverified', 'preview_acceptance_missing', 'dns_plan_unverified', 'owner_activation_approval_missing']
+    : ['customer_domain_not_bound']
   return {
     contract: WEBSITE_DEPLOY_PLAN_CONTRACT,
     planId: command.id,
@@ -541,9 +606,19 @@ function createDeployPlan(packageValue: WebsiteReleasePackage, approval: NonNull
       { sequence: 1, action: 'build_prebuilt_candidate', gate: 'local_release_contracts_pass', authority: 'release_manager_review' },
       { sequence: 2, action: 'create_protected_preview', gate: 'exact_project_and_credentials_bound', authority: 'owner_credentialed_action' },
       { sequence: 3, action: 'verify_exact_candidate', gate: 'health_logs_links_mobile_desktop_pass', authority: 'release_reviewer' },
-      { sequence: 4, action: 'promote_exact_candidate', gate: 'single_use_owner_approval', authority: 'owner_only' },
+      ...(command.target.domain ? [{ sequence: 4, action: 'verify_domain_ownership_and_dns_plan', gate: 'owner_domain_control_and_provider_records_verified', authority: 'release_reviewer' }] : []),
+      { sequence: command.target.domain ? 5 : 4, action: 'promote_exact_candidate', gate: 'single_use_owner_approval', authority: 'owner_only' },
+      ...(command.target.domain ? [{ sequence: 6, action: 'attach_verified_domain_and_check_https', gate: 'separate_domain_activation_approval', authority: 'owner_only' }] : []),
     ],
     rollback,
+    domainActivation: {
+      hostname: command.target.domain?.hostname ?? null,
+      status: 'not_executed',
+      blockers: domainBlockers,
+      ownerApprovalRequired: true,
+      providerWritesPerformed: false,
+      dnsWritesPerformed: false,
+    },
     proof: command.proof,
     ownerApprovalRequired: true,
   }

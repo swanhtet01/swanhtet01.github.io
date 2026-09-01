@@ -1,8 +1,8 @@
 """Deterministic, no-I/O Website release-package foundation.
 
 The foundation binds an already approved Website snapshot to versioned template,
-brand, locale, media, role, candidate, and rollback evidence.  It prepares no
-deployment, domain, credential, provider request, or public claim.
+brand, locale, media, role, candidate, rollback, and domain-handoff evidence.
+It executes no deployment, domain, credential, provider request, or public claim.
 """
 
 from __future__ import annotations
@@ -673,20 +673,96 @@ def upgrade_website_release_package(
     return _validate_package({**body, "packageDigest": _canonical_digest(body)})
 
 
-def _target(value: object, field: str) -> dict[str, str]:
+def normalize_website_domain_hostname(value: object) -> str:
+    """Return one canonical public hostname without claiming ownership."""
+
+    candidate = _text(value, "domain.hostname", maximum=253).lower()
+    if "://" in candidate or any(marker in candidate for marker in "/?#@:"):
+        raise _fail(
+            "domain.hostname must be a hostname without a scheme, port, path, query, fragment, or credentials."
+        )
+    try:
+        hostname = candidate.encode("idna").decode("ascii").lower()
+    except UnicodeError as error:
+        raise _fail("domain.hostname must be a valid public hostname.") from error
+    if (
+        not hostname
+        or len(hostname) > 253
+        or hostname.endswith(".")
+        or ".." in hostname
+    ):
+        raise _fail("domain.hostname must be a canonical public hostname.")
+    labels = hostname.split(".")
+    if len(labels) < 2 or any(
+        re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) is None
+        for label in labels
+    ):
+        raise _fail("domain.hostname must contain valid DNS labels.")
+    final_label = labels[-1]
+    if len(final_label) < 2 or final_label.isdigit():
+        raise _fail("domain.hostname must have a public top-level domain.")
+    if hostname == "localhost" or hostname.endswith(
+        (".localhost", ".local", ".test", ".invalid", ".example")
+    ):
+        raise _fail("domain.hostname must not use a local or reserved suffix.")
+    return hostname
+
+
+def _target(value: object, field: str) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise _fail(f"{field} must be an object.")
+    has_domain = "domain" in value
     source = _object(
-        value, field, ("provider", "projectRef", "environment", "protection")
+        value,
+        field,
+        (
+            "provider",
+            "projectRef",
+            "environment",
+            "protection",
+            *(("domain",) if has_domain else ()),
+        ),
     )
     if source["provider"] != "vercel" or source["environment"] != "production":
         raise _fail(f"{field} must describe the reviewed Vercel production target.")
     if source["protection"] != "required":
         raise _fail(f"{field}.protection must remain required.")
-    return {
+    target: dict[str, Any] = {
         "provider": "vercel",
         "projectRef": _token(source["projectRef"], f"{field}.projectRef"),
         "environment": "production",
         "protection": "required",
     }
+    if has_domain:
+        domain = _object(
+            source["domain"],
+            f"{field}.domain",
+            (
+                "hostname",
+                "ownership",
+                "dnsChange",
+                "tls",
+                "previewAcceptance",
+                "ownerActivationApproval",
+            ),
+        )
+        if (
+            domain["ownership"] != "unverified_owner_supplied"
+            or domain["dnsChange"] != "separate_owner_action"
+            or domain["tls"] != "required"
+            or domain["previewAcceptance"] != "required_before_activation"
+            or domain["ownerActivationApproval"] != "required"
+        ):
+            raise _fail(f"{field}.domain must preserve every owner and activation gate.")
+        target["domain"] = {
+            "hostname": normalize_website_domain_hostname(domain["hostname"]),
+            "ownership": "unverified_owner_supplied",
+            "dnsChange": "separate_owner_action",
+            "tls": "required",
+            "previewAcceptance": "required_before_activation",
+            "ownerActivationApproval": "required",
+        }
+    return target
 
 
 def _previous_deployment(value: object, field: str) -> dict[str, str] | None:
@@ -807,6 +883,63 @@ def _deploy_plan(
             "ownerApprovalRequired": True,
         }
     )
+    domain = command["target"].get("domain")
+    steps = [
+        {
+            "sequence": 1,
+            "action": "build_prebuilt_candidate",
+            "gate": "local_release_contracts_pass",
+            "authority": "release_manager_review",
+        },
+        {
+            "sequence": 2,
+            "action": "create_protected_preview",
+            "gate": "exact_project_and_credentials_bound",
+            "authority": "owner_credentialed_action",
+        },
+        {
+            "sequence": 3,
+            "action": "verify_exact_candidate",
+            "gate": "health_logs_links_mobile_desktop_pass",
+            "authority": "release_reviewer",
+        },
+    ]
+    if domain:
+        steps.append(
+            {
+                "sequence": 4,
+                "action": "verify_domain_ownership_and_dns_plan",
+                "gate": "owner_domain_control_and_provider_records_verified",
+                "authority": "release_reviewer",
+            }
+        )
+    steps.append(
+        {
+            "sequence": 5 if domain else 4,
+            "action": "promote_exact_candidate",
+            "gate": "single_use_owner_approval",
+            "authority": "owner_only",
+        }
+    )
+    if domain:
+        steps.append(
+            {
+                "sequence": 6,
+                "action": "attach_verified_domain_and_check_https",
+                "gate": "separate_domain_activation_approval",
+                "authority": "owner_only",
+            }
+        )
+    domain_blockers = (
+        [
+            "domain_ownership_unverified",
+            "preview_acceptance_missing",
+            "dns_plan_unverified",
+            "owner_activation_approval_missing",
+        ]
+        if domain
+        else ["customer_domain_not_bound"]
+    )
     return {
         "contract": WEBSITE_DEPLOY_PLAN_CONTRACT,
         "planId": command["id"],
@@ -820,33 +953,16 @@ def _deploy_plan(
             ],
         },
         "target": command["target"],
-        "steps": [
-            {
-                "sequence": 1,
-                "action": "build_prebuilt_candidate",
-                "gate": "local_release_contracts_pass",
-                "authority": "release_manager_review",
-            },
-            {
-                "sequence": 2,
-                "action": "create_protected_preview",
-                "gate": "exact_project_and_credentials_bound",
-                "authority": "owner_credentialed_action",
-            },
-            {
-                "sequence": 3,
-                "action": "verify_exact_candidate",
-                "gate": "health_logs_links_mobile_desktop_pass",
-                "authority": "release_reviewer",
-            },
-            {
-                "sequence": 4,
-                "action": "promote_exact_candidate",
-                "gate": "single_use_owner_approval",
-                "authority": "owner_only",
-            },
-        ],
+        "steps": steps,
         "rollback": rollback,
+        "domainActivation": {
+            "hostname": domain["hostname"] if domain else None,
+            "status": "not_executed",
+            "blockers": domain_blockers,
+            "ownerApprovalRequired": True,
+            "providerWritesPerformed": False,
+            "dnsWritesPerformed": False,
+        },
         "proof": command["proof"],
         "ownerApprovalRequired": True,
     }
@@ -1186,6 +1302,7 @@ __all__ = (
     "build_website_release_package",
     "create_empty_website_release_state",
     "prepare_website_deploy_plan",
+    "normalize_website_domain_hostname",
     "prepare_website_release_package",
     "project_website_release",
     "upgrade_website_release_package",

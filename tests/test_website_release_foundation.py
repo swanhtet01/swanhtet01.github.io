@@ -14,6 +14,7 @@ from supermega_runtime.website_release_foundation import (
     approve_website_release_package,
     build_website_release_package,
     create_empty_website_release_state,
+    normalize_website_domain_hostname,
     prepare_website_deploy_plan,
     prepare_website_release_package,
     project_website_release,
@@ -263,8 +264,82 @@ class WebsiteReleaseFoundationTests(unittest.TestCase):
             projection["headDigest"],
             "sha256:19b00a7d85eb69085e50dfe97c08cab9f10877319722b14bb713916ab8ff486f",
         )
-        self.assertNotIn("domain", json.dumps(plan).lower())
+        self.assertEqual(plan["domainActivation"]["hostname"], None)
+        self.assertEqual(
+            plan["domainActivation"]["blockers"], ["customer_domain_not_bound"]
+        )
         self.assertNotIn("token", json.dumps(plan).lower())
+
+    def test_customer_domain_handoff_is_canonical_and_fails_closed(self) -> None:
+        state = approved_state()
+        candidate = project_website_release(state)["package"]
+        result = prepare_website_deploy_plan(
+            state,
+            plan_id="deploy-plan-domain-001",
+            package_digest=candidate["packageDigest"],
+            approval_id="release-approval-001",
+            target={
+                "provider": "vercel",
+                "projectRef": "owner-bound-project",
+                "environment": "production",
+                "protection": "required",
+                "domain": {
+                    "hostname": "WWW.Mingalar-Spa.COM",
+                    "ownership": "unverified_owner_supplied",
+                    "dnsChange": "separate_owner_action",
+                    "tls": "required",
+                    "previewAcceptance": "required_before_activation",
+                    "ownerActivationApproval": "required",
+                },
+            },
+            previous_deployment=None,
+            proof=proof(4, "Release manager", "prepared no-write domain handoff"),
+            expected_head_digest=state["headDigest"],
+        )
+        plan = project_website_release(result["state"])["deployPlan"]
+        self.assertEqual(plan["target"]["domain"]["hostname"], "www.mingalar-spa.com")
+        self.assertEqual(len(plan["steps"]), 6)
+        self.assertEqual(plan["steps"][3]["action"], "verify_domain_ownership_and_dns_plan")
+        self.assertEqual(plan["steps"][5]["action"], "attach_verified_domain_and_check_https")
+        self.assertEqual(plan["domainActivation"]["status"], "not_executed")
+        self.assertEqual(
+            plan["domainActivation"]["blockers"],
+            [
+                "domain_ownership_unverified",
+                "preview_acceptance_missing",
+                "dns_plan_unverified",
+                "owner_activation_approval_missing",
+            ],
+        )
+        self.assertFalse(plan["domainActivation"]["providerWritesPerformed"])
+        self.assertFalse(plan["domainActivation"]["dnsWritesPerformed"])
+        self.assertTrue(plan["domainActivation"]["ownerApprovalRequired"])
+        self.assertTrue(normalize_website_domain_hostname("မင်္ဂလာ.com").endswith(".com"))
+
+        invalid_domains = (
+            "https://example.com",
+            "example.com/path",
+            "example.com:443",
+            "user@example.com",
+            "localhost",
+            "shop.local",
+            "shop.example",
+            "127.0.0.1",
+            "singlelabel",
+            "-bad.example.com",
+        )
+        for invalid in invalid_domains:
+            with self.subTest(invalid=invalid), self.assertRaises(
+                WebsiteReleaseValidationError
+            ):
+                normalize_website_domain_hostname(invalid)
+
+        tampered = deepcopy(result["state"])
+        tampered["commands"][-1]["payload"]["target"]["domain"][
+            "hostname"
+        ] = "other.example.com"
+        with self.assertRaises(WebsiteReleaseValidationError):
+            validate_website_release_state(tampered)
 
     def test_plan_without_previous_deployment_exposes_blocked_rollback(self) -> None:
         state = approved_state()
