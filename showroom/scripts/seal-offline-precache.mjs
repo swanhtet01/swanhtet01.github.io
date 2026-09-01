@@ -69,7 +69,7 @@ const OFFLINE_CHUNK_NAMES = [
 const ONLINE_ONLY = [
   'src/core/SettingsPage.tsx',
   'src/core/ProductOnboardingPage.tsx',
-  'src/core/WorkspaceControlsPage.tsx',
+  'WorkspaceControlsPage',
   'src/core/ManagedLoginPage.tsx',
   'src/core/ManagedAccountPage.tsx',
   'src/core/SignupPage.tsx',

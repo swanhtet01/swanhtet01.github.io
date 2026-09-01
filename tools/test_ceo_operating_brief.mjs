@@ -58,10 +58,8 @@ function makeCrm({ uniqueCustomers = 0, repeatCustomers = 0, newCustomers = 0, a
 
 const WHEN = '2026-08-11T09:00:00.000Z'
 const controlsPageSource = readFileSync('showroom/src/core/WorkspaceControlsPage.tsx', 'utf8')
-const ceoViewSource = controlsPageSource.slice(
-  controlsPageSource.indexOf('function CeoOperatingBriefView('),
-  controlsPageSource.indexOf('function EcommercePipelineView()'),
-)
+const evidenceViewsSource = readFileSync('showroom/src/core/WorkspaceEvidenceViews.tsx', 'utf8')
+const ceoViewSource = evidenceViewsSource.slice(evidenceViewsSource.indexOf('export function CeoOperatingBriefView('))
 
 function makeRecordingStorage(entries = {}) {
   const records = new Map(Object.entries(entries))
@@ -302,14 +300,14 @@ function makeRecordingStorage(entries = {}) {
 // 22. The owner-facing view names all four products and states the evidence boundary visibly.
 {
   for (const text of [
-    'Four-product browser-local summary. Read-only and unverified.',
-    'Local operating view — not commercial proof',
-    'This brief does not prove a real customer, pilot, revenue result, commercial performance, or production operation.',
+    'Four-product status. Read-only.',
+    'Local view — not commercial proof',
+    'Local records are not customer, pilot, revenue, commercial, production, or telemetry proof.',
     'Production telemetry',
     'Website',
     'Ecommerce',
   ]) {
-    check(controlsPageSource.includes(text), `CEO view includes owner-safe boundary: ${text}`)
+    check(ceoViewSource.includes(text), `CEO view includes owner-safe boundary: ${text}`)
   }
   check(ceoViewSource.includes('readCommerceWorkspace()'), 'CEO view uses the non-mutating Commerce reader')
   check(ceoViewSource.includes('readProductionWorkspace()'), 'CEO view uses the non-mutating Production reader')
@@ -321,11 +319,10 @@ function makeRecordingStorage(entries = {}) {
 {
   for (const text of [
     'Go-live controls',
-    'Configure, protect, prove, then release',
-    'Set up each product, complete its local first job, save a recovery file, verify the exact protected preview and observability receipts, then use a separate owner-approved production release.',
-    'Separate owner gate',
-    'This panel prepares the operating path only. It does not deploy, publish, contact a customer, move stock, take payment, or enable managed writes.',
-  ]) check(controlsPageSource.includes(text), `CEO lifecycle includes owner-safe control: ${text}`)
+    'Set up, protect, prove, release',
+    'Owner-gated',
+    'No deployment, publishing, contact, stock, payment, or managed write.',
+  ]) check(ceoViewSource.includes(text), `CEO lifecycle includes owner-safe control: ${text}`)
   for (const path of [
     '/settings/?product=shop',
     '/settings/?product=plant',
@@ -333,9 +330,10 @@ function makeRecordingStorage(entries = {}) {
     '/settings/?product=ecommerce',
     '/settings/#controls',
     '/settings/?view=local-metrics#controls',
-  ]) check(controlsPageSource.includes(`to="${path}"`), `CEO lifecycle links to ${path}`)
-  check(controlsPageSource.includes("backupReady ? 'Ready now' : 'Needs attention'"), 'CEO lifecycle reports whether a recovery file can be produced')
-  check(controlsPageSource.includes("runtime.writesReady ? 'Ready' : 'Locked'"), 'CEO lifecycle reports hosted runtime readiness without widening it')
+  ]) check(evidenceViewsSource.includes(path), `CEO lifecycle links to ${path}`)
+  check(ceoViewSource.includes("backupReady ? 'Ready' : 'Needs attention'"), 'CEO lifecycle reports whether a recovery file can be produced')
+  check(ceoViewSource.includes("runtime.writesReady ? 'Ready' : 'Locked'"), 'CEO lifecycle reports hosted runtime readiness without widening it')
+  check(controlsPageSource.includes("lazy(() => import('./WorkspaceEvidenceViews')"), 'optional evidence views stay outside the Workspace Controls route chunk')
   check(controlsPageSource.includes('<CeoOperatingBriefView backupReady={Boolean(currentBackup)} runtime={runtime} />'), 'CEO lifecycle receives the current read-only backup and runtime state')
 }
 
