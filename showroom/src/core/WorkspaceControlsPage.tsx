@@ -69,7 +69,7 @@ function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
   }
 }
 
-function CeoOperatingBriefView() {
+function CeoOperatingBriefView({ backupReady, runtime }: { backupReady: boolean; runtime: RuntimeHealth }) {
   const commerce = useMemo(() => readCommerceWorkspace().state, [])
   const production = useMemo(() => readProductionWorkspace().state, [])
   const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
@@ -92,6 +92,24 @@ function CeoOperatingBriefView() {
             <span><small>Production telemetry</small><strong>Not observed</strong></span>
           </div>
           <p className="authority-note">This brief does not prove a real customer, pilot, revenue result, commercial performance, or production operation. Use owner-reviewed external evidence before making those claims.</p>
+        </section>
+        <section aria-label="Go-live controls" className="core-panel">
+          <div><span className="core-eyebrow">Operating lifecycle</span><h2>Configure, protect, prove, then release</h2><p>Set up each product, complete its local first job, save a recovery file, verify the exact protected preview and observability receipts, then use a separate owner-approved production release.</p></div>
+          <div className="readiness-list">
+            <span><small>Product setup</small><strong>Available per product</strong></span>
+            <span><small>Backup file</small><strong>{backupReady ? 'Ready now' : 'Needs attention'}</strong></span>
+            <span><small>Hosted write runtime</small><strong>{runtime.writesReady ? 'Ready' : 'Locked'}</strong></span>
+            <span><small>Production release</small><strong>Separate owner gate</strong></span>
+          </div>
+          <div className="trial-actions">
+            <Link className="core-button" to="/settings/?product=shop">Set up Shop</Link>
+            <Link className="core-button" to="/settings/?product=plant">Set up Plant</Link>
+            <Link className="core-button" to="/settings/?product=website">Set up Website</Link>
+            <Link className="core-button" to="/settings/?product=ecommerce">Set up Ecommerce</Link>
+            <Link className="core-button" to="/settings/#controls">Backup and recovery</Link>
+            <Link className="core-button" to="/settings/?view=local-metrics#controls">Device activity</Link>
+          </div>
+          <p className="authority-note">This panel prepares the operating path only. It does not deploy, publish, contact a customer, move stock, take payment, or enable managed writes.</p>
         </section>
         {brief.alerts.length > 0 && <section className="core-panel">
           <div><span className="core-eyebrow">Alerts</span></div>
@@ -629,7 +647,7 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'customer-journey') return <CustomerJourneyView />
   if (searchParams.get('view') === 'ecommerce-pipeline') return <EcommercePipelineView />
   if (searchParams.get('view') === 'ecommerce-stale-requests') return <EcommerceStaleRequestsView />
-  if (searchParams.get('view') === 'ceo-brief') return <CeoOperatingBriefView />
+  if (searchParams.get('view') === 'ceo-brief') return <CeoOperatingBriefView backupReady={Boolean(currentBackup)} runtime={runtime} />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()
