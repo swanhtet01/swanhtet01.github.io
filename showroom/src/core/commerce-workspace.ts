@@ -1529,6 +1529,12 @@ export type CommerceWorkspaceSnapshot = {
   error: string
 }
 
+export type CommerceWorkspaceReadSnapshot = {
+  state: CommerceState
+  source: 'current' | 'legacy' | 'absent' | 'recovery'
+  error: string
+}
+
 export type CommerceMutationResult =
   | { ok: true; state: CommerceState; replayed: boolean }
   | { ok: false; error: string }
@@ -4620,6 +4626,33 @@ function persistInitialState(storage: CommerceStorage, state: CommerceState, sou
   } catch {
     return { state, source, error: 'Commerce storage is unavailable. This workspace is read-only until browser storage is restored.' }
   }
+}
+
+export function readCommerceWorkspace(storage = browserStorage()): CommerceWorkspaceReadSnapshot {
+  if (!storage) return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce storage is unavailable. No local data was changed.' }
+  let currentRaw: string | null
+  try { currentRaw = storage.getItem(COMMERCE_KEY) } catch { return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce storage could not be read. No local data was changed.' } }
+  if (currentRaw !== null) {
+    try {
+      return { state: validateCommerceState(JSON.parse(currentRaw)), source: 'current', error: '' }
+    } catch {
+      return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce v2 data is malformed. The read failed closed without replacing data.' }
+    }
+  }
+
+  let invalidLegacyFound = false
+  for (const legacyKey of LEGACY_COMMERCE_KEYS) {
+    let legacyRaw: string | null
+    try { legacyRaw = storage.getItem(legacyKey) } catch { invalidLegacyFound = true; continue }
+    if (legacyRaw === null) continue
+    try {
+      return { state: migrateLegacyCommerce(JSON.parse(legacyRaw)), source: 'legacy', error: '' }
+    } catch {
+      invalidLegacyFound = true
+    }
+  }
+  if (invalidLegacyFound) return { state: createEmptyCommerce(), source: 'recovery', error: 'Legacy Commerce data is malformed. The read failed closed without creating v2 data.' }
+  return { state: createEmptyCommerce(), source: 'absent', error: '' }
 }
 
 export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorkspaceSnapshot {

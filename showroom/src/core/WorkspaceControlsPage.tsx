@@ -35,8 +35,8 @@ import {
   type ShopLoyaltySettings,
 } from './shop-loyalty'
 import { useManagedIdentity } from './workspace-runtime'
-import { commerceWorkspaceArchive, commerceWorkspaceArchiveCsv, loadCommerceWorkspace } from './commerce-workspace'
-import { loadProductionWorkspace, productionMaintenanceDueQueue } from './production-workspace'
+import { commerceWorkspaceArchive, commerceWorkspaceArchiveCsv, loadCommerceWorkspace, readCommerceWorkspace } from './commerce-workspace'
+import { loadProductionWorkspace, productionMaintenanceDueQueue, readProductionWorkspace } from './production-workspace'
 import { projectShopOrderProductionStatus } from './shop-production-status'
 import { projectCrossProductOperatingSummary } from './cross-product-report'
 import { projectShopRevenueSummary } from './shop-revenue-summary'
@@ -70,8 +70,8 @@ function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
 }
 
 function CeoOperatingBriefView() {
-  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
-  const production = useMemo(() => loadProductionWorkspace().state, [])
+  const commerce = useMemo(() => readCommerceWorkspace().state, [])
+  const production = useMemo(() => readProductionWorkspace().state, [])
   const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
   const shopRevenue = useMemo(() => projectShopRevenueSummary(commerce), [commerce])
   const plantOee = useMemo(() => projectPlantOeeSummary(production, new Date().toISOString()), [production])
@@ -79,10 +79,20 @@ function CeoOperatingBriefView() {
   const crmJourney = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
   const ecommerce = useMemo((): EcommercePipelineSummary => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } } catch { return { totalRequests: 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: 0, pendingCancellationIntents: 0 } } }, [])
   const brief = useMemo(() => projectCeoOperatingBrief(shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney, new Date().toISOString()), [shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney])
+  const evidenceLabel = (state: typeof brief.evidenceBoundary.products.shop) => state === 'browser_local_records_present' ? 'Local records present' : 'No local records'
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading copy="Cross-product operating summary. Read-only." eyebrow="CEO brief" title="Operating brief" />
+      <PageHeading copy="Four-product browser-local summary. Read-only and unverified." eyebrow="CEO brief" title="Operating brief" />
       <div className="settings-control-stack">
+        <section className="core-panel system-boundary-panel">
+          <div><span className="core-eyebrow">Evidence boundary</span><h2>Local operating view — not commercial proof</h2><p>Values come only from the workspace saved in this browser. Samples, drafts, and local records may be included.</p></div>
+          <div className="readiness-list">
+            <span><small>Products with local records</small><strong>{brief.evidenceBoundary.localRecordProductCount} / 4</strong></span>
+            <span><small>Pilot evidence</small><strong>Not proven</strong></span>
+            <span><small>Production telemetry</small><strong>Not observed</strong></span>
+          </div>
+          <p className="authority-note">This brief does not prove a real customer, pilot, revenue result, commercial performance, or production operation. Use owner-reviewed external evidence before making those claims.</p>
+        </section>
         {brief.alerts.length > 0 && <section className="core-panel">
           <div><span className="core-eyebrow">Alerts</span></div>
           <div className="readiness-list">{brief.alerts.map((a, i) => <span key={i}><small>{a.product}</small><strong>{a.message}</strong></span>)}</div>
@@ -92,18 +102,34 @@ function CeoOperatingBriefView() {
             <span><small>Revenue</small><strong>{brief.shopRevenue.totalRevenue.toLocaleString()}</strong></span>
             <span><small>Orders</small><strong>{brief.shopRevenue.orderCount}</strong></span>
             <span><small>Avg order</small><strong>{brief.shopRevenue.averageOrderValue.toLocaleString()}</strong></span>
+            <span><small>Evidence</small><strong>{evidenceLabel(brief.evidenceBoundary.products.shop)}</strong></span>
           </div></section>
         <section className="core-panel"><div><span className="core-eyebrow">Plant</span></div>
           <div className="readiness-list">
             <span><small>Jobs</small><strong>{brief.plantOee.totalJobs}</strong></span>
             <span><small>Quality</small><strong>{brief.plantOee.totalJobs > 0 ? `${brief.plantOee.qualityRate}%` : '—'}</strong></span>
             <span><small>Overdue</small><strong>{brief.plantOee.overdueJobs}</strong></span>
+            <span><small>Evidence</small><strong>{evidenceLabel(brief.evidenceBoundary.products.plant)}</strong></span>
           </div></section>
-        <section className="core-panel"><div><span className="core-eyebrow">CRM</span></div>
+        <section className="core-panel"><div><span className="core-eyebrow">Website</span></div>
           <div className="readiness-list">
-            <span><small>Customers</small><strong>{brief.crmJourney.uniqueCustomers}</strong></span>
-            <span><small>Repeat</small><strong>{brief.crmJourney.repeatCustomers}</strong></span>
-            <span><small>Website leads</small><strong>{brief.websiteLeads.totalLeads}</strong></span>
+            <span><small>Lead records</small><strong>{brief.websiteLeads.totalLeads}</strong></span>
+            <span><small>Qualified</small><strong>{brief.websiteLeads.qualifiedLeads}</strong></span>
+            <span><small>Closed</small><strong>{brief.websiteLeads.closedLeads}</strong></span>
+            <span><small>Evidence</small><strong>{evidenceLabel(brief.evidenceBoundary.products.website)}</strong></span>
+          </div></section>
+        <section className="core-panel"><div><span className="core-eyebrow">Ecommerce</span></div>
+          <div className="readiness-list">
+            <span><small>Request records</small><strong>{brief.ecommercePipeline.totalRequests}</strong></span>
+            <span><small>Return intents</small><strong>{brief.ecommercePipeline.pendingReturnIntents}</strong></span>
+            <span><small>Cancellation intents</small><strong>{brief.ecommercePipeline.pendingCancellationIntents}</strong></span>
+            <span><small>Evidence</small><strong>{evidenceLabel(brief.evidenceBoundary.products.ecommerce)}</strong></span>
+          </div></section>
+        <section className="core-panel"><div><span className="core-eyebrow">Shop customer records</span></div>
+          <div className="readiness-list">
+            <span><small>Customer references</small><strong>{brief.crmJourney.uniqueCustomers}</strong></span>
+            <span><small>Repeat references</small><strong>{brief.crmJourney.repeatCustomers}</strong></span>
+            <span><small>New references</small><strong>{brief.crmJourney.newCustomers}</strong></span>
           </div></section>
       </div>
     </div>
