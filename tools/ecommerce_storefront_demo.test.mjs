@@ -3205,3 +3205,383 @@ test('with no resolvable Shop trade, the guided request reproduces the exact pre
   assert.equal(request.quote.payment.adapter, 'pay_on_pickup')
   assert.equal(request.deliveryAddress, null)
 })
+
+// ---------------------------------------------------------------------------
+// ENG-144 support outcome: the resolved state rendered, not only projected.
+//
+// ENG-144 (hq/WORKBOARD.md) shipped supermega.ecommerce.support_outcome.v1 and
+// recorded that "the fixture has no resolved case, so that state remains
+// verifier-proven". tools/verify_app_build.mjs does drive the projection through
+// a resolved Shop case, but nothing had ever rendered the resolved branch of
+// EcommerceBuyingWorkspace; ENTERPRISE-READINESS-SCORECARD.md section 5 gap 3
+// named it a never-rendered state. The block below closes that by evidence:
+//
+//   1. the fixture is built only through the shipped transitions -- storefront
+//      configuration, checkout quote, order request, Shop reserve / advance /
+//      reconcile / complete, support case open, acknowledged, first response
+//      ready, resolve (information_provided) -- never a hand-shaped case;
+//   2. both projection branches are asserted side by side (open and resolved),
+//      plus the fail-closed rules the resolved branch depends on;
+//   3. the real EcommerceBuyingWorkspace is rendered with react-dom/server and
+//      the markup is asserted for both branches.
+//
+// One seam. The workspace reads its buying state from browser storage inside
+// an effect, and server rendering runs no effects, so the initial-state
+// constructor the component calls (createEmptyEcommerceBuyingState) is wrapped
+// in the render bundle to return the fixture state for the fixture scope. Every
+// other module in the bundle is the shipped source, and the fixture state
+// itself was produced by the shipped recorders, so it carries a valid head
+// digest and event chain.
+//
+// This is a test fixture, not a guided sample. The guided Ecommerce sample
+// stops at pending_shop_review by design (guided-sample-order.ts) and so can
+// never hold a completed Shop order, let alone a resolved case, without
+// fabricating the record that earns the Ecommerce proof.
+// ---------------------------------------------------------------------------
+
+const SUPPORT_RENDER_SCOPE = 'ecommerce:support-outcome-render'
+const SUPPORT_RENDER_ORDER_ID = 'ORD-SUPPORT-RENDER-1'
+const SUPPORT_RENDER_CHECKOUT_KEY = 'ECI-7A5E0000-0000-4000-8000-000000000144'
+const SUPPORT_RENDER_INTENT_KEY = 'ESI-7A5E0000-0000-4000-8000-000000000144'
+const SUPPORT_RENDER_INTENT_ID = `ESR-${SUPPORT_RENDER_INTENT_KEY.slice(4)}`
+const SUPPORT_RENDER_CASE_ID = `CASE-${SUPPORT_RENDER_INTENT_KEY.slice(4)}`
+const SUPPORT_RENDER_OWNER = 'Support owner'
+const SUPPORT_RENDER_REQUESTED_AT = '2026-08-08T03:00:00.000Z'
+const SUPPORT_RENDER_OPENED_AT = '2026-08-08T03:05:00.000Z'
+const SUPPORT_RENDER_DUE_AT = '2026-08-08T07:00:00.000Z'
+const SUPPORT_RENDER_RESOLVED_AT = '2026-08-08T03:20:00.000Z'
+
+function supportRenderProof(actionId, capturedAt, reason, evidenceReference) {
+  return { actionId: `ACT-TEST-SUPPORT-RENDER-${actionId}`, capturedAt, actor: SUPPORT_RENDER_OWNER, reason, evidenceReference }
+}
+
+let supportRenderFixturePromise = null
+
+function buildSupportOutcomeRenderFixture() {
+  supportRenderFixturePromise ??= (async () => {
+    const storefront = await import('../showroom/src/products/ecommerce/storefront-model.ts')
+    const buying = await import('../showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts')
+    const commerce = await import('../showroom/src/core/commerce-workspace.ts')
+
+    // Storefront the customer buys from, bound to the Shop catalog the same way the
+    // managed path binds it.
+    const catalog = createSeedCommerce().items
+    const storefrontInput = { storeName: 'Mingalar Shop', summary: 'Clear prices and a small customer-ready catalog.', selectedSkus: ['SM-1001', 'SM-1003'] }
+    const preview = storefront.buildStorefrontPreview(catalog, storefrontInput)
+    const previewDigest = await storefront.storefrontPreviewDigest(preview)
+    const base = { ...createEmptyCommerce(), items: catalog }
+    const catalogDigest = await commerce.commerceCatalogDigest(base)
+    const storefrontProof = {
+      actionId: commerceStorefrontConfigurationActionId(1, catalogDigest),
+      capturedAt: '2026-08-08T01:59:00.000Z',
+      actor: SUPPORT_RENDER_OWNER,
+      reason: 'Publish the storefront this fixture buys from.',
+      evidenceReference: `ECOMMERCE-STOREFRONT:${catalogDigest}:R1`,
+    }
+    const configured = await commerce.saveCommerceStorefrontConfiguration(base, { ...storefrontInput, shopCatalogDigest: catalogDigest }, storefrontProof)
+    assert.ok(configured, 'the fixture storefront configuration must save')
+
+    // Customer request. No customerProfile on purpose: the workspace matches a
+    // profile-bearing request on the phone typed into the form, and a server render
+    // has no typed phone, so the reference-matching branch is the one a first paint
+    // takes.
+    const pim = await buying.buildEcommercePimProjection(SUPPORT_RENDER_SCOPE, previewDigest, preview)
+    const quote = await buying.buildEcommerceCheckoutQuote({
+      pim,
+      // Two lines, the guided sample's own cart shape. A single-line Shop order must also
+      // carry itemSku, which is a legacy-shape detail this fixture has no reason to exercise.
+      cart: [{ sku: 'SM-1001', quantity: 2 }, { sku: 'SM-1003', quantity: 1 }],
+      customerReference: 'Ko Aung · counter pickup',
+      fulfilment: 'pickup',
+      paymentAdapter: 'pay_on_pickup',
+      promotionCode: null,
+      idempotencyKey: SUPPORT_RENDER_CHECKOUT_KEY,
+      quotedAt: CAPTURED_AT,
+      expiresAt: '2026-08-08T02:15:00.000Z',
+    })
+    const request = await buying.buildEcommerceOrderRequestV2(quote, { revision: 1, actionId: storefrontProof.actionId })
+    const withRequest = await commerce.recordCommerceStorefrontRequest(configured, request, {
+      actionId: `ACT-${request.id.slice(4)}`,
+      capturedAt: request.createdAt,
+      actor: SUPPORT_RENDER_OWNER,
+      reason: 'Record the Ecommerce request for Shop review.',
+      evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}`,
+    })
+    assert.ok(withRequest, 'the fixture request must record in Shop')
+
+    // Shop takes the order all the way to completed through the shipped transitions.
+    const orderLines = request.lines.map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      ...(line.variant ? { variant: line.variant } : {}),
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+    const reserved = reserveCommerceOrder(withRequest, {
+      id: SUPPORT_RENDER_ORDER_ID,
+      createdAt: '2026-08-08T02:05:00.000Z',
+      customer: request.customerReference,
+      owner: SUPPORT_RENDER_OWNER,
+      channel: 'Ecommerce',
+      item: commerceOrderItemSummary(orderLines),
+      quantity: orderLines.reduce((total, line) => total + line.quantity, 0),
+      payment: 'Cash',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: request.fulfilment,
+      fulfilmentReference: request.id,
+      promisedAt: '2026-08-08T04:00:00.000Z',
+      paymentDueAt: '2026-08-08T02:05:00.000Z',
+      sourceRecordId: request.id,
+      evidenceReference: `ECOMMERCE:${request.id}:ORDER`,
+      lines: orderLines,
+      total: request.totalMmk,
+      status: 'confirmed',
+    }, supportRenderProof('RESERVE', '2026-08-08T02:05:00.000Z', 'Confirm the reviewed Ecommerce request in Shop.', `ECOMMERCE:${request.id}:ORDER`))
+    assert.ok(reserved, 'the fixture order must reserve')
+    const preparing = advanceCommerceOrder(reserved, SUPPORT_RENDER_ORDER_ID, 'confirmed', supportRenderProof('PREPARING', '2026-08-08T02:10:00.000Z', 'Start preparing.', 'SUPPORT-RENDER-PREPARING'))
+    const ready = preparing && advanceCommerceOrder(preparing, SUPPORT_RENDER_ORDER_ID, 'preparing', supportRenderProof('READY', '2026-08-08T02:20:00.000Z', 'Mark ready.', 'SUPPORT-RENDER-READY'))
+    const paid = ready && reconcileCommercePayment(ready, SUPPORT_RENDER_ORDER_ID, supportRenderProof('PAID', '2026-08-08T02:30:00.000Z', 'Counter payment received.', 'SUPPORT-RENDER-PAID'))
+    const completedState = paid && advanceCommerceOrder(paid, SUPPORT_RENDER_ORDER_ID, 'ready', supportRenderProof('COMPLETE', '2026-08-08T02:40:00.000Z', 'Customer collected the order.', 'SUPPORT-RENDER-COMPLETE'))
+    assert.ok(completedState, 'the fixture order must reach completed')
+    const completedOrder = completedState.orders.find((order) => order.id === SUPPORT_RENDER_ORDER_ID)
+    assert.equal(completedOrder?.status, 'completed')
+    assert.ok(completedOrder.completion, 'the completed fixture order must carry completion proof')
+
+    // Ecommerce side: the request and the help request, recorded by the shipped recorders.
+    const intent = buying.buildEcommerceSupportIntent({
+      scope: SUPPORT_RENDER_SCOPE,
+      orderSnapshot: completedOrder,
+      category: 'delivery_issue',
+      description: 'The pickup slot was later than the confirmed time.',
+      idempotencyKey: SUPPORT_RENDER_INTENT_KEY,
+      createdAt: SUPPORT_RENDER_REQUESTED_AT,
+    })
+    assert.equal(intent.id, SUPPORT_RENDER_INTENT_ID)
+    const emptyBuying = buying.createEmptyEcommerceBuyingState(SUPPORT_RENDER_SCOPE)
+    const buyingWithRequest = await buying.recordEcommerceOrderRequestV2(emptyBuying, request, emptyBuying.headDigest)
+    const buyingState = await buying.recordEcommerceSupportIntent(buyingWithRequest, intent, buyingWithRequest.headDigest)
+    assert.equal(buyingState.supportIntents.length, 1)
+
+    // Shop side: open, acknowledge, first response ready, resolve.
+    const openExpectation = commerceOrderSupportOpenExpectation(completedState, SUPPORT_RENDER_ORDER_ID, intent.id)
+    assert.ok(openExpectation, 'the completed fixture order must accept one help case')
+    const openState = recordCommerceOrderSupportCase(completedState, {
+      orderId: intent.orderId,
+      sourceIntentId: intent.id,
+      sourceRequestId: intent.sourceRequestId,
+      customerRequestedAt: intent.createdAt,
+      category: intent.category,
+      customerDescription: intent.description,
+      priority: 'high',
+      owner: SUPPORT_RENDER_OWNER,
+      dueAt: SUPPORT_RENDER_DUE_AT,
+      externalMessageSent: false,
+      refundStarted: false,
+    }, supportRenderProof('OPEN', SUPPORT_RENDER_OPENED_AT, `Customer requested help: ${intent.description}`, intent.evidenceReference), openExpectation)
+    assert.ok(openState, 'the fixture help case must open')
+    const openCase = openState.orders.find((order) => order.id === SUPPORT_RENDER_ORDER_ID).supportCases[0]
+    assert.equal(openCase.caseId, SUPPORT_RENDER_CASE_ID)
+    assert.equal(openCase.status, 'open')
+
+    const serviceEvidence = `SUPPORT-SERVICE:${SUPPORT_RENDER_CASE_ID}`
+    const acknowledgedExpectation = commerceOrderSupportServiceExpectation(openState, SUPPORT_RENDER_ORDER_ID, SUPPORT_RENDER_CASE_ID)
+    const acknowledged = acknowledgedExpectation && recordCommerceOrderSupportServiceEvent(openState, {
+      orderId: SUPPORT_RENDER_ORDER_ID, caseId: SUPPORT_RENDER_CASE_ID, kind: 'acknowledged', owner: SUPPORT_RENDER_OWNER, priority: 'high', dueAt: SUPPORT_RENDER_DUE_AT, note: 'Reviewing the pickup timeline.',
+    }, supportRenderProof('ACK', '2026-08-08T03:10:00.000Z', 'Acknowledged.', serviceEvidence), acknowledgedExpectation)
+    assert.ok(acknowledged, 'the fixture help case must acknowledge')
+    const responseExpectation = commerceOrderSupportServiceExpectation(acknowledged, SUPPORT_RENDER_ORDER_ID, SUPPORT_RENDER_CASE_ID)
+    const responded = responseExpectation && recordCommerceOrderSupportServiceEvent(acknowledged, {
+      orderId: SUPPORT_RENDER_ORDER_ID, caseId: SUPPORT_RENDER_CASE_ID, kind: 'first_response_ready', owner: SUPPORT_RENDER_OWNER, priority: 'high', dueAt: SUPPORT_RENDER_DUE_AT, note: 'Explanation of the pickup slot is ready.',
+    }, supportRenderProof('RESPONSE', '2026-08-08T03:15:00.000Z', 'First response ready; nothing sent.', serviceEvidence), responseExpectation)
+    assert.ok(responded, 'the fixture help case must record first response readiness')
+    const resolveExpectation = commerceOrderSupportResolveExpectation(responded, SUPPORT_RENDER_ORDER_ID, SUPPORT_RENDER_CASE_ID)
+    assert.ok(resolveExpectation, 'the fixture help case must be resolvable after first response')
+    const resolvedState = resolveCommerceOrderSupportCase(responded, {
+      orderId: SUPPORT_RENDER_ORDER_ID, caseId: SUPPORT_RENDER_CASE_ID, outcome: 'information_provided', note: 'Explained the pickup slot with the retained order evidence.',
+    }, supportRenderProof('RESOLVE', SUPPORT_RENDER_RESOLVED_AT, 'Reviewed and closed the help case.', `SUPPORT-RESOLUTION:${SUPPORT_RENDER_CASE_ID}`), resolveExpectation)
+    assert.ok(resolvedState, 'the fixture help case must resolve')
+    const resolvedCase = resolvedState.orders.find((order) => order.id === SUPPORT_RENDER_ORDER_ID).supportCases[0]
+    assert.equal(resolvedCase.status, 'resolved')
+
+    return { preview, previewDigest, storefrontProof, request, intent, buyingState, openState, resolvedState }
+  })()
+  return supportRenderFixturePromise
+}
+
+function supportRenderOrder(state) {
+  return state.orders.find((order) => order.id === SUPPORT_RENDER_ORDER_ID)
+}
+
+let supportWorkspaceRendererPromise = null
+
+// Bundles the shipped EcommerceBuyingWorkspace for a Node server render. See the block
+// comment above for the single seam (the initial-state constructor) and why it exists.
+function loadSupportWorkspaceRenderer() {
+  supportWorkspaceRendererPromise ??= (async () => {
+    const { createRequire } = await import('node:module')
+    const { pathToFileURL } = await import('node:url')
+    const { resolve: resolvePath } = await import('node:path')
+    const requireFromShowroom = createRequire(pathToFileURL('showroom/package.json').href)
+    const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuild')).href)
+    const ecommerceDir = resolvePath('showroom/src/products/ecommerce')
+    const bundle = await build({
+      stdin: {
+        contents: `
+          import { createElement } from 'react'
+          import { renderToStaticMarkup } from 'react-dom/server'
+          import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace.tsx'
+          export function renderWorkspace(props) {
+            return renderToStaticMarkup(createElement(EcommerceBuyingWorkspace, props))
+          }`,
+        resolveDir: ecommerceDir,
+        sourcefile: 'support-outcome-render-entry.ts',
+        loader: 'ts',
+      },
+      bundle: true,
+      platform: 'node',
+      format: 'esm',
+      jsx: 'automatic',
+      write: false,
+      logLevel: 'error',
+      // react-dom/server is CommonJS and requires Node built-ins at call time; an ESM data:
+      // module has no require of its own, so hand it one rooted at the showroom package.
+      banner: { js: `import { createRequire as __supermegaCreateRequire } from 'node:module'; const require = __supermegaCreateRequire(${JSON.stringify(pathToFileURL(resolvePath('showroom/package.json')).href)});` },
+      plugins: [{
+        name: 'support-outcome-initial-state-seam',
+        setup(pluginBuild) {
+          pluginBuild.onResolve({ filter: /^\.\/ecommerce-buying-lifecycle$/ }, (args) => (
+            args.importer.endsWith('EcommerceBuyingWorkspace.tsx')
+              ? { path: 'seeded-buying-lifecycle', namespace: 'support-outcome-render' }
+              : null
+          ))
+          pluginBuild.onLoad({ filter: /.*/, namespace: 'support-outcome-render' }, () => ({
+            resolveDir: ecommerceDir,
+            loader: 'ts',
+            contents: `
+              export * from './ecommerce-buying-lifecycle.ts'
+              import { createEmptyEcommerceBuyingState as shippedEmptyState } from './ecommerce-buying-lifecycle.ts'
+              export function createEmptyEcommerceBuyingState(scope) {
+                const seeded = globalThis.__supermegaSupportOutcomeRenderState
+                return seeded && seeded.scope === scope ? structuredClone(seeded) : shippedEmptyState(scope)
+              }`,
+          }))
+        },
+      }],
+    })
+    const { renderWorkspace } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
+    return renderWorkspace
+  })()
+  return supportWorkspaceRendererPromise
+}
+
+async function renderSupportWorkspace(fixture, commerceState) {
+  const renderWorkspace = await loadSupportWorkspaceRenderer()
+  const noop = () => {}
+  globalThis.__supermegaSupportOutcomeRenderState = fixture.buyingState
+  try {
+    return renderWorkspace({
+      cart: [],
+      commerceState,
+      currentCatalog: commerceState.items,
+      disabled: false,
+      onCartChange: noop,
+      onContinueInShop: noop,
+      onDraft: noop,
+      onOpenCancellation: noop,
+      onOpenCorrection: noop,
+      onOpenAmendment: noop,
+      onOpenReschedule: noop,
+      onOpenReturns: noop,
+      onOpenSupport: noop,
+      onRequestStateChange: noop,
+      preview: fixture.preview,
+      scope: SUPPORT_RENDER_SCOPE,
+      sourcePreviewDigest: fixture.previewDigest,
+      sourceStorefront: { revision: 1, actionId: fixture.storefrontProof.actionId },
+    })
+  } finally {
+    delete globalThis.__supermegaSupportOutcomeRenderState
+  }
+}
+
+function supportStatusArticles(html) {
+  return html.match(/<article class="ecommerce-return-status">.*?<\/article>/gs) ?? []
+}
+
+test('ENG-144: the support outcome projection carries the resolved branch next to the open one, and fails closed without reviewer, time, or evidence', async () => {
+  const fixture = await buildSupportOutcomeRenderFixture()
+  const { ECOMMERCE_SUPPORT_OUTCOME_SCHEMA, projectEcommerceSupportOutcome } = await import(
+    '../showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts'
+  )
+  const { intent } = fixture
+
+  const openOutcome = projectEcommerceSupportOutcome(intent, supportRenderOrder(fixture.openState))
+  assert.ok(openOutcome, 'the open case must project')
+  assert.equal(openOutcome.schema, ECOMMERCE_SUPPORT_OUTCOME_SCHEMA)
+  assert.equal(openOutcome.state, 'open')
+  assert.equal(openOutcome.caseId, SUPPORT_RENDER_CASE_ID)
+  assert.equal(openOutcome.owner, SUPPORT_RENDER_OWNER)
+  assert.equal(openOutcome.priority, 'high')
+  assert.equal(openOutcome.openedAt, SUPPORT_RENDER_OPENED_AT)
+  assert.equal(openOutcome.resolutionOutcome, null)
+  assert.equal(openOutcome.resolvedAt, null)
+  assert.equal(openOutcome.resolvedBy, null)
+  assert.equal(openOutcome.resolutionEvidenceReference, null)
+
+  const resolvedOrder = supportRenderOrder(fixture.resolvedState)
+  const resolvedOutcome = projectEcommerceSupportOutcome(intent, resolvedOrder)
+  assert.ok(resolvedOutcome, 'the resolved case must project')
+  assert.equal(resolvedOutcome.schema, ECOMMERCE_SUPPORT_OUTCOME_SCHEMA)
+  assert.equal(resolvedOutcome.state, 'resolved')
+  assert.equal(resolvedOutcome.caseId, SUPPORT_RENDER_CASE_ID)
+  assert.equal(resolvedOutcome.orderId, SUPPORT_RENDER_ORDER_ID)
+  assert.equal(resolvedOutcome.category, 'delivery_issue')
+  assert.equal(resolvedOutcome.openedAt, SUPPORT_RENDER_OPENED_AT)
+  assert.equal(resolvedOutcome.openedBy, SUPPORT_RENDER_OWNER)
+  assert.equal(resolvedOutcome.resolutionOutcome, 'information_provided')
+  assert.equal(resolvedOutcome.resolvedAt, SUPPORT_RENDER_RESOLVED_AT)
+  assert.equal(resolvedOutcome.resolvedBy, SUPPORT_RENDER_OWNER)
+  assert.equal(resolvedOutcome.resolutionEvidenceReference, `SUPPORT-RESOLUTION:${SUPPORT_RENDER_CASE_ID}`)
+  assert.equal(resolvedOutcome.externalMessageSent, false)
+  assert.equal(resolvedOutcome.refundStarted, false)
+  assert.equal(resolvedOutcome.providerCalled, false)
+
+  // Fail-closed: a resolved case without the reviewer, a resolution dated before the
+  // opening, or a resolved status with no resolution record projects nothing at all
+  // rather than an unattributed "resolved" label.
+  const withoutReviewer = structuredClone(resolvedOrder)
+  withoutReviewer.supportCases[0].resolution.proof.actor = ''
+  assert.equal(projectEcommerceSupportOutcome(intent, withoutReviewer), null, 'a resolution without its reviewer must not project')
+  const backdated = structuredClone(resolvedOrder)
+  backdated.supportCases[0].resolution.proof.capturedAt = '2026-08-08T03:04:59.000Z'
+  assert.equal(projectEcommerceSupportOutcome(intent, backdated), null, 'a resolution dated before the opening must not project')
+  const withoutResolution = structuredClone(resolvedOrder)
+  delete withoutResolution.supportCases[0].resolution
+  assert.equal(projectEcommerceSupportOutcome(intent, withoutResolution), null, 'a resolved status without a resolution record must not project')
+  const withoutEvidence = structuredClone(resolvedOrder)
+  withoutEvidence.supportCases[0].resolution.proof.evidenceReference = ''
+  assert.equal(projectEcommerceSupportOutcome(intent, withoutEvidence), null, 'a resolution without evidence must not project')
+})
+
+test('ENG-144: EcommerceBuyingWorkspace renders the resolved help outcome, and the open one, from the same fixture', async () => {
+  const fixture = await buildSupportOutcomeRenderFixture()
+
+  const resolvedHtml = await renderSupportWorkspace(fixture, fixture.resolvedState)
+  const resolvedArticle = supportStatusArticles(resolvedHtml).find((article) => article.includes('Help resolved'))
+  assert.ok(resolvedArticle, `the resolved help outcome must render as a status article; saw ${supportStatusArticles(resolvedHtml).length} status articles`)
+  assert.ok(resolvedArticle.includes('<strong>Help resolved</strong>'), resolvedArticle)
+  assert.ok(resolvedArticle.includes(`<small>${SUPPORT_RENDER_ORDER_ID} / delivery issue / owner ${SUPPORT_RENDER_OWNER}</small>`), resolvedArticle)
+  assert.ok(resolvedArticle.includes('<b>information provided</b>'), resolvedArticle)
+  assert.ok(!resolvedHtml.includes('Shop is reviewing'), 'a resolved case must not also render as under review')
+  assert.ok(!resolvedHtml.includes('Help waiting'), 'a projected outcome must not also render as a pending intent')
+
+  const openHtml = await renderSupportWorkspace(fixture, fixture.openState)
+  const openArticle = supportStatusArticles(openHtml).find((article) => article.includes('Shop is reviewing'))
+  assert.ok(openArticle, 'the open help outcome must render as a status article')
+  assert.ok(openArticle.includes('<strong>Shop is reviewing</strong>'), openArticle)
+  assert.ok(openArticle.includes(`<small>${SUPPORT_RENDER_ORDER_ID} / delivery issue / owner ${SUPPORT_RENDER_OWNER}</small>`), openArticle)
+  assert.ok(openArticle.includes('<b>high priority</b>'), openArticle)
+  assert.ok(!openHtml.includes('Help resolved'), 'an open case must not render as resolved')
+  assert.ok(!openHtml.includes('Help waiting'), 'a projected outcome must not also render as a pending intent')
+})

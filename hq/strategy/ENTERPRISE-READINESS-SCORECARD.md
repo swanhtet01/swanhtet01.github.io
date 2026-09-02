@@ -138,9 +138,31 @@ via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
   2. CoreApp.tsx (~500KB per OPS-165 lint note): zero component tests; UI is
      verified by build gates plus MANUAL 390px journeys -- no automated
      browser E2E exists in any workflow.
-  3. Ecommerce resolved-support-outcome UI state: ENG-144 records "the
+  3. ~~Ecommerce resolved-support-outcome UI state: ENG-144 records "the
      fixture has no resolved case, so that state remains verifier-proven" --
-     a named, never-rendered state.
+     a named, never-rendered state.~~
+     **CLOSED BY EVIDENCE, 2026-09-02.** `tools/ecommerce_storefront_demo.test.mjs`
+     (in the gate as `ecommerce:demo:self-test`) now carries two `ENG-144:`
+     tests. The fixture is built only through the shipped transitions --
+     storefront configuration, checkout quote, order request, Shop reserve /
+     advance / reconcile / complete, help case open, acknowledged, first
+     response ready, resolve as `information_provided` -- never a hand-shaped
+     case. The first test asserts both projection branches side by side (open:
+     owner, priority, null resolution fields; resolved: outcome, reviewer,
+     resolution time, resolution evidence) and that the resolved branch fails
+     closed with the reviewer blank, the resolution backdated before the
+     opening, the resolution record missing, or the evidence blank. The second
+     test renders the shipped `EcommerceBuyingWorkspace` with
+     `react-dom/server` and asserts the markup of both branches:
+     `<strong>Help resolved</strong>` ... `<b>information provided</b>` next to
+     `<strong>Shop is reviewing</strong>` ... `<b>high priority</b>`. The one
+     seam is the component's initial-state constructor, wrapped in the render
+     bundle to return the recorder-built fixture state, because a server render
+     runs no effects; every other module rendered is the shipped source. It is a
+     test fixture, not a guided sample: the guided Ecommerce sample stops at
+     `pending_shop_review` by design and can never hold a completed Shop order.
+     The ENG-144 wording in `hq/WORKBOARD.md` is verifier-pinned and stands as
+     the historical record; this entry is the correction.
   4. Hosted recovery: the OPS-754 restore/rollback proofs have never
      executed against a real branch; recovery is local-rehearsal-only.
   5. Load/perf: nothing exercises pool pressure, the 25/day scheduler
