@@ -180,15 +180,31 @@ status column in §1 for each. The operative forward sequence is now:
        while still reporting ok. Verified both ways: the closure still measures
        458,562 br q3 across 25 assets, and removing the `data-href` branch fails
        the build rather than passing.
-     - **Still open: `/theme-restore.js`, ~400 ms of pure latency.** It is a
-       253-byte render-blocking script, so nearly all of that cost is the round
-       trip. It cannot simply be inlined (`script-src 'self'` refuses inline
-       script, `verify_app_build.mjs` enforces that, and that exact failure is
-       why the service worker never registered for months) and it cannot be
-       deferred without reintroducing the light flash it exists to prevent.
-       Doing it means a `sha256` CSP source kept in lockstep in two places — a
-       security-surface change worth ~400 ms, which is why it deserves its own
-       pass rather than a patch. **This is what remains of item 1.**
+     - ~~**Still open: `/theme-restore.js`, ~400 ms of pure latency.**~~
+       **CLOSED AT ZERO 2026-09-02 (#573). Do not spend the security pass.**
+       The ~400 ms was an artefact of the measurement harness serving HTTP/1.1;
+       the file is 253 bytes, so its cost is almost entirely per-request, and
+       per-request cost is exactly what h1's six-connection limit inflates.
+       Re-measured over HTTP/2 — what Vercel serves — **deleting the tag
+       entirely is worth 4 ms**, inside the ±88 ms control band. The measurement
+       deleted the tag rather than inlining it, which bounds *every* variant of
+       the fix, not just the `sha256` one. So the `sha256` CSP source in two
+       places, and the light-flash risk that came with deferring it, buy
+       nothing. The refusal is recorded in `showroom/index.html`'s own comment,
+       which previously advertised "no hash and no nonce" and thereby invited
+       the wrong fix.
+     - **What actually remains of item 1** is the `modulepreload` deletion
+       (`ENTRY-SET-REDUCTION-PLAN.md` C2), and it is a weaker candidate than it
+       looked: **−116 ms over HTTP/2**, corrected 2026-09-02 by #574 from a
+       recorded −436 ms that was h1-inflated the same way. Its `load` cost is
+       transport-neutral at +390 ms, so the trade is ~1 : 3.4. It stays fenced
+       behind the tap-through probe that does not exist in `tools/`.
+     - **The transport lesson generalises, and is the durable output here.**
+       Two of this item's three levers were priced on an HTTP/1.1 harness and
+       both shrank on re-measurement — one to nothing. Any FCP figure in this
+       estate taken before 2026-09-02 should be assumed h1-inflated until
+       re-run with `--transport h2`. That flag now exists
+       (`tools/perf/measure-android-baseline.mjs`).
    - **Unrelated but urgent, found on the way (#570):** the pre-FCP entry graph
      is **299,995 bytes against a 300,000 ceiling**. Five bytes. The next change
      touching any module in that graph fails the build. #570 makes the margin
