@@ -94,6 +94,7 @@
     "website:evidence:verify": "node tools/test_website_evidence_summary.mjs",
     "website:trade-brief:verify": "node tools/test_website_trade_brief.mjs",
     "website:trade-detect:verify": "node tools/test_website_trade_detection.mjs",
+    "ecommerce:request:receipt-focus:verify": "node --test tools/test_ecommerce_request_receipt_focus.mjs",
     "ecommerce:returns:verify": "node tools/test_ecommerce_return_intent.mjs",
     "ecommerce:return:intent:brief:verify": "node tools/test_ecommerce_return_intent_brief.mjs",
     "ecommerce:delivery:address:verify": "node tools/test_ecommerce_delivery_address_brief.mjs",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
@@ -216,7 +216,13 @@ export function EcommerceBuyingWorkspace({
   const [amendmentBusy, setAmendmentBusy] = useState(false)
   const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
-  const requestReceiptRef = useRef<HTMLElement>(null)
+  const focusRequestReceipt = useCallback((receipt: HTMLElement | null) => {
+    if (!receipt) return
+    requestAnimationFrame(() => {
+      receipt.querySelector('p')?.scrollIntoView({ block: 'center' })
+      receipt.focus({ preventScroll: true })
+    })
+  }, [])
   const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -1131,10 +1137,6 @@ export function EcommerceBuyingWorkspace({
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
         setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')
-        requestAnimationFrame(() => {
-          requestReceiptRef.current?.scrollIntoView({ block: 'center' })
-          requestReceiptRef.current?.focus({ preventScroll: true })
-        })
         return
       }
       const quote = await buildEcommerceCheckoutQuote({
@@ -1179,10 +1181,6 @@ export function EcommerceBuyingWorkspace({
       setNotice(onRecordManagedRequest
         ? 'This order request is in the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
         : 'This sample order request is saved on this device for Shop review. No order, stock, message, or charge changed.')
-      requestAnimationFrame(() => {
-        requestReceiptRef.current?.scrollIntoView({ block: 'center' })
-        requestReceiptRef.current?.focus({ preventScroll: true })
-      })
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
     } finally {
@@ -1339,7 +1337,7 @@ export function EcommerceBuyingWorkspace({
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : quoteCurrent ? (
-            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={requestReceiptRef} tabIndex={-1}>
+            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
               <span className="status-pill ready">Request sent</span>
               <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
