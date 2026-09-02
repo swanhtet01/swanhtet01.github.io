@@ -1088,7 +1088,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .plant-today-metrics strong { min-width: 0; overflow: hidden; color: var(--core-ink); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
 .plant-today-source { grid-column: 1/-1; display: flex; align-items: center; gap: 8px 16px; border-top: 1px solid var(--core-line); padding-top: 10px; }
 .plant-today-source span { color: var(--core-green); font-size: 0.6875rem; font-weight: var(--font-weight-bold); }
-.plant-today-source small { margin-left: auto; max-width: 760px; text-align: right; }
+.plant-today-source small { margin-left: auto; max-width: 47.5rem; text-align: right; }
 .plant-job-import { display: grid; grid-template-columns: minmax(0,.9fr) minmax(280px,1fr); gap: 10px; align-items: start; margin: 8px 0 12px; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: var(--core-panel-raised); }
 .plant-job-import > div:first-child { min-width: 0; display: grid; gap: 4px; }
 .plant-job-import strong { color: var(--core-ink); font-size: 0.75rem; }
@@ -2936,3 +2936,26 @@ input, select, textarea { border-color: var(--core-field-line); }
 .receipt-dialog-actions .core-button .bi-label { white-space: normal; text-align: left; }
 .shop-review-sale { gap: var(--space-3); }
 .shop-cart-actions { flex-wrap: wrap; }
+
+/* P3.10 — the Plant "Start here" status notice wraps under its label on phones
+   instead of disappearing. The phone-breakpoint `display: none` on
+   `.plant-today-source small` above is verifier-pinned (tools/verify_app_build.mjs)
+   and stays byte-identical; this later rule of
+   equal specificity in the same media context is the load-bearing override.
+   That <small> is the one sentence confirming what just happened ("Shift packet
+   prepared …", "Close shift … completed") and, when writes are blocked and the
+   container is role="alert", the reason nothing saves — display:none also
+   removed it from the accessibility tree, so the alert announced an empty
+   region. Same treatment as `.plant-batch-disclosure > summary small` two rules
+   under the pin: full width under the label, no auto margin, left-aligned.
+   Proven by tools/journey_plant_shift_release.mjs, which asserts the notice is
+   visible at 390px. Type treatment (mono caption vs body text for the blocked
+   alert) is left to the design queue, DESIGN-PROGRAM.md P3.10 item 2.
+   The query is written in px to match the pinned block exactly: an em
+   breakpoint would drift from it under a non-default browser font size and
+   reopen the hide in the gap. The px it costs the ratchet is paid back by the
+   same element's wide-screen max-width above (760px → 47.5rem, P3.9). */
+@media (max-width: 560px) {
+  .plant-today-source { flex-wrap: wrap; }
+  .plant-today-source small { display: block; width: 100%; max-width: none; margin-left: 0; text-align: left; }
+}

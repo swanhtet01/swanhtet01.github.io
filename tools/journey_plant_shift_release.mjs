@@ -154,6 +154,34 @@ runJourney({
     return { state, event }
   }
 
+  // The Start here status line: the <span> names the record source and the <small>
+  // carries the sentence confirming what just happened. Until P3.10 the <small>
+  // was display:none below the phone breakpoint (core-app.css .plant-today-source
+  // small), so a 390px operator never saw the confirmation and role="alert"
+  // announced an empty region. This reads it the way a phone operator does: the
+  // text, AND whether it is actually rendered — computed display, visibility and a
+  // non-zero box. A DOM-only read would pass on a stylesheet that hides it again.
+  function statusNoticeExpr(expectedText) {
+    return `(() => {
+      const el = document.querySelector('.plant-today-source small');
+      if (!el || (el.textContent || '') !== ${JSON.stringify(expectedText)}) return null;
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const host = el.parentElement.getBoundingClientRect();
+      return { text: el.textContent, role: el.parentElement.getAttribute('role'), display: cs.display, visibility: cs.visibility, textAlign: cs.textAlign,
+        width: r.width, height: r.height, top: r.top - host.top, viewport: window.innerWidth };
+    })()`
+  }
+
+  async function expectVisibleStatusNotice(expectedText, label) {
+    const notice = await j.waitUntil(statusNoticeExpr(expectedText), label)
+    j.expect(notice.display !== 'none' && notice.visibility !== 'hidden' && notice.width > 0 && notice.height > 0,
+      `${label} is in the DOM but not visible at ${notice.viewport}px: ${JSON.stringify({ display: notice.display, visibility: notice.visibility, width: notice.width, height: notice.height })}`)
+    j.expect(notice.width <= notice.viewport, `${label} overflows the ${notice.viewport}px viewport at ${notice.width}px wide`)
+    j.expect(notice.role === 'status', `the Start here status line is role=${JSON.stringify(notice.role)}, expected "status" while Plant writes are allowed`)
+    return notice
+  }
+
   function currentStartHere() {
     return j.evaluate(`(() => {
       const panel = document.querySelector('.plant-today');
@@ -330,13 +358,10 @@ runJourney({
     const state = await readProduction()
     expected.revisionBeforeClose = state.revision
     j.expect(state.revision === expected.revisionAfterSample + 3, `expected revision ${expected.revisionAfterSample + 3} before close, found ${state.revision}`)
-    // The Start here status line carries the packet notice. It is in the DOM but
-    // display:none below the phone breakpoint (core-app.css .plant-today-source
-    // small), so at 390px the visible proof is the checklist and the Ready badge
-    // above; the notice is read from the status element, not from innerText.
-    const notice = await j.evaluate(`(document.querySelector('.plant-today-source small') || {}).textContent`)
-    j.expect(notice === `Shift packet prepared from Plant revision ${state.revision}. It is ready for accountable owner close review.`, `the Start here status line reads ${JSON.stringify(notice)}`)
-    return { checklist: checklist.rows, sourceRevision: state.revision }
+    // The Start here status line carries the packet notice, and at 390px it must be
+    // visible under the source label — not merely present in the DOM (P3.10).
+    const notice = await expectVisibleStatusNotice(`Shift packet prepared from Plant revision ${state.revision}. It is ready for accountable owner close review.`, 'the packet notice on the Start here status line')
+    return { checklist: checklist.rows, sourceRevision: state.revision, notice: { display: notice.display, width: notice.width, height: notice.height, textAlign: notice.textAlign } }
   })
 
   await j.step('close-shift', async () => {
@@ -372,10 +397,11 @@ runJourney({
     j.expect(count('output.recorded') === 1 && count('shift.close.confirmed') === 1, `local metrics: output.recorded ×${count('output.recorded')}, shift.close.confirmed ×${count('shift.close.confirmed')}`)
     const operator = await j.readStored(LAST_OPERATOR_KEY)
     j.expect(operator === SUPERVISOR, `last operator is ${JSON.stringify(operator)}, expected ${SUPERVISOR}`)
-    // Same status line as in prepare-shift-close: DOM-present, hidden at 390px.
-    const noticed = await j.waitUntil(`(document.querySelector('.plant-today-source small') || {}).textContent === ${JSON.stringify(`Close shift ${SHIFT_REF} completed. It was persisted with attributed Plant evidence.`)}`, 'the completion notice on the Start here status line')
+    // Same status line as in prepare-shift-close: the close confirmation must be
+    // rendered where a phone operator can read it, not only present in the DOM.
+    const noticed = await expectVisibleStatusNotice(`Close shift ${SHIFT_REF} completed. It was persisted with attributed Plant evidence.`, 'the completion notice on the Start here status line')
     expected.closeActionId = event.actionId
-    return { noticed, actionId: event.actionId, sourceRevision: event.sourceRevision, revision: state.revision, realEvents: real.map((candidate) => candidate.kind) }
+    return { noticed: { display: noticed.display, textAlign: noticed.textAlign, width: noticed.width, height: noticed.height, top: noticed.top, viewport: noticed.viewport }, actionId: event.actionId, sourceRevision: event.sourceRevision, revision: state.revision, realEvents: real.map((candidate) => candidate.kind) }
   })
 
   await j.step('reload-shows-closed-shift', async () => {
