@@ -28,11 +28,12 @@ A hidden-notice *candidate* is text that is not reachable by opening something: 
 
 ## What this found that needs a decision
 
-Four items, in the order I would spend attention on them. Everything else the
-sweep reports is either reachable content or an intentional caption. Each row
-names what was measured, not what it looks like.
+Four items, in the order I would spend attention on them. The first turned out,
+once traced to source, to need no action — it is kept because the trace is the
+useful part. Everything else the sweep reports is either reachable content or an
+intentional caption. Each row names what was measured, not what it looks like.
 
-### 1. Website: the editor loses its saved/unsaved indicator on a phone
+### 1. Website: the hidden `ready`/`draft` pill is redundant page-stage metadata — no action
 
 `span.website-status.is-ready` / `.is-draft` — the pills reading `ready` and
 `draft` — are hidden along with the whole `header.website-panel-head` by
@@ -40,14 +41,34 @@ names what was measured, not what it looks like.
 390px. Screens: `website-preview`, `website-editor`, `website-saved`, and
 `website-editor-unsaved` for the `draft` case.
 
-This is a **second member of the P3.10 class**: a width rule discarding text that
-tells the operator the state of their own work, with nothing else on the screen
-carrying that exact string. The header also holds the panel's `<h2>`, so the hide
-is plainly deliberate space-saving — the status pill is the collateral damage.
+I first wrote this up as a second member of the P3.10 class — "the editor loses
+its saved/unsaved indicator on a phone". Traced to source, that is wrong, and
+Codex caught it on review. The pill renders `page.stage`
+(`ContentWorkspace.tsx:57`), which is the page's publish-set membership, not
+whether the operator's work is saved. The saved/unsaved indicator is a different
+element, `span.website-save-state` (`WebsiteProduct.tsx:1156-1163`, reading
+`Unsaved preview`, `Saved on this device`, `Saved to company`, `Saved version
+changed`), and the phone rule at `website-product.css:3172-3176` explicitly keeps
+it in the action bar's second row. The stage itself is still on screen too: the
+page selector's option text carries it as `Home — / (ready)`
+(`WebsiteProduct.tsx:1150`). What the hide actually removes is the panel's
+eyebrow, the page name (also in the selector) and the one-line stage explanation
+at `ContentWorkspace.tsx:55`.
 
-*Recommendation:* the same treatment P3.10 got — keep the pill, drop the rest of
-the header — rather than restoring the whole head. Needs its own planning pass;
-this is a note, not a patch.
+So this is **not** the P3.10 shape. P3.10 was operator state with no other
+carrier; this is a duplicate of information the phone layout keeps twice. The
+screen loses nothing an operator needs, and the "keep the pill, drop the rest of
+the header" recommendation I originally wrote would have spent a planning pass
+restoring a redundancy.
+
+*What the sweep got wrong, so the next reader knows:* the "visible elsewhere"
+column is an exact match on whole normalized strings. `ready` does not equal
+`Home — / (ready)`, so the pill was reported as having no other carrier when its
+text was in fact a substring of visible text on the same screen. That is the
+correct conservative default for a measurement tool — a substring match would
+have hidden the real P3.10 behind "shift" appearing in some unrelated caption —
+but it means every Website candidate row needs exactly this trace before it is
+believed. Both Website candidates are now traced; neither needs work.
 
 ### 2. Ecommerce: five sentences a customer must read render at 9px
 
