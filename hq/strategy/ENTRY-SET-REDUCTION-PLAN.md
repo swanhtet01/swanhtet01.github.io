@@ -343,8 +343,19 @@ reproduces the recorded figure on today's build (−416 / −432, within 16 ms o
 what is written above, which is what isolates transport as the only variable),
 while h2 gives **−116 ms** on both routes. So **73% of p6 was HTTP/1.1's
 six-connection limit**; the remaining 27% is bandwidth sharing, which
-multiplexing does not remove. −116 ms is still outside the ±88 ms band and ~6×
-the widest run-to-run spread, so this is a real win — just a much smaller one.
+multiplexing does not remove.
+
+**How real is −116 ms? Real, but thin — and the first phrasing of this
+correction oversold it.** I wrote "~6× the widest run-to-run spread", which #574
+then withdrew as over-loose, and it was right to. Spread is not the threshold
+this document pre-registered; the **±88 ms control band** is, and against that
+−116 ms is **1.3×** — not the comfortable margin "6× the spread" implies. It
+does clear it on evidence: the h2 distributions do not overlap, with the
+slowest variant run 88 ms faster than the fastest control run. But 1.3× of band
+is a different claim from theme-restore's twentieth-of-band zero, and with that
+little in hand a CDN prioritising streams differently from `node:http2` on
+loopback could plausibly take it to zero. That caveat belongs next to the
+number, not in a footnote.
 
 **The cost side did not move.** The `load` regression is transport-neutral:
 +380 to +421 ms in every cell, h1 and h2 alike. So the trade this item asks you
