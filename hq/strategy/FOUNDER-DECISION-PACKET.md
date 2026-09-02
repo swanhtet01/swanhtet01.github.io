@@ -149,7 +149,7 @@ non-draft since discovering this, and will keep doing so until you say
 otherwise — flagging it because it is a deliberate deviation from a standing
 instruction, not an oversight.
 
-### After P-1: the merge order for the forty open pull requests
+### After P-1: the merge order for the forty-one open pull requests
 
 Verified 2026-09-02 against every open PR's base and file list, with the two
 independent-PR file overlaps test-merged. **Every PR here is CI-green and
@@ -207,6 +207,11 @@ GitHub's update-branch button is enough; none conflicts.
 - #586 → after #584 (design P3.10 implemented: the Plant phone-width status
   notice wraps under its label instead of hiding; the Plant journey now
   asserts it is visible; pinned CSS byte-identical, px ratchet net zero)
+- #587 → after #586 (the 390px measurement sweep, and its answer: across all
+  four products and 44 screens there is zero horizontal overflow and no
+  second P3.10 — every hidden notice is content the operator can open. Also
+  supplies the data P3.10 item 2 was waiting for: six Plant sentences at 8px,
+  three Ecommerce ones at 9px. Tool only, not wired into CI)
 
 **Tier 3 — waits on a decision in this packet. Merge only after the named one.**
 | PR | Decision | What it needs from you |
@@ -248,8 +253,8 @@ pointing at a gap already filled.
   eight of the Tier 1–2 branches, it test-merges onto the two most-overlapping
   ones with **zero conflicts**, so it imposes no ordering on them.
 
-**Total for Tiers 1–2 once P-1 is fixed: thirty-one approve-and-merge clicks
-(twenty-one plus ten stacked) in the order above.** Tier 3 is six decisions you
+**Total for Tiers 1–2 once P-1 is fixed: thirty-two approve-and-merge clicks
+(twenty-one plus eleven stacked) in the order above.** Tier 3 is six decisions you
 were going to make anyway; the table just says which PR each one releases.
 
 ---
