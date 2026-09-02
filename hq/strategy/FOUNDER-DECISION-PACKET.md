@@ -149,20 +149,22 @@ non-draft since discovering this, and will keep doing so until you say
 otherwise — flagging it because it is a deliberate deviation from a standing
 instruction, not an oversight.
 
-### After P-1: the merge order for the thirty-two open pull requests
+### After P-1: the merge order for the thirty-six open pull requests
 
 Verified 2026-09-02 against every open PR's base and file list, with the two
 independent-PR file overlaps test-merged. **Every PR here is CI-green and
-Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the eight
-after that — #572, #573, #574, the later heads of #569/#571, and the second
-wave #575, #576, #577, #578 — were reviewed by me against source instead, and
-each carries that review as a comment saying so). The order below is what lets you
+Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the twelve
+after that — #572, #573, #574, the later heads of #569/#571, the second wave
+#575–#578, and the third wave #579–#582 — were reviewed by me against source
+instead, and each carries that review as a comment saying so). The order below is what lets you
 work through them without a single manual conflict.
 
 **Tier 1 — independent, based on `main`, no decision needed. Any order.**
 #554, #555 (this packet), #556, #557, #558, #560, #562, #563, #564, #565,
-#567, #568, #570, #571, #572, #575, #576, #577. Eighteen PRs. #567 and #570
-both edit `tools/verify_app_build.mjs`; test-merged, auto-merge is clean.
+#567, #568, #570, #571, #572, #575, #576, #577, #580, #582. Twenty PRs. #567
+and #570 both edit `tools/verify_app_build.mjs`; test-merged, auto-merge is
+clean. #580 (scheduler ceiling and pool pressure measured, kernel test-only)
+and #582 (design queue entry P3.10, doc-only) are third-wave and independent.
 The three second-wave entries are test-only: #575 (fail-closed contract for
 all 64 credentialed connectors, 565/0 kernel), #576 (the one automated 390px
 browser journey, which has now run green on a GitHub runner), #577 (the
@@ -178,6 +180,9 @@ GitHub's update-branch button is enough; none conflicts.
 - #574 → after #573 (uses that flag)
 - #578 → after #566 (third edit to the readiness scorecard, a different §5
   item from #563/#566; a whitespace hunk at worst)
+- #579 → after #578 (fourth edit to the scorecard, adjacent §5 lines)
+- #581 → after #576 (refactors #576's journey into a shared harness and adds
+  the Plant journey; both have run green on a runner)
 
 **Tier 3 — waits on a decision in this packet. Merge only after the named one.**
 | PR | Decision | What it needs from you |
@@ -219,8 +224,8 @@ pointing at a gap already filled.
   eight of the Tier 1–2 branches, it test-merges onto the two most-overlapping
   ones with **zero conflicts**, so it imposes no ordering on them.
 
-**Total for Tiers 1–2 once P-1 is fixed: twenty-three approve-and-merge
-clicks (eighteen plus five stacked) in the order above.** Tier 3 is six decisions you
+**Total for Tiers 1–2 once P-1 is fixed: twenty-seven approve-and-merge
+clicks (twenty plus seven stacked) in the order above.** Tier 3 is six decisions you
 were going to make anyway; the table just says which PR each one releases.
 
 ---
