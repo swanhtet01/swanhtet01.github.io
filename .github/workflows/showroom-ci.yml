@@ -15,9 +15,12 @@ on:
       # only docs/ and both showed all-checks-passed with no validate run at all.
       - 'docs/**'
       - 'tools/test_demo_playbooks.mjs'
-      # The browser journey below is not in the app:verify chain, so a change to it
-      # alone must still trigger this workflow -- same reasoning as docs/ above.
+      # The browser journeys below are not in the app:verify chain, so a change to
+      # one of them (or to their shared harness) alone must still trigger this
+      # workflow -- same reasoning as docs/ above.
+      - 'tools/journey_lib.mjs'
       - 'tools/journey_shop_cash_sale.mjs'
+      - 'tools/journey_plant_shift_release.mjs'
       - 'CURRENT.md'
       - 'api/**'
       - 'api_app.py'
@@ -144,11 +147,17 @@ jobs:
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: npm run app:build:checked
 
-      # The one automated browser end-to-end journey (ENTERPRISE-READINESS-SCORECARD §5):
-      # the Shop one-tap cash sale at a 390px viewport against the showroom/dist the
-      # gate above just verified, asserting on the persisted workspace record rather
-      # than on pixels. Deliberately AFTER the gate so a gate failure is still the
-      # first thing reported. Zero dependencies -- Node built-ins drive the runner's
-      # preinstalled Chrome over the DevTools protocol (see the file header).
+      # The automated browser end-to-end journeys (ENTERPRISE-READINESS-SCORECARD §5):
+      # one product flow each, at a 390px viewport against the showroom/dist the gate
+      # above just verified, asserting on the persisted workspace record rather than
+      # on pixels. Deliberately AFTER the gate so a gate failure is still the first
+      # thing reported. Zero dependencies -- Node built-ins drive the runner's
+      # preinstalled Chrome over the DevTools protocol (see tools/journey_lib.mjs).
       - name: Shop cash-sale browser journey (390px)
         run: node tools/journey_shop_cash_sale.mjs
+
+      # Second product, same harness: the Plant shift close (output, material trace,
+      # blocker cleared, accountable owner close) -- proves a real operator shift
+      # persists a shift_closed proof the guided sample never writes.
+      - name: Plant shift-release browser journey (390px)
+        run: node tools/journey_plant_shift_release.mjs
