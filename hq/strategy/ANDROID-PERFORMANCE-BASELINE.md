@@ -1001,11 +1001,15 @@ Per-run FCP, so the medians are not hiding a spread:
 | h2 control | 1136, 1152, 1156, 1156, 1176, 1144 | 1140, 1156, 1160, 1160, 1156, 1196 |
 | h2 deleted | 1008, 1040, 1028, 1040, 1024, 1048 | 1044, 1028, 1048, 1028, 1044, 1052 |
 
-No arm overlaps its control on either transport. The h2 gap is small but it is
-not noise: the two independent h2 control blocks landed 4 ms apart (medians
-1,152/1,156 and 1,156/1,160), and the widest 6-run spread in any cell is 40 ms,
-so −116 ms is roughly **6× the observed run-to-run spread** and 1.3× the ±88 ms
-band. Compare theme-restore, which came in at a twentieth of the band.
+The h2 gap is small but it is not noise, and the sharpest way to say so is that
+**the two h2 distributions do not overlap**: on both routes the slowest variant
+run (1,048 and 1,052 ms) is 88 ms faster than the fastest control run (1,136 and
+1,140 ms). The same holds on h1 by a wider margin. The widest full range inside
+any single 6-run cell is 56 ms (h2 control, `/?choose=1`), and the two
+independent h2 control blocks landed 4 ms apart (medians 1,152/1,156 and
+1,156/1,160). So −116 ms is 1.3× the ±88 ms band and clear of the spread —
+though only 1.3×, which is a far thinner margin than theme-restore's, which came
+in at a twentieth of the band in the other direction.
 
 ### Why this is a transport result and not a build result
 
