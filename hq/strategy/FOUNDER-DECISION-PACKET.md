@@ -149,6 +149,58 @@ non-draft since discovering this, and will keep doing so until you say
 otherwise — flagging it because it is a deliberate deviation from a standing
 instruction, not an oversight.
 
+### After P-1: the merge order for the twenty-eight open pull requests
+
+Verified 2026-09-02 against every open PR's base and file list, with the two
+independent-PR file overlaps test-merged. **Every PR here is CI-green and
+Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the four
+after that — #572, #573, #574 and the later heads of #569/#571 — were reviewed
+by me against source instead, and say so). The order below is what lets you
+work through them without a single manual conflict.
+
+**Tier 1 — independent, based on `main`, no decision needed. Any order.**
+#554, #555 (this packet), #556, #557, #558, #560, #562, #563, #564, #565,
+#567, #568, #570, #571, #572. Fifteen PRs. #567 and #570 both edit
+`tools/verify_app_build.mjs`; test-merged, auto-merge is clean. Several of
+these (#554, #555, #557, #558) sit on an older `main` and will show "behind" —
+GitHub's update-branch button is enough; none conflicts.
+
+**Tier 2 — stacked. Merge each only after its base lands, then retarget.**
+- #566 → after #563 (both edit the readiness scorecard; #566 is the second pass)
+- #569 → after #567 (the boot shell is what makes its measurements valid)
+- #573 → after #567 (same reason; also carries the `--transport h2` harness flag)
+- #574 → after #573 (uses that flag)
+
+**Tier 3 — waits on a decision in this packet. Merge only after the named one.**
+| PR | Decision | What it needs from you |
+|---|---|---|
+| #495 | P8 | adopt the runbook amendment |
+| #501 | P10 | sign off twelve customer-facing lead lines |
+| #506 | P13 | **create the bounded billing read role first** — the PR must not merge before it exists |
+| #509 | P12 | approve a stored-record shape change |
+| #510 | P15 | approve the destructive half of compaction |
+| #537 | P11 | approve the backup-headroom warning copy |
+
+**One ordering that matters inside Tier 3: #509 after #568.** They edit the
+same two files. #568 (Tier 1) adds the §9 aggregate and, correctly, refuses
+to render a gate verdict because the capture layer cannot yet distinguish a
+correct non-order from a failed extraction, and counts four of six fields.
+**#509 is the capture-layer change that fills exactly those two gaps** — it
+adds `channel` and `fulfilment` to the scored fields and introduces
+`OrderIntakeOutcome`. So when you approve P12: rebase #509 onto the merged
+#568, and in the same pass lift #568's `gateBlockedBy`, which then has
+nothing left to block on. Merging #509 first would strand #568's blockers
+pointing at a gap already filled.
+
+**Tier 4 — not mine to merge, listed so nothing is forgotten.**
+#550 (Codex, managed auth into the production client), #552 (a salvage of an
+abandoned Codex branch), #561 (Codex's release-stack rehearsal — **its own
+body says it is not approval to merge**, deploy, or activate anything).
+
+**Total for Tiers 1–2 once P-1 is fixed: nineteen approve-and-merge clicks
+(fifteen plus four stacked) in the order above.** Tier 3 is six decisions you
+were going to make anyway; the table just says which PR each one releases.
+
 ---
 
 ## 0. The minimum subset
