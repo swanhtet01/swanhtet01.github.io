@@ -16,8 +16,10 @@
 //                     health/capability path; the credential values must not appear in any
 //                     result, thrown error (message/stack/props), or console line.
 //
-// The completeness test at the bottom pins the manifest to the registry: a connector added
-// without a manifest entry (or a no-credential declaration) fails the suite.
+// The completeness test at the bottom pins the manifest to the registry twice over: a connector
+// added without a manifest entry (or a no-credential declaration) fails the suite, and so does
+// a capability added to a classified connector without a `calls` entry (or a reasoned
+// `uncovered` exclusion) — otherwise its fail-closed / no-leak regressions would be invisible.
 //
 // Fixtures are deliberately unrealistic (`fake-<var>-not-real`); a value that a scanner or
 // a reader could mistake for a live key is a bug in this file. Connectors with a dedicated
@@ -72,6 +74,9 @@ const MARKER = 'supermega-action:00000000-0000-4000-8000-000000000000'
 // never contains a scanner-shaped literal — GitGuardian flagged the inline form on first push.
 const ZAPIER_HOOK_URL = `https://hooks.zapier.com/hooks/catch/000000/${fake('ZAPIER_HOOK_TOKEN')}/`
 const DISCORD_WEBHOOK_URL = `https://discord.com/api/webhooks/000000/${fake('DISCORD_WEBHOOK_TOKEN')}`
+// Stripe's configured() insists on the sk_live_/sk_test_ prefix; hyphens keep these fixtures
+// outside every published key-scanner pattern. Shared by the manifest and the verifyWebhook test.
+const STRIPE_ENV = { STRIPE_SECRET_KEY: 'sk_test_fake-stripe-secret-key-not-real', STRIPE_WEBHOOK_SECRET: 'whsec_fake-stripe-webhook-secret-not-real' }
 
 // Google Workspace connectors share _google-auth: a service account OR an OAuth user trio.
 function googleWorkspace(key, { optional = [], values = {}, calls }) {
@@ -107,7 +112,12 @@ function googleWorkspace(key, { optional = [], values = {}, calls }) {
 //   variants  extra present-scenario envs (alternate auth paths) — all run the no-leak pass
 //   partials  extra absent-scenario envs that must still fail closed
 //   calls     [name, (connector) => promise] with VALID input so the credential gate is the
-//             only thing standing between the call and the network
+//             only thing standing between the call and the network. `name` is the method name,
+//             optionally followed by a scenario in parentheses ('send (webhook)').
+//   uncovered { method: reason } — capabilities on the connector object that deliberately have
+//             no calls entry. Every one needs an honest reason (no network path, gated by a
+//             second credential and tested on its own below, ...); the completeness test
+//             requires calls ∪ uncovered to equal the connector's capability surface exactly.
 //   network   false when the connector has no network path at all (health is config-only)
 //   failClosed false for the one connector whose credential is optional (documented below)
 const MANIFEST = [
@@ -304,8 +314,8 @@ const MANIFEST = [
     calls: [
       ['send', (c) => c.send({ to: 'U1', text: 'ping' })],
       ['broadcast', (c) => c.broadcast({ text: 'ping' })],
-      // verifyWebhook is gated by LINE_CHANNEL_SECRET, not the access token — tested on its own below.
-    ] },
+    ],
+    uncovered: { verifyWebhook: 'gated by LINE_CHANNEL_SECRET, not the access token; no network path — tested on its own below' } },
   // Resend's health checks the `re_` prefix before declaring the key well-formed.
   { key: 'messaging-resend', creds: ['RESEND_API_KEY'], values: { RESEND_API_KEY: 're_fake-resend-api-key-not-real' },
     optional: ['RESEND_FROM_EMAIL', 'RESEND_FROM_NAME'], secrets: ['RESEND_API_KEY'],
@@ -329,7 +339,8 @@ const MANIFEST = [
     calls: [
       ['send', (c) => c.send('ping', { chatId: '123456' })],
       ['readOwnerUpdates', (c) => c.readOwnerUpdates({ startDate: '2026-09-01T00:00:00Z', endDate: '2026-09-02T00:00:00Z' })],
-    ] },
+    ],
+    uncovered: { ownerChatConfigured: 'sync config predicate (token + owner chat id) returning a boolean, not an envelope; no network path — tested on its own below' } },
   { key: 'messaging-viber', creds: ['VIBER_AUTH_TOKEN'], optional: ['VIBER_BOT_NAME', 'VIBER_DEFAULT_RECEIVER'],
     secrets: ['VIBER_AUTH_TOKEN'], calls: [['send', (c) => c.send('ping', { receiver: 'r1' })]] },
   { key: 'messaging-whatsapp', creds: ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'], optional: ['WHATSAPP_DEFAULT_RECIPIENT'],
@@ -370,12 +381,13 @@ const MANIFEST = [
     secrets: ['ONEPAY_API_KEY', 'ONEPAY_SECRET_KEY'], network: false, calls: [] },
   { key: 'payment-paypal', creds: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET'], secrets: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET'],
     calls: [['listTransactions', (c) => c.listTransactions({ startDate: '2026-08-01T00:00:00Z', endDate: '2026-08-02T00:00:00Z' })]] },
-  // Stripe's configured() insists on the sk_live_/sk_test_ prefix; hyphens keep this fixture
-  // outside every published key-scanner pattern.
-  { key: 'payment-stripe', creds: ['STRIPE_SECRET_KEY'],
-    values: { STRIPE_SECRET_KEY: 'sk_test_fake-stripe-secret-key-not-real', STRIPE_WEBHOOK_SECRET: 'whsec_fake-stripe-webhook-secret-not-real' },
+  { key: 'payment-stripe', creds: ['STRIPE_SECRET_KEY'], values: STRIPE_ENV,
     optional: ['STRIPE_WEBHOOK_SECRET', 'STRIPE_SUCCESS_URL', 'STRIPE_CANCEL_URL'], secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
-    calls: [['createCheckout', (c) => c.createCheckout({ amount: 49, ref: 'PRJ-1' })]] },
+    calls: [['createCheckout', (c) => c.createCheckout({ amount: 49, ref: 'PRJ-1' })]],
+    uncovered: {
+      verifyWebhook: 'gated by STRIPE_WEBHOOK_SECRET, not the secret key; pure HMAC check with no network path — tested on its own below',
+      reconcile: 'consumes an already-verified event and touches only store.mjs / alert.mjs, never the Stripe credential; exercised by payment-stripe.test.mjs',
+    } },
   { key: 'payment-wavepay', creds: ['WAVEPAY_MERCHANT_ID', 'WAVEPAY_STORE_ID', 'WAVEPAY_SECRET_KEY'], secrets: ['WAVEPAY_SECRET_KEY'],
     calls: [
       ['createQR', (c) => c.createQR({ amount: 1000, orderId: 'ORD-1' })],
@@ -650,7 +662,58 @@ test('messaging-line verifyWebhook fails closed without LINE_CHANNEL_SECRET and 
   assert.equal(fetchStub.calls.length, 0)
 })
 
+test('payment-stripe verifyWebhook fails closed without STRIPE_WEBHOOK_SECRET and never echoes it on a bad signature', () => {
+  const fetchStub = recordingFetch(FORBIDDEN)
+  globalThis.fetch = fetchStub
+  const stripe = registry.get('payment-stripe')
+  const whsec = STRIPE_ENV.STRIPE_WEBHOOK_SECRET
+  applyEnv(without(STRIPE_ENV, ['STRIPE_WEBHOOK_SECRET']))
+  assert.deepEqual(stripe.verifyWebhook('{}', 't=1,v1=00'), { ok: false, reason: 'no_webhook_secret' })
+  applyEnv(STRIPE_ENV)
+  const badSignatures = [
+    ['unparseable header', 'not-a-signature', 'malformed_signature'],
+    ['wrong-length digest', `t=${Math.floor(Date.now() / 1000)},v1=00`, 'signature_mismatch'],
+    ['wrong digest of the right length', `t=${Math.floor(Date.now() / 1000)},v1=${'0'.repeat(64)}`, 'signature_mismatch'],
+  ]
+  for (const [label, sig, reason] of badSignatures) {
+    const rejected = stripe.verifyWebhook('{"id":"evt_not_real"}', sig)
+    assert.deepEqual(rejected, { ok: false, reason }, label)
+    assert.ok(!inspect(rejected).includes(whsec), `${label}: STRIPE_WEBHOOK_SECRET leaked`)
+  }
+  assert.equal(fetchStub.calls.length, 0)
+})
+
+test('messaging-telegram ownerChatConfigured is false without the bot token and never needs the network', () => {
+  const fetchStub = recordingFetch(FORBIDDEN)
+  globalThis.fetch = fetchStub
+  const telegram = registry.get('messaging-telegram')
+  applyEnv({ TELEGRAM_CHAT_ID: '123456' })
+  assert.equal(telegram.ownerChatConfigured(), false)
+  applyEnv(fakeEnv(['TELEGRAM_BOT_TOKEN']))
+  assert.equal(telegram.ownerChatConfigured(), false, 'a token with no owner chat id is not an owner chat')
+  applyEnv(fakeEnv(['TELEGRAM_BOT_TOKEN'], { TELEGRAM_CHAT_ID: '123456' }))
+  assert.equal(telegram.ownerChatConfigured(), true)
+  assert.equal(fetchStub.calls.length, 0)
+})
+
 // ---- completeness ---------------------------------------------------------------
+
+// The registry's interface (registry.mjs assertConnector) is exactly two functions per
+// connector: configured() and health(). The harness above calls both directly for every entry.
+// Every OTHER function-valued own property on the connector object is a capability a caller
+// reaches via registry.get(key) — those must each be exercised by a `calls` entry or carry a
+// reasoned `uncovered` exclusion. The non-function members (key, name, category, docs, and
+// messaging-resend's `capabilities` list) are metadata, not callable, so they need no listing.
+const HARNESS_SURFACE = ['configured', 'health']
+
+function capabilitiesOf(connector) {
+  return Object.keys(connector).filter((name) => typeof connector[name] === 'function' && !HARNESS_SURFACE.includes(name))
+}
+
+// 'send (webhook)' exercises `send`; the parenthesised tail only labels the scenario.
+function methodOf(callName) {
+  return callName.split(' ')[0]
+}
 
 test('every registered connector is classified: credentialed (in the manifest) or declared credential-free', () => {
   const registered = registry.list().map((row) => row.key).sort()
@@ -666,6 +729,28 @@ test('every registered connector is classified: credentialed (in the manifest) o
   for (const entry of MANIFEST) {
     for (const name of entry.secrets) {
       assert.ok(TRACKED.includes(name), `${entry.key}: secret ${name} is not a tracked env var`)
+    }
+  }
+})
+
+test('every capability on every manifest connector is exercised by a calls entry or excluded with a reason', () => {
+  for (const entry of MANIFEST) {
+    const connector = registry.get(entry.key)
+    assert.ok(connector, `${entry.key} is not registered`)
+    const capabilities = capabilitiesOf(connector)
+    const covered = new Set((entry.calls || []).map(([name]) => methodOf(name)))
+    const uncovered = entry.uncovered || {}
+    for (const method of covered) {
+      assert.ok(capabilities.includes(method), `${entry.key}: calls names ${method}, which is not a capability on the connector object`)
+    }
+    for (const [method, reason] of Object.entries(uncovered)) {
+      assert.ok(capabilities.includes(method), `${entry.key}: uncovered lists ${method}, which is not a capability on the connector object`)
+      assert.ok(!covered.has(method), `${entry.key}: ${method} is both exercised by calls and listed as uncovered — pick one`)
+      assert.ok(typeof reason === 'string' && reason.trim().length >= 20, `${entry.key}: uncovered ${method} needs a real reason, got ${inspect(reason)}`)
+    }
+    for (const method of capabilities) {
+      assert.ok(covered.has(method) || method in uncovered,
+        `${entry.key}: capability ${method} has no calls entry and no uncovered reason — its fail-closed and no-leak contracts are unasserted`)
     }
   }
 })
