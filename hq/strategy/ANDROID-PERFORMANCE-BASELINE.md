@@ -1058,9 +1058,13 @@ absent in the other. Total JS transfer is byte-identical across the two arms
 Deleting the tags does not remove the four chunks — they are static imports of
 the entry chunk and load either way. It delays them until the 80 KB gz entry
 chunk has downloaded and parsed. Before FCP that is a win on both transports,
-because the four streams stop sharing a 50 KB/s pipe with the render-blocking
-classic scripts (`/theme-restore.js`, `/css-async.js`, `/sw-register.js`,
-`/vercel-insights.js`) that gate first paint. Bandwidth is finite whether or not
+because the four streams stop sharing a 50 KB/s pipe with the two parser-
+blocking classic scripts that stand between the document and the boot-shell
+markup — `/theme-restore.js` (`index.html:40`) and `/css-async.js` (`:117`),
+both in `<head>` above `<div id="boot-shell">` at `:121`. (`/sw-register.js`
+and `/vercel-insights.js` sit at the end of `<body>`, after the shell markup;
+they are on the same pipe but this pass did not establish whether they gate the
+paint, so the mechanism is stated on the two that provably do.) Bandwidth is finite whether or not
 it is multiplexed, which is why the effect does not vanish on h2 the way
 theme-restore's per-connection cost did. What *does* vanish is the extra
 per-connection cost HTTP/1.1 charges for those four requests — 308 ms of the
