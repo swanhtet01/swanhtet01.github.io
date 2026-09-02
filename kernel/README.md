@@ -249,6 +249,26 @@ in recovery instead of being retried blindly.
 - The token cap can modestly overshoot under highly concurrent calls because storage updates are not
   a database-side atomic increment in every store mode.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
+- The 25 invocations/day scheduler ceiling is cron arithmetic, not a counter: the dormant activation
+  plan in `tools/supermega_scheduler_authority.json` is `5 * * * *` (24 firings per UTC day) plus
+  `45 0 * * *` (1), and no code counts scheduler runs — the hosted cron handlers admit an
+  authenticated 26th request exactly like the first. What this kernel's own cron receiver enforces,
+  per workcell slug, is one execution per UTC hour and one owner delivery per client-local date
+  (`WORKCELL_TIME_ZONE`): 1,440 once-a-minute deliveries over one UTC day produced 24 executions and
+  1 send, the first delivery of the next UTC day was admitted again, and 2, 8, 32, and 128
+  simultaneous deliveries admitted exactly 1 execution (2 when the burst straddled midnight UTC),
+  measured 2026-09-02 in memory mode and pinned by `kernel/api/brief.scheduler-ceiling.test.mjs`.
+  Not measured: the Python cron handlers (read, not exercised) and the live Vercel cron.
+- Pool pressure queues; it never refuses or times out: postgres mode holds one `pg.Pool` of 3
+  clients per process with no checkout timeout, so 2, 8, 32, and 128 simultaneous checkouts held 3,
+  queued the rest (0 refused, 0 timed out), and served the queue first-in first-out, measured
+  2026-09-02 through pg-pool with an in-process client and, for the store's own claim and
+  reservation paths, on a loopback Postgres 16 (0 of 128 refused), pinned by
+  `kernel/store.pool-pressure.test.mjs`. A queued caller waits as long as the three holders do, and
+  nothing reads the queue length. Memory mode has no pool (512 simultaneous claims, 0 refused);
+  supabase mode is one fetch per call, so pooling there belongs to Supabase's side. Not measured:
+  the live Supabase pooler, the peak backend count on a live database, and the HTTP agent behind
+  supabase mode.
 - Agent Company cycles admit one specialist and at most eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
 - Durable missions remain operator-staged. The server verifies stage eligibility, but no mission
