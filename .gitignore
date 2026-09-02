@@ -24,7 +24,10 @@ swan-intelligence-hub/
 .vercel_python_packages/
 .codex
 .tmp/
-node_modules/
+# No trailing slash: `node_modules/` matches a DIRECTORY only, so an agent worktree's
+# `node_modules` SYMLINK slipped past it and was committed on a branch (blob 618a2758,
+# an absolute path into one sandbox). Without the slash this matches the symlink too.
+node_modules
 api-static/
 api-static-staging-*/
 tmp-*.html
