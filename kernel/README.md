@@ -249,10 +249,16 @@ in recovery instead of being retried blindly.
 - The token cap does not overshoot under concurrent callers: 0 tokens (0%) over the cap at 2, 8, 32,
   and 128 concurrent callers (512 at the store level) for the tenant monthly cap, the company daily
   budget, and the 2,000,000-unit hard maximum, measured 2026-09-02 in memory mode and on a loopback
-  Postgres 16 running the same SQL the Supabase mode calls, pinned by
-  `kernel/gateway.budget-overshoot.test.mjs`. Every store mode admits work through a serialized
-  reserve-before-dispatch step, so the bound is structural rather than statistical. Not measured:
-  the live Supabase deployment itself. Simultaneous identical cache misses each reserve their own
+  Postgres 16, pinned by `kernel/gateway.budget-overshoot.test.mjs`. The Postgres probe measures
+  both durable paths: the direct-Postgres store, and the four `supermega_*` RPC functions the
+  Supabase mode calls, installed on that database from `kernel/supabase/*.sql` verbatim and swept
+  through the same reservation harness (0 overshoot on both, hard maximum included). The probe
+  asserts the two schema files define those functions identically and that the budget function the
+  direct store installs is the same text, so one measurement covers both modes; removing the
+  advisory lock from the applied copy makes the sweep over-admit, which is how the pin is known to
+  bite. Every store mode admits work through a serialized reserve-before-dispatch step, so the
+  bound is structural rather than statistical. Not measured: the live Supabase deployment itself,
+  where the same functions run behind PostgREST rather than a direct connection. Simultaneous identical cache misses each reserve their own
   attempt; only a completed response is shared.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
 - Agent Company cycles admit one specialist and at most eight planned role calls.

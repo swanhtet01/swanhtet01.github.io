@@ -317,8 +317,72 @@ test('the 2,000,000-unit hard maximum is not overshootable through complete() by
   t.diagnostic(`hard max via complete(): ${JSON.stringify({ N: n, perCall: deepUnits, admitted: run.parked, peak, hardMax: HARD_MAX, overshoot: Math.max(0, peak - HARD_MAX) })}`)
 })
 
+// Reservations are retained by design (a crashed process must fail closed until an operator
+// reconciles it), so a rerun against the same database must never inherit an earlier run's window:
+// the hard-max step needs at least one 250,000-unit admission of headroom, which a used window no
+// longer has. Tenant scopes already carry a per-run UUID; the company budget is keyed on the window
+// alone, so the window is drawn from ~2.6 million real dates and, decisively, the store itself is
+// asked to confirm it holds no reservation before it is used.
+async function freshWindow(s) {
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const stamp = randomUUID().replaceAll('-', '')
+    const year = 2100 + (parseInt(stamp.slice(0, 8), 16) % 7900)
+    const month = String(1 + (parseInt(stamp.slice(8, 10), 16) % 12)).padStart(2, '0')
+    const day = String(1 + (parseInt(stamp.slice(10, 12), 16) % 28)).padStart(2, '0')
+    const window = `${year}-${month}-${day}`
+    const usage = await companyUsage(s, window)
+    if (usage.attempts === 0 && usage.reservedUnits === 0) return window
+  }
+  throw new Error('overshoot_probe_no_fresh_window')
+}
+
+// The exact text of one `create or replace function public.<name>(...)` statement in a SQL source,
+// so the probe executes the Supabase definition itself rather than a paraphrase of it.
+function sqlFunctionText(source, name, file) {
+  const start = source.indexOf(`create or replace function public.${name}(`)
+  assert.ok(start >= 0, `${file} defines ${name}`)
+  // The SQL files close the body at column 0; store.mjs embeds the same text indented inside a
+  // template literal, so the terminator match tolerates leading whitespace on that line.
+  const end = /\n[ \t]*\$[a-z]*\$;/.exec(source.slice(start))
+  assert.ok(end, `${file}: ${name} has a dollar-quoted body terminator`)
+  return source.slice(start, start + end.index + end[0].length)
+}
+
+// Adapter that gives storeSweep/storeHardMax the store's four method signatures but reaches the
+// database only through the RPC functions the Supabase mode calls, with the argument shapes the
+// store's supabase branches send (store.mjs reserveAiBudget, getAiBudgetUsage, reserveTokenSpend,
+// getTokenUsage). The cap is passed unclamped so the SQL `least(p_cap_units, 2000000)` is what is
+// measured at the hard maximum, not the store's JS clamp.
+function rpcStore(pool) {
+  const one = async (sql, params) => (await pool.query(sql, params)).rows[0]
+  return {
+    async reserveAiBudget({ reservationId, window, reservedUnits, capUnits, tenantId, tier, provider }) {
+      const row = await one(
+        'select * from public.supermega_reserve_ai_budget($1::text,$2::text,$3::bigint,$4::bigint,$5::text,$6::text,$7::text)',
+        [reservationId, window, reservedUnits, capUnits, tenantId || null, tier || null, provider || null],
+      )
+      return { granted: row.granted, usedUnits: Number(row.used_units), capUnits: Number(row.cap_units), reason: row.reason }
+    },
+    async getAiBudgetUsage(window) {
+      const row = await one('select * from public.supermega_get_ai_budget_usage($1::text)', [window])
+      return { available: true, reservedUnits: Number(row.reserved_units), attempts: Number(row.attempts) }
+    },
+    async reserveTokenSpend(reservationId, tenantId, month, { reservedTokens, capTokens, expiresAt, dispatchToken, context }) {
+      const row = await one(
+        'select * from public.supermega_reserve_token_spend($1::text,$2::text,$3::text,$4::bigint,$5::bigint,$6::timestamptz,$7::text,$8::jsonb)',
+        [reservationId, tenantId, month, reservedTokens, capTokens, expiresAt, dispatchToken, JSON.stringify(context)],
+      )
+      return { accepted: row.accepted, reason: row.reason }
+    },
+    async getTokenUsage(tenantId, month) {
+      const row = await one('select * from public.supermega_get_token_usage($1::text,$2::text)', [tenantId, month])
+      return { spend_total: Number(row.spend_total) }
+    },
+  }
+}
+
 test(
-  'postgres probe: the durable SQL path admits exactly what fits under advisory and row locks',
+  'postgres probe: the durable SQL paths admit exactly what fits under advisory and row locks',
   { skip: PROBE_URL ? false : 'set SUPERMEGA_OVERSHOOT_PROBE_POSTGRES_URL to a loopback Postgres to measure the durable path' },
   async (t) => {
     const host = new URL(PROBE_URL).hostname
@@ -327,13 +391,50 @@ test(
     let probe
     try { probe = (await import('./store.mjs?probe=postgres')).default } finally { delete process.env.POSTGRES_URL }
     assert.equal(probe.mode, 'postgres')
-    // A fresh synthetic window per run keeps repeated probes against one database independent.
-    const stamp = randomUUID()
-    const day = String(1 + (parseInt(stamp.slice(0, 4), 16) % 28)).padStart(2, '0')
-    const month = `2099-${String(1 + (parseInt(stamp.slice(4, 6), 16) % 12)).padStart(2, '0')}`
-    const rows = await storeSweep(probe, { window: `${month}-${day}`, month, label: 'postgres' })
-    const hardMax = await storeHardMax(probe, `${month}-${day}`, 'postgres')
+
+    // 1. The direct-Postgres store: reserveAiBudget through the plpgsql function ensurePgTables
+    //    installs, reserveTokenSpend through the store's own `for update` transaction.
+    const window = await freshWindow(probe)
+    const rows = await storeSweep(probe, { window, month: window.slice(0, 7), label: 'postgres' })
+    const hardMax = await storeHardMax(probe, window, 'postgres')
+    t.diagnostic(`postgres store window ${window}`)
     t.diagnostic(`postgres store sweep ${JSON.stringify(rows)}`)
     t.diagnostic(`postgres store hard max ${JSON.stringify(hardMax)}`)
+
+    // 2. The Supabase RPC functions, taken verbatim from the two schema files, installed on the same
+    //    database and called directly. Both files must carry one definition, and the budget function
+    //    must be the one the direct store already runs, or the "same SQL" claim in kernel/README.md
+    //    would be measuring something else.
+    const { readFile } = await import('node:fs/promises')
+    const sources = await Promise.all(['./supabase/console-tables.sql', './supabase/workcell-client.sql', './store.mjs']
+      .map(async (file) => [file, await readFile(new URL(file, import.meta.url), 'utf8')]))
+    const [[consoleFile, consoleSql], [workcellFile, workcellSql], [storeFile, storeSource]] = sources
+    const RPC_FUNCTIONS = ['supermega_reserve_ai_budget', 'supermega_get_ai_budget_usage', 'supermega_reserve_token_spend', 'supermega_get_token_usage']
+    const definitions = RPC_FUNCTIONS.map((name) => {
+      const text = sqlFunctionText(workcellSql, name, workcellFile)
+      assert.equal(sqlFunctionText(consoleSql, name, consoleFile), text, `${name} is defined identically in both Supabase schema files`)
+      return text
+    })
+    assert.equal(
+      sqlFunctionText(storeSource, 'supermega_reserve_ai_budget', storeFile).replace(/^ {4}/gm, ''),
+      definitions[0],
+      'the budget function the direct-Postgres store installs is the Supabase definition, byte for byte',
+    )
+    assert.match(definitions[2], /\n {3}for update;\n/, 'the tenant RPC locks the ledger row')
+    assert.match(definitions[0], /pg_advisory_xact_lock/, 'the budget RPC serializes on the window')
+
+    const { Pool } = (await import('pg')).default
+    const pool = new Pool({ connectionString: PROBE_URL, ssl: false, max: 16, idleTimeoutMillis: 1_000 })
+    t.after(() => pool.end())
+    for (const text of definitions) await pool.query(text)
+
+    const rpc = rpcStore(pool)
+    const rpcWindow = await freshWindow(rpc)
+    assert.notEqual(rpcWindow, window)
+    const rpcRows = await storeSweep(rpc, { window: rpcWindow, month: rpcWindow.slice(0, 7), label: 'supabase-rpc' })
+    const rpcHardMax = await storeHardMax(rpc, rpcWindow, 'supabase-rpc')
+    t.diagnostic(`supabase rpc window ${rpcWindow}`)
+    t.diagnostic(`supabase rpc sweep ${JSON.stringify(rpcRows)}`)
+    t.diagnostic(`supabase rpc hard max ${JSON.stringify(rpcHardMax)}`)
   },
 )
