@@ -423,9 +423,15 @@ export async function runJourney(options, run) {
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }, sessionId)
       await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 }, sessionId)
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }, sessionId)
+      // The pointer's own click is judged by whether ANY new entry landed on the
+      // control, not by the last entry: a handler that dispatches a further click
+      // synchronously (Website's download handlers click a hidden <a download>)
+      // appends that programmatic click after the pointer's, and reading it as the
+      // landing point would retry a press that already worked — and run the handler
+      // again. With one entry per press (every other case) this is the same value.
       landed = await evaluate(`(() => {
         const clicks = window.__journey.clicks.slice(${before});
-        return clicks.length ? clicks[clicks.length - 1] : null;
+        return clicks.length ? (clicks.find((entry) => entry.onTarget) || clicks[clicks.length - 1]) : null;
       })()`)
       if (landed && landed.onTarget) return target
       const stillThere = await evaluate(`Boolean(window.__journey.q(${JSON.stringify(selector)}, ${JSON.stringify(text ?? null)}))`)

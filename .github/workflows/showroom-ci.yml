@@ -22,6 +22,7 @@ on:
       - 'tools/journey_shop_cash_sale.mjs'
       - 'tools/journey_plant_shift_release.mjs'
       - 'tools/journey_ecommerce_request_review.mjs'
+      - 'tools/journey_website_publish.mjs'
       - 'CURRENT.md'
       - 'api/**'
       - 'api_app.py'
@@ -169,3 +170,11 @@ jobs:
       # the guided sample's own request stays at pending_shop_review with no order.
       - name: Ecommerce request-review browser journey (390px)
         run: node tools/journey_ecommerce_request_review.mjs
+
+      # Fourth product, same harness: the Website edit-and-publish flow (a real headline
+      # edit saved on the phone, the preview download, then the shipped file checklist:
+      # three review notes, a named approval, one retained site file) -- proves a real
+      # edit earns one approval and one exportable, digest-bound site file under
+      # generated ids, while the guided sample published and approved nothing.
+      - name: Website publish browser journey (390px)
+        run: node tools/journey_website_publish.mjs
