@@ -1379,8 +1379,11 @@ test('a throwing alert path can neither alter nor escape the operations report',
   assert.equal(harness.sends.length, 0)
   assert.equal(harness.alertState.size, 0)
 
-  // Every alert dependency down at once — state read, insert, transition, claim, release, and the
-  // transport — still returns the same report and still never throws.
+  // Every dependency this path can reach on a first-time breach down at once — state read, insert,
+  // claim, and the transport — still returns the same report and still never throws. Two branches
+  // are unreachable from here and are pinned separately below: the CAS transition (needs a durable
+  // previous record, which a throwing state read never yields) and the claim release (needs a
+  // definite transport rejection; a throwing transport is classified uncertain and keeps the claim).
   const downClientId = 'client-alert-fail-open-store'
   const down = alertHarness(downClientId)
   const downBaseline = await buildCompanyOperationsReport({ clientId: downClientId, windowDays: 30 }, down.options({ env: {} }))
@@ -1397,6 +1400,63 @@ test('a throwing alert path can neither alter nor escape the operations report',
   assert.equal(allDown.ok, true)
   assert.deepEqual(allDown, downBaseline)
   assert.equal(down.sends.length, 0)
+
+  // CAS transition branch. Seed a durable record by alerting normally, move the clock past the
+  // repeat interval so the same breach must go through transitionOperationsAlertState, and make
+  // that throw. A throw there is classified 'unavailable', not 'raced': the founder is still told
+  // (fail open), the durable record is left exactly as it was, and the report is unchanged.
+  const casClientId = 'client-alert-fail-open-transition'
+  const cas = alertHarness(casClientId)
+  const casKey = `company-operations-alert:${casClientId}:30`
+  const seeded = await buildCompanyOperationsReport({ clientId: casClientId, windowDays: 30 }, cas.options())
+  assert.equal(seeded.ok, true)
+  assert.equal(cas.sends.length, 1)
+  const seededState = structuredClone(cas.alertState.get(casKey))
+  const later = { now: () => '2026-07-15T07:00:00.000Z' }
+  const casBaseline = await buildCompanyOperationsReport({ clientId: casClientId, windowDays: 30 }, cas.options({ ...later, env: {} }))
+  assert.equal(casBaseline.ok, true)
+  let transitions = 0
+  let inserts = 0
+  const casDown = await buildCompanyOperationsReport({ clientId: casClientId, windowDays: 30 }, cas.options({
+    ...later,
+    transitionOperationsAlertState: async () => { transitions += 1; boom() },
+    putOperationsAlertState: async () => { inserts += 1; boom() },
+  }))
+  assert.equal(casDown.ok, true)
+  assert.deepEqual(casDown, casBaseline)
+  assert.equal(transitions, 1)
+  assert.equal(inserts, 0)
+  assert.equal(cas.sends.length, 2)
+  assert.deepEqual(cas.alertState.get(casKey), seededState)
+
+  // Claim release branch. A first-time breach whose transport definitely rejects releases the
+  // init claim; make that release throw. The rejection must still be recorded as 'clear' and the
+  // report must be unchanged. The claim itself stays held because its release failed — and the
+  // next request retries anyway, because with a durable 'clear' record it takes the CAS path and
+  // never consults the claim.
+  const releaseClientId = 'client-alert-fail-open-release'
+  const rel = alertHarness(releaseClientId)
+  const relKey = `company-operations-alert:${releaseClientId}:30`
+  const relBaseline = await buildCompanyOperationsReport({ clientId: releaseClientId, windowDays: 30 }, rel.options({ env: {} }))
+  assert.equal(relBaseline.ok, true)
+  let attempts = 0
+  let releases = 0
+  const rejecting = () => rel.options({
+    fetch: async () => { attempts += 1; return { ok: false } },
+    releaseOperationsAlertInit: async () => { releases += 1; boom() },
+  })
+  const relDown = await buildCompanyOperationsReport({ clientId: releaseClientId, windowDays: 30 }, rejecting())
+  assert.equal(relDown.ok, true)
+  assert.deepEqual(relDown, relBaseline)
+  assert.equal(attempts, 1)
+  assert.equal(releases, 1)
+  assert.equal(rel.alertState.get(relKey).status, 'clear')
+  assert.equal(rel.claims.size, 1)
+  const relRetried = await buildCompanyOperationsReport({ clientId: releaseClientId, windowDays: 30 }, rejecting())
+  assert.equal(relRetried.ok, true)
+  assert.deepEqual(relRetried, relBaseline)
+  assert.equal(attempts, 2)
+  assert.equal(releases, 1)
 })
 
 test('the operations breach alert carries target metadata only and no customer content', async () => {
