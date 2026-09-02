@@ -136,6 +136,14 @@ status column in §1 for each. The operative forward sequence is now:
    `loadCommerceWorkspace()` call in a `useState` initializer
    (`workspace-runtime.ts:509-512`). Each needs its own planning pass, and each
    must be measured on the tap-through journey, not one route in isolation.
+   A fourth candidate, **inlining `/theme-restore.js` behind a `'sha256-'` CSP
+   source, is CLOSED at an honest zero and must not be re-chased** — measured
+   2026-09-01, its ceiling over HTTP/2 is 4 ms, inside the ±88 ms control band;
+   the ~400 ms it was recorded at is an artefact of the measurement harness's
+   HTTP/1.1 transport. It would also have meant relaxing the guard that catches
+   silently-refused inline shell scripts, for nothing. See the closing section
+   of `ANDROID-PERFORMANCE-BASELINE.md`, and re-measure any remaining
+   contention-mechanism finding over `--transport h2` before costing it.
 2. ~~P2 Plant shop-floor scanning~~ — SHIPPED 2026-08-20, see the Plant table
    in §1. Remaining Plant scan surface, unclaimed and deliberately deferred:
    the Control tab's recall-lot trace already has an exact-match resolution

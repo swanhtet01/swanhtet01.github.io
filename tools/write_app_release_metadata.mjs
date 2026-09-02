@@ -179,6 +179,16 @@ const rasterIcons = [
 // Keep the theme key in sync with THEME_KEY in showroom/src/core/CoreShell.tsx. This runs
 // as a render-blocking classic script in <head>, so it still lands before first paint and
 // a returning dark-theme user does not get a light flash.
+//
+// It stays a separate file, and the standing perf item to inline it is CLOSED at zero.
+// The obvious optimisation -- inline this body and add a matching 'sha256-...' source to
+// script-src in both vercel.json and index.html's meta -- would relax the exact guard that
+// caught the months-long silent service-worker failure below, and it was priced before
+// being built. Measured 2026-09-01, medians of 3 cold loads on the Galaxy profile: over
+// HTTP/1.1 removing this request is worth -328ms FCP, but over HTTP/2 (what Vercel serves)
+// it is worth 4ms, inside a +/-88ms control band. The measurement deleted the tag rather
+// than inlining it, which bounds EVERY variant of the fix, not just the hash one. Full 2x2
+// in hq/strategy/ANDROID-PERFORMANCE-BASELINE.md, closing section.
 const themeRestoreScript = `try {
   if (window.localStorage.getItem('supermega-interface-theme') === 'dark') {
     document.documentElement.dataset.supermegaTheme = 'dark'
