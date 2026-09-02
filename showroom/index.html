@@ -34,7 +34,9 @@
          It is a FILE and not an inline block because the content policy on this app is
          `script-src 'self'` with no hash and no nonce: an inline script here is refused
          outright and never runs. Source and the THEME_KEY note live beside the other two
-         shell scripts in tools/write_app_release_metadata.mjs. -->
+         shell scripts in tools/write_app_release_metadata.mjs. Do NOT inline it behind a
+         'sha256-' CSP source: measured over HTTP/2, deleting this tag entirely is worth
+         4ms, inside the control band. Priced in write_app_release_metadata.mjs. -->
     <script src="/theme-restore.js"></script>
     <meta property="og:title" content="SuperMega" />
     <meta

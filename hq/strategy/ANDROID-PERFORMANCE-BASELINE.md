@@ -754,10 +754,14 @@ connection limit:
   physics;
 - and the **~400 ms attributed to `/theme-restore.js`**, which is a 253-byte
   same-origin file. Under HTTP/2 on an already-open connection that is nowhere
-  near a full round trip.
+  near a full round trip. **[RESOLVED 2026-09-01 — this one has now been
+  re-measured over h2 and the prediction in this bullet was right, more
+  completely than it guessed: the cost is 4 ms, not a reduced round trip. See
+  the closing section of this document.]**
 
 None of those is refuted, and **none of them has been re-measured over h2
-either** — only the stylesheet arm was, above. They are correctly measured on
+either** — only the stylesheet arm was, above, and (since 2026-09-01) the
+theme-restore arm at the foot of this document. They are correctly measured on
 the profile this document defines, and the relative ordering probably survives. But their
 magnitudes are upper bounds for production, and the theme-restore figure is the
 one most likely to shrink, because it is almost entirely per-request cost on a
@@ -765,13 +769,25 @@ file too small for bytes to matter. **Do not spend a security-surface pass on a
 `sha256` CSP source for it until it has been re-measured over HTTP/2.** That
 re-measurement — teaching the harness `node:http2`, or pointing it at a preview
 deployment — is the cheaper prerequisite and is worth doing before any further
-contention-driven work.
+contention-driven work. **[DONE 2026-09-01. The prerequisite paid for itself:
+the measured payoff over h2 is 4 ms, so no security-surface pass was spent and
+none should be. Closing section of this document.]**
 
 ### Remaining identified FCP levers
 
 1. **Shrink the 91 KB gz entry set.** Needs its own planning pass.
 2. **The 35 KB render-blocking stylesheet.**
-3. **`/theme-restore.js` — a 253-byte file costing a whole round trip.** Worth
+3. ~~**`/theme-restore.js` — a 253-byte file costing a whole round trip.**~~
+   **CLOSED 2026-09-01 at an honest zero — do not reopen this looking for the
+   400 ms.** Measured over HTTP/2, deleting the script entirely (the ceiling of
+   any possible fix) moves FCP by 4 ms on `/` and −4 ms on `/?choose=1`, both
+   inside the ±88 ms control band by a factor of twenty. The ~400 ms below is
+   real on HTTP/1.1 and is an artefact of the local harness's transport, not of
+   production. The 2×2 and the per-run figures are in the closing section of
+   this document. **The rest of this entry is retained because its reasoning
+   about the trap is still correct and still binding — the fix it warns against
+   remains forbidden, now for a second and simpler reason: it buys nothing.**
+   Worth
    naming precisely because there is an obvious-looking fix that is a trap.
    The file is tiny, so its ~400 ms cost on this profile is almost entirely
    latency, and inlining it would remove that from the critical path. **Do not
@@ -787,3 +803,151 @@ contention-driven work.
    the payoff is roughly 400 ms, which is real but does not justify doing it
    carelessly.
 
+
+## 2026-09-01: `/theme-restore.js` re-measured over HTTP/2 — honest zero, lever 3 closed
+
+This is the re-measurement the transport caveat above asked for before anyone
+spent a security-surface pass on a `sha256` CSP source. It was run, and the
+answer is that **there is nothing to buy.** Over the transport production
+actually uses, `/theme-restore.js` costs **4 ms** — a twentieth of the ±88 ms
+control band. Lever 3 is closed at zero and the CSP is not being touched.
+
+### The 2×2
+
+One `dist`, four arms. The control arm is the branch as built; the **ceiling**
+arm is the same `dist` with the single line `<script src="/theme-restore.js">
+</script>` deleted from `dist/index.html`. Deleting it rather than inlining it
+is deliberate: it measures the *upper bound* of any fix. No inlining, hash
+allowance or preload can beat "the request does not exist", so if the ceiling
+is zero the whole family of fixes is zero and none of them needs building.
+
+Medians of 3 cold loads per cell, `tools/perf/measure-android-baseline.mjs`
+on the profile this document defines (CPU ×6, 400 ms RTT, 400 kbit/s, Galaxy
+A13 viewport, `Storage.clearDataForOrigin` per run).
+
+| Transport | route | control | ceiling (no script) | delta |
+|---|---|---|---|---|
+| HTTP/1.1 | `/` | 1,444 ms | 1,116 ms | **−328 ms** |
+| HTTP/1.1 | `/?choose=1` | 1,436 ms | 1,124 ms | **−312 ms** |
+| **HTTP/2** | `/` | 1,128 ms | 1,124 ms | **−4 ms** |
+| **HTTP/2** | `/?choose=1` | 1,132 ms | 1,136 ms | **+4 ms** |
+
+Per-run FCP, so the medians are not hiding a spread:
+
+| arm | `/` runs | `/?choose=1` runs |
+|---|---|---|
+| h1 control | 1460, 1424, 1444 | 1436, 1452, 1428 |
+| h1 ceiling | 1116, 1128, 1096 | 1128, 1104, 1124 |
+| h2 control | 1168, 1128, 1124 | 1132, 1212, 1124 |
+| h2 ceiling | 1148, 1124, 1116 | 1120, 1136, 1148 |
+
+The two HTTP/1.1 arms do not overlap at all — every control run is slower than
+every ceiling run. The two HTTP/2 arms interleave completely.
+
+Every run recorded `negotiatedProtocol` and the h2 arms all report `h2`; the
+harness throws rather than reports on a silent fallback to http/1.1, so these
+are not mislabelled. The arms were also checked to differ in the way intended
+and no other: `theme-restore.js` appears in the per-script transfer map of both
+control arms and in neither ceiling arm.
+
+### What this says, and the one thing it does not
+
+The ~400 ms attributed to this file was correctly measured and is **an artefact
+of the harness's HTTP/1.1 server**, exactly as the transport caveat predicted.
+The corollary is sharper than the headline: look down the ceiling column and
+across the HTTP/2 row and three of the four cells sit within 12 ms of each other
+— h1 ceiling 1,116, h2 ceiling 1,124, h2 control 1,128. Only h1 control, at
+1,444, stands apart. **The entire HTTP/1.1-to-HTTP/2 first-paint gap on this
+document is this one 253-byte request.** Under HTTP/2 it is multiplexed onto the
+connection the document already opened and costs nothing measurable; under
+HTTP/1.1 it pays a connection.
+
+The premise this rests on is that production is HTTP/2, which is inherited from
+the transport-caveat section above and was **not** re-confirmed from the agent
+sandbox — egress to `app.supermega.dev` is blocked by proxy policy there, so
+`curl` could not read the negotiated version. If that premise is ever falsified,
+this result reverts to the HTTP/1.1 column and the item reopens at ~320 ms.
+
+### The CSP question, answered anyway
+
+The three questions the planning pass had to settle, in case the payoff is ever
+re-litigated:
+
+- **(a) Would a `'sha256-...'` source pass the security contract?** As written,
+  yes — and that is itself worth knowing. `verify_app_deploy_workflow.mjs:279`
+  asserts `appPolicy.includes("script-src 'self'")`, a substring test that stays
+  true when a hash is appended, and its companion regex only refuses
+  `unsafe-inline`/`unsafe-eval`. So the directive checks would not notice the
+  relaxation. What *would* fire are the two inline-script guards:
+  `app_shell_inline_script_blocked_by_content_policy` in `verify_app_build.mjs`
+  and `app shell carries no inline script the policy would refuse` in
+  `verify_app_deploy_workflow.mjs`. Both would have to be deleted or narrowed —
+  and both exist because three inline shell scripts were silently refused for
+  months, which is how the app shipped with no service worker at all (G3).
+- **(b) Is the hash generatable deterministically at build time?** Yes, and the
+  machinery is already in the repo: `create_public_vercel_output.mjs:532`
+  computes `sha256` over the inline body for the public site and
+  `verify_public_vercel_output.mjs:402` verifies the emitted policy carries it.
+  The wrinkle is that the app's policy lives in **two** places — the generated
+  `vercel.json` and the hand-edited `<meta>` in `showroom/index.html` — so the
+  hash would need either a Vite transform for the meta tag or a verifier that
+  recomputes and compares both. Non-trivial, but not a blocker.
+- **(c) Is it worth it?** No. 4 ms.
+
+(a) and (b) both come back workable, which is precisely why (c) had to be
+measured first rather than assumed. The cheap prerequisite was the right call.
+
+### Consequence for the other contention-mechanism findings
+
+The transport caveat listed four findings whose mechanism is request contention
+and flagged all four as HTTP/1.1 upper bounds. This closes one of them, and it
+closed at **zero, not at a reduced number** — the correction was not a haircut,
+it was total. That is a reason to treat the remaining three (the p6
+`modulepreload` deletion at −436 ms, `ENTRY-SET-REDUCTION-PLAN.md` section 3's
+six-in-flight model, and the 2026-08-20 `modulepreload` rejection at +1.5 s) as
+genuinely unknown rather than merely inflated, and to re-measure any of them
+over `--transport h2` before spending a lane on it. The 2×2 above is the cheap
+template: build once, delete the thing, run both transports.
+
+### The no-flash property, proved in both directions
+
+The reason this file is allowed to cost anything at all is that it stamps
+`data-supermega-theme` before paint, so a returning dark-theme user never sees a
+light frame. Nothing in this change touches that path, but the ceiling arm above
+is exactly what "broken" looks like, so it was cheap to prove the property is
+real rather than assumed — and, more importantly, to prove the instrument can
+detect its absence.
+
+Method: seed `localStorage['supermega-interface-theme'] = 'dark'`, drop the
+service worker and its Cache Storage but keep localStorage, then cold-load `/`
+under the same throttling while sampling
+`document.documentElement.dataset.supermegaTheme` on every
+`requestAnimationFrame` — rAF runs *before* the paint of its own frame — and
+compare the first dark-stamped frame against the `first-contentful-paint` entry.
+
+| arm | FCP | first dark-stamped frame | theme stamped before FCP |
+|---|---|---|---|
+| as shipped | 1,468 ms | 1,416 ms | **yes**, by 51 ms |
+| script tag deleted | 1,232 ms | never, in 400 sampled frames | **no** |
+
+**The first version of this instrument was wrong and the negative arm is what
+caught it.** It sampled inside a `PerformanceObserver` callback, which is a
+queued task — by the time it ran, `CoreShell` had already stamped the theme, so
+the broken arm reported `themeAttr: "dark"` and passed identically to the good
+one. A guard that cannot fail is indistinguishable from a guard that passed.
+Sampling on rAF fixed it, and the negative arm now fails as it must.
+
+### What this change itself cost
+
+Nothing was optimised, so the only bytes moved are the warning added to
+`showroom/index.html`'s existing comment so the trap is refused at the place a
+reader meets it. That comment ships in the document on the first-paint path, so
+it was priced rather than waved through: **97 bytes brotli q3**, measured
+against the same built document without it. The first draft was 205 bytes and
+was cut in half by moving the reasoning into
+`tools/write_app_release_metadata.mjs`, which is build-time and ships nothing.
+
+Shop first-paint closure after this change: **459,779 brotli q3 across 25
+assets**, against the 475,000 ceiling in `verify_app_build.mjs` — 15,221 bytes
+of headroom (3.2%). The previously recorded 458,562 predates the boot shell's
+stall notice (`1bce5545`) and is not a like-for-like predecessor.
