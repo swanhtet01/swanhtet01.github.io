@@ -193,7 +193,7 @@ non-draft since discovering this, and will keep doing so until you say
 otherwise — flagging it because it is a deliberate deviation from a standing
 instruction, not an oversight.
 
-### After P-1: the merge order for the forty-one open pull requests
+### After P-1: the merge order for the forty-six open pull requests
 
 Verified 2026-09-02 against every open PR's base and file list, with the two
 independent-PR file overlaps test-merged. **Every PR here is CI-green and
@@ -221,7 +221,8 @@ them without a single manual conflict.
 
 **Tier 1 — independent, based on `main`, no decision needed. Any order.**
 #554, #555 (this packet), #556, #557, #558, #560, #562, #563, #564, #565,
-#567, #568, #570, #571, #572, #575, #576, #577, #580, #582, #585. Twenty-one
+#567, #568, #570, #571, #572, #575, #576, #577, #580, #582, #585, #591.
+Twenty-two
 PRs. #567 and #570 both edit `tools/verify_app_build.mjs`; test-merged,
 auto-merge is clean. #585 is two playbook sentences whose button labels had
 drifted from the shipped UI, found by the journeys. #580 (scheduler ceiling and pool pressure measured, kernel test-only)
@@ -253,9 +254,29 @@ GitHub's update-branch button is enough; none conflicts.
   asserts it is visible; pinned CSS byte-identical, px ratchet net zero)
 - #587 → after #586 (the 390px measurement sweep, and its answer: across all
   four products and 44 screens there is zero horizontal overflow and no
-  second P3.10 — every hidden notice is content the operator can open. Also
-  supplies the data P3.10 item 2 was waiting for: six Plant sentences at 8px,
-  three Ecommerce ones at 9px. Tool only, not wired into CI)
+  second P3.10 — every hidden notice on Shop, Plant and Ecommerce is content
+  the operator can open, and Website's two candidates traced to a redundant
+  page-stage pill. Also supplies the data P3.10 item 2 was waiting for: seven
+  Plant sentences at 8px, four Ecommerce ones at 9px. Tool only, not wired
+  into CI)
+- #588 → after #587 (P3.10 item 2 for the one element that carries those
+  Plant sentences: `.plant-today-source small` moves from the 8px mono
+  caption style to `--font-size-xs`, measured 14 → 0 sub-10px strings on
+  that element; one EOF-appended CSS rule, pinned originals byte-identical)
+- #589 → after #588 (doc only: the sweep's rows classified against source
+  into four decisions, one of them — the Ecommerce 9px storefront sentences —
+  deliberately left for you because it is the product's voice; corrected
+  after Codex review so the Website pill is recorded as no-action)
+- #590 → after #589 (Shop quantity steppers widened 40 → 44px on phone
+  widths; the sweep measured under-44 targets 3 → 1 with overflow still zero;
+  two value-level edits inside existing phone media blocks)
+- #592 → after #579 (the observability re-grade #563 asked for: §6 rewritten
+  to the measured facts — 16 emit sites, the shipped client error lane, the
+  shipped breach alerting, OpenTelemetry Phase A instrumented — and re-graded
+  D+ → C with the six remaining gaps cited. **Being restacked**: as opened it
+  sits on `main` and conflicts with #563's own §6 edit, so it is being
+  rebased onto the #566 chain; do not merge it until its base shows that
+  chain. Doc only)
 
 **Tier 3 — waits on a decision in this packet. Merge only after the named one.**
 | PR | Decision | What it needs from you |
@@ -297,8 +318,8 @@ pointing at a gap already filled.
   eight of the Tier 1–2 branches, it test-merges onto the two most-overlapping
   ones with **zero conflicts**, so it imposes no ordering on them.
 
-**Total for Tiers 1–2 once P-1 is fixed: thirty-two approve-and-merge clicks
-(twenty-one plus eleven stacked) in the order above.** Tier 3 is six decisions you
+**Total for Tiers 1–2 once P-1 is fixed: thirty-seven approve-and-merge clicks
+(twenty-two plus fifteen stacked) in the order above.** Tier 3 is six decisions you
 were going to make anyway; the table just says which PR each one releases.
 
 ---
