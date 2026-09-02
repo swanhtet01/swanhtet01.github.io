@@ -21,6 +21,7 @@ on:
       - 'tools/journey_lib.mjs'
       - 'tools/journey_shop_cash_sale.mjs'
       - 'tools/journey_plant_shift_release.mjs'
+      - 'tools/journey_ecommerce_request_review.mjs'
       - 'CURRENT.md'
       - 'api/**'
       - 'api_app.py'
@@ -161,3 +162,10 @@ jobs:
       # persists a shift_closed proof the guided sample never writes.
       - name: Plant shift-release browser journey (390px)
         run: node tools/journey_plant_shift_release.mjs
+
+      # Third product, same harness: the Ecommerce request-to-review handoff (storefront
+      # cart, checkout quote, order request, then the accountable Shop confirmation) --
+      # proves a real customer request earns one Shop order under a generated proof while
+      # the guided sample's own request stays at pending_shop_review with no order.
+      - name: Ecommerce request-review browser journey (390px)
+        run: node tools/journey_ecommerce_request_review.mjs
