@@ -630,6 +630,48 @@ of genuine waste whose pins are 44px touch-target and live-site guards
 `verify_app_release_live.mjs` :510-512). Retiring them is a pin-moving review
 of its own with a negative test per pin, not a byte-reclaim ride-along.
 
+### P3.10 — Plant phone-width status notice is hidden, not wrapped (queued 2026-09-02)
+
+Found by the second automated 390px browser journey (#581, `tools/journey_plant_shift_release.mjs`),
+which could read the shift-close confirmation only from the DOM, never from
+what a phone operator sees. Verified against source before queuing:
+
+- `CoreApp.tsx` ~9828 renders the Plant "Start here" status line as
+  `<div className="plant-today-source" role="status"|"alert"><span>{source}</span><small>{notice}</small></div>`.
+  The `<small>` carries the sentences that confirm what just happened:
+  "Shift packet prepared …", "Close shift … completed", and the write-blocked
+  reason when `productionCanWrite` is false (that is when the container is
+  `role="alert"`).
+- `core-app.css` :1091 lays the `<small>` out as a right-aligned 760px-max mono
+  caption on wide screens, and :2239, inside the phone-width media query, is
+  `.plant-today-source small { display: none; }`.
+
+So at 390px, the primary device, the operator who just closed a shift gets the
+badge and the checklist but never the confirmation sentence, and when writes
+are blocked the alert's reason is removed along with it. `display: none` also
+drops the element from the accessibility tree, so `role="alert"` announces an
+empty region to a screen reader on a phone. The sibling rule two lines below
+(:2240-2241, `.plant-batch-disclosure > summary small { width: 100%; margin-left: 0 }`)
+already shows the intended phone treatment for the same kind of caption: wrap
+it under the label, do not hide it.
+
+Scope for the planning pass (do not blind-implement from this entry):
+
+1. Replace :2239 with the wrap treatment (`.plant-today-source { flex-wrap: wrap }`
+   and `.plant-today-source small { width: 100%; margin-left: 0; text-align: left; max-width: none }`),
+   EOF-appended per the binding rules, leaving :2239 byte-identical only if a
+   pin covers it (check `verify_app_build.mjs` first; none found on 2026-09-02).
+2. Decide whether the `role="alert"` write-blocked case should keep the mono
+   caption style at all at phone width, or promote to body text: it is the
+   one sentence that tells a blocked operator why nothing saves.
+3. Extend the Plant journey to assert the notice is VISIBLE at 390px
+   (`getComputedStyle(...).display !== 'none'` and non-zero box), so the
+   regression cannot return silently; the Shop journey's counter notices
+   should get the same visibility assertion for parity.
+4. Check the other three products for the same `small { display: none }`
+   phone-width idiom before closing (grep `small { display: none` in the
+   four CSS files) and list what each hides.
+
 ### Phase-3 exit
 
 Phase 3 is done when: ecommerce live-declaration hex = preview-frame
