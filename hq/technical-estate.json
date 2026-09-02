@@ -1,0 +1,254 @@
+{
+  "schemaVersion": "supermega.technical-estate.v1",
+  "generatedFrom": {
+    "portfolioUpdatedAt": "2026-08-21",
+    "siteContextVersion": "2026-07-31.3",
+    "catalogVersion": "2026-07-31.3",
+    "readinessContract": "supermega.managed-pilot-readiness.v5",
+    "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
+  },
+  "sourceDigest": "sha256:5d5aa170ebd1efe6d83cbcf076d31d165748cb32555405c2b66fa600f75fec6b",
+  "canonicalSource": {
+    "repository": "swanhtet01/swanhtet01.github.io",
+    "activeBranch": "main",
+    "localAuthority": "owner-controlled supermega-platform checkout",
+    "currentRehearsalBranchesAllowed": true,
+    "directProductionDeploymentAllowed": false
+  },
+  "vercel": {
+    "hosting": "vercel",
+    "releaseWorkflow": ".github/workflows/supermega-public-release.yml",
+    "projects": [
+      {
+        "project": "supermega-public",
+        "classification": "canonical-public-company-surface",
+        "domains": [
+          "supermega.dev",
+          "www.supermega.dev"
+        ],
+        "buildScript": "node tools/create_public_vercel_output.mjs",
+        "verifyScript": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify",
+        "output": ".vercel/output",
+        "productionPromotion": "owner-approved coordinated workflow only"
+      },
+      {
+        "project": "megaos",
+        "classification": "canonical-hosted-app-runtime",
+        "domains": [
+          "app.supermega.dev",
+          "megaos.vercel.app"
+        ],
+        "buildScript": "npm run app:release:write && npm --prefix showroom run build",
+        "verifyScript": "node tools/run_app_verify.mjs --serial",
+        "output": "showroom/dist",
+        "productionPromotion": "owner-approved coordinated workflow only"
+      }
+    ]
+  },
+  "supabase": {
+    "projectRef": "zvtzwcimpvvtkowflhda",
+    "targetStatus": "protected-unapproved",
+    "schemaAuthority": {
+      "privateSchema": "app_private",
+      "publicLegacySchema": "public",
+      "migrationAuthority": "source-controlled supabase migrations and rehearsal packets",
+      "readinessContract": "supermega.managed-pilot-readiness.v5",
+      "liveSchemaVersion": 11,
+      "localTargetVersion": 11,
+      "versionDrift": 0,
+      "browserRolesDenied": true,
+      "publicBrowserQuarantine": true
+    },
+    "productionWritesAllowed": false
+  },
+  "products": [
+    {
+      "productId": "shop",
+      "name": "Shop",
+      "kind": "operating-product",
+      "lifecycleState": "release-candidate-local",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "sourceBranchAuthority": "main",
+      "appRoute": "/shop/",
+      "publicAppRoute": "https://app.supermega.dev/shop/",
+      "runtimeSurface": "commerce",
+      "compatibilityPath": "/operations/commerce/",
+      "sourcePaths": [
+        "showroom/src/App.tsx",
+        "showroom/src/core/CoreApp.tsx",
+        "showroom/src/core/CoreShell.tsx",
+        "showroom/src/products/shop",
+        "showroom/src/core/ShopToday.tsx",
+        "showroom/src/core/shop-profit-control.ts",
+        "showroom/src/core/ShopInventoryFoundation.tsx"
+      ],
+      "releaseWorkflow": ".github/workflows/supermega-public-release.yml",
+      "ownerGate": "owner-gated",
+      "workOrderId": "shop-spa-owner-pilot",
+      "requiredProof": "One named Spa owner completes reviewed import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant; record setup time, correction effort, and five-day evidence without treating sample data as client proof.",
+      "classification": "customer-product"
+    },
+    {
+      "productId": "plant",
+      "name": "Plant",
+      "kind": "operating-product",
+      "lifecycleState": "release-candidate-local",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "sourceBranchAuthority": "main",
+      "appRoute": "/plant/",
+      "publicAppRoute": "https://app.supermega.dev/plant/",
+      "runtimeSurface": "production",
+      "compatibilityPath": "/operations/production/",
+      "sourcePaths": [
+        "showroom/src/App.tsx",
+        "showroom/src/core/CoreApp.tsx",
+        "showroom/src/core/CoreShell.tsx",
+        "showroom/src/core/PlantOrderFoundation.tsx",
+        "showroom/src/core/PlantEquipmentOnboarding.tsx"
+      ],
+      "releaseWorkflow": ".github/workflows/supermega-public-release.yml",
+      "ownerGate": "owner-gated",
+      "workOrderId": "plant-managed-oee-pilot",
+      "requiredProof": "Validate one order-bound OEE window with named operator and supervisor on isolated managed tenant; reconcile exact downtime source; measure correction effort before costing adapters.",
+      "classification": "customer-product"
+    },
+    {
+      "productId": "website",
+      "name": "Website",
+      "kind": "maker-product",
+      "lifecycleState": "release-candidate-local",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "sourceBranchAuthority": "main",
+      "appRoute": "/website/",
+      "publicAppRoute": "https://app.supermega.dev/website/",
+      "runtimeSurface": "website",
+      "compatibilityPath": null,
+      "sourcePaths": [
+        "showroom/src/App.tsx",
+        "showroom/src/products/website/WebsiteProduct.tsx",
+        "showroom/src/products/website/WebsiteStarterSetup.tsx",
+        "showroom/src/products/website/website-model.ts"
+      ],
+      "releaseWorkflow": ".github/workflows/supermega-public-release.yml",
+      "ownerGate": "owner-gated",
+      "workOrderId": "website-managed-brief-acceptance",
+      "requiredProof": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority.",
+      "classification": "customer-product"
+    },
+    {
+      "productId": "ecommerce",
+      "name": "Ecommerce",
+      "kind": "maker-product",
+      "lifecycleState": "release-candidate-local",
+      "canonicalRepository": "swanhtet01/swanhtet01.github.io",
+      "sourceBranchAuthority": "main",
+      "appRoute": "/ecommerce/",
+      "publicAppRoute": "https://app.supermega.dev/ecommerce/",
+      "runtimeSurface": "ecommerce",
+      "compatibilityPath": null,
+      "sourcePaths": [
+        "showroom/src/App.tsx",
+        "showroom/src/products/ecommerce/EcommerceProduct.tsx",
+        "showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx",
+        "showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts",
+        "showroom/src/products/ecommerce/ecommerce-shop-handoff.ts"
+      ],
+      "releaseWorkflow": ".github/workflows/supermega-public-release.yml",
+      "ownerGate": "owner-gated",
+      "workOrderId": "ecommerce-managed-order-exception-pilot",
+      "requiredProof": "Prove cart-to-Shop handoff and customer-safe acknowledgement on protected preview and isolated managed tenant; add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery.",
+      "classification": "customer-product"
+    }
+  ],
+  "sharedCapabilities": [
+    {
+      "id": "ai-assistance",
+      "classification": "shared-capability-not-product",
+      "status": "gated-r-and-d",
+      "route": "/agents/",
+      "boundary": "May prepare reviewed work inside Shop, Plant, Website, and Ecommerce; may not independently send, charge, publish, deploy, mutate access, or write production."
+    }
+  ],
+  "lifecycle": {
+    "order": [
+      "shop",
+      "plant",
+      "website",
+      "ecommerce"
+    ],
+    "states": [
+      "discover",
+      "define",
+      "build",
+      "release",
+      "learn"
+    ],
+    "currentPriority": "shop-first-managed-pilot-readiness",
+    "nextProductSequence": [
+      "shop",
+      "plant",
+      "website",
+      "ecommerce"
+    ]
+  },
+  "legacyAndSatellite": [
+    {
+      "id": "supermega-workspace",
+      "classification": "satellite",
+      "allowedAction": "read-only observation and later owner-approved triage",
+      "retirementAllowedWithoutOwnerApproval": false
+    },
+    {
+      "id": "legacy-vercel-projects-and-domains",
+      "classification": "legacy-observe-first",
+      "allowedAction": "30-day observation before any retirement proposal",
+      "retirementAllowedWithoutOwnerApproval": false
+    }
+  ],
+  "ownerGates": {
+    "requiredApprovalFor": [
+      "github_push",
+      "pull_request_creation",
+      "merge",
+      "production_release",
+      "vercel_deploy_or_promotion",
+      "supabase_schema_or_data_write",
+      "credential_change",
+      "customer_contact",
+      "payment_or_refund",
+      "stock_movement",
+      "domain_or_publish_change",
+      "managed_activation"
+    ],
+    "productionWritesAllowed": false,
+    "externalEffectsAllowed": false,
+    "autoMergeAllowed": false,
+    "localSubagentsAllowedByDefault": false
+  },
+  "sourceReceipts": [
+    {
+      "path": "hq/portfolio.json",
+      "digest": "sha256:952074c01bd97f591f02271cdb7acd8ced3051198e126407c720775b821b1423"
+    },
+    {
+      "path": "site-manifest.json",
+      "digest": "sha256:2327e64de7f935c7379fb3780cc1c8a4b4ad68ce8f2d60701375c60b800e1477"
+    },
+    {
+      "path": "vercel.json",
+      "digest": "sha256:a0daaf281a3f9cfb4a7b0e03880da757dd4e76497928390414be9c55fc7c64fb"
+    },
+    {
+      "path": "package.json",
+      "digest": "sha256:1015e58e6ddcac784a1f12c5e069afd16d5228915f2e9902eb233bcca2a6e26f"
+    },
+    {
+      "path": "hq/readiness/supabase-security-advisor-audit.json",
+      "digest": "sha256:59edf60b5e7eae3a52ca37819c063789993f7c235fccf74968906289ad667d6b"
+    },
+    {
+      "path": "hq/readiness/managed-pilot-readiness.json#semantic-projection-v1",
+      "digest": "sha256:0c6e3f561f872fe399abe083cdd0d2e11c4e39a8dbeb98b91cf7ab90841660dc"
+    }
+  ]
+}

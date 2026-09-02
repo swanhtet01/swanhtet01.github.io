@@ -48,6 +48,43 @@ const SALES_SCHEMA = {
 }
 
 const arr = (v, max, mapper) => (Array.isArray(v) ? v.slice(0, max).map(mapper) : [])
+const record = (v) => v && typeof v === 'object' && !Array.isArray(v)
+
+/**
+ * Bound and whitelist a deal packet before it is persisted or used as outreach source.
+ * Generated packets already pass through the same clips below; this also protects the
+ * manual save path from arbitrary JSON, unexpected nested keys, and oversized text.
+ */
+export function normalizeDealPacket(input) {
+  if (!record(input)) return { ok: false, reason: 'invalid_packet' }
+  const packet = {
+    headline: clip(input.headline, 300),
+    fit_score: Math.max(0, Math.min(parseInt(input.fit_score, 10) || 0, 100)),
+    fit_reason: clip(input.fit_reason, 600),
+    segment: clip(input.segment, 80),
+    pain: clip(input.pain, 600),
+    modules: arr(input.modules, 5, (m) => ({
+      name: clip(record(m) ? m.name : '', 80),
+      why: clip(record(m) ? m.why : '', 240),
+    })).filter((m) => m.name || m.why),
+    operator: clip(input.operator, 600),
+    phases: arr(input.phases, 3, (s) => clip(s, 90)).filter(Boolean),
+    first_proof: clip(input.first_proof, 360),
+    pricing: {
+      build_fee_mmk: clip(record(input.pricing) ? input.pricing.build_fee_mmk : '', 80),
+      pro_mrr_mmk: clip(record(input.pricing) ? input.pricing.pro_mrr_mmk : '', 80),
+      rationale: clip(record(input.pricing) ? input.pricing.rationale : '', 500),
+    },
+    objections: arr(input.objections, 4, (o) => ({
+      objection: clip(record(o) ? o.objection : '', 200),
+      answer: clip(record(o) ? o.answer : '', 400),
+    })).filter((o) => o.objection || o.answer),
+    outreach_en: clip(input.outreach_en, 1200),
+    next_action: clip(input.next_action, 300),
+  }
+  if (!packet.headline && !packet.pain) return { ok: false, reason: 'empty_packet' }
+  return { ok: true, packet }
+}
 
 /** Generate a deal packet for a lead. Returns { ok, packet } or { ok:false, reason }. */
 export async function generateDeal({ name, company, workflow, contact }) {
@@ -70,7 +107,7 @@ export async function generateDeal({ name, company, workflow, contact }) {
       b = bRes.data
     } catch { /* sales is best-effort; packet is still useful */ }
 
-    const packet = {
+    const rawPacket = {
       headline: clip(a.headline, 300),
       fit_score: Math.max(0, Math.min(parseInt(a.fit_score, 10) || 0, 100)),
       fit_reason: clip(a.fit_reason, 600),
@@ -85,12 +122,13 @@ export async function generateDeal({ name, company, workflow, contact }) {
       outreach_en: clip(b?.outreach_en, 1200),
       next_action: clip(a.next_action, 300),
     }
-    if (!packet.headline && !packet.pain) return { ok: false, reason: 'empty_packet' }
-    return { ok: true, packet }
+    const normalized = normalizeDealPacket(rawPacket)
+    if (!normalized.ok) return normalized
+    return { ok: true, packet: normalized.packet }
   } catch (err) {
     if (String(err.message).includes('missing_api_key')) return { ok: false, reason: 'ai_not_configured' }
     return { ok: false, reason: clip(err.message, 120) || 'generation_failed' }
   }
 }
 
-export default { generateDeal }
+export default { generateDeal, normalizeDealPacket }

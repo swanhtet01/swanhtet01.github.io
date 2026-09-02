@@ -1,0 +1,136 @@
+{
+  "contract": "supermega.github-main-protection-proposal.v1",
+  "digestScope": "utf8_compact_json_without_digest",
+  "repository": "swanhtet01/swanhtet01.github.io",
+  "mode": "owner_approval_required",
+  "purpose": "Make the GitHub main-protection blocker executable without approving any other release action.",
+  "githubApi": {
+    "method": "POST",
+    "path": "/repos/swanhtet01/swanhtet01.github.io/rulesets",
+    "apiVersion": "2026-03-10",
+    "requiredPermission": "Administration repository permission: write",
+    "docs": [
+      "https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset",
+      "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets"
+    ]
+  },
+  "proposedRuleset": {
+    "name": "SuperMega main release gate",
+    "target": "branch",
+    "enforcement": "active",
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "include": [
+          "refs/heads/main"
+        ],
+        "exclude": []
+      }
+    },
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "type": "pull_request",
+        "parameters": {
+          "allowed_merge_methods": [
+            "merge",
+            "squash",
+            "rebase"
+          ],
+          "dismiss_stale_reviews_on_push": true,
+          "require_code_owner_review": false,
+          "require_last_push_approval": true,
+          "required_approving_review_count": 1,
+          "required_review_thread_resolution": true
+        }
+      },
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {
+              "context": "SuperMega App CI"
+            },
+            {
+              "context": "Dependency Security Audit"
+            },
+            {
+              "context": "Kernel Console - Verify & Owner-Gated Release"
+            }
+          ],
+          "strict_required_status_checks_policy": true
+        }
+      }
+    ]
+  },
+  "verifierCompatibility": {
+    "verifier": "tools/verify_github_main_protection.mjs",
+    "contract": "supermega.github-main-protection.v1",
+    "simulatedOk": true,
+    "requiredChecks": [
+      "SuperMega App CI",
+      "Dependency Security Audit",
+      "Kernel Console - Verify & Owner-Gated Release"
+    ],
+    "simulatedFailures": []
+  },
+  "controls": {
+    "githubWritesApproved": false,
+    "githubWritesPerformed": false,
+    "repositorySettingsMutated": false,
+    "branchMutated": false,
+    "pullRequestCreated": false,
+    "mergePerformed": false,
+    "deploymentPerformed": false,
+    "supabaseMutated": false,
+    "credentialValuesRequired": false
+  },
+  "applicator": {
+    "tool": "tools/apply_github_main_protection.mjs",
+    "planCommand": "npm run github:main-protection:apply:plan",
+    "executeCommand": "node tools/apply_github_main_protection.mjs --execute",
+    "requiredApprovalEnv": "SUPERMEGA_GITHUB_MAIN_PROTECTION_APPROVAL",
+    "tokenEnv": [
+      "GITHUB_TOKEN",
+      "GH_TOKEN"
+    ],
+    "defaultMode": "plan_only_no_github_write",
+    "executeRequiresExactOwnerApproval": true,
+    "afterApplyVerifier": "tools/verify_github_main_protection.mjs",
+    "credentialValueExposed": false
+  },
+  "ownerApprovalTemplate": "I approve one GitHub repository settings write to create or update the main protection ruleset for swanhtet01/swanhtet01.github.io using the reviewed SuperMega main release gate proposal only. I do not approve push, PR creation, merge, deployment, Supabase mutation, credential change, customer contact, payment, stock, domain, hosted-write, or managed activation.",
+  "afterApplyVerification": {
+    "readOnlySnapshotCommands": [
+      "GET /repos/swanhtet01/swanhtet01.github.io/branches/main",
+      "GET /repos/swanhtet01/swanhtet01.github.io/rulesets"
+    ],
+    "localVerificationCommand": "node tools/verify_github_main_protection.mjs --branch-file <branch-snapshot.json> --rulesets-file <rulesets-snapshot.json>",
+    "requiredResult": "ok:true"
+  },
+  "sourceReceipts": [
+    {
+      "path": "package.json",
+      "digest": "sha256:1015e58e6ddcac784a1f12c5e069afd16d5228915f2e9902eb233bcca2a6e26f"
+    },
+    {
+      "path": "tools/verify_github_main_protection.mjs",
+      "digest": "sha256:e4292c78ae87fa8aff23d2084b6dd5fa60464a9fd42e6b85f5c91c15e731a5c6"
+    },
+    {
+      "path": "tools/prepare_github_main_protection_packet.mjs",
+      "digest": "sha256:b542b62b566228f7186a6b315e32989452468718593bee7019ace2966c568279"
+    },
+    {
+      "path": "tools/apply_github_main_protection.mjs",
+      "digest": "sha256:fc075c0fbff91e01551ec2122fc8728b57412855be41a3ff64546aa95268da96"
+    }
+  ],
+  "digest": "sha256:611e0be34212d54fe8f5c9b4580ae1263293cf56769c7d28568cfa890f65f6b3"
+}

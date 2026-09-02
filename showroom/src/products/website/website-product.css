@@ -1881,6 +1881,7 @@
 .website-today-metrics span { min-width: 0; display: grid; gap: 3px; padding: 10px 8px; background: var(--website-panel); }
 .website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
 .website-today-metrics strong { overflow: hidden; color: var(--website-ink); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.website-today-metrics span:last-child strong { overflow: visible; text-overflow: clip; white-space: normal; }
 
 .website-today-source {
   grid-column: 1 / -1;
@@ -3625,4 +3626,43 @@
      --website-sans, the pre-P3.2 winner — the de-terminal-look decision).
      --website-sans itself is undisputed: it is declared only at :1716. */
   --website-mono: var(--website-sans);
+}
+
+.website-restored-draft-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.125rem;
+  border: .0625rem solid var(--website-warn);
+  border-radius: var(--radius-lg);
+  background: var(--website-panel);
+  padding: var(--space-4) 1.125rem;
+}
+
+.website-restored-draft-choice h2 {
+  margin: .1875rem 0 .3125rem;
+  font-size: var(--font-size-lg);
+}
+
+.website-restored-draft-choice p,
+.website-restored-draft-choice small {
+  display: block;
+  margin: 0;
+  color: var(--website-muted);
+  line-height: 1.45;
+}
+
+.website-restored-draft-choice small { margin-top: var(--space-1); }
+
+.website-restored-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 47.5rem) {
+  .website-restored-draft-choice { grid-template-columns: 1fr; }
+  .website-restored-draft-actions { display: grid; justify-content: stretch; }
+  .website-restored-draft-actions .website-button { width: 100%; }
 }

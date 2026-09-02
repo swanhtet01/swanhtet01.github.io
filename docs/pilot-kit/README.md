@@ -2,21 +2,30 @@
 
 **This kit is preparation for the managed pilot, not the pilot's acceptance evidence itself.** The Shop work order `shop-spa-owner-pilot`'s actual gate (`hq/portfolio.json`) requires one named Spa owner to complete reviewed client import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant, with setup time, correction effort, and five-day evidence recorded. This kit prepares the operator, baseline, agreement, and rehearsal without pretending sample data is client proof. The authenticated run on an isolated hosted tenant remains a separate, founder-only step.
 
+## Strategy bridge: Profit Control acquisition, Spa proof
+
+POS-independent Shop Profit Control is the public and owner first-use acquisition and diagnostic wedge. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
+
+The existing shop-spa-owner-pilot remains the first bounded named vertical proof. It uses the existing Spa package sale, treatment redemption, daily close, and recovery workflow to validate one real end-to-end operating workflow and measured correction effort. Spa is not Shop's product identity, and success in this bounded vertical does not prove all Myanmar trades.
+
+Both paths remain owner-gated. Synthetic, sample, browser-local, and local-rendered evidence cannot close the real pilot.
+
 ## Why this kit exists
 
-The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v4`, stored at `hq/readiness/managed-pilot-readiness.json`) blocks every managed claim behind the founder decision `managed-production-activation`. It requires four explicit inputs: `approve_runtime_role_provisioning`, `approve_first_named_owner_identity`, `approve_exact_production_release`, and `approve_managed_activation_window`. Its operator block requires a measured baseline (`measuredBaselineRequired`) and acceptance evidence (`acceptanceEvidenceRequired`) alongside verified email, terms acceptance, and tenant-isolation proof. Separately, `shop-spa-owner-pilot` stays `owner-gated`; this local rehearsal cannot substitute for the named client's hosted run.
+The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v5`, stored at `hq/readiness/managed-pilot-readiness.json`) blocks every managed claim behind the founder decision `managed-production-activation`. It requires four explicit inputs: `approve_runtime_role_provisioning`, `approve_first_named_owner_identity`, `approve_exact_production_release`, and `approve_managed_activation_window`. Its operator block requires a measured baseline (`measuredBaselineRequired`) and acceptance evidence (`acceptanceEvidenceRequired`) alongside verified email, terms acceptance, and tenant-isolation proof. Separately, `shop-spa-owner-pilot` stays `owner-gated`; this local rehearsal cannot substitute for the named client's hosted run.
 
 This kit is the paperwork for that preparation. It authorizes nothing: the founder decision remains `required` with `proposal_only` authority, and nothing in this kit touches a hosted service, spends a credential, or performs any network mutation.
 
 ## The documents, in order of use
 
-1. [baseline-measurement.md](baseline-measurement.md) — the form the founder fills in WITH the Spa owner before day 1: named business, named operator, the measured package-and-treatment process, at least three observed timings, error and cost counts, and the four baseline numbers the handoff generator requires.
-2. [acceptance-checklist.md](acceptance-checklist.md) — the day-by-day five-day plan: the four start gates, what evidence gets captured daily, what an accepted run means, and how each day maps to the readiness contract's acceptance-evidence requirement.
+1. [baseline-measurement.md](baseline-measurement.md) — the form the founder fills in WITH the Spa owner before day 1: named business, named operator, the measured package-and-treatment process, at least three observed manual order runs, three package-redemption runs, three daily-close runs, distinct private JSON run IDs across every baseline stream, error and cost counts, and the baseline numbers the handoff generator requires.
+2. [acceptance-checklist.md](acceptance-checklist.md) — the day-by-day five-day plan: the four start gates, what evidence gets captured daily, what an accepted run means, how the private receipt plus independent anchor are recorded, and how each day maps to the readiness contract's acceptance-evidence requirement.
 3. [pilot-agreement-outline.md](pilot-agreement-outline.md) — a plain-language outline of what the partner gets and gives. Outline only, marked NOT LEGAL ADVICE; it contains no invented commitments.
 
 ## How it connects to the existing machinery
 
 - The concrete five-day evidence plan, the four owner gates, and the required baseline fields come verbatim from the pilot handoff generator, tools/create_shop_pilot_handoff.mjs (npm script `client:pilot:handoff`). This kit is the human-facing preparation for the inputs that generator refuses to run without.
+- The baseline form can be converted into an owner-safe digest packet with the `shop:pilot:baseline-packet` script. Owner-safe means counts, booleans, labels, dates, and digests for local/HQ review only; it is not public website, customer-facing, or publishable output. The owner-private intake packet comes from `shop:pilot:intake-packet`. The Shop launch gate can then read both packets with `shop:pilot:launch-gate`; the Day-0 readiness packet comes from `shop:pilot:day0-readiness` and must include the current release handoff plus GitHub protection snapshot. Both gates still refuse contact, payment, deployment, hosted writes, and managed activation.
 - The private sales workspace flow around a real contact event is documented in `docs/supermega-shop-sales-agent.md`; its reporting boundary applies to everything captured with this kit: customer identity stays private.
 - The in-person demo that usually precedes recruitment is docs/demo-playbooks/shop.md.
 

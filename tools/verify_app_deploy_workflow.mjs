@@ -16,6 +16,7 @@ const root = resolve(import.meta.dirname, '..')
 const appWorkflow = await readFile(resolve(root, '.github/workflows/supermega-app-deploy.yml'), 'utf8')
 const workflow = await readFile(resolve(root, '.github/workflows/supermega-public-release.yml'), 'utf8')
 const ciWorkflow = await readFile(resolve(root, '.github/workflows/showroom-ci.yml'), 'utf8')
+const renderedJourneyVerifier = await readFile(resolve(root, 'tools/verify_app_entry_rendered.mjs'), 'utf8')
 const dependencyAuditWorkflow = await readFile(resolve(root, '.github/workflows/dependency-security.yml'), 'utf8')
 const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/supermega-public-live-health.yml'), 'utf8')
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
@@ -120,7 +121,8 @@ requireContract('ordered integration batches preserve production safeguards and 
   && releaseIntegrationBatch.includes('createClientDemoWorkspace')
   && releaseIntegrationBatch.includes("file: 'showroom/src/core/client-onboarding.ts'")
   && releaseIntegrationBatch.includes('function managedLoginPath(product: string | null)')
-  && releaseIntegrationBatch.includes('Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser.')
+  && releaseIntegrationBatch.includes('Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.')
+  && releaseIntegrationBatch.includes('Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.')
   && releaseIntegrationBatch.includes('loadManagedOwnerControlRun')
   && releaseIntegrationBatch.includes('const ProductSystemNavigator = lazy(')
   && releaseIntegrationBatch.includes('Choose what you want to run.')
@@ -240,7 +242,34 @@ requireContract('app build contract',
   && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
   && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
+requireContract('CI verifies exact-source desktop and 390px journeys for all four products',
+  ciWorkflow.includes('timeout-minutes: 15')
+  && ciWorkflow.includes("SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
+  && ciWorkflow.includes("ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
+  && ciWorkflow.includes('Verify exact source checkout')
+  && ciWorkflow.includes('test "$(git rev-parse HEAD)" = "$SUPERMEGA_CI_SOURCE_SHA"')
+  && ciWorkflow.includes("SUPERMEGA_RELEASE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
+  && ciWorkflow.includes('Verify desktop and 390px product journeys')
+  && ciWorkflow.includes('SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}')
+  && ciWorkflow.includes('node tools/verify_app_entry_rendered.mjs')
+  && ciWorkflow.includes('--out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json"')
+  && ciWorkflow.includes('--screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR"')
+  && ciWorkflow.includes('--expected-head "$SUPERMEGA_CI_SOURCE_SHA"')
+  && !ciWorkflow.includes('--expected-head "$GITHUB_SHA"')
+  && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify desktop and 390px product journeys')
+  && ['shop', 'plant', 'website', 'ecommerce'].every((product) => renderedJourneyVerifier.includes(`route: '/${product}/`))
+  && renderedJourneyVerifier.includes('width: 390')
+  && renderedJourneyVerifier.includes('height: 844')
+  && renderedJourneyVerifier.includes('noHorizontalOverflow: true')
+  && renderedJourneyVerifier.includes("getComputedStyle(currentSale).transform === 'none'")
+  && renderedJourneyVerifier.includes('Number.parseFloat(getComputedStyle(currentSale).opacity) === 1')
+  && renderedJourneyVerifier.includes('&& (!mobile || state?.drawerTransitionSettled)')
+  && !ciWorkflow.includes('actions/upload-artifact'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
+requireContract('coordinated release avoids redundant local app install',
+  !workflow.includes('Install app dependencies')
+  && !workflow.includes('working-directory: showroom\n        run: npm ci')
+  && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"'))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
@@ -258,7 +287,8 @@ requireContract('app is served with a security header floor',
   appSecurityHeaders['X-Frame-Options'] === 'DENY'
   && appSecurityHeaders['X-Content-Type-Options'] === 'nosniff'
   && appSecurityHeaders['Referrer-Policy'] === 'no-referrer'
-  && String(appSecurityHeaders['Permissions-Policy'] || '').includes('camera=()')
+  && appSecurityHeaders['Permissions-Policy'] === 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()'
+  && generator.includes("'Permissions-Policy': 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()'")
   && generator.includes('appContentSecurityPolicy'))
 requireContract('app content policy refuses framing, injection and unexpected egress',
   [
@@ -452,6 +482,10 @@ requireContract('core workflows use Node 24 action revisions',
   && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 6
   && (coreWorkflowActions.match(/actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/g) || []).length === 3
   && !/(?:11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|a26af69be951a213d495a4c3e4e4022e16d87065)/.test(coreWorkflowActions))
+requireContract('coordinated release caches python verifier dependencies',
+  workflow.includes("cache: 'pip'")
+  && workflow.includes('cache-dependency-path: requirements-test.txt')
+  && workflow.indexOf("cache: 'pip'") < workflow.indexOf('python -m pip install --disable-pip-version-check -r requirements-test.txt'))
 requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
 requireContract('stale Cloud Run release authority is retired', !existsSync(resolve(root, '.github/workflows/supermega-app-cloud-run.yml')))
 requireContract('orphan enterprise and free-mode gates are retired',

@@ -56,6 +56,8 @@ function check(condition, label) {
 {
   check(cashAccountCodeForMethod('KBZPay') === 'cash_kbz_wallet', 'KBZPay routes to the KBZ wallet leaf')
   check(cashAccountCodeForMethod('WavePay') === 'cash_wave_wallet', 'WavePay routes to the Wave wallet leaf')
+  check(cashAccountCodeForMethod('AYA Pay') === 'cash_aya_wallet', 'AYA Pay routes to the AYA wallet leaf')
+  check(cashAccountCodeForMethod('MMQR') === 'cash_mmqr_clearing', 'MMQR routes to the interoperable QR clearing leaf')
   check(cashAccountCodeForMethod('Cash') === 'cash_drawer', 'Cash routes to the drawer leaf')
   check(cashAccountCodeForMethod('Voucher') === 'cash_other_clearing', 'an unknown method routes to the other-clearing leaf (total, never unresolved)')
   check(ledgerAccountCodeForRole('accounts_receivable') === 'accounts_receivable', 'AR resolves to its single leaf')

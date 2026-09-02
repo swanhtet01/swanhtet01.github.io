@@ -29,7 +29,9 @@ A pilot run counts as accepted only when all of the following hold, following th
 4. Zero wrong-target actions — nothing was done to the wrong order, item, or customer record.
 5. Zero external effects — no real message, payment, or stock movement happened because of the run.
 
-Any run failing any condition is recorded as not accepted, with the correction minutes it cost. Missing evidence is recorded as missing — per the generator's evidence rule: `Record failures and operator interventions; do not convert missing evidence into a success claim.` The measurement reference promotes a workflow only after 20 consecutive accepted runs; the five-day pilot feeds that same counting discipline, and the count restarts on any non-accepted run.
+Each counted run also needs two distinct SHA-256 digests before it is recorded: `evidenceReferenceDigest` for the private evidence receipt, and `independentAnchorDigest` for the independently sealed private anchor. Create the private run input with `client:pilot:observed-evidence:template`, check it with `client:pilot:observed-evidence:validate`, then record and verify it with `client:pilot:observed-evidence`. If either digest is missing, reused, or equal to the other digest, the run does not count.
+
+Any run failing any condition is recorded as not accepted, with the correction minutes it cost. Missing evidence is recorded as missing — per the generator's evidence rule: `Record failures and operator interventions; do not convert missing evidence into a success claim.` The measurement reference promotes a workflow only after 20 consecutive accepted runs whose accepted streak also covers pilot days 1 through 5 and at least 5 distinct observed calendar dates; the five-day pilot feeds that same counting discipline, and the count restarts on any non-accepted run.
 
 ## The five days
 
@@ -39,7 +41,7 @@ Each day's focus and proof line is verbatim from the generator's evidence plan.
 
 Proof: `Record the Shop baseline, then review the Spa services vertical pack client import and resolve every row before applying sample data.`
 
-- [ ] Generic Shop baseline numbers from the form re-confirmed with the owner on-site.
+- [ ] Shop baseline numbers from the form re-confirmed with the owner on-site: at least three manual order/package-sale runs, three package-redemption runs, and three daily-close runs.
 - [ ] Review the Spa services vertical pack client import preview with the owner. Resolve duplicates, missing identities, and invalid rows before applying sample data. No sample row counts as client evidence.
 - [ ] Evidence captured: baseline sheet finalized; walkthrough noted with date, time, and who was present.
 
@@ -94,7 +96,7 @@ The handoff contract requires exactly these, and the daily records above produce
 
 ## Boundary for all five days
 
-Nothing on the readiness contract's does-not-authorize list ever happens during these five days: `customer_message`, `payment`, `stock_move`, `hosted_scheduler_activation`, `additional_tenant_activation`, `billing_activation`, or `autonomous_external_write`. The app's own gate states the same boundary: `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
+Nothing on the readiness contract's does-not-authorize list ever happens during these five days: `customer_message`, `payment`, `stock_move`, `hosted_scheduler_activation`, `additional_tenant_activation`, `billing_activation`, or `autonomous_external_write`. The app's own routine-sale gate states the same boundary: `Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.`
 
 **These five days do not, by themselves, close the Shop work order's gate.** That gate requires `shop-spa-owner-pilot` to run with a real named Spa owner on an isolated hosted tenant. Sample client or package evidence is explicitly rejected. The founder decision `managed-production-activation` creates only the first named-owner Shop workspace on production and authorizes none of the additional external effects listed above.
 

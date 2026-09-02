@@ -145,14 +145,17 @@ export const APP_SHELL_REQUIREMENTS = [
   {
     id: 'upstream-local-consequence-boundary', authority: 'upstream', file: 'showroom/src/core/CoreApp.tsx', tokens: [
       'counter-local-boundary',
-      'Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser.',
+      'Browser-local sample only.',
+      'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
+      'It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.',
+      'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
       'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
       "if (tab === 'production') return <div className=\"operation-module production-operation-module\">",
     ],
   },
   {
     id: 'upstream-action-reachability', authority: 'upstream', file: 'showroom/src/core/core-app.css', tokens: [
-      '.shop-counter-module > .shop-counter-surface { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }',
+      '.shop-counter-module > .shop-counter-surface { min-height: 440px; flex: 0 0 clamp(440px,calc(100svh - 280px),620px); overflow: hidden; }',
       '.operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }',
       '.plant-production-module > .production-view { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }',
     ],
@@ -173,7 +176,7 @@ export const APP_SHELL_REQUIREMENTS = [
       "routeProduct ? ' has-system-navigator' : ''",
       'export function ProductHomeEntry',
       'export function ProductHomePage',
-      '<nav aria-label="Choose a SuperMega product" className="product-track-grid">',
+      '<nav aria-label="Choose product" className="product-track-grid">',
     ],
   },
   {
@@ -299,13 +302,18 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   {
     id: 'upstream-build-ux-and-context-gates', authority: 'upstream', file: 'tools/verify_app_build.mjs', tokens: [
       'function managedLoginPath(product: string | null)', 'Keep approved context', 'Raw records and browser text stay out.',
-      'Order batch review workspace', 'Enterprise order controls', 'Browser-local sample only.',
+      'Order batch review workspace', 'Enterprise order controls',
+      'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
+      'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
     ],
   },
   {
     id: 'upstream-live-usability-gates', authority: 'upstream', file: 'tools/verify_app_release_live.mjs', tokens: [
       'Start guided sample', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.',
-      '.operations-screen:not(.commerce-screen) .workspace-view', 'Browser-local sample only.', 'no real stock is moved',
+      '.operations-screen:not(.commerce-screen) .workspace-view', 'Browser-local sample only.',
+      'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
+      'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
+      'no real stock is moved',
     ],
   },
   {
@@ -336,8 +344,8 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Each product opens as its own working sample. Setup is optional when you are ready to use your business data.',
-      'supermega.last-product.v1', 'Your product workspaces stay separate. Opening a sample does not change another product.',
+      'Working samples. Add data when ready.',
+      'supermega.last-product.v1', 'Samples stay separate.',
       "'Choose what you want to run.'",
       'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.',
     ],

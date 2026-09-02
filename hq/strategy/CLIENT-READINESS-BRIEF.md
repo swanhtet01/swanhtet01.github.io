@@ -20,6 +20,16 @@ its generator `kernel/managed-pilot-readiness.mjs`, `hq/portfolio.json`,
 documents), `docs/demo-playbooks/shop.md`, and the product source files cited
 in section 3.
 
+**Freshness note, 2026-08-26:** current release/readiness authority has moved
+from the self-serve activation framing in this brief to the owner-named Shop
+pilot sequence captured in `COMPETITIVE-EXECUTION-CUT.md`,
+`AI-NATIVE-ARCHITECTURE.md`, and
+`hq/readiness/managed-pilot-readiness.json`. Protected production is now schema
+v11 with zero drift from the local v11 target, browser roles denied, public
+browser quarantine recorded, managed writes disabled, and pilot mode
+`owner_named`. Treat any instruction below that asks the founder to apply v11
+as historical unless re-confirmed against the runbook and readiness ledger.
+
 ---
 
 ## 1. Where we actually are
@@ -231,9 +241,10 @@ this brief said exactly that; it was wrong, and it is corrected here.
 applies the migration, not to leaving the runtime env untouched.
 
 **Why steps 10–11 cannot be pulled forward — checked in the code, not
-assumed.** Production is at v10 (`securityAudit.liveSchemaVersion` in the
-ledger), so `billing_rail`'s `_assert_schema` rejects it outright. Every
-ledger method is also workspace-scoped (`_workspace_id`,
+assumed.** Production is at v11 (`securityAudit.liveSchemaVersion` in the
+ledger), while billing schema v12/v13 remains separately gated; `billing_rail`'s
+`_assert_schema` rejects the current production posture. Every ledger method is
+also workspace-scoped (`_workspace_id`,
 `where workspace_id = %s`), and no workspace row exists until step 8 creates
 one. So an `issue-invoice` run against production today fail-closes twice
 over. **Steps 7 and 8 are prerequisites for step 10, not parallel tracks.**
@@ -286,21 +297,23 @@ with no failed requests. **F1 still stands** — none of this has been run on re
 Myanmar hardware over a real dropped connection, and the phone test is what
 turns a measured claim into a demonstrated one.
 
-`docs/demo-playbooks/shop.md` §2 is still the correct
-setup path, **but its §3 script is pre-#459 and demos roughly three of the nine
-rows below**: it has no camera-scan, payment-QR, product-photo, loyalty, or
-bottom-nav step, and its step 6 still walks the pre-#436
-`Reconcile payment` → `Complete` path that row 1 supersedes. Extending it is
-item A6 of the two-week plan. Two rows (Plant job board, Ecommerce storefront
-cards) are not Shop phone surfaces at all and have their own playbooks. The
-limits column is not hedging; it is what must be said out loud so a demo does
-not become an overclaim.
+`docs/demo-playbooks/shop.md` §2 is still the correct setup path, and §3 now
+covers the Shop phone surfaces that matter for a first owner demo: camera scan,
+keyboard fallback, bottom task bar, product photo, display-only payment QR,
+loyalty chip, current `Paid & handed over` handoff, and the online-first/offline
+drop smoke pass. `tools/prepare_shop_android_smoke_packet.mjs` packages that
+script into a private founder hardware rehearsal packet. **F1 still stands**:
+the packet makes the real-phone run repeatable, but it does not prove hosted
+pilot readiness, promotion evidence, or managed activation. Two rows (Plant job
+board, Ecommerce storefront cards) are not Shop phone surfaces at all and have
+their own playbooks. The limits column is not hedging; it is what must be said
+out loud so a demo does not become an overclaim.
 
 | Surface | Where it lives | Honest limit to say out loud |
 |---|---|---|
 | One-tap cash sale — the counter's `Paid & handed over` primary | `CoreApp.tsx:6955` renders the button, `:3990` queues the `order_settle` action (design phase 2 item 1, PR #436; `DESIGN-PROGRAM.md` lines 67 and 159 — its cited line numbers have since drifted, the strings above are current) | Records a sale; captures no money. Payment state changes only through the owner-confirmed reconciliation action, and the counter gate says so on screen. |
 | Phone bottom-nav work modes — Today / Sell / Orders / Stock | `showroom/src/core/commerce-tabs.ts`, rendered by `CoreShell.tsx` `.mobile-nav` (roadmap F1, #459; keyboard batch 1 #486) | Roadmap F1 still lists "Open: on-device keyboard/touch pass". Only batch 1 of the keyboard regression has run. No real phone has been through it. |
-| Camera barcode scan at the counter and both catalog SKU fields | `showroom/src/core/BarcodeScanButton.tsx` (roadmap S1, #459) | Built on the platform `BarcodeDetector` API alone — the component **renders nothing at all** on Firefox and desktop Safari, by design. Roadmap S1's open item is an "on-device camera smoke test (founder, any Android phone)": **this has never run on real hardware.** |
+| Camera barcode scan at the counter and both catalog SKU fields | `showroom/src/core/BarcodeScanButton.tsx` (roadmap S1, #459); local guard `tools/test_barcode_scan_boundary.mjs` | Built on the platform `BarcodeDetector` API alone — the component **renders nothing at all** on Firefox and desktop Safari, by design. The 2026-08-25 local guard pins fallback behaviour, stream cleanup, six call sites, keyboard-wedge continuity, and no scan-triggered domain writes. Roadmap S1's open item is an "on-device camera smoke test (founder, any Android phone)": **this has never run on real hardware.** |
 | Product photos on inventory rows, counter tiles, and storefront preview | `showroom/src/core/product-image-store.ts`, `use-product-image.ts` (roadmap E1, #459) | IndexedDB, device-local, downscaled on ingest. Deliberately **no `imageId` on the workspace record** (the deployed backend enforces exact-field item contracts), so photos do not sync and do not travel with a managed workspace. |
 | Photo-first storefront preview cards | `showroom/src/products/ecommerce/ecommerce-product.css:1964` (`:has()` selector; roadmap E1 follow-through, #483) | Falls back to the byte-identical artwork card in any browser without `:has()`. Photos are **not** in the exported/published site — `website-export.ts` is untouched and contains no image handling (roadmap §3 item 3 lists this as a separate, undecided slice). |
 | Merchant payment QR at checkout and on the amount-due receipt dialog | `showroom/src/core/payment-qr-store.ts`, `PaymentQr.tsx`, `use-payment-qr-image.ts` (roadmap S2, #465) | **Display-only, and this must be said.** The store's own header: "THIS IS NOT A PAYMENT CAPABILITY … No network call of any kind happens here." It shows the owner's own provider-issued static QR; money moves inside the customer's banking app, invisible to this system. |
@@ -373,12 +386,11 @@ build gates and desktop emulation only. A camera permission prompt behaving
 unexpectedly in front of a shop owner is a first-meeting-ending failure.
 
 **Cheapest mitigation, in order of cost:** (a) the founder walks one Android
-phone through the nine rows of section 3 for an afternoon — **not** through
-`docs/demo-playbooks/shop.md` §3 as it stands, which scripts none of the
-camera, QR, photo, loyalty, or bottom-nav surfaces (see the §3 preamble); the
-plan's item A6 extends the playbook to cover them, and doing that first turns
-the smoke test into a repeatable script instead of a one-off. Zero build cost,
-zero gate spend, and it closes S1's and F1's open roadmap items.
+phone through the updated Shop playbook and `shop:android-smoke:packet` output
+for an afternoon. The playbook now covers the camera, QR, photo, loyalty, and
+bottom-nav surfaces; the packet keeps the evidence private and fail-closed. Zero
+build cost, zero gate spend, and it turns S1's and F1's open items into a real
+hardware decision instead of a synthetic claim.
 (b) ship the app-shell skeleton that `ANDROID-PERFORMANCE-BASELINE.md`'s "What
 to optimize first" item 3 describes — a static skeleton inside the 4 KB
 `index.html`, which "moves first visual feedback to well under 1 s on this
@@ -386,6 +398,22 @@ profile **with no JS changes**". That is the cheapest measurable win in the
 whole performance queue.
 
 ### Risk 3 — Running the pilot kit and calling it "the pilot" would overclaim the Shop gate
+
+**Architecture bridge.** POS-independent Shop Profit Control is the public and
+owner first-use acquisition and diagnostic wedge. Its first job selects and
+prioritizes one accountable money leak or operating risk, with the accountable
+role, due point, next action, and objective closure made explicit. It does not
+replace a POS and it does not turn a local projection into customer, pilot, or
+commercial proof.
+
+The existing shop-spa-owner-pilot remains the first bounded named vertical
+proof. It uses the existing Spa package sale, treatment redemption, daily close,
+and recovery workflow to validate one real end-to-end operating workflow and
+measured correction effort. Spa is not Shop's product identity, and success in
+this bounded vertical does not prove all Myanmar trades.
+
+Both paths remain owner-gated. Synthetic, sample, browser-local, and
+local-rendered evidence cannot close the real pilot.
 
 **Evidence.** `hq/portfolio.json`'s `shop-spa-owner-pilot` requires a named Spa
 owner to complete reviewed client import, reconciled package sale, matching
@@ -420,14 +448,14 @@ the founder can do, per the cited contract in each row.
 | **A3 — P2: Plant shop-floor scanning.** Reuse `BarcodeScanButton.tsx` for material issue and job dispatch. | Roadmap §1 P2 ("NOW after S1 ships"), §3 item 2 | Small-medium; no new dependency, no gate spend. |
 | **A4 — Doc-truth fix in the Shop demo playbook.** `docs/demo-playbooks/shop.md` §2's parallel-lane note says a `?template=` deep link "is not in the app at this commit — do not add a template parameter to app URLs in a live demo". It **is** in the app: `ProductOnboardingPage.tsx:105` reads `?template=` and `business-templates.ts:559-561` builds the path. | The two source lines above; `GTM-AI-OPERATIONS.md` (c) mechanism note | Directly unblocks step 3 of the critical path — the outreach drafts promise a trade-specific sample and the playbook currently forbids the link that delivers it. `docs/` is drift-guarded, so `node tools/test_demo_playbooks.mjs` must stay green. |
 | **A5 — Reconcile the two stale gap claims** in `PRODUCT-CATALOG-AND-PRICING.md` §2.1 and §2.4 (contradiction 5, section 1). | Roadmap S1/E1 SHIPPED rows | Doc-only. That document is the one sales copy is lifted from. |
-| **A6 — Extend `docs/demo-playbooks/shop.md` §3 to the surfaces that shipped 2026-08-19.** Its script predates #436/#459/#465/#469 and covers roughly three of section 3's nine rows: no camera scan, no payment QR, no product photo, no loyalty balance, no bottom-nav step, and a step 6 that still walks the superseded `Reconcile payment` → `Complete` path. | Section 3 of this brief; roadmap S1/S2/S3/E1/F1 SHIPPED rows | Prerequisite for founder item F1 — the on-device smoke test needs a script that exercises what is being smoke-tested. Same drift guard as A4: `node tools/test_demo_playbooks.mjs` must stay green. |
+| **A6 — CLOSED LOCAL 2026-08-25: extend `docs/demo-playbooks/shop.md` §3 to the surfaces that shipped 2026-08-19.** | Section 3 of this brief; roadmap S1/S2/S3/E1/F1 SHIPPED rows; `tools/prepare_shop_android_smoke_packet.mjs` | The on-device smoke test now has a repeatable script and private evidence-field packet. This closes the local doc/tooling slice only; founder item F1 still needs real Android hardware. Same drift guard as A4: `node tools/test_demo_playbooks.mjs` plus `npm run shop:android-smoke:self-test` must stay green. |
 | **A7 — Propose the runbook amendment for the schema-version trap.** `PRODUCTION-ACTIVATION-RUNBOOK.md` §2 sequences only v11 and hardcodes `SUPERMEGA_TRIAL_SCHEMA_VERSION=11`; it never mentions `SUPERMEGA_BILLING_SCHEMA_VERSION` at all, and its §4 "What you should NOT do" list does not warn about the v12/v13 case. Draft the amended step B for both forks, for founder confirmation. | "The schema-version trap" in section 2; `trial_store.py:52`/`3218`, `billing_rail.py:63`/`543` | The runbook is the document a founder follows literally at 2am during activation. Amending it is doc work an agent can draft; **adopting** it is the founder's call, and the runbook stays founder-owned. |
 
 ### Founder-only
 
 | Item | Cites | Why only the founder |
 |---|---|---|
-| **F1 — One Android phone smoke test** over section 3's nine rows: camera scan, bottom nav, QR dialog, one-tap sale, product photo, loyalty chip. Best run after A6 so it follows a script. Do the first load **on connectivity**, then drop the network and confirm the workflow still runs — that tests the offline claim honestly instead of assuming it. | Roadmap S1 and F1 open items | Needs real hardware. Closes two open roadmap items for the cost of an afternoon and retires most of Risk 2. |
+| **F1 — One Android phone smoke test** over section 3's nine rows: camera scan, bottom nav, QR dialog, one-tap sale, product photo, loyalty chip. Run it from the A6-updated playbook and the `shop:android-smoke:packet` evidence fields. Do the first load **on connectivity**, then drop the network and confirm the workflow still runs — that tests the offline claim honestly instead of assuming it. | Roadmap S1 and F1 open items | Needs real hardware. Closes two open roadmap items for the cost of an afternoon and retires most of Risk 2. |
 | **F2 — Make D1–D6, plus the migration-set fork** (critical-path step 6: Fork A all-migrations-before-tenant, or Fork B v11-now-billing-later). | `BILLING-RAIL-DESIGN.md` 49–54; "The schema-version trap" in section 2 | `CLAUDE.md` hard limit. D3/D4/D5 carry written recommendations, so the genuinely open ones are D1, D2, and the fork. D6 is not a free-standing scheduling call once the trap is understood — it comes with the two runtime env values. |
 | **F3 — Resolve the runbook §0 precondition** (contradiction 2): check whether the paired release carrying the self-serve fixes is live. | `PRODUCTION-ACTIVATION-RUNBOOK.md` §0; `PRODUCT-CATALOG-AND-PRICING.md` §7 | Release history is founder-visible; the dispatch itself is founder-only. Everything hosted is behind this. |
 | **F4 — Tick or explicitly defer the six GTM boxes.** | `GTM-AI-OPERATIONS.md` (f) | Named there as a hard gate. Deferring is a legitimate answer; leaving them ambiguous is what stalls Track A. |

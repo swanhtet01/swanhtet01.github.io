@@ -1,0 +1,249 @@
+{
+  "contract": "supermega.supabase-preview-rehearsal-proposal.v1",
+  "digestScope": "utf8_compact_json_without_digest",
+  "repository": "swanhtet01/swanhtet01.github.io",
+  "mode": "owner_approval_required",
+  "state": "prepared-not-executed",
+  "generatedAt": "2026-08-25T00:00:00.000Z",
+  "purpose": "Prepare the exact Supabase preview rehearsal gate without creating a branch, reading production rows, copying production data, or approving managed activation.",
+  "productionBaseline": {
+    "projectRef": "zvtzwcimpvvtkowflhda",
+    "classification": "protected-production",
+    "asOf": "2026-08-20T17:02:04.312+06:30",
+    "postgresMajor": 17,
+    "projectStatus": "ACTIVE_HEALTHY",
+    "liveSchemaVersion": 11,
+    "localTargetVersion": 11,
+    "versionDrift": 0,
+    "browserRolesDenied": true,
+    "publicBrowserQuarantinePresent": true,
+    "securityAdvisorStatus": "clear",
+    "advisorFindings": 0,
+    "businessRowsRead": 0,
+    "databaseWrites": 0,
+    "providerMutations": 0
+  },
+  "readinessBaseline": {
+    "contract": "supermega.managed-pilot-readiness.v5",
+    "previewProofComplete": false,
+    "previewGateStatus": "blocked",
+    "blockingGateIds": [
+      "preview_rehearsal",
+      "pilot_evidence",
+      "production_activation"
+    ],
+    "hostedActivationReady": false
+  },
+  "previewBranch": {
+    "kind": "clean_empty_ephemeral_preview",
+    "parentProjectRef": "zvtzwcimpvvtkowflhda",
+    "parentClassification": "protected-production",
+    "maximumLifetimeHours": 24,
+    "startsWithProductionData": false,
+    "seedProductionDataAllowed": false,
+    "productionRefsAllowed": false,
+    "privilegedRuntimeCredentialsAllowed": false,
+    "deleteAfterEvidence": true,
+    "failedBranchReuseAllowed": false,
+    "failedBranchName": "security-rehearsal-24h-20260812"
+  },
+  "migrationPlan": {
+    "schemaVersion": 13,
+    "migrationCount": 15,
+    "privateMigrationCount": 14,
+    "publicBaseline": "20260711081300_public_legacy_baseline.sql",
+    "finalMigration": "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
+    "chainDigest": "sha256:547f06ad47ff3d1b3fd2fd8d918ffe9848dc03d3f1bfb70311f9bde829133d32",
+    "migrations": [
+      {
+        "name": "20260711081300_public_legacy_baseline.sql",
+        "path": "supabase/migrations/20260711081300_public_legacy_baseline.sql",
+        "digest": "sha256:40e54bfd6a31cf7d3f70de87cac34a4587f38412d7aa89ad27f77f33c1b3d72e"
+      },
+      {
+        "name": "20260722004500_private_trial_backend_role_preflight.sql",
+        "path": "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
+        "digest": "sha256:a1a5077b1834c291c54658d5ba2c7625bd9bf37da78b9a8ac919d10f16c4ddae"
+      },
+      {
+        "name": "20260722005134_private_trial_backend_foundation.sql",
+        "path": "supabase/migrations/20260722005134_private_trial_backend_foundation.sql",
+        "digest": "sha256:dd4e8c16c4405ba003f13688fa7313da9c89fb33c46f092ec7a6d856c35c76b9"
+      },
+      {
+        "name": "20260722142801_private_trial_backend_v2.sql",
+        "path": "supabase/migrations/20260722142801_private_trial_backend_v2.sql",
+        "digest": "sha256:aac79f1696602705e4d3521f2978b86f00a53afd1aac907de91cb257469fed42"
+      },
+      {
+        "name": "20260723094500_private_trial_backend_v3_website.sql",
+        "path": "supabase/migrations/20260723094500_private_trial_backend_v3_website.sql",
+        "digest": "sha256:6db99a0eef5b200bef77808de0562bdb1a35c8c5752e7b4831c5f95e8c441343"
+      },
+      {
+        "name": "20260723144500_private_trial_backend_v4_hardening.sql",
+        "path": "supabase/migrations/20260723144500_private_trial_backend_v4_hardening.sql",
+        "digest": "sha256:a475e5d88ba3c5c761e2c05f563bbda6707da1bce8b26e1abe47339028c1e435"
+      },
+      {
+        "name": "20260724204920_private_trial_backend_v5_read_capabilities.sql",
+        "path": "supabase/migrations/20260724204920_private_trial_backend_v5_read_capabilities.sql",
+        "digest": "sha256:5d63e803dffb8580109629a245695519040f774007a5178af21960e14d356998"
+      },
+      {
+        "name": "20260730113000_private_trial_backend_v6_managed_activation.sql",
+        "path": "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
+        "digest": "sha256:cb796a132bfd49662deeac3d5a0a11a8961ed7743127f40994a27c359596955c"
+      },
+      {
+        "name": "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
+        "path": "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
+        "digest": "sha256:1012f1a744186eedf87b0c16f03c8a363a7668dfed576943e258bb8fd54bc201"
+      },
+      {
+        "name": "20260802161500_private_trial_backend_v8_rls_initplan.sql",
+        "path": "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
+        "digest": "sha256:61e711bb62e9fee8f0f8724004d68ff715696d5183a52a9dca418db003c241c6"
+      },
+      {
+        "name": "20260803063822_private_trial_backend_v9_metadata_rls.sql",
+        "path": "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
+        "digest": "sha256:11db3e7ebb9698b6572c1405120efd887bf4cc5d9d4a440681ed8156cc967c1d"
+      },
+      {
+        "name": "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+        "path": "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+        "digest": "sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde"
+      },
+      {
+        "name": "20260816120000_private_trial_backend_v11_self_serve_grants.sql",
+        "path": "supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql",
+        "digest": "sha256:12c70c75f0da98e457a5661dfcb77b3eb2483e08beaf33a8010fdf5a3b01817d"
+      },
+      {
+        "name": "20260817090000_private_trial_backend_v12_billing_rail.sql",
+        "path": "supabase/migrations/20260817090000_private_trial_backend_v12_billing_rail.sql",
+        "digest": "sha256:19cf4077c26336d74d3f5ea5ba4d60c20a2525604f4c8aa1673fd2b3b243a033"
+      },
+      {
+        "name": "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
+        "path": "supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
+        "digest": "sha256:784ba3a4fd29c61abebbc9b73eb37d0a68e40780c7d98d4b0b8953fee31b777f"
+      }
+    ],
+    "browserQuarantine": {
+      "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
+      "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
+    },
+    "liveProductionSchemaVersion": 11,
+    "sourceAheadOfLiveProduction": true,
+    "productionApplyAllowed": false
+  },
+  "gates": {
+    "previewRehearsal": {
+      "status": "blocked-until-executed",
+      "proofComplete": false,
+      "exactCandidateRequired": true,
+      "productionRefsRejected": true,
+      "productionDataRejected": true,
+      "privilegedRuntimeCredentialsRejected": true
+    },
+    "managedActivation": {
+      "status": "blocked",
+      "requiresSeparateOwnerApproval": true,
+      "enabledByThisProposal": false
+    }
+  },
+  "requiredEvidence": [
+    "preview-branch-status-and-migration-list",
+    "clean-empty-data-less-branch-confirmed",
+    "source-controlled-migration-chain-applied-through-v13",
+    "metadata-only-schema-fingerprint-comparison",
+    "public-table-rls-and-anon-authenticated-denial",
+    "private-schema-backend-role-policy-and-no-browser-grants",
+    "tenant-a-b-isolation-and-active-session-revocation",
+    "private-storage-six-request-privacy-proof",
+    "backup-and-clean-restore",
+    "security-and-performance-advisors-rerun",
+    "branch-deleted-after-evidence",
+    "no-production-retry-on-failure"
+  ],
+  "executionPacketAfterApproval": {
+    "tool": "tools/prepare_supabase_rehearsal_packet.mjs",
+    "commandTemplate": "npm run database:supabase:packet -- --target-project-ref <preview-branch-ref> --output .tmp/supermega-rehearsal-packet.json --release-handoff <release-handoff.json>",
+    "outputMustBeGitignored": true,
+    "bindsExactCommitAfterSourcePacketCommit": true
+  },
+  "compatibilityWatchList": [
+    {
+      "id": "supabase-logs-all-removal-2026-09-23",
+      "source": "https://supabase.com/changelog?types=breaking-change",
+      "requirement": "No legacy Supabase Management API aggregate-log consumer may remain before the 2026-09-23 removal."
+    },
+    {
+      "id": "supabase-public-table-auto-exposure-2026-10-30",
+      "source": "https://supabase.com/changelog?types=breaking-change",
+      "requirement": "Every new public-table migration must use explicit grants or revokes before the 2026-10-30 default change reaches existing projects."
+    }
+  ],
+  "documentation": {
+    "branching": "https://supabase.com/docs/guides/deployment/branching",
+    "productionChecklist": "https://supabase.com/docs/guides/deployment/going-into-prod",
+    "changelogBreakingChanges": "https://supabase.com/changelog?types=breaking-change"
+  },
+  "controls": {
+    "supabaseBranchCreationApproved": false,
+    "supabaseBranchCreated": false,
+    "supabaseBranchDeleted": false,
+    "providerMutationsPerformed": false,
+    "productionProjectMutated": false,
+    "productionDataCopied": false,
+    "productionRowsRead": false,
+    "privilegedRuntimeCredentialsIncluded": false,
+    "managedActivationAllowed": false,
+    "vercelDeploymentAllowed": false,
+    "githubWritesAllowed": false,
+    "customerContactAllowed": false,
+    "paymentOrStockActionAllowed": false
+  },
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:547f06ad47ff3d1b3fd2fd8d918ffe9848dc03d3f1bfb70311f9bde829133d32 on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "sourceReceipts": [
+    {
+      "path": "package.json",
+      "digest": "sha256:1015e58e6ddcac784a1f12c5e069afd16d5228915f2e9902eb233bcca2a6e26f"
+    },
+    {
+      "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
+      "digest": "sha256:54bda6535468262b0a6025fa7e3c2da2642c499b55530b8bf011b66116f92142"
+    },
+    {
+      "path": "tools/prepare_supabase_rehearsal_packet.mjs",
+      "digest": "sha256:4353a132f05766baaae7e885b2a19e6c59a0a82a89a54cebeb6e7f0944048bee"
+    },
+    {
+      "path": "tools/verify_private_trial_migrations.mjs",
+      "digest": "sha256:e5e9a169aaf8265eccfb2118e5bc786c6f45b3aaad34954f942591595375ff8d"
+    },
+    {
+      "path": "tools/verify_public_browser_quarantine.mjs",
+      "digest": "sha256:a45fe5ef6b3772d73c4d037111b08b2c26df8806e0292b321f6cb2f8433dacc1"
+    },
+    {
+      "path": "hq/readiness/supabase-security-advisor-audit.json",
+      "digest": "sha256:59edf60b5e7eae3a52ca37819c063789993f7c235fccf74968906289ad667d6b"
+    },
+    {
+      "path": "hq/readiness/managed-pilot-readiness.json",
+      "digest": "sha256:6b673dc99c042b2d5ef25df46c45383918a95910594b8f009bb641ce61167c29"
+    },
+    {
+      "path": "hq/readiness/github-main-protection-proposal.json",
+      "digest": "sha256:06a41ba200805ffe4f1c5a9a34bffac7f363944c46a1c78994af86b5fb66c428"
+    },
+    {
+      "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
+      "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
+    }
+  ],
+  "digest": "sha256:feee6b9255f93461823373e6af3226fa9734b6cfa9f6d401c8fb98ed672bd9bd"
+}

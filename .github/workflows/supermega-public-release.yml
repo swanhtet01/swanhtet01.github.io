@@ -74,6 +74,8 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements-test.txt
 
       - name: Setup uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -92,10 +94,6 @@ jobs:
           node tools/verify_private_trial_migrations.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
-
-      - name: Install app dependencies
-        working-directory: showroom
-        run: npm ci
 
       - name: Require production deploy credential
         env:

@@ -191,7 +191,8 @@ external actions (portfolio.json nonGoals; order-intake eval "What this is not")
 Tags: [product] / [platform] / [gate]. FD = requires a founder decision.
 
 1.  [platform][gate] FD-approved: execute the bounded preview-branch rehearsal
-    (v8-v10 + browser quarantine, 24h lifetime, delete after evidence) per
+    (complete source-controlled migration chain against current v11 parity +
+    browser quarantine, 24h lifetime, delete after evidence) per
     hq/readiness/managed-pilot-readiness.json. Unblocks everything hosted.
 2.  [platform][gate] FD: on green rehearsal, propose the production migration.
     On red, fix locally and repeat; production stays untouched.
@@ -503,10 +504,15 @@ ALSO NOT CLOSED:
 
 **G2 — Receipts are laid out for a sheet of paper, not a roll. (Cheapest high-value fix. Not founder-gated for the fix; the hardware claim still is.)**
 
-Verified state. `core/ReceiptDialog.tsx:21-46` builds a blob HTML document and
-calls `window.print()`. The style block is `body { padding: 1rem 2rem; ... }`
-and `@media print { @page { margin: 1cm } }` — **no `size` declaration**, so
-the page is whatever the print target defaults to.
+Verified state, updated 2026-08-25. `showroom/src/core/ReceiptDialog.tsx`
+still builds a blob HTML document and calls `window.print()`, but the printed
+CSS now defaults to roll geometry: near-zero page margin, zero body margin, a
+4mm horizontal body inset, a tighter branch for <=65mm media, and the old
+sheet geometry restored only for >=90mm media. It deliberately declares **no
+`size`**. `tools/verify_shop_receipt_print_geometry.mjs` and the existing
+`tools/verify_app_build.mjs` guard that boundary and fail if an invalid
+`size: <length> auto` shortcut, direct printer transport, or thermal hardware
+claim appears in this slice.
 
 Why the existing framing was wrong. `PRODUCT-SUPREMACY-ROADMAP.md` S4 records
 this as "fine with OS print services, dead-end for raw-byte thermal printers"
@@ -520,8 +526,8 @@ printer via an installed print service, and what makes the output unusable is
 that it is A4-shaped: centimetre margins and two-rem body padding on a 58mm or
 80mm roll.
 
-Size. **S** for the fix — but read the next paragraph before writing the rule,
-because the obvious form of it does not work.
+Size. **Done-local for the CSS; S to maintain** — but read the next paragraph
+before changing the rule, because the obvious form of it does not work.
 
 **Do not write `@page { size: 58mm auto }`.** This document said that in its
 first revision and it is **invalid CSS**, caught in review on this PR. The
@@ -553,9 +559,10 @@ stays FD and stays deprioritised** — it is a large build for the last mile of 
 problem a CSS rule may close most of.
 
 Founder gate. **No** for the CSS. **Yes** to *claim* it works: nobody has
-printed a SuperMega receipt on a thermal printer. Build it, then ask the
-founder for one device test — the same open item S1 and P2 already carry for
-the camera. Do not put thermal printing in sales copy before that test.
+printed a SuperMega receipt on a thermal printer. Keep the CSS guard green,
+then ask the founder for one device test — the same open item S1 and P2 already
+carry for the camera. Do not put thermal printing in sales copy before that
+test.
 
 ---
 

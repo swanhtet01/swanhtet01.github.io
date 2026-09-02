@@ -290,6 +290,12 @@ export type ProductionWorkspaceSnapshot = {
   error: string
 }
 
+export type ProductionWorkspaceReadSnapshot = {
+  state: ProductionState
+  source: 'current' | 'legacy' | 'absent' | 'recovery'
+  error: string
+}
+
 export type ProductionMutationResult =
   | { ok: true; state: ProductionState; replayed: boolean }
   | { ok: false; error: string }
@@ -2004,6 +2010,31 @@ function persistInitialState(storage: ProductionStorage, state: ProductionState,
   } catch {
     return { state, source, error: 'Production storage is unavailable. This workspace is read-only until browser storage is restored.' }
   }
+}
+
+export function readProductionWorkspace(storage = browserStorage()): ProductionWorkspaceReadSnapshot {
+  if (!storage) return { state: createEmptyProduction(), source: 'recovery', error: 'Production storage is unavailable. No local data was changed.' }
+  let currentRaw: string | null
+  try { currentRaw = storage.getItem(PRODUCTION_KEY) } catch { return { state: createEmptyProduction(), source: 'recovery', error: 'Production storage could not be read. No local data was changed.' } }
+  if (currentRaw !== null) {
+    try {
+      return { state: validateProductionState(JSON.parse(currentRaw)), source: 'current', error: '' }
+    } catch {
+      return { state: createEmptyProduction(), source: 'recovery', error: 'Production v2 data is malformed. The read failed closed without replacing data.' }
+    }
+  }
+
+  for (const legacyKey of LEGACY_PRODUCTION_KEYS) {
+    let legacyRaw: string | null
+    try { legacyRaw = storage.getItem(legacyKey) } catch { return { state: createEmptyProduction(), source: 'recovery', error: 'Legacy Production data could not be read. The read failed closed without creating v2 data.' } }
+    if (legacyRaw === null) continue
+    try {
+      return { state: migrateLegacyProduction(JSON.parse(legacyRaw)), source: 'legacy', error: '' }
+    } catch {
+      return { state: createEmptyProduction(), source: 'recovery', error: 'Legacy Production data is malformed. The read failed closed without creating v2 data.' }
+    }
+  }
+  return { state: createEmptyProduction(), source: 'absent', error: '' }
 }
 
 export function loadProductionWorkspace(storage = browserStorage()): ProductionWorkspaceSnapshot {

@@ -100,6 +100,122 @@ export function templateFor(product: SetupProductId, name: string) {
   return templates.find((template) => template.id === name || template.name === name) ?? fallback
 }
 
+export type SetupTemplateDoorSelection = {
+  activeTemplate: WorkflowTemplate
+  requestedTemplate: WorkflowTemplate | null
+  choiceRequired: boolean
+}
+
+// A public template door is a request, never permission to replace saved setup state. New
+// product setup starts on the requested canonical id; a returning product stays on its saved
+// template until the owner explicitly resolves the mismatch in ProductOnboardingPage.
+export function resolveSetupTemplateDoor(
+  product: SetupProductId,
+  setup: SetupState,
+  requestedTemplateId: string | null | undefined,
+): SetupTemplateDoorSelection {
+  const templates = templatesFor(product)
+  const requestedTemplate = templates.find((template) => template.id === requestedTemplateId) ?? null
+  const savedTemplate = setup.product === product ? templateFor(product, setup.templateId) : null
+  return {
+    activeTemplate: savedTemplate ?? requestedTemplate ?? templateFor(product, ''),
+    requestedTemplate,
+    choiceRequired: Boolean(savedTemplate && requestedTemplate && savedTemplate.id !== requestedTemplate.id),
+  }
+}
+
+export type SetupVariantDoorSelection<T extends string> = {
+  activeId: T
+  requestedId: T | null
+  choiceRequired: boolean
+}
+
+// Some public doors share one workflow template but carry a second validated setup
+// dimension (Plant's industry pack is the first example). That dimension must make
+// the same saved-versus-requested distinction as the workflow template: a URL may
+// propose a value, but it cannot silently replace the value attached to a returning
+// setup. Callers validate the ids against their source-owned registry before use.
+export function resolveSetupVariantDoor<T extends string>(
+  savedId: T,
+  requestedId: T | null | undefined,
+  hasSavedSetup: boolean,
+): SetupVariantDoorSelection<T> {
+  const requested = requestedId ?? null
+  return {
+    activeId: hasSavedSetup ? savedId : requested ?? savedId,
+    requestedId: requested,
+    choiceRequired: Boolean(hasSavedSetup && requested && requested !== savedId),
+  }
+}
+
+export type SetupDoorDimension = 'template' | 'variant'
+
+// Resolving one dimension of a compound public door must not silently resolve the
+// other. Only validated ids reach this helper; unknown query values are discarded by
+// their source-owned registries before the remaining URL is constructed.
+export function setupDoorQueryAfterChoice(
+  productSlug: string,
+  requestedTemplateId: string | null | undefined,
+  requestedVariantId: string | null | undefined,
+  resolvedDimension: SetupDoorDimension,
+) {
+  const params = new URLSearchParams({ product: productSlug })
+  if (resolvedDimension !== 'template' && requestedTemplateId) params.set('template', requestedTemplateId)
+  if (resolvedDimension !== 'variant' && requestedVariantId) params.set('pack', requestedVariantId)
+  return params.toString()
+}
+
+export type SetupProvisionDisposition = 'installed' | 'current' | 'preserved'
+
+// A local Plant preference may follow only an exact installed/current sample. A
+// preserved workspace is authoritative and must not be relabelled. Managed setup has
+// no local sample by design; its preference is saved only by the explicit reviewed
+// form submit before routing to the separate company-plan review.
+export function plantPackSaveAllowed(
+  hasManagedIdentity: boolean,
+  localProvisionDisposition: SetupProvisionDisposition | null,
+) {
+  return hasManagedIdentity
+    ? localProvisionDisposition === null
+    : localProvisionDisposition === 'installed'
+    || localProvisionDisposition === 'current'
+}
+
+// A source-bound local trade may select a more specific Plant sample than the
+// generic pack request. Refuse a contradictory request before either sample or
+// preference is written; matching and unbound requests can continue.
+export function setupVariantMatchesSource<T extends string>(
+  requestedId: T,
+  sourceBoundId: T | null | undefined,
+) {
+  return !sourceBoundId || requestedId === sourceBoundId
+}
+
+export type ShopTemplateDoorState = 'none' | 'checking' | 'local-active' | 'managed-unapplied'
+
+// A null identity is ambiguous until the identity probe settles. Public trade copy
+// can describe an active sample only after the local-workspace gate is confirmed.
+export function shopTemplateDoorState(
+  requestedTemplateId: string | null | undefined,
+  confirmedLocalShop: boolean,
+  hasManagedIdentity: boolean,
+): ShopTemplateDoorState {
+  if (!requestedTemplateId) return 'none'
+  if (confirmedLocalShop) return 'local-active'
+  return hasManagedIdentity ? 'managed-unapplied' : 'checking'
+}
+
+// A public Shop trade is not evidence that an existing managed catalog has that
+// shape. A ready company workspace therefore needs an explicit review boundary;
+// unprovisioned workspaces keep using their existing reviewed creation form.
+export function managedTemplateDoorRequiresReview(
+  hasManagedIdentity: boolean,
+  workspaceMode: string,
+  requestedTemplateId: string | null | undefined,
+) {
+  return hasManagedIdentity && workspaceMode === 'managed-ready' && Boolean(requestedTemplateId)
+}
+
 export function seedSetupForProduct(product: SetupProductId, templateId = ''): SetupState {
   const template = templateFor(product, templateId)
   return {

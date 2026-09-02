@@ -6,7 +6,7 @@ Who this is for: factories and workshops that plan jobs and record output by shi
 
 The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
-- `Operating software for Myanmar companies.`
+- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
 - `Plan jobs, record output, and close shifts.`
 - `Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.`
 
@@ -40,6 +40,6 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 ## 5. The close
 
 - Self-serve close: public `/plant/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=plant`), on the supervisor's own phone.
-- Assisted close: the landing page's `Set up Plant data` button opens `/contact/?product=plant` with Plant pre-selected in `Starting point`; the form submits with `Send workflow` and confirms with `Request received: ` plus an ID.
+- Assisted close: the landing page's `Request assisted setup` button opens `/contact/?product=plant` with Plant pre-selected in `Starting point`; the form submits with `Send workflow` and confirms with `Request received: ` plus an ID.
 - From inside the app: the setup page's "Ask SuperMega to set up Plant" link carries the template, for example `https://supermega.dev/contact/?product=plant&template=production-control&utm_source=app&utm_medium=guided_trial`.
 - Managed pilot close: `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.

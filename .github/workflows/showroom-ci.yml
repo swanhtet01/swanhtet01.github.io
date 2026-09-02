@@ -88,10 +88,17 @@ jobs:
   validate:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact source checkout
+        run: test "$(git rev-parse HEAD)" = "$SUPERMEGA_CI_SOURCE_SHA"
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -138,5 +145,14 @@ jobs:
 
       - name: Build and verify canonical app
         env:
-          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
+          SUPERMEGA_RELEASE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: npm run app:build:checked
+
+      - name: Verify desktop and 390px product journeys
+        env:
+          SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          node tools/verify_app_entry_rendered.mjs \
+            --out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json" \
+            --screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR" \
+            --expected-head "$SUPERMEGA_CI_SOURCE_SHA"

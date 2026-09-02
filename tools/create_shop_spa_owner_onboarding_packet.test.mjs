@@ -16,10 +16,13 @@ const expectedFiles = [
   'NO-EXTERNAL-ACTION.md',
   'START-HERE.md',
   'contact-event.sample.json',
+  'day-1-operator-script.md',
   'five-day-proof-plan.md',
   'owner-input.template.json',
+  'owner-roi-scorecard.md',
   'packet.json',
   'sample-client-import.csv',
+  'sample-first-week-metrics.csv',
   'sample-spa-services.csv',
 ]
 
@@ -52,10 +55,20 @@ test('packet copy is practical, generic Shop first, and Spa only as the vertical
   assert.match(files['START-HERE.md'], /Vertical pack: Spa services/)
   assert.match(files['START-HERE.md'], /Shop baseline: weekly orders/)
   assert.match(files['START-HERE.md'], /Spa services vertical pack: client import rows/)
+  assert.match(files['START-HERE.md'], /day-1-operator-script\.md/)
+  assert.match(files['START-HERE.md'], /owner-roi-scorecard\.md/)
+  assert.match(files['day-1-operator-script.md'], /Cash, KBZPay, WavePay, AYA Pay, or MMQR/)
+  assert.match(files['day-1-operator-script.md'], /If any step needs explanation twice, mark it as a product issue/)
+  assert.match(files['owner-roi-scorecard.md'], /20 accepted order-to-close runs/)
+  assert.match(files['owner-roi-scorecard.md'], /accepted evidence covers pilot days 1 through 5 and at least 5 distinct observed calendar dates/)
+  assert.match(files['owner-roi-scorecard.md'], /Paid decision rule/)
   assert.match(files['five-day-proof-plan.md'], /Package sale/)
   assert.match(files['five-day-proof-plan.md'], /Treatment redemption/)
+  assert.match(files['five-day-proof-plan.md'], /AYA Pay/)
+  assert.match(files['sample-first-week-metrics.csv'], /unexplained_payment_or_stock_changes/)
   assert.doesNotMatch(files['START-HERE.md'], /\bPOS\b/i)
   assert.doesNotMatch(files['START-HERE.md'], /SAP replacement|Odoo replacement/i)
+  assert.doesNotMatch(files['owner-roi-scorecard.md'], /SAP replacement|Odoo replacement/i)
 })
 
 test('packet metadata and owner template preserve closed authority gates', () => {
@@ -68,6 +81,17 @@ test('packet metadata and owner template preserve closed authority gates', () =>
   assert.equal(owner.product, 'shop')
   assert.equal(owner.pilotMode, 'owner_named')
   assert.equal(owner.verticalPack, 'spa-services')
+  assert.deepEqual(manifest.allowedPaymentMethodsForReview, ['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'])
+  assert.equal(manifest.successCriteria.acceptedOrderToCloseRuns, 20)
+  assert.equal(manifest.successCriteria.dailyClosesObserved, 5)
+  assert.equal(manifest.successCriteria.pilotDaySequenceCoverageRequired, true)
+  assert.equal(manifest.successCriteria.unexplainedPaymentOrStockChanges, 0)
+  assert.deepEqual(owner.paymentMethodsToReview, ['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'])
+  assert.equal(owner.successTargets.acceptedOrderToCloseRuns, 20)
+  assert.equal(owner.successTargets.dailyClosesObserved, 5)
+  assert.equal(owner.successTargets.pilotDaySequenceCoverageRequired, true)
+  assert.equal(owner.successTargets.unexplainedPaymentOrStockChanges, 0)
+  assert.equal(owner.successTargets.ownerDecisionRecorded, false)
   for (const key of [
     'customerContactAllowed',
     'externalMessagesAllowed',

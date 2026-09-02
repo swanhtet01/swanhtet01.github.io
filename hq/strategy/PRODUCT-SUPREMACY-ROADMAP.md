@@ -28,7 +28,7 @@ infra required first.
 
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
-| S1 | Camera barcode scanning (Loyverse/Square both ship it; phone-only shops have no USB scanner) | Counter search input at `CoreApp.tsx` ~1139 already handles keyboard-wedge scanners via exact-SKU-match-on-Enter (`addSearchMatch` ~1105); nothing invokes the camera. Native `BarcodeDetector` API covers Android Chrome offline, zero dependencies | **SHIPPED 2026-08-19** (#459): `BarcodeScanButton.tsx`, counter + both catalog SKU fields; camera feeds the same `addScannedValue` path as Enter. Open: on-device camera smoke test (founder, any Android phone) |
+| S1 | Camera barcode scanning (Loyverse/Square both ship it; phone-only shops have no USB scanner) | Counter search input at `CoreApp.tsx` ~1139 already handles keyboard-wedge scanners via exact-SKU-match-on-Enter (`addSearchMatch` ~1105); nothing invokes the camera. Native `BarcodeDetector` API covers Android Chrome offline, zero dependencies | **SHIPPED 2026-08-19** (#459): `BarcodeScanButton.tsx`, counter + both catalog SKU fields; camera feeds the same `addScannedValue` path as Enter. **Guarded 2026-08-25**: `tools/test_barcode_scan_boundary.mjs` pins unsupported-browser fallback, slow detection interval, cleanup, call-site wiring, keyboard fallback, and no scan-triggered domain writes. Open: on-device camera smoke test (founder, any Android phone) |
 | S2 | Merchant payment QR at checkout (Wave MMQR / MyanMyanPay let one QR take KBZPay/WavePay/AYA/CB) | `payment.method` is a display string only (`business-templates.ts:32`, `commerce-workspace.ts` ~1416 `manual_qr`); no QR image exists anywhere; cashier has nothing to show a customer to scan | **SHIPPED 2026-08-19** (#465): workspace-scoped IndexedDB QR store (PNG-lossless ingest), Settings upload slots, counter + receipt amount-due dialog. Display-only, no payment API |
 | S3 | Loyalty points (Loyverse's flagship small-shop draw) | Zero `loyalty` matches in `showroom/src`. NOT the rejected CRM non-goal (`portfolio.json` nonGoals) — a points ledger keyed off the existing order `customer` field is narrow | **PR1+PR2 SHIPPED 2026-08-19** (#469 accrual, #472 redemption, #482 tax-spend fix: spend derives from the listed before-tax amount; the redemption IS a prefixed `ACT-LOYREDEEM-` credit correction — one atomic write, syncs managed). PR3 (founder-gated) remains. Planning pass verdict: CommerceState CANNOT be extended now (deployed backend's exact-field `_STATE_FIELDS`/`COMMERCE_EVENTS` contracts reject any new state key on every managed sync, and the backend only updates via founder-only release dispatch). PR1 (`shop-loyalty.ts`): local-first `supermega.shop.loyalty.v1` settings + pure-projection accrual over settled orders (no stored accrual → refunds reverse structurally; `enabledAt` cutoff + `ACT-DEMO-` skip keep sample workspaces at zero) + counter balance chip, customer keyed by the existing credit-policy exact-string convention. PR2: redemption riding the existing `order_correction` credit mechanism (syncs managed with zero server change) + receipt line. PR3 (founder-gated, deferred): promote into CommerceState + `commerce.loyalty.*` events in both validators |
 | S4 | Direct ESC/POS printing for driverless BT thermal printers (~$15 Myanmar-common units) | `ReceiptDialog.tsx` ~20-46 does blob-HTML + `window.print()` — fine with OS print services, dead-end for raw-byte thermal printers | FD-adjacent: buildable client-side via Web Bluetooth but unverifiable without real hardware; needs a founder-run device test |
@@ -47,7 +47,7 @@ infra required first.
 | # | Gap | Verified current state | Status |
 |---|---|---|---|
 | P1 | Visual job-scheduling board (Katana's signature drag-and-drop timeline) | Jobs surface is list/filter only (`CoreApp.tsx` ~7364-7373); `priority`/`dueAt` exist in the data (`production-workspace.ts` ~1008-1010) but no timeline/board UI | **SHIPPED 2026-08-19** (#484): list ⇄ board toggle (list default, per-device preference), Overdue/Today/This week/Later/No-due lanes with exclusive midnight bounds (Codex-verified), display-only — no drag-and-drop rescheduling (that is a domain write, a future slice). |
-| P2 | Shop-floor barcode/QR for material issue & job dispatch (Katana Shop Floor Control) | No scanning anywhere in Plant; `'QREL'` hits are ID prefixes, not scanning | **SHIPPED 2026-08-20**: S1's `BarcodeScanButton` imported (not forked) into the two Plant fields an operator fills from a printed code at the line — job dispatch (the output panel's Job control; exact case-insensitive match against the same `activeJobs` list the dropdown renders, unmatched code stays on screen next to a no-match notice) and material issue (Materials used → `materialRef`, free text, scan applies the field's own `maxLength` cap). Input assistance only: no new domain record, event kind, or write path, and `plant_shopfloor_scan_missing` pins the two handlers against the Plant write verbs. Scanning the optional lot field and the Control-tab recall trace were deliberately left out — one scan target per form. Open (same as S1): on-device camera smoke test, founder, any Android phone |
+| P2 | Shop-floor barcode/QR for material issue & job dispatch (Katana Shop Floor Control) | No scanning anywhere in Plant; `'QREL'` hits are ID prefixes, not scanning | **SHIPPED 2026-08-20**: S1's `BarcodeScanButton` imported (not forked) into the two Plant fields an operator fills from a printed code at the line — job dispatch (the output panel's Job control; exact case-insensitive match against the same `activeJobs` list the dropdown renders, unmatched code stays on screen next to a no-match notice) and material issue (Materials used → `materialRef`, free text, scan applies the field's own `maxLength` cap). Input assistance only: no new domain record, event kind, or write path, and `plant_shopfloor_scan_missing` pins the two handlers against the Plant write verbs. **Guarded 2026-08-25**: `tools/test_barcode_scan_boundary.mjs` also pins the shared camera/fallback/write-boundary contract for the Plant call sites. Scanning the optional lot field and the Control-tab recall trace were deliberately left out — one scan target per form. Open (same as S1): on-device camera smoke test, founder, any Android phone |
 
 ### Website
 
@@ -81,14 +81,13 @@ Ranked; each item names its gate.
    quoting its source text. Gate: run the server-only eval, record correction
    effort. First and only until its eval passes. This is the single
    highest-value AI feature for the Myanmar channel-commerce reality.
-   **Status 2026-08-20: run 6 attempted, BLOCKED, nothing measured —
-   `hq/research/order-intake-eval-run6-attempt-2026-08-20.md`. Two independent
-   blockers: no provider key in an agent environment (fails closed correctly,
-   zero network calls, verified), and the agent proxy denies CONNECT to the
-   OpenAI endpoint every prior run used, so a key alone would not unblock it.
-   Needs a founder or CI shell with egress to that endpoint and
-   `OPENAI_API_KEY` exported. Do not substitute the reachable Anthropic path —
-   different model class, that would be a second baseline, not run 6.**
+   **Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are
+   suspended for this owner-named wave. Active AI R&D is local Ollama only:
+   `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback, no provider key,
+   no hosted model route, and no production exposure. If the local model cannot
+   pass the golden-set eval with source-quote provenance and measured
+   correction effort, the feature remains blocked rather than falling through
+   to a paid provider.**
 2. **Daily close owner brief.** Plain-language end-of-day narrative from
    on-device data that already exists (`shop-daily-close-summary.ts`,
    `shop-ar-aging-summary.ts`, `shop-order-exception-summary.ts`). Zero new
@@ -252,15 +251,13 @@ status column in §1 for each. The operative forward sequence is now:
    and needs sign-off on the sentence, same rule as `DESIGN-PROGRAM.md` P3.8
    batch 1.
 4. AI item 1 (order-intake eval) is server-only and spends no hosted gate, but
-   **it cannot run from an agent lane at all** — this line previously said it
-   "can run in parallel any time" and that sent a 2026-08-20 attempt at it.
-   Two independent blockers, both verified that day: no provider credential is
-   readable from an agent environment (the harness fails closed correctly and
-   makes zero network calls), and the agent proxy denies CONNECT to the OpenAI
-   endpoint every prior run used — so a key alone would not unblock it. It
-   needs a founder or CI shell with egress to that endpoint. See §2 item 1's
-   status block and `hq/research/order-intake-eval-run6-attempt-2026-08-20.md`
-   before spending another lane on it.
+   **it cannot run from a cloud-provider agent lane in the current wave** —
+   this line previously said it "can run in parallel any time" and that sent a
+   2026-08-20 attempt at it. The current 2026-08-27 policy supersedes that
+   path: run only a loopback local-Ollama eval, record model/version and
+   correction effort, unload afterward, and keep the feature blocked if
+   `llama3.2:1b` cannot pass. Do not spend another provider lane on it without
+   a separate owner-approved source-controlled cut.
 5. Everything FD-tagged waits for the founder: S4 hardware test, S5/W1 scope
    decisions, E3 messaging infra, S3 PR3 (managed loyalty), hosted anything.
 6. Scaling-ceiling work, from `hq/strategy/FOUNDER-BOTTLENECK-STUDY.md`

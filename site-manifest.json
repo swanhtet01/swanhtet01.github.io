@@ -14,10 +14,10 @@
     }
   },
   "company": {
-    "positioning": "Operating software for Myanmar companies.",
-    "statement": "Four focused SuperMega products for retail, production, websites, and ecommerce ordering.",
-    "headline": "Pick one product and try the working sample.",
-    "supporting": "Shop sells and tracks stock. Plant runs production. Website builds pages. Ecommerce creates Shop-connected ordering.",
+    "positioning": "POS-independent Shop Profit Control for Myanmar operators.",
+    "statement": "Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.",
+    "headline": "Shop Profit Control: see today’s operating money risk and close one accountable action.",
+    "supporting": "A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.",
     "publicPricing": false
   },
   "templatePackPolicy": {
@@ -53,14 +53,21 @@
       "publicAnchor": "/#shop",
       "appRoute": "https://app.supermega.dev/shop/",
       "status": "available-in-app",
-      "eyebrow": "Shop operations",
-      "headline": "Sell, track stock, and close the day.",
-      "description": "Use the working Shop sample for counter sales, orders, stock, purchases, receipts, returns, and daily close. Real payments, messages, delivery, and stock writes stay behind review.",
+      "eyebrow": "POS-independent Shop Profit Control",
+      "headline": "Shop Profit Control: see today’s operating money risk.",
+      "description": "A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.",
+      "firstOperatingLoop": [
+        "Open Today from the current local Shop record.",
+        "Review the highest operating money leak or risk.",
+        "Confirm its accountable owner, due point, and next action.",
+        "Close it only when the source metric meets its objective condition."
+      ],
       "primaryCta": {
-        "label": "Open Shop"
+        "label": "Open Shop Profit Control",
+        "url": "https://app.supermega.dev/shop/?tab=today"
       },
       "secondaryCta": {
-        "label": "Set up Shop data",
+        "label": "Request assisted setup",
         "url": "/contact/?product=shop"
       },
       "modules": [
@@ -76,7 +83,7 @@
         "Monthly statement — profit and loss in plain language, not accountant words",
         "Accounting export — a balanced, sealed packet your accountant can check",
         "Tax engine — effective-dated rates and digest-checked order calculations",
-        "9 Myanmar trade templates — mini-mart, pharmacy, phone, fashion, hardware, tea shop, auto parts, restaurant, spa",
+        "10 Myanmar trade templates — Mini-mart & grocery, Pharmacy, Phone & electronics, Fashion & clothing, Hardware & construction supply, Tea & coffee shop, Auto parts, Restaurant, Beauty spa, Bakery & patisserie",
         "Sales and stock insight — 7/30-day trends, payment mix, what to do next"
       ],
       "internalTemplatePacks": [
@@ -527,11 +534,17 @@
       "eyebrow": "Plant operations",
       "headline": "Plan jobs, record output, and close shifts.",
       "description": "Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.",
+      "firstOperatingLoop": [
+        "Choose the closest plant type.",
+        "Load jobs, materials, equipment, and quality checks.",
+        "Record output, scrap, downtime, or an issue.",
+        "Review the priority queue before the next shift."
+      ],
       "primaryCta": {
         "label": "Open Plant"
       },
       "secondaryCta": {
-        "label": "Set up Plant data",
+        "label": "Request assisted setup",
         "url": "/contact/?product=plant"
       },
       "modules": [
@@ -796,6 +809,16 @@
         "No payment action"
       ],
       "description": "Draft a simple, mobile-first company website from what your shop already knows, approve it, and download the whole site to keep.",
+      "firstOperatingLoop": [
+        "Answer one business brief.",
+        "Review finite pages and mobile preview.",
+        "Approve content, evidence, and lead capture.",
+        "Download the retained site artifact."
+      ],
+      "secondaryCta": {
+        "label": "Request assisted setup",
+        "url": "/contact/?product=website"
+      },
       "modules": [
         "Site drafted from your trade — copy written from facts your shop can actually support",
         "Page and menu editor — bounded, schema-checked, with device previews",
@@ -814,7 +837,7 @@
       "appRoute": "https://app.supermega.dev/ecommerce/",
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
-      "headline": "Create a Shop-connected ordering page.",
+      "headline": "Draft an ordering page from the current local Shop workspace.",
       "views": [
         "Storefront",
         "Cart and quote",
@@ -915,10 +938,20 @@
         "No publishing",
         "No external write"
       ],
-      "description": "Build a Shop-backed catalog and reviewed order requests. Publishing stays separate; Shop remains the stock and price record.",
+      "description": "Draft a browser-local catalog and request receipt from the current Shop workspace. It is a request, not an order: nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved. Shop remains the price and stock record.",
+      "firstOperatingLoop": [
+        "Choose items from the current local Shop catalog.",
+        "Build a browser-local cart and quote.",
+        "Save a local request receipt with pickup or delivery intent.",
+        "Keep it in the browser for Shop review; nothing is sent."
+      ],
+      "secondaryCta": {
+        "label": "Request assisted setup",
+        "url": "/contact/?product=ecommerce"
+      },
       "modules": [
-        "Storefront from real stock — the catalog is sealed to Shop, so it cannot show what you do not have",
-        "Checkout quote — price, delivery and tax decided from Shop policies, valid for 15 minutes",
+        "Current-workspace catalog — a browser-local preview from retained Shop items, not a live stock promise",
+        "Browser-local quote — price, delivery, and tax previewed from the current Shop workspace; no managed quote is issued",
         "Request, not an order — a person in Shop confirms before anything is reserved or charged",
         "After the order — returns, support, changes, cancellation, reschedule and corrections",
         "Pay-on-pickup, cash on delivery and manual KBZPay — no card capture, nothing charged automatically"
@@ -955,12 +988,13 @@
     {
       "route": "/",
       "file": "index.html",
-      "title": "SuperMega | Four products"
+      "title": "Shop Profit Control for Myanmar operators | SuperMega",
+      "description": "A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action."
     },
     {
       "route": "/shop/",
       "file": "shop/index.html",
-      "title": "Shop | Sell, track stock, and close the day | SuperMega",
+      "title": "Shop Profit Control | POS-independent daily action | SuperMega",
       "productId": "shop",
       "liveGate": "post-release"
     },
@@ -982,10 +1016,10 @@
     {
       "route": "/ecommerce/",
       "file": "ecommerce/index.html",
-      "title": "Ecommerce | Online ordering connected to Shop | SuperMega",
+      "title": "Ecommerce | Browser-local ordering from Shop | SuperMega",
       "productId": "ecommerce",
       "liveGate": "post-release",
-      "description": "Choose Shop-backed products, build a cart, review a deterministic 15-minute quote, and save a recoverable request receipt. Payment, fulfilment, returns, and refunds are completed in Shop."
+      "description": "Choose items from the current local Shop workspace, draft a browser-local catalog, cart, and quote, and save a recoverable request receipt. Nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved. Shop remains the price and stock record."
     },
     {
       "route": "/contact/",

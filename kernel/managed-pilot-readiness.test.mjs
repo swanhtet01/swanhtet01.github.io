@@ -75,17 +75,35 @@ const input = {
 
 test('derives one blocked four-product ledger from current bounded evidence', () => {
   const ledger = buildManagedPilotReadiness(input)
-  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v4')
-  assert.equal(ledger.overall.blockingGateCount, 7)
-  assert.equal(ledger.gates[0].status, 'ready-local')
+  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v5')
+  assert.equal(ledger.pilotMode, 'owner_named')
+  assert.equal(ledger.overall.blockingGateCount, 6)
+  assert.deepEqual(ledger.overall.blockingGateIds, ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'])
+  assert.equal(ledger.gates[0].id, 'preview_rehearsal')
+  assert.equal(ledger.gates[0].status, 'blocked')
+  assert.equal(ledger.previewRehearsal.proofComplete, false)
   assert.equal(
-    ledger.gates.find((gate) => gate.id === 'live_product_contract')?.evidence,
-    'The exact paired release is verified, but its managed product contract remains isolated_demo.',
+    ledger.gates.find((gate) => gate.id === 'pilot_evidence')?.evidence,
+    'Owner-named Shop pilot proof is absent. Required proof remains: shop hosted proof',
   )
   assert.equal(
     ledger.gates.find((gate) => gate.id === 'security')?.evidence,
     '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v11.',
   )
+  assert.equal(ledger.liveProduction.schemaVersion, 7)
+  assert.equal(ledger.liveProduction.publicBrowserQuarantine, true)
+  assert.equal(ledger.liveProduction.managedWritesEnabled, false)
+  assert.equal(ledger.pilotEvidence.pilotMode, 'owner_named')
+  assert.equal(ledger.pilotEvidence.requiredAcceptedConsecutiveRuns, 20)
+  assert.equal(ledger.pilotEvidence.acceptedConsecutiveRuns, 0)
+  assert.deepEqual(ledger.pilotEvidence.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+  assert.deepEqual(ledger.pilotEvidence.acceptedConsecutivePilotDayIndexes, [])
+  assert.equal(ledger.pilotEvidence.pilotSequenceCoverageMet, false)
+  assert.equal(ledger.pilotEvidence.requiredPilotCalendarDates, 5)
+  assert.equal(ledger.pilotEvidence.acceptedConsecutiveObservedDateCount, 0)
+  assert.deepEqual(ledger.pilotEvidence.acceptedConsecutiveObservedDates, [])
+  assert.equal(ledger.pilotEvidence.pilotCalendarCoverageMet, false)
+  assert.equal(ledger.pilotEvidence.syntheticEvidenceAccepted, false)
   assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
   assert.equal(ledger.products.length, 4)
   assert.equal(ledger.controls.modelCallsRequiredToBuild, 0)
@@ -122,20 +140,16 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
 test('records the self-serve pilot proof independently from production activation', () => {
   const withoutProof = buildManagedPilotReadiness(input)
   assert.equal(withoutProof.selfServePilot.proofComplete, false)
-  const blockedGate = withoutProof.gates.find((gate) => gate.id === 'self_serve_pilot')
-  assert.equal(blockedGate.status, 'blocked')
-  assert.equal(blockedGate.evidence, 'HQ records no completed self-serve pilot proof or measured baseline.')
+  assert.equal(withoutProof.gates.some((gate) => gate.id === 'self_serve_pilot'), false)
+  assert.equal(withoutProof.gates.find((gate) => gate.id === 'pilot_evidence').status, 'blocked')
 
   const proven = buildManagedPilotReadiness({ ...input, selfServePilotEvidence: selfServePilotProof })
   assert.equal(proven.selfServePilot.proofComplete, true)
   assert.equal(proven.selfServePilot.approvalId, 'self-serve-proof-v11c-20260816')
   assert.equal(proven.selfServePilot.schemaVersionProven, 11)
   assert.equal(proven.selfServePilot.liveActivationBlockedOn, 'production_activation')
-  const provenGate = proven.gates.find((gate) => gate.id === 'self_serve_pilot')
-  // The fixture still models live v7, so the proof is banked while the hosted schema gate remains blocked.
-  assert.equal(provenGate.status, 'blocked')
-  assert.match(provenGate.evidence, /proven six-for-six/)
-  assert.match(provenGate.nextAction, /runtime-login provisioning/)
+  assert.equal(proven.gates.find((gate) => gate.id === 'pilot_evidence').status, 'blocked')
+  assert.match(proven.gates.find((gate) => gate.id === 'pilot_evidence').evidence, /Owner-named Shop pilot proof is absent/)
   assert.equal(validateManagedPilotReadiness(proven), proven)
 })
 

@@ -6,7 +6,7 @@ Who this is for: a company that needs a credible web presence without an agency 
 
 The pitch, verbatim from approved copy (eyebrow `Website maker`):
 
-- `Operating software for Myanmar companies.`
+- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
 - `Build a simple company website from a brief.`
 - `Answer a short business brief, edit finite pages, review a responsive preview, and download a standalone website. Request managed hosting when needed.`
 
@@ -40,6 +40,6 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 ## 5. The close
 
 - Self-serve close: public `/website/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=website`). The downloaded website file is the take-home artifact — let them keep it.
-- Assisted close: the landing page's `Set up Website data` button opens `/contact/?product=website` with Website pre-selected in `Starting point`; submit with `Send workflow`, confirmation starts `Request received: `.
+- Assisted close: the landing page's `Request assisted setup` button opens `/contact/?product=website` with Website pre-selected in `Starting point`; submit with `Send workflow`, confirmation starts `Request received: `.
 - From inside the app: the setup page's "Ask SuperMega to set up Website" link carries the template, for example `https://supermega.dev/contact/?product=website&template=business-presence&utm_source=app&utm_medium=guided_trial`.
 - Managed hosting or pilot: `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.

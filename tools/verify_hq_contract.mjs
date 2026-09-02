@@ -27,7 +27,7 @@ import {
 import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText, supabaseCompatibilityVerifierText, competitiveExecutionCutText, pilotKitReadmeText, shopDemoPlaybookText, clientReadinessBriefText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -65,6 +65,11 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'README.md'), 'utf8'),
   readFile(resolve(root, 'agent_os', 'agent_os_architecture.md'), 'utf8'),
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
+  readFile(resolve(root, 'tools', 'verify_supabase_compatibility.mjs'), 'utf8'),
+  readFile(resolve(root, 'hq', 'strategy', 'COMPETITIVE-EXECUTION-CUT.md'), 'utf8'),
+  readFile(resolve(root, 'docs', 'pilot-kit', 'README.md'), 'utf8'),
+  readFile(resolve(root, 'docs', 'demo-playbooks', 'shop.md'), 'utf8'),
+  readFile(resolve(root, 'hq', 'strategy', 'CLIENT-READINESS-BRIEF.md'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
@@ -105,6 +110,7 @@ for (const relativePath of databaseImplementationPaths) {
 }
 const databaseImplementationDigest = `sha256:${databaseImplementationHash.digest('hex')}`
 const normalizedAgentGovernanceText = agentGovernanceText.replace(/\r\n?/g, '\n')
+const competitiveExecutionCutNormalized = competitiveExecutionCutText.replace(/\s+/g, ' ')
 const liveReleaseCommit = now.match(/^Live release commit: `([0-9a-f]{40})`$/m)?.[1] ?? ''
 const executionOrderMarker = '## Execution order'
 const workboardExecutionOrder = workboard.includes(executionOrderMarker)
@@ -208,7 +214,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
   && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 14
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 324497
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 325851
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
@@ -878,6 +884,29 @@ requireContract('Shop uses the stable commerce runtime',
   && product('shop')?.nextGate?.includes('reconciled package sale')
   && product('shop')?.nextGate?.includes('matching treatment redemption')
   && product('shop')?.nextGate?.includes('sample data as client proof'))
+const shopStrategyBridgeDocuments = [pilotKitReadmeText, shopDemoPlaybookText, clientReadinessBriefText]
+  .map((document) => document.replace(/\s+/g, ' '))
+const shopStrategyBridgeRequired = [
+  'POS-independent Shop Profit Control',
+  'public and owner first-use acquisition and diagnostic wedge',
+  'selects and prioritizes one accountable money leak or operating risk',
+  'shop-spa-owner-pilot remains the first bounded named vertical proof',
+  "Spa is not Shop's product identity",
+  'does not prove all Myanmar trades',
+  'package sale, treatment redemption, daily close, and recovery',
+  'measured correction effort',
+  'Both paths remain owner-gated',
+  'Synthetic, sample, browser-local, and local-rendered evidence cannot close the real pilot',
+]
+const shopStrategyBridgeForbidden = [
+  "Spa is Shop's product identity",
+  'Spa proves all Myanmar trades',
+  'Synthetic evidence closes the real pilot',
+  'Local evidence closes the real pilot',
+]
+requireContract('Shop Profit Control acquisition and bounded Spa proof stay distinct',
+  shopStrategyBridgeDocuments.every((document) => shopStrategyBridgeRequired.every((required) => document.includes(required)))
+  && shopStrategyBridgeDocuments.every((document) => shopStrategyBridgeForbidden.every((forbidden) => !document.includes(forbidden))))
 requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',
   enterpriseRoadmap.includes('Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1`')
   && enterpriseRoadmap.includes('Checkpoint `39b7fc2` adds `supermega.commerce.order-calculation.v2`')
@@ -935,6 +964,20 @@ requireContract('internal systems are not customer products',
   portfolio.internalSystems?.map((entry) => entry.id).join(',') === 'company-system,rnd-system'
   && internalSystem('company-system')?.name === 'SuperMega HQ'
   && internalSystem('rnd-system')?.public === false)
+requireContract('competitive execution cut preserves money-path focus and claim boundaries',
+  competitiveExecutionCutText.includes('Contract: `supermega.competitive-execution-cut.v1`')
+  && competitiveExecutionCutText.includes('OneDrive expert/audit exports are advisory inputs only.')
+  && competitiveExecutionCutText.includes('AI is a shared capability, not a customer product.')
+  && competitiveExecutionCutNormalized.includes('Do not claim SAP, Odoo, Shopify, or POS-SaaS replacement parity until managed tenant, support, observability, recovery, and commercial evidence gates pass.')
+  && competitiveExecutionCutNormalized.includes('Shop remains the money-path product until its owner-private pilot has at least 20 consecutive accepted observed runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates.')
+  && competitiveExecutionCutNormalized.includes('GitHub `main` protection is verified. The current first external gate is the exact review-branch push.')
+  && !competitiveExecutionCutText.includes('The current first external gate is GitHub `main` protection.')
+  && competitiveExecutionCutNormalized.includes('The current first commercial evidence gate is the owner-private Shop baseline and pilot.')
+  && competitiveExecutionCutText.includes('The implementer cannot sign its own verification.')
+  && competitiveExecutionCutNormalized.includes('Do not create persistent subagents, recursive delegation, hosted agent runs, or parallel local model work.')
+  && competitiveExecutionCutNormalized.includes('No new product shell should be created until one of the four products completes a real owner-reviewed learning loop.')
+  && competitiveExecutionCutText.includes('No deploy, provider write, credential')
+  && competitiveExecutionCutNormalized.includes('managed activation is authorized by this document.'))
 
 requireContract('manifest has one canonical four-product registry',
   manifest.schemaVersion === 'supermega.site-context.v2'
@@ -1072,11 +1115,14 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.vercelMutated === false)
 
 requireContract('managed pilot readiness is derived and fail closed',
-  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v4'
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v5'
+  && managedPilotReadiness.pilotMode === 'owner_named'
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
   && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
+  && managedPilotReadiness.overall?.blockingGateIds?.join(',') === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').map((entry) => entry.id).join(',')
+  && managedPilotReadiness.overall?.blockingGateIds?.join(',') === 'preview_rehearsal,pilot_evidence,production_activation'
   && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
   && managedPilotReadiness.overall?.nextAction?.decisionId === 'managed-production-activation'
   && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_runtime_role_provisioning,approve_first_named_owner_identity,approve_exact_production_release,approve_managed_activation_window'
@@ -1103,6 +1149,32 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
+  && managedPilotReadiness.liveProduction?.operatingMode === 'isolated_demo'
+  && managedPilotReadiness.liveProduction?.schemaVersion === supabaseSecurityAudit.managedBackend?.liveSchemaVersion
+  && managedPilotReadiness.liveProduction?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
+  && managedPilotReadiness.liveProduction?.versionDrift === supabaseSecurityAudit.managedBackend?.versionDrift
+  && managedPilotReadiness.liveProduction?.browserRolesDenied === true
+  && managedPilotReadiness.liveProduction?.publicBrowserQuarantine === true
+  && managedPilotReadiness.liveProduction?.managedWritesEnabled === false
+  && managedPilotReadiness.previewRehearsal?.proofComplete === false
+  && managedPilotReadiness.previewRehearsal?.exactCandidateRequired === true
+  && managedPilotReadiness.previewRehearsal?.productionRefsRejected === true
+  && managedPilotReadiness.previewRehearsal?.productionDataRejected === true
+  && managedPilotReadiness.previewRehearsal?.privilegedRuntimeCredentialsRejected === true
+  && managedPilotReadiness.pilotEvidence?.pilotMode === 'owner_named'
+  && managedPilotReadiness.pilotEvidence?.productId === 'shop'
+  && managedPilotReadiness.pilotEvidence?.proofComplete === false
+  && managedPilotReadiness.pilotEvidence?.requiredAcceptedConsecutiveRuns === 20
+  && managedPilotReadiness.pilotEvidence?.acceptedConsecutiveRuns === 0
+  && JSON.stringify(managedPilotReadiness.pilotEvidence?.requiredPilotDayIndexes) === JSON.stringify([1, 2, 3, 4, 5])
+  && JSON.stringify(managedPilotReadiness.pilotEvidence?.acceptedConsecutivePilotDayIndexes) === JSON.stringify([])
+  && managedPilotReadiness.pilotEvidence?.pilotSequenceCoverageMet === false
+  && managedPilotReadiness.pilotEvidence?.requiredPilotCalendarDates === 5
+  && managedPilotReadiness.pilotEvidence?.acceptedConsecutiveObservedDateCount === 0
+  && JSON.stringify(managedPilotReadiness.pilotEvidence?.acceptedConsecutiveObservedDates) === JSON.stringify([])
+  && managedPilotReadiness.pilotEvidence?.pilotCalendarCoverageMet === false
+  && managedPilotReadiness.pilotEvidence?.syntheticEvidenceAccepted === false
+  && managedPilotReadiness.pilotEvidence?.publicIdentityAllowed === false
   && managedPilotReadiness.sourceReceipts?.length === 10
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/hosted-storage-privacy-proof.json')
@@ -1111,7 +1183,13 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.selfServePilot?.proofComplete === true
   && managedPilotReadiness.selfServePilot?.contract === 'supermega.self-serve-pilot-proof.v1'
   && managedPilotReadiness.selfServePilot?.schemaVersionProven === 11
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'self_serve_pilot')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.map((gate) => gate.id).join(',') === 'preview_rehearsal,managed_persistence,storage_privacy,security,pilot_evidence,production_activation'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'preview_rehearsal')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'managed_persistence')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'storage_privacy')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'pilot_evidence')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'production_activation')?.status === 'blocked'
   && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
   && managedPilotReadiness.securityAudit?.findingCount === supabaseSecurityAudit.advisor?.findingCount
@@ -1120,7 +1198,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === (supabaseSecurityAudit.conclusion?.status === 'clear'
-    ? `Advisor is clear on protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} with metadata RLS enabled and zero drift from local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`
+    ? `Protected production is at managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion}, zero drift from local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}, browser roles denied, public-browser quarantine recorded, and Security Advisor clear.`
     : `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`)
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef
@@ -1134,12 +1212,67 @@ requireContract('managed pilot readiness is derived and fail closed',
   && supabaseSecurityAudit.conclusion?.productionMutationAuthorized === false
   && supabaseSecurityAudit.controls?.databaseWrites === 0
   && packageText.includes('"readiness:supabase-security:verify": "node tools/verify_supabase_security_advisor_audit.mjs"')
-  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/verify_hq_contract.mjs'))
+  && packageText.includes('"estate:technical:verify": "node tools/manage_technical_estate.mjs --verify"')
+  && packageText.includes('"supabase:preview-rehearsal:proposal:verify": "node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify"')
+  && packageText.includes('"github:main-protection:proposal:verify": "node tools/prepare_github_main_protection_packet.mjs --verify"')
+  && packageText.includes('"release:owner-gates:verify": "node tools/verify_release_stack_owner_gates.mjs --verify"')
+  && packageText.includes('"github:main-protection:apply:plan": "node tools/apply_github_main_protection.mjs --plan"')
+  && packageText.includes('"github:main-protection:apply:self-test": "node --test tools/apply_github_main_protection.test.mjs && node tools/apply_github_main_protection.mjs --self-test"')
+  && packageText.includes('"github:main-protection:owner-action-card:self-test": "node --test tools/prepare_github_main_protection_owner_action_card.test.mjs && node tools/prepare_github_main_protection_owner_action_card.mjs --self-test"')
+  && packageText.includes('"github:main-protection:snapshot:self-test": "node --test tools/collect_github_main_protection_snapshot.test.mjs && node tools/collect_github_main_protection_snapshot.mjs --self-test"')
+  && packageText.includes('"release:branch-push:owner-click": "node tools/apply_review_branch_push.mjs --execute --owner-click"')
+  && packageText.includes('"release:branch-push:owner-receipt:self-test": "node --test tools/review_branch_push_owner_receipt.test.mjs && node tools/review_branch_push_owner_receipt.mjs --self-test"')
+  && packageText.includes('"release:branch-push:apply:self-test": "npm run release:branch-push:owner-receipt:self-test && node --test tools/apply_review_branch_push.test.mjs && node tools/apply_review_branch_push.mjs --self-test"')
+  && packageText.includes('"release:pull-request:create:self-test": "node --test tools/apply_release_pull_request.test.mjs && node tools/apply_release_pull_request.mjs --self-test"')
+  && packageText.includes('"operator:board:self-test": "node --test tools/prepare_current_operator_board.test.mjs && node tools/prepare_current_operator_board.mjs --self-test"')
+  && packageText.includes('"admin:technical-coordination": "node tools/prepare_admin_technical_coordination_packet.mjs"')
+  && packageText.includes('"admin:technical-coordination:self-test": "node --test tools/prepare_admin_technical_coordination_packet.test.mjs && node tools/prepare_admin_technical_coordination_packet.mjs --self-test"')
+  && packageText.includes('"operating:action-board:verify": "node tools/verify_operating_action_board.mjs"')
+  && packageText.includes('"operating:action-board:self-test": "node --test kernel/operating-action-board.test.mjs && node tools/verify_operating_action_board.mjs --self-test"')
+  && packageText.includes('"supermega:status:brief": "node tools/prepare_supermega_status_brief.mjs"')
+  && packageText.includes('"supermega:status:brief:self-test": "node --test tools/prepare_supermega_status_brief.test.mjs && node tools/prepare_supermega_status_brief.mjs --self-test"')
+  && packageText.includes('"product:readiness-matrix": "node tools/prepare_product_readiness_matrix.mjs"')
+  && packageText.includes('"product:readiness-matrix:self-test": "node --test tools/prepare_product_readiness_matrix.test.mjs && node tools/prepare_product_readiness_matrix.mjs --self-test"')
+  && packageText.includes('"release:next-action-preflight": "node tools/prepare_next_release_action_preflight.mjs"')
+  && packageText.includes('"release:next-action-preflight:self-test": "node --test tools/prepare_next_release_action_preflight.test.mjs && node tools/prepare_next_release_action_preflight.mjs --self-test"')
+  && packageText.includes('"release:artifact-family:verify": "node tools/verify_release_artifact_family.mjs"')
+  && packageText.includes('"release:artifact-family:self-test": "node --test tools/verify_release_artifact_family.test.mjs && node tools/verify_release_artifact_family.mjs --self-test"')
+  && packageText.includes('"release:artifact-family:plan": "node tools/prepare_release_artifact_family_plan.mjs"')
+  && packageText.includes('"release:artifact-family:plan:self-test": "node --test tools/prepare_release_artifact_family_plan.test.mjs && node tools/prepare_release_artifact_family_plan.mjs --self-test"')
+  && packageText.includes('"shop:pilot:launch-gate": "node tools/verify_shop_pilot_launch_gate.mjs"')
+  && packageText.includes('"shop:pilot:launch-gate:verify": "node tools/verify_shop_pilot_launch_gate.mjs --verify"')
+  && packageText.includes('"shop:pilot:launch-gate:self-test": "node --test tools/verify_shop_pilot_launch_gate.test.mjs && node tools/verify_shop_pilot_launch_gate.mjs --self-test"')
+  && packageText.includes('"shop:pilot:intake-packet": "node tools/prepare_shop_pilot_private_intake_packet.mjs"')
+  && packageText.includes('"shop:pilot:intake-packet:self-test": "node --test tools/prepare_shop_pilot_private_intake_packet.test.mjs && node tools/prepare_shop_pilot_private_intake_packet.mjs --self-test"')
+  && packageText.includes('"shop:pilot:baseline-packet": "node tools/prepare_shop_pilot_baseline_packet.mjs"')
+  && packageText.includes('"shop:pilot:baseline-packet:self-test": "node --test tools/prepare_shop_pilot_baseline_packet.test.mjs && node tools/prepare_shop_pilot_baseline_packet.mjs --self-test"')
+  && packageText.includes('"shop:pilot:baseline-complete": "node tools/complete_shop_pilot_baseline.mjs"')
+  && packageText.includes('"shop:pilot:baseline-complete:self-test": "node --test tools/complete_shop_pilot_baseline.test.mjs"')
+  && packageText.includes('"shop:pilot:day0-readiness": "node tools/prepare_shop_pilot_day0_readiness_packet.mjs"')
+  && packageText.includes('"shop:pilot:day0-readiness:self-test": "node --test tools/prepare_shop_pilot_day0_readiness_packet.test.mjs && node tools/prepare_shop_pilot_day0_readiness_packet.mjs --self-test"')
+  && packageText.includes('"shop:pilot:day0-owner-baseline-card": "node tools/prepare_shop_pilot_day0_owner_baseline_action_card.mjs"')
+  && packageText.includes('"shop:pilot:day0-owner-baseline-card:self-test": "node --test tools/prepare_shop_pilot_day0_owner_baseline_action_card.test.mjs && node tools/prepare_shop_pilot_day0_owner_baseline_action_card.mjs --self-test"')
+  && packageText.includes('"shop:pilot:owner-observation-pack": "node tools/prepare_shop_pilot_owner_observation_pack.mjs"')
+  && packageText.includes('"shop:pilot:owner-observation-pack:self-test": "node --test tools/prepare_shop_pilot_owner_observation_pack.test.mjs && node tools/prepare_shop_pilot_owner_observation_pack.mjs --self-test"')
+  && packageText.includes('"shop:pilot:decision-packet": "node tools/prepare_shop_pilot_decision_packet.mjs"')
+  && packageText.includes('"shop:pilot:decision-packet:self-test": "node --test tools/prepare_shop_pilot_decision_packet.test.mjs && node tools/prepare_shop_pilot_decision_packet.mjs --self-test"')
+  && packageText.includes('"shop:receipt:print-geometry:verify": "node tools/verify_shop_receipt_print_geometry.mjs"')
+  && packageText.includes('"shop:receipt:print-geometry:self-test": "node --test tools/verify_shop_receipt_print_geometry.test.mjs && node tools/verify_shop_receipt_print_geometry.mjs --self-test"')
+  && packageText.includes('"strategy:posture:verify": "node --test tools/verify_strategy_posture.test.mjs && node tools/verify_strategy_posture.mjs --self-test && node tools/verify_strategy_posture.mjs"')
+  && packageText.includes('"operational:action-packet": "node tools/prepare_operational_report_action_packet.mjs"')
+  && packageText.includes('"operational:action-packet:self-test": "node --test tools/prepare_operational_report_action_packet.test.mjs && node tools/prepare_operational_report_action_packet.mjs --self-test"')
+  && packageText.includes('"hq:verify": "node tools/run_hq_verify.mjs"')
+  && packageText.includes('"hq:verify:steps": "node tools/record_postgres17_rehearsal.mjs --verify')
+  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_technical_estate.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/prepare_supabase_preview_rehearsal_proposal.mjs --verify && node tools/prepare_github_main_protection_packet.mjs --verify && node tools/verify_release_stack_owner_gates.mjs --verify && npm run github:main-protection:apply:self-test && npm run github:main-protection:owner-action-card:self-test && npm run github:main-protection:snapshot:self-test && npm run release:branch-push:apply:self-test && npm run release:pull-request:create:self-test && npm run operator:board:self-test && npm run operating:action-board:self-test && npm run operational:action-packet:self-test && npm run operating:action-board:verify && npm run supermega:status:brief:self-test && npm run product:readiness-matrix:self-test && npm run release:next-action-preflight:self-test && npm run release:owner-approval:packet:self-test && npm run release:control-index:self-test && npm run admin:technical-coordination:self-test && npm run release:artifact-family:self-test && npm run release:artifact-family:plan:self-test && npm run shop:pilot:intake-packet:self-test && npm run shop:pilot:baseline-packet:self-test && npm run shop:pilot:baseline-complete:self-test && npm run shop:pilot:day0-readiness:self-test && npm run shop:pilot:day0-owner-baseline-card:self-test && npm run shop:pilot:owner-observation-pack:self-test && npm run shop:pilot:decision-packet:self-test && npm run shop:pilot:day0-readiness && npm run shop:receipt:print-geometry:self-test && npm run shop:receipt:print-geometry:verify && node tools/verify_shop_pilot_launch_gate.mjs --verify && npm run strategy:posture:verify && node tools/verify_hq_contract.mjs'))
 
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')
   && packageText.includes('npm run database:supabase:compatibility && npm run database:migrations:verify')
   && packageText.includes('"productionSupabaseTargetStatus": "protected-unapproved"')
+  && supabaseCompatibilityVerifierText.includes("const PUBLIC_TABLE_AUTO_EXPOSURE_CHANGE = '2026-10-30'")
+  && supabaseCompatibilityVerifierText.includes('public_table_exposure_posture_missing')
+  && supabaseCompatibilityVerifierText.includes('explicit_table_grant_or_revoke_for_public_anon_authenticated_or_service_role')
+  && supabaseCompatibilityVerifierText.includes('allow_cross_file_public_table_quarantine')
   && workboard.includes('| OPS-084 | CEO + Supabase Compatibility Codex | done-local |')
   && workboard.includes('| OPS-085 | CEO + Supabase Target Authority Codex | done-local |'))
 

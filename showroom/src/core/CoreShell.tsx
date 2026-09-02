@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
@@ -9,13 +9,12 @@ import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
 import {
   managedProductIsVisible,
-  managedProductPath,
   productSwitcherVisible,
   resolveManagedProductHome,
   resolveManagedProductRoute,
 } from './managed-product-access'
 import { currentManagedWorkspace } from './managed-workspace-selection'
-import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
+import type { SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
@@ -25,6 +24,10 @@ function signupProductSlug(product: SetupProductId) {
   if (product === 'commerce') return 'shop'
   if (product === 'production') return 'plant'
   return product
+}
+
+function clientSetupPath(product: SetupProductId) {
+  return `/settings/?product=${encodeURIComponent(signupProductSlug(product))}`
 }
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -98,7 +101,7 @@ const checkingRuntime: RuntimeHealth = {
   auditReady: false,
   writesReady: false,
   coverageScore: 0,
-  requirements: ['Checking company account readiness.'],
+  requirements: ['Checking account.'],
   activationSteps: [],
   evidencePlan: [],
   activationManifest: null,
@@ -106,8 +109,6 @@ const checkingRuntime: RuntimeHealth = {
 }
 
 const LAST_PRODUCT_KEY = 'supermega.last-product.v1'
-const DEFAULT_ENTRY_PRODUCT: ClientSolutionId = 'commerce'
-
 function isClientSolutionId(value: unknown): value is ClientSolutionId {
   return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
 }
@@ -383,7 +384,7 @@ function useRuntimeHealth() {
         })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before company account setup.'] })
+        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health.'] })
       })
     return () => controller.abort()
   }, [])
@@ -585,11 +586,11 @@ export function CoreLayout() {
                   : requestedProduct && portalAccess.status === 'reauthenticate'
                     ? <Navigate replace to={companyLoginPath} />
                     : requestedProduct && portalAccess.status === 'error'
-                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Product access needs attention" />
+                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
                       : requestedProduct && !managedProductAllowed
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
-                          : <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
+                      : <PortalAccessPanel copy="No active product. Ask the owner to assign one." title="No products" />
                         : <Outlet context={runtime} />}
               </RouteErrorBoundary>
             </ManagedPortalAccessContext.Provider>
@@ -614,17 +615,17 @@ const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
 }
 
 const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
-  ['commerce', 'Shop', 'build your catalog and complete your first sale'],
-  ['ecommerce', 'Ecommerce', 'receive online orders that flow into Shop'],
-  ['production', 'Plant', 'link production runs to your Shop stock'],
-  ['website', 'Website', 'give your business a public face'],
+  ['commerce', 'Shop', 'make the first sale'],
+  ['ecommerce', 'Ecommerce', 'take Shop-backed orders'],
+  ['production', 'Plant', 'connect production to stock'],
+  ['website', 'Website', 'publish a simple site'],
 ]
 
 const customerProducts = [
-  ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
-  ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
-  ['Website', 'Publish your business', 'Pages, services, inquiries, and launch preview.', '/website/'],
-  ['Ecommerce', 'Take online orders', 'Storefront, checkout, delivery, and Shop handoff.', '/ecommerce/'],
+  ['Shop', 'Sales, orders, stock, close.', 'Complete a sample sale', '/shop/'],
+  ['Plant', 'Jobs, materials, quality.', 'Run a sample production job', '/plant/'],
+  ['Website', 'Pages, leads, preview.', 'Preview a business website', '/website/'],
+  ['Ecommerce', 'Storefront to Shop handoff.', 'Send a sample order to Shop', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
@@ -637,11 +638,11 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
     ? readLastProduct(window.localStorage)
     : null
   if (portalAccess.status === 'checking') {
-    return <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
+    return <PortalAccessPanel copy="Checking products." title="Opening…" />
   }
   if (portalAccess.status === 'reauthenticate') return <Navigate replace to={managedLoginPath(lastProduct)} />
   if (portalAccess.status === 'error') {
-    return <PortalAccessPanel action={<Link className="button" to={managedLoginPath(lastProduct)}>Sign in again</Link>} copy={portalAccess.message} title="Product access needs attention" />
+    return <PortalAccessPanel action={<Link className="button" to={managedLoginPath(lastProduct)}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
   }
   if (portalAccess.status === 'ready') {
     const requestedRouteProduct = route ? productFromPathname(route) : null
@@ -656,26 +657,31 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
       ? <ProductHomePage />
       : <Navigate replace to={decision.path} />
   }
-  return route
-    ? <Navigate replace to={route} />
-    : choosingProduct
-      ? <ProductHomePage />
-      : <Navigate replace to={managedProductPath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
+  return route ? <Navigate replace to={route} /> : <ProductHomePage />
 }
 
 export function ProductHomePage() {
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
-  const productSetups = useMemo(() => {
-    if (managedPortal) return null
-    if (typeof window === 'undefined') return null
-    return {
-      commerce: readProductSetup(window.localStorage, 'commerce'),
-      production: readProductSetup(window.localStorage, 'production'),
-      website: readProductSetup(window.localStorage, 'website'),
-      ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
-    }
+  const [localProductSetups, setLocalProductSetups] = useState<Record<SetupProductId, { startedAt?: string; workspace: string } | null> | null>(null)
+  useEffect(() => {
+    let active = true
+    if (managedPortal || typeof window === 'undefined') return () => { active = false }
+    void import('./product-setup').then(({ readProductSetup }) => {
+      if (!active) return
+      setLocalProductSetups({
+        commerce: readProductSetup(window.localStorage, 'commerce'),
+        production: readProductSetup(window.localStorage, 'production'),
+        website: readProductSetup(window.localStorage, 'website'),
+        ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
+      })
+    }).catch(() => {
+      // A missing setup chunk must not invent first-run or saved-workspace state.
+      if (active) setLocalProductSetups(null)
+    })
+    return () => { active = false }
   }, [managedPortal])
+  const productSetups = managedPortal ? null : localProductSetups
   const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
   const nextSetupStep = (() => {
     if (!productSetups) return null
@@ -684,8 +690,8 @@ export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
-        ? <PageHeading copy="Only products assigned to this company are shown." eyebrow="Company portal" title="Company products" />
-        : <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />}
+        ? <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
+        : <PageHeading copy="Working samples. Add data when ready." eyebrow="Products" title="Switch product" />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -698,34 +704,34 @@ export function ProductHomePage() {
         </div>
       </section> : null}
       {managedPortal && portalAccess.products.length === 0
-        ? <PortalAccessPanel copy="This company account does not have an active product yet. Ask the workspace owner to assign Shop, Plant, or Website." title="No products assigned" />
+        ? <PortalAccessPanel copy="No active product. Ask the owner to assign one." title="No products" />
         : null}
-      {!managedPortal && !anyStarted ? (
-        <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — set it up once, and it connects to all other products through one catalog and order flow.</p>
+      {!managedPortal && productSetups && !anyStarted ? (
+        <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — one catalog and order flow connects the rest.</p>
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
       ) : null}
-      <nav aria-label="Choose a SuperMega product" className="product-track-grid">
-        {customerProducts.map(([name, job, outcome, path], index) => {
+      <nav aria-label="Choose product" className="product-track-grid">
+        {customerProducts.map(([name, outcome, firstAction, path], index) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
           if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
           const setup = productSetups?.[setupKey]
           const workspaceName = setup?.startedAt ? setup.workspace : null
-          return <Link aria-label={`Open ${name} workspace`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
+          return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
-                <small>{job}</small>
+                <small>First action</small>
                 <h2>{name}</h2>
                 <p>{outcome}</p>
-                {workspaceName ? <span className="product-track-workspace">{workspaceName}</span> : null}
+                {workspaceName ? <span className="product-track-workspace">Continue saved workspace: {workspaceName}</span> : null}
               </span>
-              <strong className="product-track-open">Open {name} <span aria-hidden="true">→</span></strong>
+              <strong className="product-track-open">{firstAction} <span aria-hidden="true">→</span></strong>
             </Link>
         })}
       </nav>
       {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products} /></Suspense> : null}
       {!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
-      <p className="product-home-note">{managedPortal ? 'Each product keeps its own workspace, roles, and data access. Only purchased product connections appear above.' : 'Your product workspaces stay separate. Opening a sample does not change another product.'}</p>
+      <p className="product-home-note">{managedPortal ? 'Separate workspaces, roles, and access per product.' : 'Samples stay separate.'}</p>
     </div>
   )
 }

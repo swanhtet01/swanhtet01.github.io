@@ -23,6 +23,7 @@ import {
 
 export const OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2' as const
 export const OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2' as const
+export const OPERATIONAL_REPORT_ACTION_PACKET_CONTRACT = 'supermega.operational_report_action_packet.v1' as const
 export const SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT = 'supermega.shared_master_data_review_packet.v1' as const
 export const SHARED_MASTER_DATA_DECISION_CONTRACT = 'supermega.shared_master_data_decision.v1' as const
 export const SHARED_MASTER_DATA_DRY_RUN_CONTRACT = 'supermega.shared_master_data_dry_run.v1' as const
@@ -42,6 +43,15 @@ export type OperationalSource = {
   updatedAt: string | null
 }
 
+export type OperationalActionability = {
+  workOrderRequired: boolean
+  ownerReviewRequired: boolean
+  ownerDueRequiredBeforeClosure: boolean
+  evidenceRequiredBeforeClosure: boolean
+  externalEffectAllowed: false
+  managedWriteAllowed: false
+}
+
 export type OperationalReportEntry = {
   id: string
   product: OperationalProduct
@@ -50,6 +60,7 @@ export type OperationalReportEntry = {
   detail: string
   count: number
   route: string
+  actionability: OperationalActionability
   sourceSurface: OperationalSurface
   sourceRevision: number | null
 }
@@ -106,6 +117,12 @@ export type OperationalReport = {
 export type OperationalReportView = {
   product: 'all' | OperationalProduct
   urgency: 'all' | 'attention' | 'critical'
+}
+
+export type OperationalReportActionPacketInput = {
+  ownerRole: string
+  dueDate: string
+  openedAt?: string
 }
 
 export type SharedMasterDataResolution = 'retain_separate_roles' | 'link_shared_party' | 'retain_separate_locations' | 'merge_in_owner'
@@ -192,8 +209,56 @@ const masterDimensionKinds: Record<string, readonly SharedMasterDataKind[]> = {
   'ecommerce.documents': ['document'],
 }
 
+const customerProductIds = ['shop', 'plant', 'website', 'ecommerce'] as const
+const customerProductByOperationalProduct: Record<OperationalProduct, typeof customerProductIds[number]> = {
+  commerce: 'shop',
+  production: 'plant',
+  website: 'website',
+  ecommerce: 'ecommerce',
+}
+const actionSeverityByOperationalSeverity: Record<Exclude<OperationalSeverity, 'ready'>, 'critical' | 'high' | 'medium'> = {
+  critical: 'critical',
+  warning: 'high',
+  action: 'medium',
+}
+const actionImpactByOperationalProduct: Record<OperationalProduct, 'quality' | 'revenue' | 'trust'> = {
+  commerce: 'revenue',
+  production: 'quality',
+  website: 'trust',
+  ecommerce: 'revenue',
+}
+const sensitiveTextPatterns = [
+  /sk-[A-Za-z0-9_-]{20,}/,
+  /sk-proj-[A-Za-z0-9_-]{20,}/,
+  /ghp_[A-Za-z0-9]{20,}/,
+  /github_pat_[A-Za-z0-9_]{20,}/,
+  /sb_secret_[A-Za-z0-9_-]{20,}/,
+  /postgres(?:ql)?:\/\/[^"\s]+/i,
+  /https?:\/\/[^/\s:@]+:[^/\s@]+@/i,
+  /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PRIVATE )?PRIVATE KEY-----/,
+]
+
 function exactIso(value: string) {
   try { return new Date(value).toISOString() === value } catch { return false }
+}
+
+function exactDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = Date.parse(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value
+}
+
+function safeLine(value: unknown, maximum: number, reason: string) {
+  const normalized = String(value || '').trim()
+  if (!normalized || normalized.length > maximum || normalized.normalize('NFC') !== normalized
+    || Array.from(normalized).some((char) => {
+      const code = char.codePointAt(0) || 0
+      return code < 32 || code === 127
+    })
+    || sensitiveTextPatterns.some((pattern) => pattern.test(normalized))) {
+    throw new Error(reason)
+  }
+  return normalized
 }
 
 function canonicalProducts(value: readonly OperationalProduct[]) {
@@ -217,6 +282,18 @@ function validateSources(value: readonly OperationalSource[], allowedProducts: r
   return value.filter((source) => required.has(source.surface)).map((source) => ({ ...source }))
 }
 
+function actionabilityFor(severity: OperationalSeverity): OperationalActionability {
+  const workOrderRequired = severity !== 'ready'
+  return {
+    workOrderRequired,
+    ownerReviewRequired: workOrderRequired,
+    ownerDueRequiredBeforeClosure: workOrderRequired,
+    evidenceRequiredBeforeClosure: workOrderRequired,
+    externalEffectAllowed: false,
+    managedWriteAllowed: false,
+  }
+}
+
 function task(
   source: OperationalSource,
   product: OperationalProduct,
@@ -228,7 +305,7 @@ function task(
   route: string,
 ): OperationalReportEntry {
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Operational report count is invalid.')
-  return { id, product, severity, label, detail, count, route, sourceSurface: source.surface, sourceRevision: source.revision }
+  return { id, product, severity, label, detail, count, route, actionability: actionabilityFor(severity), sourceSurface: source.surface, sourceRevision: source.revision }
 }
 
 function masterDimension(
@@ -497,6 +574,193 @@ function validateExportMasterData(value: unknown, allowedProducts: readonly Oper
 
 async function digestPayload(value: unknown) {
   return `sha256:${hex(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))}`
+}
+
+function actionIdForEntry(entry: OperationalReportEntry) {
+  const [, ...rest] = entry.id.split('.')
+  return `operational-${[customerProductByOperationalProduct[entry.product], ...rest].join('-').replace(/[^a-z0-9]+/g, '-')}`
+}
+
+function buildActionEvidenceRef(report: OperationalReport, entry: OperationalReportEntry) {
+  return `${OPERATIONAL_REPORT_CONTRACT}:${report.observedAt}:${customerProductByOperationalProduct[entry.product]}:${actionIdForEntry(entry)}`
+}
+
+function validateOperationalAction(value: unknown, packet: { openedAt: string, dueDate: string, ownerRole: string }) {
+  if (!exactKeys(value, ['id', 'openedAt', 'productIds', 'sourceFinding', 'recommendation', 'severity', 'businessImpact', 'owner', 'dueDate', 'status', 'authority', 'acceptance', 'closure'])) {
+    throw new Error('Operational report action is invalid.')
+  }
+  const action = value as {
+    id: string
+    openedAt: string
+    productIds: string[]
+    sourceFinding: { sourceType: string, label: string, evidenceRef: string, evidenceDigest: string }
+    recommendation: string
+    severity: string
+    businessImpact: { kind: string, estimateLabel: string, measured: boolean }
+    owner: { role: string, namedPrivate: boolean }
+    dueDate: string
+    status: string
+    authority: { ownerApprovalRequired: boolean, externalWriteAllowed: boolean }
+    acceptance: { evidenceRequired: string[], tests: string[] }
+    closure: { closedAt: null, closureNote: null, measuredResult: null }
+  }
+  if (!/^operational-[a-z0-9][a-z0-9-]{2,96}$/.test(action.id)
+    || action.openedAt !== packet.openedAt
+    || action.dueDate !== packet.dueDate
+    || !Array.isArray(action.productIds) || action.productIds.length !== 1 || !customerProductIds.includes(action.productIds[0] as typeof customerProductIds[number])
+    || !['critical', 'high', 'medium'].includes(action.severity)
+    || action.status !== 'owner-gated') throw new Error('Operational report action is invalid.')
+  if (!exactKeys(action.sourceFinding, ['sourceType', 'label', 'evidenceRef', 'evidenceDigest'])
+    || action.sourceFinding.sourceType !== 'runtime_metric'
+    || !action.sourceFinding.evidenceRef.startsWith(`${OPERATIONAL_REPORT_CONTRACT}:`)
+    || !/^sha256:[0-9a-f]{64}$/.test(action.sourceFinding.evidenceDigest)) throw new Error('Operational report action source is invalid.')
+  safeLine(action.sourceFinding.label, 160, 'Operational report action source is invalid.')
+  safeLine(action.sourceFinding.evidenceRef, 240, 'Operational report action source is invalid.')
+  if (!exactKeys(action.businessImpact, ['kind', 'estimateLabel', 'measured'])
+    || !['quality', 'revenue', 'trust'].includes(action.businessImpact.kind)
+    || action.businessImpact.measured !== false) throw new Error('Operational report action impact is invalid.')
+  safeLine(action.businessImpact.estimateLabel, 180, 'Operational report action impact is invalid.')
+  if (!exactKeys(action.owner, ['role', 'namedPrivate'])
+    || action.owner.role !== packet.ownerRole
+    || action.owner.namedPrivate !== false) throw new Error('Operational report action owner is invalid.')
+  if (!exactKeys(action.authority, ['ownerApprovalRequired', 'externalWriteAllowed'])
+    || action.authority.ownerApprovalRequired !== true
+    || action.authority.externalWriteAllowed !== false) throw new Error('Operational report action authority is invalid.')
+  if (!exactKeys(action.acceptance, ['evidenceRequired', 'tests'])
+    || !Array.isArray(action.acceptance.evidenceRequired) || action.acceptance.evidenceRequired.length < 2 || action.acceptance.evidenceRequired.length > 6
+    || !Array.isArray(action.acceptance.tests) || action.acceptance.tests.length < 1 || action.acceptance.tests.length > 6) throw new Error('Operational report action acceptance is invalid.')
+  action.acceptance.evidenceRequired.forEach((entry) => safeLine(entry, 160, 'Operational report action acceptance is invalid.'))
+  action.acceptance.tests.forEach((entry) => safeLine(entry, 160, 'Operational report action acceptance is invalid.'))
+  if (!exactKeys(action.closure, ['closedAt', 'closureNote', 'measuredResult'])
+    || action.closure.closedAt !== null || action.closure.closureNote !== null || action.closure.measuredResult !== null) {
+    throw new Error('Operational report action closure is invalid.')
+  }
+  return structuredClone(action)
+}
+
+export async function exportOperationalReportActionPacket(
+  report: OperationalReport,
+  view: OperationalReportView,
+  input: OperationalReportActionPacketInput,
+) {
+  const safeView = restoreOperationalReportView(view, report.allowedProducts)
+  const openedAt = input.openedAt === undefined ? report.observedAt : String(input.openedAt)
+  const dueDate = String(input.dueDate || '').trim()
+  const ownerRole = safeLine(input.ownerRole, 80, 'Operational report action owner is invalid.')
+  if (!exactIso(openedAt)) throw new Error('Operational report action opened time is invalid.')
+  if (!exactDate(dueDate)) throw new Error('Operational report action due date is invalid.')
+  const sourceEntries = filterOperationalReport(report, safeView).filter((entry) => entry.actionability.workOrderRequired)
+  const actions = await Promise.all(sourceEntries.map(async (entry) => {
+    if (entry.severity === 'ready'
+      || entry.actionability.ownerReviewRequired !== true
+      || entry.actionability.ownerDueRequiredBeforeClosure !== true
+      || entry.actionability.evidenceRequiredBeforeClosure !== true
+      || entry.actionability.externalEffectAllowed !== false
+      || entry.actionability.managedWriteAllowed !== false) {
+      throw new Error('Operational report actionability cannot create a work order.')
+    }
+    const sourceFinding = {
+      sourceType: 'runtime_metric' as const,
+      label: entry.label,
+      evidenceRef: buildActionEvidenceRef(report, entry),
+      evidenceDigest: await digestPayload({
+        reportContract: report.contract,
+        observedAt: report.observedAt,
+        entryId: entry.id,
+        product: entry.product,
+        severity: entry.severity,
+        count: entry.count,
+        route: entry.route,
+        sourceSurface: entry.sourceSurface,
+        sourceRevision: entry.sourceRevision,
+      }),
+    }
+    return {
+      id: actionIdForEntry(entry),
+      openedAt,
+      productIds: [customerProductByOperationalProduct[entry.product]],
+      sourceFinding,
+      recommendation: safeLine(`${entry.detail} Review ${entry.route} and record closure evidence before changing source data.`, 240, 'Operational report action recommendation is invalid.'),
+      severity: actionSeverityByOperationalSeverity[entry.severity],
+      businessImpact: {
+        kind: actionImpactByOperationalProduct[entry.product],
+        estimateLabel: `${customerProductByOperationalProduct[entry.product]} operating exception requires owner-reviewed closure.`,
+        measured: false as const,
+      },
+      owner: {
+        role: ownerRole,
+        namedPrivate: false as const,
+      },
+      dueDate,
+      status: 'owner-gated' as const,
+      authority: {
+        ownerApprovalRequired: true as const,
+        externalWriteAllowed: false as const,
+      },
+      acceptance: {
+        evidenceRequired: [
+          'Owner-reviewed due date before closure',
+          'Source-backed evidence reference before closure',
+        ],
+        tests: ['npm run app:verify'],
+      },
+      closure: {
+        closedAt: null,
+        closureNote: null,
+        measuredResult: null,
+      },
+    }
+  }))
+  const payload = {
+    contract: OPERATIONAL_REPORT_ACTION_PACKET_CONTRACT,
+    reportContract: report.contract,
+    observedAt: report.observedAt,
+    mode: report.mode,
+    view: safeView,
+    openedAt,
+    dueDate,
+    ownerRole,
+    actions,
+    controls: {
+      reviewOnly: true as const,
+      operatingActionBoardReady: true as const,
+      allActionsOwnerGated: true as const,
+      externalWritesPerformed: false as const,
+      managedWritesPerformed: false as const,
+      privateIdentityExposed: false as const,
+    },
+  }
+  return { ...payload, digest: await digestPayload(payload) }
+}
+
+export async function validateOperationalReportActionPacket(value: unknown) {
+  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'view', 'openedAt', 'dueDate', 'ownerRole', 'actions', 'controls', 'digest'])) {
+    throw new Error('Operational report action packet is invalid.')
+  }
+  const packet = value as Awaited<ReturnType<typeof exportOperationalReportActionPacket>>
+  if (packet.contract !== OPERATIONAL_REPORT_ACTION_PACKET_CONTRACT
+    || packet.reportContract !== OPERATIONAL_REPORT_CONTRACT
+    || !exactIso(packet.observedAt)
+    || !['local', 'managed'].includes(packet.mode)
+    || !exactIso(packet.openedAt)
+    || !exactDate(packet.dueDate)
+    || JSON.stringify(packet.view) !== JSON.stringify(restoreOperationalReportView(packet.view, operationalProducts))
+    || !Array.isArray(packet.actions) || packet.actions.length > 2_000
+    || !exactKeys(packet.controls, ['reviewOnly', 'operatingActionBoardReady', 'allActionsOwnerGated', 'externalWritesPerformed', 'managedWritesPerformed', 'privateIdentityExposed'])
+    || packet.controls.reviewOnly !== true || packet.controls.operatingActionBoardReady !== true || packet.controls.allActionsOwnerGated !== true
+    || packet.controls.externalWritesPerformed !== false || packet.controls.managedWritesPerformed !== false || packet.controls.privateIdentityExposed !== false) {
+    throw new Error('Operational report action packet contract is invalid.')
+  }
+  const ownerRole = safeLine(packet.ownerRole, 80, 'Operational report action owner is invalid.')
+  const seen = new Set<string>()
+  for (const action of packet.actions) {
+    const validated = validateOperationalAction(action, { openedAt: packet.openedAt, dueDate: packet.dueDate, ownerRole })
+    if (seen.has(validated.id)) throw new Error('Operational report action id is duplicated.')
+    seen.add(validated.id)
+  }
+  const { digest, ...payload } = packet
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Operational report action packet digest is invalid.')
+  return structuredClone(packet)
 }
 
 export async function exportSharedMasterDataReviewPacket(report: OperationalReport) {
@@ -816,7 +1080,8 @@ export async function validateOperationalReportExport(value: unknown) {
   const sources = validateSources(artifact.sources, artifact.allowedProducts)
   const bySurface = new Map(sources.map((source) => [source.surface, source]))
   for (const entry of artifact.entries) {
-    if (!exactKeys(entry, ['id', 'product', 'severity', 'label', 'detail', 'count', 'route', 'sourceSurface', 'sourceRevision'])
+    const workOrderRequired = entry.severity !== 'ready'
+    if (!exactKeys(entry, ['id', 'product', 'severity', 'label', 'detail', 'count', 'route', 'actionability', 'sourceSurface', 'sourceRevision'])
       || !artifact.allowedProducts.includes(entry.product) || entry.sourceSurface !== productSurface[entry.product]
       || entry.sourceRevision !== bySurface.get(entry.sourceSurface)?.revision
       || typeof entry.id !== 'string' || !/^[a-z]+[.][a-z_]+$/.test(entry.id)
@@ -824,7 +1089,14 @@ export async function validateOperationalReportExport(value: unknown) {
       || typeof entry.label !== 'string' || !entry.label || entry.label.length > 160
       || typeof entry.detail !== 'string' || !entry.detail || entry.detail.length > 240
       || !Number.isSafeInteger(entry.count) || entry.count < 0
-      || typeof entry.route !== 'string' || !entry.route.startsWith('/') || entry.route.startsWith('//')) {
+      || typeof entry.route !== 'string' || !entry.route.startsWith('/') || entry.route.startsWith('//')
+      || !exactKeys(entry.actionability, ['workOrderRequired', 'ownerReviewRequired', 'ownerDueRequiredBeforeClosure', 'evidenceRequiredBeforeClosure', 'externalEffectAllowed', 'managedWriteAllowed'])
+      || entry.actionability.workOrderRequired !== workOrderRequired
+      || entry.actionability.ownerReviewRequired !== workOrderRequired
+      || entry.actionability.ownerDueRequiredBeforeClosure !== workOrderRequired
+      || entry.actionability.evidenceRequiredBeforeClosure !== workOrderRequired
+      || entry.actionability.externalEffectAllowed !== false
+      || entry.actionability.managedWriteAllowed !== false) {
       throw new Error('Operational report export entry is invalid.')
     }
   }

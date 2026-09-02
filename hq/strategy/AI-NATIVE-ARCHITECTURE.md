@@ -1,6 +1,6 @@
 # SuperMega AI-Native Architecture and Scalability Strategy
 
-Updated: 2026-08-12
+Updated: 2026-08-26
 Author: Architecture Codex
 Status: proposal (founder review required for any consequential change)
 Sources: hq/portfolio.json, pilot-data/agent_team_system.json, kernel/README.md,
@@ -23,8 +23,8 @@ operating principles, all already implemented in code rather than aspiration:
    scaling_model.rules).
 
 2. Verification gates are management. Humans do not review agent effort;
-   gates review agent output. The 621-step app:verify chain (OPS-737), the
-   7-gate managed-pilot readiness ledger, and fail-closed release verifiers
+   gates review agent output. The current serial app:verify chain, the
+   owner-named managed-pilot readiness ledger, and fail-closed release verifiers
    replace status meetings. An agent that cannot pass the gate has not
    worked. Note: lint runs separately from app:verify and can fail CI alone.
 
@@ -37,8 +37,10 @@ operating principles, all already implemented in code rather than aspiration:
 4. Consequential authority stays human. consequentialAuthority: "founder"
    (portfolio.json). No agent deploys, sends, pays, publishes, or writes
    production data. Agents propose; gates verify; the founder decides. The
-   2026-08-12 decisions (preview branch approved, self-serve onboarding,
-   branch push approved -- hq/TIMELINE.md) are exactly this pattern.
+   current release wave is owner-named: GitHub main protection, review-branch
+   publication, preview rehearsal, production release, customer contact,
+   payment/stock actions, credential changes, and managed activation each need
+   separate owner approval.
 
 The scalability claim follows: because employees are contracts (not
 processes), headcount scales by registering role definitions, not by hiring;
@@ -141,7 +143,7 @@ Authority: hq/portfolio.json agentOperatingModel + pilot-data/agent_team_system.
       |
       +-- Managed backend (planned, currently isolated_demo):
             Supabase Postgres 17, project zvtzwcimpvvtkowflhda
-            private schema v7 live, v8-v10 code-only, RLS everywhere,
+            production schema v11 observed with the public-browser quarantine,
             browser roles denied, writes off until gates pass
             rehearsal flow: disposable preview branch, apply migrations,
             prove isolation/storage/recovery, delete after evidence
@@ -152,30 +154,25 @@ Authority: hq/portfolio.json agentOperatingModel + pilot-data/agent_team_system.
     for transactional email, console/api.mjs ops console), agent-company
     cycles, one-use-code operator auth, managed-pilot-readiness generator.
 
-### 3.2 Self-serve onboarding pipeline (founder decision 2026-08-12)
+### 3.2 Owner-named Shop pilot before self-serve onboarding
 
-Managed onboarding is SELF-SERVE: users name themselves; no founder-named
-pilot operator (hq/TIMELINE.md, decisions received 2026-08-12). The pipeline
-already has its rails built:
+The current managed onboarding path is owner-named. Self-serve remains a later
+product expansion, not the active activation route. The immediate path is:
 
-    signup (/signup, mobile CTA proven at 375x812 -- OPS-735)
-      -> device trial: full product use in browser storage, zero server cost
-      -> claim code: SM-XXXX-XXXX Crockford (no I/L/O/U), rides the contact
-         link as claim= fragment param, validated server-side into
-         record.raw (OPS-739)
-      -> lead: serverless contact function on supermega.dev; founder notify
-         (email + telegram); customer acknowledgement email via Resend,
-         best-effort, idempotent per lead, reply-to founder (OPS-738;
-         kernel/connectors/messaging-resend.mjs)
-      -> managed tenant: provisioned behind RLS on the approved Supabase
-         target; claim code links the tenant to its device trial; operator
-         access via one-use tenant code -> role-scoped HttpOnly session
-         (kernel/api/agent-company-auth.mjs pattern)
+    owner-private intake accepted
+      -> owner-observed manual baseline captured privately
+      -> GitHub main protection and review PR gates
+      -> exact-candidate preview rehearsal with no production refs or data
+      -> owner-approved paired release while operating mode stays isolated_demo
+      -> five-day private Shop pilot with operator-reviewed runs
+      -> 20 consecutive accepted receipt-and-anchor-bound runs covering pilot
+         days 1 through 5 and at least 5 distinct observed calendar dates
+         before any managed activation recommendation
 
-Design consequence of self-serve: the named_pilot readiness gate is satisfied
-by the signup flow itself (user-named operator + measured in-product baseline)
-instead of a founder selection. The other six hosted gates are unchanged and
-still block activation.
+Design consequence: no public signup, claim-code provisioning, hosted tenant,
+customer acknowledgement, payment, stock movement, production database write,
+or managed persistence activation is implied by readiness documents. Owner
+review can satisfy only the exact gate it names.
 
 ### 3.3 Scaling path for the data plane
 
@@ -186,7 +183,8 @@ Stage 0 (now): one Supabase project, writes off, device-local trials only.
 Stage 1: single project, per-tenant RLS. One database, tenant_id on every
   row, RLS policies already rehearsed locally (56 PostgreSQL 17 checks,
   tenant isolation, session revocation -- readiness gate local_postgres17 is
-  ready-local). Preview-branch rehearsal proves v8-v10 + browser quarantine
+  ready-local). Preview-branch rehearsal proves the complete source-controlled
+  migration chain against current v11 production parity and browser quarantine
   before production migration.
 
 Stage 2: same project, operational hardening. Connection pooling, the
@@ -243,9 +241,9 @@ showroom CI run separately and fail CI on their own.
   (RESEND_API_KEY et al.), GitGuardian in CI, dependency-security workflow,
   no keys in the built artifact (verified by the public output gate).
 - Database: RLS on every managed table, browser roles denied, metadata
-  quarantine for legacy public tables prepared (v8-v10 + digest-bound
-  browser quarantine, code-only until the preview rehearsal passes),
-  production writes disabled until separate founder approval
+  quarantine for legacy public tables observed on production schema v11 and
+  required to remain reproducible from source; production writes remain
+  disabled until separate founder approval
   (production_activation gate).
 - Sessions: one-use tenant codes exchanged for HttpOnly, Secure, SameSite
   role-scoped sessions; server stores only fingerprints; owner can revoke
@@ -260,27 +258,34 @@ showroom CI run separately and fail CI on their own.
 
 ## 5. 90-day scalability roadmap (concrete triggers)
 
-Day 0 state: zero managed tenants, zero real leads, 7 hosted gates blocked,
-three founder decisions received (preview branch, self-serve, branch push).
+Day 0 state: zero managed tenants, owner-named Shop pilot not yet observed,
+GitHub main protection verified, review-branch publication still owner-gated,
+and production/external writes disabled. Current release packets must be
+generated from the reviewed candidate SHA and treated as stale when a newer
+artifact family supersedes them.
 
 Phase A -- prove the hosted spine (target: days 0-14)
-- Execute the approved bounded rehearsal exactly as scoped in
-  managed-pilot-readiness.json: create one preview branch, apply v8-v10 plus
-  the browser quarantine, run the hosted isolation / storage / recovery /
-  session-revocation proofs, capture evidence, delete the branch (max
-  lifetime 24h).
+- After separate owner approval, execute the bounded rehearsal exactly as scoped
+  in managed-pilot-readiness.json: create one preview branch, apply the complete
+  source-controlled migration chain, prove v11 parity, browser quarantine,
+  hosted isolation / storage / recovery / session-revocation, capture evidence,
+  and delete the branch (max lifetime 24h).
 - Trigger: rehearsal green -> propose production migration to the founder.
   Rehearsal red -> fix locally, repeat; production stays untouched.
 
-Phase B -- first self-serve tenants (target: days 14-45)
-- Wire claim-code -> tenant provisioning so a delivered lead with a valid
-  SM- code can be activated on the approved target without founder naming.
-- Trigger: first valid claim-code lead arrives -> provision tenant #1 and
-  start the five-day evidence plan the shop pilot gate requires.
-- Trigger: 3 active tenants -> activate the dormant scheduler at its
-  reviewed 25/day ceiling (only after the five managed proofs, per OPS-026).
-- Trigger: 10 tenants -> turn on the approved aggregate analytics schema;
-  review pool usage and slow queries weekly from real load, not guesses.
+Phase B -- owner-named Shop pilot (target: days 14-45)
+- Capture the private manual baseline before pilot day one, then run the
+  five-day owner-named Shop sequence without external messages, payments,
+  stock movement, production writes, or managed activation.
+- Trigger: 20 consecutive accepted, operator-reviewed, receipt-and-anchor-bound
+  runs covering pilot days 1 through 5 and at least 5 distinct observed
+  calendar dates -> prepare a pilot decision packet and managed activation
+  recommendation.
+- Trigger: fewer or failed accepted runs -> keep Shop in learning mode and fix
+  locally before any activation proposal.
+- Self-serve tenant provisioning, customer acknowledgement automation, and
+  aggregate analytics remain deferred until after pilot acceptance and separate
+  owner decisions.
 
 Phase C -- steady-state scale rules (target: days 45-90)
 - Trigger: AI spend > 400k units (80% of default) for 3 consecutive UTC

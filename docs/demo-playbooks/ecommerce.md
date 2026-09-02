@@ -6,9 +6,9 @@ Who this is for: sellers who take orders in chat or by phone and want a controll
 
 The pitch, verbatim from approved copy (eyebrow `Ecommerce maker`):
 
-- `Operating software for Myanmar companies.`
-- `Create a Shop-connected ordering page.`
-- `Choose Shop-backed products, build a cart, review a deterministic 15-minute quote, and save a recoverable request receipt. Payment, fulfilment, returns, and refunds are completed in Shop.`
+- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
+- `Draft an ordering page from the current local Shop workspace.`
+- `Choose items from the current local Shop workspace, draft a browser-local catalog, cart, and quote, and save a recoverable request receipt. Nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved. Shop remains the price and stock record.`
 
 Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it as a working sample and a Shop handoff — never as hosted storefront proof.
 
@@ -44,6 +44,6 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 ## 5. The close
 
 - Self-serve close: public `/ecommerce/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=ecommerce`), on the seller's own phone.
-- Assisted close: the landing page's `Set up Ecommerce data` button opens `/contact/?product=ecommerce` with Ecommerce pre-selected in `Starting point`; submit with `Send workflow`, confirmation starts `Request received: `.
+- Assisted close: the landing page's `Request assisted setup` button opens `/contact/?product=ecommerce` with Ecommerce pre-selected in `Starting point`; submit with `Send workflow`, confirmation starts `Request received: `.
 - From inside the app: the setup page's "Ask SuperMega to set up Ecommerce" link carries the template, for example `https://supermega.dev/contact/?product=ecommerce&template=social-storefront&utm_source=app&utm_medium=guided_trial`.
 - Managed pilot close (usually paired with Shop): `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.

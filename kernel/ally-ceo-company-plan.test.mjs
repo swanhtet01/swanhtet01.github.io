@@ -176,7 +176,7 @@ test('CEO planning carries compact four-product managed-pilot truth within the e
   assert.equal(readiness.status, 'blocked')
   assert.equal(readiness.localDatabaseProofReady, true)
   assert.equal(readiness.hostedActivationReady, false)
-  assert.equal(readiness.blockingGateIds.length, 7)
+  assert.deepEqual(readiness.blockingGateIds, ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'])
   assert.deepEqual(readiness.products.map(({ productId }) => productId), ['shop', 'plant', 'website', 'ecommerce'])
   assert.equal(result.manifest.evidence['operations-analyst'].sourceReceipts.at(-1).path, 'hq/readiness/managed-pilot-readiness.json')
   assert.ok(result.preflight.totalEvidenceBytes <= 8_192)

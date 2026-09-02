@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -50,10 +51,30 @@ import {
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
 const CONTENT_CHECK_IDS = ['ready-pages', 'home-path', 'navigation']
+const websiteProductSource = await readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+const websiteProductCss = (await readFile(new URL('../showroom/src/products/website/website-product.css', import.meta.url), 'utf8')).replaceAll('\r\n', '\n')
 
 function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
 }
+
+test('the Website FILE status stays fully readable on desktop and keeps the mobile layout', () => {
+  assert.match(
+    websiteProductSource,
+    /\['File', hasUnsavedChanges \? 'Blocked by draft' : releaseRecordRequired \? publishIsCurrent \? 'Ready' : 'Needed' : 'Ready to download'\]/,
+    'the guarded status must remain the current source-owned FILE truth',
+  )
+
+  const ellipsisRule = '.website-today-metrics strong { overflow: hidden; color: var(--website-ink); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }'
+  const fileRule = '.website-today-metrics span:last-child strong { overflow: visible; text-overflow: clip; white-space: normal; }'
+  assert.ok(websiteProductCss.includes(ellipsisRule), 'other compact Website metrics retain their bounded ellipsis behavior')
+  assert.ok(websiteProductCss.indexOf(fileRule) > websiteProductCss.indexOf(ellipsisRule), 'the FILE value override must follow and defeat the generic ellipsis rule')
+  assert.match(
+    websiteProductCss,
+    /@media \(max-width: 760px\) \{[\s\S]*?\.website-today-metrics \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}\n  \.website-today-metrics span:last-child \{ grid-column: 1 \/ -1; \}/,
+    'mobile keeps its two-column grid with the FILE metric spanning the full row',
+  )
+})
 
 test('a fresh Website workspace opens on a complete, previewable site', () => {
   const workspace = createInitialWorkspace()
@@ -67,6 +88,34 @@ test('a fresh Website workspace opens on a complete, previewable site', () => {
   }
   assert.ok(workspace.pages.some((page) => page.navigation.visible), 'navigation must show at least one page')
   assert.ok(isUntouchedWebsiteStarter(workspace))
+})
+
+test('a recovered tab draft waits for an explicit provenance choice', () => {
+  assert.match(
+    websiteProductSource,
+    /setEditSessionState\(null\)\s+setRestoredDraftState\(next\)/,
+    'restoration must hold the candidate aside instead of silently activating it',
+  )
+  assert.match(websiteProductSource, /Unsaved tab draft found/)
+  assert.match(websiteProductSource, /Current \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'saved Website'\}/)
+  assert.match(websiteProductSource, /Continue saved draft/)
+  assert.match(websiteProductSource, /Start from this \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'Website'\}/)
+  assert.match(websiteProductSource, /Nothing was overwritten, deployed, published, or sent\./)
+  assert.match(
+    websiteProductSource,
+    /window\.sessionStorage\.removeItem\(websiteEditSessionStorageKey\(pendingRestoredDraft\.scope\)\)/,
+    'choosing the current Website must remove the older tab draft',
+  )
+  assert.match(
+    websiteProductSource,
+    /The older tab draft could not be discarded safely[\s\S]*?focusRestoredDraftChoice\(\)[\s\S]*?return/,
+    'a storage failure must keep the provenance choice unresolved',
+  )
+  assert.match(
+    websiteProductSource,
+    /if \(pendingRestoredDraft\) \{\s+focusRestoredDraftChoice\(\)\s+return\s+\}/,
+    'the primary action must return to the unresolved choice instead of bypassing it',
+  )
 })
 
 test('the seeded site passes every content readiness check', () => {

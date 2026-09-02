@@ -341,6 +341,7 @@ for (const key of [
   'supermega.production.workspace.v2',
   'supermega.setup.v3',
   'supermega.shop.counter_draft.v1',
+  'supermega.shop.batch-profit-control.local-workspace.v1',
   'supermega.last_operator.v1',
   'supermega.trial_signup.v1',
   'supermega.behavior-trail.v1',
@@ -362,6 +363,7 @@ check(isLocalWorkspaceKey('supermega.commerce.workspace.v2'), 'the Shop workspac
 check(isLocalWorkspaceKey('supermega.production.workspace.v2'), 'the Plant workspace is registered')
 check(isLocalWorkspaceKey('supermega.website.workspace.v2'), 'the Website workspace is registered')
 check(isLocalWorkspaceKey('supermega.shop.counter_draft.v1'), 'the in-progress counter sale is registered')
+check(isLocalWorkspaceKey('supermega.shop.batch-profit-control.local-workspace.v1'), 'local Batch Profit Control reviews are registered')
 check(isLocalWorkspaceKey('supermega.last_operator.v1'), 'the remembered operator name is registered')
 check(isLocalWorkspaceKey('supermega.shop.order_draft.v1.any-scope'), 'scoped order drafts are registered by prefix')
 
@@ -372,9 +374,13 @@ check(!isLocalWorkspaceKey(''), 'an empty key is not claimed')
 // --- listing only reports what is present ------------------------------------
 const fakeStorage = (keys) => ({ length: keys.length, key: (index) => keys[index] ?? null })
 const listed = listLocalWorkspaceStorageKeys(fakeStorage([
-  'supermega.commerce.workspace.v2', 'unrelated.app.data', 'supermega.last_operator.v1',
+  'supermega.commerce.workspace.v2',
+  'supermega.shop.batch-profit-control.local-workspace.v1',
+  'unrelated.app.data',
+  'supermega.last_operator.v1',
 ]))
-check(listed.length === 2, `listing returns only workspace keys, got ${listed.length}`)
+check(listed.length === 3, `listing returns only workspace keys, got ${listed.length}`)
+check(listed.includes('supermega.shop.batch-profit-control.local-workspace.v1'), 'listing includes local Batch Profit Control reviews')
 check(!listed.includes('unrelated.app.data'), 'and never a key belonging to another app on the same origin')
 
 console.log(`workspace storage registry contract: ${checks} checks passed (${discovered.size} keys scanned, ${DELIBERATE_EXCLUSIONS.size} documented exclusions)`)

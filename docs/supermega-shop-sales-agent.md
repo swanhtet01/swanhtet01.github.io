@@ -41,6 +41,32 @@ npm.cmd run client:pilot:workspace -- --decide --workspace "<private-workspace>"
 npm.cmd run client:pilot:workspace -- --verify --workspace "<private-workspace>"
 ```
 
+## Day-0 baseline and observed pilot evidence
+
+After the owner has captured the private baseline, commit it through one new atomic baseline-completion directory before any pilot-day recording. The private baseline JSON must use distinct `runId` values across order, package-redemption, and daily-close streams. The completion command validates and verifies all four artifacts before committing the directory; require the sealed receipt digest as `owner_safe_baseline_completion_receipt_digest`. Day-0 readiness must be bound to the current release handoff and GitHub protection snapshot; never treat a stale release gate as pilot-ready.
+
+```powershell
+npm.cmd run shop:pilot:baseline-complete -- --input "<private-baseline-input.json>" --output-dir "<private-baseline-completion-directory>"
+npm.cmd run shop:pilot:baseline-complete -- --verify-dir "<private-baseline-completion-directory>"
+npm.cmd run shop:pilot:intake-packet -- --output "<owner-safe-intake-packet.json>"
+npm.cmd run shop:pilot:launch-gate -- --baseline-packet "<private-baseline-completion-directory>/owner-safe-baseline-packet.json" --intake-packet "<owner-safe-intake-packet.json>" --output "<owner-safe-launch-gate-report.json>"
+npm.cmd run shop:pilot:launch-gate:verify -- --verify-report "<owner-safe-launch-gate-report.json>"
+npm.cmd run shop:pilot:day0-readiness -- --launch-gate-report "<owner-safe-launch-gate-report.json>" --release-handoff "<release-handoff.json>" --github-protection-snapshot "<github-protection-snapshot.json>" --output "<owner-safe-day0-packet.json>" --markdown-output "<owner-safe-day0-packet.md>"
+```
+
+Do not hand-edit or manually replace any file in the completion directory, and do not recreate the owner-safe packet with the retired separate lint/generate/verify flow. The launch gate may consume only `<private-baseline-completion-directory>/owner-safe-baseline-packet.json` after `--verify-dir` succeeds and `owner-safe-baseline-completion-receipt.json` remains sealed. On an existing directory, partial output, digest mismatch, or validation failure, stop and preserve the evidence for owner review.
+
+During the five-day private pilot, create and validate one private run input per real observed run before recording it:
+
+```powershell
+npm.cmd run client:pilot:observed-evidence:template -- --workspace "<private-observed-workspace>" --output "<private-observed-run-input.json>"
+npm.cmd run client:pilot:observed-evidence:validate -- --run-input "<private-observed-run-input.json>"
+npm.cmd run client:pilot:observed-evidence -- --record --workspace "<private-observed-workspace>" --run-input "<private-observed-run-input.json>"
+npm.cmd run client:pilot:observed-evidence -- --verify --workspace "<private-observed-workspace>"
+```
+
+Every counted run requires `evidenceReferenceDigest` for the private evidence receipt and `independentAnchorDigest` for the independently sealed private anchor. If either digest is missing, reused, or equal to the other digest, the run does not count. Promotion evidence still requires 20 consecutive accepted real runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates; synthetic or sample runs do not close the gate.
+
 Never overwrite existing outputs. On `stage_incomplete`, `stale_or_tampered`, `binding_mismatch`, or another validation error, stop the transition and preserve the files for owner review.
 
 ## Reporting boundary

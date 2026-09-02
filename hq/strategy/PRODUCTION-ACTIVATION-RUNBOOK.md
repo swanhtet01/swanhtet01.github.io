@@ -5,7 +5,7 @@ Status: READY FOR FOUNDER REVIEW, NOT AUTHORIZED — the self-serve end-to-end p
 `self-serve-proof-v11c-20260816`), so the env names and ordering below are
 proof-confirmed. Nothing here is executed by writing it; only the founder runs
 these steps. Production remains `protected-unapproved`. Author: tech lead.
-Date: 2026-08-16 (updated 2026-08-20).
+Date: 2026-08-16 (updated 2026-08-27).
 
 This is the single consolidated `production_activation` decision. Every
 technical proof it depends on is done on isolated infrastructure; this
@@ -27,6 +27,11 @@ self-serve product real for customers. Read top to bottom before running.
   (approvalId `self-serve-proof-v11c-20260816`). This precondition is SATISFIED.
 - Migration v11 is already live on protected production. Do not apply it again
   as an activation step.
+- Billing migrations v12/v13 are source-controlled and separately proven, but
+  they are **not** part of this v11 self-serve activation runbook. Do not apply
+  them, set `SUPERMEGA_BILLING_SCHEMA_VERSION`, or expect premium entitlement
+  reads during this run unless a newer founder-approved runbook and verifier
+  explicitly replaces this v11 sequence.
 - The exact candidate must be merged to trunk and released as a paired,
   live-verified app/public commit. **This and the founder approval receipt are
   the open preconditions; do not provision the runtime login or run steps B-D
@@ -47,6 +52,25 @@ path fail-closes.
 
 Steps A-B are safe prep (no customer can create anything until C+D). Step C
 opens the door; step D lets writes land. You can do A-B, watch, then C-D.
+
+### Schema-version fork — choose one before activation
+
+This document's executable path is the **v11 self-serve fork**:
+
+- protected production remains at schema 11;
+- `SUPERMEGA_TRIAL_SCHEMA_VERSION=11`;
+- `SUPERMEGA_BILLING_SCHEMA_VERSION` stays unset;
+- billing invoices, payment confirmation, and premium entitlement reads remain
+  founder-gated future work.
+
+The **billing-ready fork** is a different activation package, not a toggle in
+this runbook. It would first require owner-approved production application of
+v12 and v13, a matching runtime expectation for the same live schema version,
+`SUPERMEGA_BILLING_SCHEMA_VERSION=13`, an updated managed-environment verifier,
+and a fresh hosted proof that self-serve activation plus entitlement reads both
+pass on the same target. Do not mix the forks: a v13 database with
+`SUPERMEGA_TRIAL_SCHEMA_VERSION=11` fail-closes, and a v11 database with billing
+v13 runtime expectations fail-closes.
 
 ## 2. Exact sequence (founder-run; each step verifiable)
 
@@ -71,6 +95,10 @@ exact store configuration through the production connection path):
 
 **Step B — tell the store to expect v11** (Vercel env, app runtime project):
 - `SUPERMEGA_TRIAL_SCHEMA_VERSION=11` (exactly the digits `11`).
+- Leave `SUPERMEGA_BILLING_SCHEMA_VERSION` unset for this v11 self-serve fork.
+  The billing rail defaults fail-closed unless the separately approved billing
+  migration fork is active; do not set a billing schema value to make a premium
+  flag appear.
 - Redeploy the app so the runtime picks it up (or it reads at boot per config).
 - The store now requires schema 11 AND production is at 11 → consistent.
 - Safety net: an empty or mistyped value can NOT crash the app — the store
@@ -111,6 +139,10 @@ exact store configuration through the production connection path):
   a v10 schema that can't accept it (the exact bug the proof caught).
 - Do not enable writes (D) before you've personally verified a tenant creates
   correctly on the target.
+- Do not apply v12/v13 billing migrations during this v11 run, and do not set
+  `SUPERMEGA_BILLING_SCHEMA_VERSION` as a shortcut. The current environment
+  verifier and activation script are v11 self-serve controls; the billing-ready
+  fork needs its own reviewed runbook, verifier update, and hosted proof.
 
 ## 5. After activation — the first-tenant evidence plan
 

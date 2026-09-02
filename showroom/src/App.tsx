@@ -21,7 +21,7 @@ const VisionProduct = visionPreviewEnabled
   : null
 
 function ProductLoading({ name }: { name: string }) {
-  return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name}…</p></div>
+  return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>{name}</p></div>
 }
 
 function productDemoPath(value: string | null) {
@@ -55,11 +55,11 @@ function SettingsEntry() {
   const product = setupProductFromQuery(new URLSearchParams(location.search).get('product'))
 
   if (product) {
-    return <Suspense fallback={<ProductLoading name="product setup" />}><ProductOnboardingPage product={product} /></Suspense>
+    return <Suspense fallback={<ProductLoading name="setup" />}><ProductOnboardingPage product={product} /></Suspense>
   }
 
   if (location.hash === '#controls' || location.hash === '#workspace-recovery') {
-    return <Suspense fallback={<ProductLoading name="workspace controls" />}><WorkspaceControlsPage /></Suspense>
+    return <Suspense fallback={<ProductLoading name="controls" />}><WorkspaceControlsPage /></Suspense>
   }
 
   return <Navigate replace to="/" />
@@ -83,17 +83,17 @@ export default function App() {
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
           <Route element={<SettingsEntry />} path="settings/*" />
-          {import.meta.env.DEV ? <Route element={<Suspense fallback={<ProductLoading name="client builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" /> : null}
+          {import.meta.env.DEV ? <Route element={<Suspense fallback={<ProductLoading name="builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" /> : null}
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
           <Route element={<Navigate replace to="/" />} path="agents/*" />
           <Route element={<Navigate replace to="/" />} path="assist/*" />
           <Route element={<Navigate replace to="/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="managed access" />}><ManagedLoginPage /></Suspense>} path="login" />
-          <Route element={<Suspense fallback={<ProductLoading name="account recovery" />}><ManagedAccountPage /></Suspense>} path="account/recovery" />
-          <Route element={<Suspense fallback={<ProductLoading name="account setup" />}><ManagedAccountPage /></Suspense>} path="account/setup" />
-          <Route element={<Suspense fallback={<ProductLoading name="free trial" />}><SignupPage /></Suspense>} path="signup" />
+          <Route element={<Suspense fallback={<ProductLoading name="login" />}><ManagedLoginPage /></Suspense>} path="login" />
+          <Route element={<Suspense fallback={<ProductLoading name="recovery" />}><ManagedAccountPage /></Suspense>} path="account/recovery" />
+          <Route element={<Suspense fallback={<ProductLoading name="account" />}><ManagedAccountPage /></Suspense>} path="account/setup" />
+          <Route element={<Suspense fallback={<ProductLoading name="trial" />}><SignupPage /></Suspense>} path="signup" />
           <Route element={<Navigate replace to="/" />} path="*" />
         </Route>
       </Routes>

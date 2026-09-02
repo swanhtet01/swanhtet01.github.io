@@ -1,12 +1,18 @@
 {
-  "contract": "supermega.managed-pilot-readiness.v4",
-  "asOf": "2026-08-22T07:44:43.854Z",
-  "sourceDigest": "sha256:6df97a9099b856ee4db6be4f673ee35e5a4086005e1cfa5f7a04a6c02d30d4e4",
+  "contract": "supermega.managed-pilot-readiness.v5",
+  "asOf": "2026-08-28T17:18:10.017Z",
+  "pilotMode": "owner_named",
+  "sourceDigest": "sha256:fec3fe6764c17d2374353437adbffb45a744efb7a549e0f242bea3ab1037f0e2",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 1,
+    "blockingGateCount": 3,
+    "blockingGateIds": [
+      "preview_rehearsal",
+      "pilot_evidence",
+      "production_activation"
+    ],
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "managed-production-activation",
@@ -84,6 +90,23 @@
     "productionMutationAuthorized": false,
     "databaseWrites": 0
   },
+  "liveProduction": {
+    "operatingMode": "isolated_demo",
+    "schemaVersion": 11,
+    "localTargetVersion": 11,
+    "versionDrift": 0,
+    "browserRolesDenied": true,
+    "publicBrowserQuarantine": true,
+    "managedWritesEnabled": false,
+    "productionMutationAuthorized": false
+  },
+  "previewRehearsal": {
+    "proofComplete": false,
+    "exactCandidateRequired": true,
+    "productionRefsRejected": true,
+    "productionDataRejected": true,
+    "privilegedRuntimeCredentialsRejected": true
+  },
   "storagePrivacy": {
     "proofComplete": true,
     "contract": "supermega.hosted-storage-privacy-proof.v1",
@@ -107,30 +130,35 @@
     "schemaVersionProven": 11,
     "liveActivationBlockedOn": "production_activation"
   },
+  "pilotEvidence": {
+    "pilotMode": "owner_named",
+    "productId": "shop",
+    "proofComplete": false,
+    "requiredAcceptedConsecutiveRuns": 20,
+    "acceptedConsecutiveRuns": 0,
+    "requiredPilotDayIndexes": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "acceptedConsecutivePilotDayIndexes": [],
+    "pilotSequenceCoverageMet": false,
+    "requiredPilotCalendarDates": 5,
+    "acceptedConsecutiveObservedDateCount": 0,
+    "acceptedConsecutiveObservedDates": [],
+    "pilotCalendarCoverageMet": false,
+    "syntheticEvidenceAccepted": false,
+    "publicIdentityAllowed": false,
+    "privateWorkspaceRequired": true
+  },
   "gates": [
     {
-      "id": "local_postgres17",
-      "status": "ready-local",
-      "evidence": "56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.",
-      "nextAction": "Keep the digest-bound rehearsal current."
-    },
-    {
-      "id": "hosted_postgres17",
-      "status": "ready-hosted",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v11 with zero drift from local target v11.",
-      "nextAction": "Keep the hosted schema at the local target and the audit current."
-    },
-    {
-      "id": "hosted_storage_privacy",
-      "status": "ready-hosted",
-      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
-      "nextAction": "Keep the storage-privacy evidence and instrument current."
-    },
-    {
-      "id": "live_product_contract",
-      "status": "ready-hosted",
-      "evidence": "Managed persistence and security are proven on isolated targets; the live product contract remains isolated_demo by design until the activation window and production gates open.",
-      "nextAction": "Keep the paired release and proof evidence current; the next steps are founder decisions."
+      "id": "preview_rehearsal",
+      "status": "blocked",
+      "evidence": "No exact-candidate protected preview rehearsal receipt is present for this local branch; release handoff still requires a current HEAD and fresh preview proof.",
+      "nextAction": "Run a protected preview rehearsal for the exact candidate after owner-approved PR/review setup."
     },
     {
       "id": "managed_persistence",
@@ -139,16 +167,22 @@
       "nextAction": "Keep the persistence evidence and instrument current."
     },
     {
+      "id": "storage_privacy",
+      "status": "ready-hosted",
+      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
+      "nextAction": "Keep the storage-privacy evidence and instrument current."
+    },
+    {
       "id": "security",
       "status": "ready-hosted",
-      "evidence": "Advisor is clear on protected managed schema v11 with metadata RLS enabled and zero drift from local target v11.",
+      "evidence": "Protected production is at managed schema v11, zero drift from local target v11, browser roles denied, public-browser quarantine recorded, and Security Advisor clear.",
       "nextAction": "Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs."
     },
     {
-      "id": "self_serve_pilot",
-      "status": "ready-hosted",
-      "evidence": "Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS, and protected production now carries the reviewed v11 grants. Runtime-login provisioning, the first named owner, deployment, and the activation window remain under the separate production_activation decision.",
-      "nextAction": "Keep the six-proof evidence current; execute runtime-login provisioning and the first named-owner activation only through the exact founder-approved production handoff."
+      "id": "pilot_evidence",
+      "status": "blocked",
+      "evidence": "Owner-named Shop pilot proof is absent. Required proof remains: One named Spa owner completes reviewed import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant; record setup time, correction effort, and five-day evidence without treating sample data as client proof.",
+      "nextAction": "Complete the private owner-named Shop pilot sequence and retain identity only in the private workspace."
     },
     {
       "id": "production_activation",
@@ -222,11 +256,11 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:cc61a7ccf1f1f6d2164448c7e29097884814b467705d83351c65c4237f665730"
+      "digest": "sha256:952074c01bd97f591f02271cdb7acd8ced3051198e126407c720775b821b1423"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:b160ca85da2753a5ce470b9c6a60d261997ff42fe3f171f988f281c6a56bc8b3"
+      "digest": "sha256:295d5b7917a193d0700aa3ae7485c62c837b42e0aafdb29256c3bc89e851b7fc"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -250,15 +284,15 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:538c9c979b74d41563028f96c32ac340693a02a6cb20d5a9e63bd34fe87c4439"
+      "digest": "sha256:1502e906047cf2cb67bb641256c55dd62728a8c16c50921f768ee78ee95aa4a4"
     },
     {
       "path": "package.json",
-      "digest": "sha256:6ab18de152b808058925b58dd5101004d3235de1c5146d1130000ddb85762105"
+      "digest": "sha256:1015e58e6ddcac784a1f12c5e069afd16d5228915f2e9902eb233bcca2a6e26f"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:9d4874bd708ef350c811101d503720d54993f599caeb47f5cda1331fb5f9c7ba"
+      "digest": "sha256:22ae4ff0c60c06a1d1dad1ce4d670f1facc9c299972d571a091392e6e0855be0"
     }
   ]
 }

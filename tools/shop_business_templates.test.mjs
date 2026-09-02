@@ -8,8 +8,30 @@ const root = resolve(import.meta.dirname, '..')
 const modulePath = resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')
 const moduleHref = pathToFileURL(modulePath).href
 const model = await import(moduleHref)
+const coreAppSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8')
 
 const expectedTemplateIds = ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa', 'bakery']
+
+test('a trade URL opens Sell and invokes the guarded local sample boundary', () => {
+  assert.match(coreAppSource, /requestedShopTemplateId && requestedTab === null \? 'counter'/)
+  assert.match(coreAppSource, /provisionLocalShopBusinessTemplateSample\(requestedShopTemplateId\)/)
+  assert.match(coreAppSource, /installedShopSampleId === requestedShopTemplateId/)
+  assert.match(coreAppSource, /Existing Shop kept/)
+})
+
+test('a trade URL cannot relabel or operate an existing managed catalog', () => {
+  for (const token of [
+    'managedTemplateDoorRequiresReview(Boolean(managedIdentity), effectiveMode, managedTemplateId)',
+    'data-template-request="blocked"',
+    'was requested, not applied',
+    'The public trade link did not replace, merge, or relabel it',
+    'Continue existing managed Shop',
+    'to="/shop/?tab=counter"',
+  ]) assert.ok(coreAppSource.includes(token), `managed trade boundary missing: ${token}`)
+  assert.ok(coreAppSource.includes('shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))'))
+  assert.ok(coreAppSource.includes('Checking workspace access before applying the ${requestedShopTemplate.name.en} sample. Nothing has been applied.'))
+  assert.match(coreAppSource, /requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate\s*\? `The \$\{requestedShopTemplate\.name\.en\} public request is not applied/)
+})
 
 test('registry carries exactly the 10 supported Myanmar business types', () => {
   assert.deepEqual(model.shopBusinessTemplates.map((template) => template.id), expectedTemplateIds)
@@ -414,22 +436,19 @@ test('the browser-local lane still installs every trade catalog through the real
   })
 
   try {
-    // The current clean-start contract replaces the generic seed catalog with the selected trade
-    // catalog. Keeping both would put unrelated demo goods beside a spa, pharmacy, or restaurant's
-    // real starter items. The earlier contract test in this file pins that same invariant at the
-    // pure installer; this one proves the browser-local write boundary preserves it.
+    // The clean-start contract replaces the generic seed catalog with the selected trade catalog.
+    // Keeping both would put unrelated demo goods beside a spa, pharmacy, or restaurant's real
+    // starter items. A non-empty till draft is tested separately below and must fail closed.
     assert.equal(model.shopBusinessTemplates.length, 10, 'all ten shipped trade templates are present')
 
     for (const template of model.shopBusinessTemplates) {
-      const store = localStorageStub({
-        'supermega.shop.counter_draft.v1': JSON.stringify({ cart: { 'OLD-SKU': 1 }, customer: 'Previous sale', payment: 'Cash' }),
-      })
+      const store = localStorageStub()
       globalThis.window = { localStorage: store }
       globalThis.localStorage = store
 
       const disposition = await onboardingRuntime.provisionLocalShopBusinessTemplateSample(template.id)
       assert.equal(disposition, 'installed', `${template.id}: a signed-out install still reports 'installed'`)
-      assert.equal(store.map.has('supermega.shop.counter_draft.v1'), false, `${template.id}: installing a new catalog clears the previous till draft`)
+      assert.equal(store.map.has('supermega.shop.counter_draft.v1'), false, `${template.id}: clean install does not invent a till draft`)
 
       const written = store.map.get(commerceKey)
       assert.ok(typeof written === 'string' && written.length > 0, `${template.id}: the browser-local Shop workspace was written`)
@@ -478,6 +497,40 @@ test('the browser-local lane still installs every trade catalog through the real
       )
       assert.ok(commerceModel.validateCommerceState(state), `${template.id}: the installed workspace is a valid commerce state`)
     }
+
+    // A trade link may replace the exact generic seed or another untouched guided sample, but
+    // it must stop once an operator has added their own catalog evidence. This drives the same
+    // public provisioner the route calls and compares the complete stored record byte-for-byte.
+    const protectedStore = localStorageStub({
+      'supermega.shop.counter_draft.v1': JSON.stringify({ cart: { 'OWNER-SKU': 1 }, customer: 'Current sale', payment: 'Cash' }),
+    })
+    globalThis.window = { localStorage: protectedStore }
+    globalThis.localStorage = protectedStore
+    const draftOnlyBefore = protectedStore.map.get(commerceKey)
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved')
+    assert.equal(protectedStore.map.get(commerceKey), draftOnlyBefore, 'a draft-only operator workspace was not replaced')
+    assert.equal(protectedStore.map.has('supermega.shop.counter_draft.v1'), true, 'the in-progress sale was retained')
+    protectedStore.map.delete('supermega.shop.counter_draft.v1')
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'installed')
+    const ownerChange = await commerceModel.mutateCommerceWorkspace((current) => commerceModel.registerCommerceItem(current, {
+      sku: 'OWNER-SKU',
+      name: 'Owner product',
+      onHand: 3,
+      reorderAt: 1,
+      price: 2500,
+    }, {
+      actionId: 'ACT-OWNER-CATALOG-001',
+      capturedAt: new Date().toISOString(),
+      actor: 'Owner',
+      reason: 'Add an operator-owned product before following another trade link.',
+      evidenceReference: 'OWNER-CATALOG-001',
+    }) ?? current)
+    assert.equal(ownerChange.ok, true, 'the owner catalog evidence was stored')
+    protectedStore.map.set('supermega.shop.counter_draft.v1', JSON.stringify({ cart: { 'OWNER-SKU': 1 }, customer: 'Current sale', payment: 'Cash' }))
+    const protectedBefore = protectedStore.map.get(commerceKey)
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('pharmacy'), 'preserved')
+    assert.equal(protectedStore.map.get(commerceKey), protectedBefore, 'the second trade link did not alter the owner workspace')
+    assert.equal(protectedStore.map.has('supermega.shop.counter_draft.v1'), true, 'a preserved workspace keeps its in-progress sale')
 
     assert.equal(fetchCalls.length, 0, `the browser-local lane made no network calls, got ${JSON.stringify(fetchCalls)}`)
   } finally {

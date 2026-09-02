@@ -3,6 +3,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EXPECTED_OWNER_CONFIRMATION="I UNDERSTAND LEGACY SMOKE IS NOT READINESS PROOF"
+if [[ "${SUPERMEGA_ALLOW_LEGACY_LOCAL_SMOKE:-}" != "${EXPECTED_OWNER_CONFIRMATION}" ]]; then
+  echo "Quarantined legacy serve_solution.py smoke path. This is not SuperMega readiness proof." >&2
+  echo "Re-run only with SUPERMEGA_ALLOW_LEGACY_LOCAL_SMOKE='${EXPECTED_OWNER_CONFIRMATION}' for local legacy observation." >&2
+  exit 64
+fi
+echo "Running legacy serve_solution.py / mark1_pilot local smoke only; not SuperMega readiness proof, release proof, commercial proof, or Shop pilot evidence." >&2
 HOST="${SUPERMEGA_SMOKE_HOST:-127.0.0.1}"
 if [[ -n "${SUPERMEGA_SMOKE_PORT:-}" ]]; then
   PORT="$SUPERMEGA_SMOKE_PORT"

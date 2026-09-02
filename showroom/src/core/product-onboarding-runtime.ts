@@ -404,7 +404,13 @@ export async function provisionLocalShopWorkingSample(industryPackId: ShopIndust
   return disposition
 }
 
-export async function provisionLocalShopBusinessTemplateSample(businessTemplateId: ShopBusinessTemplateId) {
+export async function provisionLocalShopBusinessTemplateSample(
+  businessTemplateId: ShopBusinessTemplateId,
+): Promise<'installed' | 'current' | 'preserved'> {
+  // A trade link is allowed to replace an untouched guided sample, never a sale the operator
+  // is already ringing up. The cart is stored separately from the Commerce workspace, so the
+  // catalog guard cannot see it; check it before staging any replacement and fail closed.
+  if (localShopCounterDraftHasLines()) return 'preserved'
   const template = shopBusinessTemplate(businessTemplateId)
   const preview = await createClientImportPreview(
     shopBusinessTemplateCatalogCsv(template.id),
@@ -464,6 +470,23 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
 }
 
 const SHOP_COUNTER_DRAFT_STORAGE_KEY = 'supermega.shop.counter_draft.v1'
+
+function localShopCounterDraftHasLines() {
+  const raw = window.localStorage.getItem(SHOP_COUNTER_DRAFT_STORAGE_KEY)
+  if (!raw) return false
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true
+    const cart = (parsed as { cart?: unknown }).cart
+    if (!cart || typeof cart !== 'object' || Array.isArray(cart)) return true
+    return Object.entries(cart).some(([sku, quantity]) => Boolean(sku)
+      && Number.isSafeInteger(quantity)
+      && (quantity as number) > 0)
+  } catch {
+    // Unknown draft data may still be the only copy of a sale. Keep it for explicit recovery.
+    return true
+  }
+}
 
 function clearInstalledSampleCounterDraft(disposition: 'installed' | 'current' | 'preserved') {
   // A newly installed catalog is a new till context. Keeping the previous draft can mix an

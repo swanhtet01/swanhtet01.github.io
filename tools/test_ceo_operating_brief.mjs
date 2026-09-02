@@ -1,6 +1,7 @@
 // CEO operating brief: synthesis of all five product analytics summaries.
 // Tests alert generation, passthrough of key metrics, and empty-state handling.
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -9,7 +10,11 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { projectCeoOperatingBrief } from './ceo-operating-brief.ts'`,
+    contents: `
+      export { projectCeoOperatingBrief } from './ceo-operating-brief.ts'
+      export { COMMERCE_KEY, readCommerceWorkspace } from './commerce-workspace.ts'
+      export { PRODUCTION_KEY, readProductionWorkspace } from './production-workspace.ts'
+    `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/ceo-test-entry.ts',
     loader: 'ts',
@@ -21,7 +26,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { projectCeoOperatingBrief } = await import(
+const { COMMERCE_KEY, PRODUCTION_KEY, projectCeoOperatingBrief, readCommerceWorkspace, readProductionWorkspace } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -52,10 +57,42 @@ function makeCrm({ uniqueCustomers = 0, repeatCustomers = 0, newCustomers = 0, a
 }
 
 const WHEN = '2026-08-11T09:00:00.000Z'
+const controlsPageSource = readFileSync('showroom/src/core/WorkspaceControlsPage.tsx', 'utf8')
+const evidenceViewsSource = readFileSync('showroom/src/core/WorkspaceEvidenceViews.tsx', 'utf8')
+const ceoViewSource = evidenceViewsSource.slice(evidenceViewsSource.indexOf('export function CeoOperatingBriefView('))
+
+function makeRecordingStorage(entries = {}) {
+  const records = new Map(Object.entries(entries))
+  const writes = []
+  return {
+    records,
+    writes,
+    storage: {
+      getItem(key) { return records.get(key) ?? null },
+      setItem(key, value) { writes.push(['set', key, value]); records.set(key, value) },
+      removeItem(key) { writes.push(['remove', key]); records.delete(key) },
+    },
+  }
+}
 
 // 1. Empty state → no alerts, all zeros
 {
-  const r = projectCeoOperatingBrief(makeShop(), makePlant(), makeWebsite(), makeEcommerce(), makeCrm(), WHEN)
+  const commerceStorage = makeRecordingStorage()
+  const productionStorage = makeRecordingStorage()
+  const commerce = readCommerceWorkspace(commerceStorage.storage)
+  const production = readProductionWorkspace(productionStorage.storage)
+  const r = projectCeoOperatingBrief(
+    makeShop({ orderCount: commerce.state.orders.length }),
+    makePlant({ totalJobs: production.state.jobs.length }),
+    makeWebsite(),
+    makeEcommerce(),
+    makeCrm(),
+    WHEN,
+  )
+  check(commerce.source === 'absent', 'empty Commerce read reports absent instead of seeding')
+  check(production.source === 'absent', 'empty Production read reports absent instead of seeding')
+  check(commerceStorage.writes.length === 0 && productionStorage.writes.length === 0, 'empty CEO workspace reads perform no writes')
+  check(!commerceStorage.records.has(COMMERCE_KEY) && !productionStorage.records.has(PRODUCTION_KEY), 'opening the CEO brief leaves empty storage empty')
   check(r.asOf === WHEN, 'asOf is passed through')
   check(r.alerts.length === 0, 'no alerts for empty state')
   check(r.shopRevenue.totalRevenue === 0, 'shopRevenue.totalRevenue = 0')
@@ -63,6 +100,14 @@ const WHEN = '2026-08-11T09:00:00.000Z'
   check(r.websiteLeads.totalLeads === 0, 'websiteLeads.totalLeads = 0')
   check(r.ecommercePipeline.totalRequests === 0, 'ecommercePipeline.totalRequests = 0')
   check(r.crmJourney.uniqueCustomers === 0, 'crmJourney.uniqueCustomers = 0')
+  check(r.evidenceBoundary.scope === 'browser_local_unverified', 'empty brief stays browser-local and unverified')
+  check(r.evidenceBoundary.source === 'this_device_saved_workspace', 'evidence source is this device workspace')
+  check(r.evidenceBoundary.localRecordProductCount === 0, 'empty brief has zero products with local records')
+  check(Object.values(r.evidenceBoundary.products).every(state => state === 'no_local_records'), 'empty brief distinguishes absent local records from measured zero')
+  check(r.evidenceBoundary.pilotEvidenceProven === false, 'empty brief does not prove pilot evidence')
+  check(r.evidenceBoundary.customerEvidenceProven === false, 'empty brief does not prove customer evidence')
+  check(r.evidenceBoundary.commercialPerformanceProven === false, 'empty brief does not prove commercial performance')
+  check(r.evidenceBoundary.productionTelemetryObserved === false, 'empty brief does not claim production telemetry')
 }
 
 // 2. Shop passthrough fields
@@ -234,6 +279,62 @@ const WHEN = '2026-08-11T09:00:00.000Z'
   check(r.alerts[0]?.product === 'shop', 'first alert is from shop')
   check(r.alerts[1]?.product === 'plant', 'second alert is from plant')
   check(r.alerts[2]?.product === 'ecommerce', 'third alert is from ecommerce')
+}
+
+// 21. Local records are detected per product without widening their authority.
+{
+  const r = projectCeoOperatingBrief(
+    makeShop({ orderCount: 1, totalRevenue: 1000 }),
+    makePlant({ totalJobs: 1 }),
+    makeWebsite({ totalLeads: 1 }),
+    makeEcommerce({ pendingReturnIntents: 1 }),
+    makeCrm({ uniqueCustomers: 1 }),
+    WHEN,
+  )
+  check(r.evidenceBoundary.localRecordProductCount === 4, 'four products with local records are counted')
+  check(Object.values(r.evidenceBoundary.products).every(state => state === 'browser_local_records_present'), 'all four local record states are explicit')
+  check(r.evidenceBoundary.commercialPerformanceProven === false, 'local records never become commercial proof')
+  check(r.evidenceBoundary.productionTelemetryObserved === false, 'local records never become observed production telemetry')
+}
+
+// 22. The owner-facing view names all four products and states the evidence boundary visibly.
+{
+  for (const text of [
+    'Four-product status. Read-only.',
+    'Local view — not commercial proof',
+    'Local records are not customer, pilot, revenue, commercial, production, or telemetry proof.',
+    'Production telemetry',
+    'Website',
+    'Ecommerce',
+  ]) {
+    check(ceoViewSource.includes(text), `CEO view includes owner-safe boundary: ${text}`)
+  }
+  check(ceoViewSource.includes('readCommerceWorkspace()'), 'CEO view uses the non-mutating Commerce reader')
+  check(ceoViewSource.includes('readProductionWorkspace()'), 'CEO view uses the non-mutating Production reader')
+  check(!ceoViewSource.includes('loadCommerceWorkspace()'), 'CEO view does not call the seeding Commerce loader')
+  check(!ceoViewSource.includes('loadProductionWorkspace()'), 'CEO view does not call the seeding Production loader')
+}
+
+// 23. The CEO view exposes a safe, ordered operating lifecycle without an execution action.
+{
+  for (const text of [
+    'Go-live controls',
+    'Set up, protect, prove, release',
+    'Owner-gated',
+    'No deployment, publishing, contact, stock, payment, or managed write.',
+  ]) check(ceoViewSource.includes(text), `CEO lifecycle includes owner-safe control: ${text}`)
+  for (const path of [
+    '/settings/?product=shop',
+    '/settings/?product=plant',
+    '/settings/?product=website',
+    '/settings/?product=ecommerce',
+    '/settings/#controls',
+    '/settings/?view=local-metrics#controls',
+  ]) check(evidenceViewsSource.includes(path), `CEO lifecycle links to ${path}`)
+  check(ceoViewSource.includes("backupReady ? 'Ready' : 'Needs attention'"), 'CEO lifecycle reports whether a recovery file can be produced')
+  check(ceoViewSource.includes("runtime.writesReady ? 'Ready' : 'Locked'"), 'CEO lifecycle reports hosted runtime readiness without widening it')
+  check(controlsPageSource.includes("lazy(() => import('./WorkspaceEvidenceViews')"), 'optional evidence views stay outside the Workspace Controls route chunk')
+  check(controlsPageSource.includes('<CeoOperatingBriefView backupReady={Boolean(currentBackup)} runtime={runtime} />'), 'CEO lifecycle receives the current read-only backup and runtime state')
 }
 
 console.log(`CEO operating brief: ${checks} checks passed`)

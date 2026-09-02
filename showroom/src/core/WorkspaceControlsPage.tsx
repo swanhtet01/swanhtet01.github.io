@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
 
-import { getSessionEvents } from '../analytics/metrics-collector'
+import { getRecordedEvents, LOCAL_METRICS_MAX_EVENTS, projectLocalActivityLifecycle } from '../analytics/metrics-collector'
 
 import {
   LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
@@ -45,12 +45,12 @@ import { projectPlantEquipmentMaintenanceSummary } from './plant-equipment-maint
 import { projectWebsiteLeadSummary } from './website-lead-summary'
 import { readWebsiteLeadLedger } from '../products/website/website-leads'
 import { projectCustomerJourneySummary } from './customer-journey-summary'
-import { projectCeoOperatingBrief } from './ceo-operating-brief'
-import type { EcommercePipelineSummary } from './ecommerce-pipeline-summary'
 import { projectEcommerceStaleRequestQueue } from './ecommerce-request-age-summary'
 import type { EcommerceOrderRequestV2 } from '../products/ecommerce/ecommerce-buying-lifecycle.ts'
 
 const ECOMMERCE_BUYING_LOCAL_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'
+const CeoOperatingBriefView = lazy(() => import('./WorkspaceEvidenceViews').then((module) => ({ default: module.CeoOperatingBriefView })))
+const REPORT_FALLBACK = <div className="workspace-screen settings-screen"><p className="form-notice">Loading local report…</p></div>
 
 // Same raw-localStorage read EcommercePipelineView below uses: readEcommerceBuyingState's
 // validation is async, and every other view on this page reads its workspace state
@@ -67,47 +67,6 @@ function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
   } catch {
     return []
   }
-}
-
-function CeoOperatingBriefView() {
-  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
-  const production = useMemo(() => loadProductionWorkspace().state, [])
-  const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
-  const shopRevenue = useMemo(() => projectShopRevenueSummary(commerce), [commerce])
-  const plantOee = useMemo(() => projectPlantOeeSummary(production, new Date().toISOString()), [production])
-  const websiteLeads = useMemo(() => projectWebsiteLeadSummary(ledger), [ledger])
-  const crmJourney = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
-  const ecommerce = useMemo((): EcommercePipelineSummary => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } } catch { return { totalRequests: 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: 0, pendingCancellationIntents: 0 } } }, [])
-  const brief = useMemo(() => projectCeoOperatingBrief(shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney, new Date().toISOString()), [shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney])
-  return (
-    <div className="workspace-screen settings-screen">
-      <PageHeading copy="Cross-product operating summary. Read-only." eyebrow="CEO brief" title="Operating brief" />
-      <div className="settings-control-stack">
-        {brief.alerts.length > 0 && <section className="core-panel">
-          <div><span className="core-eyebrow">Alerts</span></div>
-          <div className="readiness-list">{brief.alerts.map((a, i) => <span key={i}><small>{a.product}</small><strong>{a.message}</strong></span>)}</div>
-        </section>}
-        <section className="core-panel"><div><span className="core-eyebrow">Shop</span></div>
-          <div className="readiness-list">
-            <span><small>Revenue</small><strong>{brief.shopRevenue.totalRevenue.toLocaleString()}</strong></span>
-            <span><small>Orders</small><strong>{brief.shopRevenue.orderCount}</strong></span>
-            <span><small>Avg order</small><strong>{brief.shopRevenue.averageOrderValue.toLocaleString()}</strong></span>
-          </div></section>
-        <section className="core-panel"><div><span className="core-eyebrow">Plant</span></div>
-          <div className="readiness-list">
-            <span><small>Jobs</small><strong>{brief.plantOee.totalJobs}</strong></span>
-            <span><small>Quality</small><strong>{brief.plantOee.totalJobs > 0 ? `${brief.plantOee.qualityRate}%` : '—'}</strong></span>
-            <span><small>Overdue</small><strong>{brief.plantOee.overdueJobs}</strong></span>
-          </div></section>
-        <section className="core-panel"><div><span className="core-eyebrow">CRM</span></div>
-          <div className="readiness-list">
-            <span><small>Customers</small><strong>{brief.crmJourney.uniqueCustomers}</strong></span>
-            <span><small>Repeat</small><strong>{brief.crmJourney.repeatCustomers}</strong></span>
-            <span><small>Website leads</small><strong>{brief.websiteLeads.totalLeads}</strong></span>
-          </div></section>
-      </div>
-    </div>
-  )
 }
 
 function EcommercePipelineView() {
@@ -430,16 +389,31 @@ function ShopRevenueView() {
 }
 
 function LocalMetricsView() {
-  const events = getSessionEvents()
+  const summary = projectLocalActivityLifecycle(getRecordedEvents())
+  const productLabels = { shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' } as const
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading copy="Session activity. Nothing leaves this device." eyebrow="Analytics" title="Session metrics" />
+      <PageHeading copy="Bounded activity saved on this device across sessions." eyebrow="Analytics" title="Device activity" />
       <div className="settings-control-stack">
-        {events.length === 0
-          ? <p className="form-notice">No events yet. Open a product to begin.</p>
-          : <table><thead><tr><th>Product</th><th>Action</th></tr></thead><tbody>
-              {events.map((e, i) => <tr key={i}><td>{e.product}</td><td>{e.action}</td></tr>)}
-            </tbody></table>}
+        <section className="core-panel system-boundary-panel">
+          <div><span className="core-eyebrow">Evidence boundary</span><h2>Local activity — not observed production telemetry</h2><p>These privacy-minimal counters may span earlier sessions on this device. They contain product, capability, action, and timestamp only.</p></div>
+          <div className="readiness-list">
+            <span><small>Product events</small><strong>{summary.productEventCount}</strong></span>
+            <span><small>HQ and navigation events</small><strong>{summary.hqEventCount}</strong></span>
+            <span><small>Stored events</small><strong>{summary.eventCount} / {LOCAL_METRICS_MAX_EVENTS}</strong></span>
+            <span><small>External telemetry</small><strong>Not observed</strong></span>
+            <span><small>Commercial proof</small><strong>Not proven</strong></span>
+          </div>
+          <p className="authority-note">Activity counts do not prove a customer, pilot, production operation, commercial result, or provider ingestion. The oldest events may be dropped when the device record reaches its {LOCAL_METRICS_MAX_EVENTS}-event limit.</p>
+        </section>
+        {summary.products.map((product) => <section className="core-panel" key={product.product}>
+          <div><span className="core-eyebrow">{productLabels[product.product]}</span></div>
+          <div className="readiness-list">
+            <span><small>Local events</small><strong>{product.eventCount}</strong></span>
+            <span><small>Latest local activity</small><strong>{product.latestAt ? new Date(product.latestAt).toLocaleString() : 'No local activity'}</strong></span>
+          </div>
+        </section>)}
+        {summary.atCapacity ? <p className="form-notice">The local activity record is at its bounded capacity. New events keep replacing the oldest events on this device.</p> : null}
       </div>
     </div>
   )
@@ -588,7 +562,7 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'customer-journey') return <CustomerJourneyView />
   if (searchParams.get('view') === 'ecommerce-pipeline') return <EcommercePipelineView />
   if (searchParams.get('view') === 'ecommerce-stale-requests') return <EcommerceStaleRequestsView />
-  if (searchParams.get('view') === 'ceo-brief') return <CeoOperatingBriefView />
+  if (searchParams.get('view') === 'ceo-brief') return <Suspense fallback={REPORT_FALLBACK}><CeoOperatingBriefView backupReady={Boolean(currentBackup)} runtime={runtime} /></Suspense>
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()
@@ -760,7 +734,7 @@ export function WorkspaceControlsPage() {
             <Link className="core-button" to="/settings/?view=ecommerce-pipeline#controls">Ecommerce pipeline</Link>
             <Link className="core-button" to="/settings/?view=customer-journey#controls">Customer journey</Link>
             <Link className="core-button" to="/settings/?view=cross-product#controls">Order and production status</Link>
-            <Link className="core-button" to="/settings/?view=local-metrics#controls">Session metrics</Link>
+            <Link className="core-button" to="/settings/?view=local-metrics#controls">Device activity</Link>
           </div>
         </section>
 
@@ -769,7 +743,7 @@ export function WorkspaceControlsPage() {
               The image is stored in this device's IndexedDB only: it is never uploaded, and it
               is not part of workspace backups by construction (the backup snapshots registered
               localStorage keys; this store is invisible to it, like product photos). */}
-          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (Wave MMQR, MyanMyanPay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
+          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (MMQR, AYA Pay, WavePay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
           <PaymentQrSettingsControls scope={paymentQrScope} />
         </section>
 

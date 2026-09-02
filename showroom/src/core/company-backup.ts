@@ -50,6 +50,9 @@ const portableExactKeys = new Set([
   // The in-progress basket. 'supermega.shop.order_draft.v1.' is already a portable PREFIX, so
   // leaving the counter draft behind was an inconsistency rather than a decision.
   'supermega.shop.counter_draft.v1',
+  // Append-only local Batch Profit Control reviews are business records. A restore that omitted
+  // them would erase the owner's reviewed production-cost and batch-disposition lineage.
+  'supermega.shop.batch-profit-control.local-workspace.v1',
   // Order-intake correction evidence. Portable, unlike the local analytics counters below, because
   // it is an accumulating record of how the AI performs on THIS shop's own messages rather than a
   // marker about this device — the same reasoning that makes the behaviour trail portable. It is

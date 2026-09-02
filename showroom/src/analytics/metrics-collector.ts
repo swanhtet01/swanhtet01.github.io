@@ -11,6 +11,28 @@ export type MetricEvent = {
   ts: number
 }
 
+export type LocalProductActivity = {
+  product: Exclude<MetricProduct, 'hq'>
+  eventCount: number
+  latestAt: string | null
+}
+
+export type LocalActivityLifecycle = {
+  contract: 'supermega.local_activity_lifecycle.v1'
+  scope: 'device_local_activity'
+  source: 'bounded_device_record'
+  spansEarlierSessions: true
+  eventCount: number
+  productEventCount: number
+  hqEventCount: number
+  atCapacity: boolean
+  products: LocalProductActivity[]
+  externalTelemetryObserved: false
+  customerEvidenceProven: false
+  commercialPerformanceProven: false
+  productionOperationProven: false
+}
+
 // Persistence. The key is reserved in core/local-workspace-storage.ts and is listed in
 // company-backup.ts as deliberately NOT portable: these are counters about THIS device, and
 // re-asserting them on another one would describe activity that never happened there.
@@ -39,11 +61,40 @@ export function validMetricEvent(value: unknown): value is MetricEvent {
   const event = value as Partial<MetricEvent>
   if (!METRIC_PRODUCTS.includes(event.product as MetricProduct)) return false
   if (typeof event.action !== 'string' || !event.action || event.action.length > 120) return false
-  if (typeof event.ts !== 'number' || !Number.isFinite(event.ts)) return false
+  if (typeof event.ts !== 'number' || !Number.isSafeInteger(event.ts) || !Number.isFinite(new Date(event.ts).getTime())) return false
   if (event.capability !== null && (typeof event.capability !== 'string' || event.capability.length > 120)) return false
   // Structural PII exclusion: a stored record carrying anything beyond the four known fields
   // is not ours, so refuse it rather than let an unknown field survive a reload.
   return Object.keys(event).every((key) => key === 'product' || key === 'capability' || key === 'action' || key === 'ts')
+}
+
+const LOCAL_ACTIVITY_PRODUCTS: readonly Exclude<MetricProduct, 'hq'>[] = ['shop', 'plant', 'website', 'ecommerce']
+
+export function projectLocalActivityLifecycle(events: readonly unknown[]): LocalActivityLifecycle {
+  const accepted = events.filter(validMetricEvent).slice(-LOCAL_METRICS_MAX_EVENTS)
+  return {
+    contract: 'supermega.local_activity_lifecycle.v1',
+    scope: 'device_local_activity',
+    source: 'bounded_device_record',
+    spansEarlierSessions: true,
+    eventCount: accepted.length,
+    productEventCount: accepted.filter((event) => event.product !== 'hq').length,
+    hqEventCount: accepted.filter((event) => event.product === 'hq').length,
+    atCapacity: accepted.length === LOCAL_METRICS_MAX_EVENTS,
+    products: LOCAL_ACTIVITY_PRODUCTS.map((product) => {
+      const productEvents = accepted.filter((event) => event.product === product)
+      const latestTimestamp = productEvents.reduce((latest, event) => Math.max(latest, event.ts), Number.NEGATIVE_INFINITY)
+      return {
+        product,
+        eventCount: productEvents.length,
+        latestAt: Number.isFinite(latestTimestamp) ? new Date(latestTimestamp).toISOString() : null,
+      }
+    }),
+    externalTelemetryObserved: false,
+    customerEvidenceProven: false,
+    commercialPerformanceProven: false,
+    productionOperationProven: false,
+  }
 }
 
 export function readStoredMetrics(storage: MetricsStorage | undefined = metricsStorage()): MetricEvent[] {

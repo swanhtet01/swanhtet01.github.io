@@ -5,6 +5,9 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import { validatePlantBusinessTemplates } from '../showroom/src/products/plant/business-templates.ts'
+import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
+
 const run = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDir = resolve(root, '.vercel', 'output')
@@ -46,6 +49,13 @@ for (const product of manifest.customerProducts) {
 const publicProducts = manifest.customerProducts
 
 const brand = manifest.brand
+
+function productFirstOperatingLoop(product) {
+  assert(Array.isArray(product.firstOperatingLoop), `first_operating_loop_missing:${product.id}`)
+  assert(product.firstOperatingLoop.length === 4, `first_operating_loop_length:${product.id}`)
+  assert(product.firstOperatingLoop.every((item) => typeof item === 'string' && item.length >= 24 && item.length <= 96), `first_operating_loop_copy_invalid:${product.id}`)
+  return product.firstOperatingLoop
+}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -115,7 +125,7 @@ const sharedStyle = `
   a { color: inherit; }
   button, input, select, textarea { font: inherit; }
   img, svg { display: block; max-width: 100%; }
-  .skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }
+  .skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }
   .skip-link:focus { transform: translateY(0); }
   .shell { min-height: 100svh; }
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
@@ -267,7 +277,7 @@ const sharedStyle = `
   .solution-modules span { min-height: 52px; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 14px; line-height: 1.45; padding: 10px 0; }
   .solution-modules i { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
   /* Design tribunal phase 1 language, applied to the public site: the free/premium/
-     managed story and the nine trade demo links, at a readable size on a cheap phone. */
+     managed story and the registry-backed trade demo links, at a readable size on a cheap phone. */
   .tier-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; border-top: 1px solid var(--line-strong); padding-top: 24px; }
   .tier-lane h3 { margin: 4px 0 8px; font-size: 17px; letter-spacing: -.01em; }
   .tier-lane .eyebrow { color: var(--green); }
@@ -291,8 +301,14 @@ const sharedStyle = `
   .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(25,54,42,.045); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 13px; }
+  .compact-first { display: grid; gap: 4px; margin-top: 14px; border-left: 2px solid var(--green); padding-left: 10px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+  .compact-first span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; font-weight: 760; text-transform: uppercase; }
   .compact-solution > .card-link { margin-top: auto; }
   .compact-solution > .card-link + .card-link { margin-top: 2px; }
+  .first-loop { scroll-margin-top: 92px; }
+  .first-loop-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .first-loop-list li { min-height: 58px; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--panel-solid); color: var(--muted); font-size: 14px; line-height: 1.45; }
+  .first-loop-list i { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-style: normal; font-weight: 800; }
   .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
@@ -333,7 +349,7 @@ const sharedStyle = `
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
-  @media (max-width: 420px) { .compact-solution { padding: 18px; } }
+  @media (max-width: 420px) { .compact-solution { padding: 18px; } .first-loop-list li { grid-template-columns: 28px minmax(0,1fr); padding: 10px 11px; font-size: 13px; } }
   @media (max-width: 520px) { .compact-solutions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .compact-solution { min-height: 250px; padding: 16px; } .compact-solution h3 { margin-top: 12px; font-size: 22px; } .compact-solution > p { font-size: 11px; line-height: 1.45; } .compact-solution .card-index { min-height: 28px; font-size: 8px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 12px; } }
   @media (max-width: 760px) { .offer-model-grid { grid-template-columns: 1fr; } .offer-model-lane { padding: 24px 0; } .offer-model-lane + .offer-model-lane { border-top: 1px solid var(--line-strong); border-left: 0; padding-left: 0; } .offer-model-action { align-items: stretch; flex-direction: column; } .offer-model-action .button { width: 100%; } }
 `
@@ -362,6 +378,39 @@ function structuredDataHtml(schema) {
   const json = JSON.stringify({ '@context': 'https://schema.org', ...schema }).replaceAll('<', '\\u003c')
   return `\n    <script type="application/ld+json">${json}</script>`
 }
+
+const publicObservabilityHosts = Object.freeze(['supermega.dev', 'www.supermega.dev'])
+const publicObservabilityPaths = Object.freeze(manifest.pages.map((page) => page.route))
+assert(publicObservabilityPaths.join(',') === '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/', 'public_observability_path_surface_changed')
+
+// Source presence is only delivery readiness. Provider-visible pageviews and
+// vitals remain unobserved until a separate read-only provider receipt proves
+// them after deployment.
+const publicObservabilityScript = `(function () {
+  var hosts = ${JSON.stringify(publicObservabilityHosts)}
+  var paths = new Set(${JSON.stringify(publicObservabilityPaths)})
+  if (location.protocol !== 'https:' || !hosts.includes(location.hostname)) return
+  function safeEvent(event, expectedType) {
+    if (!event || event.type !== expectedType || typeof event.url !== 'string') return null
+    var url
+    try { url = new URL(event.url, location.origin) } catch { return null }
+    if (url.origin !== location.origin || !paths.has(url.pathname)) return null
+    var safe = { type: expectedType, url: url.origin + url.pathname }
+    if (expectedType === 'vital') safe.route = url.pathname
+    return safe
+  }
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  window.va('beforeSend', function (event) { return safeEvent(event, 'pageview') })
+  window.si('beforeSend', function (event) { return safeEvent(event, 'vital') })
+  for (var src of ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']) {
+    var script = document.createElement('script')
+    script.defer = true
+    script.src = src
+    document.head.append(script)
+  }
+})()
+`
 
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
@@ -395,60 +444,154 @@ function documentHtml({ route, title, description, content, schema = null, robot
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="shell">${headerHtml(route)}${content}${footerHtml(route)}</div>
+    <script src="/vercel-insights.js"></script>
   </body>
 </html>`
 }
 
+function guidedSampleAction(product) {
+  const href = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  return product.id === 'shop'
+    ? { href, label: 'Choose Shop type or continue saved' }
+    : { href, label: 'Start free sample' }
+}
+
+function assistedSetupAction(product) {
+  const expectedHref = `/contact/?product=${encodeURIComponent(product.id)}`
+  assert(product.secondaryCta?.label === 'Request assisted setup', `assisted_setup_label_invalid:${product.id}`)
+  assert(product.secondaryCta.url === expectedHref, `assisted_setup_route_invalid:${product.id}`)
+  return { href: product.secondaryCta.url, label: product.secondaryCta.label }
+}
+
+function shopProfitControlAction() {
+  const shop = publicProducts.find((product) => product.id === 'shop')
+  assert(shop?.primaryCta?.label === 'Open Shop Profit Control', 'shop_profit_control_label_invalid')
+  assert(shop.primaryCta.url === 'https://app.supermega.dev/shop/?tab=today', 'shop_profit_control_route_invalid')
+  return { href: shop.primaryCta.url, label: shop.primaryCta.label }
+}
+
+const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()
+
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  const firstLoop = productFirstOperatingLoop(product)
+  const guidedSample = guidedSampleAction(product)
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
+    <div class="compact-first"><span>First loop</span>${escapeHtml(firstLoop[0])}</div>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
     <a class="card-link" href="/${escapeHtml(product.id)}/">${escapeHtml(product.name)} overview</a>
-    <a class="card-link" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a>
+    <a class="card-link" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a>
   </article>`
 }
 
+const homePage = manifest.pages.find((page) => page.route === '/')
+assert(homePage?.file === 'index.html', 'home_page_manifest_entry_invalid')
+assert(typeof homePage.title === 'string' && homePage.title.includes('Shop Profit Control'), 'home_page_title_invalid')
+assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
+
 const homeHtml = documentHtml({
   route: '/',
-  title: 'SuperMega | Four products',
-  description: manifest.company.statement,
-  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: manifest.company.statement },
+  title: homePage.title,
+  description: homePage.description,
+  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: homePage.description },
   content: `<main id="content">
-    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four focused products</span><span>Working samples</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Name the business, choose its type, and start with one guided job. Real client data stays optional until the workflow makes sense.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
+    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.href)}">${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}</a><a class="button" href="#products">Explore all products</a></div><div class="hero-note"><span>POS-independent</span><span>Read-only local record</span><span>No payment or stock write</span></div></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Start with Shop Profit Control, then choose a connected workflow.</h2><p>Shop surfaces the first accountable operating action. Plant, Website, and Ecommerce remain focused local products with guided samples of their own.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
     <section class="frame section offer-model" id="model" aria-label="Free and managed SuperMega"><div class="section-head"><span class="eyebrow">Free product. Managed intelligence.</span><h2>Run the products free. Add managed company intelligence when the workflow proves value.</h2><p>The free workspace keeps the operating software useful on its own. Managed service adds approved AI context and company controls without replacing the underlying record.</p></div><div class="offer-model-grid"><div class="offer-model-lane"><span class="eyebrow">Free local workspace</span><h3>Operate without a stripped-down plan.</h3><p>Every workflow visible in Shop, Plant, Website, and Ecommerce remains available in the browser workspace.</p><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></div><div class="offer-model-lane"><span class="eyebrow">Managed company intelligence</span><h3>Use approved context across products.</h3><p>SuperMega can retain reviewed context, rank next actions, and prepare controlled work only after company controls pass.</p><ul class="offer-model-list"><li>Approved AI context across all four products</li><li>Persistent company history and role-aware access</li><li>Reviewed recommendations and accountable actions</li><li>Managed setup, recovery, and support</li></ul></div></div><div class="offer-model-action"><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p><a class="button primary" href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
 
-// The nine shipped Shop trade templates. Each link opens the real app with that
-// trade's catalog, sample sales and a live order already loaded — no signup. This
-// is the strongest thing the site can offer a shop owner: their own trade, running.
-const SHOP_TRADES = [
-  ['mini-mart', 'Mini-mart & grocery', 'Daily groceries and household basics'],
-  ['pharmacy', 'Pharmacy', 'Medicine and clinic supplies with strict reorder levels'],
-  ['phone-electronics', 'Phone & electronics', 'Accessories and small electronics'],
-  ['fashion', 'Fashion & clothing', 'Stock tracked down to the size'],
-  ['hardware', 'Hardware & construction', 'Bulk orders quoted and set aside'],
-  ['tea-coffee', 'Tea & coffee shop', 'Counter menu plus office preorders'],
-  ['auto-parts', 'Auto parts', 'Exact-fit spares checked against stock'],
-  ['restaurant', 'Restaurant', 'Full menu with table bookings'],
-  ['beauty-spa', 'Beauty spa', 'Treatments booked against staff and rooms'],
-]
+// Every validated Shop trade template is projected into the public site. Keeping
+// this projection registry-backed prevents a shipped template from disappearing
+// from the public door when the product registry changes.
+const SHOP_TRADES = validateShopBusinessTemplates().map((template) => ({
+  id: template.id,
+  name: template.name.en,
+  note: template.description,
+}))
 
 function tradeTemplatesHtml() {
-  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one loads a real catalog, sample sales and a live order in your browser. Nothing to install, no account, free.</p></div><div class="trade-grid">${SHOP_TRADES.map(([id, name, note]) => `<a class="trade-card" href="https://app.supermega.dev/settings/?product=shop&amp;template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one opens Sell with a real catalog, sample sales and a live order in your browser. Nothing to install and no account required.</p></div><div class="trade-grid">${SHOP_TRADES.map(({ id, name, note }) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+}
+
+function customerProductContract(id) {
+  const product = publicProducts.find((candidate) => candidate.id === id)
+  assert(product, `customer_product_missing:${id}`)
+  return product
+}
+
+function validatedProductTemplates(productId, expectedCount) {
+  const templates = customerProductContract(productId).templates
+  assert(Array.isArray(templates) && templates.length === expectedCount, `public_template_count_changed:${productId}`)
+  assert(templates.every((template) => /^[a-z][a-z0-9-]{1,39}$/.test(template.id)
+    && typeof template.name === 'string' && template.name.trim()
+    && typeof template.outcome === 'string' && template.outcome.trim()), `public_template_copy_invalid:${productId}`)
+  assert(new Set(templates.map((template) => template.id)).size === templates.length, `public_template_id_duplicate:${productId}`)
+  return templates
+}
+
+function guidedTemplateRoute(productId, templateId, extra = {}) {
+  const query = new URLSearchParams({ product: productId, template: templateId, ...extra })
+  return `https://app.supermega.dev/settings/?${query.toString()}`
+}
+
+const plantWorkflowTemplate = validatedProductTemplates('plant', 3).find((template) => template.id === 'production-control')
+assert(plantWorkflowTemplate, 'plant_primary_workflow_template_missing')
+const FIRST_JOB_TEMPLATE_SECTIONS = {
+  plant: {
+    title: 'Choose a shipped production sample.',
+    intro: 'Each door carries its validated Plant pack and first production workflow into guided setup.',
+    doors: validatePlantBusinessTemplates().map((template) => ({
+      id: template.id,
+      name: template.name.en,
+      note: template.description,
+      href: guidedTemplateRoute('plant', plantWorkflowTemplate.id, { pack: template.industryPackId }),
+    })),
+  },
+  website: {
+    title: 'Choose the first job for your website.',
+    intro: 'Start from one validated layout, then review the local draft before any publishing decision.',
+    doors: validatedProductTemplates('website', 3).map((template) => ({
+      id: template.id,
+      name: template.name,
+      note: template.outcome,
+      href: guidedTemplateRoute('website', template.id),
+    })),
+  },
+  ecommerce: {
+    title: 'Choose the first ordering workflow.',
+    intro: 'Start with one validated Shop-connected request flow while Shop remains the operating record.',
+    doors: validatedProductTemplates('ecommerce', 3).map((template) => ({
+      id: template.id,
+      name: template.name,
+      note: template.outcome,
+      href: guidedTemplateRoute('ecommerce', template.id),
+    })),
+  },
+}
+
+function firstJobTemplatesHtml(productId) {
+  const section = FIRST_JOB_TEMPLATE_SECTIONS[productId]
+  if (!section) return ''
+  const hrefs = section.doors.map((door) => door.href)
+  assert(new Set(hrefs).size === hrefs.length, `public_template_route_duplicate:${productId}`)
+  return `<section class="frame section" id="first-job-templates"><div class="section-head"><span class="eyebrow">${escapeHtml(section.doors.length)} validated starting points</span><h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.intro)}</p></div><div class="trade-grid" aria-label="${escapeHtml(customerProductContract(productId).name)} first-job templates">${section.doors.map(({ id, name, note, href }) => `<a class="trade-card first-job-card" data-template="${escapeHtml(id)}" href="${escapeHtml(href)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div><div class="control-line"><span class="eyebrow">Browser-local setup only</span><p>Opening a door does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue. Any later setup change remains an explicit reviewed action.</p></div></section>`
 }
 
 function productLandingHtml(product, page) {
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
+  const guidedSample = guidedSampleAction(product)
+  const assistedSetup = assistedSetupAction(product)
+  const leadingAction = product.id === 'shop' ? SHOP_PROFIT_CONTROL_ACTION : guidedSample
+  const actionsHtml = product.id === 'shop'
+    ? `<a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
+    : `<a class="button primary" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
   const description = page.description || product.description
   const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
+  const firstLoop = productFirstOperatingLoop(product)
   const launchModuleLimit = manifest.templatePackPolicy.maxEnabledModulesAtLaunch
   assert(Number.isSafeInteger(launchModuleLimit) && launchModuleLimit >= 1 && launchModuleLimit <= 8, 'launch_module_limit_invalid')
   const launchModules = moduleItems.slice(0, launchModuleLimit)
@@ -459,12 +602,14 @@ function productLandingHtml(product, page) {
     shareImage: `/og-card-${product.id}.png`,
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
-    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">First operating loop</span><h2>Start with one ${escapeHtml(product.name)} job.</h2><p>This is the path a new owner should understand before looking at advanced modules.</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
+    ${firstJobTemplatesHtml(product.id)}
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
     <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Use the core workflow before adding complexity.</h2><p>The guided workspace runs on the owner’s device. Managed service is only for shared records, approved AI context, and infrastructure the business asks SuperMega to operate.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Local</span><h3>Start one real job</h3><ul class="offer-model-list"><li>The ${escapeHtml(launchModules.length)} core workflows above</li><li>Backup and restore</li><li>Review before consequential actions</li></ul></div><div class="tier-lane"><span class="eyebrow">AI assisted</span><h3>Prepare, then review</h3><ul class="offer-model-list"><li>Source-backed drafts from approved records</li><li>Ranked next actions</li><li>No automatic send or payment</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>One company workspace</h3><ul class="offer-model-list"><li>Separate client portal</li><li>Staff sign-ins and limits</li><li>Shared records with recovery controls</li></ul></div></div></section>
     <section class="frame trust-strip" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
-    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a></div></section>
+    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a></div></section>
   </main>`,
   })
 }
@@ -535,8 +680,8 @@ const publicSecurityHeaders = {
   'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
-  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
-  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
 }
@@ -551,7 +696,7 @@ const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the seven public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -1078,6 +1223,7 @@ const vercelConfig = {
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
+    { src: '^/vercel-insights\\.js$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
     { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
@@ -1104,6 +1250,7 @@ await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 await writeStatic('favicon.svg', faviconSvg)
+await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)

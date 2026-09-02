@@ -18,7 +18,10 @@ const FILES = Object.freeze({
   contactEvent: 'contact-event.sample.json',
   services: 'sample-spa-services.csv',
   clients: 'sample-client-import.csv',
+  operatorScript: 'day-1-operator-script.md',
   proofPlan: 'five-day-proof-plan.md',
+  roiScorecard: 'owner-roi-scorecard.md',
+  metrics: 'sample-first-week-metrics.csv',
   noExternalAction: 'NO-EXTERNAL-ACTION.md',
 })
 
@@ -71,6 +74,20 @@ function packetManifest() {
       paymentPerformed: false,
       deploymentPerformed: false,
     },
+    allowedPaymentMethodsForReview: [
+      'Cash',
+      'KBZPay',
+      'WavePay',
+      'AYA Pay',
+      'MMQR',
+    ],
+    successCriteria: {
+      acceptedOrderToCloseRuns: 20,
+      dailyClosesObserved: 5,
+      pilotDaySequenceCoverageRequired: true,
+      unexplainedPaymentOrStockChanges: 0,
+      ownerDecisionRequired: true,
+    },
   }
 }
 
@@ -88,13 +105,14 @@ This packet is for a private owner review. It is sample-only and contains no rea
 
 ## First useful workflow
 
-1. Import or review services and package products.
-2. Import a small reviewed client list.
-3. Create one package sale.
-4. Complete one treatment redemption.
-5. Run daily close.
-6. Reload and verify nothing duplicated.
-7. Export the proof packet for owner review.
+1. Read \`${FILES.operatorScript}\` with the operator.
+2. Import or review services and package products.
+3. Import a small reviewed client list.
+4. Create one package sale.
+5. Complete one treatment redemption.
+6. Run daily close.
+7. Reload and verify nothing duplicated.
+8. Fill \`${FILES.roiScorecard}\` and \`${FILES.metrics}\` for owner review.
 
 ## What to fill privately
 
@@ -129,6 +147,20 @@ function ownerInputTemplate() {
       medianMinutesPerRedemption: null,
       weeklyPackageCorrectionCount: null,
     },
+    paymentMethodsToReview: [
+      'Cash',
+      'KBZPay',
+      'WavePay',
+      'AYA Pay',
+      'MMQR',
+    ],
+    successTargets: {
+      acceptedOrderToCloseRuns: 20,
+      dailyClosesObserved: 5,
+      pilotDaySequenceCoverageRequired: true,
+      unexplainedPaymentOrStockChanges: 0,
+      ownerDecisionRecorded: false,
+    },
     isolatedNonProductionTenantApproved: false,
     namedOperatorAuthorized: false,
     pilotDataHandlingApproved: false,
@@ -158,6 +190,41 @@ function contactEventSample() {
       },
     },
   }
+}
+
+function operatorScript() {
+  return `# Day-1 operator script
+
+Use this with the owner or named operator. Keep it private. Use sample data unless the owner has explicitly approved reviewed real pilot data.
+
+## Outcome
+
+By the end of day 1, the operator should understand exactly how Shop helps a spa sell a prepaid package, redeem a treatment, reconcile payment evidence, and close the day.
+
+## Run order
+
+1. Choose the Shop product and the Spa services vertical pack.
+2. Review the services CSV: treatment services have duration, prepaid packages have session balance.
+3. Review the client CSV: every imported client row must be accepted, corrected, or rejected before use.
+4. Create one package sale. Select one reviewed method from Cash, KBZPay, WavePay, AYA Pay, or MMQR. Do not call a payment provider from this packet.
+5. Create one treatment redemption against the matching package. Confirm remaining sessions changed once.
+6. Try one bad redemption case. The system should refuse mismatched or exhausted package use.
+7. Run daily close. The close must show sales, payment method, correction count, and any difference reason.
+8. Reload the workspace. The sale, redemption, client balance, and close must not duplicate.
+9. Record the result in \`${FILES.metrics}\` and summarize the decision in \`${FILES.roiScorecard}\`.
+
+## Mobile check
+
+On a phone-sized screen, the operator must still find these without instruction:
+
+- start sale
+- choose payment method
+- find the next appointment or redemption
+- close day
+- see the next action
+
+If any step needs explanation twice, mark it as a product issue instead of blaming the operator.
+`
 }
 
 function servicesCsv() {
@@ -191,7 +258,8 @@ function proofPlan() {
 
 - Create one reviewed package sale.
 - Record completion time and corrections.
-- Do not accept payment in this packet.
+- Select the observed payment method from Cash, KBZPay, WavePay, AYA Pay, or MMQR.
+- Do not call a payment provider or accept money from this packet.
 
 ## Day 3 - Treatment redemption
 
@@ -211,6 +279,56 @@ function proofPlan() {
 - Compare against baseline.
 - Record owner decision.
 - Keep production activation blocked until managed tenant, backup, restore, and security gates pass.
+`
+}
+
+function roiScorecard() {
+  return `# Owner ROI scorecard
+
+Use this after the operator has completed the five-day proof plan. This is the commercial decision page, not a marketing slide.
+
+## Required proof before saying the pilot works
+
+- 20 accepted order-to-close runs
+- 5 daily closes observed
+- accepted evidence covers pilot days 1 through 5 and at least 5 distinct observed calendar dates
+- 0 unexplained payment or stock changes
+- every correction has an operator, reason, timestamp, and evidence reference
+- owner records a continue, revise, or stop decision
+
+## Score the pilot
+
+| Area | Baseline | Observed result | Owner score |
+| --- | --- | --- | --- |
+| Orders handled per week | weekly_orders | fill privately | 1-5 |
+| Median minutes per order | median_minutes_per_order | fill privately | 1-5 |
+| Weekly exceptions | weekly_exception_count | fill privately | 1-5 |
+| Close minutes per day | close_minutes_per_day | fill privately | 1-5 |
+| Package redemptions | weeklyTreatmentRedemptions | fill privately | 1-5 |
+| Payment reconciliation clarity | manual proof today | fill privately | 1-5 |
+| Operator confidence | manual process today | fill privately | 1-5 |
+
+## Paid decision rule
+
+Move to a paid managed pilot only if the owner can point to one of these outcomes:
+
+- faster daily close
+- fewer package redemption mistakes
+- fewer payment reconciliation questions
+- cleaner stock/package balance after reload
+- operator prefers Shop for the same workflow
+
+If the owner cannot name the improvement, the next action is product revision, not sales pressure.
+`
+}
+
+function metricsCsv() {
+  return `day,operator_session_ref,orders_observed,package_sales,treatment_redemptions,minutes_saved_estimate,exceptions_count,unexplained_payment_or_stock_changes,daily_close_completed,owner_note_sample
+1,SAMPLE-SESSION-001,1,1,1,10,0,0,true,sample only - replace privately
+2,SAMPLE-SESSION-002,4,2,3,18,1,0,true,sample only - replace privately
+3,SAMPLE-SESSION-003,5,1,5,20,0,0,true,sample only - replace privately
+4,SAMPLE-SESSION-004,5,2,4,22,1,0,true,sample only - replace privately
+5,SAMPLE-SESSION-005,5,1,5,25,0,0,true,sample only - replace privately
 `
 }
 
@@ -243,7 +361,10 @@ export function shopSpaOwnerOnboardingPacketFiles() {
     [FILES.contactEvent]: json(contactEventSample()),
     [FILES.services]: servicesCsv(),
     [FILES.clients]: clientsCsv(),
+    [FILES.operatorScript]: operatorScript(),
     [FILES.proofPlan]: proofPlan(),
+    [FILES.roiScorecard]: roiScorecard(),
+    [FILES.metrics]: metricsCsv(),
     [FILES.noExternalAction]: noExternalAction(),
   }
 }

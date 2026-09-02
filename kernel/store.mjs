@@ -361,6 +361,34 @@ export async function updateLead(id, patch) {
   const cur = mem.lead.get(id); if (!cur) return null; const next = { ...cur, ...patch }; mem.lead.set(id, next); return next
 }
 
+export async function markLeadWon(id) {
+  if (!id) return null
+  if (mode === 'supabase') {
+    const changed = await rest('PATCH', `supermega_leads?lead_id=eq.${encodeURIComponent(id)}&or=(lead_stage.neq.won,lead_stage.is.null)`, { lead_stage: 'won' })
+    if (changed?.[0]) {
+      const lead = mapLead(changed[0])
+      return lead.stage === 'won' ? { lead, changed: true } : null
+    }
+    const lead = await getLead(id)
+    return lead?.stage === 'won' ? { lead, changed: false } : null
+  }
+  if (mode === 'postgres') {
+    const changed = await q(`update public.supermega_leads set lead_stage='won' where lead_id=$1 and lead_stage is distinct from 'won' returning ${LEAD_COLS}`, [id])
+    if (changed[0]) {
+      const lead = mapLead(changed[0])
+      return lead.stage === 'won' ? { lead, changed: true } : null
+    }
+    const lead = await getLead(id)
+    return lead?.stage === 'won' ? { lead, changed: false } : null
+  }
+  const current = mem.lead.get(id)
+  if (!current) return null
+  if (current.stage === 'won') return { lead: current, changed: false }
+  const lead = { ...current, stage: 'won' }
+  mem.lead.set(id, lead)
+  return { lead, changed: true }
+}
+
 // ---------- pipeline: clients + projects ----------
 export async function listProjects() {
   if (mode === 'supabase') return rest('GET', 'supermega_console_projects?order=created_at.desc')
@@ -382,6 +410,7 @@ export async function createClient(c) {
     }
   }
   if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_console_clients (id,name,plan,contacts,channels,notes) values ($1,$2,$3,$4,$5,$6) returning *', [row.id, row.name, row.plan, JSON.stringify(row.contacts), JSON.stringify(row.channels), row.notes]))[0] }
+  if (mem.client.has(row.id)) throw new Error('console_client_id_conflict')
   const rec = { ...row, created_at: new Date().toISOString() }; mem.client.set(rec.id, rec); return rec
 }
 // Fetch a single client/tenant by id (used by the gateway's server-side plan resolution).
@@ -392,9 +421,10 @@ export async function getClient(id) {
   return mem.client.get(id) || null
 }
 export async function createProject(p) {
-  const row = { id: randomUUID(), client_id: p.client_id || null, lead_id: p.lead_id || null, offer: p.offer || 'build', scope_summary: p.scope_summary || '', status: p.status || 'scoping', deposit_status: p.deposit_status || 'unpaid' }
+  const row = { id: String(p.id || randomUUID()), client_id: p.client_id || null, lead_id: p.lead_id || null, offer: p.offer || 'build', scope_summary: p.scope_summary || '', status: p.status || 'scoping', deposit_status: p.deposit_status || 'unpaid' }
   if (mode === 'supabase') return (await rest('POST', 'supermega_console_projects', row))[0]
   if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_console_projects (id,client_id,lead_id,offer,scope_summary,status,deposit_status) values ($1,$2,$3,$4,$5,$6,$7) returning *', [row.id, row.client_id, row.lead_id, row.offer, row.scope_summary, row.status, row.deposit_status]))[0] }
+  if (mem.project.has(row.id)) throw new Error('console_project_id_conflict')
   const rec = { ...row, created_at: new Date().toISOString() }; mem.project.set(rec.id, rec); return rec
 }
 export async function updateProject(id, patch) {
@@ -1933,4 +1963,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, getAiBudgetUsage, settleAiBudgetReservation, reserveTokenSpend, markTokenSpendDispatched, markTokenSpendIndeterminate, settleTokenSpend, releaseTokenSpend, reconcileTokenSpend, getResponseCache, putResponseCache, getControlRecord, putControlRecord, listControlRecords, transitionControlRecord, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, markLeadWon, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, getAiBudgetUsage, settleAiBudgetReservation, reserveTokenSpend, markTokenSpendDispatched, markTokenSpendIndeterminate, settleTokenSpend, releaseTokenSpend, reconcileTokenSpend, getResponseCache, putResponseCache, getControlRecord, putControlRecord, listControlRecords, transitionControlRecord, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }

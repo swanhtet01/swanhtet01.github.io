@@ -7,6 +7,9 @@ import { join, resolve } from 'node:path'
 import test from 'node:test'
 
 import { buildClientPortalLaunchProof } from './assemble_client_portal_launch_proof.mjs'
+import {
+  buildGitHubMainProtectionSnapshot,
+} from './collect_github_main_protection_snapshot.mjs'
 import { buildReleaseHandoff, validateWorkflowAuthority } from './prepare_release_handoff.mjs'
 import { portalEvidenceBindingDigest } from './verify_hosted_product_acceptance.mjs'
 
@@ -59,16 +62,27 @@ jobs:
 `
 
 function releaseHandoff() {
+  const mainCommit = 'b'.repeat(40)
   const identity = { commit: 'c'.repeat(40), brandVersion: 'jade-v2', contextVersion: '2026-08', catalogVersion: '2026-08' }
   return buildReleaseHandoff({
     generatedAt: '2026-08-22T00:00:00.000Z',
     repository: 'swanhtet01/swanhtet01.github.io',
     candidate: { branch: 'codex/client-launch', commit, clean: true },
-    remote: { origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', mainCommit: 'b'.repeat(40), candidateCommit: null },
+    remote: { origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', mainCommit, candidateCommit: null },
     live: { app: identity, public: identity },
     relations: { mainIsAncestor: true, liveIsAncestor: true, remoteCandidateIsAncestor: null, candidateAheadOfMain: 1, candidateAheadOfLive: 2 },
     legacyReleaseBranch: { commit: null, isAncestorOfCandidate: null, legacyOnlyCommits: 0, candidateOnlyCommits: 0 },
     verification: { passed: true, verifiedCommit: commit, workflowAuthority: validateWorkflowAuthority(workflow) },
+    githubMainProtection: buildGitHubMainProtectionSnapshot({
+      generatedAt: '2026-08-22T00:00:00.000Z',
+      branch: {
+        name: 'main',
+        protected: false,
+        commit: { sha: mainCommit },
+        protection: { enabled: false, required_status_checks: { contexts: [], checks: [] } },
+      },
+      rulesets: [],
+    }),
   })
 }
 

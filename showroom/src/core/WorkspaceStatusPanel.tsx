@@ -37,7 +37,10 @@ export function WorkspaceStatusPanel() {
           <li key={entry.id}>
             <Link className={`wsp-item wsp-${entry.severity}`} to={entry.route}>
               <b aria-hidden="true" className="wsp-mark" />
-              <span className="wsp-label">{entry.label}</span>
+              <span className="wsp-copy">
+                <span className="wsp-label">{entry.label}</span>
+                <span className="wsp-meta">{entry.actionability.ownerReviewRequired ? 'Owner review · evidence and due time required · no external action' : 'Read-only status · no external action'}</span>
+              </span>
               <span aria-hidden="true" className="wsp-arrow">→</span>
             </Link>
           </li>
