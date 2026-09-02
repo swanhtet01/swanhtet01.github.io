@@ -747,11 +747,17 @@ contention**, because that mechanism is largely an artefact of HTTP/1.1's
 connection limit:
 
 - the p6 result (deleting four `modulepreload` links moved FCP −436 ms while
-  removing zero bytes);
+  removing zero bytes). **[RE-MEASURED 2026-09-02 — this one did NOT go to zero.
+  It survives at −116 ms over h2, roughly a quarter of the recorded figure, and
+  the `load` regression it buys does not shrink at all. See the closing section
+  of this document.]**
 - section 3's "six requests in flight, and the stylesheet's share is set by how
   many competitors exist" model in `ENTRY-SET-REDUCTION-PLAN.md`;
 - the 2026-08-20 rejection of `modulepreload` at +1.5 s, which is the same
-  physics;
+  physics. **[RE-MEASURED 2026-09-02 on today's build: its FCP penalty over h2
+  is inside the control band, but its `load` penalty is +1.6 s on both
+  transports. The rejection stands, on the `load` number rather than the FCP
+  one. Closing section.]**
 - and the **~400 ms attributed to `/theme-restore.js`**, which is a 253-byte
   same-origin file. Under HTTP/2 on an already-open connection that is nowhere
   near a full round trip. **[RESOLVED 2026-09-01 — this one has now been
@@ -759,9 +765,11 @@ connection limit:
   completely than it guessed: the cost is 4 ms, not a reduced round trip. See
   the closing section of this document.]**
 
-None of those is refuted, and **none of them has been re-measured over h2
-either** — only the stylesheet arm was, above, and (since 2026-09-01) the
-theme-restore arm at the foot of this document. They are correctly measured on
+None of those is refuted, and **the fourth — section 3's six-in-flight model in
+`ENTRY-SET-REDUCTION-PLAN.md` — has still not been re-measured over h2**; the
+other three have been (the stylesheet arm above, the theme-restore arm since
+2026-09-01, and the two `modulepreload` arms since 2026-09-02, both at the foot
+of this document). They are correctly measured on
 the profile this document defines, and the relative ordering probably survives. But their
 magnitudes are upper bounds for production, and the theme-restore figure is the
 one most likely to shrink, because it is almost entirely per-request cost on a
@@ -951,3 +959,187 @@ Shop first-paint closure after this change: **459,779 brotli q3 across 25
 assets**, against the 475,000 ceiling in `verify_app_build.mjs` — 15,221 bytes
 of headroom (3.2%). The previously recorded 458,562 predates the boot shell's
 stall notice (`1bce5545`) and is not a like-for-like predecessor.
+
+---
+
+## The `modulepreload` deletion (p6) over both transports — 2026-09-02
+
+The section above closed `/theme-restore.js` at zero and named three remaining
+contention-mechanism findings as "genuinely unknown rather than merely
+inflated". This re-measures the largest of them, `ENTRY-SET-REDUCTION-PLAN.md`'s
+**p6** — deleting the four `<link rel="modulepreload">` tags from `index.html`,
+recorded there at **−428 / −448 ms FCP for zero bytes removed**, and described
+as "the only measured FCP win" in that document.
+
+**Verdict: p6 is NOT an HTTP/1.1 artefact, but it is a 3.7× overstatement.**
+Over the transport production uses it is worth **−116 ms**, not −436 ms. That
+is outside the ±88 ms control band, so it is a real signal — unlike
+theme-restore, which went to zero — but the `load` regression it buys does
+**not** shrink with transport, so the trade it offers is not the trade the
+entry-set document priced.
+
+### The 2×2
+
+Medians of **6** cold loads per cell (two independent 3-run blocks, run
+non-adjacently), `tools/perf/measure-android-baseline.mjs` on the profile this
+document defines. Variant produced by deleting the four tags from a throwaway
+`showroom/dist/index.html`; app source untouched.
+
+| Transport | route | control FCP | 4 tags deleted | Δ FCP | control `load` | deleted `load` | Δ `load` |
+|---|---|---|---|---|---|---|---|
+| HTTP/1.1 | `/` | 1,456 ms | 1,040 ms | **−416 ms** | 3,914 ms | 4,335 ms | **+421 ms** |
+| HTTP/1.1 | `/?choose=1` | 1,456 ms | 1,024 ms | **−432 ms** | 3,935 ms | 4,328 ms | **+393 ms** |
+| **HTTP/2** | `/` | 1,156 ms | 1,040 ms | **−116 ms** | 3,883 ms | 4,279 ms | **+396 ms** |
+| **HTTP/2** | `/?choose=1` | 1,160 ms | 1,044 ms | **−116 ms** | 3,893 ms | 4,273 ms | **+380 ms** |
+
+Per-run FCP, so the medians are not hiding a spread:
+
+| arm | `/` runs | `/?choose=1` runs |
+|---|---|---|
+| h1 control | 1456, 1460, 1432, 1456, 1452, 1448 | 1456, 1456, 1424, 1448, 1448, 1464 |
+| h1 deleted | 1040, 1032, 1036, 1048, 1024, 1044 | 1036, 1008, 1004, 1052, 1024, 1000 |
+| h2 control | 1136, 1152, 1156, 1156, 1176, 1144 | 1140, 1156, 1160, 1160, 1156, 1196 |
+| h2 deleted | 1008, 1040, 1028, 1040, 1024, 1048 | 1044, 1028, 1048, 1028, 1044, 1052 |
+
+No arm overlaps its control on either transport. The h2 gap is small but it is
+not noise: the two independent h2 control blocks landed 4 ms apart (medians
+1,152/1,156 and 1,156/1,160), and the widest 6-run spread in any cell is 40 ms,
+so −116 ms is roughly **6× the observed run-to-run spread** and 1.3× the ±88 ms
+band. Compare theme-restore, which came in at a twentieth of the band.
+
+### Why this is a transport result and not a build result
+
+p6 was recorded on the **pre-#567 build**, whose FCP was gated by a
+render-blocking `<link rel="stylesheet">` (baseline 3,252 ms). This build serves
+that stylesheet asynchronously (baseline 1,456 ms h1), so a null here could have
+meant "the build changed", not "the transport changed". It does not, because the
+HTTP/1.1 column reproduces the recorded figure on the **new** build:
+
+| | `/` | `/?choose=1` |
+|---|---|---|
+| p6 as recorded (old build, h1) | −428 ms | −448 ms |
+| this pass (new build, h1) | −416 ms | −432 ms |
+
+Within 16 ms. The build change did not move p6 on HTTP/1.1, so the only variable
+left between −424 ms and −116 ms is the transport. The attribution is clean.
+
+### The instrument was checked in both directions
+
+A null result is only worth something if the instrument could have produced a
+non-null one, and a non-null result is only worth something if the instrument
+does not manufacture deltas. Both were checked, against the previous section's
+published figures rather than against nothing:
+
+| check | this pass | previous section | agrees |
+|---|---|---|---|
+| `theme-restore.js` deleted, h1 (**must be large**) | −308 / −324 ms | −328 / −312 ms | yes |
+| `theme-restore.js` deleted, h2 (**must be ~zero**) | 0 / −28 ms | −4 / +4 ms | yes |
+| control re-run against itself, h2 (**must be zero**) | +4 / +4 ms | — | — |
+
+So on this machine, on this build, the harness still resolves a ~320 ms effect
+on h1, still reports zero for a known-zero on h2, and reports zero when nothing
+changed. The −116 ms is not an artefact of the rig.
+
+Every h2 run recorded `negotiatedProtocol: "h2"` and every h1 run
+`http/1.1`; the harness throws rather than reports on a silent fallback. Each
+arm's `showroom/dist/index.html` was grepped **after** being copied into place
+and its SHA-256 recorded, so no arm can have measured a stale document — the
+control and variant digests differ, and the four tags are present in one and
+absent in the other. Total JS transfer is byte-identical across the two arms
+(97,833 B) and all four chunks still load in the variant: the change is purely
+*when* they are requested.
+
+### What actually moved, and why the trade is worse than it looked
+
+Deleting the tags does not remove the four chunks — they are static imports of
+the entry chunk and load either way. It delays them until the 80 KB gz entry
+chunk has downloaded and parsed. Before FCP that is a win on both transports,
+because the four streams stop sharing a 50 KB/s pipe with the render-blocking
+classic scripts (`/theme-restore.js`, `/css-async.js`, `/sw-register.js`,
+`/vercel-insights.js`) that gate first paint. Bandwidth is finite whether or not
+it is multiplexed, which is why the effect does not vanish on h2 the way
+theme-restore's per-connection cost did. What *does* vanish is the extra
+per-connection cost HTTP/1.1 charges for those four requests — 308 ms of the
+424 ms, i.e. **73% of p6 was the six-connection limit**.
+
+After FCP the same delay is pure serialisation, and that cost is transport-
+neutral: `load` moves +380 to +421 ms in every cell, h1 and h2 alike, matching
+the +414 / +363 recorded for p6. So:
+
+| | FCP won | `load` paid | ratio |
+|---|---|---|---|
+| p6 as recorded (h1) | 436 ms | 390 ms | ~1 : 0.9 |
+| **p6 over h2 (production)** | **116 ms** | **390 ms** | **~1 : 3.4** |
+
+The benefit shrank by 3.7× and the cost did not shrink at all. On the numbers
+this document is willing to defend, C2 now buys 116 ms of first paint for
+390 ms of `load`. `ENTRY-SET-REDUCTION-PLAN.md` already says the number that
+decides C2 is a tap-through measurement that does not exist in `tools/`; this
+pass makes that prerequisite decisive rather than cautionary, because the FCP
+side no longer obviously dominates.
+
+### Consequence for the "run backwards" corroboration
+
+`ENTRY-SET-REDUCTION-PLAN.md` treats the 2026-08-20 `modulepreload` slice-2
+rejection (+1.5 s FCP) as independent corroboration of p6 — "the same physics
+run backwards, and the agreement between the two is the best evidence that this
+model is right". **Slice 2 was measured on this same HTTP/1.1 harness**, so that
+agreement was never independent; it was the same rig twice, exactly as suspected.
+
+Re-measured on today's build, both transports, 3 runs, by adding a
+`modulepreload` for `core-app` (108.7 KB gz) to the control:
+
+| Transport | Δ FCP `/` | Δ FCP `/?choose=1` | Δ `load` |
+|---|---|---|---|
+| HTTP/1.1 | +132 ms | +148 ms | +1,589 ms |
+| **HTTP/2** | **+28 ms** | **+20 ms** | **+1,585 ms** |
+
+Over h2 the FCP penalty is **inside** the control band. This is *not* a
+reproduction of the 2026-08-20 conditions — the build's first paint has since
+been taken off the stylesheet's critical path, so its FCP is far less sensitive
+to pipe pressure than the build that measured +1.5 s, and two variables differ.
+What it does establish is that the slice-2 verdict survives for a **different
+reason than the one recorded**: the durable, transport-neutral, build-
+independent cost of a speculative `modulepreload` is **`load`, +1.6 s**, not
+FCP. The standing instruction — do not add speculative `modulepreload` to
+`index.html` on this profile — stands, and is now better founded than it was.
+
+### What it would take to ship p6, if anyone decides 116 ms is worth 390 ms
+
+Not shipped here, and this document does not recommend shipping it on these
+numbers. What a shipping pass would owe:
+
+1. **The tap-through probe.** `load` regressing 390 ms is a proxy for
+   interactivity, not a measurement of it. `tools/perf/` has no probe that
+   drives a tap and measures response, and `ENTRY-SET-REDUCTION-PLAN.md` names
+   this as the number that decides C2. Building it is the prerequisite, not an
+   optional extra — and it should be built before the change, so the change
+   cannot be graded on a metric chosen after the fact.
+2. **An answer for the `load` regression itself**, not just a measurement of it.
+   The four chunks are the router and React core; deferring them to after the
+   entry chunk parses is what costs the 390 ms.
+3. **`build.modulePreload: false` is a Vite config change**, so it interacts
+   with `verify_app_build.mjs`'s pinned expectations about the built shell.
+   That is a byte-budget and pin question, not a perf one, and belongs to the
+   same pass.
+4. **Re-measure on the build of the day.** Everything above was measured on
+   commit `78478954`'s build; first paint on this app has been restructured
+   twice in three weeks and p6's magnitude is a property of what else is on the
+   pipe.
+
+### Not verified in this pass
+
+- **That production speaks HTTP/2.** Inherited from the transport-caveat
+  section and, as there, not re-confirmed: egress to `app.supermega.dev` is
+  refused by the agent sandbox proxy. If that premise is ever falsified, this
+  result reverts to the HTTP/1.1 column and C2 is worth −424 ms again.
+- **Real HTTP/2 server behaviour.** This is `node:http2` on loopback with a
+  throwaway cert, not Vercel's edge: no BBR, no real RTT variance, no
+  server-side prioritisation policy, no CDN cache. Stream prioritisation is
+  precisely the mechanism this result turns on, so a CDN that prioritises
+  differently could move the 116 ms in either direction.
+- **Anything about interactivity.** No tap-through probe exists; `load` is
+  standing in for it, and the whole point of finding 1 above is that it should
+  not have to.
+- **Routes other than `/` and `/?choose=1`.** The 2×2 was kept to the two
+  routes the previous section used, for comparability.
