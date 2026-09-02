@@ -2959,3 +2959,19 @@ input, select, textarea { border-color: var(--core-field-line); }
   .plant-today-source { flex-wrap: wrap; }
   .plant-today-source small { display: block; width: 100%; max-width: none; margin-left: 0; text-align: left; }
 }
+
+/* P3.10 item 2 — the Plant "Start here" status line is a sentence, not a label.
+   `.plant-today-metrics small, .plant-today-source small` (:1087) gives both the
+   same caption treatment: 0.5rem (8px computed), bold, uppercase, letter-spaced,
+   mono. That is right for the metrics captions, which are two-word labels
+   ("Active jobs", "Shift output"). It is wrong for the source line, whose <small>
+   carries the confirmation of what just happened ("Close shift Sweep Day Shift
+   completed. It was persisted with attributed Plant evidence.") and, when writes
+   are blocked and the container is role="alert", the reason nothing saves.
+   #586 made that sentence visible on phones; tools/phone_width_sweep.mjs then
+   measured it at 8px and found six such sentences, which is what this rule
+   answers. Uppercase and letter-spacing are dropped because they cost the most
+   legibility on running text; the mono family and quiet colour stay, because the
+   line is provenance and reads as such elsewhere. Applied at every width: the
+   sentence is a sentence on a desktop too. The metrics captions are untouched. */
+.plant-today-source small { font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); letter-spacing: normal; text-transform: none; }
