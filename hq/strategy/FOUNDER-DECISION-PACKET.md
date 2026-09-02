@@ -85,11 +85,55 @@ explanations that could not be eliminated from inside one agent's branches:
 file sets, authorship, branch naming.
 
 **Conclusion: the ruleset requires three check names that no workflow in this
-repository produces.** The seven this repo actually emits are `validate`
-(showroom-ci.yml), `verify` and `release` (kernel-deploy.yml),
-`hosting-contract` (public-hosting-guard.yml), and `Audit app` / `Audit
-kernel` / `Audit platform` / `Audit runtime (pip)` (dependency-security.yml),
-plus third-party GitGuardian.
+repository produces on a pull request.** The names this repo actually emits on
+a PR are `validate` (showroom-ci.yml), `verify` and `release`
+(kernel-deploy.yml), `hosting-contract` (public-hosting-guard.yml), and
+`Audit app` / `Audit kernel` / `Audit platform` / `Audit runtime (pip)`
+(dependency-security.yml), plus third-party GitGuardian.
+
+**Which three, most likely — added 2026-09-02.** Two further observations
+narrow this from "some three names" to a specific, checkable guess.
+
+First, the combined *commit status* on a green blocked PR is empty:
+
+```
+GET /repos/.../pulls/562  -> get_status
+{"state":"pending","total_count":0,"statuses":[]}
+```
+
+Zero legacy statuses, because everything here is a Checks-API check run. So
+nothing is arriving through the older channel either.
+
+Second, and decisively: of the seven workflow jobs in `.github/workflows/`,
+**exactly three can never run on a pull request at all**, because none of
+them has a `pull_request` trigger:
+
+| Check name | Workflow | Triggers |
+|---|---|---|
+| `validate-coordinated-authority` | supermega-app-deploy.yml | `workflow_dispatch`, `push` to main |
+| `verify-live` | supermega-public-live-health.yml | `workflow_run`, `workflow_dispatch`, `schedule` |
+| `verify-deploy-promote` | supermega-public-release.yml | `workflow_dispatch` only (the founder-only typed phrase) |
+
+Three names, permanently unreachable on a pull request, against a message
+that reads "**3 of 3** required status checks are expected" and never
+decrements. That is a strong match, and it explains the symptom exactly: a
+required check belonging to a workflow with no `pull_request` trigger stays
+`expected` forever no matter how green the PR is.
+
+**This is inference, not a read of the ruleset** — reading it needs repository
+admin, which this lane does not have and should not have. Confirm it in one
+look: Settings → Rules → the `main` ruleset → "Require status checks to
+pass". If those three names are the required ones, that is the whole bug.
+
+**The fix, if confirmed:** remove those three from the required list and, if
+you want a required gate at all, require the names that do run on pull
+requests — `validate` for app changes and `verify` for kernel changes. Note
+that both are `paths:`-filtered, so requiring either one alone will block PRs
+that legitimately touch neither; the honest options are to require none and
+rely on review, or to make the required job a small always-runs job. I have
+deliberately NOT created such a job, because a check that reports success
+without running the work it is named for is a fake protection signal, and
+inventing one to satisfy a rule I cannot read would be exactly that.
 
 ### What you need to do
 
