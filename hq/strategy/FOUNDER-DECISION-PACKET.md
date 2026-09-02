@@ -149,21 +149,22 @@ non-draft since discovering this, and will keep doing so until you say
 otherwise — flagging it because it is a deliberate deviation from a standing
 instruction, not an oversight.
 
-### After P-1: the merge order for the thirty-seven open pull requests
+### After P-1: the merge order for the thirty-eight open pull requests
 
 Verified 2026-09-02 against every open PR's base and file list, with the two
 independent-PR file overlaps test-merged. **Every PR here is CI-green and
-Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the thirteen
+Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the fourteen
 after that — #572, #573, #574, the later heads of #569/#571, the second wave
-#575–#578, and the third wave #579–#583 — were reviewed by me against source
-instead, and each carries that review as a comment saying so). The order below is what lets you
+#575–#578, the third wave #579–#583, and #585 — were reviewed by me against
+source instead, and each carries that review as a comment saying so). The order below is what lets you
 work through them without a single manual conflict.
 
 **Tier 1 — independent, based on `main`, no decision needed. Any order.**
 #554, #555 (this packet), #556, #557, #558, #560, #562, #563, #564, #565,
-#567, #568, #570, #571, #572, #575, #576, #577, #580, #582. Twenty PRs. #567
-and #570 both edit `tools/verify_app_build.mjs`; test-merged, auto-merge is
-clean. #580 (scheduler ceiling and pool pressure measured, kernel test-only)
+#567, #568, #570, #571, #572, #575, #576, #577, #580, #582, #585. Twenty-one
+PRs. #567 and #570 both edit `tools/verify_app_build.mjs`; test-merged,
+auto-merge is clean. #585 is two playbook sentences whose button labels had
+drifted from the shipped UI, found by the journeys. #580 (scheduler ceiling and pool pressure measured, kernel test-only)
 and #582 (design queue entry P3.10, doc-only) are third-wave and independent.
 The three second-wave entries are test-only: #575 (fail-closed contract for
 all 64 credentialed connectors, 565/0 kernel), #576 (the one automated 390px
@@ -226,8 +227,8 @@ pointing at a gap already filled.
   eight of the Tier 1–2 branches, it test-merges onto the two most-overlapping
   ones with **zero conflicts**, so it imposes no ordering on them.
 
-**Total for Tiers 1–2 once P-1 is fixed: twenty-eight approve-and-merge
-clicks (twenty plus eight stacked) in the order above.** Tier 3 is six decisions you
+**Total for Tiers 1–2 once P-1 is fixed: twenty-nine approve-and-merge
+clicks (twenty-one plus eight stacked) in the order above.** Tier 3 is six decisions you
 were going to make anyway; the table just says which PR each one releases.
 
 ---
@@ -1609,6 +1610,42 @@ them now converts founder attention into inventory.
 
 **Source:** `hq/strategy/PRODUCT-SUPREMACY-ROADMAP.md` §1 rows S3, S5, E3 and §3
 item 5; `hq/strategy/DESIGN-PROGRAM.md` §P3.8.
+
+### P24 — Should a device-local Website workspace have an on-screen path to the file checklist?
+
+**Blocked on this:** nothing. Recorded because the fourth automated browser
+journey (#584) had to reach the checklist by URL, and the reason turned out
+to be a scope choice worth confirming rather than a defect.
+
+**Verified 2026-09-02 against `showroom/src/products/website/WebsiteProduct.tsx`:**
+
+- The `Prepare file` button that opens the file checklist renders only when
+  `storageMode === 'managed'` (~1265). A device-local workspace's action bar
+  ends at `Download preview`.
+- The Start here primary action (~960-993) downloads the preview and returns
+  whenever `localPreviewReady` is true, and `localPreviewReady` (~820) is true
+  for every device-local workspace past the starter with no unsaved changes.
+  So the handler's `openWorkspaceView('publish')` branch is unreachable on
+  this device.
+- The same screen's Review metric reads `Not required` for device-local
+  workspaces (`releaseRecordRequired` false, ~930), which says the omission is
+  deliberate: a browser-local site needs no release record.
+- The checklist itself is shipped for device-local workspaces: `?view=publish`
+  mounts it, it renders its own `This device only` boundary, and it persists
+  real evidence, approval and site-file records with generated ids. #584
+  drives exactly that path and proves the records are digest-bound.
+
+**The question:** keep it this way (device-local sites never see the review
+checklist; it exists for the managed tier and is reachable by URL), or add one
+button on the ready panel so a solo owner can record their own review notes
+before handing a file to a hosting provider?
+
+**Recommendation:** keep it as is for client one. The managed tier is where a
+named reviewer exists; a solo owner reviewing their own site adds ceremony
+without accountability. If a pilot client asks for it, the change is one
+button and no model change, because the records already work.
+
+**Cost of deciding later:** none; nothing waits on it.
 
 ---
 
