@@ -18,7 +18,7 @@
 // WHAT THIS FILE COVERS NOW (it outgrew its name): the LOCAL TELEMETRY CONTRACT, both lanes.
 //
 // Sections 1-4 are the original persistence guard for analytics/metrics-collector.ts.
-// Sections 5-9 are the behavioural guard for core/client-error-reporter.ts, which until
+// Sections 5-10 are the behavioural guard for core/client-error-reporter.ts, which until
 // they existed had NO behavioural test at all -- it was held up only by source-string pins
 // in tools/verify_app_build.mjs, exactly the vacuity pattern
 // hq/strategy/VERIFIER-VACUITY-AUDIT.md exists to catch. A string pin proves a line of code
@@ -41,6 +41,12 @@
 //  9. MetricEvent's structural PII exclusion holds at the emission boundary too, not only
 //     across storage -- a field outside the closed shape cannot be recorded in the first
 //     place.
+//  10. The entry point really is gated. Section 8 proves the gate over the real function, but
+//     that proves nothing about showroom/src/main.tsx, which is where the gate is applied. This
+//     reads main.tsx and holds that startClientErrorReporter() is called exactly once, that the
+//     call is the guarded statement `if (isBeaconHost()) startClientErrorReporter()`, and that
+//     both names are imported from core/client-error-reporter with nothing shadowing them --
+//     so an unconditional call, a reversed condition, or a local look-alike guard all fail.
 // ---------------------------------------------------------------------------------------
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
@@ -521,6 +527,41 @@ const { ERROR_CLASSES, isBeaconHost, classifyError, hashErrorMessage } = await f
     }
     check(win.location.hash === '#/shop/orders', 'sanity: the harness never mutated the page location')
   })
+}
+
+// ---- 10. the entry point applies the gate: main.tsx wiring, not a re-enactment of it -------
+{
+  // Section 8 exercises isBeaconHost() and startClientErrorReporter() as real functions, but
+  // the line that joins them lives in main.tsx. If that entry point ever called the reporter
+  // unconditionally, reversed the condition, or guarded it with a look-alike, section 8 would
+  // stay green while every preview and local host started shipping error events. So the
+  // wiring is held here, against the file as written, with comments stripped first so a
+  // commented-out call or a comment quoting the guard cannot satisfy or defeat it.
+  const { readFileSync } = await import('node:fs')
+  const entry = readFileSync('showroom/src/main.tsx', 'utf8')
+  const code = entry.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
+
+  const calls = code.match(/startClientErrorReporter\s*\(/g) || []
+  check(calls.length === 1, `main.tsx calls startClientErrorReporter exactly once (found ${calls.length})`)
+
+  // The whole statement, not a substring: the guard and the call on one line, the call being
+  // the guard's only consequence. `if (!isBeaconHost())`, `isBeaconHost() || true`, a call
+  // outside the if, or a second call elsewhere all fail the count or the shape.
+  const guarded = code.match(/^[ \t]*if \(isBeaconHost\(\)\) startClientErrorReporter\(\)[ \t]*;?[ \t]*$/m)
+  check(guarded !== null, 'the one call is the guarded statement `if (isBeaconHost()) startClientErrorReporter()`')
+
+  // Both names must be the real exports section 8 tested, not local definitions.
+  const importLine = code.match(/^import \{([^}]*)\} from '\.\/core\/client-error-reporter'/m)
+  const imported = importLine ? importLine[1].split(',').map((name) => name.trim()) : []
+  check(imported.includes('isBeaconHost'), 'isBeaconHost is imported from ./core/client-error-reporter')
+  check(imported.includes('startClientErrorReporter'), 'startClientErrorReporter is imported from ./core/client-error-reporter')
+  check(!/\b(?:function|const|let|var)\s+isBeaconHost\b/.test(code), 'nothing in main.tsx shadows isBeaconHost')
+  check(!/\b(?:function|const|let|var)\s+startClientErrorReporter\b/.test(code), 'nothing in main.tsx shadows startClientErrorReporter')
+
+  // Sanity on the stripping itself, so a future comment style cannot hollow this section out:
+  // the guard must be findable in the raw file too, and the raw file must still be TSX.
+  check(entry.includes('if (isBeaconHost()) startClientErrorReporter()'), 'sanity: the guard is present in the unstripped source')
+  check(/createRoot\(/.test(code), 'sanity: main.tsx is still the React entry point after comment stripping')
 }
 
 console.log(`local telemetry contract (metrics persistence + client error lane): ${checks} checks passed`)
