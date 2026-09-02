@@ -6,7 +6,8 @@ Status: analysis (no deploy, write, or gate change authorized by this document)
 Question answered: "enterprise level and what other infrastructure and tools"
 Rule: every grade cites a repo file. Companion: ERP-COMPETITIVE-ROADMAP.md sec 3
 (the enterprise checklist), AI-NATIVE-ARCHITECTURE.md (stages and triggers),
-hq/readiness/managed-pilot-readiness.json (gate ledger, 4 blocking).
+hq/readiness/managed-pilot-readiness.json (gate ledger; 4 blocking when
+written, 1 blocking as of 2026-08-30 — see the freshness note below).
 
 **Freshness note, 2026-08-17 (tech lead):** this scorecard predates a full day
 of subsequent work and should not be quoted as current without checking the
@@ -23,6 +24,27 @@ pilot as a floor, not a current reading, until a full re-grade pass is done.
 and its citation was wrong even when written — see the correction inline at
 that item. Do not resurrect it as open work without reading that note first.
 
+**Freshness note, 2026-08-30 (correction pass, verified against live source):**
+this scorecard's single most-repeated recommendation — "run the OPS-754
+preview-branch rehearsal" — was already satisfied on 2026-08-16, the same day
+the scorecard was authored. Verified in
+`hq/readiness/managed-pilot-readiness.json` and
+`hq/readiness/managed-persistence-proof.json`: the `managed_persistence` gate
+reads `ready-hosted`, all seven proofs recorded a passing result, and preview
+branch `persistence-proof-24h-20260816` was created and deleted inside the same
+session. An agent taking this document's "highest leverage" lines at face value
+would try to re-run a completed rehearsal whose runbook
+(`MANAGED-PERSISTENCE-PROOF-PLAN.md` section 6) makes all five of its steps
+founder stops with no agent discretion — approval ID, branch cost, setup SQL
+review, live-run confirmation, branch deletion. Corrected inline below at
+sections 2, 3, 5 and 9; section 6's own corrections are immediately above.
+Two further drifts fixed in the same pass: the ledger is at 1 blocking gate,
+not 4, and the app:verify chain is 652 steps, not 621 (counted from
+`package.json` `app:verify:steps`, and confirmed by a green
+`{"steps":652,"totalSteps":652}` run). Grades are still NOT re-derived — per
+the 2026-08-17 rule above, every grade whose deduction is struck below is now
+a FLOOR, and the letters in the table are stale in the pessimistic direction.
+
 Grading key: A = provable today against an enterprise buyer's checklist.
 C = built or designed but not activated. F = absent with no plan.
 
@@ -33,9 +55,15 @@ C = built or designed but not activated. F = absent with no plan.
 | 3 | Auditability | A- |
 | 4 | Access control | C+ |
 | 5 | Testing | A- |
-| 6 | Observability | D+ |
+| 6 | Observability | C |
 | 7 | Scalability | B- |
 | - | OVERALL | B- |
+
+Table caveat (2026-08-30, amended 2026-09-02): grades 2, 3 and 5 rest on
+deductions that have since been struck as satisfied. Read them as floors, not
+readings; the table alone is not quotable without the 2026-08-30 freshness
+note below. Grade 6 is the exception: it was re-derived against the rubric on
+2026-09-02 (D+ -> C, section 6) and is a current reading, not a floor.
 
 ---
 
@@ -65,19 +93,42 @@ with exact live-identity verification and automatic rollback of both domains on
 a stale verifier (supermega-public-release.yml shape, CEO-020 evidence, cited
 in AI-NATIVE-ARCHITECTURE.md 4.1; tools/resolve_vercel_rollback_target.mjs).
 
-- Gate coverage: 621-step app:verify chain plus 7 CI workflows; lint and
+- Gate coverage: ~~621-step~~ **652-step (2026-08-30, counted from
+  `package.json` `app:verify:steps`)** app:verify chain plus 7 CI workflows; lint and
   showroom CI fail on their own (AI-NATIVE 4.1 note).
 - Live verification: supermega-public-live-health.yml runs post-release and on
   a daily 01:45 UTC cron against https://supermega.dev.
-- Deduction: backup/restore is proven local only (core/company-backup.ts,
+- ~~Deduction: backup/restore is proven local only (core/company-backup.ts,
   600k-iteration KDF); hosted durable-write, recovery, and restore have never
-  run -- managed_persistence gate is blocked, "Live managed persistence ready
+  run — managed_persistence gate is blocked, "Live managed persistence ready
   is false" (managed-pilot-readiness.json). The OPS-754 seven-proof instrument
   (durable write, idempotent retry, event immutability, cross-tenant denial,
-  recovery round-trip, induced rollback; commit cb59abe8) is built but unrun.
+  recovery round-trip, induced rollback; commit cb59abe8) is built but unrun.~~
+  **SUPERSEDED 2026-08-30.** The instrument ran on 2026-08-16 against preview
+  branch `persistence-proof-24h-20260816` (a branch of the production project,
+  never production itself), session-pooler lane, 45 self-test cases, deleted
+  the same session. All seven proofs passed: `readback_exact`, `no_op_replay`,
+  version conflict `rejected` with 0 stale rows matched, update and delete on
+  `workspace_events` both rejected with SQLSTATE 42501, cross-tenant read
+  `denied_with_canary` with 0 foreign rows visible, backup/restore
+  `roundtrip_exact`, and induced-failure atomic rollback. Evidence:
+  `hq/readiness/managed-persistence-proof.json`. The `managed_persistence`
+  gate now reads `ready-hosted`. Local-only backup/restore remains true of
+  `core/company-backup.ts` specifically; it is no longer true of the hosted
+  layer. Residual deduction, unchanged: this proved the persistence
+  *mechanism* on a disposable branch — production still holds zero workspace
+  data and its activation is a separate founder gate.
 
-Highest leverage: execute the founder-approved 24h preview-branch rehearsal
-with the OPS-754 instrument; it converts four blocked gates into evidence.
+~~Highest leverage: execute the founder-approved 24h preview-branch rehearsal
+with the OPS-754 instrument; it converts four blocked gates into evidence.~~
+**DONE 2026-08-16 (recorded here 2026-08-30).** Attribution corrected after
+Codex flagged it: this rehearsal moved the ledger **4 -> 3**, which is what
+`hq/WORKBOARD.md`'s OPS-759 row and `hq/TIMELINE.md` both record. The count is
+**1** today, but the other two gates were closed by later, independent work --
+crediting all three to this proof would let a reader treat two separate
+readiness requirements as satisfied by a persistence rehearsal that did not
+touch them. The one that remains is `production_activation`, which is
+founder-only. Do not re-run this rehearsal.
 
 ## 3. Auditability: A-
 
@@ -91,10 +142,17 @@ that a second decision cannot overwrite (kernel/README.md).
   digest-bound to 8 sha256 source receipts (managed-pilot-readiness.json).
 - Accountable operators: reviews record reviewer, recorder, source, and
   provenance class (operator_recorded vs tenant_bound_customer_session).
-- Deduction: hosted immutability unproven until the rehearsal passes (ERP
-  roadmap sec 3 audit-trail row); OPS-754 proof 4 covers exactly this.
+- ~~Deduction: hosted immutability unproven until the rehearsal passes (ERP
+  roadmap sec 3 audit-trail row); OPS-754 proof 4 covers exactly this.~~
+  **CLOSED 2026-08-30.** Proof 4 (`event_immutability_enforced`) ran hosted on
+  2026-08-16 and recorded `update_and_delete_rejected`, both with SQLSTATE
+  42501 — the append-only guarantee is enforced by the database, not by
+  application discipline. Grade A- is now a floor.
 
-Highest leverage: run OPS-754 proof 4 (event immutability) hosted.
+~~Highest leverage: run OPS-754 proof 4 (event immutability) hosted.~~ Done;
+see above. The next auditability question is the one this proof does not
+answer: immutability is proven on a fixture tenant, not under concurrent load
+by real operators.
 
 ## 4. Access control: C+
 
@@ -120,7 +178,7 @@ staff-roles cannot ship before it.
 Justification: 600 tools/test_*.mjs files green (OPS-736, hq/TIMELINE.md),
 51 kernel test files, ~41 python test files with the tests/ suite run in CI
 via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
-621-step app:verify chain.
+~~621-step~~ **652-step (2026-08-30)** app:verify chain.
 
 - Adversarial culture is real: OPS-750/751 added leak/pagination/429 and
   body-discrimination adversarial cases; OPS-754 ships 37 offline adversarial
@@ -188,8 +246,13 @@ via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
      `pending_shop_review` by design and can never hold a completed Shop order.
      The ENG-144 wording in `hq/WORKBOARD.md` is verifier-pinned and stands as
      the historical record; this entry is the correction.
-  4. Hosted recovery: the OPS-754 restore/rollback proofs have never
-     executed against a real branch; recovery is local-rehearsal-only.
+  4. ~~Hosted recovery: the OPS-754 restore/rollback proofs have never
+     executed against a real branch; recovery is local-rehearsal-only.~~
+     **CLOSED 2026-08-30:** proofs 6 (`workspace_backup_restore_roundtrip`,
+     result `roundtrip_exact`) and 7 (induced-failure atomic rollback) both
+     executed against preview branch `persistence-proof-24h-20260816` on
+     2026-08-16. The live gap is now repetition, not first execution: one run
+     is evidence, not a drill cadence — see section 8 item 5.
   5. Load/perf: nothing exercises pool pressure or the 25/day scheduler
      ceiling. ~~Concurrent budget reservation (the token cap "can modestly
      overshoot under highly concurrent calls" -- kernel Honest Limits --
@@ -213,34 +276,183 @@ different product (Plant shift release or Ecommerce request-to-review), so
 the harness is proven reusable rather than a one-off, then the gate-coverage
 gap named under gap 1.
 
-## 6. Observability: D+
+## 6. Observability: C (re-derived 2026-09-02; was D+)
 
-Justification: what exists is thin -- a local metrics collector with four
-emit sites (sale.completed, shift.close.confirmed, order.created,
-accounting.export.downloaded; showroom/src/analytics/metrics-collector.ts,
-OPS-165) that ships no beacon anywhere, plus the daily live-health workflow
-and the kernel operations-report (7/30/90-day windows, kernel/README.md).
+**Re-graded on measured evidence, 2026-09-02.** The 2026-08-31 correction
+pass established that the D+ rested on premises that had become false and
+asked for the grade to be re-derived against the rubric rather than bumped.
+This is that re-derivation; the correction's findings are folded in below
+rather than stacked above a stale justification. Every claim was traced to
+source on `main` at f08e7539 before it was written, and where this pass and
+the 2026-08-31 correction disagree on a count, the line says so and cites the
+file.
 
-- No error tracking: no Sentry or equivalent dependency exists in any
-  package.json (verified by search), and no error-event lane exists.
-- No tracing: the OpenTelemetry decision is adopt-with-managed-mode with an
-  implementation plan ready (30 named spans, redaction rules --
-  hq/portfolio.json researchGates; hq/NOW.md R&D decisions) but zero
-  packages installed and zero spans emitted.
-- No alerting over measured target states: "alerts over the measured target
-  states" is explicitly future (kernel/README.md Next step 3) -- this part
-  still holds. Narrower correction, 2026-08-19: a failed *live-health* run is
-  no longer a silent red X -- `supermega-public-live-health.yml`'s "Alert
-  owner on failed live verification" step files/comments a GitHub issue on
-  red, fail-open, since before this scorecard was written. See section 8
-  item 4 for the full correction; the remaining gap is metric-target
-  alerting (e.g. error-rate or latency thresholds), not live-health.
+Justification: emission is real and covers all four products, a browser
+error lane and a target-breach alerting lane that this document recorded as
+absent have both shipped, and OpenTelemetry Phase A is instrumented rather
+than planned. The grade is C and not B because none of it aggregates: spans
+land in a process console, metrics never leave the device, and nothing pages
+anyone -- the layer can record that something happened but still cannot tell
+an operator when. On the rubric, "built or designed but not activated" is the
+C line, and collection is exactly what is built but not activated.
+
+What the original section claimed, against what is true now:
+
+- ~~"a local metrics collector with four emit sites (sale.completed,
+  shift.close.confirmed, order.created, accounting.export.downloaded)"~~ --
+  **undercounted by 12.** `emitMetric(` appears at 16 call sites across
+  showroom/src (Shop 4: the four named above, all in core/CoreApp.tsx;
+  Plant 5: output.recorded, capa.opened, capa.resolved, job.released,
+  shift.close.confirmed, also CoreApp.tsx; Ecommerce 4: cart.built in
+  products/ecommerce/EcommerceProduct.tsx plus quote.captured,
+  order.request.submitted, shop.handoff.reached in
+  products/ecommerce/EcommerceBuyingWorkspace.tsx; Website 3: preview.opened,
+  edit.saved, file.downloaded in products/website/WebsiteProduct.tsx). The
+  "ships no beacon" half of the sentence is still correct: the collector
+  (showroom/src/analytics/metrics-collector.ts, `emitMetric` at :142)
+  dispatches in-page and persists to one localStorage key
+  (LOCAL_METRICS_STORAGE_KEY, 500-event cap) with structural PII exclusion,
+  and company-backup.ts deliberately excludes it from portability.
+- ~~"No error tracking: no Sentry or equivalent dependency exists in any
+  package.json (verified by search), and no error-event lane exists."~~ --
+  **half false.** Browser side, an error lane exists and is in production:
+  showroom/src/core/client-error-reporter.ts carries a closed 14-member
+  `ERROR_CLASSES` enum, `classifyError`, a one-way FNV-1a `hashErrorMessage`
+  (the raw message text never leaves the device), a coarse surface label
+  resolved through the metrics collector's SURFACE_MAP rather than the raw
+  URL, and the build commit from /__release.json. It rides the existing
+  Vercel Web Analytics `window.vaq` script queue, is installed only on
+  production hostnames via `isBeaconHost` (showroom/src/main.tsx:14), caps at
+  5 reports per session, dedupes on class+hash, and swallows its own
+  failures; RouteErrorBoundary.tsx calls `report()` directly because React's
+  componentDidCatch never reaches window.onerror. This is section 8
+  recommendation 2 delivered as specified -- deliberately not Sentry, no new
+  vendor. Caveat: it carried NO behavioural test until this batch, only a
+  byte-budget mention in tools/verify_app_build.mjs. Server side, the claim
+  still holds for the canonical runtime, with the scope the 2026-08-30 pass
+  corrected: none of package.json, showroom/, kernel/, requirements.txt or
+  pyproject.toml carries Sentry or an equivalent; `mark1_pilot/requirements.txt:14`
+  does declare `sentry-sdk[fastapi]` and tools/serve_solution.py initialises
+  it, but that is a legacy service, not the Vercel runtime. A hosted runtime
+  exception today is recorded only as an exception event on a span that the
+  console exporter prints and nothing collects.
+- ~~"No tracing: the OpenTelemetry decision is adopt-with-managed-mode with
+  an implementation plan ready (30 named spans, redaction rules) but zero
+  packages installed and zero spans emitted."~~ -- **false.**
+  requirements.txt:5-8 and pyproject.toml:11-14 pin four OpenTelemetry
+  packages (sdk 1.44.0, instrumentation-fastapi, instrumentation-psycopg,
+  exporter-otlp-proto-grpc). supermega_runtime/telemetry/schema.py declares
+  28 named spans with a per-domain attribute whitelist and
+  FORBIDDEN_ATTRIBUTE_KEYS; supermega_runtime/telemetry/tracing.py builds the
+  provider behind a `RedactingSpanProcessor` that every exporter sits behind,
+  attaches FastAPI and psycopg auto-instrumentation plus W3C traceparent
+  extraction, and is called from `create_app()`
+  (supermega_runtime/runtime.py:1047) inside a try/except so instrumentation
+  can never break the API; tests/telemetry/test_redact.py covers the
+  scrubber. Count correction to the 2026-08-31 note, which put the plan's
+  step-9 manual spans at 3/5: it is **4/5**. shop.order.confirm,
+  plant.job.release and ecommerce.request.submit are wired through the
+  `(surface, event_type)` map at trial_runtime.py:606, and ai.invocation is
+  wired at both provider call sites (order_intake_provider.py:608 and :786,
+  on main since #421, 2026-08-19); the earlier count checked only
+  trial_runtime.py, whose own docstring (:627) says the AI span lives in the
+  provider. Only the worker cycle is unwired -- `worker.cycle.start` exists as
+  a schema constant and a redaction fixture and nothing else. The honest limit
+  is the phase, not absence: Phase A is local-only by design -- the default
+  exporter is ConsoleSpanExporter and OTLP is reached only under
+  `OTEL_LOCAL=1` to localhost:4317, with
+  hq/research/opentelemetry-implementation-plan-2026-08.md forbidding
+  `OTEL_EXPORTER_OTLP_ENDPOINT` in any Vercel environment until a recorded
+  founder decision (section 5 gates; :281).
+  **Open exposure, carried forward from the 2026-08-30 correction and
+  re-verified on main:** the scrubber is closed for span names and attributes
+  only. `_sanitized_copy` (tracing.py) copies `events=span.events` through
+  untouched, and OpenTelemetry's ASGI instrumentation records every unhandled
+  exception as a span event carrying the verbatim `exception.message` plus a
+  stacktrace; the 2026-08-30 pass reproduced a customer name, a Myanmar mobile
+  number and an MMK amount reaching the exporter in one such event. The
+  `redact.scrub_events` fix that pass describes is NOT on main -- redact.py
+  exports `scrub_attributes` and `scrub_span_name` and nothing for events.
+  Today the exposure is bounded to the process console because no exporter
+  leaves the machine; it is a hard precondition for ever setting an OTLP
+  endpoint, and it is part of why this grade is not higher.
+- ~~"No alerting over measured target states: 'alerts over the measured
+  target states' is explicitly future (kernel/README.md Next step 3)."~~ --
+  **false.** kernel/agent-company-operations.mjs imports `notifyDetailed`
+  from alert.mjs at :10 and carries a full alerting section from :1861
+  (`COMPANY_OPERATIONS_ALERT_STATE_CONTRACT`), documented at kernel/README.md
+  ~:179-184: when an operations report measures any target `missed`, a
+  metadata-only founder Telegram alert lists the breached target ids with
+  measured vs target values and never customer data, evidence, or output. An
+  identical breach set re-pings at most every 6 hours
+  (OPERATIONS_ALERT_REPEAT_MINUTES 360); a changed set alerts immediately;
+  recovery clears the stored state so the same ids alert again if they
+  return. Dedupe state is a durable compare-and-swap record with a per-process
+  mirror, alerting is best-effort and can never affect the report response,
+  and without TELEGRAM_BOT_TOKEN plus a chat id the whole path is a silent
+  no-op that performs no I/O. The narrower live-health correction of
+  2026-08-19 stands unchanged: a failed live-health run is not a silent red
+  X -- `supermega-public-live-health.yml`'s "Alert owner on failed live
+  verification" step files or comments a GitHub issue on red, fail-open (see
+  section 8 item 4).
 - Analytics is adopt (implementation-steps-ready) but the no-PII MetricEvent
-  aggregate schema has not passed founder PII review or shipped.
+  aggregate schema has not passed founder PII review or shipped -- still
+  true; the error lane rode the existing Web Analytics script queue rather
+  than a new MetricEvent beacon, so this line is unaffected by it.
 
-Highest leverage: execute the OpenTelemetry local phase now -- the decision
-is already made, the redaction rules are already written, and it requires no
-founder gate until managed mode.
+What is still genuinely missing, and why the grade is C rather than B:
+
+  1. No distributed trace. The spans above are Python-runtime-only: neither
+     showroom/package.json nor kernel/package.json carries any OpenTelemetry
+     package, so a browser action and the API call it causes never join into
+     one trace, and no hosted collector exists to query them if they did
+     (Phase B is founder-gated, above, and the span-events scrub must merge
+     first).
+  2. No server-side error tracking in the canonical runtime (the half of the
+     error-lane bullet that survived). This is a wiring gap beside an existing
+     implementation -- the browser lane's no-PII shape and the legacy Sentry
+     wiring are both worth reading first -- not a greenfield build.
+  3. No production metric-threshold alerting. The kernel breach alert fires
+     on operator work-order targets (queue p90, execution p90, terminal
+     orders, role-budget and draft-only compliance, evaluation coverage --
+     kernel/README.md ~:170-177), not on the site: no error rate, latency, or
+     availability threshold anywhere triggers a notification. The
+     client_error events reach Vercel Web Analytics as custom events, which
+     is a dashboard, not an alarm.
+  4. No uptime monitoring between runs. .github/workflows/supermega-public-live-health.yml
+     is the only production liveness check and runs on `cron: '45 1 * * *'`
+     -- once a day. An outage beginning at 02:00 UTC is invisible for roughly
+     24 hours. (The other two schedules are weekly and unrelated:
+     dependency-security.yml `25 3 * * 1`, public-hosting-guard.yml
+     `5 2 * * 1`.)
+  5. No paging, acknowledgement, or escalation. The live-health alert opens
+     or comments on a GitHub issue via the built-in token and reaches the
+     owner as issue-notification email (that workflow, "Alert owner on failed
+     live verification", fail-open via continue-on-error). There is no on-call
+     rotation, no acknowledgement, and no escalation if nobody reads it; the
+     kernel Telegram path is explicitly best-effort and silently off when
+     unconfigured.
+  6. No log aggregation. No log-shipping or log-search dependency exists in
+     any package.json, requirements.txt, or pyproject.toml (verified by
+     search); runtime logs are whatever the platform retains per surface,
+     with nothing correlating them.
+  7. Metrics never aggregate. All 16 emit sites above write to one device's
+     localStorage by design and ship no beacon, so there is still no
+     cross-pilot view -- which is exactly the data section 7's stage triggers
+     wait on.
+
+~~Highest leverage: execute the OpenTelemetry local phase now.~~ DONE; see
+above. Following it would redo finished work.
+
+Highest leverage now, in order: (1) merge the span-events scrub, because it
+is the precondition for any exporter that leaves the machine and it is a
+one-line regression away from reopening; (2) shrink the ~24h blind window --
+raising supermega-public-live-health.yml's schedule costs runner-minutes and
+nothing else; (3) server-side error capture into the same no-PII lane the
+browser already uses, which is the 2026-08-31 pick and remains the largest
+gap in what an incident responder would actually have. A hosted collector
+(Phase B) is the larger prize but is founder-gated and buys nothing until
+(1) has merged.
 
 ## 7. Scalability: B-
 
@@ -269,12 +481,28 @@ self-verifying, and entry through hq/portfolio.json researchGates. None
 duplicates the deferred (dense-data-grid, realtime-broadcast) or rejected
 (second-queue-or-crm) gates, existing CI, or the kernel queue.
 
-1. OpenTelemetry tracing, local phase first.
+1. ~~OpenTelemetry tracing, local phase first.~~ **SHIPPED (Phase A,
+   local-only) -- status 2026-09-02.** Four packages pinned, 28 named spans
+   declared, FastAPI + psycopg auto-instrumentation, and 4/5 of the plan's
+   manual domain spans, all wired from `create_app()`; section 6 carries every
+   citation. Do not open this as new work. What remains is not this item: the
+   worker-cycle span, the span-events scrub (a precondition -- section 6), and
+   Phase B, which is founder-gated by the implementation plan's section 5.
+   Original text, kept for the record --
    Why: the only planned answer to "what broke and where" across request,
    model, and database operations. Cost: dev cycles only; no vendor until
    managed mode. Gate: the EXISTING opentelemetry researchGate
    (adopt-with-managed-mode; redaction + correlation conditions must hold).
-2. Error-event lane on the planned MetricEvent beacon -- not Sentry.
+2. ~~Error-event lane on the planned MetricEvent beacon -- not Sentry.~~
+   **SHIPPED -- status 2026-09-02.** showroom/src/core/client-error-reporter.ts
+   delivers exactly this shape (closed class enum, one-way message hash,
+   coarse surface label, build commit; no Sentry, no new vendor), with one
+   deviation worth knowing: it rides the EXISTING Vercel Web Analytics script
+   queue on production hostnames rather than a new MetricEvent beacon, so the
+   analytics researchGate's PII review was not the gate it passed through. It
+   carried no behavioural test until this batch. What remains is the
+   server-side half (section 6, missing item 2), not this item.
+   Original text, kept for the record --
    Why: error tracking is the biggest observability hole, and a Sentry
    dependency would duplicate the adopted analytics beacon while adding a
    data-egress vendor. Cost: one schema addition plus review. Gate: the
@@ -310,12 +538,20 @@ duplicates the deferred (dense-data-grid, realtime-broadcast) or rejected
    which already satisfies the underlying need this recommendation asked for.
    No `researchGate` entry is needed for this item.
 5. Scheduled hosted restore drills using the OPS-754 recovery proof.
-   Why: backup that has never restored hosted is a hope, not a control;
-   disposable Supabase preview branches are already the proven pattern
-   (storage-privacy proof, OPS-752). Cost: branch-hours only. Gate: the
-   managed_persistence readiness gate must pass first, then a NEW
-   researchGate entry "restore-drills" bound by the reviewed 25/day
-   scheduler ceiling (OPS-026) and delete-after-evidence.
+   **Rewritten 2026-08-30 — both of this item's premises were falsified by
+   the correction in section 2 above, and Codex was right that leaving them
+   here sends anyone following the reference to stale gating.**
+   ~~Why: backup that has never restored hosted is a hope, not a control~~ --
+   it HAS restored hosted, once: proof 6 (`workspace_backup_restore_roundtrip`,
+   result `roundtrip_exact`) ran on 2026-08-16.
+   ~~Gate: the managed_persistence readiness gate must pass first~~ — it has
+   passed; the gate reads `ready-hosted`.
+   What actually remains is **cadence, not first execution**: one run is
+   evidence that the mechanism works, not a control that it keeps working.
+   Disposable Supabase preview branches are the proven pattern (storage-privacy
+   proof OPS-752, and this rehearsal). Cost: branch-hours only. Gate: a NEW
+   researchGate entry "restore-drills" bound by the reviewed 25/day scheduler
+   ceiling (OPS-026) and delete-after-evidence.
 
 ---
 
@@ -323,13 +559,31 @@ duplicates the deferred (dense-data-grid, realtime-broadcast) or rejected
 
 The three moves that raise the grade fastest:
 
-1. Run the approved 24h preview-branch rehearsal with the OPS-754 instrument
-   (managed-pilot-readiness.json founderDecision). One bounded action turns
-   Reliability B -> A-, Auditability A- -> A, and unlocks the access ladder.
+1. ~~Run the approved 24h preview-branch rehearsal with the OPS-754
+   instrument (managed-pilot-readiness.json founderDecision). One bounded
+   action turns Reliability B -> A-, Auditability A- -> A, and unlocks the
+   access ladder.~~ **DONE 2026-08-16; recorded 2026-08-30.** The citation was
+   imprecise too: `founderDecision` in that ledger is the *production
+   activation* decision (still `status: required`, `approvalReceipt: null`),
+   not the rehearsal approval — the rehearsal is recorded separately under
+   `managedPersistence.approvalId`. The predicted grade movement (Reliability
+   B -> A-, Auditability A- -> A) is owed but deliberately not applied here,
+   because this pass corrects facts and does not re-derive letters.
 2. Ship the observability floor: OTel local phase + error lane on the
-   MetricEvent beacon (recs 1, 2 -- rec 4 is retired, already done; see
+   MetricEvent beacon (recs 1, 2 — rec 4 is retired, already done; see
    section 8 above). D+ -> B, and it feeds every scaling trigger in
    AI-NATIVE-ARCHITECTURE.md sec 5.
+   **Status 2026-08-30:** partly. Tracing is 3/5 on the plan's manual-span
+   step and the error lane is in review (section 6). What the D+ -> B claim
+   still lacks beyond those is collection — spans and error events that
+   nothing receives do not answer an incident.
+   **Status 2026-09-02:** both recs are shipped (4/5 on the manual-span step,
+   not 3/5 -- section 6 has the citation -- and the error lane is on main),
+   and the grade was re-derived to **C**, not B. The D+ -> B prediction was
+   wrong about what the floor is made of: shipping emission moved one letter;
+   the rest of the distance is collection, thresholds and paging, enumerated
+   as seven missing items in section 6. Treat "ship the floor" as done and
+   that list as the move.
 3. Walk the enterprise-capabilities sequence: verified-statements on the
    managed tenant, then staff-roles with a named operator (researchGates
    sequence; enterprise-staff-roles.ts header). Access control C+ -> B+ and
