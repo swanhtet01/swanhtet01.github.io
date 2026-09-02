@@ -97,6 +97,11 @@ test('the Plant status identifies historical sample dates and uses readable sing
     /\.plant-today-source small \{ display: block; margin-left: 0; text-align: left; \}/,
     'the accountable-review note must remain visible and readable on mobile',
   )
+  assert.match(coreAppSource, /\? 'Recover saved Plant data'/)
+  assert.match(coreAppSource, /\? 'Open data recovery'/)
+  assert.match(coreAppSource, /navigate\('\/settings\/#workspace-recovery'\)/)
+  assert.match(coreAppSource, /No Plant record was replaced; use workspace recovery\./)
+  assert.doesNotMatch(coreAppSource, /Restore Plant write access|Restore write access/)
 })
 
 const PLANNING_DAY = '2026-08-07'

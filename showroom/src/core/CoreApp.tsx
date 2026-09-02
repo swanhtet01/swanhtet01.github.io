@@ -8674,7 +8674,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ? 'attention'
       : 'ready'
   const plantTodayHeadline = plantTodayStep === 'restore'
-    ? 'Restore Plant write access'
+    ? productionStorageError
+      ? 'Recover saved Plant data'
+      : 'Review Plant write readiness'
     : plantTodayStep === 'approval'
       ? 'One Plant change needs approval'
       : plantTodayStep === 'problems'
@@ -8689,7 +8691,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 ? 'Continue production'
                 : 'Record first shift output'
   const plantTodayReason = plantTodayStep === 'restore'
-    ? 'Company data must confirm durable storage before records can change.'
+    ? productionStorageError
+      ? 'Plant kept existing records read-only because the saved workspace could not be verified. Open recovery to load a backup or preserve current records before a reviewed reset.'
+      : 'Plant stays read-only until durable storage and write locking are confirmed. Open workspace recovery before changing records.'
     : plantTodayStep === 'approval'
       ? 'Review the pending change, responsible owner, reason, and evidence.'
       : plantTodayStep === 'problems'
@@ -8706,7 +8710,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                   ? `${activeJobs[0].id} is the next active job by priority and due time.`
                   : 'Choose an active job and record the first good output for this shift.'
   const plantTodayAction = plantTodayStep === 'restore'
-    ? 'Restore write access'
+    ? productionStorageError
+      ? 'Open data recovery'
+      : 'Open workspace recovery'
     : plantTodayStep === 'approval'
       ? 'Finish approval'
       : plantTodayStep === 'problems'
@@ -8734,7 +8740,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ? `Local sample records · ${plantSampleScenarioIsHistorical ? 'historical scenario' : 'scenario'} ${plantSampleScenarioDate}`
       : 'Local sample records on this device'
   const plantTodayNotice = productionStorageError
-    ? `Writes paused: ${productionStorageError}`
+    ? `Writes paused: ${productionStorageError} No Plant record was replaced; use workspace recovery.`
     : notice || (productionCanWrite
       ? 'Every production, quality, material, maintenance, and equipment-status change still requires accountable review.'
       : 'Writes are paused until durable storage and write locking are confirmed.')
@@ -9995,7 +10001,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       return
     }
     if (!productionCanWrite) {
-      navigate('/settings/#controls')
+      navigate('/settings/#workspace-recovery')
       return
     }
     if (plantTodayStep === 'problems') {
