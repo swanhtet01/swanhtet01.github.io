@@ -136,6 +136,86 @@ status column in §1 for each. The operative forward sequence is now:
    `loadCommerceWorkspace()` call in a `useState` initializer
    (`workspace-runtime.ts:509-512`). Each needs its own planning pass, and each
    must be measured on the tap-through journey, not one route in isolation.
+
+   **RE-RANKED 2026-08-30, on measurement. Read this before picking (a), (b) or
+   (c) above — two of the three are closed and the biggest lever is not among
+   them.**
+
+   **MERGE-STATE WARNING, and it is not a formality.** Every "SHIPPED" below
+   means *merged into the pull request named beside it*, NOT into `main`. At the
+   time of writing, `main`'s `showroom/index.html` still contains a bare
+   `<div id="root"></div>` — **none of #567, #569 or #570 is an ancestor of this
+   commit**, and this document may well merge before they do. So: if you are
+   reading this from `main` and the change it describes is not in the tree in
+   front of you, the item is **still live work waiting on a merge**, not
+   finished work to skip. Codex caught this exact hazard on #571 (a document
+   telling readers to stop pursuing an improvement that is not in their tree),
+   and it is the same failure this whole re-ranking exists to fix — a document
+   confidently describing a state the code is not in. Check `git log` for the
+   named PR before acting on any row.
+
+   - **(a) is shipped IN #567 (unmerged at time of writing).** The app-shell skeleton moved FCP 4,400 -> 3,280 ms
+     on `/` and 4,516 -> 3,244 ms on the chooser, load flat. This item predicted
+     "well under 1 s"; it is 3.2 s. That prediction was wrong and is corrected in
+     `ANDROID-PERFORMANCE-BASELINE.md` — do not carry it forward.
+   - **(b) is an HONEST ZERO (#569, unmerged), closed by evidence the way DESIGN-PROGRAM
+     closed P3.5.** Removing 19.1 KB gz moved FCP +4/-8 ms; removing 40.1 KB gz
+     moved it -20/-4 ms. Both inside the +/-88 ms control band, and the entire
+     app-authored share of the entry set (~15 KB gz) is SMALLER than the cut that
+     already measured nothing. The response to size is a step, not a slope. The
+     premise also died with (a): post-#567 `jsTransferBeforeFcpBytes` is 19,068 --
+     the 254 KB entry chunk has not finished when the page paints. Do not reopen
+     this looking for the bytes; they were measured and they do not pay.
+   - **The biggest lever was never listed here, and its larger half is now
+     SHIPPED.** The render-blocking chain, not the entry set, is where the
+     seconds were.
+     - **Stylesheet: done in #567 (unmerged).** `showroom/vite.config.ts`'s `asyncStylesheetPlugin`
+       rewrites Vite's emitted `<link rel="stylesheet">` into `/css-async.js`,
+       which appends it after parsing. Measured on the real build: **FCP 3,236
+       -> 1,492 ms**, and **4,400 -> 1,492 ms cumulative with the boot shell,
+       a 66% reduction.** No unstyled flash (stylesheet live 835 ms before
+       mount, zero bad frames). The Shop first-paint closure walk was taught the
+       new shape IN THE SAME COMMIT — without that the 230 KB stylesheet would
+       have silently left the closure and the byte guard would have gone blind
+       while still reporting ok. Verified both ways: the closure still measures
+       458,562 br q3 across 25 assets, and removing the `data-href` branch fails
+       the build rather than passing.
+     - ~~**Still open: `/theme-restore.js`, ~400 ms of pure latency.**~~
+       **CLOSED AT ZERO 2026-09-02 (#573). Do not spend the security pass.**
+       The ~400 ms was an artefact of the measurement harness serving HTTP/1.1;
+       the file is 253 bytes, so its cost is almost entirely per-request, and
+       per-request cost is exactly what h1's six-connection limit inflates.
+       Re-measured over HTTP/2 — what Vercel serves — **deleting the tag
+       entirely is worth 4 ms**, inside the ±88 ms control band. The measurement
+       deleted the tag rather than inlining it, which bounds *every* variant of
+       the fix, not just the `sha256` one. So the `sha256` CSP source in two
+       places, and the light-flash risk that came with deferring it, buy
+       nothing. The refusal is recorded in `showroom/index.html`'s own comment,
+       which previously advertised "no hash and no nonce" and thereby invited
+       the wrong fix.
+     - **What actually remains of item 1** is the `modulepreload` deletion
+       (`ENTRY-SET-REDUCTION-PLAN.md` C2), and it is a weaker candidate than it
+       looked: **−116 ms over HTTP/2**, corrected 2026-09-02 by #574 from a
+       recorded −436 ms that was h1-inflated the same way. Its `load` cost is
+       transport-neutral at +390 ms, so the trade is ~1 : 3.4. It stays fenced
+       behind the tap-through probe that does not exist in `tools/`.
+     - **The transport lesson generalises, and is the durable output here.**
+       Two of this item's three levers were priced on an HTTP/1.1 harness and
+       both shrank on re-measurement — one to nothing. Any FCP figure in this
+       estate taken before 2026-09-02 should be assumed h1-inflated until
+       re-run with `--transport h2`. That flag now exists
+       (`tools/perf/measure-android-baseline.mjs`).
+   - **Unrelated but urgent, found on the way (#570):** the pre-FCP entry graph
+     is **299,995 bytes against a 300,000 ceiling**. Five bytes. The next change
+     touching any module in that graph fails the build. #570 makes the margin
+     visible and the failure legible; it deliberately does not raise the ceiling.
+
+   Measurement caveat that invalidates anything timed between 2026-08-20 and
+   2026-08-30: the harness was serving runs 2 and 3 out of the service worker's
+   Cache Storage (`Network.setCacheDisabled` does not touch it), reporting
+   medians ~10x optimistic. Fixed in #567. A polluted row is sub-second with zero
+   JS transfer bytes; no figure in the baseline document carries that signature,
+   so the recorded numbers stand.
 2. ~~P2 Plant shop-floor scanning~~ — SHIPPED 2026-08-20, see the Plant table
    in §1. Remaining Plant scan surface, unclaimed and deliberately deferred:
    the Control tab's recall-lot trace already has an exact-match resolution
