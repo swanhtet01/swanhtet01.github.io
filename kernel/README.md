@@ -253,10 +253,14 @@ in recovery instead of being retried blindly.
   plan in `tools/supermega_scheduler_authority.json` is `5 * * * *` (24 firings per UTC day) plus
   `45 0 * * *` (1), and no code counts scheduler runs — the hosted cron handlers admit an
   authenticated 26th request exactly like the first. What this kernel's own cron receiver enforces,
-  per workcell slug, is one execution per UTC hour and one owner delivery per client-local date
-  (`WORKCELL_TIME_ZONE`): 1,440 once-a-minute deliveries over one UTC day produced 24 executions and
-  1 send, the first delivery of the next UTC day was admitted again, and 2, 8, 32, and 128
-  simultaneous deliveries admitted exactly 1 execution (2 when the burst straddled midnight UTC),
+  per workcell slug, is one execution per (client-local date, UTC hour) bucket and one owner delivery
+  per client-local date (`WORKCELL_TIME_ZONE`). For a UTC client that is 24 execution buckets per UTC
+  day; for a zone whose local midnight falls inside a UTC hour, such as Asia/Yangon at 17:30Z, that
+  hour carries two buckets, so 25 per UTC day. Measured: 1,440 once-a-minute deliveries over one UTC
+  day produced 24 executions and 1 send for a UTC client (25 distinct execution claims and 2 delivery
+  claims for Asia/Yangon), the first delivery of the next UTC day was admitted again, and 2, 8, 32,
+  and 128 simultaneous deliveries admitted exactly 1 execution (2 when the burst straddled a bucket
+  boundary),
   measured 2026-09-02 in memory mode and pinned by `kernel/api/brief.scheduler-ceiling.test.mjs`.
   Not measured: the Python cron handlers (read, not exercised) and the live Vercel cron.
 - Pool pressure queues; it never refuses or times out: postgres mode holds one `pg.Pool` of 3
