@@ -243,6 +243,26 @@ in recovery instead of being retried blindly.
 
 ## Honest Limits
 
+- `alert.mjs` forwards error text to Telegram UNSCRUBBED, and that is a deliberate trade-off rather
+  than an oversight — but it is a real boundary and it is not written down anywhere else.
+  `captureError` sends `detail.message` verbatim (300 chars) plus every `meta` value (80 chars each)
+  to `api.telegram.org`, and `reconcile` supplies that detail as `String(e.message)` from whatever
+  threw (`connectors/payment-stripe.mjs:165`). Nothing between the throw and the wire scrubs it.
+  What this is NOT: a demonstrated leak. Both live call sites pass bounded, non-customer data — a
+  Stripe event id and type (`api/stripe-webhook.mjs:48`), and an amount/reference comparison
+  (`connectors/payment-stripe.mjs:150`). No current path is known to carry a customer name, phone or
+  address onto that channel.
+  What it IS: an absent defence, in a place where the Python side has a rigorous one. Server spans
+  go through `supermega_runtime/telemetry/redact.py`, which digests exception messages and drops
+  stack traces precisely because an exception can carry data from anywhere — a database error
+  echoing a row, a parse error quoting its input. The kernel's alert path has no equivalent, so any
+  new call site, or any throw whose message embeds row content, reaches a third-party service
+  unfiltered.
+  Why it has not simply been fixed: digesting the message would defeat the feature. The operator
+  needs to know WHAT broke at 3am in the money path, and a SHA-256 prefix tells them nothing
+  actionable. The destination is also the owner's own chat, so the exposure is to the data
+  controller rather than to a vendor. Read this before "hardening" it — scrubbing this channel
+  without replacing the diagnostic value would trade a real capability for a theoretical gain.
 - Client connector secrets are isolated per Vercel project, not stored in a shared multi-tenant vault.
 - ClickUp task creation is the only approval-backed write. Customer sends, other record changes,
   refunds, and payments remain unavailable.
