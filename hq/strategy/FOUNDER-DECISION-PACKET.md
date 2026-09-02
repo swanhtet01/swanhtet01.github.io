@@ -149,14 +149,14 @@ non-draft since discovering this, and will keep doing so until you say
 otherwise — flagging it because it is a deliberate deviation from a standing
 instruction, not an oversight.
 
-### After P-1: the merge order for the thirty-eight open pull requests
+### After P-1: the merge order for the thirty-nine open pull requests
 
 Verified 2026-09-02 against every open PR's base and file list, with the two
 independent-PR file overlaps test-merged. **Every PR here is CI-green and
-Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the fourteen
+Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the fifteen
 after that — #572, #573, #574, the later heads of #569/#571, the second wave
-#575–#578, the third wave #579–#583, and #585 — were reviewed by me against
-source instead, and each carries that review as a comment saying so). The order below is what lets you
+#575–#578, the third wave #579–#583, #584 and #585 — were reviewed by me
+against source instead, and each carries that review as a comment saying so). The order below is what lets you
 work through them without a single manual conflict.
 
 **Tier 1 — independent, based on `main`, no decision needed. Any order.**
@@ -186,6 +186,8 @@ GitHub's update-branch button is enough; none conflicts.
   the Plant journey; both have run green on a runner)
 - #583 → after #581 (third journey, Ecommerce request-to-review, on the same
   harness; all three have run green on a runner in one job)
+- #584 → after #583 (fourth journey, Website edit-and-publish; every product
+  now has one automated 390px journey, all four green on a runner in one job)
 
 **Tier 3 — waits on a decision in this packet. Merge only after the named one.**
 | PR | Decision | What it needs from you |
@@ -227,8 +229,8 @@ pointing at a gap already filled.
   eight of the Tier 1–2 branches, it test-merges onto the two most-overlapping
   ones with **zero conflicts**, so it imposes no ordering on them.
 
-**Total for Tiers 1–2 once P-1 is fixed: twenty-nine approve-and-merge
-clicks (twenty-one plus eight stacked) in the order above.** Tier 3 is six decisions you
+**Total for Tiers 1–2 once P-1 is fixed: thirty approve-and-merge clicks
+(twenty-one plus nine stacked) in the order above.** Tier 3 is six decisions you
 were going to make anyway; the table just says which PR each one releases.
 
 ---
