@@ -192,10 +192,24 @@ adds `channel` and `fulfilment` to the scored fields and introduces
 nothing left to block on. Merging #509 first would strand #568's blockers
 pointing at a gap already filled.
 
-**Tier 4 — not mine to merge, listed so nothing is forgotten.**
-#550 (Codex, managed auth into the production client), #552 (a salvage of an
-abandoned Codex branch), #561 (Codex's release-stack rehearsal — **its own
-body says it is not approval to merge**, deploy, or activate anything).
+**Tier 4 — Codex's, listed so nothing is forgotten. Both checked 2026-09-02.**
+- **#550** (managed auth into the production client). Was red for eleven days
+  on a single `no-useless-assignment` lint error; fixed with an additive commit
+  (`cdd45296`), now green, merges clean onto `main`. Its one design trade —
+  the audited production env briefly on disk with mode 600 and a `trap`,
+  instead of `vercel env run`, so Vite can statically replace
+  `import.meta.env.VITE_*` — is Codex's and is stated in the diff. Approve or
+  not on that basis; the lint was never the question.
+- **#552** (a salvage of an abandoned Codex branch).
+- **#561** (release-stack rehearsal, 240 files, 426 real commits). **Its own
+  body says it is not approval to merge**, deploy, or activate anything, so
+  treat it as a review artefact. Two things verified because it touches
+  digest-bound files (root `package.json` +119 lines, `runtime.py` +3): its
+  rewritten receipts pass `record_postgres17_rehearsal --verify` (56 checks)
+  and the readiness ledger validates against its own tree — no laundering
+  signal from the checks this repo provides. And despite sharing files with
+  eight of the Tier 1–2 branches, it test-merges onto the two most-overlapping
+  ones with **zero conflicts**, so it imposes no ordering on them.
 
 **Total for Tiers 1–2 once P-1 is fixed: nineteen approve-and-merge clicks
 (fifteen plus four stacked) in the order above.** Tier 3 is six decisions you
