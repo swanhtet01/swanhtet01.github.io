@@ -86,7 +86,9 @@ function buildTraceparent(): { traceId: string; header: string } {
 function withTraceHeaders(headers: Headers): Headers {
   const { traceId, header } = buildTraceparent()
   headers.set('traceparent', header)
-  let developmentBuild = false
+  // Declared without an initialiser on purpose: both branches below assign it, so an initial
+  // `false` is dead and `no-useless-assignment` rejects it — which is why this PR sat red.
+  let developmentBuild: boolean
   try {
     developmentBuild = Boolean(import.meta.env.DEV)
   } catch {
