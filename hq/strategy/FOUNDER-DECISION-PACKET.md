@@ -149,14 +149,16 @@ non-draft since discovering this, and will keep doing so until you say
 otherwise — flagging it because it is a deliberate deviation from a standing
 instruction, not an oversight.
 
-### After P-1: the merge order for the thirty-nine open pull requests
+### After P-1: the merge order for the forty open pull requests
 
 Verified 2026-09-02 against every open PR's base and file list, with the two
 independent-PR file overlaps test-merged. **Every PR here is CI-green and
-Codex-reviewed** (Codex's review quota ran out at 2026-09-02T00:08Z; the fifteen
-after that — #572, #573, #574, the later heads of #569/#571, the second wave
-#575–#578, the third wave #579–#583, #584 and #585 — were reviewed by me
-against source instead, and each carries that review as a comment saying so). The order below is what lets you
+reviewed.** Codex's review quota ran out at 2026-09-02T00:08Z and came back at
+13:16Z; the PRs opened in between (#572–#585) were reviewed by me against
+source, each carrying that review as a comment, and the code-bearing ones
+(#575, #577, #578, #580, #581, #583, #584) were then re-submitted to Codex.
+Its findings (four P2s across #575, #577, #578, #580) were each verified
+against source and fixed with additive commits; none was a false positive. The order below is what lets you
 work through them without a single manual conflict.
 
 **Tier 1 — independent, based on `main`, no decision needed. Any order.**
@@ -188,6 +190,9 @@ GitHub's update-branch button is enough; none conflicts.
   harness; all three have run green on a runner in one job)
 - #584 → after #583 (fourth journey, Website edit-and-publish; every product
   now has one automated 390px journey, all four green on a runner in one job)
+- #586 → after #584 (design P3.10 implemented: the Plant phone-width status
+  notice wraps under its label instead of hiding; the Plant journey now
+  asserts it is visible; pinned CSS byte-identical, px ratchet net zero)
 
 **Tier 3 — waits on a decision in this packet. Merge only after the named one.**
 | PR | Decision | What it needs from you |
@@ -229,8 +234,8 @@ pointing at a gap already filled.
   eight of the Tier 1–2 branches, it test-merges onto the two most-overlapping
   ones with **zero conflicts**, so it imposes no ordering on them.
 
-**Total for Tiers 1–2 once P-1 is fixed: thirty approve-and-merge clicks
-(twenty-one plus nine stacked) in the order above.** Tier 3 is six decisions you
+**Total for Tiers 1–2 once P-1 is fixed: thirty-one approve-and-merge clicks
+(twenty-one plus ten stacked) in the order above.** Tier 3 is six decisions you
 were going to make anyway; the table just says which PR each one releases.
 
 ---
