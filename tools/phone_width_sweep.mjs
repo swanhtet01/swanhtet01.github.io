@@ -252,7 +252,29 @@ function measureInPage(config) {
   // read several notices that way, so a hidden copy with a visible twin is not a
   // lost message.
   const hiddenNotices = []
-  const renderedText = document.body.innerText.replace(/\s+/g, ' ')
+  // Every distinct normalized string that is actually rendered somewhere on the screen.
+  // This is a SET of whole values compared exactly, not one big haystack searched with
+  // includes(): a notice reading "ready" would otherwise be judged visible elsewhere by
+  // the word "already" or by "Site file ready" in an unrelated panel, and a notice
+  // wrongly marked visible elsewhere is excluded from the candidate set — silently
+  // suppressing exactly the regression this sweep exists to find.
+  const renderedTexts = new Set()
+  {
+    const norm = (v) => (v || '').replace(/\s+/g, ' ').trim()
+    const whole = norm(document.body.innerText)
+    if (whole) renderedTexts.add(whole)
+    for (const node of Array.from(document.body.querySelectorAll('*'))) {
+      if (SKIP_TAGS.has(node.tagName)) continue
+      if (!isRendered(node)) continue
+      const t = norm(node.innerText !== undefined ? node.innerText : node.textContent)
+      if (t) renderedTexts.add(t)
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType !== 3) continue
+        const own = norm(child.textContent)
+        if (own) renderedTexts.add(own)
+      }
+    }
+  }
   for (const el of Array.from(document.querySelectorAll(NOTICE_SELECTOR))) {
     const fullText = (el.textContent || '').replace(/\s+/g, ' ').trim()
     const text = clip(fullText)
@@ -271,7 +293,7 @@ function measureInPage(config) {
       visibility: cs.visibility,
       box: box(r),
       hiddenBy: selfHidden ? 'self' : 'ancestor',
-      visibleElsewhere: renderedText.includes(fullText),
+      visibleElsewhere: renderedTexts.has(fullText),
     }
     const parent = el.parentElement
     const collapsedChild = selfHidden && parent && parent.tagName === 'DETAILS' && !parent.open && el.tagName !== 'SUMMARY'
@@ -372,6 +394,10 @@ function measureInPage(config) {
   for (const el of Array.from(document.body.querySelectorAll('*'))) {
     if (SKIP_TAGS.has(el.tagName)) continue
     const own = Array.from(el.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ')
+    // Classified from the FULL string: clip() truncates at 80 characters, and a sentence
+    // whose terminating punctuation falls past the cutoff would be judged "not a sentence",
+    // understating the load-bearing count this report is read for.
+    const full = own.replace(/\s+/g, ' ').trim()
     const text = clip(own)
     if (!text) continue
     const cs = getComputedStyle(el)
@@ -379,14 +405,14 @@ function measureInPage(config) {
     if (!(px < smallTextPx)) continue
     if (!isRendered(el)) continue
     const caption = el.closest('small, code, .core-mono')
-    const words = text.split(' ').length
+    const words = full.split(' ').filter(Boolean).length
     smallText.push({
       selector: path(el),
       text,
       fontSizePx: round(px),
       fontSizeRem: round(px / rootPx * 100) / 100,
       captionContext: caption ? (caption.tagName === 'SMALL' || caption.tagName === 'CODE' ? caption.tagName.toLowerCase() : '.core-mono') : null,
-      sentence: words >= 4 && /[.!?]/.test(text),
+      sentence: words >= 4 && /[.!?]/.test(full),
       mono: /mono/i.test(cs.fontFamily),
     })
   }
@@ -491,14 +517,16 @@ function buildSourceIndex() {
   return { files: files.map((f) => relative(repoRoot, f)), index }
 }
 
-const PHONE_MEDIA = /max-width:\s*(\d+(?:\.\d+)?)(px|em|rem)/
+// Every rule that reaches here already passed `matchMedia(...).matches` at the 390px
+// measurement viewport, so any width-constrained query among its conditions is, by
+// construction, one that is active on the phone. An earlier version additionally required
+// the breakpoint to be <= 840px, which silently excluded real phone-affecting rules: the
+// Website editor panel head is hidden at `max-width: 900px`, which matches at 390px but
+// was reported as "phone media: no". A narrower flag than the thing it names is the same
+// failure this tool exists to catch, so the arbitrary ceiling is gone.
+const PHONE_MEDIA = /max-width:\s*\d/
 function isPhoneWidthMedia(mediaList) {
-  return mediaList.some((m) => {
-    const match = PHONE_MEDIA.exec(m)
-    if (!match) return false
-    const value = Number(match[1])
-    return match[2] === 'px' ? value <= 840 : value <= 52.5
-  })
+  return mediaList.some((m) => PHONE_MEDIA.test(m))
 }
 
 function resolveRule(rule, sourceIndex) {
@@ -837,6 +865,20 @@ function renderMarkdown(report) {
 }
 
 // ---- main ----
+// Set as soon as the report object and its output directory exist, so a failure ANYWHERE
+// after that -- including a preflight throw before the first browser starts -- still
+// leaves the partial report on disk. The tool's contract says instrument failures are
+// reported rather than swallowed; without this the process exits with only a console
+// line and automation gets no structured `navigation` failure data at all.
+let partial = null
+
+async function writeReport(report, outDir) {
+  const json = JSON.stringify(report, null, 2)
+  await writeFile(join(outDir, 'phone-width-sweep.json'), json)
+  await writeFile(join(outDir, 'phone-width-sweep.md'), renderMarkdown(report))
+  return json
+}
+
 async function main() {
   const only = (argValue('--only', '') || '').split(',').map((s) => s.trim()).filter(Boolean)
   const products = only.length ? PRODUCTS.filter((p) => only.includes(p)) : PRODUCTS
@@ -861,6 +903,8 @@ async function main() {
     pinnedTouchTargets: PINNED_TOUCH_TARGETS,
     products: [],
   }
+  // Armed here: from this point a throw anywhere still leaves a report on disk.
+  partial = { report, outDir }
 
   for (const product of products) {
     const screens = []
@@ -915,15 +959,28 @@ async function main() {
   }
 
   report.ok = report.products.every((p) => p.navigation.ok)
-  const json = JSON.stringify(report, null, 2)
-  await writeFile(join(outDir, 'phone-width-sweep.json'), json)
-  await writeFile(join(outDir, 'phone-width-sweep.md'), renderMarkdown(report))
+  const json = await writeReport(report, outDir)
+  partial = null
   console.error(`report: ${join(outDir, 'phone-width-sweep.json')} and phone-width-sweep.md`)
   process.stdout.write(`${json}\n`)
   if (!report.ok) process.exitCode = 1
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(err instanceof JourneyError ? `PHONE-WIDTH SWEEP FAILED at "${err.step}": ${err.message}` : err)
+  if (partial) {
+    partial.report.ok = false
+    partial.report.failure = {
+      step: err instanceof JourneyError ? err.step : 'preflight',
+      message: String(err && err.message ? err.message : err),
+      productsMeasured: partial.report.products.map((p) => p.product),
+    }
+    try {
+      await writeReport(partial.report, partial.outDir)
+      console.error(`partial report: ${join(partial.outDir, 'phone-width-sweep.json')} and phone-width-sweep.md`)
+    } catch (writeError) {
+      console.error(`could not write the partial report: ${writeError.message}`)
+    }
+  }
   process.exit(1)
 })
