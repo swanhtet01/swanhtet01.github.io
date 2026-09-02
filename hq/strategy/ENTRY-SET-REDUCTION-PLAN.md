@@ -252,11 +252,17 @@ competitor that is still downloading when the stylesheet completes changes the
 stylesheet's share by nothing — which is p1 and p2. Removing a competitor
 entirely, or removing four of them (p6), changes it immediately.
 
-This also retro-explains the 2026-08-20 rejection of slice 2 cleanly: adding a
+This also retro-explains the 2026-08-20 rejection of slice 2: adding a
 `modulepreload` for `core-app` cost +1.5 s FCP because it added a competitor
-during the stylesheet's window. p6 is the same physics run backwards, and the
-agreement between the two is the best evidence that this model is right rather
-than a story fitted to one run.
+during the stylesheet's window. p6 is the same physics run backwards.
+
+~~and the agreement between the two is the best evidence that this model is
+right rather than a story fitted to one run.~~ **WITHDRAWN 2026-09-02 (#574).
+It was not independent corroboration.** Slice 2 was measured on this same
+HTTP/1.1 harness, so "the two agreeing" is the same rig twice, not two
+witnesses — precisely the trap this document was written to avoid, reproduced
+inside it. The mechanism claim survives on the re-measurement below; the
+*evidential* claim does not, and a reader should not count it twice.
 
 ---
 
@@ -327,8 +333,23 @@ comparison plus a `verify_app_build.mjs` assertion.
 discovers router, react, the preload helper and `managed-workspace-selection`
 after parsing the entry chunk instead of from the preload scanner.
 
-**Measured: −428 / −448 ms FCP, +414 / +363 ms `load` (p6).** Zero bytes change
-hands. Long-task totals are unchanged (`/`: 888 → 1,011 ms; chooser: 489 →
+**Measured: ~~−428 / −448 ms~~ → −116 / −116 ms FCP over HTTP/2, +414 / +363 ms
+`load` (p6).** Zero bytes change hands.
+
+**CORRECTED 2026-09-02 by #574 — the recorded figure was an HTTP/1.1 artefact
+and is 3.7× the production number.** This harness serves HTTP/1.1; Vercel serves
+HTTP/2. Re-measured on both transports, medians of 6 cold loads per cell: h1
+reproduces the recorded figure on today's build (−416 / −432, within 16 ms of
+what is written above, which is what isolates transport as the only variable),
+while h2 gives **−116 ms** on both routes. So **73% of p6 was HTTP/1.1's
+six-connection limit**; the remaining 27% is bandwidth sharing, which
+multiplexing does not remove. −116 ms is still outside the ±88 ms band and ~6×
+the widest run-to-run spread, so this is a real win — just a much smaller one.
+
+**The cost side did not move.** The `load` regression is transport-neutral:
++380 to +421 ms in every cell, h1 and h2 alike. So the trade this item asks you
+to make is not the ~1 : 0.9 the numbers above imply — it is **~1 : 3.4**, 116 ms
+of first paint for 390 ms of `load`. Long-task totals are unchanged (`/`: 888 → 1,011 ms; chooser: 489 →
 522 ms, both inside the ±116 ms band).
 
 **This is not the lever this document was commissioned to plan**, and it is
@@ -341,8 +362,10 @@ sign, and the two results agree with each other.
 
 **Risk: real, measured, and of exactly the shape that killed slice 1.** The
 +390 ms on `load` is the app becoming interactive later, and `load` is a proxy —
-the honest number is a tap-through one nobody has taken. Trading 436 ms of first
-paint for ~390 ms of time-to-usable is not obviously a good trade, and on the
+the honest number is a tap-through one nobody has taken. Trading ~~436 ms~~
+**116 ms** of first paint for ~390 ms of time-to-usable is not obviously a good
+trade — and at the corrected ratio it looks considerably worse than when this
+paragraph was written, and on the
 `/` route (which redirects to `/shop/`) the delayed discovery of `router` sits
 directly in front of the redirect. **This must not ship on the numbers in this
 document.** It needs its own pass with an early-tap probe of the kind described
@@ -493,7 +516,10 @@ mostly, but not entirely, shakeable.)
    at all; an operational hazard with 5 bytes of margin. Highest actual
    urgency on this page.
 3. **C2 — the modulepreload question.** The only measured FCP win here
-   (−436 ms), and the only item that needs a further planning pass rather than
+   (−116 ms over HTTP/2, corrected 2026-09-02 by #574 from the −436 ms recorded
+   here, which was an HTTP/1.1 artefact — and against a transport-neutral
+   +390 ms `load`, so the trade is ~1 : 3.4, not ~1 : 0.9), and the only item
+   that needs a further planning pass rather than
    an implementation. Blocked on writing a tap-through probe. Do not ship it on
    this document's numbers.
 4. **C7, C3** — measured-zero FCP, small real bytes, non-zero risk. Skip.
