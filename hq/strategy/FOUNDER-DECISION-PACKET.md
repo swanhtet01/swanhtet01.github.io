@@ -157,9 +157,23 @@ reviewed.** Codex's review quota ran out at 2026-09-02T00:08Z and came back at
 13:16Z; the PRs opened in between (#572–#585) were reviewed by me against
 source, each carrying that review as a comment, and the code-bearing ones
 (#575, #577, #578, #580, #581, #583, #584) were then re-submitted to Codex.
-Its findings (four P2s across #575, #577, #578, #580) were each verified
-against source and fixed with additive commits; none was a false positive. The order below is what lets you
-work through them without a single manual conflict.
+Its findings — five P2s across #575, #577 (two), #578 and #580 — were each
+verified against source and fixed with additive commits, and every one was
+real; none was a false positive, and none required weakening a test. What
+they caught, since the pattern is worth knowing: three of the five were
+**tests that looked thorough but measured less than they claimed** — a
+completeness check comparing connector keys while never exercising four
+capability methods (#575), a concurrency probe running the direct-Postgres
+transaction while the prose said it ran the Supabase functions (#577), and
+that same probe reusing budget windows so a rerun could fail with the locking
+intact (#577). The fourth was a documented invariant stated more narrowly
+than the code enforces it (#580: the execution claim is keyed on
+`(client-local date, UTC hour)`, not the UTC hour alone). The fifth was a
+test importing a package that only arrived transitively (#578). All five are
+the same failure mode this repo already warns about — an assertion that
+cannot fail is indistinguishable from one that passes — which is why they
+were worth a second reviewer. The order below is what lets you work through
+them without a single manual conflict.
 
 **Tier 1 — independent, based on `main`, no decision needed. Any order.**
 #554, #555 (this packet), #556, #557, #558, #560, #562, #563, #564, #565,
