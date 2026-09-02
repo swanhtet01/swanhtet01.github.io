@@ -191,14 +191,61 @@ via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
   at import-time now, preserving relative offsets. Standing rule: never let a
   fixture's absolute date race the wall clock; anchor relative or freeze.
 - Five concrete coverage gaps:
-  1. kernel/connectors/: 82 connector modules vs 51 kernel test files; most
-     fixed-host adapters have no dedicated contract test.
-  2. CoreApp.tsx (~500KB per OPS-165 lint note): zero component tests; UI is
+  1. ~~kernel/connectors/: 82 connector modules vs 51 kernel test files; most
+     fixed-host adapters have no dedicated contract test.~~
+     **CLOSED BY EVIDENCE, 2026-09-02 (#575).**
+     `kernel/connectors/connector-fail-closed.test.mjs` puts every credentialed
+     connector (64 of the 69 registered; the other five declare no credential)
+     under two contracts: fail closed with any required variable absent
+     (`configured()` false, health and every capability refuse with a
+     config-shaped reason, injected `fetch` never invoked) and no secret leak
+     under four provider stubs (500/JSON, 500/malformed, transport failure,
+     timeout). A completeness test pins the covered set to `registry.list()`,
+     so a new connector without fail-closed behaviour fails the suite. Kernel
+     suite 565 pass / 0 fail. Caveat that stands: the `app:verify:steps` chain
+     runs only `kernel/managed-pilot-readiness.test.mjs`, so this suite is
+     enforced by `kernel-deploy.yml`, not by the gate.
+  2. ~~CoreApp.tsx (~500KB per OPS-165 lint note): zero component tests; UI is
      verified by build gates plus MANUAL 390px journeys -- no automated
-     browser E2E exists in any workflow.
-  3. Ecommerce resolved-support-outcome UI state: ENG-144 records "the
+     browser E2E exists in any workflow.~~
+     **PARTLY CLOSED, 2026-09-02 (#576).** `tools/journey_shop_cash_sale.mjs`
+     runs after the gate in `showroom-ci.yml`: the built `showroom/dist`
+     served locally with an honest 404 for `/api/*`, Chromium over the
+     DevTools protocol at 390x844 with a fresh profile, real pointer clicks
+     through the Shop one-tap cash sale (onboarding, catalog check, three
+     taps, cash, review, create order, reload, paid and handed over, reload),
+     asserting on the persisted workspace record: order state, stock
+     decrement, reserve and settle proofs carrying non-sample action ids,
+     draft cleared, metric emitted. It has run green on a GitHub runner.
+     Falsifiability was shown by mutating `dist/` (inert button, corrupted
+     total) and watching it fail at `create-order`. What remains open: it is
+     one journey, Shop only; zero component tests still holds for the other
+     three products.
+  3. ~~Ecommerce resolved-support-outcome UI state: ENG-144 records "the
      fixture has no resolved case, so that state remains verifier-proven" --
-     a named, never-rendered state.
+     a named, never-rendered state.~~
+     **CLOSED BY EVIDENCE, 2026-09-02.** `tools/ecommerce_storefront_demo.test.mjs`
+     (in the gate as `ecommerce:demo:self-test`) now carries two `ENG-144:`
+     tests. The fixture is built only through the shipped transitions --
+     storefront configuration, checkout quote, order request, Shop reserve /
+     advance / reconcile / complete, help case open, acknowledged, first
+     response ready, resolve as `information_provided` -- never a hand-shaped
+     case. The first test asserts both projection branches side by side (open:
+     owner, priority, null resolution fields; resolved: outcome, reviewer,
+     resolution time, resolution evidence) and that the resolved branch fails
+     closed with the reviewer blank, the resolution backdated before the
+     opening, the resolution record missing, or the evidence blank. The second
+     test renders the shipped `EcommerceBuyingWorkspace` with
+     `react-dom/server` and asserts the markup of both branches:
+     `<strong>Help resolved</strong>` ... `<b>information provided</b>` next to
+     `<strong>Shop is reviewing</strong>` ... `<b>high priority</b>`. The one
+     seam is the component's initial-state constructor, wrapped in the render
+     bundle to return the recorder-built fixture state, because a server render
+     runs no effects; every other module rendered is the shipped source. It is a
+     test fixture, not a guided sample: the guided Ecommerce sample stops at
+     `pending_shop_review` by design and can never hold a completed Shop order.
+     The ENG-144 wording in `hq/WORKBOARD.md` is verifier-pinned and stands as
+     the historical record; this entry is the correction.
   4. ~~Hosted recovery: the OPS-754 restore/rollback proofs have never
      executed against a real branch; recovery is local-rehearsal-only.~~
      **CLOSED 2026-08-30:** proofs 6 (`workspace_backup_restore_roundtrip`,
@@ -206,13 +253,28 @@ via `python -m unittest discover -s tests` (showroom-ci.yml), all under the
      executed against preview branch `persistence-proof-24h-20260816` on
      2026-08-16. The live gap is now repetition, not first execution: one run
      is evidence, not a drill cadence — see section 8 item 5.
-  5. Load/perf: nothing exercises pool pressure, the 25/day scheduler
-     ceiling, or concurrent budget reservation (the token cap "can modestly
+  5. Load/perf: nothing exercises pool pressure or the 25/day scheduler
+     ceiling. ~~Concurrent budget reservation (the token cap "can modestly
      overshoot under highly concurrent calls" -- kernel Honest Limits --
-     and no test measures by how much).
+     and no test measures by how much).~~
+     **Budget half CLOSED BY MEASUREMENT, 2026-09-02 (#577).**
+     `kernel/gateway.budget-overshoot.test.mjs` measured the overshoot at
+     exactly 0 tokens at 2, 8, 32 and 128 concurrent callers (512 at the
+     store level) for the tenant monthly cap, the company daily budget and
+     the 2,000,000-unit hard maximum, in memory mode and on a loopback
+     Postgres 16 running the same SQL the Supabase mode calls. The bound is
+     structural (serialized reserve-before-dispatch), shown both ways: an
+     `await` inside the memory critical section fails the sweep at N=2, and
+     dropping the advisory lock admits 5 of 4 at N=8. The Honest Limits
+     bullet now says so. Not measured: the live Supabase deployment, and
+     pool pressure and the scheduler ceiling remain untested.
 
-Highest leverage: one automated 390px browser journey in CI to replace the
-manual QA lane -- it protects the largest untested surface (CoreApp.tsx).
+~~Highest leverage: one automated 390px browser journey in CI to replace the
+manual QA lane -- it protects the largest untested surface (CoreApp.tsx).~~
+Done in #576 (see gap 2). Next highest leverage: a second journey on a
+different product (Plant shift release or Ecommerce request-to-review), so
+the harness is proven reusable rather than a one-off, then the gate-coverage
+gap named under gap 1.
 
 ## 6. Observability: C (re-derived 2026-09-02; was D+)
 
