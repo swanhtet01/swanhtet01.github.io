@@ -74,6 +74,24 @@ actor string — actor strings are display copy and will be rewritten.
   build that fails while its output is redirected leaves a stale `dist/` in
   place and the gate reports green over broken code. This has happened; do
   not repeat it. Run builds with their output visible and read it.
+- **`verify_app_release_live.mjs` cannot run from an agent sandbox, and its
+  failure is NOT a production signal** (established 2026-09-02, after losing
+  time to it). It fetches `https://app.supermega.dev`, which is not on the
+  agent proxy's allowlist: `curl` returns `CONNECT tunnel failed, response 403`
+  — the proxy refusing the tunnel, not the origin answering. So from here it
+  always fails, and **no claim about live-site health can be made from an agent
+  session at all.** Ask the founder, or read CI.
+  `hq:verify:live` surfaces this as `live_app_product_contract_failed:exit_1`,
+  and **`exit_1` is by design — do not "fix" it.**
+  `verify_hq_live_state.mjs`'s `safeLiveVerifierFailure` only propagates
+  reasons matching a narrow allowlist (`^(?:missing_live_…|live_…|…_(missing|
+  wrong|invalid|mismatch|rejected))$`) and collapses everything else to
+  `exit_${status}`, so unvetted stderr — URLs, tokens, customer content — can
+  never reach a published receipt. The pattern is restrictive enough that most
+  of the live verifier's OWN errors also collapse; that is the control working,
+  not a gap. Both files are pin-read by `verify_app_build.mjs` (:169) and
+  `verify_app_security_contract.mjs` (:36), so edits there cost pin updates for
+  no gain.
 - The artifact byte budget only trips on a FRESH `dist/` — local green + CI red
   on size changes is expected; raise the documented allowance for real product
   value, never shrink product code. **Corrected 2026-08-31, and the SHAPE
