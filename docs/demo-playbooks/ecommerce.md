@@ -27,7 +27,7 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 3. Open the `Cart and checkout` panel (`Review one total before Shop`). Show the cart lines with quantities and the products total.
 4. Fill the customer fields — Name and Phone — then `Receive order`: `Pickup · included` or `Delivery · Shop confirms`. Payment shows the sample notice (quoted in section 4); the empty-cart copy already set the rule: `Nothing goes to Shop until you review the exact quote.`
 5. Press `Send order request`. The receipt appears with the `Request sent` pill, one exact total, and a countdown — the approved workflow step is `Review a 15-minute whole-MMK quote`.
-6. Press `Continue in Shop`. The app navigates to the Shop order queue (`/shop/?tab=orders&source=ecommerce`) where a named person reviews the request — this is the accountability handoff, the core selling moment.
+6. Press `Open Shop operator review`. The app navigates to the Shop order queue (`/shop/?tab=orders&source=ecommerce`) where a named person reviews the request — this is the accountability handoff, the core selling moment. (`Continue in Shop` is the button the receipt shows *after* Shop has confirmed the order; before review, the shipped button reads `Open Shop operator review`.)
 7. Confirm the draft in Shop, then return to Ecommerce: the receipt now reads `Confirmed in Shop` with the Shop order ID, and offers `Start another order`.
 8. Wrap on the order workspace panel (`Order workspace`): on a fresh local sample it reads `Try the sample order flow`, and after confirmation the timeline shows the one path from cart to return, with `Open Shop order queue` linking back.
 
