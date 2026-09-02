@@ -25,6 +25,86 @@ Contract `supermega.phone-width-sweep.v1` · browser Chrome/141.0.7390.37 · gen
 
 A hidden-notice *candidate* is text that is not reachable by opening something: not inside a closed disclosure, dialog, slide-over panel or an inactive view pane, and not rendered elsewhere on the same screen — the P3.10 shape. Every row is data; classification against source is the reader's job.
 
+
+## What this found that needs a decision
+
+Four items, in the order I would spend attention on them. The first turned out,
+once traced to source, to need no action — it is kept because the trace is the
+useful part. Everything else the sweep reports is either reachable content or an
+intentional caption. Each row names what was measured, not what it looks like.
+
+### 1. Website: the hidden `ready`/`draft` pill is redundant page-stage metadata — no action
+
+`span.website-status.is-ready` / `.is-draft` — the pills reading `ready` and
+`draft` — are hidden along with the whole `header.website-panel-head` by
+`website-product.css:2487` inside `@media (max-width: 900px)`, which matches at
+390px. Screens: `website-preview`, `website-editor`, `website-saved`, and
+`website-editor-unsaved` for the `draft` case.
+
+I first wrote this up as a second member of the P3.10 class — "the editor loses
+its saved/unsaved indicator on a phone". Traced to source, that is wrong, and
+Codex caught it on review. The pill renders `page.stage`
+(`ContentWorkspace.tsx:57`), which is the page's publish-set membership, not
+whether the operator's work is saved. The saved/unsaved indicator is a different
+element, `span.website-save-state` (`WebsiteProduct.tsx:1156-1163`, reading
+`Unsaved preview`, `Saved on this device`, `Saved to company`, `Saved version
+changed`), and the phone rule at `website-product.css:3172-3176` explicitly keeps
+it in the action bar's second row. The stage itself is still on screen too: the
+page selector's option text carries it as `Home — / (ready)`
+(`WebsiteProduct.tsx:1150`). What the hide actually removes is the panel's
+eyebrow, the page name (also in the selector) and the one-line stage explanation
+at `ContentWorkspace.tsx:55`.
+
+So this is **not** the P3.10 shape. P3.10 was operator state with no other
+carrier; this is a duplicate of information the phone layout keeps twice. The
+screen loses nothing an operator needs, and the "keep the pill, drop the rest of
+the header" recommendation I originally wrote would have spent a planning pass
+restoring a redundancy.
+
+*What the sweep got wrong, so the next reader knows:* the "visible elsewhere"
+column is an exact match on whole normalized strings. `ready` does not equal
+`Home — / (ready)`, so the pill was reported as having no other carrier when its
+text was in fact a substring of visible text on the same screen. That is the
+correct conservative default for a measurement tool — a substring match would
+have hidden the real P3.10 behind "shift" appearing in some unrelated caption —
+but it means every Website candidate row needs exactly this trace before it is
+believed. Both Website candidates are now traced; neither needs work.
+
+### 2. Ecommerce: five sentences a customer must read render at 9px
+
+| Element | Sentence |
+|---|---|
+| `.ecommerce-stale-quote > small` | "The previous quote remains in Your orders and cannot continue with this cart." |
+| `.ecommerce-return-workspace > p` (×2, two panels) | "Shop reviews every change, cancellation, return, and help request…" / "Active and completed orders for this exact contact will appear here." |
+| `.ecommerce-request-receipt.ecommerce-quote-receipt > small` | "Request ECR-… · Shop recorded the order and stock reservation." |
+
+All at `0.5625rem` (9px computed). The first explains why a cart cannot continue
+— a blocking condition — and the last is order provenance.
+
+*Recommendation:* raise these four selectors to `--font-size-xs` (0.6875rem), the
+same token P3.10 item 2 used for the Plant line, and leave the product's many
+other 9px captions alone. **I did not implement this.** Unlike P3.10 item 2 this
+carries no design-queue mandate, it is a customer-facing storefront surface, and
+`0.5625rem` is used widely enough in `ecommerce-product.css` that picking which
+instances are sentences is a design call rather than a mechanical one.
+
+### 3. Shop: the quantity steppers are 40×44
+
+The `−` and `+` buttons in `.shop-quantity-stepper` measure 40×44 — four pixels
+short on one axis of the 44×44 guidance, with no enclosing label to fall back on.
+They are the control a cashier hits most often, mid-sale, one-handed.
+
+*Recommendation:* widen to 44. Cheap and self-contained, but it is a touch-target
+change to the counter, so it belongs in a pass that can re-run the Shop journey.
+
+### 4. Measured and deliberately NOT flagged
+
+Shop's `Guest` input is 356×40 inside a 356×57 `<label>`, and Website's two
+publish-gate checkboxes are 18×18 inside 314×48 and 288×50 labels. In each case
+the input sits **inside** its label, so the effective touch target is the label
+box and the guidance is met. The report carries `labelBox` for exactly this
+judgement; a tool that counted these as failures would be crying wolf.
+
 ## shop
 
 Screens: `settings-shop` (/settings/?product=shop), `counter` (/shop/?tab=counter), `counter-cart-bar` (/shop/?tab=counter), `current-sale-open` (/shop/?tab=counter), `counter-review-gate` (/shop/?tab=counter), `counter-after-order` (/shop/?tab=orders), `orders-open` (/shop/?tab=orders), `settle-gate` (/shop/?tab=orders), `orders-after-settle` (/shop/?tab=orders), `counter-after-sale` (/shop/?tab=counter)
