@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
@@ -16,6 +16,20 @@ import {
   selectCeoOutcome,
   SUPERMEGA_HQ_AUTHORITY,
 } from './supermega-hq-authority.mjs'
+
+// The founder breach alert is the only path in this module that can reach the network, and it
+// does so through alert.mjs `notifyDetailed`, which falls back to the GLOBAL `fetch` whenever no
+// transport is injected. Take that global before anything runs a report: ESM import declarations
+// are evaluated ahead of every module-body statement, so this is the earliest point a single test
+// module can install the stub, and it is still before the first test executes. Calls are recorded
+// and then refused — no test in this file may perform real network I/O.
+const globalFetchCalls = []
+const realGlobalFetch = globalThis.fetch
+globalThis.fetch = async (...args) => {
+  globalFetchCalls.push(args)
+  throw new Error('global fetch is stubbed in this test file: no network I/O')
+}
+after(() => { globalThis.fetch = realGlobalFetch })
 
 const HASH = 'a'.repeat(64)
 const AUTHORITY_DIGEST = 'c'.repeat(64)
@@ -1232,4 +1246,227 @@ test('operations alert is a silent no-op without owner tokens and dedupes in mem
   const second = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, failingState())
   assert.equal(second.ok, true)
   assert.equal(harness.sends.length, 1)
+})
+
+// Distinctive customer-shaped content planted in the work orders the report reads. None of it is
+// operating metadata, so none of it may reach the founder alert.
+const customerMarkers = Object.freeze({
+  orderId: 'CUST-PO-99120',
+  name: 'Wilhelmina Vandersloot',
+  email: `buyer.wilhelmina@${'customer'}.invalid`,
+  freeText: 'the second pallet arrived smashed and the buyer wants a full refund today',
+})
+
+function contaminatedAlertHarness(clientId) {
+  const harness = alertHarness(clientId)
+  const contaminated = Array.from({ length: 5 }, (_, index) => order({
+    workOrderId: `company-order:${String(index + 1).repeat(40)}`,
+    clientId,
+    cycleId: `cycle-${index + 1}-${customerMarkers.orderId}`,
+    createdAt: `2026-07-1${index + 1}T00:00:00.000Z`,
+    startedAt: `2026-07-1${index + 1}T00:10:00.000Z`,
+    completedAt: `2026-07-1${index + 1}T00:20:00.000Z`,
+    customerReference: customerMarkers.orderId,
+    notes: customerMarkers.freeText,
+    plan: {
+      brief: customerMarkers.freeText,
+      assignments: [{ agentId: 'sales-qualifier', name: customerMarkers.name, department: 'growth', crew: 'lead-qualification-desk', roleCount: 3 }],
+      budget: { roleLimit: 3 },
+      controls: { externalWrites: false, dynamicDelegation: false },
+    },
+    result: {
+      ok: true,
+      status: 'completed',
+      actionMode: 'draft_only',
+      approvalRequired: true,
+      results: [{
+        agentId: 'sales-qualifier',
+        status: 'completed',
+        usedRoleCalls: 3,
+        summary: customerMarkers.freeText,
+        output: { customer: customerMarkers.name, email: customerMarkers.email, note: customerMarkers.freeText },
+      }],
+      budget: { usedRoleCalls: 3 },
+      durableResultStored: true,
+    },
+    evidence: [{ digest: 'e'.repeat(64), bytes: 20, label: customerMarkers.orderId }],
+  }))
+  const baseOptions = harness.options
+  harness.options = (patch = {}) => baseOptions({
+    listCompanyWorkOrders: async () => ({ ok: true, workOrders: contaminated.map(({ result, evidence, ...item }) => item) }),
+    getCompanyWorkOrder: async ({ workOrderId }) => ({
+      ok: true,
+      workOrder: structuredClone(contaminated.find((item) => item.workOrderId === workOrderId)),
+    }),
+    ...patch,
+  })
+  return harness
+}
+
+test('a changed operations breach set alerts immediately inside the repeat interval', async () => {
+  const clientId = 'client-alert-changed-set'
+  const harness = alertHarness(clientId)
+  const stateKey = `company-operations-alert:${clientId}:30`
+  // A second breach on top of the first: 120 minutes from dispatch to terminal result against a
+  // 30 minute target, on the same five orders the base harness lists.
+  const slowExecution = async ({ workOrderId }) => {
+    const day = workOrderId.split(':')[1].slice(0, 1)
+    return {
+      ok: true,
+      workOrder: order({
+        workOrderId,
+        clientId,
+        cycleId: `cycle-${day}`,
+        createdAt: `2026-07-1${day}T00:00:00.000Z`,
+        startedAt: `2026-07-1${day}T00:10:00.000Z`,
+        completedAt: `2026-07-1${day}T02:10:00.000Z`,
+      }),
+    }
+  }
+
+  const first = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(first.ok, true)
+  assert.equal(harness.sends.length, 1)
+  assert.equal(harness.alertState.get(stateKey).signature, 'evaluation_coverage_rate')
+
+  // Same clock as the first alert — well inside the 6 hour repeat interval — but the breach set
+  // is different, so the founder is told immediately instead of waiting out the interval.
+  const widened = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options({
+    getCompanyWorkOrder: slowExecution,
+  }))
+  assert.equal(widened.ok, true)
+  assert.deepEqual(
+    widened.targets.filter((target) => target.state === 'missed').map((target) => target.id),
+    ['execution_p90', 'evaluation_coverage_rate'],
+  )
+  assert.equal(harness.sends.length, 2)
+  assert.match(harness.sends[1].text, /execution_p90: 120 vs target <= 30/)
+  assert.match(harness.sends[1].text, /2\/8 operating targets missed/)
+  assert.equal(harness.alertState.get(stateKey).signature, 'execution_p90,evaluation_coverage_rate')
+  assert.deepEqual(harness.alertState.get(stateKey).breachedTargetIds, ['execution_p90', 'evaluation_coverage_rate'])
+
+  // Narrowing back to the original set is also a change: alert again, still on the same clock.
+  const narrowed = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(narrowed.ok, true)
+  assert.equal(harness.sends.length, 3)
+  assert.equal(harness.alertState.get(stateKey).signature, 'evaluation_coverage_rate')
+
+  // ...and the now-current set still dedupes for the rest of the interval.
+  const repeated = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(repeated.ok, true)
+  assert.equal(harness.sends.length, 3)
+})
+
+test('a throwing alert path can neither alter nor escape the operations report', async () => {
+  const clientId = 'client-alert-fail-open-env'
+  const harness = alertHarness(clientId)
+  // Baseline: the identical report with alerting configured off, so any difference below comes
+  // from the alert path rather than from the report inputs.
+  const baseline = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options({ env: {} }))
+  assert.equal(baseline.ok, true)
+  // 'collecting' rather than 'at_risk': accepted_evaluation_rate has no samples yet. A breach
+  // still alerts — the alert reads target states, not the rolled-up readiness word.
+  assert.equal(baseline.readiness, 'collecting')
+  assert.equal(baseline.targets.some((target) => target.state === 'missed'), true)
+
+  // Reading the alert env throws. That happens before the alert routine's own guards, so only the
+  // fail-open wrapper around the alert call in buildCompanyOperationsReport can contain it.
+  const hostileEnv = harness.options()
+  Object.defineProperty(hostileEnv, 'env', { get() { throw new Error('alert env unavailable') } })
+  const escaped = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, hostileEnv)
+  assert.equal(escaped.ok, true)
+  assert.deepEqual(escaped, baseline)
+  assert.equal(harness.sends.length, 0)
+  assert.equal(harness.alertState.size, 0)
+
+  // Every alert dependency down at once — state read, insert, transition, claim, release, and the
+  // transport — still returns the same report and still never throws.
+  const downClientId = 'client-alert-fail-open-store'
+  const down = alertHarness(downClientId)
+  const downBaseline = await buildCompanyOperationsReport({ clientId: downClientId, windowDays: 30 }, down.options({ env: {} }))
+  assert.equal(downBaseline.ok, true)
+  const boom = () => { throw new Error('alert dependency down') }
+  const allDown = await buildCompanyOperationsReport({ clientId: downClientId, windowDays: 30 }, down.options({
+    getOperationsAlertState: async () => boom(),
+    putOperationsAlertState: async () => boom(),
+    transitionOperationsAlertState: async () => boom(),
+    claimOperationsAlertInit: async () => boom(),
+    releaseOperationsAlertInit: async () => boom(),
+    fetch: async () => boom(),
+  }))
+  assert.equal(allDown.ok, true)
+  assert.deepEqual(allDown, downBaseline)
+  assert.equal(down.sends.length, 0)
+})
+
+test('the operations breach alert carries target metadata only and no customer content', async () => {
+  const clientId = 'client-alert-metadata-only'
+  const harness = contaminatedAlertHarness(clientId)
+  const report = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, harness.options())
+  assert.equal(report.ok, true)
+  // The contaminated orders really did reach the report, so the alert had the chance to leak them.
+  assert.equal(report.counts.total, 5)
+  assert.equal(JSON.stringify(report).includes(customerMarkers.name), true)
+  assert.equal(harness.sends.length, 1)
+
+  const payload = harness.sends[0]
+  assert.deepEqual(Object.keys(payload).sort(), ['chat_id', 'disable_web_page_preview', 'text'])
+  for (const [field, marker] of Object.entries(customerMarkers)) {
+    assert.equal(payload.text.includes(marker), false, `alert leaked customer ${field}`)
+  }
+  assert.equal(payload.text.includes('company-order:'), false)
+  assert.doesNotMatch(payload.text, /model output|anthropic|private|[a-f0-9]{40}/)
+
+  // Whole-message grammar: a metadata header plus one measured-target line each. Nothing else can
+  // appear, so free text appended to this message anywhere later fails here.
+  const targetsById = new Map(report.targets.map((target) => [target.id, target]))
+  const [header, ...details] = payload.text.split('\n')
+  assert.match(header, new RegExp(`^SuperMega ops \\| client ${clientId} \\| 30d window \\| ${details.length}/8 operating targets missed$`))
+  assert.equal(details.length > 0, true)
+  for (const line of details) {
+    const parsed = /^- ([a-z0-9_]+): (unmeasured|-?\d+(?:\.\d+)?) vs target (<=|>=) (-?\d+(?:\.\d+)?) \(sample (\d+)\)$/.exec(line)
+    assert.notEqual(parsed, null, `alert line is not target metadata: ${line}`)
+    const [, id, value, bound, target, sample] = parsed
+    const measured = targetsById.get(id)
+    assert.notEqual(measured, undefined, `alert named an unknown target: ${id}`)
+    assert.equal(measured.state, 'missed')
+    assert.equal(value, String(measured.value))
+    assert.equal(bound, measured.direction === 'max' ? '<=' : '>=')
+    assert.equal(target, String(measured.target))
+    assert.equal(sample, String(measured.sample))
+  }
+})
+
+test('without owner Telegram tokens the alert path performs zero network I/O', async () => {
+  const clientId = 'client-alert-zero-io'
+  const harness = alertHarness(clientId)
+  const unconfigured = harness.options({ env: {} })
+  // No injected transport either: the only remaining way out to the network is the global fetch,
+  // which this file replaced with a recording stub before any test ran.
+  delete unconfigured.fetch
+  const callsBefore = globalFetchCalls.length
+  const report = await buildCompanyOperationsReport({ clientId, windowDays: 30 }, unconfigured)
+  assert.equal(report.ok, true)
+  assert.equal(report.readiness, 'collecting')
+  assert.equal(report.targets.some((target) => target.state === 'missed'), true)
+  assert.equal(globalFetchCalls.length, callsBefore)
+  assert.equal(harness.sends.length, 0)
+  assert.equal(harness.stateReads, 0)
+  assert.equal(harness.alertState.size, 0)
+  assert.equal(harness.claims.size, 0)
+
+  // Positive control: the same breach with tokens configured and still no injected transport does
+  // reach the global fetch, so the zero-call assertion above is falsifiable rather than vacuous.
+  const configuredClientId = 'client-alert-global-transport'
+  const configured = alertHarness(configuredClientId)
+  const configuredOptions = configured.options()
+  delete configuredOptions.fetch
+  const sent = await buildCompanyOperationsReport({ clientId: configuredClientId, windowDays: 30 }, configuredOptions)
+  assert.equal(sent.ok, true)
+  assert.equal(globalFetchCalls.length, callsBefore + 1)
+  const [requestUrl, requestInit] = globalFetchCalls[callsBefore]
+  const telegramHost = ['api', 'telegram', 'org'].join('.')
+  assert.equal(new URL(requestUrl).host, telegramHost)
+  assert.equal(new URL(requestUrl).pathname.startsWith(`/bot${'unit-test-token'}/`), true)
+  assert.match(JSON.parse(requestInit.body).text, /evaluation_coverage_rate: 0 vs target >= 1/)
 })
