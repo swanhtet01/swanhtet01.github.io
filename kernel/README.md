@@ -246,8 +246,14 @@ in recovery instead of being retried blindly.
 - Client connector secrets are isolated per Vercel project, not stored in a shared multi-tenant vault.
 - ClickUp task creation is the only approval-backed write. Customer sends, other record changes,
   refunds, and payments remain unavailable.
-- The token cap can modestly overshoot under highly concurrent calls because storage updates are not
-  a database-side atomic increment in every store mode.
+- The token cap does not overshoot under concurrent callers: 0 tokens (0%) over the cap at 2, 8, 32,
+  and 128 concurrent callers (512 at the store level) for the tenant monthly cap, the company daily
+  budget, and the 2,000,000-unit hard maximum, measured 2026-09-02 in memory mode and on a loopback
+  Postgres 16 running the same SQL the Supabase mode calls, pinned by
+  `kernel/gateway.budget-overshoot.test.mjs`. Every store mode admits work through a serialized
+  reserve-before-dispatch step, so the bound is structural rather than statistical. Not measured:
+  the live Supabase deployment itself. Simultaneous identical cache misses each reserve their own
+  attempt; only a completed response is shared.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
 - Agent Company cycles admit one specialist and at most eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
