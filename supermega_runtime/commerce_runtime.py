@@ -249,11 +249,13 @@ _SERVICE_PACKAGE_DEFINITION_FIELDS = frozenset(
         "purchaseSku",
         "eligibleServiceIds",
         "sessionsPerPurchase",
-        "priceMmk",
-        "validDays",
         "active",
     }
 )
+_SERVICE_PACKAGE_TERMS_BY_SKU = {
+    "SPA-PACK-MASSAGE-5": {"sessionsPerPurchase": 5, "validDays": 365},
+    "SPA-PACK-FACIAL-3": {"sessionsPerPurchase": 3, "validDays": 365},
+}
 _SERVICE_PACKAGE_ENTITLEMENT_FIELDS = frozenset(
     {
         "id",
@@ -1170,6 +1172,9 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             maximum=80,
         )
         package_purchase_skus.append(purchase_sku)
+        package_terms = _SERVICE_PACKAGE_TERMS_BY_SKU.get(purchase_sku)
+        if package_terms is None:
+            raise TrialValidationError(f"{field}.purchaseSku is unsupported.")
         eligible_service_ids = _list(
             definition.get("eligibleServiceIds"),
             f"{field}.eligibleServiceIds",
@@ -1188,13 +1193,11 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             f"{field}.sessionsPerPurchase",
             minimum=1,
         )
-        valid_days = _integer(
-            definition.get("validDays"),
-            f"{field}.validDays",
-            minimum=1,
-        )
-        _integer(definition.get("priceMmk"), f"{field}.priceMmk", minimum=1)
-        if sessions > 1000 or valid_days > 3650 or not isinstance(definition.get("active"), bool):
+        if (
+            sessions > 1000
+            or sessions != package_terms["sessionsPerPurchase"]
+            or not isinstance(definition.get("active"), bool)
+        ):
             raise TrialValidationError(f"{field} package terms are invalid.")
         package_definitions_by_id[definition_id] = definition
     _unique(package_definition_ids, "commerce state.serviceSchedule package definition ID")
@@ -1425,7 +1428,8 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
         expires_at = _timestamp(entitlement.get("expiresAt"), f"{field}.expiresAt")
         issued_time = datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
         expires_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        if expires_time != issued_time + timedelta(days=definition["validDays"]):
+        package_terms = _SERVICE_PACKAGE_TERMS_BY_SKU[definition["purchaseSku"]]
+        if expires_time != issued_time + timedelta(days=package_terms["validDays"]):
             raise TrialValidationError(f"{field}.expiresAt does not match the package validity.")
         status = entitlement.get("status")
         expected_status = "active" if remaining_sessions > 0 else "exhausted"
@@ -10876,6 +10880,16 @@ def _service_package_order_matches(
     )
     if order is None:
         return False
+    catalog_item = next(
+        (
+            item
+            for item in commerce.get("items", [])
+            if item.get("sku") == definition.get("purchaseSku")
+        ),
+        None,
+    )
+    if catalog_item is None:
+        return False
     paid_at = order.get("paymentReconciledAt")
     completion = order.get("completion")
     completion_at = completion.get("capturedAt") if isinstance(completion, Mapping) else None
@@ -10907,7 +10921,7 @@ def _service_package_order_matches(
     line = lines[line_index]
     return bool(
         line.get("sku") == definition.get("purchaseSku")
-        and line.get("unitPriceMmk") == definition.get("priceMmk")
+        and line.get("unitPriceMmk") == catalog_item.get("price")
         and isinstance(line.get("quantity"), int)
         and not isinstance(line.get("quantity"), bool)
         and line["quantity"] > 0
@@ -11090,7 +11104,6 @@ def _validate_service_schedule_saved(
             and definition["active"] is True
             and latest["subjectId"] == definition["id"]
             and catalog_item is not None
-            and catalog_item.get("price") == definition["priceMmk"]
             and all(
                 service.get("active") is True
                 for service in before["services"]
@@ -11228,10 +11241,15 @@ def _validate_service_schedule_saved(
         before_by_entitlement_id = {
             entitlement["id"]: entitlement for entitlement in before["packageLedger"]
         }
+        changed_entitlement_indexes = [
+            index
+            for index, (prior, candidate) in enumerate(
+                zip(before["packageLedger"], after["packageLedger"], strict=False)
+            )
+            if prior != candidate
+        ]
         changed_entitlements = [
-            entitlement
-            for entitlement in after["packageLedger"]
-            if before_by_entitlement_id.get(entitlement["id"]) != entitlement
+            after["packageLedger"][index] for index in changed_entitlement_indexes
         ]
         changed_entitlement = changed_entitlements[0] if len(changed_entitlements) == 1 else None
         prior_entitlement = (
@@ -11284,6 +11302,9 @@ def _validate_service_schedule_saved(
             if prior_entitlement and booking
             else None
         )
+        expected_ledger = list(before["packageLedger"])
+        if expected_entitlement is not None and len(changed_entitlement_indexes) == 1:
+            expected_ledger[changed_entitlement_indexes[0]] = expected_entitlement
         happened_at = datetime.fromisoformat(latest["happenedAt"].replace("Z", "+00:00"))
         valid_change = (
             canonical_package_shape
@@ -11312,9 +11333,7 @@ def _validate_service_schedule_saved(
                 latest["happenedAt"],
             )
             and changed_entitlement == expected_entitlement
-            and len(after["packageLedger"]) == len(before["packageLedger"])
-            and {entry["id"] for entry in after["packageLedger"]}
-            == set(before_by_entitlement_id)
+            and after["packageLedger"] == expected_ledger
             and after["packageDefinitions"] == before["packageDefinitions"]
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
