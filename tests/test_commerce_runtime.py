@@ -9168,6 +9168,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             "sourceOrderId": "ORD-SPA-PACKAGE",
             "sourceOrderLineIndex": 0,
             "sourceOrderDigest": order_digest,
+            "purchasePriceMmk": 200000,
             "allocatedSessions": 5,
             "remainingSessions": 5,
             "issuedAt": allocation_at,
@@ -9212,6 +9213,24 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(
             allocated_state["serviceSchedule"]["packageLedger"][0]["remainingSessions"],
             5,
+        )
+        repriced_before_allocation = deepcopy(definition_state)
+        repriced_before_allocation["items"][0]["price"] = 210000
+        repriced_allocation = apply_event(
+            repriced_before_allocation,
+            "commerce.service_schedule.saved",
+            {**repriced_before_allocation, "serviceSchedule": allocation_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R6",
+                "capturedAt": allocation_at,
+                "actor": "operator-1",
+                "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R6",
+            },
+        )
+        self.assertEqual(
+            repriced_allocation["serviceSchedule"]["packageLedger"][0]["purchasePriceMmk"],
+            200000,
         )
 
         second_order_digest = f"sha256:{sha256(json.dumps(definition_state['orders'][1], ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')).hexdigest()}"
@@ -9289,10 +9308,12 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "happenedAt": redemption_at,
             }
         )
+        repriced_after_allocation = deepcopy(two_entitlement_state)
+        repriced_after_allocation["items"][0]["price"] = 220000
         package_saved = apply_event(
-            two_entitlement_state,
+            repriced_after_allocation,
             "commerce.service_schedule.saved",
-            {**two_entitlement_state, "serviceSchedule": redemption_schedule},
+            {**repriced_after_allocation, "serviceSchedule": redemption_schedule},
             {
                 "actionId": "ACT-SERVICE-SCHEDULE-R8",
                 "capturedAt": redemption_at,
@@ -9353,6 +9374,22 @@ class CommerceRuntimeTests(unittest.TestCase):
                 definition_state,
                 "commerce.service_schedule.saved",
                 {**definition_state, "serviceSchedule": forged_allocation},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R6",
+                    "capturedAt": allocation_at,
+                    "actor": "operator-1",
+                    "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R6",
+                },
+            )
+
+        forged_purchase_price = deepcopy(allocation_schedule)
+        forged_purchase_price["packageLedger"][0]["purchasePriceMmk"] = 210000
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                definition_state,
+                "commerce.service_schedule.saved",
+                {**definition_state, "serviceSchedule": forged_purchase_price},
                 {
                     "actionId": "ACT-SERVICE-SCHEDULE-R6",
                     "capturedAt": allocation_at,

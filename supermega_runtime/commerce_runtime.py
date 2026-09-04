@@ -264,6 +264,7 @@ _SERVICE_PACKAGE_ENTITLEMENT_FIELDS = frozenset(
         "sourceOrderId",
         "sourceOrderLineIndex",
         "sourceOrderDigest",
+        "purchasePriceMmk",
         "allocatedSessions",
         "remainingSessions",
         "issuedAt",
@@ -1413,6 +1414,11 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
         )
         if re.fullmatch(r"sha256:[a-f0-9]{64}", source_order_digest) is None:
             raise TrialValidationError(f"{field}.sourceOrderDigest is invalid.")
+        _integer(
+            entitlement.get("purchasePriceMmk"),
+            f"{field}.purchasePriceMmk",
+            minimum=1,
+        )
         allocated_sessions = _integer(
             entitlement.get("allocatedSessions"),
             f"{field}.allocatedSessions",
@@ -10880,16 +10886,6 @@ def _service_package_order_matches(
     )
     if order is None:
         return False
-    catalog_item = next(
-        (
-            item
-            for item in commerce.get("items", [])
-            if item.get("sku") == definition.get("purchaseSku")
-        ),
-        None,
-    )
-    if catalog_item is None:
-        return False
     paid_at = order.get("paymentReconciledAt")
     completion = order.get("completion")
     completion_at = completion.get("capturedAt") if isinstance(completion, Mapping) else None
@@ -10921,7 +10917,7 @@ def _service_package_order_matches(
     line = lines[line_index]
     return bool(
         line.get("sku") == definition.get("purchaseSku")
-        and line.get("unitPriceMmk") == catalog_item.get("price")
+        and line.get("unitPriceMmk") == entitlement.get("purchasePriceMmk")
         and isinstance(line.get("quantity"), int)
         and not isinstance(line.get("quantity"), bool)
         and line["quantity"] > 0
@@ -11146,6 +11142,7 @@ def _validate_service_schedule_saved(
                 "sourceOrderId": entitlement["sourceOrderId"],
                 "sourceOrderLineIndex": entitlement["sourceOrderLineIndex"],
                 "sourceOrderDigest": entitlement["sourceOrderDigest"],
+                "purchasePriceMmk": entitlement["purchasePriceMmk"],
                 "allocatedSessions": entitlement["allocatedSessions"],
                 "remainingSessions": entitlement["allocatedSessions"],
                 "issuedAt": latest["happenedAt"],
