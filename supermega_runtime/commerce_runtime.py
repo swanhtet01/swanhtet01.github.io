@@ -234,16 +234,50 @@ _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
         "booking_scheduled",
         "booking_advanced",
         "booking_cancelled",
+        "package_definition_saved",
+        "package_allocated",
         "package_redeemed",
         "client_retention_set",
         "client_exported",
         "client_anonymized",
     }
 )
-_SPA_MEMBERSHIP_PACKAGES = {
-    "service-session": ("SPA-PACK-MASSAGE-5", 5),
-    "service-facial": ("SPA-PACK-FACIAL-3", 3),
-}
+_SERVICE_PACKAGE_DEFINITION_FIELDS = frozenset(
+    {
+        "id",
+        "label",
+        "purchaseSku",
+        "eligibleServiceIds",
+        "sessionsPerPurchase",
+        "priceMmk",
+        "validDays",
+        "active",
+    }
+)
+_SERVICE_PACKAGE_ENTITLEMENT_FIELDS = frozenset(
+    {
+        "id",
+        "clientId",
+        "definitionId",
+        "sourceOrderId",
+        "sourceOrderLineIndex",
+        "sourceOrderDigest",
+        "allocatedSessions",
+        "remainingSessions",
+        "issuedAt",
+        "expiresAt",
+        "status",
+        "version",
+        "evidence",
+    }
+)
+_SERVICE_PACKAGE_EVIDENCE_FIELDS = frozenset(
+    {"revision", "type", "actor", "reason", "happenedAt"}
+)
+_SERVICE_PACKAGE_ID_PATTERN = re.compile(r"package-[A-Za-z0-9][A-Za-z0-9_-]{2,71}")
+_SERVICE_PACKAGE_ENTITLEMENT_ID_PATTERN = re.compile(
+    r"package-entitlement-[A-Za-z0-9][A-Za-z0-9_-]{2,59}"
+)
 _SUPPORT_INTENT_ID_PATTERN = re.compile(
     r"ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
@@ -297,7 +331,19 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _SERVICE_SCHEDULE_FIELDS = frozenset(
-    {"schema", "industryPackId", "revision", "services", "resources", "privacyPolicy", "clients", "bookings", "events"}
+    {
+        "schema",
+        "industryPackId",
+        "revision",
+        "services",
+        "resources",
+        "privacyPolicy",
+        "clients",
+        "bookings",
+        "packageDefinitions",
+        "packageLedger",
+        "events",
+    }
 )
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
 _CATALOG_CHANGE_FIELDS = frozenset(
@@ -1015,6 +1061,33 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
     schedule = _object(value, "commerce state.serviceSchedule")
     if schedule.get("schema") == _LEGACY_SERVICE_SCHEDULE_SCHEMA_V3:
         schedule = {**deepcopy(schedule), "schema": _SERVICE_SCHEDULE_SCHEMA, "privacyPolicy": {"clientRetentionDays": None}}
+    legacy_booking_ids: set[str] = set()
+    raw_bookings = schedule.get("bookings")
+    if isinstance(raw_bookings, list):
+        normalized_bookings: list[object] = []
+        for candidate in raw_bookings:
+            if (
+                isinstance(candidate, Mapping)
+                and "resourceId" in candidate
+                and "resourceIds" not in candidate
+            ):
+                booking = dict(candidate)
+                resource_id = booking.pop("resourceId")
+                booking["resourceIds"] = [resource_id]
+                if isinstance(booking.get("id"), str):
+                    legacy_booking_ids.add(booking["id"])
+                normalized_bookings.append(booking)
+            else:
+                normalized_bookings.append(candidate)
+        schedule = {**schedule, "bookings": normalized_bookings}
+    has_package_definitions = "packageDefinitions" in schedule
+    has_package_ledger = "packageLedger" in schedule
+    if has_package_definitions != has_package_ledger:
+        raise TrialValidationError(
+            "commerce state.serviceSchedule package contract is incomplete."
+        )
+    if not has_package_definitions:
+        schedule = {**schedule, "packageDefinitions": [], "packageLedger": []}
     _exact_fields(
         schedule,
         "commerce state.serviceSchedule",
@@ -1034,8 +1107,24 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
     resources = _list(schedule.get("resources"), "commerce state.serviceSchedule.resources")
     clients = _list(schedule.get("clients"), "commerce state.serviceSchedule.clients")
     bookings = _list(schedule.get("bookings"), "commerce state.serviceSchedule.bookings")
+    package_definitions = _list(
+        schedule.get("packageDefinitions"),
+        "commerce state.serviceSchedule.packageDefinitions",
+    )
+    package_ledger = _list(
+        schedule.get("packageLedger"),
+        "commerce state.serviceSchedule.packageLedger",
+    )
     events = _list(schedule.get("events"), "commerce state.serviceSchedule.events")
-    if len(services) > 100 or len(resources) > 100 or len(clients) > 500 or len(bookings) > 500 or len(events) > 1000:
+    if (
+        len(services) > 100
+        or len(resources) > 100
+        or len(clients) > 500
+        or len(bookings) > 500
+        or len(package_definitions) > 50
+        or len(package_ledger) > 1000
+        or len(events) > 1000
+    ):
         raise TrialValidationError("commerce state.serviceSchedule exceeds managed workspace limits.")
 
     service_ids: list[str] = []
@@ -1059,6 +1148,58 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
     _unique(service_ids, "commerce state.serviceSchedule service ID")
     service_by_id = {service["id"]: service for service in services}
 
+    package_definition_ids: list[str] = []
+    package_purchase_skus: list[str] = []
+    package_definitions_by_id: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(package_definitions):
+        field = f"commerce state.serviceSchedule.packageDefinitions[{index}]"
+        definition = _object(candidate, field)
+        _exact_fields(
+            definition,
+            field,
+            required=_SERVICE_PACKAGE_DEFINITION_FIELDS,
+        )
+        definition_id = _text(definition.get("id"), f"{field}.id", maximum=80)
+        if _SERVICE_PACKAGE_ID_PATTERN.fullmatch(definition_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        package_definition_ids.append(definition_id)
+        _text(definition.get("label"), f"{field}.label", maximum=160)
+        purchase_sku = _text(
+            definition.get("purchaseSku"),
+            f"{field}.purchaseSku",
+            maximum=80,
+        )
+        package_purchase_skus.append(purchase_sku)
+        eligible_service_ids = _list(
+            definition.get("eligibleServiceIds"),
+            f"{field}.eligibleServiceIds",
+        )
+        if not 1 <= len(eligible_service_ids) <= 100:
+            raise TrialValidationError(f"{field}.eligibleServiceIds is invalid.")
+        normalized_eligible_ids = [
+            _text(service_id, f"{field}.eligibleServiceIds[{service_index}]", maximum=80)
+            for service_index, service_id in enumerate(eligible_service_ids)
+        ]
+        _unique(normalized_eligible_ids, f"{field} eligible service ID")
+        if any(service_id not in service_by_id for service_id in normalized_eligible_ids):
+            raise TrialValidationError(f"{field} references an unknown service.")
+        sessions = _integer(
+            definition.get("sessionsPerPurchase"),
+            f"{field}.sessionsPerPurchase",
+            minimum=1,
+        )
+        valid_days = _integer(
+            definition.get("validDays"),
+            f"{field}.validDays",
+            minimum=1,
+        )
+        _integer(definition.get("priceMmk"), f"{field}.priceMmk", minimum=1)
+        if sessions > 1000 or valid_days > 3650 or not isinstance(definition.get("active"), bool):
+            raise TrialValidationError(f"{field} package terms are invalid.")
+        package_definitions_by_id[definition_id] = definition
+    _unique(package_definition_ids, "commerce state.serviceSchedule package definition ID")
+    _unique(package_purchase_skus, "commerce state.serviceSchedule package purchase SKU")
+
     resource_ids: list[str] = []
     for index, candidate in enumerate(resources):
         field = f"commerce state.serviceSchedule.resources[{index}]"
@@ -1078,6 +1219,7 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
         ):
             raise TrialValidationError(f"{field} kind or active state is invalid.")
     _unique(resource_ids, "commerce state.serviceSchedule resource ID")
+    resources_by_id = {resource["id"]: resource for resource in resources}
 
     privacy_policy = _object(schedule.get("privacyPolicy"), "commerce state.serviceSchedule.privacyPolicy")
     retention_days = privacy_policy.get("clientRetentionDays")
@@ -1149,7 +1291,7 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             required=frozenset(
                 {
                     "id", "clientId", "customerName", "contact", "appointmentUpdates", "serviceId",
-                    "resourceId", "startsAt", "endsAt", "status", "note", "createdAt", "updatedAt",
+                    "resourceIds", "startsAt", "endsAt", "status", "note", "createdAt", "updatedAt",
                 }
             ),
         )
@@ -1168,8 +1310,33 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             or booking.get("appointmentUpdates") != client.get("appointmentUpdates")
         ):
             raise TrialValidationError(f"{field} client details are stale.")
-        if booking.get("serviceId") not in service_ids or booking.get("resourceId") not in resource_ids:
-            raise TrialValidationError(f"{field} references an unknown service or resource.")
+        booking_resource_values = _list(booking.get("resourceIds"), f"{field}.resourceIds")
+        if not 1 <= len(booking_resource_values) <= 10:
+            raise TrialValidationError(f"{field}.resourceIds is invalid.")
+        booking_resource_ids = [
+            _text(resource_id, f"{field}.resourceIds[{resource_index}]", maximum=80)
+            for resource_index, resource_id in enumerate(booking_resource_values)
+        ]
+        _unique(booking_resource_ids, f"{field} resource ID")
+        if (
+            booking.get("serviceId") not in service_ids
+            or any(resource_id not in resources_by_id for resource_id in booking_resource_ids)
+            or any(resources_by_id[resource_id]["active"] is not True for resource_id in booking_resource_ids)
+        ):
+            raise TrialValidationError(f"{field} references an unknown or inactive service or resource.")
+        if booking_id not in legacy_booking_ids and schedule["industryPackId"] == "spa":
+            booking_resource_kinds = [
+                resources_by_id[resource_id]["kind"] for resource_id in booking_resource_ids
+            ]
+            if (
+                len(booking_resource_kinds) < 2
+                or booking_resource_kinds[0] != "staff"
+                or booking_resource_kinds[1] != "room"
+                or any(kind != "equipment" for kind in booking_resource_kinds[2:])
+            ):
+                raise TrialValidationError(
+                    f"{field}.resourceIds must order staff, room, then optional equipment."
+                )
         starts_at = _timestamp(booking.get("startsAt"), f"{field}.startsAt")
         ends_at = _timestamp(booking.get("endsAt"), f"{field}.endsAt")
         if datetime.fromisoformat(ends_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
@@ -1192,13 +1359,172 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
     for left, first in enumerate(blocking):
         for second in blocking[left + 1 :]:
             if (
-                first["resourceId"] == second["resourceId"]
+                set(first["resourceIds"]) & set(second["resourceIds"])
                 and datetime.fromisoformat(first["startsAt"].replace("Z", "+00:00"))
                 < datetime.fromisoformat(second["endsAt"].replace("Z", "+00:00"))
                 and datetime.fromisoformat(second["startsAt"].replace("Z", "+00:00"))
                 < datetime.fromisoformat(first["endsAt"].replace("Z", "+00:00"))
             ):
                 raise TrialValidationError("commerce state.serviceSchedule contains overlapping bookings.")
+
+    package_entitlement_ids: list[str] = []
+    package_source_lines: list[str] = []
+    package_evidence_bindings: list[tuple[int, str, dict[str, Any]]] = []
+    for index, candidate in enumerate(package_ledger):
+        field = f"commerce state.serviceSchedule.packageLedger[{index}]"
+        entitlement = _object(candidate, field)
+        _exact_fields(
+            entitlement,
+            field,
+            required=_SERVICE_PACKAGE_ENTITLEMENT_FIELDS,
+        )
+        entitlement_id = _text(entitlement.get("id"), f"{field}.id", maximum=80)
+        if _SERVICE_PACKAGE_ENTITLEMENT_ID_PATTERN.fullmatch(entitlement_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        package_entitlement_ids.append(entitlement_id)
+        client_id = _text(entitlement.get("clientId"), f"{field}.clientId", maximum=80)
+        if client_id not in clients_by_id:
+            raise TrialValidationError(f"{field} references an unknown client.")
+        definition_id = _text(
+            entitlement.get("definitionId"),
+            f"{field}.definitionId",
+            maximum=80,
+        )
+        definition = package_definitions_by_id.get(definition_id)
+        if definition is None:
+            raise TrialValidationError(f"{field} references an unknown package definition.")
+        source_order_id = _text(
+            entitlement.get("sourceOrderId"),
+            f"{field}.sourceOrderId",
+            maximum=80,
+        )
+        source_order_line_index = _integer(
+            entitlement.get("sourceOrderLineIndex"),
+            f"{field}.sourceOrderLineIndex",
+        )
+        package_source_lines.append(f"{source_order_id}:{source_order_line_index}")
+        source_order_digest = _text(
+            entitlement.get("sourceOrderDigest"),
+            f"{field}.sourceOrderDigest",
+            maximum=71,
+        )
+        if re.fullmatch(r"sha256:[a-f0-9]{64}", source_order_digest) is None:
+            raise TrialValidationError(f"{field}.sourceOrderDigest is invalid.")
+        allocated_sessions = _integer(
+            entitlement.get("allocatedSessions"),
+            f"{field}.allocatedSessions",
+            minimum=1,
+        )
+        remaining_sessions = _integer(
+            entitlement.get("remainingSessions"),
+            f"{field}.remainingSessions",
+        )
+        if remaining_sessions > allocated_sessions:
+            raise TrialValidationError(f"{field}.remainingSessions is invalid.")
+        issued_at = _timestamp(entitlement.get("issuedAt"), f"{field}.issuedAt")
+        expires_at = _timestamp(entitlement.get("expiresAt"), f"{field}.expiresAt")
+        issued_time = datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+        expires_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        if expires_time != issued_time + timedelta(days=definition["validDays"]):
+            raise TrialValidationError(f"{field}.expiresAt does not match the package validity.")
+        status = entitlement.get("status")
+        expected_status = "active" if remaining_sessions > 0 else "exhausted"
+        if status != expected_status:
+            raise TrialValidationError(f"{field}.status is invalid.")
+        version = _integer(entitlement.get("version"), f"{field}.version", minimum=1)
+        evidence_entries = _list(entitlement.get("evidence"), f"{field}.evidence")
+        if not evidence_entries or len(evidence_entries) > 1000 or version != len(evidence_entries):
+            raise TrialValidationError(f"{field}.evidence is incomplete.")
+        redemption_booking_ids: list[str] = []
+        prior_evidence_revision = 0
+        prior_evidence_time: datetime | None = None
+        for evidence_index, evidence_candidate in enumerate(evidence_entries):
+            evidence_field = f"{field}.evidence[{evidence_index}]"
+            package_evidence = _object(evidence_candidate, evidence_field)
+            evidence_type = package_evidence.get("type")
+            expected_evidence_type = "package_allocated" if evidence_index == 0 else "package_redeemed"
+            optional_fields = frozenset() if evidence_index == 0 else frozenset({"bookingId"})
+            _exact_fields(
+                package_evidence,
+                evidence_field,
+                required=_SERVICE_PACKAGE_EVIDENCE_FIELDS,
+                optional=optional_fields,
+            )
+            if evidence_type != expected_evidence_type:
+                raise TrialValidationError(f"{evidence_field}.type is invalid.")
+            evidence_revision = _integer(
+                package_evidence.get("revision"),
+                f"{evidence_field}.revision",
+                minimum=1,
+            )
+            if evidence_revision <= prior_evidence_revision:
+                raise TrialValidationError(f"{field}.evidence revisions are not ordered.")
+            prior_evidence_revision = evidence_revision
+            evidence_actor = _text(
+                package_evidence.get("actor"),
+                f"{evidence_field}.actor",
+                maximum=120,
+            )
+            evidence_reason = _text(
+                package_evidence.get("reason"),
+                f"{evidence_field}.reason",
+                maximum=240,
+            )
+            evidence_at = _timestamp(
+                package_evidence.get("happenedAt"),
+                f"{evidence_field}.happenedAt",
+            )
+            evidence_time = datetime.fromisoformat(evidence_at.replace("Z", "+00:00"))
+            if prior_evidence_time is not None and evidence_time < prior_evidence_time:
+                raise TrialValidationError(f"{field}.evidence is not deterministically ordered.")
+            prior_evidence_time = evidence_time
+            if evidence_index == 0:
+                if evidence_at != issued_at:
+                    raise TrialValidationError(f"{field}.issuedAt is not bound to allocation evidence.")
+            else:
+                booking_id = _text(
+                    package_evidence.get("bookingId"),
+                    f"{evidence_field}.bookingId",
+                    maximum=80,
+                )
+                booking = next(
+                    (candidate for candidate in normalized_bookings if candidate["id"] == booking_id),
+                    None,
+                )
+                if (
+                    booking is None
+                    or booking["status"] != "completed"
+                    or booking["clientId"] != client_id
+                    or booking["serviceId"] not in definition["eligibleServiceIds"]
+                    or evidence_time
+                    < datetime.fromisoformat(booking["updatedAt"].replace("Z", "+00:00"))
+                    or evidence_time >= expires_time
+                ):
+                    raise TrialValidationError(f"{evidence_field} redemption evidence is invalid.")
+                redemption_booking_ids.append(booking_id)
+            package_evidence_bindings.append(
+                (
+                    evidence_revision,
+                    entitlement_id,
+                    {
+                        "revision": evidence_revision,
+                        "type": evidence_type,
+                        "subjectId": entitlement_id,
+                        "actor": evidence_actor,
+                        "reason": evidence_reason,
+                        "happenedAt": evidence_at,
+                    },
+                )
+            )
+        _unique(redemption_booking_ids, f"{field} redemption booking ID")
+        if remaining_sessions != allocated_sessions - len(redemption_booking_ids):
+            raise TrialValidationError(f"{field} remaining session evidence is inconsistent.")
+    _unique(package_entitlement_ids, "commerce state.serviceSchedule package entitlement ID")
+    _unique(package_source_lines, "commerce state.serviceSchedule package source order line")
+    _unique(
+        [str(binding[0]) for binding in package_evidence_bindings],
+        "commerce state.serviceSchedule package evidence revision",
+    )
 
     if len(events) != revision:
         raise TrialValidationError("commerce state.serviceSchedule evidence is incomplete.")
@@ -1218,10 +1544,23 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             or (event["type"] == "resource_registered" and subject_id not in resource_ids)
             or (event["type"].startswith("booking_") and subject_id not in booking_ids)
             or (
+                event["type"] == "package_definition_saved"
+                and subject_id not in package_definition_ids
+            )
+            or (
+                event["type"] == "package_allocated"
+                and subject_id not in package_entitlement_ids
+            )
+            or (
                 event["type"] == "package_redeemed"
-                and not any(
-                    booking["id"] == subject_id and booking["status"] == "completed"
-                    for booking in bookings
+                and subject_id not in package_entitlement_ids
+                and not (
+                    not package_definitions
+                    and not package_ledger
+                    and any(
+                        booking["id"] == subject_id and booking["status"] == "completed"
+                        for booking in normalized_bookings
+                    )
                 )
             )
             or (event["type"] == "client_anonymized" and subject_id not in client_ids)
@@ -1232,6 +1571,11 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
         _text(event.get("actor"), f"{field}.actor", maximum=120)
         _text(event.get("reason"), f"{field}.reason", maximum=240)
         _timestamp(event.get("happenedAt"), f"{field}.happenedAt")
+    for evidence_revision, _, expected_event in package_evidence_bindings:
+        if evidence_revision > len(events) or events[evidence_revision - 1] != expected_event:
+            raise TrialValidationError(
+                "commerce state.serviceSchedule package evidence is not bound to its event history."
+            )
     return schedule
 
 
@@ -10489,55 +10833,87 @@ def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
     return _validate_service_schedule(value) if value is not None else None
 
 
-def _spa_membership_session_available(
-    commerce: Mapping[str, Any],
-    schedule: Mapping[str, Any],
+def _service_package_order_digest(order: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        order,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return f"sha256:{sha256(encoded).hexdigest()}"
+
+
+def _service_package_evidence(
     event: Mapping[str, Any],
+    *,
+    booking_id: str | None = None,
+) -> dict[str, Any]:
+    evidence = {
+        "revision": event["revision"],
+        "type": event["type"],
+        "actor": event["actor"],
+        "reason": event["reason"],
+        "happenedAt": event["happenedAt"],
+    }
+    if booking_id is not None:
+        evidence["bookingId"] = booking_id
+    return evidence
+
+
+def _service_package_order_matches(
+    commerce: Mapping[str, Any],
+    entitlement: Mapping[str, Any],
+    definition: Mapping[str, Any],
+    happened_at: str,
 ) -> bool:
-    booking_by_id = {booking["id"]: booking for booking in schedule["bookings"]}
-    booking = booking_by_id.get(event["subjectId"])
-    event_at = datetime.fromisoformat(event["happenedAt"].replace("Z", "+00:00"))
+    order = next(
+        (
+            order
+            for order in commerce.get("orders", [])
+            if order.get("id") == entitlement.get("sourceOrderId")
+        ),
+        None,
+    )
+    if order is None:
+        return False
+    paid_at = order.get("paymentReconciledAt")
+    completion = order.get("completion")
+    completion_at = completion.get("capturedAt") if isinstance(completion, Mapping) else None
     if (
-        schedule["industryPackId"] != "spa"
-        or booking is None
-        or booking["status"] != "completed"
-        or booking["customerName"] == "Guest"
-        or event_at < datetime.fromisoformat(booking["updatedAt"].replace("Z", "+00:00"))
+        order.get("customer") != entitlement.get("clientId")
+        or order.get("status") != "completed"
+        or order.get("paymentStatus") != "reconciled"
+        or order.get("refundStatus") != "none"
+        or not isinstance(paid_at, str)
+        or not isinstance(completion_at, str)
+        or datetime.fromisoformat(paid_at.replace("Z", "+00:00"))
+        > datetime.fromisoformat(happened_at.replace("Z", "+00:00"))
+        or datetime.fromisoformat(completion_at.replace("Z", "+00:00"))
+        > datetime.fromisoformat(happened_at.replace("Z", "+00:00"))
+        or entitlement.get("sourceOrderDigest") != _service_package_order_digest(order)
     ):
         return False
-    package = _SPA_MEMBERSHIP_PACKAGES.get(booking["serviceId"])
-    if package is None:
+    line_index = entitlement.get("sourceOrderLineIndex")
+    lines = order.get("lines")
+    if (
+        isinstance(line_index, bool)
+        or not isinstance(line_index, int)
+        or not isinstance(lines, list)
+        or line_index < 0
+        or line_index >= len(lines)
+        or not isinstance(lines[line_index], Mapping)
+    ):
         return False
-    package_sku, sessions_per_purchase = package
-    purchased = 0
-    for order in commerce.get("orders", []):
-        paid_at = order.get("paymentReconciledAt")
-        if (
-            order["customer"] != booking["customerName"]
-            or order["status"] != "completed"
-            or order["paymentStatus"] != "reconciled"
-            or order["refundStatus"] != "none"
-            or paid_at is None
-            or datetime.fromisoformat(paid_at.replace("Z", "+00:00")) > event_at
-        ):
-            continue
-        for line in order.get("lines", []):
-            if line["sku"] == package_sku:
-                purchased += line["quantity"] * sessions_per_purchase
-    redeemed = 0
-    for prior in schedule["events"][:-1]:
-        if prior["type"] != "package_redeemed":
-            continue
-        if prior["subjectId"] == booking["id"]:
-            return False
-        prior_booking = booking_by_id.get(prior["subjectId"])
-        if (
-            prior_booking is not None
-            and prior_booking["customerName"] == booking["customerName"]
-            and prior_booking["serviceId"] == booking["serviceId"]
-        ):
-            redeemed += 1
-    return purchased > redeemed
+    line = lines[line_index]
+    return bool(
+        line.get("sku") == definition.get("purchaseSku")
+        and line.get("unitPriceMmk") == definition.get("priceMmk")
+        and isinstance(line.get("quantity"), int)
+        and not isinstance(line.get("quantity"), bool)
+        and line["quantity"] > 0
+        and entitlement.get("allocatedSessions")
+        == line["quantity"] * definition.get("sessionsPerPurchase")
+    )
 
 
 def _service_csv_cell(value: object) -> str:
@@ -10593,12 +10969,30 @@ def _validate_service_schedule_saved(
         )
     before = _service_schedule(current)
     after = _service_schedule(next_state)
+    raw_after = _object(
+        next_state.get("serviceSchedule"),
+        "commerce state.serviceSchedule",
+    )
+    raw_after_bookings = raw_after.get("bookings")
+    canonical_package_shape = (
+        "packageDefinitions" in raw_after
+        and "packageLedger" in raw_after
+        and isinstance(raw_after_bookings, list)
+        and all(
+            isinstance(booking, Mapping)
+            and "resourceIds" in booking
+            and "resourceId" not in booking
+            for booking in raw_after_bookings
+        )
+    )
     if after is None or after["revision"] < 1:
         raise TrialValidationError(
             "commerce.service_schedule.saved requires a reviewed schedule change."
         )
     if before is None:
-        return
+        raise TrialValidationError(
+            "commerce.service_schedule.saved requires an initialized managed schedule."
+        )
     if after["industryPackId"] != before["industryPackId"]:
         raise TrialValidationError("an active service schedule cannot change industry pack.")
     if after["revision"] != before["revision"] + 1:
@@ -10674,6 +11068,106 @@ def _validate_service_schedule_saved(
             and after["privacyPolicy"] == before["privacyPolicy"]
             and after["clients"] == expected_clients
         )
+    elif event_type == "package_definition_saved":
+        definition = (
+            after["packageDefinitions"][-1]
+            if len(after["packageDefinitions"]) == len(before["packageDefinitions"]) + 1
+            else None
+        )
+        catalog_item = next(
+            (
+                item
+                for item in current.get("items", [])
+                if definition and item.get("sku") == definition["purchaseSku"]
+            ),
+            None,
+        )
+        valid_change = (
+            canonical_package_shape
+            and after["industryPackId"] == "spa"
+            and definition is not None
+            and after["packageDefinitions"][:-1] == before["packageDefinitions"]
+            and definition["active"] is True
+            and latest["subjectId"] == definition["id"]
+            and catalog_item is not None
+            and catalog_item.get("price") == definition["priceMmk"]
+            and all(
+                service.get("active") is True
+                for service in before["services"]
+                if service["id"] in definition["eligibleServiceIds"]
+            )
+            and after["packageLedger"] == before["packageLedger"]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == before["clients"]
+            and after["bookings"] == before["bookings"]
+        )
+    elif event_type == "package_allocated":
+        entitlement = (
+            after["packageLedger"][-1]
+            if len(after["packageLedger"]) == len(before["packageLedger"]) + 1
+            else None
+        )
+        definition = next(
+            (
+                candidate
+                for candidate in before["packageDefinitions"]
+                if entitlement and candidate["id"] == entitlement["definitionId"]
+            ),
+            None,
+        )
+        client = next(
+            (
+                candidate
+                for candidate in before["clients"]
+                if entitlement and candidate["id"] == entitlement["clientId"]
+            ),
+            None,
+        )
+        expected_entitlement = (
+            {
+                "id": entitlement["id"],
+                "clientId": entitlement["clientId"],
+                "definitionId": entitlement["definitionId"],
+                "sourceOrderId": entitlement["sourceOrderId"],
+                "sourceOrderLineIndex": entitlement["sourceOrderLineIndex"],
+                "sourceOrderDigest": entitlement["sourceOrderDigest"],
+                "allocatedSessions": entitlement["allocatedSessions"],
+                "remainingSessions": entitlement["allocatedSessions"],
+                "issuedAt": latest["happenedAt"],
+                "expiresAt": entitlement["expiresAt"],
+                "status": "active",
+                "version": 1,
+                "evidence": [_service_package_evidence(latest)],
+            }
+            if entitlement and definition and client
+            else None
+        )
+        valid_change = (
+            canonical_package_shape
+            and after["industryPackId"] == "spa"
+            and entitlement is not None
+            and definition is not None
+            and definition["active"] is True
+            and client is not None
+            and "anonymizedAt" not in client
+            and latest["subjectId"] == entitlement["id"]
+            and entitlement == expected_entitlement
+            and _service_package_order_matches(
+                current,
+                entitlement,
+                definition,
+                latest["happenedAt"],
+            )
+            and after["packageLedger"][:-1] == before["packageLedger"]
+            and after["packageDefinitions"] == before["packageDefinitions"]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == before["clients"]
+            and after["bookings"] == before["bookings"]
+        )
     elif event_type == "client_retention_set":
         match = re.fullmatch(r"retention-([0-9]{2,4})-days", str(latest["subjectId"]))
         retention_days = int(match.group(1)) if match else None
@@ -10709,6 +11203,13 @@ def _validate_service_schedule_saved(
         happened_at = datetime.fromisoformat(latest["happenedAt"].replace("Z", "+00:00"))
         last_activity = max([datetime.fromisoformat(prior_client["updatedAt"].replace("Z", "+00:00")), *[datetime.fromisoformat(booking["updatedAt"].replace("Z", "+00:00")) for booking in client_bookings]]) if prior_client else None
         retention_elapsed = isinstance(retention_days, int) and not isinstance(retention_days, bool) and last_activity is not None and happened_at >= last_activity + timedelta(days=retention_days)
+        active_package_entitlement = any(
+            entitlement["clientId"] == latest["subjectId"]
+            and entitlement["status"] == "active"
+            and happened_at
+            < datetime.fromisoformat(entitlement["expiresAt"].replace("Z", "+00:00"))
+            for entitlement in before["packageLedger"]
+        )
         evidence_identity_free = prior_client is not None and not any(_service_events_contain_identifier(after["events"], value) for value in (prior_client["name"], prior_client["contact"]))
         expected_client = ({
             "id": prior_client["id"], "name": f"Former client {prior_client['id']}", "contact": f"anonymized:{prior_client['id']}",
@@ -10718,24 +11219,107 @@ def _validate_service_schedule_saved(
         expected_clients = [expected_client if client["id"] == latest["subjectId"] else client for client in before["clients"]]
         expected_bookings = [{**booking, "customerName": f"Former client {latest['subjectId']}", "contact": f"anonymized:{latest['subjectId']}", "appointmentUpdates": "not_recorded", "note": "", "updatedAt": latest["happenedAt"]} if booking["clientId"] == latest["subjectId"] else booking for booking in before["bookings"]]
         valid_change = (
-            expected_client is not None and not open_visit and financial_records_closed and retention_elapsed and evidence_identity_free
+            expected_client is not None and not open_visit and not active_package_entitlement
+            and financial_records_closed and retention_elapsed and evidence_identity_free
             and after["services"] == before["services"] and after["resources"] == before["resources"]
             and after["privacyPolicy"] == before["privacyPolicy"] and after["clients"] == expected_clients and after["bookings"] == expected_bookings
         )
     elif event_type == "package_redeemed":
-        completed_subject = next(
+        before_by_entitlement_id = {
+            entitlement["id"]: entitlement for entitlement in before["packageLedger"]
+        }
+        changed_entitlements = [
+            entitlement
+            for entitlement in after["packageLedger"]
+            if before_by_entitlement_id.get(entitlement["id"]) != entitlement
+        ]
+        changed_entitlement = changed_entitlements[0] if len(changed_entitlements) == 1 else None
+        prior_entitlement = (
+            before_by_entitlement_id.get(changed_entitlement["id"])
+            if changed_entitlement
+            else None
+        )
+        definition = next(
             (
-                booking
-                for booking in after["bookings"]
-                if booking["id"] == latest["subjectId"] and booking["status"] == "completed"
+                candidate
+                for candidate in before["packageDefinitions"]
+                if prior_entitlement and candidate["id"] == prior_entitlement["definitionId"]
             ),
             None,
         )
+        latest_entitlement_evidence = (
+            changed_entitlement["evidence"][-1] if changed_entitlement else None
+        )
+        booking = next(
+            (
+                candidate
+                for candidate in before["bookings"]
+                if latest_entitlement_evidence
+                and candidate["id"] == latest_entitlement_evidence.get("bookingId")
+            ),
+            None,
+        )
+        client = next(
+            (
+                candidate
+                for candidate in before["clients"]
+                if prior_entitlement and candidate["id"] == prior_entitlement["clientId"]
+            ),
+            None,
+        )
+        remaining_sessions = (
+            prior_entitlement["remainingSessions"] - 1 if prior_entitlement else -1
+        )
+        expected_entitlement = (
+            {
+                **prior_entitlement,
+                "remainingSessions": remaining_sessions,
+                "status": "active" if remaining_sessions > 0 else "exhausted",
+                "version": prior_entitlement["version"] + 1,
+                "evidence": [
+                    *prior_entitlement["evidence"],
+                    _service_package_evidence(latest, booking_id=booking["id"]),
+                ],
+            }
+            if prior_entitlement and booking
+            else None
+        )
+        happened_at = datetime.fromisoformat(latest["happenedAt"].replace("Z", "+00:00"))
         valid_change = (
-            completed_subject is not None
-            and _spa_membership_session_available(current, after, latest)
+            canonical_package_shape
+            and after["industryPackId"] == "spa"
+            and prior_entitlement is not None
+            and changed_entitlement is not None
+            and definition is not None
+            and definition["active"] is True
+            and client is not None
+            and "anonymizedAt" not in client
+            and prior_entitlement["status"] == "active"
+            and prior_entitlement["remainingSessions"] > 0
+            and latest["subjectId"] == prior_entitlement["id"]
+            and booking is not None
+            and booking["clientId"] == prior_entitlement["clientId"]
+            and booking["status"] == "completed"
+            and booking["serviceId"] in definition["eligibleServiceIds"]
+            and happened_at
+            >= datetime.fromisoformat(booking["updatedAt"].replace("Z", "+00:00"))
+            and happened_at
+            < datetime.fromisoformat(prior_entitlement["expiresAt"].replace("Z", "+00:00"))
+            and _service_package_order_matches(
+                current,
+                prior_entitlement,
+                definition,
+                latest["happenedAt"],
+            )
+            and changed_entitlement == expected_entitlement
+            and len(after["packageLedger"]) == len(before["packageLedger"])
+            and {entry["id"] for entry in after["packageLedger"]}
+            == set(before_by_entitlement_id)
+            and after["packageDefinitions"] == before["packageDefinitions"]
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == before["clients"]
             and after["bookings"] == before["bookings"]
         )
     else:
@@ -10778,6 +11362,15 @@ def _validate_service_schedule_saved(
             and after["privacyPolicy"] == before["privacyPolicy"]
             and after["clients"] == before["clients"]
         )
+    if event_type not in {
+        "package_definition_saved",
+        "package_allocated",
+        "package_redeemed",
+    } and (
+        after["packageDefinitions"] != before["packageDefinitions"]
+        or after["packageLedger"] != before["packageLedger"]
+    ):
+        valid_change = False
     if not valid_change:
         raise TrialValidationError(
             "service schedule change does not match its latest evidence event."
@@ -10803,9 +11396,17 @@ def _validate_service_schedule_initialized(
         raise TrialValidationError(
             "service schedule initialization requires a clean industry pack without operating evidence."
         )
-    if not schedule["services"] or not schedule["resources"] or schedule["clients"] or schedule["bookings"] or schedule["privacyPolicy"] != {"clientRetentionDays": None}:
+    if (
+        not schedule["services"]
+        or not schedule["resources"]
+        or schedule["clients"]
+        or schedule["bookings"]
+        or schedule["packageDefinitions"]
+        or schedule["packageLedger"]
+        or schedule["privacyPolicy"] != {"clientRetentionDays": None}
+    ):
         raise TrialValidationError(
-            "service schedule initialization requires services and resources but no clients, bookings, or retained policy."
+            "service schedule initialization requires services and resources but no clients, bookings, packages, entitlements, or retained policy."
         )
 
 

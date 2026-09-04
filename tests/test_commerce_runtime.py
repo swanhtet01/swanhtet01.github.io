@@ -844,6 +844,12 @@ def spa_counter_state() -> dict[str, object]:
         ],
         "resources": [
             {
+                "id": "resource-staff-1",
+                "name": "Therapist 1",
+                "kind": "staff",
+                "active": True,
+            },
+            {
                 "id": "resource-room-1",
                 "name": "Treatment room 1",
                 "kind": "room",
@@ -869,7 +875,7 @@ def spa_counter_state() -> dict[str, object]:
                 "contact": "09-111-111",
                 "appointmentUpdates": "declined",
                 "serviceId": "service-session",
-                "resourceId": "resource-room-1",
+                "resourceIds": ["resource-staff-1", "resource-room-1"],
                 "startsAt": "2026-07-23T09:30:00.000Z",
                 "endsAt": "2026-07-23T10:30:00.000Z",
                 "status": "held",
@@ -878,6 +884,8 @@ def spa_counter_state() -> dict[str, object]:
                 "updatedAt": NOW,
             }
         ],
+        "packageDefinitions": [],
+        "packageLedger": [],
         "events": [
             {
                 "revision": 1,
@@ -8727,7 +8735,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         current["orders"][0].update(  # type: ignore[index]
             {
-                "customer": "Mya Thandar",
+                "customer": "client-0001",
                 "item": "Myanmar massage package 5 sessions",
                 "itemSku": "SPA-PACK-MASSAGE-5",
                 "quantity": 1,
@@ -8761,6 +8769,12 @@ class CommerceRuntimeTests(unittest.TestCase):
             ],
             "resources": [
                 {
+                    "id": "resource-staff-1",
+                    "name": "Therapist 1",
+                    "kind": "staff",
+                    "active": True,
+                },
+                {
                     "id": "resource-room-1",
                     "name": "Treatment room 1",
                     "kind": "room",
@@ -8786,7 +8800,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "contact": "09-111-111",
                     "appointmentUpdates": "declined",
                     "serviceId": "service-session",
-                    "resourceId": "resource-room-1",
+                    "resourceIds": ["resource-staff-1", "resource-room-1"],
                     "startsAt": "2026-07-29T04:30:00.000Z",
                     "endsAt": "2026-07-29T05:30:00.000Z",
                     "status": "held",
@@ -8795,6 +8809,8 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "updatedAt": "2026-07-29T04:00:00.000Z",
                 }
             ],
+            "packageDefinitions": [],
+            "packageLedger": [],
             "events": [
                 {
                     "revision": 1,
@@ -9084,63 +9100,423 @@ class CommerceRuntimeTests(unittest.TestCase):
                 },
             )
 
-        package_schedule = deepcopy(managed_schedule_state["serviceSchedule"])
-        package_schedule["revision"] = 5
-        package_schedule["events"].append(
+        package_definition = {
+            "id": "package-massage-5",
+            "label": "Myanmar massage package 5 sessions",
+            "purchaseSku": "SPA-PACK-MASSAGE-5",
+            "eligibleServiceIds": ["service-session"],
+            "sessionsPerPurchase": 5,
+            "priceMmk": 200000,
+            "validDays": 30,
+            "active": True,
+        }
+        definition_schedule = deepcopy(managed_schedule_state["serviceSchedule"])
+        definition_schedule["revision"] = 5
+        definition_schedule["packageDefinitions"].append(package_definition)
+        definition_schedule["events"].append(
             {
                 "revision": 5,
-                "type": "package_redeemed",
-                "subjectId": "booking-0001",
+                "type": "package_definition_saved",
+                "subjectId": package_definition["id"],
                 "actor": "operator-1",
-                "reason": "Used after the completed treatment was checked.",
+                "reason": "Saved the reviewed record-only package definition.",
                 "happenedAt": "2026-07-29T05:31:00.000Z",
             }
         )
-        package_saved = apply_event(
+        definition_state = apply_event(
             managed_schedule_state,
             "commerce.service_schedule.saved",
-            {**managed_schedule_state, "serviceSchedule": package_schedule},
+            {**managed_schedule_state, "serviceSchedule": definition_schedule},
             {
                 "actionId": "ACT-SERVICE-SCHEDULE-R5",
                 "capturedAt": "2026-07-29T05:31:00.000Z",
                 "actor": "operator-1",
-                "reason": "Used after the completed treatment was checked.",
+                "reason": "Saved the reviewed record-only package definition.",
                 "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
             },
         )
-        self.assertEqual(package_saved["serviceSchedule"]["events"][-1]["type"], "package_redeemed")
-        self.assertEqual(package_saved["serviceSchedule"]["bookings"], managed_schedule_state["serviceSchedule"]["bookings"])
+        order_digest = f"sha256:{sha256(json.dumps(definition_state['orders'][0], ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')).hexdigest()}"
+        allocation_at = "2026-07-29T05:32:00.000Z"
+        entitlement = {
+            "id": "package-entitlement-0001",
+            "clientId": "client-0001",
+            "definitionId": package_definition["id"],
+            "sourceOrderId": "ORD-SPA-PACKAGE",
+            "sourceOrderLineIndex": 0,
+            "sourceOrderDigest": order_digest,
+            "allocatedSessions": 5,
+            "remainingSessions": 5,
+            "issuedAt": allocation_at,
+            "expiresAt": "2026-08-28T05:32:00.000Z",
+            "status": "active",
+            "version": 1,
+            "evidence": [
+                {
+                    "revision": 6,
+                    "type": "package_allocated",
+                    "actor": "operator-1",
+                    "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                    "happenedAt": allocation_at,
+                }
+            ],
+        }
+        allocation_schedule = deepcopy(definition_state["serviceSchedule"])
+        allocation_schedule["revision"] = 6
+        allocation_schedule["packageLedger"].append(entitlement)
+        allocation_schedule["events"].append(
+            {
+                "revision": 6,
+                "type": "package_allocated",
+                "subjectId": entitlement["id"],
+                "actor": "operator-1",
+                "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                "happenedAt": allocation_at,
+            }
+        )
+        allocated_state = apply_event(
+            definition_state,
+            "commerce.service_schedule.saved",
+            {**definition_state, "serviceSchedule": allocation_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R6",
+                "capturedAt": allocation_at,
+                "actor": "operator-1",
+                "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R6",
+            },
+        )
+        self.assertEqual(
+            allocated_state["serviceSchedule"]["packageLedger"][0]["remainingSessions"],
+            5,
+        )
 
-        no_paid_balance = deepcopy(managed_schedule_state)
-        no_paid_balance["orders"][0]["customer"] = "Another Client"
+        redemption_at = "2026-07-29T05:33:00.000Z"
+        redemption_schedule = deepcopy(allocated_state["serviceSchedule"])
+        redemption_schedule["revision"] = 7
+        redemption_schedule["packageLedger"][0].update(
+            {
+                "remainingSessions": 4,
+                "version": 2,
+                "evidence": [
+                    *redemption_schedule["packageLedger"][0]["evidence"],
+                    {
+                        "revision": 7,
+                        "type": "package_redeemed",
+                        "actor": "operator-1",
+                        "reason": "Redeemed after the completed eligible treatment was checked.",
+                        "happenedAt": redemption_at,
+                        "bookingId": "booking-0001",
+                    },
+                ],
+            }
+        )
+        redemption_schedule["events"].append(
+            {
+                "revision": 7,
+                "type": "package_redeemed",
+                "subjectId": entitlement["id"],
+                "actor": "operator-1",
+                "reason": "Redeemed after the completed eligible treatment was checked.",
+                "happenedAt": redemption_at,
+            }
+        )
+        package_saved = apply_event(
+            allocated_state,
+            "commerce.service_schedule.saved",
+            {**allocated_state, "serviceSchedule": redemption_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R7",
+                "capturedAt": redemption_at,
+                "actor": "operator-1",
+                "reason": "Redeemed after the completed eligible treatment was checked.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R7",
+            },
+        )
+        self.assertEqual(package_saved["serviceSchedule"]["events"][-1]["type"], "package_redeemed")
+        self.assertEqual(package_saved["serviceSchedule"]["packageLedger"][0]["remainingSessions"], 4)
+        self.assertEqual(package_saved["serviceSchedule"]["bookings"], allocated_state["serviceSchedule"]["bookings"])
+
+        for field, value in (
+            ("paymentStatus", "pending"),
+            ("refundStatus", "settled"),
+            ("customer", "client-0002"),
+        ):
+            invalid_financial_state = deepcopy(definition_state)
+            invalid_financial_state["orders"][0][field] = value
+            with self.subTest(package_allocation_order_field=field), self.assertRaises(TrialValidationError):
+                apply_event(
+                    invalid_financial_state,
+                    "commerce.service_schedule.saved",
+                    {**invalid_financial_state, "serviceSchedule": allocation_schedule},
+                    {
+                        "actionId": "ACT-SERVICE-SCHEDULE-R6",
+                        "capturedAt": allocation_at,
+                        "actor": "operator-1",
+                        "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                        "evidenceReference": "SHOP-SERVICE-SCHEDULE:R6",
+                    },
+                )
+
+        forged_allocation = deepcopy(allocation_schedule)
+        forged_allocation["packageLedger"][0]["sourceOrderDigest"] = f"sha256:{'0' * 64}"
         with self.assertRaises(TrialValidationError):
             apply_event(
-                no_paid_balance,
+                definition_state,
                 "commerce.service_schedule.saved",
-                {**no_paid_balance, "serviceSchedule": package_schedule},
+                {**definition_state, "serviceSchedule": forged_allocation},
                 {
-                    "actionId": "ACT-SERVICE-SCHEDULE-R5",
-                    "capturedAt": "2026-07-29T05:31:00.000Z",
+                    "actionId": "ACT-SERVICE-SCHEDULE-R6",
+                    "capturedAt": allocation_at,
                     "actor": "operator-1",
-                    "reason": "Used after the completed treatment was checked.",
-                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+                    "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R6",
                 },
             )
 
-        package_rewrite = deepcopy(package_schedule)
-        package_rewrite["bookings"][0]["customerName"] = "Rewritten during redemption"
+        duplicate_redemption = deepcopy(redemption_schedule)
+        duplicate_redemption["revision"] = 8
+        duplicate_redemption["packageLedger"][0].update(
+            {
+                "remainingSessions": 3,
+                "version": 3,
+                "evidence": [
+                    *duplicate_redemption["packageLedger"][0]["evidence"],
+                    {
+                        "revision": 8,
+                        "type": "package_redeemed",
+                        "actor": "operator-1",
+                        "reason": "Invalid duplicate redemption.",
+                        "happenedAt": "2026-07-29T05:34:00.000Z",
+                        "bookingId": "booking-0001",
+                    },
+                ],
+            }
+        )
+        duplicate_redemption["events"].append(
+            {
+                "revision": 8,
+                "type": "package_redeemed",
+                "subjectId": entitlement["id"],
+                "actor": "operator-1",
+                "reason": "Invalid duplicate redemption.",
+                "happenedAt": "2026-07-29T05:34:00.000Z",
+            }
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state({**package_saved, "serviceSchedule": duplicate_redemption})
+
+        for expired_at in (
+            entitlement["expiresAt"],
+            "2026-08-28T05:32:00.001Z",
+        ):
+            expired_redemption = deepcopy(allocation_schedule)
+            expired_redemption["revision"] = 7
+            expired_redemption["packageLedger"][0].update(
+                {
+                    "remainingSessions": 4,
+                    "version": 2,
+                    "evidence": [
+                        *expired_redemption["packageLedger"][0]["evidence"],
+                        {
+                            "revision": 7,
+                            "type": "package_redeemed",
+                            "actor": "operator-1",
+                            "reason": "Invalid expired redemption.",
+                            "happenedAt": expired_at,
+                            "bookingId": "booking-0001",
+                        },
+                    ],
+                }
+            )
+            expired_redemption["events"].append(
+                {
+                    "revision": 7,
+                    "type": "package_redeemed",
+                    "subjectId": entitlement["id"],
+                    "actor": "operator-1",
+                    "reason": "Invalid expired redemption.",
+                    "happenedAt": expired_at,
+                }
+            )
+            with self.subTest(expired_at=expired_at), self.assertRaises(TrialValidationError):
+                validate_commerce_state({**allocated_state, "serviceSchedule": expired_redemption})
+
+        privacy_rewrite = deepcopy(redemption_schedule)
+        privacy_rewrite["privacyPolicy"] = {
+            "clientRetentionDays": 30,
+            "updatedAt": redemption_at,
+            "updatedBy": "operator-1",
+        }
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                allocated_state,
+                "commerce.service_schedule.saved",
+                {**allocated_state, "serviceSchedule": privacy_rewrite},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R7",
+                    "capturedAt": redemption_at,
+                    "actor": "operator-1",
+                    "reason": "Redeemed after the completed eligible treatment was checked.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R7",
+                },
+            )
+
+        mismatched_definition = deepcopy(definition_schedule)
+        mismatched_definition["packageDefinitions"][0]["priceMmk"] = 100000
         with self.assertRaises(TrialValidationError):
             apply_event(
                 managed_schedule_state,
                 "commerce.service_schedule.saved",
-                {**managed_schedule_state, "serviceSchedule": package_rewrite},
+                {**managed_schedule_state, "serviceSchedule": mismatched_definition},
                 {
                     "actionId": "ACT-SERVICE-SCHEDULE-R5",
                     "capturedAt": "2026-07-29T05:31:00.000Z",
                     "actor": "operator-1",
-                    "reason": "Used after the completed treatment was checked.",
+                    "reason": "Saved the reviewed record-only package definition.",
                     "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
                 },
+            )
+
+        renamed_state = deepcopy(definition_state)
+        renamed_state["serviceSchedule"]["clients"][0]["name"] = "Mya Thandar Updated"
+        renamed_state["serviceSchedule"]["bookings"][0]["customerName"] = "Mya Thandar Updated"
+        renamed_allocation = deepcopy(allocation_schedule)
+        renamed_allocation["clients"] = deepcopy(renamed_state["serviceSchedule"]["clients"])
+        renamed_allocation["bookings"] = deepcopy(renamed_state["serviceSchedule"]["bookings"])
+        renamed_allocated = apply_event(
+            renamed_state,
+            "commerce.service_schedule.saved",
+            {**renamed_state, "serviceSchedule": renamed_allocation},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R6",
+                "capturedAt": allocation_at,
+                "actor": "operator-1",
+                "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R6",
+            },
+        )
+        self.assertEqual(
+            renamed_allocated["serviceSchedule"]["packageLedger"][0]["clientId"],
+            "client-0001",
+        )
+
+        same_name_state = deepcopy(definition_state)
+        same_name_state["serviceSchedule"]["clients"].append(
+            {
+                "id": "client-0002",
+                "name": "Mya Thandar",
+                "contact": "09-222-222",
+                "appointmentUpdates": "declined",
+                "createdAt": allocation_at,
+                "updatedAt": allocation_at,
+            }
+        )
+        same_name_allocation = deepcopy(allocation_schedule)
+        same_name_allocation["clients"] = deepcopy(same_name_state["serviceSchedule"]["clients"])
+        same_name_allocation["packageLedger"][0]["clientId"] = "client-0002"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                same_name_state,
+                "commerce.service_schedule.saved",
+                {**same_name_state, "serviceSchedule": same_name_allocation},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R6",
+                    "capturedAt": allocation_at,
+                    "actor": "operator-1",
+                    "reason": "Allocated only after reviewing the recorded MMK payment evidence.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R6",
+                },
+            )
+
+        wrong_service_state = deepcopy(allocated_state)
+        wrong_service = {
+            "id": "service-other",
+            "name": "Other treatment",
+            "durationMinutes": 60,
+            "priceMmk": 45000,
+            "active": True,
+        }
+        wrong_service_state["serviceSchedule"]["services"].append(wrong_service)
+        wrong_service_state["serviceSchedule"]["bookings"][0]["serviceId"] = "service-other"
+        wrong_service_redemption = deepcopy(redemption_schedule)
+        wrong_service_redemption["services"].append(wrong_service)
+        wrong_service_redemption["bookings"][0]["serviceId"] = "service-other"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                wrong_service_state,
+                "commerce.service_schedule.saved",
+                {**wrong_service_state, "serviceSchedule": wrong_service_redemption},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R7",
+                    "capturedAt": redemption_at,
+                    "actor": "operator-1",
+                    "reason": "Redeemed after the completed eligible treatment was checked.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R7",
+                },
+            )
+
+        exhausted_state = deepcopy(package_saved)
+        exhausted_state["serviceSchedule"]["packageDefinitions"][0]["sessionsPerPurchase"] = 1
+        exhausted_state["serviceSchedule"]["packageLedger"][0].update(
+            {"allocatedSessions": 1, "remainingSessions": 0, "status": "exhausted"}
+        )
+        exhausted_state["serviceSchedule"]["bookings"].append(
+            {
+                **exhausted_state["serviceSchedule"]["bookings"][0],
+                "id": "booking-0002",
+                "startsAt": "2026-07-29T06:00:00.000Z",
+                "endsAt": "2026-07-29T07:00:00.000Z",
+                "updatedAt": "2026-07-29T07:00:00.000Z",
+            }
+        )
+        exhausted_redemption = deepcopy(exhausted_state["serviceSchedule"])
+        exhausted_redemption["revision"] = 8
+        exhausted_redemption["packageLedger"][0]["version"] = 3
+        exhausted_redemption["packageLedger"][0]["evidence"].append(
+            {
+                "revision": 8,
+                "type": "package_redeemed",
+                "actor": "operator-1",
+                "reason": "Invalid exhausted redemption.",
+                "happenedAt": "2026-07-29T07:01:00.000Z",
+                "bookingId": "booking-0002",
+            }
+        )
+        exhausted_redemption["events"].append(
+            {
+                "revision": 8,
+                "type": "package_redeemed",
+                "subjectId": entitlement["id"],
+                "actor": "operator-1",
+                "reason": "Invalid exhausted redemption.",
+                "happenedAt": "2026-07-29T07:01:00.000Z",
+            }
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(
+                {**exhausted_state, "serviceSchedule": exhausted_redemption}
+            )
+
+        reordered_evidence = deepcopy(package_saved)
+        reordered_evidence["serviceSchedule"]["packageLedger"][0]["evidence"].reverse()
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(reordered_evidence)
+
+        unsupported_reversal = deepcopy(allocation_schedule)
+        unsupported_reversal["revision"] = 7
+        unsupported_reversal["events"].append(
+            {
+                "revision": 7,
+                "type": "package_reversed",
+                "subjectId": entitlement["id"],
+                "actor": "operator-1",
+                "reason": "Unsupported reversal must fail closed.",
+                "happenedAt": redemption_at,
+            }
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(
+                {**allocated_state, "serviceSchedule": unsupported_reversal}
             )
 
         unfinished_package = deepcopy(confirmed_schedule)
