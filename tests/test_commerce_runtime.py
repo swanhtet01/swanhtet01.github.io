@@ -29,6 +29,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_supplier_payables_handoff_csv,
     commerce_supplier_payables_aging,
     commerce_website_intake_snapshot_digest,
+    create_commerce_order_from_intent,
     validate_commerce_state,
 )
 from supermega_runtime.client_import_runtime import (
@@ -824,6 +825,87 @@ def created_state(order_id: str = "ORD-1") -> dict[str, object]:
     state["orders"] = [order_record(order_id)]
     state["movements"] = [movement("reserve", f"ACT-{order_id}", -2, order_id=order_id)]
     return state
+
+
+def spa_counter_state() -> dict[str, object]:
+    state = catalog_state()
+    state["serviceSchedule"] = {
+        "schema": "supermega.shop.service_schedule.v4",
+        "industryPackId": "spa",
+        "revision": 1,
+        "services": [
+            {
+                "id": "service-session",
+                "name": "Standard treatment",
+                "durationMinutes": 60,
+                "priceMmk": 45000,
+                "active": True,
+            }
+        ],
+        "resources": [
+            {
+                "id": "resource-room-1",
+                "name": "Treatment room 1",
+                "kind": "room",
+                "active": True,
+            }
+        ],
+        "privacyPolicy": {"clientRetentionDays": None},
+        "clients": [
+            {
+                "id": "client-0001",
+                "name": "Mya Thandar",
+                "contact": "09-111-111",
+                "appointmentUpdates": "declined",
+                "createdAt": NOW,
+                "updatedAt": NOW,
+            }
+        ],
+        "bookings": [
+            {
+                "id": "booking-0001",
+                "clientId": "client-0001",
+                "customerName": "Mya Thandar",
+                "contact": "09-111-111",
+                "appointmentUpdates": "declined",
+                "serviceId": "service-session",
+                "resourceId": "resource-room-1",
+                "startsAt": "2026-07-23T09:30:00.000Z",
+                "endsAt": "2026-07-23T10:30:00.000Z",
+                "status": "held",
+                "note": "",
+                "createdAt": NOW,
+                "updatedAt": NOW,
+            }
+        ],
+        "events": [
+            {
+                "revision": 1,
+                "type": "booking_scheduled",
+                "subjectId": "booking-0001",
+                "actor": "operator-1",
+                "reason": "Scheduled from the Shop appointment workspace.",
+                "happenedAt": NOW,
+            }
+        ],
+    }
+    return validate_commerce_state(state)
+
+
+def spa_counter_order_intent(**overrides: object) -> dict[str, object]:
+    intent: dict[str, object] = {
+        "orderId": "ORD-SPA-COUNTER-1",
+        "customer": "client-0001",
+        "channel": "sister_counter",
+        "payment": "cash",
+        "fulfilment": "pickup",
+        "fulfilmentReference": "SPA-COUNTER-1",
+        "promisedAt": PROMISED_AT,
+        "paymentTermsDays": 0,
+        "lines": [{"sku": "SKU-1", "quantity": 2}],
+    }
+    intent.update(overrides)
+    return intent
 
 
 def completed_state(order_id: str = "ORD-1") -> dict[str, object]:
@@ -8438,6 +8520,200 @@ class CommerceRuntimeTests(unittest.TestCase):
             apply_event({}, "commerce.workspace.initialized", invalid)
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.snapshot.saved", catalog_state())
+
+    def test_spa_counter_order_uses_retained_client_and_record_only_mmk_tender(self) -> None:
+        for tender in ("cash", "bank_transfer", "mobile_wallet"):
+            with self.subTest(tender=tender):
+                current = spa_counter_state()
+                accepted = reduce_trial_state(
+                    "commerce",
+                    "commerce.order.created",
+                    current,
+                    {
+                        "intent": spa_counter_order_intent(payment=tender),
+                        "evidence": action_evidence("ACT-SPA-COUNTER-ORDER"),
+                    },
+                )
+                order = accepted["orders"][0]
+                self.assertEqual(order["customer"], "client-0001")
+                self.assertEqual(order["payment"], tender)
+                self.assertEqual(order["paymentStatus"], "pending")
+                self.assertEqual(order["refundStatus"], "none")
+                self.assertEqual(order["status"], "confirmed")
+                self.assertNotIn("paymentReconciledAt", order)
+                self.assertNotIn("completion", order)
+                self.assertEqual(
+                    order["calculation"],
+                    {
+                        "schema": "supermega.commerce.order-calculation.v1",
+                        "currency": "MMK",
+                        "catalogRevision": 0,
+                        "subtotalMmk": 200,
+                        "taxMode": "not_configured",
+                        "taxMmk": 0,
+                        "totalMmk": 200,
+                    },
+                )
+                self.assertEqual(order["total"], 200)
+                self.assertEqual(accepted["items"][0]["onHand"], 8)
+                self.assertEqual(accepted["movements"][0]["kind"], "reserve")
+                self.assertEqual(accepted["serviceSchedule"], current["serviceSchedule"])
+                self.assertEqual(accepted["closes"], current["closes"])
+
+    def test_spa_counter_order_rejects_stale_identity_tender_and_operator_totals(self) -> None:
+        current = spa_counter_state()
+        invalid_customers: tuple[object, ...] = (
+            "client-9999",
+            "Mya Thandar",
+            "09-111-111",
+            "local-import:Mya-Thandar",
+            "client-1",
+            "",
+        )
+        for customer in invalid_customers:
+            with self.subTest(customer=customer):
+                with self.assertRaises(TrialValidationError):
+                    reduce_trial_state(
+                        "commerce",
+                        "commerce.order.created",
+                        current,
+                        {
+                            "intent": spa_counter_order_intent(customer=customer),
+                            "evidence": action_evidence("ACT-SPA-INVALID-CUSTOMER"),
+                        },
+                    )
+
+        with self.assertRaises(TrialValidationError):
+            create_commerce_order_from_intent(
+                current,
+                spa_counter_order_intent(customer="Mya Thandar"),
+                action_evidence("ACT-SPA-DIRECT-BUILDER"),
+            )
+
+        anonymized = deepcopy(current)
+        client = anonymized["serviceSchedule"]["clients"][0]
+        client.update(
+            {
+                "name": "Former client client-0001",
+                "contact": "anonymized:client-0001",
+                "appointmentUpdates": "not_recorded",
+                "updatedAt": NOW,
+                "anonymizedAt": NOW,
+                "anonymizedBy": "operator-1",
+            }
+        )
+        booking = anonymized["serviceSchedule"]["bookings"][0]
+        booking.update(
+            {
+                "customerName": "Former client client-0001",
+                "contact": "anonymized:client-0001",
+                "appointmentUpdates": "not_recorded",
+            }
+        )
+        anonymized["serviceSchedule"]["events"][0].update(
+            {"type": "client_anonymized", "subjectId": "client-0001"}
+        )
+        validate_commerce_state(anonymized)
+        with self.assertRaises(TrialValidationError):
+            reduce_trial_state(
+                "commerce",
+                "commerce.order.created",
+                anonymized,
+                {
+                    "intent": spa_counter_order_intent(),
+                    "evidence": action_evidence("ACT-SPA-ANONYMIZED-CUSTOMER"),
+                },
+            )
+
+        for tender in ("Cash", "card", "paid", "settled", "", {"method": "cash"}):
+            with self.subTest(tender=tender):
+                with self.assertRaises(TrialValidationError):
+                    reduce_trial_state(
+                        "commerce",
+                        "commerce.order.created",
+                        current,
+                        {
+                            "intent": spa_counter_order_intent(payment=tender),
+                            "evidence": action_evidence("ACT-SPA-INVALID-TENDER"),
+                        },
+                    )
+
+        with self.assertRaises(TrialValidationError):
+            reduce_trial_state(
+                "commerce",
+                "commerce.order.created",
+                current,
+                {
+                    "intent": spa_counter_order_intent(paymentTermsDays=7),
+                    "evidence": action_evidence("ACT-SPA-CREDIT-TERM"),
+                },
+            )
+        for field, value in (
+            ("unitPriceMmk", 1),
+            ("total", 1),
+            ("status", "completed"),
+            ("paymentStatus", "reconciled"),
+        ):
+            with self.subTest(operator_field=field):
+                with self.assertRaises(TrialValidationError):
+                    reduce_trial_state(
+                        "commerce",
+                        "commerce.order.created",
+                        current,
+                        {
+                            "intent": spa_counter_order_intent(**{field: value}),
+                            "evidence": action_evidence("ACT-SPA-OPERATOR-PRICE"),
+                        },
+                    )
+        for lines in (
+            [
+                {"sku": "SKU-1", "quantity": 1},
+                {"sku": "SKU-1", "quantity": 1},
+            ],
+            [{"sku": "SKU-1", "quantity": 11}],
+        ):
+            with self.subTest(lines=lines):
+                with self.assertRaises(TrialValidationError):
+                    reduce_trial_state(
+                        "commerce",
+                        "commerce.order.created",
+                        current,
+                        {
+                            "intent": spa_counter_order_intent(lines=lines),
+                            "evidence": action_evidence("ACT-SPA-INVALID-LINES"),
+                        },
+                    )
+
+    def test_spa_counter_order_transition_rejects_direct_identity_and_schedule_bypass(self) -> None:
+        current = spa_counter_state()
+        evidence = action_evidence("ACT-SPA-DIRECT-BYPASS")
+        accepted = reduce_trial_state(
+            "commerce",
+            "commerce.order.created",
+            current,
+            {"intent": spa_counter_order_intent(), "evidence": evidence},
+        )
+        for field, value in (("customer", "Mya Thandar"), ("payment", "card")):
+            forged = deepcopy(accepted)
+            forged["orders"][0][field] = value
+            with self.subTest(field=field):
+                with self.assertRaises(TrialValidationError):
+                    apply_event(current, "commerce.order.created", forged, evidence)
+
+        broad_replacement = deepcopy(accepted)
+        broad_replacement["serviceSchedule"]["privacyPolicy"] = {
+            "clientRetentionDays": 30,
+            "updatedAt": NOW,
+            "updatedBy": "operator-1",
+        }
+        validate_commerce_state(broad_replacement)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.order.created",
+                broad_replacement,
+                evidence,
+            )
 
     def test_service_schedule_is_versioned_inside_commerce_and_fails_closed(self) -> None:
         current = completed_state("ORD-SPA-PACKAGE")

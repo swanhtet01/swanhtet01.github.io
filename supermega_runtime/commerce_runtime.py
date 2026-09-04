@@ -224,6 +224,9 @@ _MAX_MOVEMENT_ID_LENGTH = 2_000
 _SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v4"
 _LEGACY_SERVICE_SCHEDULE_SCHEMA_V3 = "supermega.shop.service_schedule.v3"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
+_SPA_COUNTER_RECORD_ONLY_TENDER_METHODS = frozenset(
+    {"cash", "bank_transfer", "mobile_wallet"}
+)
 _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
     {
         "service_registered",
@@ -5962,6 +5965,35 @@ def _configured_order_calculation(
     return calculation
 
 
+def _validate_spa_counter_order_identity_and_tender(
+    current: Mapping[str, Any],
+    *,
+    customer: Any,
+    payment: Any,
+    payment_terms_days: int,
+) -> None:
+    service_schedule = _service_schedule(current)
+    if service_schedule is None or service_schedule["industryPackId"] != "spa":
+        return
+    active_client_ids = {
+        client["id"]
+        for client in service_schedule["clients"]
+        if "anonymizedAt" not in client
+    }
+    if customer not in active_client_ids:
+        raise TrialValidationError(
+            "a Spa counter order must reference one current non-anonymized managed client ID."
+        )
+    if payment not in _SPA_COUNTER_RECORD_ONLY_TENDER_METHODS:
+        raise TrialValidationError(
+            "a Spa counter order requires a source-owned record-only tender method."
+        )
+    if payment_terms_days != 0:
+        raise TrialValidationError(
+            "a Spa counter tender record cannot create customer credit or settle payment."
+        )
+
+
 def create_commerce_order_from_intent(
     current_value: Mapping[str, Any],
     intent_value: Mapping[str, Any],
@@ -6013,6 +6045,12 @@ def create_commerce_order_from_intent(
     )
     if payment_terms_days not in _CUSTOMER_CREDIT_TERMS:
         raise TrialValidationError("order intent.paymentTermsDays is unsupported.")
+    _validate_spa_counter_order_identity_and_tender(
+        current,
+        customer=customer,
+        payment=payment,
+        payment_terms_days=payment_terms_days,
+    )
 
     item_by_sku = {item["sku"]: item for item in current["items"]}
     raw_lines = _list(intent["lines"], "order intent.lines")
@@ -8121,6 +8159,13 @@ def _validate_new_order_and_reservation(
     payment_terms_days = _order_payment_terms_days(order)
     if payment_terms_days is None:
         raise TrialValidationError("a new order requires a supported customer credit term.")
+    if event_type == "commerce.order.created":
+        _validate_spa_counter_order_identity_and_tender(
+            current,
+            customer=order.get("customer"),
+            payment=order.get("payment"),
+            payment_terms_days=payment_terms_days,
+        )
     credit_decision = order.get("creditDecision")
     if payment_terms_days == 0:
         if credit_decision is not None:
