@@ -246,7 +246,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:b7dfd9033c97cdde1b42a44d510f6c37e730d6269efeeac66603e277a9dcd5f0"
+      "digest": "sha256:0c00feaf994f3488c2f455882a2a375e2f72db3ce3221e0fe7ce4bfd5387e4f7"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -257,5 +257,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:051b649e45737daaf9807ea6ab5ee3d6fa3ee45f977d6a5b03270b915bc137e4"
+  "digest": "sha256:05a46f712507d27e64143677d282b153ef3b4d1366ef2b325afebbc6ebd8d531"
 }
