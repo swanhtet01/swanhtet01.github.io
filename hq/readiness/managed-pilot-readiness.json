@@ -1,15 +1,32 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-08-28T17:18:10.017Z",
+  "asOf": "2026-09-07T05:02:24.097Z",
   "pilotMode": "owner_named",
-  "sourceDigest": "sha256:6b10fa748650f79dad07d05fef1a9454697736b5bcda5e64cb7b88a26b7d093b",
+  "localDatabase": {
+    "contract": "supermega.hq.database-rehearsal.v3",
+    "schemaVersion": 13,
+    "schemaProfile": "v13-self-serve",
+    "migrationCount": 15,
+    "implementationCommit": "492dbf2a73d3c91ad8d25cc675523d079f678b99",
+    "implementationTree": "1fcff3d03e5a44ea396235d8b3800c263655c653",
+    "implementationDigest": "sha256:6a8be4393b3fec28693e9ee685e179853f8b7d1f8ce6f13b02807079d4aa694e",
+    "receiptDigest": "sha256:1d6056b9d72011965f31951a13b2fb76f7005033cab5e80e4222cd64658f68fd",
+    "behaviorChecks": 72,
+    "catalogChecksBefore": 33,
+    "catalogChecksAfter": 33,
+    "hostedEvidenceCurrent": false
+  },
+  "sourceDigest": "sha256:65ddd9ac28c5804dcd83afaf811459717ae5d9c2e4b2059dc33f686252db2794",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 3,
+    "blockingGateCount": 6,
     "blockingGateIds": [
       "preview_rehearsal",
+      "managed_persistence",
+      "storage_privacy",
+      "security",
       "pilot_evidence",
       "production_activation"
     ],
@@ -93,10 +110,12 @@
   "liveProduction": {
     "operatingMode": "isolated_demo",
     "schemaVersion": 11,
-    "localTargetVersion": 11,
-    "versionDrift": 0,
+    "observedAt": "2026-08-20T17:02:04.312+06:30",
+    "currentStateRevalidated": false,
+    "localTargetVersion": 13,
+    "versionDrift": 2,
     "browserRolesDenied": true,
-    "publicBrowserQuarantine": true,
+    "publicBrowserQuarantine": false,
     "managedWritesEnabled": false,
     "productionMutationAuthorized": false
   },
@@ -109,6 +128,7 @@
   },
   "storagePrivacy": {
     "proofComplete": true,
+    "currentTargetProven": false,
     "contract": "supermega.hosted-storage-privacy-proof.v1",
     "approvalId": "storage-privacy-proof-24h-20260814",
     "recordedAt": "2026-08-14T20:46:15.344Z",
@@ -116,6 +136,7 @@
   },
   "managedPersistence": {
     "proofComplete": true,
+    "currentTargetProven": false,
     "contract": "supermega.managed-persistence-proof.v1",
     "approvalId": "persistence-proof-24h-20260816",
     "recordedAt": "2026-08-16T09:14:56.804Z",
@@ -123,6 +144,7 @@
   },
   "selfServePilot": {
     "proofComplete": true,
+    "currentTargetProven": false,
     "contract": "supermega.self-serve-pilot-proof.v1",
     "approvalId": "self-serve-proof-v11c-20260816",
     "recordedAt": "2026-08-16T17:00:52.000Z",
@@ -162,20 +184,20 @@
     },
     {
       "id": "managed_persistence",
-      "status": "ready-hosted",
-      "evidence": "Seven-proof hosted audit passed: durable writes with read-back, exact idempotent retry, version-conflict rejection, event immutability, cross-tenant denial, recovery round-trip, and induced atomic rollback, on a deleted isolated branch.",
-      "nextAction": "Keep the persistence evidence and instrument current."
+      "status": "blocked",
+      "evidence": "Historical seven-proof hosted audit is retained for its deleted branch; it does not bind current schema v13, billing, durable signup limits or this candidate.",
+      "nextAction": "Prove current durable commands, billing, attempt limits, recovery and tenant isolation on an owner-approved isolated target."
     },
     {
       "id": "storage_privacy",
-      "status": "ready-hosted",
-      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
-      "nextAction": "Keep the storage-privacy evidence and instrument current."
+      "status": "blocked",
+      "evidence": "Historical six-request Storage audit is retained for its deleted branch; current candidate access and uploaded object recovery remain unproven.",
+      "nextAction": "Prove current private access plus object export/restore on an owner-approved isolated target."
     },
     {
       "id": "security",
-      "status": "ready-hosted",
-      "evidence": "Protected production is at managed schema v11, zero drift from local target v11, browser roles denied, public-browser quarantine recorded, and Security Advisor clear.",
+      "status": "blocked",
+      "evidence": "Historical clear audit (0 findings) observed managed schema v11 against its then-target v11. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.",
       "nextAction": "Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs."
     },
     {
@@ -260,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:295d5b7917a193d0700aa3ae7485c62c837b42e0aafdb29256c3bc89e851b7fc"
+      "digest": "sha256:bc6f06d50d81aea96f679c72b3c6f5c4abdcee86533ff75231589c0179471dfd"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -292,7 +314,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:22ae4ff0c60c06a1d1dad1ce4d670f1facc9c299972d571a091392e6e0855be0"
+      "digest": "sha256:18a7f64af21ccfc236b8025cccca4a6bdcd95ef857c5fc61cefcbf7401939b72"
     }
   ]
 }
