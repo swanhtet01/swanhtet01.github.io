@@ -54,6 +54,7 @@ const selfServeGrantsMigration = await read('supabase/migrations/20260816120000_
 const publicBrowserQuarantine = await read('supabase/rehearsal/20260804_public_browser_quarantine.sql')
 const publicBrowserQuarantineVerifier = await read('tools/verify_public_browser_quarantine.mjs')
 const managedActivation = await read('supermega_runtime/managed_activation.py')
+const currentDatabaseProfile = await read('tools/private_trial_v13_contract.py')
 const managedEnvironmentValueVerifier = await read('tools/verify_managed_runtime_environment_values.mjs')
 const runtimeRoleProvisioner = await read('tools/provision_supermega_runtime_role.py')
 const managedAccountPage = await read('showroom/src/core/ManagedAccountPage.tsx')
@@ -304,6 +305,54 @@ const requireContract = (name, condition) => {
   checks.push(name)
   if (!condition) failures.push(name)
 }
+// Drift guards for the independently tested implementation, not database or
+// provider evidence. Keep the legacy profile pins below for historical audits.
+const currentDatabasePins = [
+  [databaseValidator, [
+    'def schema_contract(profile: str)',
+    'choices=("legacy-v11", "v13-self-serve")',
+    'schema_profile=args.schema_profile',
+    'schema_profile=schema_profile',
+    'schema_profile_mode_conflict',
+  ]],
+  [currentDatabaseProfile, [
+    'PROFILE = "v13-self-serve"',
+    'CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"',
+    'SCHEMA_VERSION=13',
+    '"extension_columns_exact"',
+    '"extension_constraints_exact"',
+    '"extension_functions_exact"',
+    '"extension_policies_exact"',
+    '"private_column_acl_exact"',
+  ]],
+  [managedActivation, [
+    'TRIAL_SCHEMA_VERSION = 13',
+    'TRIAL_SCHEMA_PROFILE = "v13-self-serve"',
+    'TRIAL_DATABASE_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"',
+    'type(target["schemaVersion"]) is not int',
+    'target["schemaProfile"] != TRIAL_SCHEMA_PROFILE',
+    'target["databaseContract"] != TRIAL_DATABASE_CONTRACT',
+    'verify_postgres17_schema_v13_self_serve',
+  ]],
+  [databaseActivator, [
+    "'--schema-profile', 'v13-self-serve'",
+    "target.schemaProfile -cne 'v13-self-serve'",
+    "target.databaseContract -cne 'supermega_private_trial_database_v13_self_serve_v1'",
+    "-Key 'SUPERMEGA_BILLING_SCHEMA_VERSION' -Value $activationSchemaVersion",
+  ]],
+  [managedRuntimeEnvironmentVerifier, [
+    "managedSchemaVersion = '13'",
+    'environment.SUPERMEGA_BILLING_SCHEMA_VERSION',
+    "if (billingSchemaVersion !== managedSchemaVersion) addFailure('managed_billing_schema_version_invalid')",
+    'schemaVersion, billingSchemaVersion, boundProjectRef',
+  ]],
+]
+const currentDatabasePinsMatch = (groups) => groups.every(([source, pins]) => pins.every((pin) => source.includes(pin)))
+requireContract('managed v13 activation selects and binds the reviewed profile and billing configuration', currentDatabasePinsMatch(currentDatabasePins))
+requireContract('managed v13 source guard rejects each missing contract pin', currentDatabasePins.every(([source, pins], groupIndex) => pins.every((pin) => {
+  const altered = currentDatabasePins.map((group, index) => index === groupIndex ? [source.split(pin).join('removed-contract-pin'), pins] : group)
+  return !currentDatabasePinsMatch(altered)
+})))
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 const expectedHumanCommerceEvents = [
@@ -663,7 +712,7 @@ requireContract('managed activation requires durable named-owner authorization a
 requireContract('client owner onboarding is create-only, privacy scrubbed, live-auth verified, and activation-bound without copied identity', /supermega\.client_owner_identity_plan\.v1/.test(await read('tools/manage_client_owner_identity.py')) && /invite_named_owner/.test(await read('tools/manage_client_owner_identity.py')) && /verify_supabase_user_identity/.test(await read('tools/manage_client_owner_identity.py')) && /authorizationFromUserMetadataAllowed/.test(await read('tools/manage_client_owner_identity.py')) && /containsRawEmail/.test(await read('tools/manage_client_owner_identity.py')) && /providerCallsPerformed/.test(await read('tools/manage_client_owner_identity.py')) && /prepare-activation/.test(await read('tools/manage_client_owner_identity.py')) && /compile_proof_bound_activation/.test(await read('tools/manage_client_owner_identity.py')) && !/prepare_activation\.add_argument\("--owner-actor-id"/.test(await read('tools/manage_client_owner_identity.py')) && rootPackage.scripts?.['client:owner-identity'] === 'python -s tools/manage_client_owner_identity.py' && rootPackage.scripts?.['client:prepare:self-test']?.includes('tests.test_client_owner_identity'))
 requireContract('managed database role collision is rejected before foundation grants', /pre-existing supermega trial backend role attributes are unsafe/.test(rolePreflight) && /dependency\.refclassid = 'pg_authid'::regclass/.test(rolePreflight) && migration.indexOf('backend_role_preflight') < migration.indexOf('create schema if not exists app_private'))
 requireContract('hosted database administration cannot inherit or set the backend role', /member_role\.rolname = 'postgres'/.test(hardeningMigration) && /grantor_role\.rolname in \('postgres', 'supabase_admin'\)/.test(hardeningMigration) && /not membership\.inherit_option/.test(hardeningMigration) && /not membership\.set_option/.test(hardeningMigration) && /safe_hosted_admin_membership/.test(databaseValidator) && /row\.get\("inherit_option"\) is False/.test(databaseValidator) && /row\.get\("set_option"\) is False/.test(databaseValidator))
-requireContract('managed database readiness validator targets exact PostgreSQL and schema contracts', /CONTRACT = "supermega_private_trial_database_v11"/.test(databaseValidator) && /EXPECTED_POSTGRES_MAJOR = 17/.test(databaseValidator) && /pg_db_role_setting/.test(databaseValidator) && /SCHEMA_VERSION = 11/.test(databaseValidator) && /complete v11 schema contract/.test(databaseValidator) && /workspace_access_controls_self_serve_insert/.test(databaseValidator) && /workspace_memberships_self_serve_insert/.test(databaseValidator) && /metadata_table_rls/.test(databaseValidator) && /select current_setting\('app\.workspace_id'/.test(databaseValidator) && /workspace_access_controls/.test(databaseValidator) && /workspace_is_active/.test(databaseValidator) && /supabase_session_is_active/.test(databaseValidator) && /RESTRICTIVE/.test(databaseValidator) && /EXPECTED_POLICY_FINGERPRINTS/.test(databaseValidator) && /security_constraints_exact/.test(databaseValidator))
+requireContract('managed database readiness validator targets exact PostgreSQL and schema contracts', /CONTRACT = "supermega_private_trial_database_v11"/.test(databaseValidator) && /EXPECTED_POSTGRES_MAJOR = 17/.test(databaseValidator) && /pg_db_role_setting/.test(databaseValidator) && /SCHEMA_VERSION = 11/.test(databaseValidator) && /complete selected schema contract/.test(databaseValidator) && /workspace_access_controls_self_serve_insert/.test(databaseValidator) && /workspace_memberships_self_serve_insert/.test(databaseValidator) && /metadata_table_rls/.test(databaseValidator) && /select current_setting\('app\.workspace_id'/.test(databaseValidator) && /workspace_access_controls/.test(databaseValidator) && /workspace_is_active/.test(databaseValidator) && /supabase_session_is_active/.test(databaseValidator) && /RESTRICTIVE/.test(databaseValidator) && /EXPECTED_POLICY_FINGERPRINTS/.test(databaseValidator) && /security_constraints_exact/.test(databaseValidator))
 requireContract('managed Vercel mode requires value-aware target, dedicated runtime login, TLS, browser-auth, and write-flag proof', /managed_database_target_or_tls_invalid/.test(managedEnvironmentValueVerifier) && /managed_browser_auth_url_invalid/.test(managedEnvironmentValueVerifier) && /managed_browser_publishable_key_invalid/.test(managedEnvironmentValueVerifier) && /managed_writes_flag_not_enabled/.test(managedEnvironmentValueVerifier) && /runtimeRole = 'supermega_trial_login'/.test(managedEnvironmentValueVerifier) && /username === `\$\{runtimeRole\}\.\$\{projectRef\}`/.test(managedEnvironmentValueVerifier) && /parsed\.port === '6543'/.test(managedEnvironmentValueVerifier) && /queryKeys\.length === 1/.test(managedEnvironmentValueVerifier) && /secretValuesExposed: false/.test(managedEnvironmentValueVerifier))
 requireContract('managed clients treat capability-filtered product states as partial', /states: Partial<Record<ManagedSurface, ManagedStateRecord>>/.test(managedTrialClient) && /requireManagedSurfaceState/.test(managedTrialClient) && /trial_capability_required/.test(managedTrialClient) && /requireManagedSurfaceState\(bootstrap, 'commerce', 'Shop'\)/.test(workspaceRuntime) && /requireManagedSurfaceState\(bootstrap, 'production', 'Plant'\)/.test(workspaceRuntime))
 requireContract('managed product entitlements constrain server capabilities and direct data access', /def capabilities_for_product_entitlements\(/.test(trialStore) && /An explicit empty or malformed grant/.test(trialStore) && (trialStore.match(/capabilities = capabilities_for_product_entitlements\(/g) || []).length >= 2 && /product_entitlements = self\._product_entitlements\(/.test(trialStore) && /store\.get_state\(principal, "production"\)/.test(await read('tests/test_product_entitlements.py')) && /test_activation_entitlements_override_mismatched_product_capabilities/.test(await read('tests/test_trial_runtime.py')))
@@ -812,7 +861,7 @@ requireContract('console errors and partial lead conversions are recorded with s
   && !/console\.api_unhandled_error[\s\S]{0,160}body/.test(consoleApi)
   && /lead conversion records the won stage before it logs a clean win/.test(consoleErrorRecordingTest)
   && /console error handling contract records safe metadata and never request bodies/.test(consoleErrorRecordingTest))
-requireContract('managed database secret handoff is staged, release-bound, value-verified, and compensated', /vercel@56\.1\.0/.test(databaseActivator) && /--sensitive/.test(databaseActivator) && /AppVercelProjectId = 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'/.test(databaseActivator) && /VercelOrgId = 'team_wI4l7ZgSxcEztQPSlCCYVeJ5'/.test(databaseActivator) && /--cwd/.test(databaseActivator) && !/--project/.test(databaseActivator) && /\$addedEnvironmentKeys\.Add\(\$Key\)/.test(databaseActivator) && /Remove-StagedEnvironmentValues/.test(databaseActivator) && /\$VercelCli env rm/.test(databaseActivator) && /verify_managed_runtime_environment_values\.mjs/.test(databaseActivator) && /Activation plan must target the reviewed managed schema version 11/.test(databaseActivator) && /Activation plan must bind the exact reviewed 40-character release commit/.test(databaseActivator) && databaseActivator.includes("-Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION'") && databaseActivator.includes("-Key 'SUPERMEGA_SUPABASE_PROJECT_REF'") && !databaseActivator.includes("-Key 'SUPERMEGA_RELEASE_COMMIT'") && /VERCEL_GIT_COMMIT_SHA remains authoritative after deployment/.test(databaseActivator) && databaseActivator.indexOf("-Key 'SUPERMEGA_DATABASE_URL'") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && databaseActivator.indexOf("Write-Output '==> activate the workspace gate") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && /managedSchemaVersion = '11'/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_SUPABASE_PROJECT_REF/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_RELEASE_COMMIT[\s\S]+VERCEL_GIT_COMMIT_SHA[\s\S]+GITHUB_SHA/.test(managedRuntimeEnvironmentVerifier) && /managed_self_serve_window_not_open/.test(managedRuntimeEnvironmentVerifier))
+requireContract('managed database secret handoff is staged, release-bound, value-verified, and compensated', /vercel@56\.1\.0/.test(databaseActivator) && /--sensitive/.test(databaseActivator) && /AppVercelProjectId = 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'/.test(databaseActivator) && /VercelOrgId = 'team_wI4l7ZgSxcEztQPSlCCYVeJ5'/.test(databaseActivator) && /--cwd/.test(databaseActivator) && !/--project/.test(databaseActivator) && /\$addedEnvironmentKeys\.Add\(\$Key\)/.test(databaseActivator) && /Remove-StagedEnvironmentValues/.test(databaseActivator) && /\$VercelCli env rm/.test(databaseActivator) && /verify_managed_runtime_environment_values\.mjs/.test(databaseActivator) && /Activation plan must target the reviewed managed schema version 13/.test(databaseActivator) && /Activation plan must bind the exact reviewed 40-character release commit/.test(databaseActivator) && databaseActivator.includes("-Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION'") && databaseActivator.includes("-Key 'SUPERMEGA_SUPABASE_PROJECT_REF'") && !databaseActivator.includes("-Key 'SUPERMEGA_RELEASE_COMMIT'") && /VERCEL_GIT_COMMIT_SHA remains authoritative after deployment/.test(databaseActivator) && databaseActivator.indexOf("-Key 'SUPERMEGA_DATABASE_URL'") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && databaseActivator.indexOf("Write-Output '==> activate the workspace gate") < databaseActivator.indexOf("-Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'") && /managedSchemaVersion = '13'/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_SUPABASE_PROJECT_REF/.test(managedRuntimeEnvironmentVerifier) && /SUPERMEGA_RELEASE_COMMIT[\s\S]+VERCEL_GIT_COMMIT_SHA[\s\S]+GITHUB_SHA/.test(managedRuntimeEnvironmentVerifier) && /managed_self_serve_window_not_open/.test(managedRuntimeEnvironmentVerifier))
 requireContract('managed storage privacy proof is bounded, read-only, owner-confirmed, and redacted',
   /supermega\.private-storage-privacy\.v1/.test(storagePrivacyVerifier)
   && /supabase_storage_rest_v2/.test(storagePrivacyVerifier)
