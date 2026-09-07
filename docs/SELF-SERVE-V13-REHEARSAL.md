@@ -46,7 +46,8 @@ fingerprints were derived from an isolated PostgreSQL 17 installation of the
 exact pinned v12, v13 and durable-budget migration bytes (LF-normalized), never
 from a supplied target during validation. They bind every column/default/type,
 constraint, function body/security/configuration and policy expression in the
-extension. The collector also checks all private column grants; exactly UPDATE
+extension, including column collation identity/determinism. The collector also
+checks all private column grants; exactly UPDATE
 on the budget's attempts/claim_conflicts columns is permitted. Existing table,
 function, trigger, index, role, RLS and Storage checks remain required.
 

@@ -32,7 +32,7 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 # Exact PostgreSQL 17 output from the pinned migrations, with all row keys retained.
 # Source-derived, synthetic catalog evidence only. Unknown/extra/missing rows fail.
 CATALOG_PINS = {
-    "extension_columns_exact": "10e24312e29b665b1b94b1778d0ded573af4dbad288331e8ed03ed7d6b1eea55",
+    "extension_columns_exact": "705ac29f04e2e799419d9f81ee90240c0c025e1bcce651c21a55217a8873e685",
     "extension_constraints_exact": "961352f5b52fab0b3af2a5d829ffb64709eda86a04422301aeaee1641949ad0d",
     "extension_functions_exact": "523ddec4eeeeb0402fb5fd677b1d53864c99637e6b56bf6e4fbca568abecfe5e",
     "extension_policies_exact": "754caf9d12613147447cabba15d04964755e1edda223c73f265dc336b56cf35e",
@@ -84,9 +84,13 @@ def collect_extensions(cursor, execute_rows):
                a.attnum as position, format_type(a.atttypid,a.atttypmod) as data_type,
                a.attnotnull as not_null, a.attidentity::text as identity_kind,
                a.attgenerated::text as generated_kind,
+               cn.nspname as collation_schema, co.collname as collation_name,
+               co.collisdeterministic as collation_deterministic,
                pg_get_expr(d.adbin,d.adrelid) as default_expression
         from pg_attribute a join pg_class c on c.oid=a.attrelid
         join pg_namespace n on n.oid=c.relnamespace
+        left join pg_collation co on co.oid=a.attcollation
+        left join pg_namespace cn on cn.oid=co.collnamespace
         left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum
         where n.nspname='app_private' and c.relname=any(%s)
           and a.attnum>0 and not a.attisdropped

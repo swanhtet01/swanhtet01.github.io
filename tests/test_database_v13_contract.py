@@ -169,6 +169,8 @@ class V13CatalogTests(unittest.TestCase):
     def test_actual_database_privilege_and_rls_drift_is_rejected_and_restored(self):
         pg = proof.pg
         cases = (
+            ('alter table app_private.billing_invoices alter column workspace_id type text collate "C"',
+             'alter table app_private.billing_invoices alter column workspace_id type text collate "default"'),
             ("grant update on app_private.self_serve_attempt_budgets to supermega_trial_backend",
              "revoke update on app_private.self_serve_attempt_budgets from supermega_trial_backend; "
              "grant update(attempts, claim_conflicts) on app_private.self_serve_attempt_budgets to supermega_trial_backend"),
