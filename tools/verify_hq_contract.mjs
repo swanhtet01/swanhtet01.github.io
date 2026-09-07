@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
+import { implementationEvidence } from './record_postgres17_rehearsal.mjs'
+import { buildSanitizedProof, validateSanitizedProof } from '../kernel/database-rehearsal-evidence.mjs'
 
 import {
   COMPANY_CAPACITY_CLAIM_CONTRACT,
@@ -81,34 +83,17 @@ const portfolio = JSON.parse(portfolioText)
 const workforce = JSON.parse(workforceText)
 const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
-const databaseImplementationPaths = [
-  'supermega_runtime/managed_context.py',
-  'supermega_runtime/managed_activation.py',
-  'supermega_runtime/runtime.py',
-  'supermega_runtime/trial_runtime.py',
-  'supermega_runtime/trial_store.py',
-  'supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql',
-  'supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql',
-  'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
-  'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
-  'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
-  'supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql',
-  'supabase/rehearsal/20260804_public_browser_quarantine.sql',
-  'tools/activate_supermega_database.ps1',
-  'tools/rehearse_supermega_postgres17.py',
-  'tools/validate_supermega_database_url.py',
-  'tools/verify_public_browser_quarantine.mjs',
-  'tools/verify_managed_runtime_environment_values.mjs',
-]
-const databaseImplementationHash = createHash('sha256')
-for (const relativePath of databaseImplementationPaths) {
-  databaseImplementationHash.update(relativePath, 'utf8')
-  databaseImplementationHash.update('\0', 'utf8')
-  const implementationSource = await readFile(resolve(root, relativePath), 'utf8')
-  databaseImplementationHash.update(implementationSource.replace(/\r\n/g, '\n'), 'utf8')
-  databaseImplementationHash.update('\0', 'utf8')
-}
-const databaseImplementationDigest = `sha256:${databaseImplementationHash.digest('hex')}`
+const databaseImplementation = await implementationEvidence()
+const databaseImplementationPaths = databaseImplementation.paths
+const databaseImplementationDigest = databaseImplementation.digest
+const databaseValidation = validateSanitizedProof(databaseRehearsal, databaseImplementation)
+const databaseRaw = JSON.parse(await readFile(resolve(root, 'hq/research/postgres17-rehearsal.json.raw.json'), 'utf8'))
+const rebuiltDatabase = buildSanitizedProof(databaseRaw, {
+  recordedAt: databaseRehearsal.recordedAt, implementationCommit: databaseRehearsal.implementationCommit,
+  implementationTree: databaseRehearsal.implementationTree, implementation: databaseImplementation,
+  archive: { bytes: databaseRehearsal.engine.archiveBytes, sha256: databaseRehearsal.engine.observedArchiveSha256 },
+})
+if (JSON.stringify(rebuiltDatabase) !== JSON.stringify(databaseRehearsal)) throw new Error('hq_database_raw_receipt_mismatch')
 const normalizedAgentGovernanceText = agentGovernanceText.replace(/\r\n?/g, '\n')
 const competitiveExecutionCutNormalized = competitiveExecutionCutText.replace(/\s+/g, ' ')
 const liveReleaseCommit = now.match(/^Live release commit: `([0-9a-f]{40})`$/m)?.[1] ?? ''
@@ -1062,7 +1047,8 @@ requireContract('research decision is superseded',
   && research.includes('Ecommerce owns the storefront and order-intent layer and feeds Shop'))
 
 requireContract('local PostgreSQL rehearsal remains bounded',
-  databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v2'
+  databaseValidation.ok === true
+  && databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v3'
   && /^[0-9a-f]{40}$/.test(databaseRehearsal.implementationCommit || '')
   && JSON.stringify(databaseRehearsal.implementation?.paths) === JSON.stringify(databaseImplementationPaths)
   && databaseRehearsal.implementation?.digest === databaseImplementationDigest
@@ -1077,10 +1063,10 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 12
-  && databaseRehearsal.migration?.schemaVersion === 11
+  && databaseRehearsal.migration?.count === 15
+  && databaseRehearsal.migration?.schemaVersion === 13
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 56
+  && Object.keys(databaseRehearsal.checks || {}).length === 72
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
@@ -1120,9 +1106,13 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
+  && managedPilotReadiness.localDatabase?.receiptDigest === databaseRehearsal.receiptDigest
+  && managedPilotReadiness.localDatabase?.implementationDigest === databaseRehearsal.implementationDigest
+  && managedPilotReadiness.localDatabase?.schemaVersion === 13
+  && managedPilotReadiness.localDatabase?.hostedEvidenceCurrent === false
   && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
   && managedPilotReadiness.overall?.blockingGateIds?.join(',') === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').map((entry) => entry.id).join(',')
-  && managedPilotReadiness.overall?.blockingGateIds?.join(',') === 'preview_rehearsal,pilot_evidence,production_activation'
+  && managedPilotReadiness.overall?.blockingGateIds?.join(',') === 'preview_rehearsal,managed_persistence,storage_privacy,security,pilot_evidence,production_activation'
   && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
   && managedPilotReadiness.overall?.nextAction?.decisionId === 'managed-production-activation'
   && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_runtime_role_provisioning,approve_first_named_owner_identity,approve_exact_production_release,approve_managed_activation_window'
@@ -1151,10 +1141,12 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.productionWritesEnabled === false
   && managedPilotReadiness.liveProduction?.operatingMode === 'isolated_demo'
   && managedPilotReadiness.liveProduction?.schemaVersion === supabaseSecurityAudit.managedBackend?.liveSchemaVersion
-  && managedPilotReadiness.liveProduction?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
-  && managedPilotReadiness.liveProduction?.versionDrift === supabaseSecurityAudit.managedBackend?.versionDrift
+  && managedPilotReadiness.liveProduction?.observedAt === supabaseSecurityAudit.asOf
+  && managedPilotReadiness.liveProduction?.currentStateRevalidated === false
+  && managedPilotReadiness.liveProduction?.localTargetVersion === 13
+  && managedPilotReadiness.liveProduction?.versionDrift === 13 - supabaseSecurityAudit.managedBackend?.liveSchemaVersion
   && managedPilotReadiness.liveProduction?.browserRolesDenied === true
-  && managedPilotReadiness.liveProduction?.publicBrowserQuarantine === true
+  && managedPilotReadiness.liveProduction?.publicBrowserQuarantine === false
   && managedPilotReadiness.liveProduction?.managedWritesEnabled === false
   && managedPilotReadiness.previewRehearsal?.proofComplete === false
   && managedPilotReadiness.previewRehearsal?.exactCandidateRequired === true
@@ -1183,11 +1175,14 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.selfServePilot?.proofComplete === true
   && managedPilotReadiness.selfServePilot?.contract === 'supermega.self-serve-pilot-proof.v1'
   && managedPilotReadiness.selfServePilot?.schemaVersionProven === 11
+  && managedPilotReadiness.selfServePilot?.currentTargetProven === false
+  && managedPilotReadiness.storagePrivacy?.currentTargetProven === false
+  && managedPilotReadiness.managedPersistence?.currentTargetProven === false
   && managedPilotReadiness.gates?.map((gate) => gate.id).join(',') === 'preview_rehearsal,managed_persistence,storage_privacy,security,pilot_evidence,production_activation'
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'preview_rehearsal')?.status === 'blocked'
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'managed_persistence')?.status === 'ready-hosted'
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'storage_privacy')?.status === 'ready-hosted'
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.status === 'ready-hosted'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'managed_persistence')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'storage_privacy')?.status === 'blocked'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.status === 'blocked'
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'pilot_evidence')?.status === 'blocked'
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'production_activation')?.status === 'blocked'
   && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
@@ -1197,9 +1192,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.securityAudit?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === (supabaseSecurityAudit.conclusion?.status === 'clear'
-    ? `Protected production is at managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion}, zero drift from local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}, browser roles denied, public-browser quarantine recorded, and Security Advisor clear.`
-    : `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`)
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `Historical ${supabaseSecurityAudit.advisor?.status} audit (${supabaseSecurityAudit.advisor?.findingCount} findings) observed managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} against its then-target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.`
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef
   && supabaseSecurityAudit.targetClassification === 'protected-production'
