@@ -18,6 +18,7 @@ const DEFAULT_PATHS = {
 }
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
 const REQUIRED_PILOT_CALENDAR_DATES = 5
+const REQUIRED_HOSTED_BLOCKERS = ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation']
 const STALE_CLOUD_AI_RUNBOOK_FRAGMENTS = Object.freeze([
   'ANTHROPIC_API_KEY',
   'CLAUDE_API_KEY',
@@ -94,12 +95,26 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(readiness?.contract !== 'supermega.managed-pilot-readiness.v5', failures, 'strategy_posture_readiness_contract_invalid')
   addIf(readiness?.pilotMode !== 'owner_named', failures, 'strategy_posture_pilot_mode_not_owner_named')
   addIf(!Number.isInteger(liveSchemaVersion), failures, 'strategy_posture_live_schema_version_invalid')
-  addIf(liveSchemaVersion !== localTargetVersion, failures, 'strategy_posture_schema_drift_present')
+  addIf(localTargetVersion !== 13 || liveSchemaVersion !== 11, failures, 'strategy_posture_schema_drift_present')
   addIf(liveSchemaVersion !== securityLiveSchemaVersion, failures, 'strategy_posture_security_schema_mismatch')
-  addIf(readiness?.liveProduction?.versionDrift !== 0, failures, 'strategy_posture_version_drift_nonzero')
+  addIf(readiness?.liveProduction?.versionDrift !== localTargetVersion - liveSchemaVersion, failures, 'strategy_posture_version_drift_inconsistent')
+  addIf(readiness?.liveProduction?.currentStateRevalidated !== false
+    || !Number.isFinite(Date.parse(readiness?.liveProduction?.observedAt))
+    || readiness?.liveProduction?.observedAt !== readiness?.securityAudit?.asOf,
+  failures, 'strategy_posture_historical_hosted_boundary_invalid')
+  addIf(readiness?.localDatabase?.contract !== 'supermega.hq.database-rehearsal.v3'
+    || readiness?.localDatabase?.schemaVersion !== localTargetVersion
+    || readiness?.localDatabase?.hostedEvidenceCurrent !== false,
+  failures, 'strategy_posture_local_database_boundary_invalid')
+  addIf(readiness?.overall?.status !== 'blocked'
+    || readiness?.overall?.hostedActivationReady !== false
+    || readiness?.overall?.blockingGateCount !== REQUIRED_HOSTED_BLOCKERS.length
+    || !sameArray(readiness?.overall?.blockingGateIds, REQUIRED_HOSTED_BLOCKERS),
+  failures, 'strategy_posture_hosted_gates_invalid')
   addIf(readiness?.liveProduction?.browserRolesDenied !== true, failures, 'strategy_posture_browser_roles_not_denied')
-  addIf(readiness?.liveProduction?.publicBrowserQuarantine !== true, failures, 'strategy_posture_public_browser_quarantine_missing')
+  addIf(readiness?.liveProduction?.publicBrowserQuarantine !== false, failures, 'strategy_posture_current_quarantine_unproven')
   addIf(readiness?.liveProduction?.managedWritesEnabled !== false, failures, 'strategy_posture_managed_writes_not_disabled')
+  addIf(readiness?.liveProduction?.productionMutationAuthorized !== false, failures, 'strategy_posture_production_authority_invalid')
   addIf(readiness?.pilotEvidence?.productId !== 'shop', failures, 'strategy_posture_pilot_product_not_shop')
   addIf(requiredRuns !== 20, failures, 'strategy_posture_required_runs_not_20')
   addIf(!sameArray(requiredPilotDayIndexes, REQUIRED_PILOT_DAY_INDEXES), failures, 'strategy_posture_required_pilot_days_invalid')
@@ -113,8 +128,11 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(readiness?.pilotEvidence?.publicIdentityAllowed !== false, failures, 'strategy_posture_public_identity_allowed')
 
   addIf(!has(aiNative, 'Owner-named Shop pilot before self-serve onboarding'), failures, 'strategy_posture_ai_owner_named_section_missing')
-  addIf(!has(aiNative, `production schema v${liveSchemaVersion} observed with the public-browser quarantine`), failures, 'strategy_posture_ai_schema_line_stale')
-  addIf(!has(aiNative, `current v${liveSchemaVersion} production parity`), failures, 'strategy_posture_ai_parity_line_stale')
+  addIf(!has(aiNative, `historical hosted schema v${liveSchemaVersion}; current hosted state not revalidated`), failures, 'strategy_posture_ai_schema_line_stale')
+  addIf(!has(aiNative, `local schema v${localTargetVersion}; hosted parity is unproven`), failures, 'strategy_posture_ai_parity_line_stale')
+  for (const document of [aiNative, clientReadiness]) {
+    addIf(has(document, `current v${liveSchemaVersion} production parity`) || has(document, 'zero drift from the local v11 target'), failures, 'strategy_posture_false_current_parity_claim')
+  }
   addIf(!(has(aiNative, 'Self-serve remains a later') && has(aiNative, 'not the active activation route')), failures, 'strategy_posture_ai_self_serve_deferred_missing')
   addIf(!has(aiNative, '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates'), failures, 'strategy_posture_ai_20_run_gate_missing')
   addIf(!has(aiNative, 'no public signup, claim-code provisioning, hosted tenant'), failures, 'strategy_posture_ai_no_signup_claim_missing')
@@ -136,7 +154,9 @@ export function buildStrategyPostureReport(input = {}) {
   addIf(!has(competitiveCut, 'No deploy, provider write, credential'), failures, 'strategy_posture_competitive_cut_authority_warning_missing')
   addIf(!(has(competitiveCut, 'Current 30-day AI runtime policy: local Ollama only') && has(competitiveCut, '`llama3.2:1b`') && has(competitiveCut, '`OLLAMA_KEEP_ALIVE=0s`') && has(competitiveCut, 'no cloud fallback')), failures, 'strategy_posture_competitive_cut_local_ai_policy_missing')
 
-  addIf(!has(clientReadiness, 'Freshness note, 2026-08-26'), failures, 'strategy_posture_client_freshness_note_missing')
+  addIf(!has(clientReadiness, 'Freshness note, 2026-09-07')
+    || !has(clientReadiness, `historical hosted schema v${liveSchemaVersion}; current hosted state not revalidated`)
+    || !has(clientReadiness, `local schema v${localTargetVersion}; hosted parity is unproven`), failures, 'strategy_posture_client_freshness_note_missing')
   assertNoActiveStaleSchemaClaims(clientReadiness, failures, { liveSchemaVersion })
 
   addIf(!has(productSupremacy, 'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended'), failures, 'strategy_posture_product_supremacy_local_ai_freshness_missing')
@@ -151,6 +171,11 @@ export function buildStrategyPostureReport(input = {}) {
     ok: failures.length === 0,
     contract: STRATEGY_POSTURE_CONTRACT,
     liveSchemaVersion,
+    localTargetVersion,
+    hostedObservationAt: readiness?.liveProduction?.observedAt || null,
+    hostedEvidenceCurrent: false,
+    releaseAuthorized: false,
+    hostedBlockingGateIds: [...REQUIRED_HOSTED_BLOCKERS],
     pilotMode: readiness?.pilotMode || null,
     productSequence: ['shop', 'plant', 'website', 'ecommerce'],
     requiredAcceptedConsecutiveRuns: requiredRuns,
@@ -200,13 +225,19 @@ function runSelfTest() {
     pilotMode: 'owner_named',
     liveProduction: {
       schemaVersion: 11,
-      localTargetVersion: 11,
-      versionDrift: 0,
+      localTargetVersion: 13,
+      versionDrift: 2,
+      observedAt: '2026-08-20T17:02:04.312+06:30',
+      currentStateRevalidated: false,
       browserRolesDenied: true,
-      publicBrowserQuarantine: true,
+      publicBrowserQuarantine: false,
       managedWritesEnabled: false,
+      productionMutationAuthorized: false,
     },
-    securityAudit: { liveSchemaVersion: 11 },
+    securityAudit: { liveSchemaVersion: 11, asOf: '2026-08-20T17:02:04.312+06:30' },
+    localDatabase: { contract: 'supermega.hq.database-rehearsal.v3', schemaVersion: 13, hostedEvidenceCurrent: false },
+    overall: { status: 'blocked', hostedActivationReady: false, blockingGateCount: 6,
+      blockingGateIds: ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'] },
     pilotEvidence: {
       productId: 'shop',
       requiredAcceptedConsecutiveRuns: 20,
@@ -223,8 +254,8 @@ function runSelfTest() {
   }
   const aiNative = [
     '### 3.2 Owner-named Shop pilot before self-serve onboarding',
-    'production schema v11 observed with the public-browser quarantine',
-    'current v11 production parity',
+    'historical hosted schema v11; current hosted state not revalidated',
+    'local schema v13; hosted parity is unproven',
     'Self-serve remains a later product expansion, not the active activation route',
     '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates',
     'no public signup, claim-code provisioning, hosted tenant',
@@ -243,7 +274,7 @@ function runSelfTest() {
     'Plant, Website, and Ecommerce keep security, dependency, regression, and handoff maintenance until Shop produces a decision packet',
     'Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
   ].join('\n')
-  const clientReadiness = 'Freshness note, 2026-08-26\nProduction is at v11.'
+  const clientReadiness = 'Freshness note, 2026-09-07\nhistorical hosted schema v11; current hosted state not revalidated\nlocal schema v13; hosted parity is unproven'
   const productSupremacy = [
     'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended',
     'Active AI R&D is local Ollama only: `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',

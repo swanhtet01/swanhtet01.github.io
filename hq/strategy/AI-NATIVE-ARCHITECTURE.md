@@ -143,8 +143,9 @@ Authority: hq/portfolio.json agentOperatingModel + pilot-data/agent_team_system.
       |
       +-- Managed backend (planned, currently isolated_demo):
             Supabase Postgres 17, project zvtzwcimpvvtkowflhda
-            production schema v11 observed with the public-browser quarantine,
-            browser roles denied, writes off until gates pass
+            historical hosted schema v11; current hosted state not revalidated
+            local schema v13; hosted parity is unproven
+            prior quarantine audit retained as history, writes off until gates pass
             rehearsal flow: disposable preview branch, apply migrations,
             prove isolation/storage/recovery, delete after evidence
             (hq/readiness/managed-pilot-readiness.json founderDecision)
@@ -181,11 +182,13 @@ Stage 0 (now): one Supabase project, writes off, device-local trials only.
   the cheapest possible top-of-funnel and should be preserved.
 
 Stage 1: single project, per-tenant RLS. One database, tenant_id on every
-  row, RLS policies already rehearsed locally (56 PostgreSQL 17 checks,
-  tenant isolation, session revocation -- readiness gate local_postgres17 is
-  ready-local). Preview-branch rehearsal proves the complete source-controlled
-  migration chain against current v11 production parity and browser quarantine
-  before production migration.
+  row, RLS policies rehearsed locally (72 PostgreSQL 17 behavior checks,
+  33 catalog checks before and after restore, schema v13 including billing and
+  durable signup limits). Local proof does not establish hosted security.
+  Preview-branch rehearsal must prove the complete current migration chain,
+  tenant isolation, session revocation, browser quarantine and recovery before
+  production migration. All six hosted gates remain blocked: preview_rehearsal,
+  managed_persistence, storage_privacy, security, pilot_evidence, production_activation.
 
 Stage 2: same project, operational hardening. Connection pooling, the
   dormant scheduler activated at its reviewed ceiling (hourly + daily,
@@ -241,8 +244,9 @@ showroom CI run separately and fail CI on their own.
   (RESEND_API_KEY et al.), GitGuardian in CI, dependency-security workflow,
   no keys in the built artifact (verified by the public output gate).
 - Database: RLS on every managed table, browser roles denied, metadata
-  quarantine for legacy public tables observed on production schema v11 and
-  required to remain reproducible from source; production writes remain
+  quarantine for legacy public tables recorded in the historical v11 audit.
+  That observation is not current v13 proof and must be revalidated;
+  production writes remain
   disabled until separate founder approval
   (production_activation gate).
 - Sessions: one-use tenant codes exchanged for HttpOnly, Secure, SameSite
@@ -267,7 +271,7 @@ artifact family supersedes them.
 Phase A -- prove the hosted spine (target: days 0-14)
 - After separate owner approval, execute the bounded rehearsal exactly as scoped
   in managed-pilot-readiness.json: create one preview branch, apply the complete
-  source-controlled migration chain, prove v11 parity, browser quarantine,
+  source-controlled migration chain, prove current v13 parity, browser quarantine,
   hosted isolation / storage / recovery / session-revocation, capture evidence,
   and delete the branch (max lifetime 24h).
 - Trigger: rehearsal green -> propose production migration to the founder.

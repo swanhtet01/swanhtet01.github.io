@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 import { buildStrategyPostureReport } from './verify_strategy_posture.mjs'
 
@@ -9,14 +10,20 @@ function readiness(overrides = {}) {
     pilotMode: 'owner_named',
     liveProduction: {
       schemaVersion: 11,
-      localTargetVersion: 11,
-      versionDrift: 0,
+      localTargetVersion: 13,
+      versionDrift: 2,
+      observedAt: '2026-08-20T17:02:04.312+06:30',
+      currentStateRevalidated: false,
       browserRolesDenied: true,
-      publicBrowserQuarantine: true,
+      publicBrowserQuarantine: false,
       managedWritesEnabled: false,
+      productionMutationAuthorized: false,
       ...(overrides.liveProduction || {}),
     },
-    securityAudit: { liveSchemaVersion: 11, ...(overrides.securityAudit || {}) },
+    securityAudit: { liveSchemaVersion: 11, asOf: '2026-08-20T17:02:04.312+06:30', ...(overrides.securityAudit || {}) },
+    localDatabase: { contract: 'supermega.hq.database-rehearsal.v3', schemaVersion: 13, hostedEvidenceCurrent: false },
+    overall: { status: 'blocked', hostedActivationReady: false, blockingGateCount: 6,
+      blockingGateIds: ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'] },
     pilotEvidence: {
       productId: 'shop',
       requiredAcceptedConsecutiveRuns: 20,
@@ -37,8 +44,8 @@ function readiness(overrides = {}) {
 
 const aiNative = [
   '### 3.2 Owner-named Shop pilot before self-serve onboarding',
-  'production schema v11 observed with the public-browser quarantine',
-  'current v11 production parity',
+  'historical hosted schema v11; current hosted state not revalidated',
+  'local schema v13; hosted parity is unproven',
   'Self-serve remains a later product expansion, not the active activation route',
   '20 consecutive accepted receipt-and-anchor-bound runs covering pilot days 1 through 5 and at least 5 distinct observed calendar dates',
   'no public signup, claim-code provisioning, hosted tenant',
@@ -59,7 +66,7 @@ const competitiveCut = [
   'Current 30-day AI runtime policy: local Ollama only, `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback',
 ].join('\n')
 
-const clientReadiness = 'Freshness note, 2026-08-26\nProduction is at v11.'
+const clientReadiness = 'Freshness note, 2026-09-07\nhistorical hosted schema v11; current hosted state not revalidated\nlocal schema v13; hosted parity is unproven'
 
 const productSupremacy = [
   'Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are suspended',
@@ -89,6 +96,37 @@ test('accepts the current owner-named strategy posture', () => {
   assert.deepEqual(report.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
   assert.deepEqual(report.acceptedConsecutivePilotDayIndexes, [])
   assert.equal(report.pilotSequenceCoverageMet, false)
+})
+
+test('current source documents preserve local versus historical hosted truth', async () => {
+  const root = new URL('../', import.meta.url)
+  const actual = JSON.parse(await readFile(new URL('hq/readiness/managed-pilot-readiness.json', root), 'utf8'))
+  const input = { readiness: actual }
+  for (const [key, file] of Object.entries({
+    aiNative: 'AI-NATIVE-ARCHITECTURE.md', competitiveCut: 'COMPETITIVE-EXECUTION-CUT.md',
+    clientReadiness: 'CLIENT-READINESS-BRIEF.md', productSupremacy: 'PRODUCT-SUPREMACY-ROADMAP.md',
+    orderIntakeEvalPlan: 'AI-ORDER-INTAKE-EVAL-PLAN.md',
+  })) input[key] = await readFile(new URL('hq/strategy/' + file, root), 'utf8')
+  const result = buildStrategyPostureReport(input)
+  assert.deepEqual(result.failures, [])
+  assert.equal(result.releaseAuthorized, false)
+  assert.equal(result.hostedEvidenceCurrent, false)
+  assert.equal(result.localTargetVersion, 13)
+  for (const mutate of [
+    (r) => { r.liveProduction.versionDrift = 0 },
+    (r) => { r.liveProduction.currentStateRevalidated = true },
+    (r) => { r.liveProduction.publicBrowserQuarantine = true },
+    (r) => { r.liveProduction.productionMutationAuthorized = true },
+    (r) => { r.localDatabase.hostedEvidenceCurrent = true },
+    (r) => { r.overall.hostedActivationReady = true },
+    (r) => { r.overall.blockingGateIds.splice(1, 1); r.overall.blockingGateCount -= 1 },
+  ]) {
+    const changed = structuredClone(actual)
+    mutate(changed)
+    assert.equal(buildStrategyPostureReport({ ...input, readiness: changed }).ok, false)
+  }
+  assert.equal(buildStrategyPostureReport({ ...input, aiNative: input.aiNative + '\ncurrent v11 production parity' }).ok, false)
+  assert.equal(buildStrategyPostureReport({ ...input, clientReadiness: input.clientReadiness + '\nzero drift from the local v11 target' }).ok, false)
 })
 
 test('rejects stale self-serve and stale schema strategy posture', () => {

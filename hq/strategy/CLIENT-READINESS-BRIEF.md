@@ -20,15 +20,18 @@ its generator `kernel/managed-pilot-readiness.mjs`, `hq/portfolio.json`,
 documents), `docs/demo-playbooks/shop.md`, and the product source files cited
 in section 3.
 
-**Freshness note, 2026-08-26:** current release/readiness authority has moved
+**Freshness note, 2026-09-07:** current release/readiness authority has moved
 from the self-serve activation framing in this brief to the owner-named Shop
 pilot sequence captured in `COMPETITIVE-EXECUTION-CUT.md`,
 `AI-NATIVE-ARCHITECTURE.md`, and
-`hq/readiness/managed-pilot-readiness.json`. Protected production is now schema
-v11 with zero drift from the local v11 target, browser roles denied, public
-browser quarantine recorded, managed writes disabled, and pilot mode
-`owner_named`. Treat any instruction below that asks the founder to apply v11
-as historical unless re-confirmed against the runbook and readiness ledger.
+`hq/readiness/managed-pilot-readiness.json`: historical hosted schema v11;
+current hosted state not revalidated. The accepted rehearsal proves local schema
+v13; hosted parity is unproven. Prior hosted quarantine/security receipts remain
+historical, managed writes remain disabled, and pilot mode is `owner_named`.
+All six hosted gates remain blocked. The remainder of this dated brief is
+historical analysis, not an executable activation checklist. Reconfirm migration
+sets, runtime versions, account flows, payment policy and release identity against
+the current source-owned runbook and readiness ledger before any owner action.
 
 ---
 
