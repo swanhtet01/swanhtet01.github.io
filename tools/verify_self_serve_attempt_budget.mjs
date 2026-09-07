@@ -79,6 +79,23 @@ export async function verifySelfServeAttemptBudget(database, requireCheck) {
   const other = '10000000-0000-4000-8000-000000000002'
   const context = async (id, kind) => database.query(
     "select set_config('app.actor_id', $1, false), set_config('app.actor_kind', $2, false)", [id, kind])
+  const reserveAfterClockAdvance = async () => {
+    // PGlite's host clock can repeat within a millisecond. Positive fixtures
+    // wait for its actual DB clock; production's >= rejection stays unchanged.
+    // Never retry an admission error or alter retained admission timestamps.
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const advanced = await scalar(`select not exists (
+        select 1 from app_private.self_serve_attempt_budgets,
+          unnest(attempts) as retained(stamp)
+        where retained.stamp >= clock_timestamp()
+      ) as value`)
+      if (advanced === true) {
+        return scalar('select app_private.reserve_self_serve_attempt()::text as value')
+      }
+      await new Promise(resolve => setTimeout(resolve, 2))
+    }
+    throw new Error('self_serve_budget_test_clock_did_not_advance')
+  }
   await database.exec('set role supermega_trial_backend')
   try {
     for (const [id, kind] of [['', 'human'], [actor, 'agent'], [actor, '']]) {
@@ -92,11 +109,11 @@ export async function verifySelfServeAttemptBudget(database, requireCheck) {
     const stamps = []
     for (let index = 0; index < 5; index++) {
       // Retain PostgreSQL microseconds as text; JS Date would truncate admission identity.
-      const stamp = await scalar('select app_private.reserve_self_serve_attempt()::text as value')
+      const stamp = await reserveAfterClockAdvance()
       check(`admission ${index + 1} retained`, typeof stamp === 'string' && !stamps.includes(stamp))
       stamps.push(stamp)
     }
-    check('sixth admission refused', await scalar('select app_private.reserve_self_serve_attempt() as value') === null)
+    check('sixth admission refused', await reserveAfterClockAdvance() === null)
     const retained = await scalar('select attempts::text as value from app_private.self_serve_attempt_budgets')
     check('exact five retained admissions', await scalar('select cardinality(attempts) as value from app_private.self_serve_attempt_budgets') === 5)
     for (let index = 0; index < 2; index++) {
@@ -123,13 +140,13 @@ export async function verifySelfServeAttemptBudget(database, requireCheck) {
       'update app_private.self_serve_attempt_budgets set attempts = array[]::timestamptz[], claim_conflicts = array[]::timestamptz[] returning actor_id')).rows.length === 0)
     check('other actor cannot claim original admission', await scalar(
       'select app_private.mark_self_serve_claim_conflict($1::timestamptz) as value', [stamps[0]]) === false)
-    check('other actor has independent admission', typeof await scalar('select app_private.reserve_self_serve_attempt()::text as value') === 'string')
+    check('other actor has independent admission', typeof await reserveAfterClockAdvance() === 'string')
     await context(actor, 'agent')
     check('nonhuman actor cannot read human budget', await scalar('select count(*)::int as value from app_private.self_serve_attempt_budgets') === 0)
     await context(actor, 'human')
     await database.exec(`update app_private.self_serve_attempt_budgets
       set attempts = array[now() - interval '25 hours'], claim_conflicts = array[now() - interval '25 hours']`)
-    check('expired admission capacity returns', typeof await scalar('select app_private.reserve_self_serve_attempt()::text as value') === 'string')
+    check('expired admission capacity returns', typeof await reserveAfterClockAdvance() === 'string')
     check('expired attempts and conflict diagnostics pruned', await scalar(`select cardinality(attempts) = 1 and cardinality(claim_conflicts) = 0 as value from app_private.self_serve_attempt_budgets`) === true)
     await database.exec(`update app_private.self_serve_attempt_budgets set attempts = array[now() + interval '1 day']`)
     check('future retained clock fails closed', await rejects('select app_private.reserve_self_serve_attempt()', [], 'P0001'))
