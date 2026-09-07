@@ -241,7 +241,7 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
   useEffect(() => {
     if (!enabled || !selectedWorkspace) return undefined
     let active = true
-    void import('./managed-trial')
+    void import('./managed-portal-client')
       .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
         const identity = await currentManagedIdentity()
         if (!active) return
