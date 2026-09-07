@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { access, lstat, mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
@@ -383,6 +383,43 @@ async function requireAbsent(path) {
   fail('database_rehearsal_output_exists')
 }
 
+export function recorderOutcomeReconciled(result, raw) {
+  return !result?.error && !result?.signal && Number.isInteger(result?.status) && result.status >= 0
+    && raw?.contract === 'supermega_postgres17_rehearsal_v2' && raw.cleanup_complete === true
+    && raw.production_mutated === false && raw.supabase_mutated === false
+    && raw.vercel_mutated === false && raw.secret_values_exposed === false
+}
+
+export async function withRecorderLease(lockPaths, operation) {
+  const owned = []
+  let launched = false, reconciled = false
+  try {
+    for (const path of lockPaths) {
+      let handle
+      try { handle = await open(path, 'wx') }
+      catch (error) {
+        if (error.code === 'EEXIST') fail('database_rehearsal_active_or_unreconciled')
+        throw error
+      }
+      owned.push({ path, handle })
+    }
+    return await operation({
+      markLaunched() { launched = true },
+      reconcile(result, raw) {
+        reconciled = recorderOutcomeReconciled(result, raw)
+        return reconciled
+      },
+    })
+  } finally {
+    for (const { path, handle } of owned.reverse()) {
+      await handle.close()
+      // A timeout kills only the immediate launcher on Windows. Without its
+      // terminal child result AND confirmed cleanup, retain both lock markers.
+      if (!launched || reconciled) await rm(path, { force: true })
+    }
+  }
+}
+
 async function record(destination) {
   const rawPath = `${destination}.raw.json`
   await requireAbsent(destination)
@@ -391,16 +428,21 @@ async function record(destination) {
   const implementation = await implementationEvidence()
   await mkdir(dirname(destination), { recursive: true })
   const lockPath = `${destination}.lock`
-  const lock = await open(lockPath, 'wx')
-  try {
+  const commonDirectory = gitOutput(['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  const commonKey = process.platform === 'win32' ? commonDirectory.toLowerCase() : commonDirectory
+  const repositoryLock = resolve(tmpdir(), `supermega-postgres17-${sha256(commonKey).slice(7)}.lock`)
+  return withRecorderLease([repositoryLock, lockPath], async (lease) => {
     // The loopback PostgreSQL cluster, TLS checks, dump, and restore can exceed
     // two minutes on the ROG Ally under normal foreground load. Keep the run
     // bounded, but allow enough time to avoid converting machine contention
     // into a false database failure.
+    lease.markLaunched()
     const result = spawnSync(process.execPath, [rehearsalRunner, '--expected-head', source.implementationCommit, '--evidence-file', rawPath], { cwd: root, encoding: 'utf8', timeout: 300_000, windowsHide: true })
+    let raw
+    try { raw = JSON.parse(await readFile(rawPath, 'utf8')) } catch { fail('database_rehearsal_termination_unreconciled') }
+    if (!lease.reconcile(result, raw)) fail('database_rehearsal_termination_unreconciled')
     if (result.status !== 0) fail('database_rehearsal_execution_failed')
     if (!same(cleanSource(), source) || !same(await implementationEvidence(), implementation)) fail('database_rehearsal_source_changed')
-    const raw = JSON.parse(await readFile(rawPath, 'utf8'))
     const proof = buildSanitizedProof(raw, {
       recordedAt: new Date().toISOString(),
       ...source,
@@ -411,12 +453,7 @@ async function record(destination) {
     if (!same(cleanSource(), source)) fail('database_rehearsal_source_changed')
     await writeFile(destination, `${JSON.stringify(proof, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
     return { ok: true, contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA, ...source, implementationDigest: proof.implementationDigest, receiptDigest: proof.receiptDigest, checks: rawCheckNames.length, hostedActivationProven: false }
-  } finally {
-    // Preserve the raw sanitized result, including a failed result. Never
-    // delete/replace historical proof or a running database's data directory.
-    await lock.close()
-    await rm(lockPath, { force: true })
-  }
+  })
 }
 
 async function verify(input, expectedHead) {

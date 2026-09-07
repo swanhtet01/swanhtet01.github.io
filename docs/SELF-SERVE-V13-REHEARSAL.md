@@ -92,8 +92,14 @@ authenticity or an owner approval. All hosted/production authority remains false
 
 Use a new output outside the checkout. Existing outputs fail before database work;
 no historical tracked HQ receipt is overwritten. A failed run retains its safe raw
-result, without a successful receipt. A lock prevents concurrent recording to that
-destination. A shutdown failure retains the temporary cluster directory, never
+result, without a successful receipt. A repository-wide lock shared by all Git
+worktrees plus a destination lock prevent concurrent recording. Timeout, signal,
+missing raw result or unconfirmed cleanup retains both markers, blocking even a
+different output path. Never remove them or retry automatically: first reconcile
+the complete launcher/Python/PostgreSQL process tree and any delayed raw output.
+Only a terminal launcher result plus the raw current-contract cleanup confirmation
+(or failure before launching) releases the owned markers. A shutdown failure
+retains the temporary cluster directory, never
 deleting a possibly live database. Successful runs stop one cluster before starting
 the restore cluster and clean both up. No full app verifier is invoked.
 

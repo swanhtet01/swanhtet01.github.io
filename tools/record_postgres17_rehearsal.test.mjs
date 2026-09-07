@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { readFile, mkdtemp, rm, writeFile, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -12,6 +12,8 @@ import {
   implementationEvidence,
   catalogCheckNames,
   proofDigest,
+  recorderOutcomeReconciled,
+  withRecorderLease,
 } from './record_postgres17_rehearsal.mjs'
 
 const checkNames = [
@@ -203,5 +205,53 @@ test('read-only CLI consumer recomputes exact raw receipt pair and rejects chang
   } finally {
     // Exact fresh temporary test directory, never a repository/user directory.
     await rm(folder, { recursive: true, force: true })
+  }
+})
+
+test('timeout, signal, absent report or unknown cleanup cannot release a rehearsal lease', async () => {
+  const terminal = { status: 0, signal: null }
+  const vectors = [
+    [{ status: null, error: { code: 'ETIMEDOUT' } }, raw],
+    [{ status: 0, error: { code: 'ETIMEDOUT' } }, raw],
+    [{ status: null, signal: 'SIGTERM' }, raw],
+    [terminal, undefined],
+    [terminal, { ...raw, cleanup_complete: false }],
+    [terminal, { ...raw, contract: 'old' }],
+  ]
+  for (const [result, report] of vectors) {
+    assert.equal(recorderOutcomeReconciled(result, report), false)
+    const folder = await mkdtemp(join(tmpdir(), 'supermega-lease-test-'))
+    const locks = [join(folder, 'repository.lock'), join(folder, 'output.lock')]
+    try {
+      await assert.rejects(withRecorderLease(locks, async lease => {
+        lease.markLaunched()
+        assert.equal(lease.reconcile(result, report), false)
+        throw new Error('simulated_termination')
+      }), /simulated_termination/)
+      for (const path of locks) await access(path)
+      let secondLaunched = false
+      await assert.rejects(withRecorderLease([locks[0], join(folder, 'other-output.lock')], async () => {
+        secondLaunched = true
+      }), /active_or_unreconciled/)
+      assert.equal(secondLaunched, false)
+      for (const path of locks) await access(path)
+    } finally { await rm(folder, { recursive: true, force: true }) }
+  }
+})
+
+test('only terminal confirmed cleanup, or prelaunch failure, releases owned leases', async () => {
+  for (const mode of ['success', 'failed-cleaned', 'before-launch']) {
+    const folder = await mkdtemp(join(tmpdir(), 'supermega-lease-test-'))
+    const locks = [join(folder, 'repository.lock'), join(folder, 'output.lock')]
+    try {
+      await assert.rejects(withRecorderLease(locks, async lease => {
+        if (mode !== 'before-launch') {
+          lease.markLaunched()
+          assert.equal(lease.reconcile({ status: mode === 'success' ? 0 : 1 }, raw), true)
+        }
+        throw new Error('simulated_end')
+      }), /simulated_end/)
+      for (const path of locks) await assert.rejects(access(path), { code: 'ENOENT' })
+    } finally { await rm(folder, { recursive: true, force: true }) }
   }
 })
