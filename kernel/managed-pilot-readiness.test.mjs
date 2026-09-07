@@ -50,6 +50,9 @@ const selfServePilotProof = {
 const input = {
   portfolio: { schemaVersion: 'supermega.hq.portfolio.v3', products },
   databaseEvidence: databaseFixture,
+  // Explicit unit fixture binding; production callers hash current implementation bytes.
+  databaseImplementation: { digest: databaseFixture.implementationDigest,
+    fileCount: databaseFixture.implementationFileCount, paths: databaseFixture.implementation.paths },
   storageAudit: 'Status: local verifier ready; hosted proof blocked',
   securityAudit: {
     contract: 'supermega.supabase-security-advisor-audit.v2',
@@ -240,6 +243,9 @@ test('completed historical persistence and Storage proofs stay retained but cann
 })
 
 test('changed implementation binding and local proof summaries cannot be called current evidence', () => {
+  const missing = structuredClone(input)
+  delete missing.databaseImplementation
+  assert.throws(() => buildManagedPilotReadiness(missing), /managed_pilot_readiness_database_evidence_invalid/)
   const changed = structuredClone(input)
   changed.databaseImplementation = { paths: databaseFixture.implementation.paths,
     fileCount: databaseFixture.implementationFileCount, digest: `sha256:${'0'.repeat(64)}` }

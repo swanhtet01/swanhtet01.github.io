@@ -128,10 +128,8 @@ function securityGateEvidenceV5(audit, database) {
 
 function localDatabaseSummary(database, implementation) {
   try {
-    const result = validateSanitizedProof(database, implementation ?? {
-      digest: database?.implementationDigest, fileCount: database?.implementationFileCount,
-      paths: database?.implementation?.paths,
-    })
+    if (!isRecord(implementation)) fail('managed_pilot_readiness_database_implementation_missing')
+    const result = validateSanitizedProof(database, implementation)
     return {
       contract: database.schemaVersion, schemaVersion: database.migration.schemaVersion,
       schemaProfile: database.migration.schemaProfile, migrationCount: database.migration.count,

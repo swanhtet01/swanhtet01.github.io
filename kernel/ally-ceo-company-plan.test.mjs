@@ -64,11 +64,14 @@ function portfolio(overrides = {}, automationOverrides = {}) {
 }
 
 function managedReadiness() {
+  const database = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
   const sourceReceipts = ['portfolio', 'database', 'storage', 'security', 'storageproof', 'persistenceproof', 'selfserveproof', 'now', 'package', 'kernel']
     .map((path) => ({ path, digest: readinessDigest(path) }))
   return JSON.stringify(buildManagedPilotReadiness({
     portfolio: JSON.parse(portfolio({}, { ecommerce: { status: 'owner-gated' } })),
-    databaseEvidence: JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8')),
+    databaseEvidence: database,
+    databaseImplementation: { digest: database.implementationDigest,
+      fileCount: database.implementationFileCount, paths: database.implementation.paths },
     storageAudit: 'Status: local verifier ready; hosted proof blocked',
     securityAudit: {
       contract: 'supermega.supabase-security-advisor-audit.v2',
