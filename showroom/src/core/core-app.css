@@ -1238,6 +1238,9 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .managed-login-panel .signup-consent-terms { font-size: 0.86rem; line-height: 1.55; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px 14px; }
 .managed-login-panel .signup-consent-terms summary { cursor: pointer; font-weight: var(--font-weight-semibold); }
 .managed-login-panel .signup-consent-terms ol { margin: 10px 0 2px; padding-left: 18px; display: grid; gap: 8px; }
+.signup-entry-screen .managed-login-panel { gap: var(--space-3); padding-block: var(--space-3); }
+.signup-entry-screen .managed-login-panel p { font-size: var(--font-size-md); line-height: 1.5; }
+.signup-entry-screen .signup-consent-terms > label { margin-top: var(--space-3); }
 .account-inline-link { width: fit-content; min-height: 44px; display: inline-flex; align-items: center; color: var(--core-accent); font-size: 0.75rem; font-weight: var(--font-weight-bold); text-decoration: none; }
 .account-inline-link:hover { text-decoration: underline; }
 .account-link-button { font: inherit; cursor: pointer; }

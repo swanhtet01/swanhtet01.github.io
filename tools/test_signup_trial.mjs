@@ -25,6 +25,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export * from './signup-trial.ts'
+      export { managedAccountRequestUrl } from './account-routes.ts'
       export { shopIndustryPacks } from './shop-service-scheduling.ts'
       export { shopBusinessTemplates } from '../products/shop/business-templates.ts'
     `,
@@ -54,6 +55,7 @@ const {
   trialSignupProductChoice,
   writeTrialSignup,
   signupBusinessChoices,
+  managedAccountRequestUrl,
   shopIndustryPacks,
   shopBusinessTemplates,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
@@ -85,8 +87,14 @@ for (const choice of TRIAL_SIGNUP_PRODUCT_CHOICES) {
   check(trialSignupProductChoice(choice.slug) === choice, `${choice.slug}: public slug resolves to its signup choice`)
   check(choice.setupPath.includes(`product=${choice.slug}`), `${choice.label}: setup path preserves product intent`)
   check(choice.workspacePath.startsWith(`/${choice.slug}/`), `${choice.label}: workspace path is product-specific`)
+  const request = new URL(managedAccountRequestUrl(choice.slug))
+  check(request.origin === 'https://supermega.dev' && request.pathname === '/contact/', `${choice.label}: account request uses the existing public handoff`)
+  check(request.searchParams.get('product') === choice.slug && request.searchParams.get('template') === 'managed-account', `${choice.label}: account request preserves the exact product`)
+  check(request.hash === '' && !request.searchParams.has('email') && !request.searchParams.has('claim'), `${choice.label}: a new request invents no claim and leaks no contact field`)
 }
 check(trialSignupProductChoice('unknown').id === 'commerce', 'unknown product input fails to the visible Shop default')
+check(trialSignupProductChoice('website').outcome.includes('local draft. Publishing is a separate reviewed step.'), 'Website local sample cannot promise publishing')
+check(trialSignupProductChoice('ecommerce').outcome.includes('Nothing is sent or paid.'), 'Ecommerce sample cannot imply an order or payment')
 
 // --- the record -----------------------------------------------------------------
 const minimal = createTrialSignupRecord(base)
@@ -204,6 +212,8 @@ for (const managedReady of [true, false]) {
   // Never tell an owner the door is broken. When managed auth is off the activation request is
   // answered by a person, which is a real route, not a degraded one.
   const words = `${managed.label} ${managed.detail}`.toLowerCase()
+  check(!words.includes('your company account is active'), 'runtime availability cannot assert this visitor has an active account')
+  check(!words.includes('already named your business') && !words.includes('hold the claim code'), 'account copy cannot assert an unsaved trial exists')
   for (const dead of ['not active', 'unavailable', 'coming soon', 'disabled', 'not configured']) {
     check(!words.includes(dead), `the managed door never reads as broken (managedReady=${managedReady}): "${dead}"`)
   }
@@ -302,6 +312,7 @@ check(loginSource.split('to={signupPath}').length - 1 === 2, 'both login-to-tria
 const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
 check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0;'), 'signup controls cannot overflow the mobile content width')
 check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { font-size: 1rem; }'), 'mobile signup inputs retain a zoom-safe font size')
+check(coreCss.includes('.signup-entry-screen .managed-login-panel p { font-size: var(--font-size-md);'), 'entry boundaries use the readable 14px body token instead of 11px captions')
 
 const storageSource = readFileSync('showroom/src/core/local-workspace-storage.ts', 'utf8')
 check(
@@ -317,10 +328,28 @@ check(
   'both consent-style rows share the signup-consent styling',
 )
 check(
-  pageSource.indexOf('I accept the SuperMega trial terms') < pageSource.indexOf('Start my ${selectedProductChoice.label} trial'),
+  pageSource.indexOf('I accept the SuperMega trial terms') < pageSource.indexOf('Try ${selectedProductChoice.label} on this device'),
   'the terms checkbox sits above the submit button',
 )
 check(pageSource.includes("product: selectedProduct"), 'the saved trial records the product the owner selected')
 check(pageSource.includes("selectedProduct === 'commerce' ? selectedProductChoice.workspacePath : selectedProductChoice.setupPath"), 'Shop keeps fast start while other products enter their own setup')
+
+// A new visitor can request real access without first creating a local trial or visiting an
+// inactive login. Existing trial claims retain their separate, explicitly reviewed handoff.
+const newVisitorPage = pageSource.slice(pageSource.indexOf('<PageHeading eyebrow="Get started"'))
+check(newVisitorPage.indexOf('aria-label="Company account"') < newVisitorPage.indexOf('<form'), 'company account request is visible before the local sample form')
+check(newVisitorPage.includes('href={managedAccountRequestUrl(selectedProductChoice.slug)}'), 'new account requests do not require a saved claim')
+check(newVisitorPage.includes("{managedReady ? <Link") && newVisitorPage.includes("managedAccountPath('/login', selectedProductChoice.slug)"), 'sign-in is offered only when runtime and auth are available')
+check(newVisitorPage.includes('Account setup and data transfer require separate review.'), 'request submission is not called account creation')
+check(newVisitorPage.includes('No company account, team sync, or cloud backup.'), 'local sample keeps its cloud boundary visible')
+check(newVisitorPage.includes('value={choice.id}>{choice.label}</option>'), 'product chooser keeps short, readable labels instead of clipped descriptions')
+const optionalFields = newVisitorPage.match(/<details[^>]+onInvalidCapture[\s\S]*?<\/details>/)?.[0] ?? ''
+check(optionalFields.includes('Add your name or email (optional)') && optionalFields.includes('Email (optional)') && optionalFields.includes('Your name (optional)'), 'optional fields are grouped in a closed-by-default disclosure')
+check(!optionalFields.includes(' open=') && optionalFields.includes('event.currentTarget.open = true'), 'optional details reveal invalid hidden controls before browser validation focuses them')
+check(optionalFields.includes('It is not sent to SuperMega.'), 'saving contact locally is not represented as a contact request')
+check(pageSource.includes('not a password or proof of account access'), 'claim code is not represented as authentication')
+const submission = pageSource.slice(pageSource.indexOf('async function startTrial'), pageSource.indexOf('function downloadClaim'))
+check(submission.indexOf('const identity = createTrialSignupRecord(') < submission.indexOf('provisionLocalShopIndustryPack('), 'typed-field validation happens before sample provisioning')
+check(submission.includes('...identity,') && submission.includes('shopIndustryPackId: industryPackId'), 'validated identity is retained with the actually preserved industry pack')
 
 console.log(`signup trial contract: ${checks} checks passed`)

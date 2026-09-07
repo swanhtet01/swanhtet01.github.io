@@ -94,10 +94,10 @@ export type TrialSignupProductChoice = {
 }
 
 export const TRIAL_SIGNUP_PRODUCT_CHOICES: readonly TrialSignupProductChoice[] = [
-  { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Sell, book, stock, and close the day.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
-  { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Plan work, materials, quality, and maintenance.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
-  { id: 'website', slug: 'website', label: 'Website', outcome: 'Build, preview, approve, and publish your business site.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
-  { id: 'ecommerce', slug: 'ecommerce', label: 'Ecommerce', outcome: 'Open a storefront and turn requests into reviewed orders.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
+  { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Try a sample sale, appointment, and daily close on this device.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
+  { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Try a sample production plan and quality checks on this device.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
+  { id: 'website', slug: 'website', label: 'Website', outcome: 'Build and preview a local draft. Publishing is a separate reviewed step.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
+  { id: 'ecommerce', slug: 'ecommerce', label: 'Ecommerce', outcome: 'Try a local catalog and request draft. Nothing is sent or paid.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
 ] as const
 
 export function trialSignupProductChoice(value: unknown): TrialSignupProductChoice {
@@ -301,13 +301,13 @@ export function trialSignupDoors({ managedReady, signupOpen = false }: { managed
       ? {
         id: 'managed',
         label: 'Sign in to your company',
-        detail: 'Your company account is active. Sign in to work with your team on shared records.',
+        detail: 'Already have a company account? Sign in to access the workspaces you are a member of. A local trial does not create an account.',
         action: 'sign-in',
       }
       : {
         id: 'managed',
-        label: 'Activate your company account',
-        detail: 'Shared records, your team, and your data off this device. You have already named your business and hold the claim code -- send your activation request, and a person is on hand whenever you want help.',
+        label: 'Request a company account',
+        detail: 'Ask SuperMega to arrange team access. The request does not create an account or move records off this device; setup and any data transfer need separate review.',
         action: 'request-activation',
       },
     ...(signupOpen
