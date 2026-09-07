@@ -52,6 +52,17 @@ function check(condition, label) {
   assert.ok(condition, label)
 }
 
+// Source pins describe code, not a checkout's Git line-ending conversion.
+const containsSourcePin = (source, pin) => source.replace(/\r\n/g, '\n').includes(pin)
+const batchTypePin = "type ShopBatchProfitControlProjection,\n} from './shop-batch-profit-control'"
+const batchViewPin = "projectNoBatchProfitControl,\n} from './shop-batch-profit-control-view.ts'"
+for (const newline of ['\n', '\r\n']) {
+  check(containsSourcePin(batchTypePin.replace(/\n/g, newline), batchTypePin), 'engine type pin accepts LF and CRLF')
+  check(!containsSourcePin(batchTypePin.replace('type ', '').replace(/\n/g, newline), batchTypePin), 'engine value import cannot satisfy type pin')
+  check(containsSourcePin(batchViewPin.replace(/\n/g, newline), batchViewPin), 'lightweight re-export pin accepts LF and CRLF')
+  check(!containsSourcePin(batchViewPin.replace('-view.ts', '.ts').replace(/\n/g, newline), batchViewPin), 'heavy engine cannot satisfy lightweight re-export pin')
+}
+
 check(
   SHOP_BAKERY_DEMO_ACCEPTED_ARTIFACTS.scenarioFileSha256 === 'sha256:d0f94e8a709f541d4ca59045f7af23cf51789176d74aaf92962c0956b56eaf8b',
   'source binds the accepted synthetic scenario artifact',
@@ -181,11 +192,11 @@ for (const control of [
   'accountingWrite', 'customerWrite', 'hostedWrite', 'providerWrite', 'productionWrite', 'modelUsed',
 ]) check(batchControlsSource.includes(`${control}: false`), `Batch internal control stays false: ${control}`)
 check(loaderSource.includes('Object.values(SHOP_BAKERY_BATCH_DEMO_CONTROLS).some((value) => value !== false)'), 'Batch load fails closed unless every internal authority control is false')
-check(loaderSource.includes("type ShopBatchProfitControlProjection,\n} from './shop-batch-profit-control'"), 'Batch loader keeps only engine types at runtime')
+check(containsSourcePin(loaderSource, batchTypePin), 'Batch loader keeps only engine types at runtime')
 check(!loaderSource.includes('projectShopBatchProfitControl'), 'Batch loader retains neither the generic projector nor a second arithmetic implementation')
 check(todaySource.includes("import type { ShopBatchProfitControlProjection } from './shop-batch-profit-control'"), 'Shop Today keeps only an engine type dependency')
 check(todaySource.includes("from './shop-batch-profit-control-view'"), 'Shop Today reads values from the lightweight Batch view boundary')
-check(batchEngineSource.includes("projectNoBatchProfitControl,\n} from './shop-batch-profit-control-view.ts'"), 'The engine preserves the lightweight no-batch re-export')
+check(containsSourcePin(batchEngineSource, batchViewPin), 'The engine preserves the lightweight no-batch re-export')
 check((batchViewSource.match(/supermega\.shop\.batch_profit_control\.v1/g) ?? []).length === 1, 'The lightweight view boundary owns the single public contract literal')
 for (const forbidden of ['localStorage', 'sessionStorage', 'indexedDB', 'fetch(', 'XMLHttpRequest', 'OneDrive', 'C:\\\\Users', 'saveCommerce', 'setItem(']) {
   check(!loaderSource.includes(forbidden), `loader excludes runtime dependency or write primitive: ${forbidden}`)
