@@ -198,10 +198,12 @@ async function buildTechnicalEstate() {
         migrationAuthority: 'source-controlled supabase migrations and rehearsal packets',
         readinessContract: readiness.contract,
         liveSchemaVersion: securityAudit.managedBackend.liveSchemaVersion,
-        localTargetVersion: securityAudit.managedBackend.localTargetVersion,
-        versionDrift: securityAudit.managedBackend.versionDrift,
+        observedAt: securityAudit.asOf,
+        currentStateRevalidated: false,
+        localTargetVersion: readiness.localDatabase.schemaVersion,
+        versionDrift: readiness.localDatabase.schemaVersion - securityAudit.managedBackend.liveSchemaVersion,
         browserRolesDenied: securityAudit.managedBackend.browserRolesDenied,
-        publicBrowserQuarantine: true,
+        publicBrowserQuarantine: false,
       },
       productionWritesAllowed: false,
     },
@@ -256,7 +258,11 @@ export function validateTechnicalEstate(estate) {
   if (estate.vercel.projects[0]?.domains?.join(',') !== 'supermega.dev,www.supermega.dev') fail('technical_estate_public_domains_invalid')
   if (estate.vercel.projects[1]?.domains?.join(',') !== 'app.supermega.dev,megaos.vercel.app') fail('technical_estate_app_domains_invalid')
   if (estate.supabase?.targetStatus !== 'protected-unapproved' || estate.supabase?.productionWritesAllowed !== false) fail('technical_estate_supabase_boundary_invalid')
-  if (estate.supabase.schemaAuthority?.browserRolesDenied !== true || estate.supabase.schemaAuthority?.publicBrowserQuarantine !== true) fail('technical_estate_supabase_quarantine_invalid')
+  const schema = estate.supabase.schemaAuthority
+  if (schema?.browserRolesDenied !== true || schema?.publicBrowserQuarantine !== false
+    || schema.currentStateRevalidated !== false || !Number.isFinite(Date.parse(schema.observedAt || ''))
+    || !Number.isInteger(schema.liveSchemaVersion) || schema.liveSchemaVersion < 7 || schema.liveSchemaVersion > 11
+    || schema.localTargetVersion !== 13 || schema.versionDrift !== 13 - schema.liveSchemaVersion) fail('technical_estate_supabase_quarantine_invalid')
   if (estate.ownerGates?.productionWritesAllowed !== false || estate.ownerGates?.externalEffectsAllowed !== false || estate.ownerGates?.autoMergeAllowed !== false) fail('technical_estate_owner_gates_invalid')
   for (const action of OWNER_GATED_ACTIONS) {
     if (!estate.ownerGates.requiredApprovalFor.includes(action)) fail(`technical_estate_owner_gate_missing:${action}`)

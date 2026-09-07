@@ -35,7 +35,7 @@ const REQUIRED_OWNER_APPROVALS = [
   'domain_or_publish_change',
   'managed_activation',
 ]
-const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
+const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation']
 const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
 const REQUIRED_PILOT_CALENDAR_DATES = 5
 const REQUIRED_SAFE_AUTOMATED_ACTIONS = ['rebuild_local_evidence', 'verify_current_ledger', 'rehearse_local_client_package']
@@ -296,6 +296,8 @@ export function assessReleaseStackOwnerGates(input = {}) {
     addFailure(failures, 'release_stack_owner_gate_readiness_overall_invalid')
   }
   if (readiness.liveProduction?.operatingMode !== 'isolated_demo'
+    || readiness.liveProduction?.localTargetVersion !== 13
+    || readiness.liveProduction?.currentStateRevalidated !== false
     || readiness.liveProduction?.managedWritesEnabled !== false
     || readiness.liveProduction?.productionMutationAuthorized !== false) {
     addFailure(failures, 'release_stack_owner_gate_live_production_boundary_invalid')
@@ -665,7 +667,7 @@ function sampleInput(overrides = {}) {
       blockingGateCount: REQUIRED_BLOCKING_GATES.length,
       blockingGateIds: [...REQUIRED_BLOCKING_GATES],
     },
-    liveProduction: { operatingMode: 'isolated_demo', managedWritesEnabled: false, productionMutationAuthorized: false },
+    liveProduction: { operatingMode: 'isolated_demo', localTargetVersion: 13, currentStateRevalidated: false, managedWritesEnabled: false, productionMutationAuthorized: false },
     previewRehearsal: {
       proofComplete: false,
       productionRefsRejected: true,

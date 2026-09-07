@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:4bbfe7179d2ade1aa06db723177a9120c4b621a0d3f8806b57279645971ae40c",
+  "sourceDigest": "sha256:f8388883ebdb6c52293d2b7533b466d91c6501f01424654098e92ab3220e0c63",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -54,10 +54,12 @@
       "migrationAuthority": "source-controlled supabase migrations and rehearsal packets",
       "readinessContract": "supermega.managed-pilot-readiness.v5",
       "liveSchemaVersion": 11,
-      "localTargetVersion": 11,
-      "versionDrift": 0,
+      "observedAt": "2026-08-20T17:02:04.312+06:30",
+      "currentStateRevalidated": false,
+      "localTargetVersion": 13,
+      "versionDrift": 2,
       "browserRolesDenied": true,
-      "publicBrowserQuarantine": true
+      "publicBrowserQuarantine": false
     },
     "productionWritesAllowed": false
   },
@@ -248,7 +250,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json#semantic-projection-v1",
-      "digest": "sha256:0c6e3f561f872fe399abe083cdd0d2e11c4e39a8dbeb98b91cf7ab90841660dc"
+      "digest": "sha256:1016030ce8af2c8fc933e4759fb77fd90f8326f0af8df9350d9179e658064ada"
     }
   ]
 }

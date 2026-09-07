@@ -110,10 +110,10 @@ function input(overrides = {}) {
     overall: {
       status: 'blocked',
       hostedActivationReady: false,
-      blockingGateCount: 3,
-      blockingGateIds: ['preview_rehearsal', 'pilot_evidence', 'production_activation'],
+      blockingGateCount: 6,
+      blockingGateIds: ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'],
     },
-    liveProduction: { operatingMode: 'isolated_demo', managedWritesEnabled: false, productionMutationAuthorized: false },
+    liveProduction: { operatingMode: 'isolated_demo', localTargetVersion: 13, currentStateRevalidated: false, managedWritesEnabled: false, productionMutationAuthorized: false },
     previewRehearsal: {
       proofComplete: false,
       productionRefsRejected: true,
@@ -263,6 +263,17 @@ test('fails closed for dirty worktree and external-effect authority', () => {
   }))
   assert.equal(external.ok, false)
   assert.ok(external.failures.includes('release_stack_owner_gate_estate_owner_gates_invalid'))
+})
+
+test('historical three-gate and schema snapshots cannot satisfy current release assessment', () => {
+  for (const mutate of [r => { r.overall.blockingGateCount = 3; r.overall.blockingGateIds = ['preview_rehearsal', 'pilot_evidence', 'production_activation'] },
+    r => { r.liveProduction.localTargetVersion = 11 }, r => { r.liveProduction.currentStateRevalidated = true }]) {
+    const readiness = structuredClone(input().readiness)
+    mutate(readiness)
+    const report = assessReleaseStackOwnerGates(input({ readiness }))
+    assert.equal(report.ok, false)
+    assert.ok(report.failures.some(f => /readiness_overall_invalid|live_production_boundary_invalid/.test(f)))
+  }
 })
 
 test('fails closed when the atomic Shop baseline completion gate is removed', () => {

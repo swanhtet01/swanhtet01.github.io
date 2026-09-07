@@ -12,6 +12,7 @@ import {
   TECHNICAL_ESTATE_PRODUCT_SOURCE_PATHS,
   managedReadinessSemanticProjection,
   technicalEstateSourceReceipts,
+  validateTechnicalEstate,
 } from './manage_technical_estate.mjs'
 import { readinessDigest } from '../kernel/managed-pilot-readiness.mjs'
 
@@ -53,7 +54,7 @@ test('technical estate still rejects invalid readiness and binds direct-source o
 test('one managed-readiness refresh followed by one technical-estate regeneration converges and verifies', async () => {
   const fixtureRoot = await mkdtemp(resolve(tmpdir(), 'supermega-estate-'))
   try {
-    for (const path of ['tools/manage_technical_estate.mjs', 'kernel/managed-pilot-readiness.mjs', ...TECHNICAL_ESTATE_DIRECT_SOURCE_PATHS, 'hq/readiness/managed-pilot-readiness.json']) {
+    for (const path of ['tools/manage_technical_estate.mjs', 'kernel/managed-pilot-readiness.mjs', 'kernel/database-rehearsal-evidence.mjs', ...TECHNICAL_ESTATE_DIRECT_SOURCE_PATHS, 'hq/readiness/managed-pilot-readiness.json']) {
       const destination = resolve(fixtureRoot, path)
       await mkdir(dirname(destination), { recursive: true })
       await cp(resolve(root, path), destination)
@@ -76,6 +77,15 @@ test('one managed-readiness refresh followed by one technical-estate regeneratio
     const generator = resolve(fixtureRoot, 'tools/manage_technical_estate.mjs')
     await execFileAsync(process.execPath, [generator], { cwd: fixtureRoot })
     const generated = await readFile(resolve(fixtureRoot, 'hq/technical-estate.json'), 'utf8')
+    const estate = JSON.parse(generated)
+    assert.equal(estate.supabase.schemaAuthority.localTargetVersion, 13)
+    assert.equal(estate.supabase.schemaAuthority.currentStateRevalidated, false)
+    for (const mutate of [s => { s.publicBrowserQuarantine = true }, s => { s.currentStateRevalidated = true },
+      s => { s.localTargetVersion = 11 }, s => { s.versionDrift = 0 }]) {
+      const changed = structuredClone(estate)
+      mutate(changed.supabase.schemaAuthority)
+      assert.throws(() => validateTechnicalEstate(changed), /technical_estate_supabase_quarantine_invalid/)
+    }
     await execFileAsync(process.execPath, [generator, '--verify'], { cwd: fixtureRoot })
     assert.equal(await readFile(resolve(fixtureRoot, 'hq/technical-estate.json'), 'utf8'), generated)
   } finally {
