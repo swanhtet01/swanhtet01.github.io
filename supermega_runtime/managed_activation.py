@@ -31,10 +31,12 @@ SUSPENSION_RECEIPT_CONTRACT = "supermega.managed_workspace_suspension_receipt.v2
 ACTIVATION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_activation_event.v1"
 SUSPENSION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_suspension_event.v1"
 ACTIVATION_AUTHORIZATION_CONTRACT = "supermega.managed_workspace_activation_authorization.v1"
-# Production already carries the reviewed self-serve grants migration. New
-# activation plans must bind to that exact schema and fail closed against the
-# older v10 contract.
-TRIAL_SCHEMA_VERSION = 11
+# Required candidate contract, not a claim about the live database. A fresh
+# plan and owner authorization must bind the billing + durable-admission profile;
+# an older version-only plan cannot be upgraded by reusing its authorization.
+TRIAL_SCHEMA_VERSION = 13
+TRIAL_SCHEMA_PROFILE = "v13-self-serve"
+TRIAL_DATABASE_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MAX_INPUT_BYTES = 1024 * 1024
 PLAN_TTL = timedelta(days=7)
 AUTOMATIC_COMPENSATION_REASON = "Activation compensation after a downstream release gate failure."
@@ -572,10 +574,12 @@ def compile_activation_plan(
             "releaseCommit": release,
             "adminCaSha256": ca_digest,
             "schemaVersion": TRIAL_SCHEMA_VERSION,
+            "schemaProfile": TRIAL_SCHEMA_PROFILE,
+            "databaseContract": TRIAL_DATABASE_CONTRACT,
         },
         "evidence": deepcopy(source["evidence"]),
         "operations": [
-            "verify_postgres17_schema_v7",
+            "verify_postgres17_schema_v13_self_serve",
             "lock_workspace_identity",
             "verify_durable_owner_authorization",
             "insert_workspace_access_control",
@@ -732,7 +736,7 @@ def validate_activation_plan(
     _timestamp(approval["approvedAt"], "Owner approval timestamp")
     target = _exact(
         plan["target"],
-        ("projectRef", "releaseCommit", "adminCaSha256", "schemaVersion"),
+        ("projectRef", "releaseCommit", "adminCaSha256", "schemaVersion", "schemaProfile", "databaseContract"),
         "Activation target",
     )
     if not isinstance(target["projectRef"], str) or not _PROJECT_REF.fullmatch(target["projectRef"]):
@@ -741,8 +745,11 @@ def validate_activation_plan(
         raise ManagedActivationError("Activation target release commit is invalid.")
     if not isinstance(target["adminCaSha256"], str) or not _SHA256.fullmatch(target["adminCaSha256"]):
         raise ManagedActivationError("Activation target administrative CA digest is invalid.")
-    if target["schemaVersion"] != TRIAL_SCHEMA_VERSION:
+    if type(target["schemaVersion"]) is not int or target["schemaVersion"] != TRIAL_SCHEMA_VERSION:
         raise ManagedActivationError("Activation target schema version is invalid.")
+    if (target["schemaProfile"] != TRIAL_SCHEMA_PROFILE
+            or target["databaseContract"] != TRIAL_DATABASE_CONTRACT):
+        raise ManagedActivationError("Activation target database profile contract is invalid.")
     evidence = _exact(
         plan["evidence"],
         (
@@ -784,7 +791,7 @@ def validate_activation_plan(
     if evidence["pilotOutcomeStatus"] not in {"target_met", "improved"}:
         raise ManagedActivationError("Activation pilot outcome status is invalid.")
     if plan["operations"] != [
-        "verify_postgres17_schema_v7",
+        "verify_postgres17_schema_v13_self_serve",
         "lock_workspace_identity",
         "verify_durable_owner_authorization",
         "insert_workspace_access_control",
@@ -1161,7 +1168,7 @@ class ManagedWorkspaceProvisioner:
             "eventInsert": bool(_row_value(row, "event_insert", 15)),
         }
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != TRIAL_SCHEMA_VERSION:
-            raise ManagedActivationError("Managed activation requires PostgreSQL 17 and private schema version 10.")
+            raise ManagedActivationError(f"Managed activation requires PostgreSQL 17 and private schema version {TRIAL_SCHEMA_VERSION}.")
         if not snapshot["backendRoleSafe"]:
             raise ManagedActivationError("Managed activation backend role is unsafe.")
         if (

@@ -109,8 +109,12 @@ if ([string]$activationPlan.target.projectRef -ne $ExpectedProjectRef) {
 }
 $activationSchemaVersion = [string]$activationPlan.target.schemaVersion
 $activationReleaseCommit = ([string]$activationPlan.target.releaseCommit).Trim().ToLowerInvariant()
-if ($activationSchemaVersion -ne '11') {
-  throw 'Activation plan must target the reviewed managed schema version 11.'
+if ($activationSchemaVersion -ne '13') {
+  throw 'Activation plan must target the reviewed managed schema version 13.'
+}
+if ([string]$activationPlan.target.schemaProfile -cne 'v13-self-serve' -or
+    [string]$activationPlan.target.databaseContract -cne 'supermega_private_trial_database_v13_self_serve_v1') {
+  throw 'Activation plan must bind the reviewed v13 self-serve database profile; rebuild and reapprove older plans.'
 }
 if ($activationReleaseCommit -notmatch '^[0-9a-f]{40}$') {
   throw 'Activation plan must bind the exact reviewed 40-character release commit.'
@@ -194,6 +198,7 @@ try {
     '--env-key', 'SUPERMEGA_DATABASE_URL',
     '--storage-audit-env-key', 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL',
     '--activation-target',
+    '--schema-profile', 'v13-self-serve',
     '--expected-project-ref-env-key', 'SUPERMEGA_ACTIVATION_PROJECT_REF',
     '--ensure-schema',
     '--require-ready'
@@ -262,6 +267,7 @@ try {
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_URL' -Value $supabaseUrl
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_PUBLISHABLE_KEY' -Value $resolvedPublishableKey
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION' -Value $activationSchemaVersion
+    Add-ManagedEnvironmentValue -Key 'SUPERMEGA_BILLING_SCHEMA_VERSION' -Value $activationSchemaVersion
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_SUPABASE_PROJECT_REF' -Value $ExpectedProjectRef
     & npx.cmd --yes $VercelCli env run --environment=production --cwd $RepoRoot --scope $Scope -- node $EnvironmentValueVerifier staged
     if ($LASTEXITCODE -ne 0) { throw 'Staged Vercel values failed value-aware verification.' }
