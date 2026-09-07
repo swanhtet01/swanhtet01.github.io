@@ -3371,8 +3371,6 @@ class PostgresTrialStore:
         self.database_url = str(database_url or "").strip()
         self.reducer = reducer
         self.write_enabled = bool(write_enabled)
-        self._self_serve_attempts: dict[str, int] = {}
-        self._self_serve_attempt_lock = RLock()
 
     def _connect(self):
         if not self.database_url:
@@ -3827,6 +3825,56 @@ class PostgresTrialStore:
         except Exception as exc:
             raise TrialNotReadyError(("database_or_schema_ready",)) from exc
 
+    def _self_serve_budget_transaction(
+        self, principal: TrialPrincipal, *, conflict_at: datetime | None = None
+    ) -> datetime | None:
+        """Commit admission independently of the later workspace transaction.
+
+        Five admitted attempts (including exact replays and failed claims) per
+        verified actor in a rolling database-clock 24h window. Missing migration,
+        revoked session, timeout or uncertain commit fails closed; never refund or
+        automatically retry a possibly committed admission. No process-local fallback.
+        """
+        try:
+            with self._connect() as connection:
+                with connection.transaction():
+                    with connection.cursor() as cursor:
+                        cursor.execute("set transaction isolation level read committed")
+                        cursor.execute("set local statement_timeout = '5s'")
+                        cursor.execute("set local lock_timeout = '3s'")
+                        self._assert_runtime_role(cursor)
+                        self._assert_schema(cursor)
+                        self._set_context(cursor, principal)
+                        self._assert_active_identity_session(cursor, principal)
+                        if conflict_at is None:
+                            cursor.execute(
+                                "select app_private.reserve_self_serve_attempt() as admitted_at"
+                            )
+                            row = cursor.fetchone() or {}
+                            if "admitted_at" not in row:
+                                raise TrialNotReadyError(("self_serve_budget_ready",))
+                            admitted_at = row["admitted_at"]
+                            if admitted_at is not None and (
+                                not isinstance(admitted_at, datetime)
+                                or admitted_at.tzinfo is None
+                            ):
+                                raise TrialNotReadyError(("self_serve_budget_ready",))
+                        else:
+                            cursor.execute(
+                                "select app_private.mark_self_serve_claim_conflict(%s::timestamptz) as recorded",
+                                (conflict_at,),
+                            )
+                            if (cursor.fetchone() or {}).get("recorded") is not True:
+                                raise TrialNotReadyError(("self_serve_budget_ready",))
+                            admitted_at = conflict_at
+            # Only return after BOTH context managers have committed successfully.
+            return admitted_at
+        except TrialStoreError:
+            raise
+        except Exception:
+            # Driver exceptions can contain DSNs, actor ids or SQL parameters.
+            raise TrialNotReadyError(("self_serve_budget_ready",)) from None
+
     def create_self_serve_workspace(
         self,
         *,
@@ -3882,8 +3930,9 @@ class PostgresTrialStore:
             _SELF_SERVE_RELEASE_COMMIT_PATTERN.fullmatch(release_commit)
         ):
             raise TrialNotReadyError(("self_serve_target_ready",))
-        with self._self_serve_attempt_lock:
-            _count_self_serve_attempt(self._self_serve_attempts, principal.actor_id)
+        admitted_at = self._self_serve_budget_transaction(principal)
+        if admitted_at is None:
+            raise TrialRateLimited(limit=SELF_SERVE_RATE_LIMIT_MAX)
         try:
             connection = self._connect()
         except TrialStoreError:
@@ -4146,6 +4195,12 @@ class PostgresTrialStore:
                             event_id=command_id,
                             created_at=created_at,
                         )
+        except TrialClaimConflict:
+            # The failed workspace transaction has rolled back by this point.
+            # Its durable admission survives, and the diagnostic mark is bound
+            # to that exact admission rather than a user-supplied identifier.
+            self._self_serve_budget_transaction(principal, conflict_at=admitted_at)
+            raise
         except TrialStoreError:
             raise
         except Exception as exc:

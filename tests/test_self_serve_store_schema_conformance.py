@@ -82,6 +82,10 @@ class _FakeCursor:
 
     def fetchone(self):
         sql = self._last
+        if "reserve_self_serve_attempt()" in sql:
+            return {"admitted_at": self._connection.created_at}
+        if "mark_self_serve_claim_conflict(" in sql:
+            return {"recorded": True}
         if "access_status" in sql:
             return self._connection.read_back
         if "returning created_at" in sql:

@@ -25,7 +25,35 @@ is an explicit UI acknowledgement, not a durable independently authenticated
 legal receipt. No terms metadata is trusted as tenant authority.
 
 The 60-second UI cooldown and single-flight guards are not durable abuse controls.
-Before opening: implement/review durable abuse protection, configure and test
+The additive `20260907024457_self_serve_durable_attempt_budget.sql` capability
+replaces the Postgres store's process-local counter with five admitted workspace
+attempts per verified actor in a rolling database-clock 24h window. It is NOT an
+Auth signup/email limit. Provider rate limits/CAPTCHA and the new-user switch are
+still independent gates: https://supabase.com/docs/guides/auth/rate-limits.
+
+Admission commits before workspace creation; claim failures, exact replays and
+uncertain outcomes consume a slot, without an automatic refund/retry. Workspace
+writes retain their existing atomic/idempotent behavior. Row locking serializes
+different workers; no process cache, caller clock or workspace-selected budget.
+One private actor row retains at most five timestamps and five idempotent conflict
+marks, with no contact, claim, business, credential or payment data. Expired stamps
+are pruned on the next admitted request; inactive rows remain bounded until a
+separately reviewed retention cleanup. Conflict marking after rollback is diagnostic
+only; a crash can omit the mark but cannot refund admission. The runtime uses
+short READ COMMITTED admission transactions and rechecks the active session again
+in the workspace transaction. Missing capability, clock regression, lock timeout,
+invalid result or commit uncertainty fails closed. The in-memory test/demo adapter
+is not durable and does not provide this hosted guarantee.
+
+This is a separately required v13-compatible capability, not a claim that the
+existing v13 deployment already contains it. Base workspace schema metadata stays
+unchanged; migration manifests/rehearsal receipts require reconciliation before
+integration. The private table has forced actor-scoped RLS, invoker-only functions,
+explicit runtime grants, no public/anon/authenticated grants and no runtime delete.
+No migration has been applied to a configured or provider database here. Local
+disposable SQL proof is not a full-chain rehearsal or production activation proof.
+
+Before opening: independently review/rehearse the durable capability, configure and test
 custom SMTP, require provider email confirmation, decide and integrate CAPTCHA,
 verify provider rate limits and exact redirect allowlists, and test real email,
 revoked-session and cross-tenant journeys. Keep Supabase's new-users switch off
