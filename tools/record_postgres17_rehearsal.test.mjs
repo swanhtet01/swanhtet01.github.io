@@ -14,6 +14,7 @@ import {
   proofDigest,
   recorderOutcomeReconciled,
   withRecorderLease,
+  recordCompletionSummary,
 } from './record_postgres17_rehearsal.mjs'
 
 const checkNames = [
@@ -98,6 +99,23 @@ test('rejects failed checks, stale implementation evidence, and overclaimed scop
   proof.localVerification.externallyHosted = true
   proof.receiptDigest = proofDigest(proof)
   assert.throws(() => validateSanitizedProof(proof, implementation), /database_rehearsal_evidence_scope_overclaimed/)
+})
+
+test('record completion is derived from validated shared proof before publishing output', async () => {
+  const proof = buildSanitizedProof(raw, context)
+  const summary = recordCompletionSummary(proof, implementation)
+  assert.equal(summary.ok, true)
+  assert.equal(summary.checks, 72)
+  assert.equal(summary.implementationCommit, context.implementationCommit)
+  assert.equal(summary.implementationTree, context.implementationTree)
+  assert.equal(summary.receiptDigest, proof.receiptDigest)
+  assert.equal(summary.hostedActivationProven, false)
+  proof.checks.tenantIsolation = false
+  assert.throws(() => recordCompletionSummary(proof, implementation), /digest_invalid/)
+  const source = await readFile(new URL('./record_postgres17_rehearsal.mjs', import.meta.url), 'utf8')
+  assert.equal(source.includes('rawCheckNames'), false)
+  assert.ok(source.indexOf('const summary = recordCompletionSummary(') < source.indexOf('await writeFile(destination,'))
+  assert.match(source, /return summary/)
 })
 
 test('requires exact current migration identity, source commit/tree and implementation paths', () => {

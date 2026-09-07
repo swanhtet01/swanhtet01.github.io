@@ -35,6 +35,13 @@ export async function implementationEvidence(repositoryRoot = root) {
   }
 }
 
+export function recordCompletionSummary(proof, implementation) {
+  const validation = validateSanitizedProof(proof, implementation)
+  return { ...validation, implementationCommit: proof.implementationCommit,
+    implementationTree: proof.implementationTree, implementationDigest: proof.implementationDigest,
+    receiptDigest: proof.receiptDigest }
+}
+
 async function archiveEvidence(path = archivePath) {
   await access(path)
   const metadata = await stat(path)
@@ -130,10 +137,10 @@ async function record(destination) {
       implementation,
       archive: await archiveEvidence(),
     })
-    validateSanitizedProof(proof, await implementationEvidence())
+    const summary = recordCompletionSummary(proof, await implementationEvidence())
     if (!same(cleanSource(), source)) fail('database_rehearsal_source_changed')
     await writeFile(destination, `${JSON.stringify(proof, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
-    return { ok: true, contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA, ...source, implementationDigest: proof.implementationDigest, receiptDigest: proof.receiptDigest, checks: rawCheckNames.length, hostedActivationProven: false }
+    return summary
   })
 }
 
