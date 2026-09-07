@@ -313,6 +313,8 @@ const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
 check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0;'), 'signup controls cannot overflow the mobile content width')
 check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { font-size: 1rem; }'), 'mobile signup inputs retain a zoom-safe font size')
 check(coreCss.includes('.signup-entry-screen .managed-login-panel p { font-size: var(--font-size-md);'), 'entry boundaries use the readable 14px body token instead of 11px captions')
+check(pageSource.split('className={entryClassName}').length - 1 === 2 && pageSource.includes("const entryClassName = 'workspace-screen managed-login-screen signup-entry-screen'"), 'new and retained-trial account text shares the readable entry scope')
+check(coreCss.includes('.signup-entry-screen summary { min-height: 2.75rem;'), 'entry disclosures have a 44px interaction height')
 
 const storageSource = readFileSync('showroom/src/core/local-workspace-storage.ts', 'utf8')
 check(

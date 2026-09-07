@@ -289,7 +289,7 @@ export type TrialSignupDoor = {
  * `managedTrialAuthConfigured()`, both required, and the signal is fail-closed at the runtime
  * behind SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW (design section 7).
  */
-export const ACCOUNT_REQUEST_DETAIL = 'Request team access. Account setup and moving local records need separate review.'
+export const ACCOUNT_REQUEST_DETAIL = 'Account setup and moving local records need separate review.'
 
 export function trialSignupDoors({ managedReady, signupOpen = false }: { managedReady: boolean; signupOpen?: boolean }): readonly TrialSignupDoor[] {
   return [
@@ -303,7 +303,7 @@ export function trialSignupDoors({ managedReady, signupOpen = false }: { managed
       ? {
         id: 'managed',
         label: 'Sign in to your company',
-        detail: 'Sign in to your existing company account. A local trial does not create one.',
+        detail: 'Existing accounts only. Local trials do not create an account.',
         action: 'sign-in',
       }
       : {

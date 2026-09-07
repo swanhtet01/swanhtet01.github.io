@@ -30,6 +30,8 @@ import {
 } from './signup-trial'
 import { useSetupWorkspace } from './workspace-runtime'
 
+const entryClassName = 'workspace-screen managed-login-screen signup-entry-screen'
+
 /**
  * The front door. Everything decidable lives in signup-trial.ts, which a guard can reach; this
  * file is the shell that wires it to the browser. The owner chooses one explicit starting product;
@@ -183,8 +185,8 @@ export function SignupPage() {
   if (existing) {
     const existingProduct = trialSignupProductChoice(existing.product)
     return (
-      <div className="workspace-screen managed-login-screen">
-        <PageHeading eyebrow="Your trial" title="Your trial is running." copy="It lives on this device. Pick up where you left off." />
+      <div className={entryClassName}>
+        <PageHeading eyebrow="Your trial" title="Your local trial" copy="Continue on this device." />
         <section className="managed-login-panel" aria-label="Current trial">
           <div>
             <span className="core-eyebrow">Started</span>
@@ -204,8 +206,8 @@ export function SignupPage() {
   }
 
   return (
-    <div className="workspace-screen managed-login-screen signup-entry-screen">
-      <PageHeading eyebrow="Get started" title={`Start with ${selectedProductChoice.label}.`} copy="Company account or local sample." />
+    <div className={entryClassName}>
+      <PageHeading eyebrow="Get started" title={`Start with ${selectedProductChoice.label}.`} copy="Accounts or local samples." />
       <section className="managed-login-panel" aria-label="Company account">
         <div>
           <h2>Company account</h2>
