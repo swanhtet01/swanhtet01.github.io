@@ -73,13 +73,22 @@ const requireShowroom = createRequire(new URL('../showroom/package.json', import
 const { build } = await import(pathToFileURL(requireShowroom.resolve('esbuild')).href)
 async function bundleAuth(configured = true) {
   const result = await build({
-    entryPoints: ['showroom/src/core/managed-trial.ts'], bundle: true, platform: 'node', format: 'esm',
+    stdin: { contents: "export * from './managed-trial.ts'; export { ManagedAccountPage } from './ManagedAccountPage.tsx'", resolveDir: 'showroom/src/core', loader: 'ts' },
+    bundle: true, platform: 'node', format: 'esm', jsx: 'automatic',
     write: false, logLevel: 'error',
     define: { 'import.meta.env': JSON.stringify(configured ? {
       VITE_SUPABASE_URL: 'https://auth.example.invalid',
       VITE_SUPABASE_PUBLISHABLE_KEY: ['sb', 'publishable', 'synthetic-unit-test-only'].join('_'),
     } : {}) },
     plugins: [{ name: 'offline-auth', setup(builder) {
+      const shells = {
+        react: 'export const useEffect = fn => globalThis.__accountHarness.effects.push(fn); export const useState = init => [typeof init === "function" ? init() : init, () => {}];',
+        'react/jsx-runtime': 'export const jsx = (type, props) => ({ type, props }); export const jsxs = jsx;',
+        'react-router': 'export const Link = "a"; export const useOutletContext = () => globalThis.__accountHarness.runtime; export const useLocation = () => ({ pathname: "/account/setup", search: window.location.search }); export const useNavigate = () => () => { throw Error("unexpected navigation") };',
+        './CoreShell': 'export const PageHeading = "header";',
+      }
+      builder.onResolve({ filter: /^(react|react\/jsx-runtime|react-router|\.\/CoreShell)$/ }, ({ path }) => ({ path, namespace: 'page-shell' }))
+      builder.onLoad({ filter: /.*/, namespace: 'page-shell' }, ({ path }) => ({ contents: shells[path] }))
       builder.onResolve({ filter: /^@supabase\/auth-js$/ }, () => ({ path: 'auth-mock', namespace: 'offline' }))
       builder.onLoad({ filter: /.*/, namespace: 'offline' }, () => ({
         contents: 'export class AuthClient { constructor(options) { globalThis.__accountHarness.options = options; return globalThis.__accountHarness.auth } }',
@@ -134,7 +143,7 @@ async function withAuth(run, configured = true) {
     }
   }
   const replacements = {
-    __accountHarness: { auth },
+    __accountHarness: { auth, effects: [], runtime: { status: 'checking', authReady: false } },
     window: { location, history: { state: null, replaceState(_state, _title, path) {
       calls.push(['scrub', path]); location.search = ''; location.hash = ''
     } }, localStorage: {
@@ -155,6 +164,7 @@ async function withAuth(run, configured = true) {
   for (const [key, value] of Object.entries(replacements)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
   try {
     const mod = await import(`${configured ? configuredBundle : unconfiguredBundle}#${++instance}`)
+    state.page = replacements.__accountHarness
     await run(mod, state)
     assert.equal(storage.get('unrelated.demo'), 'preserved')
     assert.equal(calls.filter(([name]) => name === 'storage-write' || name === 'updateUser').length, 0)
@@ -283,6 +293,7 @@ test('signup callback verifies the provider user then reads memberships without 
     assert.equal(discovery[1], '/api/trial/v1/workspaces')
     assert.equal(discovery[2].headers.get('authorization'), `Bearer ${fixedSession.access_token}`)
     assert.equal(state.calls.filter(([name]) => name === 'exchangeCodeForSession').length, 1)
+    assert.ok(state.calls.findIndex(([name]) => name === 'storage-remove') < state.calls.findIndex(([name]) => name === 'exchangeCodeForSession'))
     assert.equal(state.calls.some(([name]) => name === 'getSession'), false, 'a preexisting session never substitutes for a callback')
     await rejectsCode(mod.beginManagedAccountSetup(), 'account_link_invalid')
   })
@@ -324,7 +335,7 @@ test('invalid callback grammar is scrubbed before any provider operation even wi
   await withAuth(async (mod, state) => {
     codeLink(state)
     await rejectsCode(mod.beginManagedAccountSetup(), 'auth_not_configured')
-    assert.deepEqual(state.calls, [['scrub', '/account/setup']])
+    assert.deepEqual(state.calls.map(([name]) => name), ['scrub', 'storage-remove'])
   }, false)
 })
 
@@ -358,4 +369,19 @@ test('signup page branch cannot expose password-reset UI or automatic workspace 
   assert.ok(page.indexOf("setup?.purpose === 'signup' ? <section") < page.indexOf(': setup ? <form'))
   assert.ok(page.includes('setDirectory(result.directory.workspaces.length ? result.directory : null)'))
   assert.doesNotMatch(page, /createSelfServeWorkspace|requestSelfServeWorkspace/)
+})
+
+test('actual page effect waits during startup but scrubs terminal-disabled callbacks without Auth', async () => {
+  for (const configured of [true, false]) await withAuth(async (mod, state) => {
+    codeLink(state)
+    mod.ManagedAccountPage()
+    state.page.effects.pop()()
+    assert.equal(state.calls.length, 0, 'startup must not discard a valid callback before health settles')
+    assert.ok(state.location.search.includes('code='))
+    state.page.runtime = { status: 'demo', authReady: false }
+    mod.ManagedAccountPage()
+    state.page.effects.pop()()
+    assert.deepEqual(state.calls, [['scrub', '/account/setup']])
+    assert.equal(state.location.search + state.location.hash, '')
+  }, configured)
 })

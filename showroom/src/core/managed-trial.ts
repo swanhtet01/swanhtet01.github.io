@@ -2671,8 +2671,10 @@ function exactAuthParameters(parameters: URLSearchParams, allowed: readonly stri
   return keys.every((key, index) => allowed.includes(key) && keys.indexOf(key) === index)
 }
 
-function scrubManagedAccountCallback() {
-  window.history.replaceState(window.history.state, '', '/account/setup')
+export function scrubManagedAccountCallback() {
+  if (window.location.search || window.location.hash) {
+    window.history.replaceState(window.history.state, '', '/account/setup')
+  }
 }
 
 function accountPurpose(...values: Array<string | null>): ManagedAccountSetup['purpose'] {
@@ -2805,6 +2807,8 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
   } else {
     throw accountLinkError()
   }
+
+  forgetWorkspace()
   const supabase = await authClient()
   if (!supabase) throw new ManagedTrialError('Managed account setup is unavailable.', { code: 'auth_not_configured' })
   try {
@@ -2813,7 +2817,6 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
       : await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
     if (error || !validNamedUserSession(data.session)) throw accountLinkError()
     const session = data.session
-    forgetWorkspace()
     if (purpose === 'signup') {
       // The URL, local session and user_metadata cannot attest email verification.
       const verified = await supabase.auth.getUser(session.access_token)

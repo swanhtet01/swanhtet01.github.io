@@ -10,6 +10,7 @@ import {
   loadManagedBootstrap,
   managedTrialAuthConfigured,
   requestManagedPasswordRecovery,
+  scrubManagedAccountCallback,
   type ManagedAccountSetup,
   type ManagedWorkspaceSignIn,
 } from './managed-trial'
@@ -40,7 +41,11 @@ export function ManagedAccountPage() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (recoveryRequest || !managedReady) return
+    if (recoveryRequest || runtime.status === 'checking') return
+    if (!managedReady) {
+      scrubManagedAccountCallback()
+      return
+    }
     let active = true
     beginManagedAccountSetup()
       .then((result) => {
@@ -61,7 +66,7 @@ export function ManagedAccountPage() {
         setNotice('This account link is invalid or expired. Request a new link.')
       })
     return () => { active = false }
-  }, [managedReady, recoveryRequest])
+  }, [managedReady, recoveryRequest, runtime.status])
 
   async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string) {
     const identity = await completeManagedWorkspaceSignIn(signIn, selectedWorkspaceId)
