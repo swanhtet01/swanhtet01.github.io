@@ -105,6 +105,7 @@ const fixedSession = { user: fixedUser, access_token: 'synthetic-access-only', r
 const signupInput = { email: ' OWNER@example.invalid ', password: 'local-test-password', confirmation: 'local-test-password', termsAccepted: true }
 const openHealth = () => ({ status: 'ready', authentication: {
   self_serve_signup_open: true, supabase_user_tokens_ready: true,
+  self_serve_signup_terms_version: 'v1', self_serve_signup_terms_url: 'https://supermega.dev/terms/v1/',
   anonymous_users_allowed: false, client_asserted_roles_allowed: false,
 } })
 const directoryBody = (workspaces = []) => ({
@@ -182,15 +183,15 @@ function codeLink(state, purpose = 'signup') {
 
 test('unconfigured/invalid input/insecure origin cannot call Auth or the network', async () => {
   await withAuth(async (mod, state) => {
-    await rejectsCode(mod.createManagedAccount(signupInput), 'auth_not_configured')
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'auth_not_configured')
     assert.equal(state.calls.length, 0)
   }, false)
   await withAuth(async (mod, state) => {
     for (const input of [{ ...signupInput, email: 'invalid' }, { ...signupInput, termsAccepted: false }, { ...signupInput, confirmation: '' }]) {
-      await assert.rejects(mod.createManagedAccount(input))
+      await assert.rejects(mod.createManagedAccount(input, 'v1'))
     }
     state.location.origin = 'http://public.example.invalid'
-    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid'), 'auth_redirect_insecure')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1'), 'auth_redirect_insecure')
     assert.equal(state.calls.length, 0)
   })
 })
@@ -206,8 +207,8 @@ test('every signup and resend independently require exact fresh healthy default-
     (h) => { h.status = 'error' },
   ]) await withAuth(async (mod, state) => {
     change(state.health)
-    await rejectsCode(mod.createManagedAccount(signupInput), 'signup_window_closed')
-    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid'), 'signup_window_closed')
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'signup_window_closed')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1'), 'signup_window_closed')
     assert.equal(state.calls.length, 2)
     for (const [, url, init] of state.calls) {
       assert.equal(url, '/api/health'); assert.equal(init.cache, 'no-store')
@@ -216,8 +217,35 @@ test('every signup and resend independently require exact fresh healthy default-
   })
   for (const failed of [response(openHealth(), 503), response(openHealth(), 200, 'text/html')]) await withAuth(async (mod, state) => {
     state.fetch = async () => failed
-    await rejectsCode(mod.createManagedAccount(signupInput), 'signup_window_closed')
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'signup_window_closed')
     assert.equal(state.calls.length, 1)
+  })
+})
+
+test('missing, changed and untrusted terms policies block signup and resend before Auth', async () => {
+  await withAuth(async (mod, state) => {
+    await rejectsCode(mod.createManagedAccount(signupInput), 'account_terms_required')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1\n'), 'account_terms_required')
+    assert.equal(state.calls.length, 0)
+  })
+  for (const policy of [
+    { self_serve_signup_terms_version: undefined },
+    { self_serve_signup_terms_version: 'v0' },
+    { self_serve_signup_terms_url: 'https://example.invalid/terms/v1/' },
+    { self_serve_signup_terms_url: 'https://supermega.dev/terms/v1/?private=value' },
+    { self_serve_signup_terms_url: 'https://supermega.dev/terms/v1/#fragment' },
+    { self_serve_signup_terms_url: 'https://supermega.dev/terms/v2/' },
+  ]) await withAuth(async (mod, state) => {
+    Object.assign(state.health.authentication, policy)
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'signup_window_closed')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1'), 'signup_window_closed')
+    assert.equal(state.calls.some(([name]) => name !== 'fetch'), false)
+  })
+  await withAuth(async (mod, state) => {
+    Object.assign(state.health.authentication, { self_serve_signup_terms_version: 'v2', self_serve_signup_terms_url: 'https://supermega.dev/terms/v2/' })
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'account_terms_changed')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1'), 'account_terms_changed')
+    assert.equal(state.calls.some(([name]) => name !== 'fetch'), false)
   })
 })
 
@@ -226,16 +254,16 @@ test('signup sends normalized identity only; resend uses signup type; existing i
     state.signupResult.error = error
     state.resendResult.error = error
     const expected = { status: 'confirmation_requested' }
-    assert.deepEqual(await mod.createManagedAccount(signupInput), expected)
+    assert.deepEqual(await mod.createManagedAccount(signupInput, 'v1'), expected)
     const signup = state.calls.find(([name]) => name === 'signUp')[1]
     assert.deepEqual(signup, { email: 'owner@example.invalid', password: signupInput.password,
       options: { emailRedirectTo: 'https://app.example.invalid/account/setup?mode=signup' } })
-    assert.deepEqual(await mod.resendManagedAccountConfirmation(' OWNER@example.invalid '), expected)
+    assert.deepEqual(await mod.resendManagedAccountConfirmation(' OWNER@example.invalid ', 'v1'), expected)
     assert.deepEqual(state.calls.find(([name]) => name === 'resend')[1], {
       type: 'signup', email: 'owner@example.invalid', options: signup.options,
     })
     state.health.authentication.self_serve_signup_open = false
-    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid'), 'signup_window_closed')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1'), 'signup_window_closed')
     assert.equal(state.calls.filter(([name]) => name === 'resend').length, 1)
   })
 })
@@ -243,14 +271,14 @@ test('signup sends normalized identity only; resend uses signup type; existing i
 test('existing sessions and unexpected auto-confirmed signup never grant silent access', async () => {
   await withAuth(async (mod, state) => {
     state.session = fixedSession
-    await rejectsCode(mod.createManagedAccount(signupInput), 'auth_existing_session')
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'auth_existing_session')
     assert.equal(state.calls.some(([name]) => name === 'signUp' || name === 'signOut'), false)
     state.session = { ...fixedSession, user: { ...fixedUser, is_anonymous: true } }
-    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid'), 'auth_existing_session')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1'), 'auth_existing_session')
   })
   await withAuth(async (mod, state) => {
     state.signupResult.data.session = fixedSession
-    await rejectsCode(mod.createManagedAccount(signupInput), 'email_confirmation_required')
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'email_confirmation_required')
     assert.deepEqual(state.calls.find(([name]) => name === 'signOut'), ['signOut', { scope: 'local' }])
     assert.equal(state.calls.some(([name, url]) => name === 'fetch' && url.includes('workspaces')), false)
   })
@@ -260,17 +288,17 @@ test('network/provider failures are fixed-copy, retry-free and release submissio
   await withAuth(async (mod, state) => {
     const privateError = 'sensitive-provider-detail@example.invalid'
     state.fetch = async () => { throw new Error(privateError) }
-    await assert.rejects(mod.createManagedAccount(signupInput), (error) => error.code === 'account_request_failed' && !error.message.includes(privateError))
+    await assert.rejects(mod.createManagedAccount(signupInput, 'v1'), (error) => error.code === 'account_request_failed' && !error.message.includes(privateError))
     assert.equal(state.calls.length, 1)
     state.fetch = undefined
     state.signupResult.error = { code: 'over_email_send_rate_limit', message: privateError, status: 429 }
-    await rejectsCode(mod.createManagedAccount(signupInput), 'account_request_failed')
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'account_request_failed')
     let finish
     state.signUp = () => new Promise((resolve) => { finish = resolve })
-    const pending = mod.createManagedAccount(signupInput)
+    const pending = mod.createManagedAccount(signupInput, 'v1')
     for (let i = 0; i < 20 && !finish; i++) await new Promise((resolve) => setImmediate(resolve))
     assert.ok(finish)
-    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid'), 'account_request_pending')
+    await rejectsCode(mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1'), 'account_request_pending')
     finish({ data: { session: null }, error: null })
     assert.deepEqual(await pending, { status: 'confirmation_requested' })
   })

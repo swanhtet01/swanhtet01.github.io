@@ -41,6 +41,9 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "VITE_SUPABASE_ANON_KEY": "",
             "SUPERMEGA_CORS_ORIGINS": "",
             "VERCEL_GIT_COMMIT_SHA": "",
+            "SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW": "",
+            "SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_VERSION": "",
+            "SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_URL": "",
             **environment,
         }
         with patch.dict(os.environ, controlled, clear=False):
@@ -166,6 +169,39 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertEqual(signed.status_code, 200)
         self.assertEqual(signed.json()["status"], "blocked")
         self.assertIn("database_ready", signed.json()["blockers"])
+
+    def test_signup_health_is_exact_default_closed_and_terms_bound(self) -> None:
+        environment = {
+            "SUPERMEGA_SUPABASE_URL": "https://example.supabase.co",
+            "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "_".join(["sb", "publishable", "synthetic-unit-test-only"]),
+            "SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW": "open",
+            "SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_VERSION": "v1",
+            "SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_URL": "https://supermega.dev/terms/v1/",
+        }
+        for overrides in [
+            {"SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW": value} for value in ["", "true", "OPEN", "open "]
+        ] + [
+            {"SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_VERSION": value} for value in ["", "v0", "v1\n", "v10000", "private-text"]
+        ] + [
+            {"SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_URL": value} for value in [
+                "", "http://supermega.dev/terms/v1/", "https://example.invalid/terms/v1/",
+                "https://supermega.dev/terms/v2/", "https://supermega.dev/terms/v1/?private=value",
+            ]
+        ] + [{"SUPERMEGA_SUPABASE_URL": ""}]:
+            with self.subTest(overrides=overrides), self._client(**{**environment, **overrides}) as client:
+                auth = client.get("/api/health").json()["authentication"]
+                self.assertIs(auth["self_serve_signup_open"], False)
+                self.assertIsNone(auth["self_serve_signup_terms_version"])
+                self.assertIsNone(auth["self_serve_signup_terms_url"])
+        with self._client(**environment) as client:
+            health = client.get("/api/health").json()
+            self.assertIs(health["authentication"]["self_serve_signup_open"], True)
+            self.assertEqual(health["authentication"]["self_serve_signup_terms_version"], "v1")
+            self.assertEqual(health["authentication"]["self_serve_signup_terms_url"], environment["SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_URL"])
+            self.assertIs(health["enterprise_db_ready"], False)
+            self.assertIs(health["trial_backend"]["write_enabled"], False)
+            with patch.dict(os.environ, {"SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW": "closed"}):
+                self.assertIs(client.get("/api/health").json()["authentication"]["self_serve_signup_open"], False)
 
     def test_verified_supabase_user_token_resolves_only_a_human_actor(self) -> None:
         environment = {

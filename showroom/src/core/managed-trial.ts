@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/auth-js'
 import { validateCreateAccountRequest, type CreateAccountInput } from './signup-account.ts'
+import { readManagedSignupPolicy } from './managed-signup-policy.ts'
 import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
 import type { PlantEquipmentImportPackage } from './plant-equipment-import.ts'
 import {
@@ -2693,8 +2694,11 @@ let signupRequestPending = false
 
 // UI backpressure only, not a rate limiter. Provider signup, durable abuse controls,
 // SMTP and the default-closed runtime window require a separate activation review.
-async function requestManagedSignup(input: CreateAccountInput | string) {
+async function requestManagedSignup(input: CreateAccountInput | string, shownTermsVersion: string) {
   const request = typeof input === 'string' ? { email: normalizeAuthEmail(input) } : validateCreateAccountRequest(input)
+  if (typeof shownTermsVersion !== 'string' || shownTermsVersion.trim() !== shownTermsVersion || !/^v[1-9][0-9]{0,3}$/.test(shownTermsVersion)) {
+    throw new ManagedTrialError('Read and accept the current terms before requesting an account.', { code: 'account_terms_required' })
+  }
   const emailRedirectTo = managedAccountRedirectUrl('signup')
   if (!managedTrialAuthConfigured()) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
   if (signupRequestPending) throw new ManagedTrialError('An account request is already pending.', { code: 'account_request_pending' })
@@ -2707,12 +2711,12 @@ async function requestManagedSignup(input: CreateAccountInput | string) {
     })
     const health = response.ok && response.headers.get('content-type')?.includes('application/json')
       ? await response.json() : null
-    if (health?.status !== 'ready'
-      || health.authentication?.self_serve_signup_open !== true
-      || health.authentication?.supabase_user_tokens_ready !== true
-      || health.authentication?.anonymous_users_allowed !== false
-      || health.authentication?.client_asserted_roles_allowed !== false) {
+    const policy = readManagedSignupPolicy(health)
+    if (!policy) {
       throw new ManagedTrialError('Company signup is not open. Sign in or request an account.', { code: 'signup_window_closed' })
+    }
+    if (policy.termsVersion !== shownTermsVersion) {
+      throw new ManagedTrialError('The terms changed. Reload and read the current version before trying again.', { code: 'account_terms_changed' })
     }
     const supabase = await authClient()
     if (!supabase) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
@@ -2742,12 +2746,12 @@ async function requestManagedSignup(input: CreateAccountInput | string) {
   }
 }
 
-export function createManagedAccount(input: CreateAccountInput) {
-  return requestManagedSignup(input)
+export function createManagedAccount(input: CreateAccountInput, shownTermsVersion: string) {
+  return requestManagedSignup(input, shownTermsVersion)
 }
 
-export function resendManagedAccountConfirmation(email: string) {
-  return requestManagedSignup(email)
+export function resendManagedAccountConfirmation(email: string, shownTermsVersion: string) {
+  return requestManagedSignup(email, shownTermsVersion)
 }
 
 export async function requestManagedPasswordRecovery(email: string) {

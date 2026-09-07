@@ -1068,6 +1068,16 @@ def create_app() -> FastAPI:
         enterprise_db_ready = readiness.database_ready and readiness.role_ready and readiness.schema_ready and readiness.audit_ready
         gateway_ready = _identity_secret_ready(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
         supabase_auth_ready = SupabaseAuthConfig.from_environment().ready
+        # Availability only: does not enable Supabase signup or grant tenant access.
+        # Terms must be separately reviewed and published at this immutable version URL.
+        signup_terms_version = os.getenv("SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_VERSION", "")
+        signup_terms_url = os.getenv("SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_URL", "")
+        signup_open = bool(
+            supabase_auth_ready
+            and os.getenv("SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW") == "open"
+            and re.fullmatch(r"v[1-9][0-9]{0,3}", signup_terms_version)
+            and signup_terms_url == f"https://supermega.dev/terms/{signup_terms_version}/"
+        )
         security_ready = gateway_ready or supabase_auth_ready
         requirements = _activation_requirements(
             database_ready=readiness.database_ready,
@@ -1123,6 +1133,9 @@ def create_app() -> FastAPI:
                 "supabase_user_tokens_ready": supabase_auth_ready,
                 "anonymous_users_allowed": False,
                 "client_asserted_roles_allowed": False,
+                "self_serve_signup_open": signup_open,
+                "self_serve_signup_terms_version": signup_terms_version if signup_open else None,
+                "self_serve_signup_terms_url": signup_terms_url if signup_open else None,
             },
             "browser_origin_policy": {
                 "strict_exact_origins": True,
