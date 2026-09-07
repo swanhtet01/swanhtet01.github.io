@@ -44,16 +44,13 @@ const result = await build({
       }
       counts.blockedRequests++; show(); throw Error('fixture_network_denied');
     };
-    function Frame() { return <main><Outlet context={{status:'demo', signupPolicy:readManagedSignupPolicy(health)}} /></main> }
+    function Frame() { return <main className="core-main"><div className="core-route-content"><Outlet context={{status:'demo', signupPolicy:readManagedSignupPolicy(health)}} /></div></main> }
     createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={['/login?product=shop']}>
       <Routes><Route element={<Frame/>}><Route path='/login' element={<ManagedLoginPage/>}/>
       <Route path='/account/recovery' element={<p>Recovery route reached. Synthetic QA does not send email.</p>}/></Route></Routes>
     </MemoryRouter>);
   ` },
   plugins: [{ name: 'local-only-auth-fixture', setup(builder) {
-    builder.onResolve({ filter: /^\.\/CoreShell$/ }, () => ({ path: 'heading', namespace: 'qa-heading' }))
-    builder.onLoad({ filter: /.*/, namespace: 'qa-heading' }, () => ({ loader: 'tsx', resolveDir: resolve(root, 'showroom'), contents:
-      `export function PageHeading({eyebrow,title,copy}) { return <header className="page-heading"><span>{eyebrow}</span><h1>{title}</h1><p>{copy}</p></header> }` }))
     builder.onResolve({ filter: /^@supabase\/auth-js$/ }, () => ({ path: 'provider', namespace: 'qa-auth' }))
     builder.onLoad({ filter: /.*/, namespace: 'qa-auth' }, () => ({ contents: `
       export class AuthClient {

@@ -486,6 +486,7 @@ test('actual form requires deliberate terms and preserves product intent on reco
     state.location.search = '?product=plant'
     const tree = openedLogin(mod, state)
     assert.equal(input(tree, 'I agree').props.checked, false)
+    assert.ok(elements(tree).some((node) => node.type === 'label' && node.props.className === 'signup-consent'))
     assert.equal(button(tree, 'Create account').props.disabled, true)
     assert.equal(input(tree, 'Password').props.autoComplete, 'new-password')
     assert.equal(input(tree, 'Password').props.minLength, 12)

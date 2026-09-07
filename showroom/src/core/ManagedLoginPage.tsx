@@ -258,7 +258,7 @@ export function ManagedLoginPage() {
   }
 
   return (
-    <div className="workspace-screen managed-login-screen">
+    <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
       <PageHeading eyebrow="Company account" title={creatingAccount ? 'Create your account.' : 'Open your company.'} copy={creatingAccount ? 'Confirm your email first. Company access is a separate step.' : 'Sign in once. SuperMega finds the companies assigned to you.'} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
@@ -276,7 +276,7 @@ export function ManagedLoginPage() {
             <label>Password<input aria-describedby="signup-password-help" autoComplete="new-password" disabled={busy} minLength={12} maxLength={128} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
             <p id="signup-password-help">Use 12–128 characters. Do not reuse a payment-app PIN.</p>
             <label>Confirm password<input autoComplete="new-password" disabled={busy} minLength={12} maxLength={128} onChange={(event) => setConfirmation(event.target.value)} required type="password" value={confirmation} /></label>
-            <label><input checked={acceptedTermsVersion === signupPolicy.termsVersion} disabled={busy} onChange={(event) => setAcceptedTermsVersion(event.target.checked ? signupPolicy.termsVersion : '')} required type="checkbox" />I agree to the <a href={signupPolicy.termsUrl} target="_blank" rel="noopener noreferrer">account terms ({signupPolicy.termsVersion})</a>.</label>
+            <label className="signup-consent"><input checked={acceptedTermsVersion === signupPolicy.termsVersion} disabled={busy} onChange={(event) => setAcceptedTermsVersion(event.target.checked ? signupPolicy.termsVersion : '')} required type="checkbox" /><span>I agree to the <a href={signupPolicy.termsUrl} target="_blank" rel="noopener noreferrer">account terms ({signupPolicy.termsVersion})</a>.</span></label>
           </>}
           <button className="core-button primary" disabled={busy || cooldownSeconds > 0 || (!sentRequest && acceptedTermsVersion !== signupPolicy.termsVersion)} type="submit">{busy ? 'Requesting...' : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s before another request` : sentRequest ? 'Resend confirmation' : 'Create account'}</button>
           <p>Creating an account does not activate a company, confirm payment or copy your local demo records.</p>
