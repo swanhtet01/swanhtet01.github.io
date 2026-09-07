@@ -4,9 +4,24 @@ import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import assert from 'node:assert/strict'
+
+function fixtureHref(raw, origin) {
+  try {
+    const url = new URL(raw, origin)
+    return url.origin === origin && !url.username && !url.password ? raw : '/fixture/external-link'
+  } catch { return '/fixture/external-link' }
+}
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
+if (args.length === 1 && args[0] === '--self-test') {
+  const origin = 'http://127.0.0.1:4194'
+  for (const value of ['https://supermega.dev/terms/v1/', 'https://supermega.dev/contact/?product=shop', '//example.invalid', 'javascript:void(0)', 'data:text/plain,test', 'http://localhost:4194/', 'http://127.0.0.1:4195/']) assert.equal(fixtureHref(value, origin), '/fixture/external-link')
+  for (const value of ['/', '/account/recovery?product=shop', '#main', origin + '/fixture/external-link']) assert.equal(fixtureHref(value, origin), value)
+  console.log(JSON.stringify({ ok: true, checks: 11, contract: 'supermega.signup-fixture-navigation.v1' }))
+  process.exit(0)
+}
 if (args.length !== 2 || args[0] !== '--expected-head' || !/^[0-9a-f]{40}$/.test(args[1])) throw Error('exact_expected_head_required')
 const git = (...argv) => execFileSync('git', argv, { cwd: root, encoding: 'utf8', windowsHide: true }).trim()
 const head = git('rev-parse', 'HEAD')
@@ -32,6 +47,17 @@ const result = await build({
     import { readManagedSignupPolicy } from './managed-signup-policy.ts';
     import './core-app.css';
     const health = ${JSON.stringify(policy)};
+    ${fixtureHref.toString()}
+    // Rewrite destinations, not just clicks: keyboard, middle-click and new-tab
+    // actions must all stay local. Product source/terms URLs are not changed.
+    const isolateLinks = () => {
+      for (const link of document.querySelectorAll('a[href]')) {
+        const original = link.getAttribute('href');
+        const safe = fixtureHref(original, window.location.origin);
+        if (safe !== original) { link.setAttribute('href', safe); link.removeAttribute('target'); }
+      }
+    };
+    new MutationObserver(isolateLinks).observe(document.documentElement, {subtree:true,childList:true,attributes:true,attributeFilter:['href']});
     const counter = document.getElementById('fixture-counts');
     const counts = { authRequests: 0, healthReads: 0, blockedRequests: 0, errors: 0 };
     const show = () => { counter.textContent = Object.entries(counts).map(([key,value]) => key + ': ' + value).join(' · ') }; show();
@@ -75,6 +101,7 @@ const server = createServer((request, response) => {
   const path = request.url
   const asset = assets.get(path)
   if (path === '/') { response.setHeader('content-type', 'text/html; charset=utf-8'); response.end(html) }
+  else if (path === '/fixture/external-link') { response.setHeader('content-type', 'text/html; charset=utf-8'); response.end('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic link boundary</title><h1>External link kept local</h1><p>No external site was opened. This fixture does not publish or approve account terms, or send a setup request.</p></html>') }
   else if (asset) { response.setHeader('content-type', path.endsWith('.css') ? 'text/css' : 'text/javascript'); response.end(asset) }
   else { response.writeHead(404); response.end() }
 })

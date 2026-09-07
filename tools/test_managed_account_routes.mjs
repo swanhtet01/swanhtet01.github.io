@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
+import { execFileSync } from 'node:child_process'
 
 import {
   alternateManagedWorkspaceId,
@@ -19,6 +20,16 @@ const productRoutes = new Map([
   ['website', '/website/'],
   ['ecommerce', '/ecommerce/'],
 ])
+
+test('browser fixture rewrites every external destination, including terms and assisted setup', () => {
+  const result = JSON.parse(execFileSync(process.execPath, ['tools/serve_managed_signup_fixture.mjs', '--self-test'], { encoding: 'utf8', windowsHide: true }))
+  assert.equal(result.ok, true)
+  assert.equal(result.checks, 11)
+  const source = readFileSync('tools/serve_managed_signup_fixture.mjs', 'utf8')
+  assert.ok(source.includes('${fixtureHref.toString()}'), 'browser executes the same tested function')
+  assert.ok(source.includes("link.setAttribute('href', safe); link.removeAttribute('target')"))
+  assert.ok(source.includes("path === '/fixture/external-link'"))
+})
 
 for (const [intent, expected] of productRoutes) {
   assert.equal(managedPortalEntryPath(intent), expected)
