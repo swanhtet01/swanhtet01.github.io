@@ -58,6 +58,13 @@ function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
 }
 
+test('mobile Website actions wrap complete labels without shrinking tap targets', () => {
+  const mobile = websiteProductCss.slice(websiteProductCss.indexOf('@media screen and (max-width: 560px) {'))
+  assert.match(mobile, /\.website-primary-actions > \.website-button \{\s*white-space: normal;\s*overflow-wrap: anywhere;\s*line-height: 1\.3;\s*padding-block: \.5rem;\s*text-align: center;\s*\}/)
+  assert.match(websiteProductCss, /\.website-primary-actions > \.website-button,\s*\.website-site-settings > summary \{\s*min-width: 78px;\s*min-height: 46px;/)
+  assert.ok(websiteProductSource.includes('Download preview'), 'preserve the complete user-facing action label')
+})
+
 test('the Website FILE status stays fully readable on desktop and keeps the mobile layout', () => {
   assert.match(
     websiteProductSource,
