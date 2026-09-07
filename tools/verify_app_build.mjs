@@ -3016,12 +3016,17 @@ for (const [handler, next] of [
 if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
   // /signup used to redirect here, which was a dead end: /login is gated on
-  // runtime.status === 'enterprise' AND managedTrialAuthConfigured(), and there is no self-serve
-  // account creation anywhere, so a stranger had no way to start. It now renders a real trial.
+  // workspace login remains enterprise-gated. Local trial and separately default-closed
+  // identity creation are distinct doors; neither grants company access by itself.
   || !appSource.includes("lazy(() => import('./core/SignupPage')")
   || !appSource.includes('<SignupPage /></Suspense>} path="signup"')
   || appSource.includes('<Navigate replace to="/login" />} path="signup"')
-  || !managedLoginPageSource.includes('title="Open your company."')
+  || !managedLoginPageSource.includes("title={creatingAccount ? 'Create your account.' : 'Open your company.'}")
+  || !managedLoginPageSource.includes("runtime.status !== 'checking' && managedTrialAuthConfigured() ? runtime.signupPolicy : null")
+  || !managedLoginPageSource.includes('await createManagedAccount({ email, password, confirmation, termsAccepted: true }, termsVersion)')
+  || !managedLoginPageSource.includes('await resendManagedAccountConfirmation(sentRequest.email, termsVersion)')
+  || !managedLoginPageSource.includes('acceptedTermsVersion === signupPolicy.termsVersion')
+  || !managedLoginPageSource.includes('Creating an account does not activate a company, confirm payment or copy your local demo records.')
   || !managedLoginPageSource.includes('No workspace code or technical setup is required.')
   || !managedLoginPageSource.includes('Only active companies assigned to this account are shown.')
   || !managedLoginPageSource.includes('Request company account')
