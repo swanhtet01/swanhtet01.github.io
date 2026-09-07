@@ -1193,7 +1193,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `Historical ${supabaseSecurityAudit.advisor?.status} audit (${supabaseSecurityAudit.advisor?.findingCount} findings) observed managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} against its then-target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.`
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === 'Obtain fresh schema v13, privilege/RLS and session/billing evidence for this candidate on an owner-approved isolated target; retain the prior security audit only as history.'
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef
   && supabaseSecurityAudit.targetClassification === 'protected-production'
   && Number.isInteger(supabaseSecurityAudit.managedBackend?.liveSchemaVersion)

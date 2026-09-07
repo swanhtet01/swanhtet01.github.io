@@ -40,6 +40,7 @@ const REQUIRED_QUARANTINE_CHECKS = [
 const NEXT_ACTION_REQUIREMENTS = ['approve_runtime_role_provisioning', 'approve_first_named_owner_identity', 'approve_exact_production_release', 'approve_managed_activation_window']
 const NEXT_ACTION_DECISION_ID = 'managed-production-activation'
 const CURRENT_DATABASE_SCHEMA = 13
+const CURRENT_SECURITY_NEXT_ACTION = 'Obtain fresh schema v13, privilege/RLS and session/billing evidence for this candidate on an owner-approved isolated target; retain the prior security audit only as history.'
 const REQUIRED_SOURCE_RECEIPT_COUNT = 10
 const REQUIRED_ACCEPTED_PILOT_RUNS = 20
 const REQUIRED_PILOT_DAY_INDEXES = Object.freeze([1, 2, 3, 4, 5])
@@ -317,7 +318,7 @@ export function buildManagedPilotReadiness(input = {}) {
       'Prove current durable commands, billing, attempt limits, recovery and tenant isolation on an owner-approved isolated target.'),
     gate('storage_privacy', 'blocked', storageGateEvidence(storageProofComplete),
       'Prove current private access plus object export/restore on an owner-approved isolated target.'),
-    gate('security', (securityGateReady(auditSummary) && hostedGateReady(auditSummary)) ? 'ready-hosted' : 'blocked', securityGateEvidenceV5(auditSummary, database), securityAudit.conclusion.nextAction),
+    gate('security', (securityGateReady(auditSummary) && hostedGateReady(auditSummary)) ? 'ready-hosted' : 'blocked', securityGateEvidenceV5(auditSummary, database), CURRENT_SECURITY_NEXT_ACTION),
     gate('pilot_evidence', pilotEvidenceComplete ? 'ready-pilot' : 'blocked', pilotEvidence(pilotEvidenceComplete, products[0].requiredProof), pilotEvidenceComplete
       ? 'Prepare the exact activation decision packet without exposing private identity.'
       : 'Complete the private owner-named Shop pilot sequence and retain identity only in the private workspace.'),
@@ -623,6 +624,7 @@ export function validateManagedPilotReadiness(value) {
     || value.gates.find((entry) => entry.id === 'managed_persistence')?.evidence !== persistenceGateEvidence(managedPersistence.proofComplete)
     || value.gates.find((entry) => entry.id === 'storage_privacy')?.evidence !== storageGateEvidence(storagePrivacy.proofComplete)
     || value.gates.find((entry) => entry.id === 'security')?.evidence !== securityGateEvidenceV5(audit, { checks: { publicBrowserQuarantineEnforced: liveProduction.publicBrowserQuarantine } })
+    || value.gates.find((entry) => entry.id === 'security')?.nextAction !== CURRENT_SECURITY_NEXT_ACTION
     || value.gates.find((entry) => entry.id === 'pilot_evidence')?.evidence !== pilotEvidence(pilot.proofComplete, value.products?.[0]?.requiredProof)) fail('managed_pilot_readiness_gate_evidence_invalid')
   if (!Array.isArray(value.products) || value.products.map((product) => product.productId).join(',') !== PRODUCT_IDS.join(',') || value.products.some((product) => product.managedPilotStatus !== 'blocked' || product.automationStatus !== 'owner-gated')) fail('managed_pilot_readiness_products_invalid')
   if (value.controls?.externalWritesPerformed !== false || value.controls?.connectorRequestsPerformed !== 0 || value.controls?.modelCallsRequiredToBuild !== 0 || value.controls?.productionWritesEnabled !== false || value.controls?.ownerApprovalRequired !== true) fail('managed_pilot_readiness_controls_invalid')

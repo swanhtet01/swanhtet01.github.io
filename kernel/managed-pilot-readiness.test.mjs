@@ -216,6 +216,10 @@ test('historical clean hosted audit cannot satisfy current schema or self-serve 
     changed[key].currentTargetProven = true
     assert.throws(() => validateManagedPilotReadiness(changed), /managed_pilot_readiness_.*invalid/)
   }
+  assert.match(ledger.gates.find(g => g.id === 'security').nextAction, /fresh schema v13/)
+  const staleInstruction = structuredClone(ledger)
+  staleInstruction.gates.find(g => g.id === 'security').nextAction = historical.securityAudit.conclusion.nextAction
+  assert.throws(() => validateManagedPilotReadiness(staleInstruction), /managed_pilot_readiness_gate_evidence_invalid/)
 })
 
 test('completed historical persistence and Storage proofs stay retained but cannot clear current gates', () => {

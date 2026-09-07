@@ -16,7 +16,7 @@
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:65ddd9ac28c5804dcd83afaf811459717ae5d9c2e4b2059dc33f686252db2794",
+  "sourceDigest": "sha256:a1f9e83db28d5fbec20b566aa56fe67ea989f81d6770674f69508da4296e6e56",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -198,7 +198,7 @@
       "id": "security",
       "status": "blocked",
       "evidence": "Historical clear audit (0 findings) observed managed schema v11 against its then-target v11. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.",
-      "nextAction": "Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs."
+      "nextAction": "Obtain fresh schema v13, privilege/RLS and session/billing evidence for this candidate on an owner-approved isolated target; retain the prior security audit only as history."
     },
     {
       "id": "pilot_evidence",
@@ -314,7 +314,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:18a7f64af21ccfc236b8025cccca4a6bdcd95ef857c5fc61cefcbf7401939b72"
+      "digest": "sha256:782a7b1919ea8c7eaedc934a178bc036da35bc4713e546015274dee2c888ebee"
     }
   ]
 }
