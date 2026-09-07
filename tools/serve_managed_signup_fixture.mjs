@@ -34,7 +34,7 @@ const result = await build({
     const health = ${JSON.stringify(policy)};
     const counter = document.getElementById('fixture-counts');
     const counts = { authRequests: 0, healthReads: 0, blockedRequests: 0, errors: 0 };
-    const show = () => { counter.textContent = JSON.stringify(counts) }; show();
+    const show = () => { counter.textContent = Object.entries(counts).map(([key,value]) => key + ': ' + value).join(' · ') }; show();
     window.addEventListener('fixture-auth-request', () => { counts.authRequests++; show() });
     window.addEventListener('error', () => { counts.errors++; show() });
     window.addEventListener('unhandledrejection', () => { counts.errors++; show() });
