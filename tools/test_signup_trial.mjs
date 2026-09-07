@@ -93,7 +93,7 @@ for (const choice of TRIAL_SIGNUP_PRODUCT_CHOICES) {
   check(request.hash === '' && !request.searchParams.has('email') && !request.searchParams.has('claim'), `${choice.label}: a new request invents no claim and leaks no contact field`)
 }
 check(trialSignupProductChoice('unknown').id === 'commerce', 'unknown product input fails to the visible Shop default')
-check(trialSignupProductChoice('website').outcome.includes('local draft. Publishing is a separate reviewed step.'), 'Website local sample cannot promise publishing')
+check(trialSignupProductChoice('website').outcome.includes('local draft. Publishing needs separate review.'), 'Website local sample cannot promise publishing')
 check(trialSignupProductChoice('ecommerce').outcome.includes('Nothing is sent or paid.'), 'Ecommerce sample cannot imply an order or payment')
 
 // --- the record -----------------------------------------------------------------
@@ -340,14 +340,14 @@ const newVisitorPage = pageSource.slice(pageSource.indexOf('<PageHeading eyebrow
 check(newVisitorPage.indexOf('aria-label="Company account"') < newVisitorPage.indexOf('<form'), 'company account request is visible before the local sample form')
 check(newVisitorPage.includes('href={managedAccountRequestUrl(selectedProductChoice.slug)}'), 'new account requests do not require a saved claim')
 check(newVisitorPage.includes("{managedReady ? <Link") && newVisitorPage.includes("managedAccountPath('/login', selectedProductChoice.slug)"), 'sign-in is offered only when runtime and auth are available')
-check(newVisitorPage.includes('Account setup and data transfer require separate review.'), 'request submission is not called account creation')
+check(newVisitorPage.includes('{ACCOUNT_REQUEST_DETAIL}') && trialSignupDoors({ managedReady: false })[1].detail.includes('Account setup and moving local records need separate review.'), 'shared request copy requires review instead of claiming account creation')
 check(newVisitorPage.includes('No company account, team sync, or cloud backup.'), 'local sample keeps its cloud boundary visible')
 check(newVisitorPage.includes('value={choice.id}>{choice.label}</option>'), 'product chooser keeps short, readable labels instead of clipped descriptions')
 const optionalFields = newVisitorPage.match(/<details[^>]+onInvalidCapture[\s\S]*?<\/details>/)?.[0] ?? ''
-check(optionalFields.includes('Add your name or email (optional)') && optionalFields.includes('Email (optional)') && optionalFields.includes('Your name (optional)'), 'optional fields are grouped in a closed-by-default disclosure')
+check(optionalFields.includes('Optional name and email') && optionalFields.includes('Email (optional)') && optionalFields.includes('Your name (optional)'), 'optional fields are grouped in a closed-by-default disclosure')
 check(!optionalFields.includes(' open=') && optionalFields.includes('event.currentTarget.open = true'), 'optional details reveal invalid hidden controls before browser validation focuses them')
 check(optionalFields.includes('It is not sent to SuperMega.'), 'saving contact locally is not represented as a contact request')
-check(pageSource.includes('not a password or proof of account access'), 'claim code is not represented as authentication')
+check(pageSource.includes('Not a password or proof of account access'), 'claim code is not represented as authentication')
 const submission = pageSource.slice(pageSource.indexOf('async function startTrial'), pageSource.indexOf('function downloadClaim'))
 check(submission.indexOf('const identity = createTrialSignupRecord(') < submission.indexOf('provisionLocalShopIndustryPack('), 'typed-field validation happens before sample provisioning')
 check(submission.includes('...identity,') && submission.includes('shopIndustryPackId: industryPackId'), 'validated identity is retained with the actually preserved industry pack')

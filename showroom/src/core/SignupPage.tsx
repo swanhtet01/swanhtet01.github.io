@@ -15,6 +15,7 @@ import {
 } from './product-onboarding-runtime'
 import { rememberProductSetup, seedSetupForProduct } from './product-setup'
 import {
+  ACCOUNT_REQUEST_DETAIL,
   createTrialSignupRecord,
   readTrialSignup,
   signupBusinessChoices,
@@ -165,10 +166,10 @@ export function SignupPage() {
   const managedPanel = (record: TrialSignupRecord) => (
     <section className="managed-login-panel" aria-label="Company account">
       <div>
-        <span className="core-eyebrow">Team access is separate</span>
+        <span className="core-eyebrow">Company access</span>
         <h2>{managedDoor?.label}</h2>
         <p>{managedDoor?.detail}</p>
-        <p>Your claim code is <strong>{record.claimCode}</strong>. It identifies this local trial for review; it is not a password or proof of account access.</p>
+        <p>Trial reference: <strong>{record.claimCode}</strong>. Not a password or proof of account access.</p>
       </div>
       <div className="managed-login-actions">
         {managedDoor?.action === 'sign-in'
@@ -189,7 +190,7 @@ export function SignupPage() {
             <span className="core-eyebrow">Started</span>
             <h2>{existing.businessName}</h2>
             {carriedOver
-              ? <p>This device already had Shop data, so <strong>nothing was overwritten</strong>. Your existing catalog and records were kept exactly as they were. To load the starter catalog for your trade instead, reset this device first.</p>
+              ? <p>Existing Shop data was kept: <strong>nothing was overwritten</strong>. Continue with it, or use the reviewed reset flow to replace this device&apos;s sample.</p>
               : <p>Your {existingProduct.label} trial is ready to continue.</p>}
           </div>
           <div className="managed-login-actions">
@@ -204,15 +205,15 @@ export function SignupPage() {
 
   return (
     <div className="workspace-screen managed-login-screen signup-entry-screen">
-      <PageHeading eyebrow="Get started" title={`Start with ${selectedProductChoice.label}.`} copy="Company access or a sample on this device." />
+      <PageHeading eyebrow="Get started" title={`Start with ${selectedProductChoice.label}.`} copy="Company account or local sample." />
       <section className="managed-login-panel" aria-label="Company account">
         <div>
-          <h2>Need a real company account?</h2>
-          <p>Request team access. Account setup and data transfer require separate review.</p>
+          <h2>Company account</h2>
+          <p>{ACCOUNT_REQUEST_DETAIL}</p>
         </div>
         <div className="managed-login-actions">
           <a className="core-button" href={managedAccountRequestUrl(selectedProductChoice.slug)}>Request company account</a>
-          {managedReady ? <Link className="core-button" to={managedAccountPath('/login', selectedProductChoice.slug)}>Already have an account? Sign in</Link> : null}
+          {managedReady ? <Link className="core-button" to={managedAccountPath('/login', selectedProductChoice.slug)}>Existing account? Sign in</Link> : null}
         </div>
       </section>
       <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void startTrial(event)}>
@@ -239,17 +240,17 @@ export function SignupPage() {
           </optgroup>
         </select></label> : null}
         <details className="signup-consent-terms" onInvalidCapture={(event) => { event.currentTarget.open = true }}>
-          <summary>Add your name or email (optional)</summary>
+          <summary>Optional name and email</summary>
           <label>Your name (optional)<input autoComplete="name" maxLength={120} onChange={(event) => setOwnerName(event.target.value)} value={ownerName} /></label>
           <label>Email (optional)<input autoComplete="email" maxLength={160} onChange={(event) => setEmail(event.target.value)} type="email" value={email} /></label>
           <label className="signup-consent">
             <input checked={emailConsent} onChange={(event) => setEmailConsent(event.target.checked)} type="checkbox" />
-            <span>Keep my email in the local trial record. It is not sent to SuperMega.</span>
+            <span>Keep my email locally. It is not sent to SuperMega.</span>
           </label>
         </details>
         <label className="signup-consent">
           <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
-          <span>I accept the SuperMega trial terms below, recorded on this device with my trial record.</span>
+          <span>I accept the SuperMega trial terms. My choice stays on this device.</span>
         </label>
         <details className="signup-consent-terms">
           <summary>Read the trial terms ({TRIAL_TERMS.length} plain-language points)</summary>

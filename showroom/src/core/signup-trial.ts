@@ -94,9 +94,9 @@ export type TrialSignupProductChoice = {
 }
 
 export const TRIAL_SIGNUP_PRODUCT_CHOICES: readonly TrialSignupProductChoice[] = [
-  { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Try a sample sale, appointment, and daily close on this device.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
-  { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Try a sample production plan and quality checks on this device.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
-  { id: 'website', slug: 'website', label: 'Website', outcome: 'Build and preview a local draft. Publishing is a separate reviewed step.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
+  { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Sample sales, appointments, and closes on this device.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
+  { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Sample production and quality checks on this device.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
+  { id: 'website', slug: 'website', label: 'Website', outcome: 'Preview a local draft. Publishing needs separate review.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
   { id: 'ecommerce', slug: 'ecommerce', label: 'Ecommerce', outcome: 'Try a local catalog and request draft. Nothing is sent or paid.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
 ] as const
 
@@ -289,25 +289,27 @@ export type TrialSignupDoor = {
  * `managedTrialAuthConfigured()`, both required, and the signal is fail-closed at the runtime
  * behind SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW (design section 7).
  */
+export const ACCOUNT_REQUEST_DETAIL = 'Request team access. Account setup and moving local records need separate review.'
+
 export function trialSignupDoors({ managedReady, signupOpen = false }: { managedReady: boolean; signupOpen?: boolean }): readonly TrialSignupDoor[] {
   return [
     {
       id: 'trial',
       label: 'Open your workspace',
-      detail: 'Your trial runs on this device with a full starter catalog. Nothing to install, no card, no waiting.',
+      detail: 'Local sample only. No account or cloud backup.',
       action: 'open-product',
     },
     managedReady
       ? {
         id: 'managed',
         label: 'Sign in to your company',
-        detail: 'Already have a company account? Sign in to access the workspaces you are a member of. A local trial does not create an account.',
+        detail: 'Sign in to your existing company account. A local trial does not create one.',
         action: 'sign-in',
       }
       : {
         id: 'managed',
         label: 'Request a company account',
-        detail: 'Ask SuperMega to arrange team access. The request does not create an account or move records off this device; setup and any data transfer need separate review.',
+        detail: ACCOUNT_REQUEST_DETAIL,
         action: 'request-activation',
       },
     ...(signupOpen
