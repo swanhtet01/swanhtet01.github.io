@@ -1,5 +1,44 @@
 # Self-serve identity creation — design
 
+## Local implementation update — 2026-09-07
+
+The owner's current request authorizes bounded local account implementation, not
+public signup activation. The original design below is historical context, not
+current hosted proof. `ManagedLoginPage` now consumes the guarded create/resend
+helpers; `CoreShell` reads the default-closed policy from `/api/health`.
+
+Opening requires all of these exact server configuration values, separately
+reviewed before any environment change:
+
+- `SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW=open` (case and whitespace exact).
+- `SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_VERSION=vN`, with N from 1 through 9999.
+- `SUPERMEGA_SELF_SERVE_SIGNUP_TERMS_URL=https://supermega.dev/terms/vN/`,
+  matching that version exactly, without query/hash or alternate host.
+- Configured Supabase user-token verification. This is independent of workspace
+  activation, database readiness and paid entitlement.
+
+There is no terms publication or legal acceptance implied by this implementation.
+The versioned page must first be reviewed and published; all three variables
+remain unset here. The checkbox starts unticked. Each create/resend request
+rechecks fresh server policy and refuses a different terms version. Consent here
+is an explicit UI acknowledgement, not a durable independently authenticated
+legal receipt. No terms metadata is trusted as tenant authority.
+
+The 60-second UI cooldown and single-flight guards are not durable abuse controls.
+Before opening: implement/review durable abuse protection, configure and test
+custom SMTP, require provider email confirmation, decide and integrate CAPTCHA,
+verify provider rate limits and exact redirect allowlists, and test real email,
+revoked-session and cross-tenant journeys. Keep Supabase's new-users switch off
+until those gates pass: a browser policy cannot block direct Auth API calls.
+
+Local visual harness: `node tools/serve_managed_signup_fixture.mjs --expected-head
+<full-clean-SHA>`. It binds only loopback, bundles the actual login component and
+Auth helper with a synthetic provider, denies outbound connection requests, and
+never creates an identity, sends email or activates a workspace. Use it serially
+instead of running a second development server. It is not production evidence.
+
+---
+
 Status: DESIGN ONLY — the founder must approve this document before any code is
 written or merged. Account creation is auth surface, and auth surface changes
 are founder-gated by house rule. Nothing in this file authorizes an

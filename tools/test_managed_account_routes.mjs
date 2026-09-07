@@ -73,7 +73,7 @@ const requireShowroom = createRequire(new URL('../showroom/package.json', import
 const { build } = await import(pathToFileURL(requireShowroom.resolve('esbuild')).href)
 async function bundleAuth(configured = true) {
   const result = await build({
-    stdin: { contents: "export * from './managed-trial.ts'; export { ManagedAccountPage } from './ManagedAccountPage.tsx'", resolveDir: 'showroom/src/core', loader: 'ts' },
+    stdin: { contents: "export * from './managed-trial.ts'; export { ManagedAccountPage } from './ManagedAccountPage.tsx'; export { ManagedLoginPage } from './ManagedLoginPage.tsx'", resolveDir: 'showroom/src/core', loader: 'ts' },
     bundle: true, platform: 'node', format: 'esm', jsx: 'automatic',
     write: false, logLevel: 'error',
     define: { 'import.meta.env': JSON.stringify(configured ? {
@@ -82,8 +82,13 @@ async function bundleAuth(configured = true) {
     } : {}) },
     plugins: [{ name: 'offline-auth', setup(builder) {
       const shells = {
-        react: 'export const useEffect = fn => globalThis.__accountHarness.effects.push(fn); export const useState = init => [typeof init === "function" ? init() : init, () => {}];',
-        'react/jsx-runtime': 'export const jsx = (type, props) => ({ type, props }); export const jsxs = jsx;',
+        react: `export const useEffect = fn => globalThis.__accountHarness.effects.push(fn);
+          export const useState = init => { const h = globalThis.__accountHarness; const i = h.cursor++;
+            if (!(i in h.slots)) h.slots[i] = typeof init === 'function' ? init() : init;
+            return [h.slots[i], value => { h.slots[i] = typeof value === 'function' ? value(h.slots[i]) : value }]; };
+          export const useRef = init => useState(() => ({ current: init }))[0];
+          export const createElement = (type, props, ...children) => ({ type, props: { ...props, children } });`,
+        'react/jsx-runtime': 'export const jsx = (type, props) => ({ type, props }); export const jsxs = jsx; export const Fragment = "fragment";',
         'react-router': 'export const Link = "a"; export const useOutletContext = () => globalThis.__accountHarness.runtime; export const useLocation = () => ({ pathname: "/account/setup", search: window.location.search }); export const useNavigate = () => () => { throw Error("unexpected navigation") };',
         './CoreShell': 'export const PageHeading = "header";',
       }
@@ -144,7 +149,7 @@ async function withAuth(run, configured = true) {
     }
   }
   const replacements = {
-    __accountHarness: { auth, effects: [], runtime: { status: 'checking', authReady: false } },
+    __accountHarness: { auth, effects: [], cursor: 0, slots: [], runtime: { status: 'checking', authReady: false } },
     window: { location, history: { state: null, replaceState(_state, _title, path) {
       calls.push(['scrub', path]); location.search = ''; location.hash = ''
     } }, localStorage: {
@@ -429,4 +434,106 @@ test('portal lazy entry exposes exactly its four existing reads, never the whole
     'currentManagedIdentity', 'discoverManagedWorkspacesForCurrentSession', 'loadManagedBootstrap', 'managedProductsFromBootstrap',
   ])
   for (const key of Object.keys(portal)) assert.equal(portal[key], managed[key])
+})
+
+function elements(tree) {
+  if (Array.isArray(tree)) return tree.flatMap(elements)
+  if (!tree || typeof tree !== 'object') return []
+  return [tree, ...elements(tree.props?.children)]
+}
+function content(tree) {
+  if (Array.isArray(tree)) return tree.map(content).join('')
+  if (tree && typeof tree === 'object') return content(tree.props?.children)
+  return typeof tree === 'string' || typeof tree === 'number' ? String(tree) : ''
+}
+function login(mod, state) { state.page.cursor = 0; state.page.effects = []; return mod.ManagedLoginPage() }
+function button(tree, text) { return elements(tree).find((node) => node.type === 'button' && content(node) === text) }
+function input(tree, label) {
+  return elements(elements(tree).find((node) => node.type === 'label' && content(node).startsWith(label)))
+    .find((node) => node.type === 'input')
+}
+function openedLogin(mod, state) {
+  state.page.runtime = { status: 'demo', signupPolicy: { termsVersion: 'v1', termsUrl: 'https://supermega.dev/terms/v1/' } }
+  button(login(mod, state), 'Create an account').props.onClick()
+  return login(mod, state)
+}
+function fillSignup(mod, state) {
+  let tree = openedLogin(mod, state)
+  for (const [label, value] of [['Email', signupInput.email], ['Password', signupInput.password], ['Confirm password', signupInput.confirmation]]) {
+    input(tree, label).props.onChange({ target: { value } }); tree = login(mod, state)
+  }
+  input(tree, 'I agree').props.onChange({ target: { checked: true } })
+  return login(mod, state)
+}
+const finishRequest = async () => { for (let i = 0; i < 12; i++) await new Promise((resolve) => setImmediate(resolve)) }
+
+test('actual login form stays closed during startup, closed policy and unconfigured Auth', async () => {
+  for (const configured of [true, false]) await withAuth(async (mod, state) => {
+    for (const runtime of [{ status: 'checking' }, { status: 'demo', signupPolicy: null }]) {
+      state.page.runtime = runtime
+      assert.equal(button(login(mod, state), 'Create an account'), undefined)
+      assert.equal(state.calls.length, 0)
+    }
+    if (!configured) {
+      state.page.runtime = { status: 'demo', signupPolicy: { termsVersion: 'v1', termsUrl: 'https://supermega.dev/terms/v1/' } }
+      assert.equal(button(login(mod, state), 'Create an account'), undefined)
+    }
+  }, configured)
+})
+
+test('actual form requires deliberate terms and preserves product intent on recovery', async () => {
+  await withAuth(async (mod, state) => {
+    state.location.search = '?product=plant'
+    const tree = openedLogin(mod, state)
+    assert.equal(input(tree, 'I agree').props.checked, false)
+    assert.equal(button(tree, 'Create account').props.disabled, true)
+    assert.equal(input(tree, 'Password').props.autoComplete, 'new-password')
+    assert.equal(input(tree, 'Password').props.minLength, 12)
+    assert.equal(input(tree, 'Confirm password').props.maxLength, 128)
+    assert.ok(elements(tree).some((node) => node.props?.href === 'https://supermega.dev/terms/v1/'))
+    assert.ok(elements(tree).some((node) => node.props?.to === '/account/recovery?product=plant'))
+    elements(tree).find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} })
+    await finishRequest()
+    assert.equal(state.calls.length, 0)
+    assert.match(content(login(mod, state)), /Read and accept/)
+  })
+})
+
+test('actual form submits once, clears secrets, gives neutral confirmation and enforces cooldown', async () => {
+  await withAuth(async (mod, state) => {
+    const tree = fillSignup(mod, state)
+    const submit = elements(tree).find((node) => node.type === 'form').props.onSubmit
+    submit({ preventDefault() {} }); submit({ preventDefault() {} })
+    await finishRequest()
+    const sent = login(mod, state)
+    assert.equal(state.calls.filter(([name]) => name === 'signUp').length, 1)
+    assert.equal(input(sent, 'Password'), undefined)
+    assert.equal(state.page.slots.includes(signupInput.password), false)
+    assert.match(content(sent), /If this address can receive a confirmation/)
+    assert.doesNotMatch(content(sent), /Email sent successfully|Company activated|Payment confirmed/)
+    const cooldown = elements(sent).find((node) => node.type === 'button' && content(node).includes('Wait 60s'))
+    assert.equal(cooldown.props.disabled, true)
+    elements(sent).find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} })
+    await finishRequest()
+    assert.equal(state.calls.some(([name]) => name === 'resend'), false)
+    button(sent, 'Use another email').props.onClick()
+    const next = login(mod, state)
+    assert.equal(input(next, 'I agree').props.checked, false)
+    assert.equal(input(next, 'Password').props.value, '')
+    assert.ok(elements(next).some((node) => node.type === 'button' && content(node).includes('Wait 60s') && node.props.disabled))
+  })
+})
+
+test('actual form fails closed when policy changes after display and does not auto-retry', async () => {
+  for (const change of ['closed', 'terms']) await withAuth(async (mod, state) => {
+    const tree = fillSignup(mod, state)
+    if (change === 'closed') state.health.authentication.self_serve_signup_open = false
+    else Object.assign(state.health.authentication, { self_serve_signup_terms_version: 'v2', self_serve_signup_terms_url: 'https://supermega.dev/terms/v2/' })
+    elements(tree).find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} })
+    await finishRequest()
+    assert.equal(state.calls.filter(([name]) => name === 'fetch').length, 1)
+    assert.equal(state.calls.some(([name]) => name === 'signUp'), false)
+    assert.equal(input(login(mod, state), 'Password').props.value, '')
+    assert.match(content(login(mod, state)), change === 'closed' ? /signup is not open/ : /terms changed/)
+  })
 })

@@ -14,6 +14,7 @@ import {
   resolveManagedProductRoute,
 } from './managed-product-access'
 import { currentManagedWorkspace } from './managed-workspace-selection'
+import { readManagedSignupPolicy, type ManagedSignupPolicy } from './managed-signup-policy'
 import type { SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
@@ -82,6 +83,7 @@ export type RuntimeHealth = {
   operatingMode: string
   enterpriseDbReady: boolean
   authReady: boolean
+  signupPolicy?: ManagedSignupPolicy | null
   auditReady: boolean
   writesReady: boolean
   coverageScore: number
@@ -98,6 +100,7 @@ const checkingRuntime: RuntimeHealth = {
   operatingMode: 'unknown',
   enterpriseDbReady: false,
   authReady: false,
+  signupPolicy: null,
   auditReady: false,
   writesReady: false,
   coverageScore: 0,
@@ -308,7 +311,7 @@ function useRuntimeHealth() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/health', { headers: { accept: 'application/json' }, signal: controller.signal })
+    fetch('/api/health', { headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'omit', redirect: 'error', signal: controller.signal })
       .then(async (response) => {
         const type = response.headers.get('content-type') ?? ''
         if (!response.ok || !type.includes('application/json')) throw new Error('health_unavailable')
@@ -373,6 +376,7 @@ function useRuntimeHealth() {
           operatingMode: body.operating_mode ?? 'unknown',
           enterpriseDbReady: body.enterprise_db_ready === true,
           authReady,
+          signupPolicy: readManagedSignupPolicy(body),
           auditReady,
           writesReady,
           coverageScore: Number.isFinite(body.coverage_score) ? Number(body.coverage_score) : 0,

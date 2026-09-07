@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
@@ -11,11 +11,13 @@ import {
 } from './account-routes'
 import {
   completeManagedWorkspaceSignIn,
+  createManagedAccount,
   createSelfServeWorkspace,
   currentManagedIdentity,
   discoverManagedWorkspacesForCurrentSession,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
+  resendManagedAccountConfirmation,
   signInAndDiscoverManagedWorkspaces,
   signOutManagedTrial,
   type ManagedIdentity,
@@ -48,6 +50,71 @@ export function ManagedLoginPage() {
   const [claimCodeFieldError, setClaimCodeFieldError] = useState(false)
   const [busy, setBusy] = useState(false)
   const managedReady = runtime.status === 'enterprise' && managedTrialAuthConfigured()
+  const signupPolicy = runtime.status !== 'checking' && managedTrialAuthConfigured() ? runtime.signupPolicy : null
+  const [creatingAccount, setCreatingAccount] = useState(false)
+  const [confirmation, setConfirmation] = useState('')
+  const [acceptedTermsVersion, setAcceptedTermsVersion] = useState('')
+  const [sentRequest, setSentRequest] = useState<{ email: string; termsVersion: string } | null>(null)
+  const [cooldownUntil, setCooldownUntil] = useState(0)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
+  const accountRequestPending = useRef(false)
+
+  useEffect(() => {
+    if (!cooldownUntil) return
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000))
+      setCooldownSeconds(remaining)
+      if (!remaining) window.clearInterval(timer)
+    }
+    const timer = window.setInterval(update, 1000)
+    update()
+    return () => window.clearInterval(timer)
+  }, [cooldownUntil])
+
+  function chooseAccountMode(create: boolean) {
+    if (busy || accountRequestPending.current) return
+    setCreatingAccount(create)
+    setPassword('')
+    setConfirmation('')
+    setAcceptedTermsVersion('')
+    setSentRequest(null)
+    setNotice('')
+    setNoticeTone('quiet')
+  }
+
+  async function requestAccount(event?: FormEvent) {
+    event?.preventDefault()
+    if (!signupPolicy || busy || accountRequestPending.current || Date.now() < cooldownUntil) return
+    const termsVersion = sentRequest?.termsVersion ?? acceptedTermsVersion
+    if (termsVersion !== signupPolicy.termsVersion) {
+      setNoticeTone('error')
+      setNotice('Read and accept the current terms before requesting an account.')
+      return
+    }
+    accountRequestPending.current = true
+    setBusy(true)
+    setNoticeTone('quiet')
+    setNotice('Requesting a confirmation email...')
+    try {
+      if (sentRequest) await resendManagedAccountConfirmation(sentRequest.email, termsVersion)
+      else {
+        await createManagedAccount({ email, password, confirmation, termsAccepted: true }, termsVersion)
+        setSentRequest({ email: email.trim().toLowerCase(), termsVersion })
+      }
+      setNotice('If this address can receive a confirmation, check your inbox and spam folder. Already registered? Sign in or reset your password.')
+    } catch (error) {
+      setNoticeTone('error')
+      setNotice(error instanceof Error ? error.message : 'The account request could not be confirmed. Wait before trying again.')
+    } finally {
+      setPassword('')
+      setConfirmation('')
+      // UX backpressure only. This is not durable abuse protection or proof of email delivery.
+      setCooldownUntil(Date.now() + 60_000)
+      setCooldownSeconds(60)
+      setBusy(false)
+      accountRequestPending.current = false
+    }
+  }
 
   useEffect(() => {
     if (!managedReady) return
@@ -192,7 +259,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className="workspace-screen managed-login-screen">
-      <PageHeading eyebrow="Company account" title="Open your company." copy="Sign in once. SuperMega finds the companies assigned to you." />
+      <PageHeading eyebrow="Company account" title={creatingAccount ? 'Create your account.' : 'Open your company.'} copy={creatingAccount ? 'Confirm your email first. Company access is a separate step.' : 'Sign in once. SuperMega finds the companies assigned to you.'} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -201,7 +268,24 @@ export function ManagedLoginPage() {
           <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
         </div>
         {notice ? <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p> : null}
-      </section> : managedReady && activating ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
+      </section> : creatingAccount ? <form aria-label="Create company account" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void requestAccount(event)}>
+        {!signupPolicy ? <p role="status">New account creation is not open. Sign in or request assisted setup.</p> : <>
+          <h2>{sentRequest ? 'Check your email.' : 'Your work account'}</h2>
+          {sentRequest ? null : <>
+            <label>Email<input autoComplete="username" disabled={busy} maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
+            <label>Password<input aria-describedby="signup-password-help" autoComplete="new-password" disabled={busy} minLength={12} maxLength={128} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
+            <p id="signup-password-help">Use 12–128 characters. Do not reuse a payment-app PIN.</p>
+            <label>Confirm password<input autoComplete="new-password" disabled={busy} minLength={12} maxLength={128} onChange={(event) => setConfirmation(event.target.value)} required type="password" value={confirmation} /></label>
+            <label><input checked={acceptedTermsVersion === signupPolicy.termsVersion} disabled={busy} onChange={(event) => setAcceptedTermsVersion(event.target.checked ? signupPolicy.termsVersion : '')} required type="checkbox" />I agree to the <a href={signupPolicy.termsUrl} target="_blank" rel="noopener noreferrer">account terms ({signupPolicy.termsVersion})</a>.</label>
+          </>}
+          <button className="core-button primary" disabled={busy || cooldownSeconds > 0 || (!sentRequest && acceptedTermsVersion !== signupPolicy.termsVersion)} type="submit">{busy ? 'Requesting...' : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s before another request` : sentRequest ? 'Resend confirmation' : 'Create account'}</button>
+          <p>Creating an account does not activate a company, confirm payment or copy your local demo records.</p>
+        </>}
+        {notice ? <p className="form-notice" data-tone={noticeTone} id="managed-registration-notice" role="status">{notice}</p> : null}
+        <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(false)} type="button">Back to sign in</button>
+        {sentRequest ? <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(true)} type="button">Use another email</button> : null}
+        <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent)}>Reset an existing password</Link>
+      </form> : managedReady && activating ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
         <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Use the claim code from your free trial. The company is created for this signed-in account and only this account owns it.</p></div>
         <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
@@ -219,13 +303,13 @@ export function ManagedLoginPage() {
           <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent)}>Forgot password?</Link>
-          <Link className="account-inline-link" to={signupPath}>No account yet? Free trial</Link>
+          {signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <Link className="account-inline-link" to={signupPath}>No account yet? Try the local demo</Link>}
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? bi('Open company') : bi('Find my company')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
         <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
-        <div className="managed-login-actions"><Link className="core-button primary" to={signupPath}>Free trial</Link><Link className="core-button" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
+        <div className="managed-login-actions">{signupPolicy ? <button className="core-button primary" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <Link className="core-button primary" to={signupPath}>Free trial</Link>}<Link className="core-button" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
       </section>}
     </div>
   )
