@@ -168,7 +168,6 @@ export function SignupPage() {
   const managedPanel = (record: TrialSignupRecord) => (
     <section className="managed-login-panel" aria-label="Company account">
       <div>
-        <span className="core-eyebrow">Company access</span>
         <h2>{managedDoor?.label}</h2>
         <p>{managedDoor?.detail}</p>
         <p>Trial reference: <strong>{record.claimCode}</strong>. Not a password or proof of account access.</p>
@@ -189,7 +188,6 @@ export function SignupPage() {
         <PageHeading eyebrow="Your trial" title="Your local trial" copy="Continue on this device." />
         <section className="managed-login-panel" aria-label="Current trial">
           <div>
-            <span className="core-eyebrow">Started</span>
             <h2>{existing.businessName}</h2>
             {carriedOver
               ? <p>Existing Shop data: <strong>nothing was overwritten</strong>. Back up before using reset.</p>
