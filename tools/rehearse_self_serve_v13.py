@@ -29,6 +29,7 @@ EXTRAS = (
     "20260907024457_self_serve_durable_attempt_budget.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
+PRODUCTS = ("commerce", "production", "website", "ecommerce")
 TABLES = (
     "approval_requests", "billing_entitlements", "billing_events", "billing_invoices",
     "self_serve_attempt_budgets", "trial_schema_meta", "workspace_access_controls",
@@ -122,7 +123,7 @@ def snapshot(admin_url):
 def exercise(admin_url, runtime_url, head):
     from supermega_runtime.trial_store import (
         PostgresTrialStore, TrialPrincipal, TrialClaimConflict, TrialRateLimited,
-        TrialNotReadyError, SELF_SERVE_PRODUCT_ACTIVATION_IDS,
+        TrialNotReadyError, SELF_SERVE_PRODUCT_ACTIVATION_IDS, self_serve_owner_capabilities,
     )
     from supermega_runtime.billing_rail import BillingLedger, BillingRailError, _digest
     from tests.test_billing_rail import sample_packet
@@ -142,11 +143,14 @@ def exercise(admin_url, runtime_url, head):
             claim_code=f"SM-TEST-000{index}", business_name="Synthetic company",
             product=product, session_id=sessions[actor], identity_provider="supabase")
     created = []
-    for index, product in enumerate(SELF_SERVE_PRODUCT_ACTIVATION_IDS):
+    require(tuple(SELF_SERVE_PRODUCT_ACTIVATION_IDS) == PRODUCTS, "product_matrix_changed")
+    for index, product in enumerate(PRODUCTS):
         entry = create(index, product=product)
         ready = store.readiness(principal(entry.workspace_id))
         require(ready.write_ready, "created_workspace_not_ready")
-        require(ready.product_entitlements == (SELF_SERVE_PRODUCT_ACTIVATION_IDS[product],),
+        # Activation event names are Shop/Plant; runtime grants use commerce/production.
+        require(ready.product_entitlements == (product,)
+                and ready.capabilities == self_serve_owner_capabilities(product),
                 "product_entitlement_mismatch")
         created.append(entry)
     repeated = create()

@@ -9,6 +9,12 @@ from tools import rehearse_self_serve_v13 as proof
 
 
 class FullChainProofContractTests(unittest.TestCase):
+    def test_runtime_products_not_activation_display_ids(self):
+        self.assertEqual(proof.PRODUCTS, ("commerce", "production", "website", "ecommerce"))
+        source = Path(proof.__file__).read_text(encoding="utf-8")
+        self.assertIn("ready.product_entitlements == (product,)", source)
+        self.assertIn("ready.capabilities == self_serve_owner_capabilities(product)", source)
+
     def test_exact_current_private_migration_chain(self):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name != "20260711081300_public_legacy_baseline.sql")
