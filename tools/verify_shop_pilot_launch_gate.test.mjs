@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -73,6 +74,40 @@ function baselineInput(overrides = {}) {
     ...overrides,
   }
 }
+
+test('accepts current six-gate readiness without granting hosted authority', async () => {
+  const readiness = JSON.parse(await readFile(new URL('../hq/readiness/managed-pilot-readiness.json', import.meta.url), 'utf8'))
+  const required = ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation']
+  assert.deepEqual(readiness.overall.blockingGateIds, required)
+  const report = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ readiness }))
+  assert.equal(report.ok, true)
+  assert.deepEqual(report.readiness.blockingGateIds, required)
+  assert.equal(report.launchReadiness.readyForDeployment, false)
+  assert.equal(report.launchReadiness.readyForManagedActivation, false)
+  assert.equal(validateShopPilotLaunchGate(report), report)
+  for (const missing of required) {
+    const altered = structuredClone(readiness)
+    altered.overall.blockingGateIds = required.filter((id) => id !== missing)
+    altered.overall.blockingGateCount = altered.overall.blockingGateIds.length
+    const denied = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ readiness: altered }))
+    assert.equal(denied.ok, false)
+    assert.ok(denied.failures.includes('shop_pilot_launch_gate_overall_state_invalid'))
+  }
+  const legacy = structuredClone(readiness)
+  legacy.overall.blockingGateIds = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
+  legacy.overall.blockingGateCount = 3
+  assert.equal(assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput({ readiness: legacy })).ok, false)
+  for (const changed of [
+    { blockingGateIds: legacy.overall.blockingGateIds },
+    { overallStatus: 'ready' },
+    { hostedActivationReady: true },
+  ]) {
+    const { digest: _digest, ...body } = structuredClone(report)
+    Object.assign(body.readiness, changed)
+    const rehashed = { ...body, digest: `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}` }
+    assert.throws(() => validateShopPilotLaunchGate(rehashed), /shop_pilot_launch_gate_launch_readiness_invalid/)
+  }
+})
 
 test('passes only as owner-private-intake readiness, not contact or activation readiness', () => {
   const report = assessShopPilotLaunchGate(sampleShopPilotLaunchGateInput())

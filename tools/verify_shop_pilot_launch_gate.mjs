@@ -24,7 +24,7 @@ export const SHOP_PILOT_LAUNCH_GATE_CONTRACT = 'supermega.shop-pilot-launch-gate
 const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
-const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
+const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation']
 const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
 const REQUIRED_PILOT_CALENDAR_DATES = 5
 const REQUIRED_FORBIDDEN_ACTIONS = [
@@ -525,6 +525,9 @@ export function validateShopPilotLaunchGate(report) {
   const intakeAccepted = report.status === 'owner_private_intake_ready'
     || report.status === 'owner_private_handoff_ready'
   if (report.launchReadiness?.authority !== launchAuthority({ baselineReady: baselineAccepted, intakeReady: intakeAccepted })
+    || report.readiness?.overallStatus !== 'blocked'
+    || report.readiness?.hostedActivationReady !== false
+    || !sameArray(report.readiness?.blockingGateIds, REQUIRED_BLOCKING_GATES)
     || report.launchReadiness?.baselinePacketAccepted !== baselineAccepted
     || report.launchReadiness?.intakePacketAccepted !== intakeAccepted
     || (baselineAccepted && (report.baselineEvidence?.accepted !== true || !/^sha256:[0-9a-f]{64}$/.test(report.baselineEvidence?.privateInputDigest || '')))
