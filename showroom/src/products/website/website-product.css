@@ -3315,6 +3315,17 @@
   }
 }
 
+/* Narrow phones need two readable actions per row, not broken words. */
+@media screen and (max-width: 22.5rem) {
+  .website-primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .website-action-bar[data-surface="work"][data-editing="false"] .website-primary-actions > .website-button.is-primary {
+    grid-column: 1 / -1;
+  }
+}
+
 /* A first-run business brief replaces the misleading publish-ready sample path. */
 .website-action-bar[data-starter="true"] {
   grid-template-columns: minmax(0, 1fr) auto;

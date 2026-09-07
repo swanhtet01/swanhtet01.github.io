@@ -65,6 +65,17 @@ test('mobile Website actions wrap complete labels without shrinking tap targets'
   assert.ok(websiteProductSource.includes('Download preview'), 'preserve the complete user-facing action label')
 })
 
+test('narrow phones give the saved Website primary action a full row without changing wider screens', () => {
+  const narrowRule = '@media screen and (max-width: 22.5rem) {'
+  const narrow = websiteProductCss.slice(websiteProductCss.indexOf(narrowRule), websiteProductCss.indexOf('/* A first-run business brief'))
+  assert.ok(websiteProductCss.indexOf(narrowRule) > websiteProductCss.indexOf('@media screen and (max-width: 560px) {'))
+  assert.match(narrow, /\.website-primary-actions \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);\s*\}/)
+  assert.match(narrow, /\.website-action-bar\[data-surface="work"\]\[data-editing="false"\] \.website-primary-actions > \.website-button\.is-primary \{\s*grid-column: 1 \/ -1;\s*\}/)
+  assert.match(websiteProductCss, /\.website-primary-actions \{\s*width: 100%;\s*display: grid;\s*grid-column: 1;\s*grid-row: 3;\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/)
+  assert.match(websiteProductSource, /data-editing=\{hasUnsavedChanges \? 'true' : 'false'\}/)
+  assert.match(websiteProductSource, /surface === 'work' \? \(/)
+})
+
 test('the Website FILE status stays fully readable on desktop and keeps the mobile layout', () => {
   assert.match(
     websiteProductSource,
