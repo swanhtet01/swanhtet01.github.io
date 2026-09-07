@@ -392,6 +392,8 @@ test('portal lazy entry exposes exactly its four existing reads, never the whole
     "export{currentManagedIdentity,discoverManagedWorkspacesForCurrentSession,loadManagedBootstrap,managedProductsFromBootstrap,}from'./managed-trial.ts'")
   assert.ok(coreShellSource.includes("void import('./managed-portal-client')"))
   assert.ok(!coreShellSource.includes("import('./managed-trial')"))
+  const vite = readFileSync('showroom/vite.config.ts', 'utf8')
+  assert.match(vite, /id.includes\('\/src\/core\/managed-trial.ts'\)\s*\|\| id.includes\('\/src\/core\/managed-portal-client.ts'\)/)
   // A source-only facade must preserve function identity and perform no I/O on import.
   const portal = await import('../showroom/src/core/managed-portal-client.ts')
   const managed = await import('../showroom/src/core/managed-trial.ts')

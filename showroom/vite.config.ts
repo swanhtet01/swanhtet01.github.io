@@ -109,6 +109,7 @@ export default defineConfig({
           if (id.includes('/src/core/production-workspace.ts')
             || id.includes('/src/core/channel-order-intake.ts')
             || id.includes('/src/core/managed-trial.ts')
+            || id.includes('/src/core/managed-portal-client.ts')
             || id.includes('/src/core/team-work.ts')) {
             return 'operating-models'
           }

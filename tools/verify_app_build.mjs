@@ -1460,7 +1460,8 @@ if (!coreShellSource.includes("['Shop', 'Sales, orders, stock, close.', 'Complet
   || !coreShellSource.includes('Continue saved workspace: {workspaceName}')) fail('product_launcher_first_action_copy_missing')
 const managedPortalClientSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-portal-client.ts'), 'utf8')
 const managedPortalClientBody = managedPortalClientSource.replace(/\/\/[^\n]*/g, '').replace(/\s+/g, '')
-if (managedPortalClientBody !== "export{currentManagedIdentity,discoverManagedWorkspacesForCurrentSession,loadManagedBootstrap,managedProductsFromBootstrap,}from'./managed-trial.ts'") fail('managed_portal_lazy_entry_not_exact')
+if (managedPortalClientBody !== "export{currentManagedIdentity,discoverManagedWorkspacesForCurrentSession,loadManagedBootstrap,managedProductsFromBootstrap,}from'./managed-trial.ts'"
+  || !viteConfigSource.includes("id.includes('/src/core/managed-portal-client.ts')")) fail('managed_portal_lazy_entry_not_exact')
 if (!managedTrialSource.includes('export function managedProductsFromBootstrap(')
   || !managedTrialSource.includes('const explicit = verified.readiness.productEntitlements')
   || !managedTrialSource.includes("code: 'managed_bootstrap_invalid'")
