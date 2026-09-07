@@ -77,6 +77,7 @@ def source_identity(expected_head):
         "tools/rehearse_self_serve_v13.py", "tools/run_python_tool.mjs",
         "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
         "tests/test_self_serve_v13_rehearsal.py", *pg.IMPLEMENTATION_PATHS,
+        "tools/private_trial_v13_contract.py", "tests/test_database_v13_contract.py",
         *(f"supabase/migrations/{p}" for p in MIGRATIONS),
     ]))
     return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
@@ -254,6 +255,10 @@ def run(expected_head):
             legacy = audit_database(runtime, storage_audit_database_url=admin)
             require(legacy["ready"] is False and "schema_version_current" in legacy["failed_checks"],
                     "legacy_v13_boundary_changed")
+            current = audit_database(runtime, storage_audit_database_url=admin,
+                                     schema_profile="v13-self-serve")
+            require(current["ready"] is True and all(current["checks"].values()),
+                    "current_v13_catalog_not_ready")
             retained = exercise(admin, runtime, expected_head)
             before = snapshot(admin)
             pg._backup_database(postgres_bin=binary, admin_password=admin_secret,
@@ -268,6 +273,9 @@ def run(expected_head):
             pg._restore_database(postgres_bin=binary, admin_password=admin_secret,
                 port=port, backup_file=backup, environment=environment)
             require(snapshot(admin) == before, "restored_records_mismatch")
+            restored_catalog = audit_database(runtime, storage_audit_database_url=admin,
+                                              schema_profile="v13-self-serve")
+            require(restored_catalog["ready"] is True, "restored_v13_catalog_not_ready")
             from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialRateLimited
             store = PostgresTrialStore(runtime, reducer=lambda *_: None, write_enabled=True)
             who = TrialPrincipal(workspace_id=retained["workspace"], actor_id=retained["actor"],
@@ -286,7 +294,9 @@ def run(expected_head):
         "migrationNames": list(MIGRATIONS), "checks": dict.fromkeys(CHECKS, True),
         "dataSnapshotDigest": before, "cleanupComplete": True,
         "legacyProductionValidator": {"ready": False, "failedChecks": legacy["failed_checks"]},
-        "remainingGates": ["v13_production_validator_contract", "migration_manifest_reconciliation",
+        "currentDatabaseValidator": {"contract": current["contract"], "ready": True,
+            "checks": current["checks"], "restoreChecks": restored_catalog["checks"]},
+        "remainingGates": ["activation_caller_profile_cutover", "migration_manifest_reconciliation",
             "hosted_auth_and_rls", "provider_pooler_storage_backup_restore", "owner_release_acceptance"],
         "controls": {"releaseAuthorized": False, "hostedActivationProven": False,
             "providerWritesPerformed": False, "realAccountCreated": False, "realPaymentConfirmed": False}}

@@ -16,9 +16,13 @@ ledger) are set to 13 before either module is imported. No persistent environmen
 or provider configuration is changed.
 
 The existing strict v11 production validator must pass BEFORE the three extension
-migrations. Its rejection of v13 is then retained as an explicit unresolved
-production gate, not weakened or called acceptable. `ok:true` means only that
-this runner's 17 local behavior checks passed; it never authorizes activation.
+migrations. Its rejection of v13 is retained, not weakened or called acceptable.
+The explicit `v13-self-serve` profile must then pass all 33 exact catalog checks
+both before exercise and on the restored database. `ok:true` means that these
+catalog checks and this runner's 17 local behavior checks passed; it never
+authorizes activation. The existing activation callers still select historical
+v11 by default and must be deliberately updated with their receipts in a later
+reviewed slice; this implementation does not silently relabel old authority.
 
 The runner creates fresh synthetic session rows and calls the actual
 PostgresTrialStore for all four product choices, replay, claim collision, durable
@@ -36,8 +40,25 @@ data rather than deleting it live. The exact output is exclusive-create and a
 failed run leaves a failed receipt. Source cleanliness, full HEAD/tree and bound
 source bytes are checked both before and after the successful run.
 
-Remaining release work includes v13 production-validator contracts, canonical
+The read-only validator supports `--schema-profile v13-self-serve` on its normal
+audit and project-bound activation audit paths. Its four extension catalog
+fingerprints were derived from an isolated PostgreSQL 17 installation of the
+exact pinned v12, v13 and durable-budget migration bytes (LF-normalized), never
+from a supplied target during validation. They bind every column/default/type,
+constraint, function body/security/configuration and policy expression in the
+extension. The collector also checks all private column grants; exactly UPDATE
+on the budget's attempts/claim_conflicts columns is permitted. Existing table,
+function, trigger, index, role, RLS and Storage checks remain required.
+
+The adversarial suite damages individual catalog records and introduces actual
+temporary database drift (table/column grants, forced RLS, SECURITY DEFINER and
+unscoped entitlement policy), checking rejection and restoring the exact state.
+This is disposable loopback-only test work, not a provider configuration change.
+
+Remaining release work includes activation-caller profile cutover, canonical
 migration/receipt reconciliation, hosted pooler/Auth/Storage/restore journeys and
 owner acceptance. No existing release packet is superseded by this local report.
 
 Source guidance: [Supabase database migrations](https://supabase.com/docs/guides/deployment/database-migrations).
+Security references: [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)
+and [column privileges](https://supabase.com/docs/guides/database/postgres/column-level-security).
