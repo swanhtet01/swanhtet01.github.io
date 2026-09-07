@@ -119,6 +119,7 @@ IMPLEMENTATION_PATHS = (
     "tools/verify_managed_runtime_environment_values.mjs",
 )
 IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
+    "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "tools/rehearse_self_serve_v13.py", "tools/private_trial_v13_contract.py",
