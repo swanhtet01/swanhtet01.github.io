@@ -1,4 +1,5 @@
 import type { Session } from '@supabase/auth-js'
+import { validateCreateAccountRequest, type CreateAccountInput } from './signup-account.ts'
 import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
 import type { PlantEquipmentImportPackage } from './plant-equipment-import.ts'
 import {
@@ -115,7 +116,7 @@ export type ManagedSelfServeWorkspace = {
 export type ManagedAccountSetup = {
   purpose: 'account' | 'invite' | 'recovery'
   email: string
-}
+} | { purpose: 'signup'; email: string; directory: ManagedWorkspaceSignIn }
 
 export type ManagedApprovalRecord = {
   approval_id: string
@@ -2646,16 +2647,16 @@ function normalizeAuthEmail(value: string) {
   return email
 }
 
-function managedAccountRedirectUrl() {
+function managedAccountRedirectUrl(purpose: 'recovery' | 'signup' = 'recovery') {
   const origin = new URL(window.location.origin)
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
   if (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && loopback)) {
-    throw new ManagedTrialError('Password recovery requires a secure SuperMega address.', {
+    throw new ManagedTrialError('Account access requires a secure SuperMega address.', {
       code: 'auth_redirect_insecure',
     })
   }
   const redirect = new URL('/account/setup', origin)
-  redirect.searchParams.set('mode', 'recovery')
+  redirect.searchParams.set('mode', purpose)
   return redirect.toString()
 }
 
@@ -2676,7 +2677,7 @@ function scrubManagedAccountCallback() {
 
 function accountPurpose(...values: Array<string | null>): ManagedAccountSetup['purpose'] {
   const purposes = values.filter((value): value is string => Boolean(value))
-  if (purposes.some((value) => value !== 'invite' && value !== 'recovery') || new Set(purposes).size > 1) {
+  if (purposes.some((value) => !['invite', 'recovery', 'signup'].includes(value)) || new Set(purposes).size > 1) {
     throw accountLinkError()
   }
   return (purposes[0] as ManagedAccountSetup['purpose'] | undefined) ?? 'account'
@@ -2684,6 +2685,67 @@ function accountPurpose(...values: Array<string | null>): ManagedAccountSetup['p
 
 function validNamedUserSession(session: Session | null): session is Session {
   return Boolean(session && session.user.is_anonymous === false && session.user.id)
+}
+
+let signupRequestPending = false
+
+// UI backpressure only, not a rate limiter. Provider signup, durable abuse controls,
+// SMTP and the default-closed runtime window require a separate activation review.
+async function requestManagedSignup(input: CreateAccountInput | string) {
+  const request = typeof input === 'string' ? { email: normalizeAuthEmail(input) } : validateCreateAccountRequest(input)
+  const emailRedirectTo = managedAccountRedirectUrl('signup')
+  if (!managedTrialAuthConfigured()) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
+  if (signupRequestPending) throw new ManagedTrialError('An account request is already pending.', { code: 'account_request_pending' })
+  signupRequestPending = true
+  try {
+    // Never accept a caller-supplied flag or reuse a cached successful health response.
+    const response = await fetch('/api/health', {
+      headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'omit',
+      redirect: 'error', signal: AbortSignal.timeout(8000),
+    })
+    const health = response.ok && response.headers.get('content-type')?.includes('application/json')
+      ? await response.json() : null
+    if (health?.status !== 'ready'
+      || health.authentication?.self_serve_signup_open !== true
+      || health.authentication?.supabase_user_tokens_ready !== true
+      || health.authentication?.anonymous_users_allowed !== false
+      || health.authentication?.client_asserted_roles_allowed !== false) {
+      throw new ManagedTrialError('Company signup is not open. Sign in or request an account.', { code: 'signup_window_closed' })
+    }
+    const supabase = await authClient()
+    if (!supabase) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
+    const current = await supabase.auth.getSession()
+    if (current.error || current.data.session) {
+      throw new ManagedTrialError('Sign out before requesting another account.', { code: 'auth_existing_session' })
+    }
+    const result = 'password' in request
+      ? await supabase.auth.signUp({ email: request.email, password: request.password, options: { emailRedirectTo } })
+      : await supabase.auth.resend({ type: 'signup', email: request.email, options: { emailRedirectTo } })
+    if (result.data && 'session' in result.data && result.data.session) {
+      // A misconfigured provider must not silently turn signup into signed-in access.
+      await supabase.auth.signOut({ scope: 'local' })
+      forgetWorkspace()
+      throw new ManagedTrialError('Email confirmation is required before account access.', { code: 'email_confirmation_required' })
+    }
+    if (result.error && !['user_already_exists', 'email_exists', 'user_not_found'].includes(result.error.code ?? '')) {
+      throw new Error('account_request_failed')
+    }
+    // No user/identity count, provider wording, password, email or session in this result.
+    return { status: 'confirmation_requested' as const }
+  } catch (error) {
+    if (error instanceof ManagedTrialError) throw error
+    throw new ManagedTrialError('The account request could not be confirmed. Wait before trying again.', { code: 'account_request_failed' })
+  } finally {
+    signupRequestPending = false
+  }
+}
+
+export function createManagedAccount(input: CreateAccountInput) {
+  return requestManagedSignup(input)
+}
+
+export function resendManagedAccountConfirmation(email: string) {
+  return requestManagedSignup(email)
 }
 
 export async function requestManagedPasswordRecovery(email: string) {
@@ -2705,18 +2767,13 @@ export async function requestManagedPasswordRecovery(email: string) {
 }
 
 async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
-  const supabase = await authClient()
-  if (!supabase) {
-    throw new ManagedTrialError('Managed account setup is not configured in this app build.', {
-      code: 'auth_not_configured',
-    })
-  }
-
   const rawQuery = window.location.search
   const rawFragment = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
   const hasCallback = Boolean(rawQuery || rawFragment)
+  // Scrub even unknown purposes, duplicate parameters and unconfigured builds,
+  // before parsing or loading the provider client can fail.
+  if (hasCallback) scrubManagedAccountCallback()
   if (rawQuery.length > 4096 || rawFragment.length > 40000) {
-    if (hasCallback) scrubManagedAccountCallback()
     throw accountLinkError()
   }
   const query = new URLSearchParams(rawQuery)
@@ -2733,7 +2790,6 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
   const providerError = query.has('error') || query.has('error_code') || query.has('error_description')
     || fragment.has('error') || fragment.has('error_code') || fragment.has('error_description')
 
-  if (hasCallback) scrubManagedAccountCallback()
   if (!queryAllowed
     || !fragmentAllowed
     || providerError
@@ -2741,26 +2797,40 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
     || (expiresIn !== null && !/^\d{1,10}$/.test(expiresIn))
     || (expiresAt !== null && !/^\d{1,12}$/.test(expiresAt))) throw accountLinkError()
 
-  let session: Session
+  // Reject malformed tokens before even constructing the Auth client.
   if (code) {
     if (!AUTH_CODE.test(code) || accessToken || refreshToken) throw accountLinkError()
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
-    session = data.session
   } else if (accessToken || refreshToken) {
     if (!AUTH_TOKEN.test(accessToken) || !AUTH_TOKEN.test(refreshToken)) throw accountLinkError()
-    const { data, error } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    })
-    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
-    session = data.session
   } else {
     throw accountLinkError()
   }
-
-  forgetWorkspace()
-  return { purpose, email: session.user.email ?? 'Named user' }
+  const supabase = await authClient()
+  if (!supabase) throw new ManagedTrialError('Managed account setup is unavailable.', { code: 'auth_not_configured' })
+  try {
+    const { data, error } = code
+      ? await supabase.auth.exchangeCodeForSession(code)
+      : await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
+    const session = data.session
+    forgetWorkspace()
+    if (purpose === 'signup') {
+      // The URL, local session and user_metadata cannot attest email verification.
+      const verified = await supabase.auth.getUser(session.access_token)
+      const user = verified.data.user
+      if (verified.error || !user || user.id !== session.user.id || user.is_anonymous !== false
+        || !user.email || !AUTH_EMAIL.test(user.email) || user.email.length > 160
+        || !user.email_confirmed_at || !Number.isFinite(Date.parse(user.email_confirmed_at))) throw accountLinkError()
+      const directory = await discoverManagedWorkspaces({ ...session, user })
+      return { purpose, email: user.email, directory }
+    }
+    return { purpose, email: session.user.email ?? 'Named user' }
+  } catch {
+    // Request local-session cleanup, but never report account success if cleanup fails.
+    try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* Preserve the fixed-copy failure. */ }
+    forgetWorkspace()
+    throw accountLinkError()
+  }
 }
 
 export function beginManagedAccountSetup(): Promise<ManagedAccountSetup> {

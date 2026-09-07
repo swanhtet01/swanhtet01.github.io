@@ -46,10 +46,18 @@ export function ManagedAccountPage() {
       .then((result) => {
         if (!active) return
         setSetup(result)
-        setNotice('Secure link confirmed. Set a new password to continue.')
+        if (result.purpose === 'signup') {
+          setDirectory(result.directory.workspaces.length ? result.directory : null)
+          setWorkspaceId(result.directory.workspaces[0]?.workspaceId ?? '')
+          setNotice('Email confirmed. Company access requires an assigned membership.')
+        } else {
+          setNotice('Secure link confirmed. Set a new password to continue.')
+        }
       })
       .catch(() => {
         if (!active) return
+        setSetup(null)
+        setDirectory(null)
         setNotice('This account link is invalid or expired. Request a new link.')
       })
     return () => { active = false }
@@ -79,6 +87,7 @@ export function ManagedAccountPage() {
 
   async function savePassword(event: FormEvent) {
     event.preventDefault()
+    if (!setup || setup.purpose === 'signup') return
     if (password !== confirmation) {
       setNotice('The passwords do not match.')
       return
@@ -96,7 +105,7 @@ export function ManagedAccountPage() {
       if (signIn.workspaces.length === 0) {
         // Signed in with no company yet: the login page opens the claim-code
         // activation panel for exactly this state.
-        navigate('/login')
+        navigate(managedAccountPath('/login', productIntent))
         return
       }
       setDirectory(signIn)
@@ -141,13 +150,16 @@ export function ManagedAccountPage() {
   }
 
   return <div className="workspace-screen managed-login-screen">
-    <PageHeading eyebrow="Company account" title="Secure your account." copy="Accept your invitation or recovery link, then set one strong password." />
+    <PageHeading eyebrow="Company account" title="Secure your account." copy={setup?.purpose === 'signup' ? 'Your email is confirmed. Open an assigned company or request access.' : 'Accept your invitation or recovery link, then set one strong password.'} />
     {!managedReady ? <ManagedUnavailable productIntent={productIntent} /> : directory ? <form className="managed-login-panel core-form" onSubmit={(event) => void chooseWorkspace(event)}>
       <div><span className="core-eyebrow">Account ready</span><h2>Choose your company.</h2><p>Only active companies assigned to this named account are shown.</p></div>
       <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label>
       <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Opening...' : 'Open company'}</button>
       {notice ? <p className="form-notice" role="status">{notice}</p> : null}
-    </form> : setup ? <form className="managed-login-panel core-form" onSubmit={(event) => void savePassword(event)}>
+    </form> : setup?.purpose === 'signup' ? <section className="managed-login-panel" aria-label="Email confirmed without company access">
+      <div><h2>Email confirmed.</h2><p>No company is assigned yet. Your local demo is unchanged; email confirmation does not activate company data or a paid plan.</p></div>
+      <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent)}>Continue to sign in</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company access</a></div>
+    </section> : setup ? <form className="managed-login-panel core-form" onSubmit={(event) => void savePassword(event)}>
       <div><span className="core-eyebrow">Secure link confirmed</span><h2>Set your password.</h2><p>{setup.email}. Use at least 12 characters. This link can be used only for account setup.</p></div>
       <label>New password<input autoComplete="new-password" maxLength={128} minLength={12} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
       <label>Confirm password<input autoComplete="new-password" maxLength={128} minLength={12} onChange={(event) => setConfirmation(event.target.value)} required type="password" value={confirmation} /></label>
