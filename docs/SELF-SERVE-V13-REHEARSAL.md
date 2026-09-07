@@ -20,9 +20,10 @@ migrations. Its rejection of v13 is retained, not weakened or called acceptable.
 The explicit `v13-self-serve` profile must then pass all 33 exact catalog checks
 both before exercise and on the restored database. `ok:true` means that these
 catalog checks and this runner's 17 local behavior checks passed; it never
-authorizes activation. The existing activation callers still select historical
-v11 by default and must be deliberately updated with their receipts in a later
-reviewed slice; this implementation does not silently relabel old authority.
+authorizes activation. Activation callers now explicitly select schema 13 and this
+profile with a new project/release-bound plan fingerprint; historical approval
+cannot authorize the new target. Canonical integration and hosted acceptance
+remain separate gates.
 
 The runner creates fresh synthetic session rows and calls the actual
 PostgresTrialStore for all four product choices, replay, claim collision, durable
@@ -56,10 +57,48 @@ temporary database drift (table/column grants, forced RLS, SECURITY DEFINER and
 unscoped entitlement policy), checking rejection and restoring the exact state.
 This is disposable loopback-only test work, not a provider configuration change.
 
-Remaining release work includes activation-caller profile cutover, canonical
+Remaining release work includes canonical activation-caller integration,
 migration/receipt reconciliation, hosted pooler/Auth/Storage/restore journeys and
 owner acceptance. No existing release packet is superseded by this local report.
 
 Source guidance: [Supabase database migrations](https://supabase.com/docs/guides/deployment/database-migrations).
 Security references: [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)
 and [column privileges](https://supabase.com/docs/guides/database/postgres/column-level-security).
+
+## Full release database rehearsal
+
+The source-owned release runner now applies the exact 15 private migrations
+through schema 13 plus durable attempt budgets. It retains all 56 prior product,
+approval, identity and recovery checks, then runs the same actual account/billing
+exercise above and four restore checks (72 behavior checks total). Both catalogs
+must pass the exact 33-name current validator matrix. Legacy helper defaults remain
+v11 solely for baseline/adversarial tests; the release entry explicitly selects
+`CURRENT_MIGRATIONS` and `v13-self-serve` for both fresh and restored databases.
+
+Run once from an exact clean committed checkout, using already-installed tools:
+
+```
+node tools/record_postgres17_rehearsal.mjs --output <fresh-external-receipt.json>
+node tools/record_postgres17_rehearsal.mjs --verify --input <fresh-external-receipt.json> --expected-head <exact-clean-commit>
+```
+
+The raw `supermega_postgres17_rehearsal_v2` result is retained beside the receipt
+as `<fresh-external-receipt.json>.raw.json`. The sanitized
+`supermega.hq.database-rehearsal.v3` receipt binds clean source commit/tree,
+LF-normalized implementation bytes, exact migration names/profile, both catalogs,
+all behavior checks and equal full private-row/session snapshot digests. The
+consumer rebuilds it from the raw report; digest integrity is not independent
+authenticity or an owner approval. All hosted/production authority remains false.
+
+Use a new output outside the checkout. Existing outputs fail before database work;
+no historical tracked HQ receipt is overwritten. A failed run retains its safe raw
+result, without a successful receipt. A lock prevents concurrent recording to that
+destination. A shutdown failure retains the temporary cluster directory, never
+deleting a possibly live database. Successful runs stop one cluster before starting
+the restore cluster and clean both up. No full app verifier is invoked.
+
+This database dump proves synthetic private rows and session fixtures, not provider
+Auth, uploaded payment images or Storage object recovery. Supabase database backups
+do not contain Storage object bytes, and custom-role passwords require separate
+restoration. Those remain explicit hosted recovery gates; see
+[Supabase backups](https://supabase.com/docs/guides/platform/backups).

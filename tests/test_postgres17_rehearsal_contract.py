@@ -8,6 +8,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,11 +26,20 @@ def _load_rehearsal():
 
 
 class Postgres17RehearsalContractTests(unittest.TestCase):
+    def test_release_rehearsal_requires_current_complete_chain(self) -> None:
+        module = _load_rehearsal()
+        self.assertEqual(getattr(module, "CURRENT_SCHEMA_VERSION", None), 13)
+        self.assertEqual(module.CURRENT_PROFILE, "v13-self-serve")
+        self.assertEqual(module.CURRENT_MIGRATIONS, (*module.MIGRATIONS,
+            "20260817090000_private_trial_backend_v12_billing_rail.sql",
+            "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
+            "20260907024457_self_serve_durable_attempt_budget.sql"))
+
     def test_rehearsal_declares_the_complete_fail_closed_boundary(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")
         lowered = source.lower()
         for expected in (
-            "supermega_postgres17_rehearsal_v1",
+            "supermega_postgres17_rehearsal_v2",
             "expected_postgres_major = 17",
             "127.0.0.1",
             "hostssl all all 127.0.0.1/32 scram-sha-256",
@@ -179,6 +190,92 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             and node.func.id == "print"
         ]
         self.assertEqual(len(print_calls), 1)
+
+    def test_current_source_identity_rejects_missing_dirty_wrong_head_and_inventory(self):
+        module = _load_rehearsal()
+        with patch.object(module.subprocess, "run") as git:
+            with self.assertRaisesRegex(module.RehearsalFailure, "expected_head_required"):
+                module._source_identity(None)
+            git.assert_not_called()
+        result = lambda text: SimpleNamespace(returncode=0, stdout=text)
+        with patch.object(module.subprocess, "run", return_value=result(" M source.py")):
+            with self.assertRaisesRegex(module.RehearsalFailure, "source_dirty"):
+                module._source_identity("a" * 40)
+        with patch.object(module.subprocess, "run", side_effect=[result(""), result("b" * 40)]):
+            with self.assertRaisesRegex(module.RehearsalFailure, "source_head_mismatch"):
+                module._source_identity("a" * 40)
+        with tempfile.TemporaryDirectory() as folder, patch.object(module, "MIGRATION_DIRECTORY", Path(folder)), \
+                patch.object(module.subprocess, "run", side_effect=[result(""), result("a" * 40)]):
+            with self.assertRaisesRegex(module.RehearsalFailure, "private_migration_inventory_mismatch"):
+                module._source_identity("a" * 40)
+        with patch.object(module.subprocess, "run", side_effect=[result(""), result("a" * 40), result("b" * 40)]):
+            identity = module._source_identity("a" * 40)
+        self.assertEqual(identity, {"head": "a" * 40, "tree": "b" * 40,
+                                   "implementation_digest": module._implementation_digest()})
+
+    def test_existing_raw_output_stops_before_any_source_or_database_work(self):
+        module = _load_rehearsal()
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "historical.json"
+            output.write_text("preserve", encoding="utf-8")
+            with patch.object(module, "_source_identity") as identity, \
+                    patch.object(module, "_run_rehearsal") as run, \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout:
+                code = module.main(["--evidence-file", str(output)])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(stdout.getvalue())["error"], "evidence_output_exists")
+            self.assertEqual(output.read_text(encoding="utf-8"), "preserve")
+            identity.assert_not_called()
+            run.assert_not_called()
+
+    def test_current_validator_profile_is_explicit_and_wrong_contract_cannot_pass(self):
+        module = _load_rehearsal()
+        good = {"ok": True, "ready": True, "contract": module.CURRENT_CATALOG_CONTRACT,
+                "checks": {"schema_version_current": True}}
+        def run(payload):
+            with patch.object(module, "_run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(payload))) as called:
+                result = module._run_validator("synthetic-runtime", "synthetic-storage", {}, schema_profile=module.CURRENT_PROFILE)
+                self.assertEqual(called.call_args.args[0][-2:], ["--schema-profile", "v13-self-serve"])
+                return result
+        self.assertEqual(run(good), good)
+        for delta in ({"contract": "old"}, {"checks": {}}, {"checks": {"x": False}}):
+            with self.subTest(delta=delta), self.assertRaisesRegex(module.RehearsalFailure, "current_catalog_contract_mismatch"):
+                run({**good, **delta})
+
+    def test_release_runner_wires_current_migrations_catalog_and_recovery(self):
+        source = REHEARSAL.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        run = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_run_rehearsal")
+        calls = [n for n in ast.walk(run) if isinstance(n, ast.Call)]
+        named = lambda name: [n for n in calls if isinstance(n.func, ast.Name) and n.func.id == name]
+        migrations = named("_apply_migrations")
+        self.assertEqual(len(migrations), 1)
+        self.assertTrue(any(k.arg == "migrations" and isinstance(k.value, ast.Name)
+                            and k.value.id == "CURRENT_MIGRATIONS" for k in migrations[0].keywords))
+        for call in named("_run_validator"):
+            self.assertTrue(any(k.arg == "schema_profile" and isinstance(k.value, ast.Name)
+                                and k.value.id == "CURRENT_PROFILE" for k in call.keywords))
+        self.assertEqual(len(named("_run_validator")), 2)
+        for pin in ('account_proof.exercise(', 'account_proof.snapshot(admin_database_url)',
+                    'account_proof.snapshot(restore_admin_database_url)', 'restored_snapshot != private_snapshot',
+                    'not ready.write_ready or not ready.premium_unlocked', 'except TrialRateLimited:',
+                    'expected_row_counts=row_counts', '_source_identity(source_identity["head"]) != source_identity'):
+            self.assertIn(pin, source)
+
+    def test_workspace_cleanup_requires_known_stopped_state(self):
+        module = _load_rehearsal()
+        with tempfile.TemporaryDirectory() as parent:
+            target = Path(parent) / "supermega-pg17-fixture"
+            target.mkdir()
+            with patch.object(module.tempfile, "mkdtemp", return_value=str(target)), \
+                    patch.object(module.tempfile, "gettempdir", return_value=parent), \
+                    patch.object(module.shutil, "rmtree") as delete:
+                with module._disposable_workspace():
+                    pass
+                delete.assert_not_called()
+                with module._disposable_workspace() as (_, state):
+                    state["stopped"] = True
+                delete.assert_called_once_with(target.resolve())
 
     def test_policy_rejections_require_an_explicit_database_sqlstate(self) -> None:
         module = _load_rehearsal()
