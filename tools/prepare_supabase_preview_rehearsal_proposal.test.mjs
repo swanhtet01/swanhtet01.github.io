@@ -6,6 +6,7 @@ import {
   SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT,
   buildSupabasePreviewRehearsalProposal,
   validateSupabasePreviewRehearsalProposal,
+  validatePreviewMigrationEntries,
 } from './prepare_supabase_preview_rehearsal_proposal.mjs'
 
 const sourceReceipts = [
@@ -64,12 +65,16 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
-  assert.equal(built.migrationPlan.migrationCount, 15)
-  assert.equal(built.migrationPlan.privateMigrationCount, 14)
+  assert.equal(built.migrationPlan.migrationCount, 16)
+  assert.equal(built.migrationPlan.privateMigrationCount, 15)
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(built.migrationPlan.finalMigration, '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql')
+  assert.equal(built.migrationPlan.finalMigration, '20260907024457_self_serve_durable_attempt_budget.sql')
   assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
+  assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
+  assert.equal(built.productionBaseline.currentStateRevalidated, false)
+  assert.equal(built.productionBaseline.currentCandidateProven, false)
+  assert.ok(built.requiredEvidence.includes('durable-attempt-budget-restart-concurrency-and-restored-limit-proof'))
   assert.equal(built.gates.previewRehearsal.proofComplete, false)
   assert.ok(built.requiredEvidence.includes('metadata-only-schema-fingerprint-comparison'))
   assert.ok(built.requiredEvidence.includes('private-storage-six-request-privacy-proof'))
@@ -79,6 +84,34 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.controls.productionDataCopied, false)
   assert.equal(built.controls.githubWritesAllowed, false)
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
+})
+
+test('binds exact ordered public baseline and all fifteen private migrations, including budget', async () => {
+  const built = await proposal()
+  const entries = built.migrationPlan.migrations
+  assert.equal(validatePreviewMigrationEntries(entries), entries)
+  for (const mutate of [list => list.pop(), list => list.push({ ...list.at(-1) }),
+    list => { list[1] = { ...list[0] } }, list => { [list[1], list[2]] = [list[2], list[1]] },
+    list => { list.at(-1).name = '20260907024457_unreviewed.sql' },
+    list => { list.at(-1).path = '../unreviewed.sql' },
+    list => { list.at(-1).digest = '' }, list => { list.at(-1).execute = true }]) {
+    const altered = structuredClone(entries)
+    mutate(altered)
+    assert.throws(() => validatePreviewMigrationEntries(altered), /supabase_preview_rehearsal_migration_inventory_invalid/)
+  }
+})
+
+test('rehashing cannot hide omitted budget evidence or turn historical audit into current proof', async () => {
+  for (const mutate of [p => { p.migrationPlan.migrations.at(-1).digest = `sha256:${'1'.repeat(64)}` },
+    p => { p.productionBaseline.currentCandidateProven = true },
+    p => { p.productionBaseline.currentStateRevalidated = true },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => !e.startsWith('durable-attempt-budget-')) }]) {
+    const altered = structuredClone(await proposal())
+    mutate(altered)
+    const { digest: ignored, ...body } = altered
+    altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
+    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_digest_invalid|production_baseline_invalid|evidence_missing)/)
+  }
 })
 
 test('rejects production data, privileged credentials, mutation authority, and tampering', async () => {

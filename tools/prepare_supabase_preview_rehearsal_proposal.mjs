@@ -10,10 +10,28 @@ export const SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT = 'supermega.supabase-
 const root = resolve(import.meta.dirname, '..')
 const output = resolve(root, 'hq', 'readiness', 'supabase-preview-rehearsal-proposal.json')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
-const EXPECTED_MIGRATION_COUNT = 15
-const EXPECTED_PRIVATE_MIGRATION_COUNT = 14
+const EXPECTED_MIGRATION_COUNT = 16
+const EXPECTED_PRIVATE_MIGRATION_COUNT = 15
 const EXPECTED_PUBLIC_BASELINE = '20260711081300_public_legacy_baseline.sql'
-const EXPECTED_FINAL_MIGRATION = '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql'
+const EXPECTED_FINAL_MIGRATION = '20260907024457_self_serve_durable_attempt_budget.sql'
+const EXPECTED_MIGRATIONS = Object.freeze([
+  EXPECTED_PUBLIC_BASELINE,
+  '20260722004500_private_trial_backend_role_preflight.sql',
+  '20260722005134_private_trial_backend_foundation.sql',
+  '20260722142801_private_trial_backend_v2.sql',
+  '20260723094500_private_trial_backend_v3_website.sql',
+  '20260723144500_private_trial_backend_v4_hardening.sql',
+  '20260724204920_private_trial_backend_v5_read_capabilities.sql',
+  '20260730113000_private_trial_backend_v6_managed_activation.sql',
+  '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
+  '20260802161500_private_trial_backend_v8_rls_initplan.sql',
+  '20260803063822_private_trial_backend_v9_metadata_rls.sql',
+  '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  '20260816120000_private_trial_backend_v11_self_serve_grants.sql',
+  '20260817090000_private_trial_backend_v12_billing_rail.sql',
+  '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql',
+  EXPECTED_FINAL_MIGRATION,
+])
 const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 13
 const MAX_PREVIEW_LIFETIME_HOURS = 24
 const SOURCES = [
@@ -52,6 +70,17 @@ function packetDigest(payload) {
   return digest(JSON.stringify(payload))
 }
 
+export function validatePreviewMigrationEntries(entries) {
+  if (!Array.isArray(entries) || entries.length !== EXPECTED_MIGRATION_COUNT
+    || entries.some((entry, index) => entry?.name !== EXPECTED_MIGRATIONS[index]
+      || entry.path !== `supabase/migrations/${EXPECTED_MIGRATIONS[index]}`
+      || !/^sha256:[0-9a-f]{64}$/.test(entry.digest || '')
+      || Object.keys(entry).sort().join(',') !== 'digest,name,path')) {
+    fail('supabase_preview_rehearsal_migration_inventory_invalid')
+  }
+  return entries
+}
+
 async function migrationChain() {
   const directory = resolve(root, 'supabase', 'migrations')
   const names = (await readdir(directory))
@@ -65,7 +94,9 @@ async function migrationChain() {
     const path = `supabase/migrations/${name}`
     migrations.push({ name, path, digest: digest(await readText(path)) })
   }
-  const privateCount = migrations.filter((entry) => entry.name.includes('_private_trial_backend')).length
+  validatePreviewMigrationEntries(migrations)
+  // The reviewed private budget migration deliberately has no legacy filename prefix.
+  const privateCount = migrations.filter((entry) => entry.name !== EXPECTED_PUBLIC_BASELINE).length
   if (privateCount !== EXPECTED_PRIVATE_MIGRATION_COUNT) fail('supabase_preview_rehearsal_private_migration_count_invalid')
   return {
     schemaVersion: EXPECTED_SOURCE_TARGET_SCHEMA_VERSION,
@@ -90,6 +121,9 @@ function currentSecurityBaseline(securityAudit) {
   return {
     projectRef: securityAudit.projectRef,
     classification: securityAudit.targetClassification,
+    evidenceClassification: 'historical-audit-only',
+    currentStateRevalidated: false,
+    currentCandidateProven: false,
     asOf: securityAudit.asOf,
     postgresMajor: securityAudit.postgres?.major,
     projectStatus: securityAudit.postgres?.status,
@@ -144,7 +178,12 @@ function validateProposalShape(packet) {
   }
   if (!/^sha256:[0-9a-f]{64}$/.test(packet.migrationPlan?.chainDigest || '')) fail('supabase_preview_rehearsal_proposal_migration_digest_invalid')
   if (!Array.isArray(packet.migrationPlan?.migrations) || packet.migrationPlan.migrations.length !== EXPECTED_MIGRATION_COUNT) fail('supabase_preview_rehearsal_proposal_migrations_invalid')
+  validatePreviewMigrationEntries(packet.migrationPlan.migrations)
+  if (packet.migrationPlan.chainDigest !== digest(JSON.stringify(packet.migrationPlan.migrations))) fail('supabase_preview_rehearsal_proposal_migration_digest_invalid')
   if (packet.productionBaseline?.classification !== 'protected-production'
+    || packet.productionBaseline?.evidenceClassification !== 'historical-audit-only'
+    || packet.productionBaseline?.currentStateRevalidated !== false
+    || packet.productionBaseline?.currentCandidateProven !== false
     || packet.productionBaseline?.browserRolesDenied !== true
     || packet.productionBaseline?.publicBrowserQuarantinePresent !== true
     || packet.productionBaseline?.securityAdvisorStatus !== 'clear'
@@ -165,6 +204,7 @@ function validateProposalShape(packet) {
   for (const evidence of [
     'preview-branch-status-and-migration-list',
     'source-controlled-migration-chain-applied-through-v13',
+    'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
     'metadata-only-schema-fingerprint-comparison',
     'public-table-rls-and-anon-authenticated-denial',
     'private-schema-backend-role-policy-and-no-browser-grants',
@@ -264,6 +304,7 @@ export async function buildSupabasePreviewRehearsalProposal({
       'preview-branch-status-and-migration-list',
       'clean-empty-data-less-branch-confirmed',
       'source-controlled-migration-chain-applied-through-v13',
+      'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
       'metadata-only-schema-fingerprint-comparison',
       'public-table-rls-and-anon-authenticated-denial',
       'private-schema-backend-role-policy-and-no-browser-grants',
