@@ -190,7 +190,7 @@ export function SignupPage() {
             <span className="core-eyebrow">Started</span>
             <h2>{existing.businessName}</h2>
             {carriedOver
-              ? <p>Existing Shop data was kept: <strong>nothing was overwritten</strong>. Continue with it, or use the reviewed reset flow to replace this device&apos;s sample.</p>
+              ? <p>Existing Shop data: <strong>nothing was overwritten</strong>. Back up before using reset.</p>
               : <p>Your {existingProduct.label} trial is ready to continue.</p>}
           </div>
           <div className="managed-login-actions">
