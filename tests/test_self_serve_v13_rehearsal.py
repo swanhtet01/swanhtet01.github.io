@@ -9,6 +9,13 @@ from tools import rehearse_self_serve_v13 as proof
 
 
 class FullChainProofContractTests(unittest.TestCase):
+    def test_both_independent_schema_settings_are_explicit(self):
+        with patch.dict(proof.os.environ, {}, clear=True):
+            proof.configure_local_schema()
+            self.assertEqual(dict(proof.os.environ), {
+                "SUPERMEGA_TRIAL_SCHEMA_VERSION": "13",
+                "SUPERMEGA_BILLING_SCHEMA_VERSION": "13", "SUPERMEGA_OTEL_DISABLED": "1"})
+
     def test_runtime_products_not_activation_display_ids(self):
         self.assertEqual(proof.PRODUCTS, ("commerce", "production", "website", "ecommerce"))
         source = Path(proof.__file__).read_text(encoding="utf-8")

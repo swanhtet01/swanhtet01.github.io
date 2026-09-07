@@ -11,6 +11,9 @@ chain: role preflight, v1 through v13, and the additive durable-attempt capabili
 The legacy public baseline is deliberately replaced by the existing synthetic
 public catalog/quarantine fixture. No business records or configured database
 URLs are copied. Only already-installed PostgreSQL 17/OpenSSL tooling is used.
+Both independent process-local schema settings (trial runtime and owner billing
+ledger) are set to 13 before either module is imported. No persistent environment
+or provider configuration is changed.
 
 The existing strict v11 production validator must pass BEFORE the three extension
 migrations. Its rejection of v13 is then retained as an explicit unresolved

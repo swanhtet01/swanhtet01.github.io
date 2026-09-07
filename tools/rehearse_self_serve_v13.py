@@ -56,6 +56,13 @@ def require(condition, code):
         raise pg.RehearsalFailure(code)
 
 
+def configure_local_schema():
+    # Separate runtime and owner-ledger settings must agree with the migrated DB.
+    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "13"
+    os.environ["SUPERMEGA_BILLING_SCHEMA_VERSION"] = "13"
+    os.environ["SUPERMEGA_OTEL_DISABLED"] = "1"
+
+
 def source_identity(expected_head):
     def git(*args):
         return subprocess.check_output(["git", *args], cwd=ROOT, text=True,
@@ -218,8 +225,7 @@ def run(expected_head):
     source = source_identity(expected_head)
     require("supermega_runtime.trial_store" not in sys.modules
             and "supermega_runtime.billing_rail" not in sys.modules, "fresh_process_required")
-    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "13"
-    os.environ["SUPERMEGA_OTEL_DISABLED"] = "1"
+    configure_local_schema()
     binary, openssl = pg._default_postgres_bin(), pg._default_openssl()
     require(pg._preflight(binary, openssl).get("ok") is True, "local_postgres17_required")
     admin_secret, runtime_secret = pg._password(), pg._password()
