@@ -4,6 +4,11 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+test('launcher promises a local request, not a delivered Shop order', () => {
+  const shell = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
+  assert.ok(shell.includes("['Ecommerce', 'Storefront to Shop handoff.', 'Save a sample request on this device', '/ecommerce/']"))
+  assert.ok(!shell.includes('Send a sample order to Shop'))
+})
 const ts = require('typescript')
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('buying.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)

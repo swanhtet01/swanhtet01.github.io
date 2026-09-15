@@ -837,7 +837,7 @@ const launcherText = [
   'Website',
   'Preview a business website',
   'Ecommerce',
-  'Send a sample order to Shop',
+  'Save a sample request on this device',
 ]
 
 const shopSetup = {

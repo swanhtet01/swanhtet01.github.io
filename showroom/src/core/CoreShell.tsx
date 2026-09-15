@@ -629,7 +629,7 @@ const customerProducts = [
   ['Shop', 'Sales, orders, stock, close.', 'Complete a sample sale', '/shop/'],
   ['Plant', 'Jobs, materials, quality.', 'Run a sample production job', '/plant/'],
   ['Website', 'Pages, leads, preview.', 'Preview a business website', '/website/'],
-  ['Ecommerce', 'Storefront to Shop handoff.', 'Send a sample order to Shop', '/ecommerce/'],
+  ['Ecommerce', 'Storefront to Shop handoff.', 'Save a sample request on this device', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
