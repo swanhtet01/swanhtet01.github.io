@@ -5,7 +5,7 @@ const SCHEMA = 'supermega.shop.counter_tickets.v2'
 const LIMIT_BYTES = 65_536
 export type CounterBasket = { cart: Record<string, number>; customer: string; payment: string; outcome: 'paid_handoff' | 'open_order' }
 export type ParkedTicket = CounterBasket & { id: string; label: string }
-export type CounterTickets = CounterBasket & { schema: typeof SCHEMA; revision: number; parked: ParkedTicket[]; activeLabel: string }
+export type CounterTickets = CounterBasket & { schema: typeof SCHEMA; revision: number; parked: ParkedTicket[]; activeLabel: string; checkoutOrderId: string | null }
 type Storage = { getItem(key: string): string | null; setItem(key: string, value: string): void }
 type Locks = { request<T>(name: string, options: { mode: 'exclusive' }, callback: () => Promise<T>): Promise<T> }
 export const emptyCounterBasket = (): CounterBasket => ({ cart: {}, customer: '', payment: 'Cash', outcome: 'paid_handoff' })
@@ -25,7 +25,7 @@ function basket(value: unknown): CounterBasket {
 }
 
 export function parseCounterTickets(raw: string | null): CounterTickets {
-  if (raw === null) return { ...emptyCounterBasket(), schema: SCHEMA, revision: 0, parked: [], activeLabel: '' }
+  if (raw === null) return { ...emptyCounterBasket(), schema: SCHEMA, revision: 0, parked: [], activeLabel: '', checkoutOrderId: null }
   if (new TextEncoder().encode(raw).length > LIMIT_BYTES) return fail()
   let source: unknown
   try { source = JSON.parse(raw) } catch { return fail() }
@@ -33,11 +33,13 @@ export function parseCounterTickets(raw: string | null): CounterTickets {
   // Existing v1 carts remain readable and are migrated only by an explicit mutation.
   if (source.schema === undefined) {
     if (Object.keys(source).some(key => !['cart', 'customer', 'payment', 'outcome'].includes(key))) return fail()
-    return { ...basket({ ...source, outcome: source.outcome ?? 'paid_handoff' }), schema: SCHEMA, revision: 0, parked: [], activeLabel: '' }
+    return { ...basket({ ...source, outcome: source.outcome ?? 'paid_handoff' }), schema: SCHEMA, revision: 0, parked: [], activeLabel: '', checkoutOrderId: null }
   }
   if (source.schema !== SCHEMA || !Number.isSafeInteger(source.revision) || Number(source.revision) < 1
     || !Array.isArray(source.parked) || source.parked.length > 24
-    || Object.keys(source).some(key => !['schema', 'revision', 'parked', 'cart', 'customer', 'payment', 'outcome', 'activeLabel'].includes(key))) return fail()
+    || Object.keys(source).some(key => !['schema', 'revision', 'parked', 'cart', 'customer', 'payment', 'outcome', 'activeLabel', 'checkoutOrderId'].includes(key))) return fail()
+  const checkoutOrderId = source.checkoutOrderId ?? null
+  if (checkoutOrderId !== null && (typeof checkoutOrderId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(checkoutOrderId))) return fail()
   const activeLabel = source.activeLabel ?? ''
   if (typeof activeLabel !== 'string' || activeLabel.length > 40 || activeLabel !== activeLabel.trim()) return fail()
   const parked = source.parked.map((value): ParkedTicket => {
@@ -50,20 +52,29 @@ export function parseCounterTickets(raw: string | null): CounterTickets {
   })
   if (new Set(parked.map(ticket => ticket.id)).size !== parked.length
     || new Set(parked.map(ticket => ticket.label.toLowerCase())).size !== parked.length) return fail()
-  return { ...basket(source), schema: SCHEMA, revision: Number(source.revision), parked, activeLabel }
+  return { ...basket(source), schema: SCHEMA, revision: Number(source.revision), parked, activeLabel, checkoutOrderId }
 }
 
 export type CounterTicketAction = { kind: 'save'; basket: CounterBasket }
   | { kind: 'park'; id: string; label: string }
   | { kind: 'resume'; id: string }
+  | { kind: 'begin_checkout'; orderId: string }
+  | { kind: 'resolve_checkout'; orderId: string }
 
 export function transitionCounterTickets(current: CounterTickets, action: CounterTicketAction): CounterTickets {
   // Validate every supplied snapshot; callers cannot bypass the parser via a type cast.
   const verified = current.revision === 0 && current.parked.length === 0
-    ? { ...basket(current), schema: SCHEMA, revision: 0, parked: [], activeLabel: '' } : parseCounterTickets(JSON.stringify(current))
+    ? { ...basket(current), schema: SCHEMA, revision: 0, parked: [], activeLabel: '', checkoutOrderId: null } : parseCounterTickets(JSON.stringify(current))
+  if (verified.checkoutOrderId && action.kind !== 'resolve_checkout') throw new Error('This basket has a checkout recovery reference. Reconcile the recorded order before continuing.')
   if (verified.revision >= Number.MAX_SAFE_INTEGER) throw new Error('Counter revision cannot advance safely.')
   let next: CounterTickets = { ...verified, schema: SCHEMA, revision: verified.revision + 1, parked: [...verified.parked] }
-  if (action.kind === 'save') next = { ...next, ...basket(action.basket), activeLabel: Object.keys(action.basket.cart).length ? verified.activeLabel : '' }
+  if (action.kind === 'begin_checkout') {
+    if (!Object.keys(verified.cart).length) throw new Error('An empty basket cannot begin checkout.')
+    next.checkoutOrderId = action.orderId
+  } else if (action.kind === 'resolve_checkout') {
+    if (!verified.checkoutOrderId || verified.checkoutOrderId !== action.orderId) throw new Error('Checkout recovery reference does not match.')
+    next = { ...next, ...emptyCounterBasket(), activeLabel: '', checkoutOrderId: null }
+  } else if (action.kind === 'save') next = { ...next, ...basket(action.basket), activeLabel: Object.keys(action.basket.cart).length ? verified.activeLabel : '' }
   else if (action.kind === 'park') {
     if (!Object.keys(verified.cart).length) throw new Error('Add an item before parking this ticket.')
     next = { ...next, ...emptyCounterBasket(), activeLabel: '', parked: [...verified.parked, { ...basket(verified), id: action.id, label: action.label.trim() }] }
@@ -146,8 +157,9 @@ export function createCounterTicketSession(storage: Storage | null, locks: Locks
       })
       return true
     },
-    checkpoint() {
+    checkpoint(confirmedCheckoutId?: string) {
       if (!alive || failed || snapshot.pending) return false
+      if (snapshot.state.checkoutOrderId && snapshot.state.checkoutOrderId !== confirmedCheckoutId) return false
       try {
         if (storage && (storage.getItem(COUNTER_TICKETS_KEY) !== raw || storage.getItem(RESET_KEY) !== reset)) throw new Error('changed')
         return true

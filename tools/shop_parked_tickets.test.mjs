@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { COUNTER_TICKETS_KEY, emptyCounterBasket, parseCounterTickets, transitionCounterTickets, mutateCounterTickets, createCounterTicketSession } from '../showroom/src/core/shop-parked-tickets.ts'
 const input = { cart: { 'TEA-1': 2 }, customer: '', payment: 'Cash', outcome: 'paid_handoff' }
 const saved = () => transitionCounterTickets(parseCounterTickets(null), { kind: 'save', basket: input })
@@ -139,4 +140,57 @@ test('queued transition cannot be changed through caller input mutation', async 
   await queued()
   await pending
   assert.equal(parseCounterTickets(raw).cart['TEA-1'], 2)
+})
+
+test('confirmed commerce plus failed clear cannot restore a sellable basket; siblings survive resolution', async () => {
+  let state = transitionCounterTickets(saved(), { kind: 'park', id: 'sibling', label: 'Table 2' })
+  state = transitionCounterTickets(state, { kind: 'save', basket: input })
+  let raw = JSON.stringify(state), failClear = false
+  const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? raw : null, setItem: (_key, value) => { if (failClear) throw new Error('quota'); raw = value } }
+  const locks = { request: async (_name, _options, callback) => callback() }
+  const session = createCounterTicketSession(storage, locks)
+  assert.equal(session.dispatch({ kind: 'begin_checkout', orderId: 'ORD-ONE' }), true)
+  await session.settled()
+  assert.equal(session.checkpoint('ORD-ONE'), true)
+  const recordedOrders = new Set(['ORD-ONE']) // Commerce commits only after the durable intent above.
+  failClear = true
+  session.dispatch({ kind: 'resolve_checkout', orderId: 'ORD-ONE' })
+  await session.settled()
+  const reload = createCounterTicketSession(storage, locks)
+  assert.equal(reload.checkpoint(), false)
+  assert.equal(reload.getSnapshot().state.checkoutOrderId, 'ORD-ONE')
+  assert.equal(reload.dispatch({ kind: 'save', basket: input }), false)
+  assert.equal(reload.dispatch({ kind: 'begin_checkout', orderId: 'ORD-TWO' }), false)
+  assert.equal(reload.dispatch({ kind: 'resolve_checkout', orderId: 'WRONG' }), false)
+  failClear = false
+  if (recordedOrders.has('ORD-ONE')) reload.dispatch({ kind: 'resolve_checkout', orderId: 'ORD-ONE' })
+  await reload.settled()
+  assert.equal(reload.checkpoint(), true)
+  assert.deepEqual(reload.getSnapshot().state.cart, {})
+  assert.equal(reload.getSnapshot().state.parked[0].id, 'sibling')
+})
+
+test('unmounted delayed post-commit clear leaves durable checkout identity on reload', async () => {
+  let raw = JSON.stringify(transitionCounterTickets(saved(), { kind: 'begin_checkout', orderId: 'ORD-ONE' })), release
+  const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? raw : null, setItem: (_key, value) => { raw = value } }
+  const locks = { request: (_name, _options, callback) => new Promise((resolve, reject) => { release = () => callback().then(resolve, reject) }) }
+  const session = createCounterTicketSession(storage, locks)
+  session.dispatch({ kind: 'resolve_checkout', orderId: 'ORD-ONE' })
+  await Promise.resolve()
+  session.deactivate()
+  await release()
+  await session.settled()
+  assert.equal(createCounterTicketSession(storage, locks).checkpoint(), false)
+  assert.equal(parseCounterTickets(raw).checkoutOrderId, 'ORD-ONE')
+})
+
+test('UI persists checkout identity before commerce and only offers recorded-order recovery', () => {
+  const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const start = source.indexOf('function reviewCounterSale('), end = source.indexOf('function recordOrder(', start)
+  const flow = source.slice(start, end)
+  assert.ok(flow.indexOf('await review.beforeCommit(order.id)') < flow.indexOf("await mutateCommerce('commerce.order.created'"))
+  assert.ok(flow.includes('review.onCommitted(order.id)'))
+  assert.ok(source.includes('recordedOrderIds.includes(checkoutOrderId)'))
+  assert.ok(source.includes('await tickets.settled()'))
+  assert.ok(source.includes('return tickets.checkpoint(orderId)'))
 })

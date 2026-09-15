@@ -1160,7 +1160,8 @@ type ShopCounterReview = {
   customer: string
   payment: string
   outcome: 'paid_handoff' | 'open_order'
-  onCommitted: () => void
+  beforeCommit: (orderId: string) => Promise<boolean>
+  onCommitted: (orderId: string) => void
 }
 
 function readLocalShopIndustryPack() {
@@ -1196,7 +1197,7 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, sampleCatalogActive }: {
+function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordedOrderIds, sampleCatalogActive }: {
   businessTemplate: ShopBusinessTemplate | null
   canCompleteInOneReview: boolean
   disabled: boolean
@@ -1212,6 +1213,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   paymentQrScope: string
   persistLocalDraft: boolean
   productImageScope: string
+  recordedOrderIds: string[]
   sampleCatalogActive: boolean
 }) {
   const [tickets] = useState(() => {
@@ -1220,7 +1222,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
     catch { return createCounterTicketSession({ getItem: () => { throw new Error('unavailable') }, setItem: () => { throw new Error('unavailable') } }, null) }
   })
   const ticketSnapshot = useSyncExternalStore(tickets.subscribe, tickets.getSnapshot)
-  const { cart, customer, payment, outcome, parked, activeLabel } = ticketSnapshot.state
+  const { cart, customer, payment, outcome, parked, activeLabel, checkoutOrderId } = ticketSnapshot.state
   const [ticketLabel, setTicketLabel] = useState('')
   const [ticketsOpen, setTicketsOpen] = useState(false)
   useEffect(() => { tickets.activate(); return () => tickets.deactivate() }, [tickets])
@@ -1253,7 +1255,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
     const item = items.find(candidate => candidate.sku === sku)
     return !item || quantity > item.onHand
   })
-  const recoveryPaused = ticketSnapshot.blocked || ticketSnapshot.pending > 0
+  const recoveryPaused = ticketSnapshot.blocked || ticketSnapshot.pending > 0 || checkoutOrderId !== null
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
@@ -1308,13 +1310,22 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
     if (!lines.length || disabled || catalogChanged || recoveryPaused || !tickets.checkpoint()) return
+    const reviewedRevision = tickets.getSnapshot().state.revision
     onReview({
       lines: lines.map((line) => ({ sku: line.item.sku, quantity: line.quantity })),
       customer: customer.trim(),
       payment,
       outcome: effectiveOutcome,
-      onCommitted: () => {
-        clearSale()
+      beforeCommit: async (orderId) => {
+        if (!tickets.checkpoint() || tickets.getSnapshot().state.revision !== reviewedRevision) return false
+        if (!persistLocalDraft) return true
+        if (!tickets.dispatch({ kind: 'begin_checkout', orderId })) return false
+        await tickets.settled()
+        return tickets.checkpoint(orderId)
+      },
+      onCommitted: (orderId) => {
+        if (persistLocalDraft) tickets.dispatch({ kind: 'resolve_checkout', orderId })
+        else clearSale()
       },
     }, event.currentTarget)
   }
@@ -1413,6 +1424,11 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
       <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
         {ticketSnapshot.error ? <p className="authority-note" role="alert">{ticketSnapshot.error}</p> : null}
+        {checkoutOrderId ? <div className="authority-note" role="alert"><p>This basket is locked to checkout {checkoutOrderId}. Do not record it again.</p>
+          {recordedOrderIds.includes(checkoutOrderId)
+            ? <button type="button" disabled={ticketSnapshot.blocked || ticketSnapshot.pending > 0} onClick={() => tickets.dispatch({ kind: 'resolve_checkout', orderId: checkoutOrderId })}>Order found — clear only this basket</button>
+            : <p>Check Orders and recovery before continuing. An interrupted result is not proof that the sale failed.</p>}
+          <Link to="/shop/?tab=orders">Review recorded orders</Link></div> : null}
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
         <header><div><span className="core-eyebrow">{activeLabel || bi('Current sale')}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{bi('Clear')}</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
@@ -4041,6 +4057,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       apply: async (action) => {
         const proof = commerceActionProof(action)
         const ownedOrder = { ...order, owner: action.actor }
+        if (!await review.beforeCommit(order.id)) throw new Error('Counter recovery could not be secured. No new sale was attempted.')
         // Browser-local counter settlement is one crash-safe workspace write. The same
         // pure lifecycle transitions used by Orders are composed inside one recovery
         // intent, with a unique proof id per recorded step. Managed workspaces stay on
@@ -4063,7 +4080,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           const settled = state.orders.find((candidate) => candidate.id === order.id)
           return settled?.status === 'completed' && settled.paymentStatus === 'reconciled' ? state : null
         })
-        review.onCommitted()
+        review.onCommitted(order.id)
         if (completesSale) {
           setReceiptAck(null)
           setCounterReceiptOrderId(order.id)
@@ -6789,7 +6806,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopTradeDemoNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || shopTradeDemoCheckoutBlocked} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || shopTradeDemoCheckoutBlocked} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
