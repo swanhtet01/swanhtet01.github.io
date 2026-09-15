@@ -132,3 +132,58 @@ The next complete journey must demonstrate:
 These are acceptance requirements, not newly implemented capabilities. Reuse the
 Website path first, then qualify Ecommerce catalog review and Shop setup acceptance
 against their actual state models rather than assuming identical semantics.
+
+## Prioritized setup experiments
+
+Status: prepared study protocol; no participants recruited or results observed.
+The existing `tools/product_copy_experiment.mjs` remains a synthetic internal copy
+experiment. It must not be counted as an onboarding A/B test or customer evidence.
+
+| ID | Hypothesis | Comparison | Observable task outcome |
+| --- | --- | --- | --- |
+| SETUP-01 | Result-first briefs reduce confusion relative to template-first setup | Retained earlier template-first design versus current assisted brief, same fictional business | Participant chooses the correct product, supplies enough scope to prepare it, and explains what happens next without coaching |
+| REVIEW-01 | A preview plus a short checklist is easier than exposing the builder | Existing operator review versus a customer review flow, only after that flow exists | Participant identifies the exact revision, requests one change, and distinguishes approval from publication |
+| SHOP-01 | Prepared catalog and trade defaults reduce first-sale setup effort | Self-configuration versus operator-prepared synthetic workspace | Participant records the specified sale and manual tender correctly, finds the receipt and knows how to correct a mistake |
+
+Run these sequentially, not as concurrent local model workloads. SETUP-01 is first;
+REVIEW-01 is blocked on the missing customer review implementation. SHOP-01 uses
+disposable synthetic fixtures only until a real customer separately approves use.
+
+### Study controls and decision rules
+
+- A named study owner prepares identical task scripts, exact variant revisions,
+  fixture data and a moderator script before sessions. Never route live customers
+  randomly into incomplete or unsafe flows.
+- Recruit only consenting participants from the intended segment. Include Myanmar
+  operators using their normal language and devices; do not substitute AI personas
+  for them. Keep contact/consent records private and outside product analytics.
+- First run formative usability sessions. Counterbalance variant order when a
+  participant tries both; record prior familiarity and moderator help. These
+  sessions find defects; their small counts do not establish conversion uplift.
+- Capture pseudonymous session code, variant/revision, product, device class,
+  task success, active task time, help requests, errors, and understanding of the
+  data/publication boundary. No real phone numbers, sales values or client files
+  in shared R&D output. Screen recordings need separate consent.
+- Any data loss, tenant exposure, wrong money result or false published/received
+  status stops that variant. Fix the cause and rerun the same regression task.
+- Prefer a variant only when it improves the prespecified task outcome without
+  worsening correctness, accessibility or recovery. Retain inconclusive and
+  negative results; do not keep changing the metric until a variant wins.
+- Before a quantitative live A/B test, declare the primary metric, baseline,
+  minimum worthwhile effect, sample-size calculation, assignment unit, run window
+  and stopping rule. Avoid repeated significance checking, mixing template
+  segments or claiming a win from pageviews. Traffic and permission are currently
+  unverified, so no live allocation or statistical winner is authorized here.
+
+### Delivery and scaling work order
+
+1. Reliable brief intake and a named operator to own the reply.
+2. Existing-customer access plus revision-bound preview/change-request workflow.
+3. Repeatable template setup with reviewed import and explicit exceptions.
+4. Hosted tenant isolation, backup/restore and complete operating journey proof.
+5. Consented usability sessions, then evidence-based iteration and measured rollout.
+
+Company coordination records the owner, next action and evidence link for each
+item. It does not authorize outreach, account creation or a release. The current
+corporate task's administrator/authenticated-agent dependency remains unresolved;
+do not claim an autonomous R&D team is operating until that dependency is verified.
