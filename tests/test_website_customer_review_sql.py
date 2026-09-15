@@ -120,6 +120,67 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         return dict(review_id=str(uuid4()), recipient_actor_id=RECIPIENT, expected_version=version,
                     expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
 
+    def http_client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from supermega_runtime.trial_runtime import create_trial_router
+        principals = {"operator": TrialPrincipal(WORKSPACE, OWNER, "human"),
+                      "customer": TrialPrincipal(WORKSPACE, RECIPIENT, "human"),
+                      "other": TrialPrincipal("rehearsal-b", "owner-b", "human"),
+                      "agent": TrialPrincipal(WORKSPACE, RECIPIENT, "agent")}
+        app = FastAPI()
+        # Synthetic resolver only: production continues using its existing
+        # server-validated authentication. No header-based auth is added there.
+        app.include_router(create_trial_router(store=self.adapter().store,
+            resolve_principal=lambda request: principals.get(request.headers.get("x-test-actor"))))
+        return TestClient(app)
+
+    def test_http_prepare_customer_feedback_retry_and_withdraw_real_database(self):
+        args = self.preparation_arguments()
+        body = dict(reviewId=args["review_id"], recipientActorId=args["recipient_actor_id"],
+                    expectedVersion=args["expected_version"], expiresAt=args["expires_at"])
+        base = "/api/trial/v1/website-reviews"
+        owner = {"x-test-actor": "operator"}
+        customer = {"x-test-actor": "customer"}
+        with self.http_client() as client:
+            prepared = client.post(base, headers=owner, json=body)
+            self.assertEqual(prepared.status_code, 200, prepared.text)
+            url = base + "/" + args["review_id"]
+            preview = client.get(url, headers=customer)
+            self.assertEqual(preview.status_code, 200, preview.text)
+            self.assertEqual(preview.headers["cache-control"], "private, no-store")
+            self.assertNotIn("recipientActorId", preview.json())
+            payload = dict(commandId=str(uuid4()), reviewId=args["review_id"],
+                           previewDigest=preview.json()["previewDigest"], note="ပိုတိုအောင်ရေးပေးပါ")
+            sent = client.post(url+"/change-requests", headers=customer, json=payload)
+            self.assertEqual(sent.status_code, 200, sent.text)
+            self.assertTrue(sent.json()["persisted"])
+            self.assertTrue(client.post(url+"/change-requests", headers=customer, json=payload).json()["replayed"])
+            self.assertEqual(client.post(url+"/withdraw", headers=customer, json={}).status_code, 403)
+            self.assertEqual(client.post(url+"/withdraw", headers=owner, json={}).status_code, 200)
+            denied = client.get(url, headers=customer)
+            self.assertEqual(denied.status_code, 403)
+            self.assertEqual(denied.headers["cache-control"], "private, no-store")
+
+    def test_http_review_auth_identity_size_and_method_boundaries(self):
+        review = self.retained_assignment()
+        url = "/api/trial/v1/website-reviews/" + str(review[0])
+        customer = {"x-test-actor": "customer"}
+        with self.http_client() as client:
+            for headers, status in (({}, 401), ({"x-test-actor": "other"}, 403), ({"x-test-actor": "agent"}, 403)):
+                result = client.get(url, headers=headers)
+                self.assertEqual(result.status_code, status)
+                self.assertEqual(result.headers["cache-control"], "private, no-store")
+            payload = dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2], note="Shorten title")
+            for invalid in (payload | {"actorId": "forged"}, payload | {"reviewId": str(uuid4())}, payload | {"note": "x"*2001}):
+                response = client.post(url+"/change-requests", headers=customer, json=invalid)
+                self.assertEqual(response.status_code, 422)
+                self.assertNotIn("forged", response.text)
+            oversized = client.post(url+"/change-requests", headers=customer, json=payload | {"note": "x"*17000})
+            self.assertEqual(oversized.status_code, 413)
+            self.assertEqual(oversized.headers["cache-control"], "private, no-store")
+            self.assertEqual(client.delete(url, headers=customer).status_code, 405)
+
     def test_operator_prepares_customer_reviews_and_withdraws_without_state_mutation(self):
         adapter = self.adapter()
         operator = TrialPrincipal(WORKSPACE, OWNER, "human")

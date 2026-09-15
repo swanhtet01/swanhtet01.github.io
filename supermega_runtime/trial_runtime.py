@@ -11,6 +11,8 @@ from typing import Any, Literal, Protocol, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
@@ -69,6 +71,7 @@ from supermega_runtime.trial_store import (
     PRODUCT_ACCEPTANCE_SURFACES,
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,
+    PostgresTrialStore,
     CommandResult,
     TrialClaimConflict,
     TrialIdempotencyConflict,
@@ -92,6 +95,7 @@ from supermega_runtime.trial_store import (
     validate_self_serve_claim_code,
 )
 from supermega_runtime.website_runtime import WEBSITE_HUMAN_EVENTS, validate_website_snapshot_source
+from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
 
 
 TRIAL_API_PREFIX = "/api/trial/v1"
@@ -1078,6 +1082,52 @@ def create_trial_router(
     """
 
     router = APIRouter(prefix=TRIAL_API_PREFIX, tags=["private-trial"])
+
+    async def website_review_request(request: Request, operation: Callable, *, body_limit: int | None = None) -> JSONResponse:
+        # Private prepared content and feedback never enter a shared HTTP cache.
+        headers = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
+        try:
+            principal = _resolve_principal(request, resolve_principal)
+            if principal.actor_kind != "human":
+                raise _error(403, "website_review_human_required")
+            if not isinstance(store, PostgresTrialStore):
+                raise _error(503, "website_review_storage_unavailable")
+            body = await _bounded_json_body(request, maximum_bytes=body_limit) if body_limit is not None else None
+            adapter = WebsiteCustomerReviewStore(store)
+            result = await run_in_threadpool(_invoke, lambda: operation(adapter, principal, body))
+            return JSONResponse(result, headers=headers)
+        except HTTPException as exc:
+            exc.headers = {**(exc.headers or {}), **headers}
+            raise
+
+    @router.post("/website-reviews")
+    async def prepare_website_review(request: Request) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if not isinstance(body, Mapping) or set(body) != {"reviewId", "recipientActorId", "expectedVersion", "expiresAt"}:
+                raise TrialValidationError("website_review_request_invalid")
+            return adapter.prepare(principal, review_id=body["reviewId"], recipient_actor_id=body["recipientActorId"],
+                                   expected_version=body["expectedVersion"], expires_at=body["expiresAt"])
+        return await website_review_request(request, operation, body_limit=2048)
+
+    @router.get("/website-reviews/{review_id}")
+    async def read_website_review(review_id: str, request: Request) -> JSONResponse:
+        return await website_review_request(request, lambda adapter, principal, _body: adapter.preview(principal, review_id))
+
+    @router.post("/website-reviews/{review_id}/change-requests")
+    async def request_website_changes(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if not isinstance(body, Mapping) or body.get("reviewId") != review_id:
+                raise TrialValidationError("website_review_request_invalid")
+            return adapter.request_changes(principal, body)
+        return await website_review_request(request, operation, body_limit=16384)
+
+    @router.post("/website-reviews/{review_id}/withdraw")
+    async def withdraw_website_review(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if body != {}:
+                raise TrialValidationError("website_review_request_invalid")
+            return adapter.revoke(principal, review_id)
+        return await website_review_request(request, operation, body_limit=128)
 
     @router.post("/workspaces")
     async def trial_self_serve_workspace(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
