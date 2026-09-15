@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { runInNewContext } from 'node:vm'
 
 import {
   MAX_WEBSITE_PAGES,
@@ -59,11 +60,22 @@ function contentChecks(workspace) {
 }
 
 test('assisted Website entry stays local-only and defers to recovery and edit states', () => {
-  assert.match(websiteProductSource, /const showAssistedWebsitePreview = storageMode !== 'managed'/)
-  assert.match(websiteProductSource, /view === 'content' && surface === 'preview'/)
+  assert.match(websiteProductSource, /const canRequestWebsiteSetup = storageMode !== 'managed'/)
+  assert.match(websiteProductSource, /const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'/)
   assert.match(websiteProductSource, /!storageIssue && !canRepairLocalStorage && !pendingRestoredDraft/)
   assert.match(websiteProductSource, /!hasUnsavedChanges && !starterSetupActive/)
-  assert.match(websiteProductSource, /href="https:\/\/supermega.dev\/contact\/\?product=website&source=website-preview">Request Website setup<\/a>/)
+  const safeLink = 'href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>'
+  assert.equal(websiteProductSource.split(safeLink).length - 1, 2)
+  assert.match(websiteProductSource, /canRequestWebsiteSetup && surface === 'work' \? <a/)
+  const expression = websiteProductSource.match(/const canRequestWebsiteSetup = ([\s\S]*?)\n\s*const showAssistedWebsitePreview/)?.[1]
+  assert.ok(expression)
+  const ready = { storageMode: 'local', view: 'content', storageIssue: '', canRepairLocalStorage: false, pendingRestoredDraft: null, hasUnsavedChanges: false, starterSetupActive: false }
+  for (const surface of ['preview', 'work']) {
+    assert.equal(runInNewContext(expression, {...ready, surface}), true)
+    for (const blocked of [{storageMode:'managed'}, {view:'publish'}, {storageIssue:'error'}, {canRepairLocalStorage:true}, {pendingRestoredDraft:{}}, {hasUnsavedChanges:true}, {starterSetupActive:true}]) {
+      assert.equal(runInNewContext(expression, {...ready, surface, ...blocked}), false)
+    }
+  }
   assert.match(websiteProductSource, /You do not need to edit the site yourself\./)
   assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
 })

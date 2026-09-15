@@ -279,10 +279,11 @@ export function WebsiteProduct() {
   const websiteSurfaceActionLabel = surface === 'preview'
     ? starterAvailable ? 'Edit sample' : 'Edit page'
     : 'Preview'
-  const showAssistedWebsitePreview = storageMode !== 'managed'
-    && view === 'content' && surface === 'preview'
+  const canRequestWebsiteSetup = storageMode !== 'managed'
+    && view === 'content'
     && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
     && !hasUnsavedChanges && !starterSetupActive
+  const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
     ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
@@ -1169,6 +1170,7 @@ export function WebsiteProduct() {
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{showAssistedWebsitePreview ? 'Review this local preview. SuperMega can prepare the finished website for you; nothing here is published.' : activeViewCopy.copy}</p>
             </div>
+            {canRequestWebsiteSetup && surface === 'work' ? <a className="website-button is-secondary" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
             {view === 'publish' ? (
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
@@ -1201,7 +1203,7 @@ export function WebsiteProduct() {
               <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Let SuperMega prepare your website' : websiteAgentJob}</h2>
               <p>{showAssistedWebsitePreview ? 'Use this preview as a reference. Tell us about your business; we confirm the scope, prepare the pages and send a preview for your approval. You do not need to edit the site yourself.' : websiteAgentReason}</p>
               {showAssistedWebsitePreview ? (
-                <a className="website-button is-primary is-compact" href="https://supermega.dev/contact/?product=website&source=website-preview">Request Website setup</a>
+                <a className="website-button is-primary is-compact" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>
               ) : (
                 <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
               )}
