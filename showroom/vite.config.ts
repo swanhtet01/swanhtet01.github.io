@@ -78,7 +78,7 @@ export default defineConfig(({ command }) => ({
   esbuild: command === 'build' ? {
     jsxFactory: '__supermegaCreateElement',
     jsxFragment: '__supermegaFragment',
-    jsxInject: "import { createElement as __supermegaCreateElement, Fragment as __supermegaFragment } from 'react'",
+    jsxInject: `import { productionElement as __supermegaCreateElement, productionFragment as __supermegaFragment } from ${JSON.stringify(resolve(projectRoot, 'src/production-jsx.ts').replaceAll('\\', '/'))}`,
   } : undefined,
   plugins: [
     clientSetupManifestPlugin(projectRoot),

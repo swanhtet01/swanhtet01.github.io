@@ -21,7 +21,8 @@ function compile(expression, classic, scope = {}) {
 test('production transform is explicit and development keeps automatic JSX', () => {
   assert.ok(config.includes("react({ jsxRuntime: command === 'build' ? 'classic' : 'automatic' })"))
   assert.ok(config.includes("esbuild: command === 'build' ? {"))
-  assert.ok(config.includes(injection))
+  assert.ok(config.includes('productionElement as __supermegaCreateElement, productionFragment as __supermegaFragment'))
+  assert.ok(config.includes("resolve(projectRoot, 'src/production-jsx.ts')"))
   assert.ok(config.includes("jsxFactory: '__supermegaCreateElement'"))
   assert.ok(config.includes("jsxFragment: '__supermegaFragment'"))
   function scan(directory) {
@@ -32,6 +33,15 @@ test('production transform is explicit and development keeps automatic JSX', () 
     }
   }
   scan(new URL('../showroom/src', import.meta.url).pathname.replace(/^\/([A-Z]:)/i, '$1'))
+})
+
+test('production adapter exports exact React identities without a wrapper', () => {
+  const source = readFileSync(new URL('../showroom/src/production-jsx.ts', import.meta.url), 'utf8')
+  const code = transformSync(source, { loader: 'ts', target: 'es2022', format: 'cjs' }).code
+  const module = { exports: {} }
+  runInNewContext(code, { require, module, exports: module.exports })
+  assert.equal(module.exports.productionElement, React.createElement)
+  assert.equal(module.exports.productionFragment, React.Fragment)
 })
 
 const fixtures = [
