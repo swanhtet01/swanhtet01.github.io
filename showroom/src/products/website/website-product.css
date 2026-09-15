@@ -2117,7 +2117,7 @@
 
 .website-preview-controls > button {
   min-width: 76px;
-  min-height: 36px;
+  min-height: 2.75rem;
   border-radius: 6px;
   padding: 0 10px;
   color: var(--website-muted);

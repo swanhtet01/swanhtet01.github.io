@@ -104,6 +104,7 @@ test('Website keeps readiness visible while detailed checks collapse before the 
 })
 
 test('mobile Website actions wrap complete labels without shrinking tap targets', () => {
+  assert.match(websiteProductCss, /\.website-preview-controls > button \{\s*min-width: 76px;\s*min-height: 2\.75rem;/)
   const mobile = websiteProductCss.slice(websiteProductCss.indexOf('@media screen and (max-width: 560px) {'))
   assert.match(mobile, /\.website-primary-actions > \.website-button \{\s*white-space: normal;\s*overflow-wrap: anywhere;\s*line-height: 1\.3;\s*padding-block: \.5rem;\s*text-align: center;\s*\}/)
   assert.match(websiteProductCss, /\.website-primary-actions > \.website-button,\s*\.website-site-settings > summary \{\s*min-width: 78px;\s*min-height: 46px;/)
