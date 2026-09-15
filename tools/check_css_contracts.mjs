@@ -378,6 +378,16 @@ check(/white-space:\s*normal/.test(productNameRules), 'counter item names wrap i
 check(/overflow-wrap:\s*anywhere/.test(productNameRules), 'unbroken counter item names stay inside their tile')
 check(!/white-space:\s*nowrap|text-overflow:\s*ellipsis|line-clamp|overflow:\s*hidden/.test(productNameRules), 'responsive counter name rules never hide the item identity')
 
+// The service-first setup panel must not compress the product-page heading.
+// These are source regression pins, not a substitute for rendered breakpoint QA.
+const entryCss = readFileSync(resolve(ROOT, CORE_CSS), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+const entryRules = [...entryCss.matchAll(/\.product-home-screen\s*\{([^}]+)\}/g)].map((match) => match[1]).join('\n')
+const entryChildren = [...entryCss.matchAll(/\.product-home-screen\s*>\s*\*\s*\{([^}]+)\}/g)].map((match) => match[1]).join('\n')
+check(/(?:^|;)\s*height:\s*auto\s*;/.test(entryRules), 'product entry grows with its service panel and product cards')
+check(/min-height:\s*100%\s*;/.test(entryRules), 'short product entry retains the available workspace height')
+check(/justify-content:\s*flex-start\s*;/.test(entryRules) && !/justify-content:\s*center/.test(entryRules), 'overflowing product entry never centers content above its scroll origin')
+check(/flex-shrink:\s*0\s*;/.test(entryChildren), 'product entry heading and setup panel cannot shrink into one another')
+
 console.log(
   `css contracts: ${checks} checks passed (${liveHexTotal} live hex under ${[...CEILINGS.values()].reduce((a, b) => a + b.hex, 0)} ceiling and ${livePxTotal} live px under ${[...CEILINGS.values()].reduce((a, b) => a + b.px, 0)} ceiling across ${CASCADES.size} stylesheets, ${varUseTotal} var() consumptions all resolving, ${lowerings.length} ceilings lowered)`,
 )
