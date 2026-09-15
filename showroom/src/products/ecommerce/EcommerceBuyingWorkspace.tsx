@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
+import { confirmManagedRequest, managedRequestWasConfirmed } from './managed-request-confirmation'
 
 import {
   buildEcommerceCheckoutQuote,
@@ -169,6 +170,7 @@ export function EcommerceBuyingWorkspace({
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
+  const [managedConfirmation, setManagedConfirmation] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
   const [cartDrafts, setCartDrafts] = useState<Record<string, string>>({})
@@ -325,6 +327,7 @@ export function EcommerceBuyingWorkspace({
   }, [freshQuoteId])
 
   const latestRequest = activeBuyingState.requests[0] ?? null
+  const managedDeliveryConfirmed = Boolean(onRecordManagedRequest && managedRequestWasConfirmed(latestRequest, managedConfirmation))
   const combinedOrderTimeline = useMemo(() => {
     const sharedRequests = commerceStorefrontRequests(commerceState)
     const sharedRequestIds = new Set(sharedRequests.map((request) => request.id))
@@ -1133,7 +1136,8 @@ export function EcommerceBuyingWorkspace({
         && Date.parse(retained.quote.expiresAt) > quotedAt.getTime()
         && cartMatchesRequest(cart, retained))
       if (retainedMatches && retained && onRecordManagedRequest) {
-        await onRecordManagedRequest(retained)
+        setManagedConfirmation('')
+        setManagedConfirmation(await confirmManagedRequest(retained, onRecordManagedRequest))
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
         setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')
@@ -1169,7 +1173,8 @@ export function EcommerceBuyingWorkspace({
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'order.request.submitted', ts: Date.now() })
       setFreshQuoteId('')
-      if (onRecordManagedRequest) await onRecordManagedRequest(request)
+      setManagedConfirmation('')
+      if (onRecordManagedRequest) setManagedConfirmation(await confirmManagedRequest(request, onRecordManagedRequest))
       recordBehaviorSignal(window.localStorage, {
         event: 'first_value_completed',
         product: 'ecommerce',
@@ -1338,7 +1343,7 @@ export function EcommerceBuyingWorkspace({
             </article>
           ) : quoteCurrent ? (
             <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
-              <span className="status-pill ready">{onRecordManagedRequest ? 'Request sent to Shop' : 'Request saved on this device'}</span>
+              <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved on this device'}</span>
               <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">
@@ -1348,7 +1353,7 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-              <p>{onRecordManagedRequest ? 'Company Shop received this request.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
+              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Saved on this device. Company Shop delivery is not verified here.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
               <button className="core-button secondary" disabled={!quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
