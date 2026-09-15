@@ -1324,8 +1324,8 @@ export function EcommerceBuyingWorkspace({
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
-            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
-              {quoteBusy ? 'Sending...' : 'Send order request'}
+            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-request-mode={onRecordManagedRequest ? 'managed' : 'local'} disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
+              {quoteBusy ? (onRecordManagedRequest ? 'Sending...' : 'Saving on this device...') : (onRecordManagedRequest ? 'Send order request' : 'Save request on this device')}
             </button> : null}
             <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
               ? 'Checking saved checkout recovery...'

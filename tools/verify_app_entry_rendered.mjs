@@ -546,7 +546,8 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
     formReady = await evalInPage(cdp, sessionId, `(() => {
       const workspace = document.querySelector('#ecommerce-buying-workspace');
       const form = workspace?.querySelector('form');
-      const submit = [...(form?.querySelectorAll('button') || [])].find((candidate) => candidate.textContent.trim() === 'Send order request');
+      const submit = form?.querySelector('button[data-request-mode="local"]');
+      if (submit?.textContent.trim() !== 'Save request on this device') return false;
       return Boolean(workspace?.open && form && submit && !submit.disabled);
     })()`)
     if (!formReady) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
