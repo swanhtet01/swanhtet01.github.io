@@ -19,15 +19,16 @@ test('service brief asks for a business result without requiring template knowle
   assert.match(html, /name="goal" required maxlength="4000"/)
 })
 
-function harness(responses) {
+function harness(responses, search = '') {
   const fields = new Map()
+  const events = new Map()
   let handler, resets = 0
   const calls = []
   const timers = new Map()
   let timerId = 0
   const form = {
     querySelector(selector) {
-      if (!fields.has(selector)) fields.set(selector, { value: '', addEventListener() {} })
+      if (!fields.has(selector)) fields.set(selector, { value: selector === '[name="product"]' ? 'guide' : '', addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
     addEventListener(name, callback) { if (name === 'submit') handler = callback },
@@ -36,7 +37,7 @@ function harness(responses) {
   const crypto = { randomUUID: () => 'fixed-local-retry-key' }
   runInNewContext(script, {
     document: { querySelector: selector => selector === '[data-contact-form]' ? form : null, referrer: '' },
-    location: { search: '', hash: '', href: 'https://supermega.dev/contact/' },
+    location: { search, hash: '', href: 'https://supermega.dev/contact/' + search },
     URLSearchParams, window: { crypto }, crypto,
     AbortController,
     setTimeout(callback, delay) { assert.equal(delay, 20000); timers.set(++timerId, callback); return timerId },
@@ -53,8 +54,25 @@ function harness(responses) {
     },
   })
   form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { fields, calls, timers, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { fields, calls, timers, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
+
+test('product handoffs prefill hidden context and product changes discard stale templates only', () => {
+  for (const product of ['shop', 'ecommerce', 'website']) {
+    const state = harness([], '?product=' + product + '&template=example-template')
+    assert.equal(state.fields.get('[name="product"]').value, product)
+    assert.equal(state.fields.get('[name="template"]').value, 'example-template')
+    state.fields.get('[name="company"]').value = 'Example business'
+    state.changeProduct(product === 'shop' ? 'website' : 'shop')
+    assert.equal(state.fields.get('[name="template"]').value, '')
+    assert.equal(state.fields.get('[name="company"]').value, 'Example business')
+    assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
+    assert.equal(state.calls.length, 0)
+  }
+  for (const search of ['?product=unknown&template=example', '?product=guide&template=example', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
+    assert.equal(harness([], search).fields.get('[name="template"]').value, '')
+  }
+})
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
 test('valid generated receipt confirms and clears the brief', async () => {

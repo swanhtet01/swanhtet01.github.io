@@ -640,7 +640,8 @@ const contactScript = `<script>(function(){
     return {attempted:true,proof:valid?values:null};
   }
   var requestedProduct=query.get('product'),managedIntelligenceRequest=query.get('source')==='managed-intelligence';if(product&&${JSON.stringify(['guide', ...publicProducts.map(item => item.id)])}.includes(requestedProduct||''))product.value=requestedProduct;
-  if(query.get('template')&&template)template.value=query.get('template');
+  var requestedTemplate=query.get('template')||'';
+  if(template&&product&&requestedProduct!=='guide'&&product.value===requestedProduct&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(requestedTemplate))template.value=requestedTemplate;
   if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
   if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
   var claimInput=form.querySelector('[name="trial_claim_code"]'),claimValue=(handoff.get('claim')||'').toUpperCase();
@@ -656,7 +657,7 @@ const contactScript = `<script>(function(){
     proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;
     if(copyHeading)copyHeading.textContent='Your setup is ready.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
   }
-  if(product)product.addEventListener('change',detachProofIfChanged);
+  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(managedIntelligenceRequest&&!handoff.toString()){
     if(heading)heading.textContent='Request managed company intelligence.';
