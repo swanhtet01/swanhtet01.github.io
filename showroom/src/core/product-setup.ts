@@ -2,6 +2,7 @@
 // directly, so the client setup registry can be exercised by a test rather
 // than only pinned as source text.
 import siteManifest from '../../../site-manifest.json' with { type: 'json' }
+import { activeProductContracts } from './product-visibility.ts'
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
@@ -77,6 +78,11 @@ export const productContracts: Record<SetupProductId, ProductContract> = {
   website: requireProductContract('website'),
   ecommerce: requireProductContract('ecommerce'),
 }
+
+// New-product selectors use this acquisition list. Keep productContracts complete:
+// saved Plant setups, route parsing and recovery still require its stable identity.
+export const activeSetupProductContracts: ProductContract[] = activeProductContracts(siteManifest)
+  .map(product => productContracts[product.runtimeId as SetupProductId])
 
 export function productDisplayName(product: SetupProductId) {
   return productContracts[product].name
