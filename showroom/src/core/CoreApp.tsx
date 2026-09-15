@@ -3096,7 +3096,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div className="form-actions"><Link className="core-button primary" to="/shop/?tab=counter">Continue existing managed Shop</Link><Link className="text-link" to="/settings/#controls">Open workspace controls</Link></div>
   </section> : managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
-    if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
+    if (unprovisioned) {
+      const catalogForm = <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
+        <div className="form-row"><label>SKU<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
+        <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
+        <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
+        <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
+        <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
+        <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
+        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
+      </form>
+      return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">{managedTemplate
         ? `Review the ${managedTemplate.name.en} starter catalog, confirm its opening values, and create the whole catalog once. No demo sales, customers, or appointments are copied.`
@@ -3111,25 +3121,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. This creates server-backed company records.`}</p>
       </form> : null}
       {managedTemplate ? <details className="secondary-setup-path"><summary>Start with one item instead</summary>
-      <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
-        <div className="form-row"><label>SKU<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
-        <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
-        <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
-        <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
-        <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
-        <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
-        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
-      </form>
-      </details> : <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
-        <div className="form-row"><label>SKU<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
-        <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
-        <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
-        <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
-        <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
-        <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
-        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
-      </form>}
+      {catalogForm}
+      </details> : catalogForm}
     </section>
+    }
     return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
