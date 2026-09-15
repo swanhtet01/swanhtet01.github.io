@@ -30,3 +30,11 @@ test('dialog announces the result only for the acknowledgement that was copied',
   assert.match(dialog, /bi\('Print order record'\)/)
   assert.doesNotMatch(dialog, /bi\('Print receipt'\)/)
 })
+
+test('active and archived orders open the same honestly labelled order record', () => {
+  const core = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const viewAction = core.split('\n').find(line => line.includes('data-order-receipt="view"'))
+  assert.ok(viewAction?.includes('>View order record</button>'), 'shared view action names the order record')
+  assert.doesNotMatch(core, />View receipt<\/button>/)
+  assert.match(core, /onViewReceipt\(acknowledgement\.artifact\)/)
+})
