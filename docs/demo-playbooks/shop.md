@@ -6,7 +6,7 @@ Who this is for: counter-first businesses that sell and track stock — the mani
 
 The pitch, verbatim from approved copy (eyebrow `POS-independent Shop Profit Control`):
 
-- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
+- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
 - `Shop Profit Control: see today’s operating money risk.`
 - `A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.`
 

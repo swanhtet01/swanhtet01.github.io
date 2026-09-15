@@ -6,7 +6,7 @@ Who this is for: sellers who take orders in chat or by phone and want a controll
 
 The pitch, verbatim from approved copy (eyebrow `Ecommerce maker`):
 
-- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
+- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
 - `Draft an ordering page from the current local Shop workspace.`
 - `Choose items from the current local Shop workspace, draft a browser-local catalog, cart, and quote, and save a recoverable request receipt. Nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved. Shop remains the price and stock record.`
 

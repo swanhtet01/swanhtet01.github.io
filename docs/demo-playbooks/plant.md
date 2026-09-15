@@ -6,7 +6,7 @@ Who this is for: factories and workshops that plan jobs and record output by shi
 
 The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
-- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
+- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
 - `Plan jobs, record output, and close shifts.`
 - `Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.`
 

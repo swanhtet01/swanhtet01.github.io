@@ -6,7 +6,7 @@ Who this is for: a company that needs a credible web presence without an agency 
 
 The pitch, verbatim from approved copy (eyebrow `Website maker`):
 
-- `Start with POS-independent Shop Profit Control, then use Plant, Website, and Ecommerce as focused local workflows.`
+- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
 - `Build a simple company website from a brief.`
 - `Answer a short business brief, edit finite pages, review a responsive preview, and download a standalone website. Request managed hosting when needed.`
 
