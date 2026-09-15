@@ -1100,6 +1100,15 @@ def create_trial_router(
             exc.headers = {**(exc.headers or {}), **headers}
             raise
 
+    @router.get("/website-reviews")
+    async def list_website_reviews(request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            query = request.query_params
+            if set(query) - {"after"} or len(query.getlist("after")) > 1:
+                raise TrialValidationError("website_review_cursor_invalid")
+            return adapter.list_reviews(principal, after=query.get("after"))
+        return await website_review_request(request, operation)
+
     @router.post("/website-reviews")
     async def prepare_website_review(request: Request) -> JSONResponse:
         def operation(adapter, principal, body):

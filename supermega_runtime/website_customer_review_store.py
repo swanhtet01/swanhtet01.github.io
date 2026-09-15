@@ -52,6 +52,32 @@ class WebsiteCustomerReviewStore:
             yield cursor, actor
         # Returning to the caller happens only after the outer transaction commits.
 
+    def list_reviews(self, principal: TrialPrincipal, *, after: str | None = None) -> dict[str, Any]:
+        """Staff metadata only; UUID keyset order is not chronological or a snapshot."""
+        if after is not None:
+            after = _uuid(after)
+        with self._transaction(principal, write=False, capability="website.write") as (cursor, actor):
+            if after is not None:
+                cursor.execute("select review_id from app_private.website_customer_reviews where workspace_id=%s and review_id=%s",
+                               (actor.workspace_id, after))
+                if cursor.fetchone() is None:
+                    raise TrialValidationError("website_review_cursor_invalid")
+            boundary = "and r.review_id>%s::uuid" if after is not None else ""
+            parameters = (actor.workspace_id, after) if after is not None else (actor.workspace_id,)
+            cursor.execute("""select r.review_id,r.content_revision,r.source_version,r.prepared_at,r.expires_at,
+                case when r.status='active' and r.expires_at<=clock_timestamp() then 'expired' else r.status end as status,
+                exists(select 1 from app_private.website_customer_feedback f
+                    where f.workspace_id=r.workspace_id and f.review_id=r.review_id) as has_changes
+                from app_private.website_customer_reviews r
+                where r.workspace_id=%s """ + boundary + " order by r.review_id limit 51", parameters)
+            rows = cursor.fetchall()
+            reviews = [{"reviewId": str(row["review_id"]), "contentRevision": row["content_revision"],
+                        "sourceVersion": row["source_version"], "preparedAt": row["prepared_at"].isoformat(),
+                        "expiresAt": row["expires_at"].isoformat(), "status": row["status"],
+                        "hasChangeRequests": row["has_changes"]} for row in rows[:50]]
+            return {"reviews": reviews, "nextAfter": reviews[-1]["reviewId"] if len(rows) > 50 else None,
+                    "order": "review_id_ascending", "publicationAuthorized": False}
+
     def prepare(self, principal: TrialPrincipal, *, review_id: str, recipient_actor_id: str,
                 expected_version: int, expires_at: str) -> dict[str, Any]:
         review_id, recipient = _uuid(review_id), _uuid(recipient_actor_id)

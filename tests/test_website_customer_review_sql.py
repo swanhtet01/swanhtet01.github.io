@@ -162,6 +162,66 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             self.assertEqual(denied.status_code, 403)
             self.assertEqual(denied.headers["cache-control"], "private, no-store")
 
+    def test_http_staff_review_list_is_bounded_private_and_read_only(self):
+        with self.transaction() as connection:
+            prepared = [self.prepare(connection) for _ in range(52)]
+            connection.commit()
+        with self.transaction(RECIPIENT) as connection:
+            self.feedback(connection, prepared[0], note="Private customer correction")
+            connection.commit()
+        owner = TrialPrincipal(WORKSPACE, OWNER, "human")
+        self.adapter().revoke(owner, str(prepared[1][0]))
+        # An all-zero UUID is accepted by the existing ID contract; the first
+        # page must not accidentally omit it by using an exclusive sentinel.
+        zero = "00000000-0000-0000-0000-000000000000"
+        self.adapter().prepare(owner, **(self.preparation_arguments() | {"review_id": zero}))
+        with pg._connect(self.admin_url) as connection:
+            before = connection.execute("select (select count(*) from app_private.website_customer_reviews),(select count(*) from app_private.website_customer_feedback)").fetchone()
+        base = "/api/trial/v1/website-reviews"
+        headers = {"x-test-actor": "operator"}
+        with self.http_client() as client:
+            for actor, status in ((None, 401), ("customer", 403), ("agent", 403), ("other", 403)):
+                response = client.get(base, headers={"x-test-actor": actor} if actor else {})
+                self.assertEqual(response.status_code, status, response.text)
+                self.assertEqual(response.headers["cache-control"], "private, no-store")
+            rows, after = [], None
+            for _ in range(10):
+                response = client.get(base, headers=headers, params={"after": after} if after else {})
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.headers["cache-control"], "private, no-store")
+                body = response.json()
+                self.assertEqual(set(body), {"reviews", "nextAfter", "order", "publicationAuthorized"})
+                self.assertFalse(body["publicationAuthorized"])
+                self.assertEqual(body["order"], "review_id_ascending")
+                self.assertLessEqual(len(body["reviews"]), 50)
+                for row in body["reviews"]:
+                    self.assertEqual(set(row), {"reviewId", "contentRevision", "sourceVersion", "preparedAt", "expiresAt", "status", "hasChangeRequests"})
+                self.assertNotIn("Private customer correction", response.text)
+                self.assertNotIn(RECIPIENT, response.text)
+                rows.extend(body["reviews"])
+                if not body["nextAfter"]:
+                    break
+                self.assertEqual(len(body["reviews"]), 50)
+                self.assertEqual(body["nextAfter"], body["reviews"][-1]["reviewId"])
+                after = body["nextAfter"]
+            else:
+                self.fail("pagination did not terminate")
+            ids = [row["reviewId"] for row in rows]
+            self.assertEqual(ids, sorted(set(ids)))
+            self.assertEqual(ids[0], zero)
+            self.assertTrue({str(review[0]) for review in prepared}.issubset(ids))
+            indexed = {row["reviewId"]: row for row in rows}
+            self.assertTrue(indexed[str(prepared[0][0])]["hasChangeRequests"])
+            self.assertFalse(indexed[str(prepared[1][0])]["hasChangeRequests"])
+            self.assertEqual(indexed[str(prepared[1][0])]["status"], "revoked")
+            for query in ("?after=bad", "?after=", f"?after={uuid4()}", f"?after={zero}&after={zero}", "?workspace=other"):
+                response = client.get(base + query, headers=headers)
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertEqual(response.headers["cache-control"], "private, no-store")
+        with pg._connect(self.admin_url) as connection:
+            after_counts = connection.execute("select (select count(*) from app_private.website_customer_reviews),(select count(*) from app_private.website_customer_feedback)").fetchone()
+        self.assertEqual(before, after_counts)
+
     def test_http_review_auth_identity_size_and_method_boundaries(self):
         review = self.retained_assignment()
         url = "/api/trial/v1/website-reviews/" + str(review[0])
