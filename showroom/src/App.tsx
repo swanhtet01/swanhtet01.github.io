@@ -8,6 +8,7 @@ import {
 
 const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
+const WebsiteCustomerReview = lazy(() => import('./products/website/WebsiteCustomerReview'))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 const WorkspaceControlsPage = lazy(() => import('./core/WorkspaceControlsPage').then((module) => ({ default: module.WorkspaceControlsPage })))
@@ -69,6 +70,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="website/review/:reviewId" element={<Suspense fallback={<ProductLoading name="Website review" />}><WebsiteCustomerReview /></Suspense>} />
         <Route element={<CoreLayout />}>
           <Route element={<ProductHomeEntry productDemoPath={productDemoPath} />} index />
           <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*" />
