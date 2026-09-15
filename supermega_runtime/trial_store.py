@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
+import logging
 import os
 import re
 from threading import RLock
@@ -21,6 +22,30 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
+
+_READINESS_LOG = logging.getLogger(__name__)
+_READINESS_STAGES = frozenset({
+    "configuration", "connect", "transaction", "probe", "role", "schema",
+    "audit", "context", "membership", "entitlements", "premium",
+    "cursor_close", "transaction_close", "connection_close",
+})
+_READINESS_FAILURES = frozenset({
+    "missing_configuration", "driver_unavailable", "contract_not_ready",
+    "unexpected_error",
+})
+
+
+def _log_readiness_failure(stage: str, category: str) -> None:
+    """Server-only closed vocabulary; never serialize exceptions or identities."""
+    safe_stage = stage if stage in _READINESS_STAGES else "unknown"
+    safe_category = category if category in _READINESS_FAILURES else "unknown"
+    try:
+        _READINESS_LOG.warning(
+            "trial_readiness_failure stage=%s category=%s", safe_stage, safe_category,
+        )
+    except Exception:
+        # A logging sink must not change readiness or the public response.
+        pass
 
 
 def _env_schema_version(default: int = 10) -> int:
@@ -4339,6 +4364,7 @@ class PostgresTrialStore:
         product_entitlements: tuple[str, ...] | None = None
         capabilities: frozenset[str] = frozenset()
         if not self.database_url:
+            _log_readiness_failure("configuration", "missing_configuration")
             return TrialReadiness(
                 backend="postgres",
                 database_ready=False,
@@ -4349,23 +4375,32 @@ class PostgresTrialStore:
                 audit_ready=False,
                 write_enabled=self.write_enabled,
             )
+        stage = "connect"
         try:
             with self._connect() as connection:
+                stage = "transaction"
                 with connection.transaction():
+                    stage = "probe"
                     with connection.cursor() as cursor:
                         cursor.execute("select 1 as ready")
                         database_ready = bool((cursor.fetchone() or {}).get("ready"))
+                        stage = "role"
                         self._assert_runtime_role(cursor)
                         role_ready = True
+                        stage = "schema"
                         self._assert_schema(cursor)
                         schema_ready = True
+                        stage = "audit"
                         self._assert_audit(cursor)
                         audit_ready = True
                         if auth_ready and principal is not None:
+                            stage = "context"
                             normalized = principal.normalized()
                             self._set_context(cursor, normalized)
+                            stage = "membership"
                             capabilities = self._load_membership(cursor, normalized)
                             membership_ready = True
+                            stage = "entitlements"
                             product_entitlements = self._product_entitlements(
                                 cursor, normalized.workspace_id
                             )
@@ -4373,10 +4408,19 @@ class PostgresTrialStore:
                                 capabilities, product_entitlements
                             )
                             if TRIAL_SCHEMA_VERSION >= 12:
+                                stage = "premium"
                                 premium_unlocked = self._premium_unlocked(
                                     cursor, normalized.workspace_id
                                 )
+                        stage = "cursor_close"
+                    stage = "transaction_close"
+                stage = "connection_close"
         except TrialNotReadyError as exc:
+            _log_readiness_failure(
+                stage,
+                "driver_unavailable" if "postgres_driver_ready" in exc.reasons
+                else "contract_not_ready",
+            )
             if "postgres_driver_ready" in exc.reasons:
                 database_ready = False
             elif "role_ready" in exc.reasons:
@@ -4388,6 +4432,7 @@ class PostgresTrialStore:
             elif "membership_ready" in exc.reasons:
                 membership_ready = False
         except Exception:
+            _log_readiness_failure(stage, "unexpected_error")
             database_ready = False
             role_ready = False
             schema_ready = False
