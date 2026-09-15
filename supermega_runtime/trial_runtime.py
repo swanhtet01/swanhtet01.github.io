@@ -1121,6 +1121,15 @@ def create_trial_router(
             return adapter.request_changes(principal, body)
         return await website_review_request(request, operation, body_limit=16384)
 
+    @router.get("/website-reviews/{review_id}/change-requests")
+    async def read_website_changes(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            query = request.query_params
+            if set(query) - {"after"} or len(query.getlist("after")) > 1:
+                raise TrialValidationError("website_review_cursor_invalid")
+            return adapter.feedback(principal, review_id, after=query.get("after"))
+        return await website_review_request(request, operation)
+
     @router.post("/website-reviews/{review_id}/withdraw")
     async def withdraw_website_review(review_id: str, request: Request) -> JSONResponse:
         def operation(adapter, principal, body):

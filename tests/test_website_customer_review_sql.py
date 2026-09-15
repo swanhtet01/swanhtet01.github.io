@@ -181,6 +181,74 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             self.assertEqual(oversized.headers["cache-control"], "private, no-store")
             self.assertEqual(client.delete(url, headers=customer).status_code, 405)
 
+    def test_http_staff_reads_retained_feedback_without_customer_or_tenant_leak(self):
+        review = self.retained_assignment()
+        url = "/api/trial/v1/website-reviews/" + str(review[0])
+        payload = dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2], note="ပိုတိုအောင်ရေးပေးပါ")
+        with self.http_client() as client:
+            self.assertEqual(client.post(url+"/change-requests", headers={"x-test-actor": "customer"}, json=payload).status_code, 200)
+            for headers, status in (({}, 401), ({"x-test-actor": "customer"}, 403),
+                                    ({"x-test-actor": "other"}, 403), ({"x-test-actor": "agent"}, 403)):
+                denied = client.get(url+"/change-requests", headers=headers)
+                self.assertEqual(denied.status_code, status)
+                self.assertEqual(denied.headers["cache-control"], "private, no-store")
+                self.assertNotIn(payload["note"], denied.text)
+            owner = {"x-test-actor": "operator"}
+            result = client.get(url+"/change-requests", headers=owner)
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.headers["cache-control"], "private, no-store")
+            self.assertEqual(result.json()["requests"][0]["note"], payload["note"])
+            self.assertEqual(set(result.json()), {"reviewId", "contentRevision", "sourceVersion", "previewDigest", "reviewStatus", "publicationAuthorized", "requests", "nextAfter"})
+            self.assertEqual(set(result.json()["requests"][0]), {"commandId", "note", "createdAt"})
+            for query in ("?after=bad", "?after=", "?workspaceId=other", "?after="+payload["commandId"]+"&after="+payload["commandId"]):
+                self.assertEqual(client.get(url+"/change-requests"+query, headers=owner).status_code, 422)
+            self.assertEqual(client.post(url+"/withdraw", headers=owner, json={}).status_code, 200)
+            retained = client.get(url+"/change-requests", headers=owner).json()
+            self.assertEqual(retained["reviewStatus"], "revoked")
+            self.assertFalse(retained["publicationAuthorized"])
+            self.assertEqual(retained["requests"], result.json()["requests"])
+
+    def test_staff_feedback_pagination_handles_equal_timestamps_and_bound_cursors(self):
+        from uuid import UUID
+        review = self.retained_assignment()
+        with self.transaction(RECIPIENT) as connection:
+            for number in range(1, 54):
+                self.feedback(connection, review, UUID(int=number), note=f"Correction {number}")
+            connection.commit()
+        adapter = self.adapter(write=False)
+        operator = TrialPrincipal(WORKSPACE, OWNER, "human")
+        first = adapter.feedback(operator, str(review[0]))
+        self.assertEqual(len(first["requests"]), 50)
+        self.assertEqual(first["nextAfter"], str(UUID(int=4)))
+        second = adapter.feedback(operator, str(review[0]), after=first["nextAfter"])
+        self.assertEqual([row["commandId"] for row in second["requests"]], [str(UUID(int=i)) for i in (3, 2, 1)])
+        self.assertIsNone(second["nextAfter"])
+        self.assertEqual(len({row["commandId"] for row in first["requests"] + second["requests"]}), 53)
+        other_review = self.retained_assignment()
+        with self.assertRaises(TrialValidationError):
+            adapter.feedback(operator, str(other_review[0]), after=first["nextAfter"])
+        with self.assertRaises(TrialValidationError):
+            adapter.feedback(operator, str(review[0]), after=str(uuid4()))
+        with self.transaction() as connection:
+            self.assertEqual(connection.execute("select count(*) from app_private.website_customer_feedback where review_id=%s", (review[0],)).fetchone()[0], 53)
+
+    def test_staff_feedback_retains_expired_and_stale_revision_without_reopening_it(self):
+        operator = TrialPrincipal(WORKSPACE, OWNER, "human")
+        with self.transaction() as connection:
+            expired = self.prepare(connection, expiry="1 second")
+            connection.commit()
+        time.sleep(1.05)
+        result = self.adapter(write=False).feedback(operator, str(expired[0]))
+        self.assertEqual(result["reviewStatus"], "expired")
+        self.assertEqual(result["requests"], [])
+        review = self.retained_assignment()
+        with self.transaction() as connection:
+            self.edit(connection)
+            connection.commit()
+        result = self.adapter(write=False).feedback(operator, str(review[0]))
+        self.assertEqual(result["reviewStatus"], "stale")
+        self.assertFalse(result["publicationAuthorized"])
+
     def test_operator_prepares_customer_reviews_and_withdraws_without_state_mutation(self):
         adapter = self.adapter()
         operator = TrialPrincipal(WORKSPACE, OWNER, "human")

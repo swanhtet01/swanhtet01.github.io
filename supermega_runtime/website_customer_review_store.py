@@ -135,6 +135,53 @@ class WebsiteCustomerReviewStore:
                       "publicationAuthorized": False}
         return result
 
+    def feedback(self, principal: TrialPrincipal, review_id: str, *, after: str | None = None) -> dict[str, Any]:
+        """Staff-only retained feedback. Reading never revives or approves a review.
+
+        The cursor identifies a retained row in this exact review; its server
+        timestamp plus command ID supplies deterministic keyset pagination.
+        Newly arriving feedback appears on a fresh first page, not mid-history.
+        """
+        review_id = _uuid(review_id)
+        if after is not None:
+            after = _uuid(after)
+        with self._transaction(principal, write=False, capability="website.write") as (cursor, actor):
+            cursor.execute("""select content_revision,source_version,preview_digest,recipient_actor_id,
+                case when status='active' and expires_at<=clock_timestamp() then 'expired' else status end as status
+                from app_private.website_customer_reviews where workspace_id=%s and review_id=%s""", (actor.workspace_id, review_id))
+            review = cursor.fetchone()
+            if review is None:
+                raise TrialPermissionDenied("website.write")
+            anchor = None
+            if after is not None:
+                cursor.execute("""select created_at,command_id from app_private.website_customer_feedback
+                    where workspace_id=%s and actor_id=%s and command_id=%s and review_id=%s limit 2""",
+                    (actor.workspace_id, review["recipient_actor_id"], after, review_id))
+                anchors = cursor.fetchall()
+                if len(anchors) != 1:
+                    raise TrialValidationError("website_review_cursor_invalid")
+                anchor = anchors[0]
+            parameters = [actor.workspace_id, review_id]
+            boundary = ""
+            if anchor is not None:
+                boundary = " and (created_at,command_id)<(%s,%s)"
+                parameters.extend([anchor["created_at"], anchor["command_id"]])
+            cursor.execute("""select command_id,source_version,preview_digest,note,created_at
+                from app_private.website_customer_feedback where workspace_id=%s and review_id=%s"""
+                + boundary + " order by created_at desc,command_id desc limit 51", parameters)
+            rows = cursor.fetchall()
+            # Even retained rows must match the immutable prepared revision.
+            if any(row["source_version"] != review["source_version"] or row["preview_digest"] != review["preview_digest"] for row in rows):
+                raise TrialValidationError("website_review_feedback_revision_invalid")
+            page = rows[:50]
+            result = {"reviewId": review_id, "contentRevision": review["content_revision"],
+                      "sourceVersion": review["source_version"], "previewDigest": review["preview_digest"],
+                      "reviewStatus": review["status"], "publicationAuthorized": False,
+                      "requests": [{"commandId": str(row["command_id"]), "note": row["note"],
+                                    "createdAt": row["created_at"].isoformat()} for row in page],
+                      "nextAfter": str(page[-1]["command_id"]) if len(rows) > 50 else None}
+        return result
+
     def request_changes(self, principal: TrialPrincipal, payload: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, Mapping) or set(payload) != {"commandId", "reviewId", "previewDigest", "note"}:
             raise TrialValidationError("website_review_payload_invalid")
