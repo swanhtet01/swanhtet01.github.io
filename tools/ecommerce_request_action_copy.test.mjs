@@ -10,14 +10,17 @@ test('launcher promises a local request, not a delivered Shop order', () => {
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
-test('assisted catalog setup is local-only and preserves the current preview tab', () => {
+test('assisted catalog setup stays available in both local views and preserves the draft tab', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*return \(/)?.[1]
   assert.ok(expression)
   const ready = { catalogHydrating: false, managedIdentity: null, catalog: { source: 'sample' }, draftIssue: '', draftBusy: false, workspaceView: 'preview' }
   assert.equal(vm.runInNewContext(expression, ready), true)
-  for (const blocked of [{catalogHydrating:true}, {managedIdentity:{}}, {catalog:{source:'unavailable'}}, {draftIssue:'read failed'}, {draftBusy:true}, {workspaceView:'setup'}]) {
-    assert.equal(vm.runInNewContext(expression, {...ready,...blocked}), false)
+  assert.equal(vm.runInNewContext(expression, {...ready,workspaceView:'setup'}), true)
+  for (const workspaceView of ['preview','setup']) {
+    for (const blocked of [{catalogHydrating:true}, {managedIdentity:{}}, {catalog:{source:'unavailable'}}, {draftIssue:'read failed'}, {draftBusy:true}]) {
+      assert.equal(vm.runInNewContext(expression, {...ready,workspaceView,...blocked}), false)
+    }
   }
   assert.match(product, /product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer"/)
   assert.match(product, /sample requests are not live orders/)

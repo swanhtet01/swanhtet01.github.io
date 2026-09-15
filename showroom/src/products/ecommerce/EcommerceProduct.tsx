@@ -1781,7 +1781,6 @@ export function EcommerceProduct() {
 
   const showAssistedCatalogSetup = !catalogHydrating && !managedIdentity
     && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
-    && workspaceView === 'preview'
 
   return (
     <div className="workspace-screen ecommerce-product">
