@@ -10,6 +10,17 @@ test('launcher promises a local request, not a delivered Shop order', () => {
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
+test('phone catalog remains readable with a retained Desktop preview selection', () => {
+  const css = readFileSync(new URL('../showroom/src/products/ecommerce/ecommerce-product.css', import.meta.url), 'utf8')
+  const block = css.slice(css.indexOf('/* A retained Desktop preview selection'), css.indexOf('/* ============================================================================', css.indexOf('/* A retained Desktop preview selection')))
+  assert.match(block, /@media \(max-width: 760px\)/)
+  assert.match(block, /\.ecommerce-preview-frame \.storefront-preview \.storefront-grid\s*\{\s*grid-template-columns: minmax\(0, 1fr\);/)
+  assert.match(block, /grid-template-columns: 4rem minmax\(0, 1fr\)/)
+  for (const [index, tag] of ['small', 'strong', 'span', 'b'].entries()) {
+    assert.ok(block.includes(`article:not(:has(> .storefront-product-photo)) > ${tag} { grid-column: 2; grid-row: ${index + 1}; }`))
+  }
+  assert.ok(block.includes('> .storefront-request-button { grid-column: 1 / -1; grid-row: 5; }'))
+})
 test('local entry consistently names a sample request in source and acceptance contracts', () => {
   for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx', './verify_app_build.mjs', './verify_app_release_live.mjs', './verify_exact_app_preview.mjs']) {
     const text = readFileSync(new URL(path, import.meta.url), 'utf8')

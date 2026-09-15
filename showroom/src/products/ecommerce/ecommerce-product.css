@@ -1947,6 +1947,22 @@
    ========================================================================== */
 .storefront-grid article > .storefront-product-photo { object-fit: cover; }
 
+/* A retained Desktop preview selection must not squeeze two cards onto a phone. */
+@media (max-width: 760px) {
+  .ecommerce-preview-frame .storefront-preview .storefront-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) {
+    grid-template-columns: 4rem minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto;
+  }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > small { grid-column: 2; grid-row: 1; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > strong { grid-column: 2; grid-row: 2; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > span { grid-column: 2; grid-row: 3; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > b { grid-column: 2; grid-row: 4; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > .storefront-request-button { grid-column: 1 / -1; grid-row: 5; }
+}
+
 /* ============================================================================
    Photo-first storefront cards (2026-08-19). A card whose item carries a
    device-local photo flips to the merchandising layout customers know from
