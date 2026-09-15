@@ -1279,7 +1279,7 @@ if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settin
   || !coreShellSource.includes('aria-label="Current product navigation"')
   || !coreShellSource.includes('activeNavigation.map((item)')
   || !coreShellSource.includes('mobileNavigation.map((item)')
-  || !coreShellSource.includes("const showSignupLink = !accountEntryRoute && !routeProduct && !setupRoute")
+  || !coreShellSource.includes("const showAssistedSetupLink = !accountEntryRoute && !routeProduct && !setupRoute && portalAccess.status !== 'ready'")
   || !coreShellSource.includes("{canSwitchProduct ? <Link to=\"/?choose=1\">Switch</Link> : null}")
   || !coreCssSource.includes('grid-template-columns: repeat(auto-fit,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line);')
   || !coreCssSource.includes('overflow: hidden; border-top: 1px solid var(--core-line);')

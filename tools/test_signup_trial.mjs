@@ -306,7 +306,8 @@ check(!appSource.includes('<Navigate replace to="/login" />} path="signup"'), 'a
 
 const shellSource = readFileSync('showroom/src/core/CoreShell.tsx', 'utf8')
 const loginSource = readFileSync('showroom/src/core/ManagedLoginPage.tsx', 'utf8')
-check(shellSource.split('to={signupPath}').length - 1 === 2, 'desktop and mobile product pages preserve product intent in Free trial links')
+check(shellSource.split('href={assistedSetupHref}').length - 1 === 2, 'desktop and mobile entry offer assisted setup instead of a trial detour')
+check(shellSource.includes("portalAccess.status !== 'ready'") && !shellSource.includes('>Free trial</Link>'), 'assigned company portal does not advertise a trial')
 check(loginSource.split('to={signupPath}').length - 1 === 1, 'managed login retains one product-specific trial link')
 const unavailableLogin = loginSource.slice(loginSource.indexOf('aria-label="Company account unavailable"'))
 check(unavailableLogin.includes('to="/?choose=1">Try a sample — no account</Link>'), 'unavailable login offers the no-account sample chooser directly')

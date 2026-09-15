@@ -7,6 +7,15 @@ const source = await read('showroom/src/core/CoreShell.tsx')
 const entry = source.slice(source.indexOf('export function ProductHomePage()'))
 const message = 'We set it up. You approve the result and run your business.'
 
+test('both shell headers offer setup help without changing login or signup routes', () => {
+  assert.equal(source.split('href={assistedSetupHref}').length - 1, 2)
+  assert.equal(source.split('>Setup help</a>').length - 1, 2)
+  assert.ok(source.includes("const showAssistedSetupLink = !accountEntryRoute && !routeProduct && !setupRoute && portalAccess.status !== 'ready'"))
+  assert.ok(source.includes('to={companyLoginPath}'))
+  assert.ok(!source.includes('>Free trial</Link>'))
+  assert.ok(source.includes('https://supermega.dev/contact/?product=guide&source=assisted-app-header'))
+})
+
 test('new visitors get assisted setup, without silently activating or replacing workspaces', () => {
   assert.ok(entry.includes(message))
   assert.match(entry, /!managedPortal && productSetups && !anyStarted \? \(\s*<section aria-label="Setup by SuperMega"/)

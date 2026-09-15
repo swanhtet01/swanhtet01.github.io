@@ -453,11 +453,7 @@ export function CoreLayout() {
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
   const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
-  const signupPath = routeProduct
-    ? `/signup?product=${signupProductSlug(routeProduct)}`
-    : settingsProduct
-      ? `/signup?product=${signupProductSlug(settingsProduct)}`
-      : '/signup'
+  const assistedSetupHref = 'https://supermega.dev/contact/?product=guide&source=assisted-app-header'
   const setupRoute = customerSettingsRoute || internalBuilderRoute
   const setupNavigation: NavigationItem = internalBuilderRoute
     ? { to: '/internal/client-builder/', label: 'Client builder' }
@@ -472,7 +468,7 @@ export function CoreLayout() {
       ? [productsNavigation]
       : []
   const mobileNavigation = activeNavigation
-  const showSignupLink = !accountEntryRoute && !routeProduct && !setupRoute
+  const showAssistedSetupLink = !accountEntryRoute && !routeProduct && !setupRoute && portalAccess.status !== 'ready'
   // Design phase 3 "bottom-nav work modes", Shop slice: on phones the fixed
   // bottom bar carries Shop's four task modes instead of the two-link product
   // nav. Resolution of the active tab is shared with OperationsPage
@@ -561,10 +557,10 @@ export function CoreLayout() {
         {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{showSignupLink ? <Link className="account-shell-link signup-shell-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{showAssistedSetupLink ? <a className="account-shell-link signup-shell-link" href={assistedSetupHref}>Setup help</a> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>{bi('Company login')}</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{showSignupLink ? <Link className="account-shell-link mobile-signup-topbar-link" to={signupPath}>Free trial</Link> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{showAssistedSetupLink ? <a className="account-shell-link mobile-signup-topbar-link" href={assistedSetupHref}>Setup help</a> : null}{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -726,7 +722,7 @@ export function ProductHomePage() {
           <p>Want to look around first? The sample workspaces below are optional. They are not a live customer setup.</p>
         </section>
       ) : nextSetupStep ? (
-        <p className="platform-start-nudge"><strong>Your saved work stays here.</strong> For another product, <a className="platform-start-link" href={`https://supermega.dev/contact/?product=${nextSetupStep[0] === 'commerce' ? 'shop' : nextSetupStep[0]}&source=assisted-app-entry`}>request {nextSetupStep[1]} setup</a>. SuperMega prepares it for your review.</p>
+        <p className="platform-start-nudge"><strong>Your saved work stays here.</strong> For another product, <a className="platform-start-link" href={`https://supermega.dev/contact/?product=${signupProductSlug(nextSetupStep[0])}&source=assisted-app-entry`}>request {nextSetupStep[1]} setup</a>. SuperMega prepares it for your review.</p>
       ) : null}
       <nav aria-label="Choose product" className="product-track-grid">
         {customerProducts.filter(([name]) => managedPortal
