@@ -13,8 +13,11 @@ import io
 import json
 import os
 import unittest
+from email.message import Message
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
+from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
+from urllib.response import addinfourl
 
 import supermega_runtime.activation_email as activation_email
 
@@ -121,6 +124,57 @@ class ActivationEmailTests(unittest.TestCase):
         env_patch, opener_patch = self._patched(opener, {"RESEND_API_KEY": "re_test_key"})
         with env_patch, opener_patch:
             self.assertFalse(_send())
+
+    def test_transport_installs_redirect_denial_and_bounded_timeout(self) -> None:
+        opener = _RecordingOpener()
+        with patch.dict(os.environ, {"RESEND_API_KEY": "re_test_key"}, clear=True):
+            with patch.object(activation_email, "build_opener", return_value=opener) as factory:
+                with patch.object(opener, "open", wraps=opener.open) as send:
+                    self.assertTrue(_send())
+        handlers = factory.call_args.args
+        self.assertTrue(any(isinstance(handler, ProxyHandler) and handler.proxies == {} for handler in handlers))
+        self.assertTrue(any(isinstance(handler, activation_email._RefuseRedirects) for handler in handlers))
+        self.assertEqual(send.call_args.kwargs["timeout"], 9.0)
+        self.assertEqual(opener.requests[0].full_url, "https://api.resend.com/emails")
+        self.assertEqual(opener.requests[0].get_method(), "POST")
+
+    def test_redirect_handler_never_reissues_request(self) -> None:
+        handler = activation_email._RefuseRedirects()
+        request = Request("https://api.resend.com/emails", data=b"{}", method="POST")
+        for code in (301, 302, 303, 307, 308):
+            for target in ("https://other.example.invalid/emails", "https://api.resend.com/other", "http://api.resend.com/emails"):
+                with self.subTest(code=code, target=target):
+                    self.assertIsNone(handler.redirect_request(request, None, code, "redirect", {}, target))
+                    # Full urllib error chain, with synthetic HTTPS transport:
+                    # the default error handler raises after redirect denial.
+                    calls = []
+
+                    class SyntheticHTTPS(HTTPSHandler):
+                        def https_open(self, req):
+                            calls.append(req.full_url)
+                            headers = Message()
+                            headers["Location"] = target
+                            response = addinfourl(io.BytesIO(), headers, req.full_url, code)
+                            response.msg = "redirect"
+                            return response
+
+                    offline_opener = build_opener(ProxyHandler({}), activation_email._RefuseRedirects(), SyntheticHTTPS())
+                    with self.assertRaises(HTTPError) as failure:
+                        offline_opener.open(request)
+                    failure.exception.close()
+                    self.assertEqual(calls, ["https://api.resend.com/emails"])
+
+    def test_provider_rejection_and_transport_setup_failure_are_nonfatal(self) -> None:
+        for status in (301, 400, 401, 429, 500):
+            with self.subTest(status=status):
+                opener = _RecordingOpener(status=status)
+                env_patch, opener_patch = self._patched(opener, {"RESEND_API_KEY": "re_test_key"})
+                with env_patch, opener_patch:
+                    self.assertFalse(_send())
+                self.assertEqual(len(opener.requests), 1)
+        with patch.dict(os.environ, {"RESEND_API_KEY": "re_test_key"}, clear=True):
+            with patch.object(activation_email, "build_opener", side_effect=OSError("unavailable")):
+                self.assertFalse(_send())
 
 
 if __name__ == "__main__":

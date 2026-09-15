@@ -17,12 +17,19 @@ from __future__ import annotations
 import json
 import os
 from urllib.error import HTTPError, URLError
-from urllib.request import ProxyHandler, Request as UrlRequest, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request as UrlRequest, build_opener
 
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
 _TIMEOUT_SECONDS = 9.0
 _DEFAULT_FROM = "SuperMega <leads@supermega.dev>"
 _MAX_EMAIL_LENGTH = 160
+
+
+class _RefuseRedirects(HTTPRedirectHandler):
+    """Never forward the provider credential or recipient payload elsewhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def _welcome_text(business_name: str) -> str:
@@ -83,11 +90,14 @@ def send_self_serve_welcome_email(
         },
         method="POST",
     )
-    opener = build_opener(ProxyHandler({}))
     try:
+        opener = build_opener(ProxyHandler({}), _RefuseRedirects())
         with opener.open(request, timeout=_TIMEOUT_SECONDS) as response:
             return 200 <= int(getattr(response, "status", 0) or 0) < 300
-    except (HTTPError, URLError, OSError, TimeoutError, ValueError):
+    except HTTPError as error:
+        error.close()
+        return False
+    except (URLError, OSError, TimeoutError, ValueError):
         return False
 
 
