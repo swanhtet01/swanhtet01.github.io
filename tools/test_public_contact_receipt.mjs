@@ -8,6 +8,17 @@ const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map(match => match[1]).find(value => value.includes('[data-contact-form]'))
 assert.ok(script, 'actual generated contact script exists')
 
+test('service brief asks for a business result without requiring template knowledge', () => {
+  assert.match(html, /Tell us what your business needs\./)
+  assert.match(html, /We set it up\. You review\./)
+  assert.match(html, /scope, price and timing/)
+  assert.match(html, /Going live is a separate step after approval/)
+  assert.match(html, /<input type="hidden" name="template" maxlength="120"/)
+  assert.doesNotMatch(html, /Template, if known|>Send workflow<|>Send the workflow</)
+  assert.match(html, />Request setup<\/button>/)
+  assert.match(html, /name="goal" required maxlength="4000"/)
+})
+
 function harness(responses) {
   const fields = new Map()
   let handler, resets = 0
