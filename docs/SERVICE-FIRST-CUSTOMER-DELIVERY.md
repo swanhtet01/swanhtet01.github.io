@@ -90,8 +90,45 @@ explicit accept/reject reasons instead of optimizing for an arbitrary test count
 
 ## Current gaps
 
-The local app entry and header have service-first copy. The contact receipt guard
-and its release-test wiring are independently accepted source changes. The public
-contact page still needs a captured visual review and copy simplification. The
-customer preview/approval lifecycle described here is not yet verified end-to-end.
+The local app entry, header, public brief and product preview entry points now
+use service-first copy. Public brief desktop/tablet/mobile inspection is retained
+in the local three-product QA evidence folder; this is not hosted delivery proof.
+Contact receipts preserve later edits, pin uncertain retries to the original
+payload/reference and permit corrections after narrowly recognized pre-delivery
+validation failures. Those source corrections through `338ae787` were independently
+accepted. Full-field regression coverage was added in `89f26891`.
+
+The customer preview/approval lifecycle described here is not yet verified end-to-end.
 No new hosted, customer, publishing, payment, stock or provider authority is granted.
+
+## Reuse map for the next delivery slice
+
+Source inspection on 2026-09-15 identified these existing boundaries:
+
+| Existing source | Reuse | Missing proof or implementation |
+| --- | --- | --- |
+| `showroom/src/core/CoreShell.tsx` | Assigned-product portal routing and managed access state | Customer-specific review access must be established, not inferred from a URL |
+| `showroom/src/products/website/WebsiteProduct.tsx` | `approveCurrentRevision`, evidence capture and retained approved site file | Existing operator workflow is not an independently authenticated customer acceptance journey |
+| `showroom/src/products/website/WebsiteProduct.tsx` | `portalViewOnly` and operator restrictions | Do not grant editing privileges merely so a customer can request changes |
+| `tools/create_public_vercel_output.mjs` | Validated brief intake with receipt and idempotency | An intake receipt is not a delivery record, customer account or approval |
+
+Do not create a second identity, publishing or approval authority. Before adding
+customer review controls, trace the existing server authorization and revision
+contract. A typed reviewer name is an attestation, not authenticated customer proof.
+
+The next complete journey must demonstrate:
+
+1. An authorized customer sees only their prepared revision, with a concise
+   checklist and no mandatory editing controls.
+2. A change request retains the exact reviewed revision and does not publish or
+   silently change the operator's work.
+3. Approval records the authenticated actor and exact revision; later edits make
+   that approval stale. Operator approval must not be relabeled customer approval.
+4. Unauthorized and stale-revision actions fail without losing the customer's
+   draft feedback; retries do not duplicate requests.
+5. A separate release step binds hosted identity and recovery evidence. The
+   customer can distinguish preview approval, deployment pending and verified live.
+
+These are acceptance requirements, not newly implemented capabilities. Reuse the
+Website path first, then qualify Ecommerce catalog review and Shop setup acceptance
+against their actual state models rather than assuming identical semantics.
