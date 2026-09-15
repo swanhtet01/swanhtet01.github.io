@@ -372,7 +372,7 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v4")
   || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
   || !coreSource.includes("initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}")
   || !coreSource.includes('const [query, setQuery] = useState(initialQuery)')
-  || !coreSource.includes('restoredDraft?.customer || initialCustomer')
+  || !coreSource.includes('createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer)')
   || !coreCssSource.includes('.service-booking-form')
   || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'supabase', 'openai', 'anthropic'].some((marker) => `${shopServiceScheduleSource}\n${shopServiceScheduleUiSource}`.toLowerCase().includes(marker.toLowerCase()))) fail('shop_service_schedule_crossed_external_boundary')
@@ -6120,7 +6120,7 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !shopCounterContract.includes("localDemoStatus === 'records-at-risk' ? 'Local demo · records at risk' : 'Local demo · on this device'")
   || !coreSource.includes("shopTradeDemoStatus === 'loading' || shopTradeDemoStatus === 'error'")
   || !shopCounterContract.includes('if (!nextQuantity && unitCount === 1) setCartOpen(false)')
-  || !shopCounterContract.includes("setPayment('Cash')\n    setOutcome('paid_handoff')\n    setCartOpen(false)")
+  || !shopCounterContract.includes("tickets.dispatch({ kind: 'save', basket: emptyCounterBasket() })\n    setCartOpen(false)")
   || !shopCounterContract.includes("{unitCount ? <button aria-controls=\"shop-current-sale\"")
   || !coreSource.includes("presentation: 'counter'")
   || !coreSource.includes("channel: 'Walk-in'")
@@ -7328,11 +7328,13 @@ if (!coreSource.includes("const commerceTab = requestedShopTemplateId && request
 // Lockstep with the G1 counter slice: the cart's Clear control renders through
 // bi('Clear'), whose table entry is CONFIRMED, so this is one of the two places on
 // the counter where Burmese actually reaches the operator today. The control, its
-// handler and its conditional rendering are what this pin has always protected and
-// they are unchanged; only the label is now composed.
-if (!coreSource.includes('{unitCount ? <button className="text-link" onClick={clearSale} type="button">{bi(\'Clear\')}</button> : null}')
+// handler and its conditional rendering are protected, including unavailable saved SKUs.
+if (!coreSource.includes('{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{bi(\'Clear\')}</button> : null}')
   || !coreSource.includes('{unitCount ? <><div className="shop-sale-details">')
-  || !coreSource.includes('disabled={disabled} onClick={reviewSale}')
+  || !coreSource.includes('disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale}')
+  || !coreSource.includes('!tickets.checkpoint()')) fail('shop_counter_recovery_gate_missing')
+if (!coreSource.includes('if (!persistLocalDraft) return createCounterTicketSession(null, null, initialCustomer)')
+  || coreSource.includes('window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY')
   || !coreCssSource.includes('.shop-item-search input { min-height: 2.75rem;')) fail('shop_counter_progressive_disclosure_missing')
 if (coreSource.includes('>All apps</Link>')
   || coreSource.includes('>All products</Link>')
