@@ -3175,7 +3175,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         : 'This browser would not promise to keep Shop records on this device. If the device runs low on space, records saved here can be cleared without warning.'}</p>
       {storageDurability.quotaExceeded
         ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
-        : <Link to="/settings/#controls">Open Settings</Link>}
+        : <Link to="/settings/#workspace-recovery">Back up records</Link>}
     </div>
 
   // Stuck-till escape hatch. 'conflict' and 'unavailable' both hold canWrite false with

@@ -1127,6 +1127,17 @@ test('the settings page renders the warning beside the backup control it is abou
 // It must NOT reach the till. A device-wide limit rendered in Shop puts a second storage
 // reading in front of an owner counting sales, in the one product whose meter is already
 // measuring something else.
+test('eviction warning leads directly to the existing backup panel', async () => {
+  const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  const notice = core.slice(core.indexOf('const storageDurabilityNotice ='), core.indexOf('// Stuck-till escape hatch.'))
+  assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">Back up records</Link>'))
+  assert.ok(!notice.includes('to="/settings/#controls"'))
+  assert.ok(page.includes('id="workspace-recovery"'))
+  assert.ok(page.includes("window.location.hash === '#workspace-recovery'"))
+  assert.ok(page.includes("scrollIntoView({ block: 'start' })"))
+})
+
 test('the device warning stays out of the product workspaces', async () => {
   const coreApp = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(
