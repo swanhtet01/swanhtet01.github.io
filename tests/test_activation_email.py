@@ -14,12 +14,26 @@ import json
 import os
 import unittest
 from email.message import Message
+from html.parser import HTMLParser
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 from urllib.response import addinfourl
 
 import supermega_runtime.activation_email as activation_email
+
+
+class _EmailHTML(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags = []
+        self.content = []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    def handle_data(self, data):
+        self.content.append(data)
 
 
 class _RecordingOpener:
@@ -93,6 +107,25 @@ class ActivationEmailTests(unittest.TestCase):
         self.assertEqual(payload["subject"], "Company account created - Yangon Tyre and Service | SuperMega")
         # The courtesy email never carries secrets or session material.
         self.assertNotIn("Bearer", payload["text"])
+        self.assertEqual(payload["html"], activation_email._welcome_html("Yangon Tyre and Service"))
+
+    def test_html_escapes_names_and_has_only_the_fixed_sign_in_link(self) -> None:
+        for name in ("မြန်မာ ဆိုင်", '<img src="https://example.invalid/pixel" onerror="alert(1)">', "A & B <Shop>"):
+            with self.subTest(name=name):
+                html = activation_email._welcome_html(name)
+                parsed = _EmailHTML()
+                parsed.feed(html)
+                visible = "".join(parsed.content)
+                for section in activation_email._welcome_sections(name):
+                    self.assertIn(section, visible)
+                links = [attrs.get("href") for tag, attrs in parsed.tags if tag == "a"]
+                self.assertEqual(links, ["https://app.supermega.dev/login"])
+                for tag, attrs in parsed.tags:
+                    self.assertNotIn(tag, ("img", "script", "iframe", "form", "input", "link"))
+                    self.assertFalse(any(key.startswith("on") or key == "src" for key in attrs))
+                self.assertIn('<html lang="en">', html)
+                self.assertIn('name="viewport"', html)
+                self.assertLess(len(html.encode("utf-8")), 8000)
 
     def test_welcome_has_one_sign_in_action_and_precise_status(self) -> None:
         text = activation_email._welcome_text("Example Shop")
