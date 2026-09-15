@@ -325,6 +325,13 @@ async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText, 
   return latest
 }
 
+export function counterCaptureReady(state) {
+  return ['PAYMENT', 'Keep as open order', 'Total', 'Review & complete sale']
+    .every(needle => (state?.text || '').includes(needle))
+    && Boolean(state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton)
+    && state?.drawerTransitionSettled === true && state?.accessibility?.ok === true
+}
+
 async function exerciseShopCounter(cdp, sessionId, mobile) {
   const added = await evalInPage(cdp, sessionId, `(() => {
     const tile = [...document.querySelectorAll('.shop-product-tile')]
@@ -425,9 +432,7 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
         accessibility,
       };
     })()`)
-    if (expectedText.every((needle) => (state?.text || '').includes(needle))
-      && state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton
-      && (!mobile || state?.drawerTransitionSettled)) break
+    if (counterCaptureReady(state)) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
   const missingText = expectedText.filter((needle) => !(state?.text || '').includes(needle))
@@ -946,8 +951,7 @@ const tests = [
     route: '/?demo=plant',
     width: 1280,
     height: 900,
-    expectedPath: (path) => path.startsWith('/plant/'),
-    expectedPathLabel: '/plant/',
+    expectedPath: '/plant/?tab=production',
     expectedText: ['Plant'],
     seed: {},
   },

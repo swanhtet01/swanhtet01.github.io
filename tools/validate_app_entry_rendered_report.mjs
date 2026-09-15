@@ -53,7 +53,7 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: 'shop-counter-mini-mart-mobile-390x844.png',
     semantics: 'shop-counter',
   },
-  { name: 'demo plant opens explicit plant route', route: '/?demo=plant', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/plant/', screenshot: null },
+  { name: 'demo plant opens explicit plant route', route: '/?demo=plant', viewport: '1280x900', width: 1280, height: 900, path: '/plant/?tab=production', screenshot: null },
   { name: 'desktop Plant shows the browser-local working sample', route: '/plant/', viewport: '1280x900', width: 1280, height: 900, path: '/plant/?tab=production', screenshot: 'plant-working-sample-desktop-1280x900.png' },
   { name: 'mobile Plant shows the browser-local working sample', route: '/plant/', viewport: '390x844 mobile', width: 390, height: 844, path: '/plant/?tab=production', screenshot: 'plant-working-sample-mobile-390x844.png' },
   { name: 'demo website opens explicit website route', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/website/', screenshot: null },

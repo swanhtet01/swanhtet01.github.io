@@ -4,6 +4,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
+import { counterCaptureReady } from './verify_app_entry_rendered.mjs'
+
+test('counter capture waits for persisted basket readiness without accepting disabled controls', () => {
+  const ready = { text: 'PAYMENT Keep as open order Total Review & complete sale', payment: {}, openOrderChoice: {},
+    total: {}, reviewButton: {}, drawerTransitionSettled: true, accessibility: { ok: true } }
+  assert.equal(counterCaptureReady(ready), true)
+  for (const pending of [null, { ...ready, accessibility: { ok: false } }, { ...ready, reviewButton: null },
+    { ...ready, drawerTransitionSettled: false }, { ...ready, text: '' }]) {
+    assert.equal(counterCaptureReady(pending), false)
+  }
+})
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -228,7 +239,7 @@ function fullCaseMatrixFixture() {
       name: 'demo plant opens explicit plant route',
       route: '/?demo=plant',
       viewport: '1280x900',
-      path: '/plant/',
+      path: '/plant/?tab=production',
       screenshot: null,
     },
     {
@@ -378,7 +389,10 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
     assert.ok(source.includes(text), `missing current product authority: ${text}`)
     assert.ok(renderer.includes(text), `renderer does not require current product truth: ${text}`)
   }
-  assert.equal((renderer.match(/expectedPath: '\/plant\/\?tab=production'/g) || []).length, 2)
+  assert.equal((renderer.match(/expectedPath: '\/plant\/\?tab=production'/g) || []).length, 3)
+  const unfinishedRedirect = fullCaseMatrixFixture()
+  unfinishedRedirect[6].path = '/plant/'
+  assert.throws(() => assertRenderedProofCaseMatrix(unfinishedRedirect, 'full'), /case_matrix_mismatch/)
   const expectedTextBodies = [...renderer.matchAll(/expectedText:\s*\[([^\]]*)\]/g)].map((match) => match[1])
   for (const retired of ['Make this website yours', 'Nothing has been deployed.', 'Try one customer order', 'Start sample order']) {
     assert.equal(expectedTextBodies.some((body) => body.includes(retired)), false, `retired rendered expectation remains: ${retired}`)
