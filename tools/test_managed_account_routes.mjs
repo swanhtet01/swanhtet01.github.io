@@ -100,7 +100,7 @@ async function bundleAuth(configured = true) {
           export const useRef = init => useState(() => ({ current: init }))[0];
           export const createElement = (type, props, ...children) => ({ type, props: { ...props, children } });`,
         'react/jsx-runtime': 'export const jsx = (type, props) => ({ type, props }); export const jsxs = jsx; export const Fragment = "fragment";',
-        'react-router': 'export const Link = "a"; export const useOutletContext = () => globalThis.__accountHarness.runtime; export const useLocation = () => ({ pathname: "/account/setup", search: window.location.search }); export const useNavigate = () => () => { throw Error("unexpected navigation") };',
+        'react-router': 'export const Link = "a"; export const useOutletContext = () => globalThis.__accountHarness.runtime; export const useLocation = () => globalThis.__accountHarness.routerLocation ?? ({ pathname: "/account/setup", search: window.location.search }); export const useNavigate = () => globalThis.__accountHarness.navigate ?? (() => { throw Error("unexpected navigation") });',
         './CoreShell': 'export const PageHeading = "header";',
       }
       builder.onResolve({ filter: /^(react|react\/jsx-runtime|react-router|\.\/CoreShell)$/ }, ({ path }) => ({ path, namespace: 'page-shell' }))
@@ -184,7 +184,8 @@ async function withAuth(run, configured = true) {
     state.page = replacements.__accountHarness
     await run(mod, state)
     assert.equal(storage.get('unrelated.demo'), 'preserved')
-    assert.equal(calls.filter(([name]) => name === 'storage-write' || name === 'updateUser').length, 0)
+    assert.equal(calls.filter(([name]) => name === 'storage-write').length, 0)
+    assert.equal(calls.filter(([name]) => name === 'updateUser').length, state.expectedPasswordUpdates ?? 0)
   } finally {
     for (const [key, descriptor] of originals) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor)
@@ -519,6 +520,43 @@ function fillSignup(mod, state) {
   return login(mod, state)
 }
 const finishRequest = async () => { for (let i = 0; i < 12; i++) await new Promise((resolve) => setImmediate(resolve)) }
+
+test('actual recovery page retains router intent after URL scrubbing and password completion without membership', async () => {
+  await withAuth(async (mod, state) => {
+    const review = '11111111-1111-4111-8111-111111111111'
+    codeLink(state, 'recovery')
+    state.location.search += `&review=${review}`
+    // Browser history.replaceState does not navigate React Router. Keep its
+    // location snapshot separate from the raw URL that Auth must scrub.
+    state.page.routerLocation = { pathname: '/account/setup', search: state.location.search }
+    state.page.runtime = { status: 'ready', authReady: true }
+    const destinations = []
+    state.page.navigate = path => destinations.push(path)
+    const render = () => { state.page.cursor = 0; state.page.effects = []; return mod.ManagedAccountPage() }
+    render()
+    const cleanup = state.page.effects[0]()
+    await finishRequest()
+    assert.equal(state.location.search + state.location.hash, '')
+    assert.deepEqual(destinations, [])
+    let tree = render()
+    assert.match(content(tree), /Set your password/)
+    input(tree, 'New password').props.onChange({ target: { value: signupInput.password } })
+    tree = render()
+    input(tree, 'Confirm password').props.onChange({ target: { value: signupInput.password } })
+    tree = render()
+    state.expectedPasswordUpdates = 1
+    state.updateUser = async () => ({ data: { user: fixedUser }, error: null })
+    elements(tree).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} })
+    await finishRequest()
+    assert.deepEqual(destinations, [`/login?product=website&review=${review}`])
+    assert.equal(state.calls.filter(([name]) => name === 'updateUser').length, 1)
+    assert.equal(state.calls.some(([name, url]) => name === 'fetch' && url.includes('bootstrap')), false)
+    tree = render()
+    assert.equal(input(tree, 'New password').props.value, '')
+    assert.equal(input(tree, 'Confirm password').props.value, '')
+    cleanup()
+  })
+})
 
 test('actual login form stays closed during startup, closed policy and unconfigured Auth', async () => {
   for (const configured of [true, false]) await withAuth(async (mod, state) => {
