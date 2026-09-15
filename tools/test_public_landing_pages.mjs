@@ -5,10 +5,13 @@ import { runInNewContext } from 'node:vm'
 
 import { validatePlantBusinessTemplates } from '../showroom/src/products/plant/business-templates.ts'
 import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
+import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
 const staticDir = resolve(root, '.vercel', 'output', 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
+const activeIds = activeProductContracts(manifest).map(product => product.id)
+const discoverablePages = manifest.pages.filter(page => !page.productId || activeIds.includes(page.productId))
 const config = JSON.parse(readFileSync(resolve(root, '.vercel', 'output', 'config.json'), 'utf8'))
 const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
 const publicObservabilitySource = readStatic('vercel-insights.js')
@@ -52,6 +55,13 @@ for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   check(Boolean(product), `landing_product_exists:${page.productId}`)
   const html = readStatic(page.file)
+  if (!activeIds.includes(page.productId)) {
+    check(html.includes('name="robots" content="noindex,follow"'), `retained_noindex:${page.route}`)
+    check(html.includes(`href="${product.appRoute}"`), `retained_workspace_link:${page.route}`)
+    check(html.includes('not offered for new setup'), `retained_boundary:${page.route}`)
+    check(!html.includes('class="trade-card') && !html.includes('Request assisted setup'), `retained_no_acquisition:${page.route}`)
+    continue
+  }
   const canonical = new URL(page.route, `${manifest.release.productionDomain}/`).href
   const description = page.description || product.description
   check(Array.isArray(product.firstOperatingLoop) && product.firstOperatingLoop.length === 4, `landing_first_loop_manifest:${page.route}`)
@@ -187,6 +197,10 @@ check(!shopProfitControlHref.includes('/contact/'), 'home_shop_profit_control_no
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
+  if (!activeIds.includes(product.id)) {
+    check(!home.includes(`href="${page.route}"`) && !home.includes(`?product=${product.id}`), `home_retired_acquisition_absent:${product.id}`)
+    continue
+  }
   check(home.includes(`href="${page.route}">${product.name} overview</a>`), `home_links_landing:${page.route}`)
   check(home.includes(`href="https://app.supermega.dev/settings/?product=${product.id}">${guidedSampleLabel}</a>`), `home_keeps_guided_cta:${product.id}`)
   check(home.includes(product.firstOperatingLoop[0]), `home_shows_first_loop:${product.id}`)
@@ -230,7 +244,7 @@ const allLandingHtml = landingPages.map((page) => readStatic(page.file)).join('\
 for (const product of manifest.customerProducts) {
   check(!allLandingHtml.includes(`Set up ${product.name} data`), `assisted_setup_old_label_absent:${product.id}`)
 }
-check(countOccurrences(allLandingHtml, '>Request assisted setup</a>') === 4, 'assisted_setup_exactly_once_per_product')
+check(countOccurrences(allLandingHtml, '>Request assisted setup</a>') === activeIds.length, 'assisted_setup_exactly_once_per_active_product')
 
 const ecommerceLanding = readStatic('ecommerce/index.html')
 for (const token of [
@@ -276,15 +290,9 @@ check(Boolean(plantPrimaryWorkflow), 'plant_primary_workflow_template_present')
 const plantTemplates = validatePlantBusinessTemplates()
 const plantLanding = readStatic('plant/index.html')
 const plantDoors = publicFirstJobDoors(plantLanding)
-const plantExpectedDoors = plantTemplates.map((template) => ({
-  id: template.id,
-  href: escapedHtml(`https://app.supermega.dev/settings/?product=plant&template=${plantPrimaryWorkflow.id}&pack=${template.industryPackId}`),
-}))
 check(plantTemplates.length === 2, 'plant_shipped_template_registry_count')
-check(JSON.stringify(plantDoors) === JSON.stringify(plantExpectedDoors), 'plant_first_job_doors_match_validated_registry_exactly')
-for (const template of plantTemplates) {
-  check(plantLanding.includes(`<strong>${escapedHtml(template.name.en)}</strong><span>${escapedHtml(template.description)}</span>`), `plant_first_job_copy_matches_registry:${template.id}`)
-}
+check(plantDoors.length === 0, 'plant_acquisition_doors_retired')
+check(plantLanding.includes('Open retained workspace'), 'plant_retained_access_preserved')
 
 for (const productId of ['website', 'ecommerce']) {
   const product = productContract(productId)
@@ -301,7 +309,7 @@ for (const productId of ['website', 'ecommerce']) {
   }
 }
 
-for (const productId of ['plant', 'website', 'ecommerce']) {
+for (const productId of ['website', 'ecommerce']) {
   const html = readStatic(`${productId}/index.html`)
   const doors = publicFirstJobDoors(html)
   check(doors.length > 0 && new Set(doors.map((door) => door.id)).size === doors.length, `${productId}_first_job_template_ids_unique`)
@@ -321,7 +329,7 @@ for (const token of [
   'Continue saved {onboardingTemplate.name}',
   'Use {pendingRequestedWorkflowTemplate.name} for reviewed setup',
   'Existing ${onboardingProduct.name} records were not overwritten',
-  "if (pendingRequestedWorkflowTemplate) {",
+  "if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack) {",
 ]) {
   check(productOnboardingSource.includes(token), `public_template_door_saved_setup_guard:${token}`)
 }
@@ -346,8 +354,9 @@ check(homeSchema['@context'] === 'https://schema.org'
 
 // Sitemap covers every public route exactly once with a well-formed lastmod.
 const sitemap = readStatic('sitemap.xml')
-check((sitemap.match(/<url>/g) || []).length === manifest.pages.length, 'sitemap_url_count')
-for (const page of manifest.pages) {
+check((sitemap.match(/<url>/g) || []).length === discoverablePages.length, 'sitemap_url_count')
+check(!sitemap.includes('<loc>https://supermega.dev/plant/</loc>'), 'retained_plant_not_discoverable')
+for (const page of discoverablePages) {
   const canonical = new URL(page.route, `${manifest.release.productionDomain}/`).href
   check(sitemap.includes(`<loc>${canonical}</loc>`), `sitemap_route:${page.route}`)
 }

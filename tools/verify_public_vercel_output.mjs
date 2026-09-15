@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
+import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
 const staticDir = resolve(root, '.vercel', 'output', 'static')
@@ -42,7 +43,9 @@ if (manifest.customerProducts?.map((product) => `${product.id}:${product.runtime
 if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/,https://app.supermega.dev/plant/,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
 const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
-const publicProducts = manifest.customerProducts || []
+const publicProducts = activeProductContracts(manifest)
+const publicProductNames = publicProducts.map(product => product.name).join(', ')
+const discoverablePages = manifest.pages.filter(page => !page.productId || publicProducts.some(product => product.id === page.productId))
 const shop = publicProducts.find((product) => product.id === 'shop')
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
 if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:available-in-app,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
@@ -154,7 +157,13 @@ const forbiddenCopy = [
 ]
 const encodingCorruption = ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']
 
-const pages = new Map(manifest.pages.map((page) => [page.route, { ...page, html: readStatic(page.file) }]))
+const pages = new Map(manifest.pages.map((page) => {
+  const retained = manifest.customerProducts.find(product => product.id === page.productId && !publicProducts.includes(product))
+  return [page.route, { ...page, ...(retained ? {
+    title: `${retained.name} | Retained workspace access`,
+    description: 'Compatibility access for retained workspaces. Not offered for new-product setup.',
+  } : {}), html: readStatic(page.file) }]
+}))
 const homePage = manifest.pages.find((page) => page.route === '/')
 for (const [route, page] of pages) {
   if (!page.html.includes(`<title>${page.title}</title>`)) fail('page_title_drift', { route, expected: page.title })
@@ -178,7 +187,8 @@ for (const [route, page] of pages) {
     if (!page.html.includes(`<meta property="og:description" content="${page.description}" />`)) fail('page_open_graph_description_drift', { route, expected: page.description })
   }
   // Landing pages carry their per-product share card; every other page keeps the generic card.
-  const pageShareImage = new URL(page.productId ? `/og-card-${page.productId}.png` : '/og-card.png', `${manifest.release.productionDomain}/`).href
+  const activeLanding = publicProducts.some(product => product.id === page.productId)
+  const pageShareImage = new URL(activeLanding ? `/og-card-${page.productId}.png` : '/og-card.png', `${manifest.release.productionDomain}/`).href
   for (const token of [
     '<meta property="og:type" content="website" />',
     '<meta property="og:site_name" content="SuperMega" />',
@@ -191,7 +201,7 @@ for (const [route, page] of pages) {
   ]) {
     if (!page.html.includes(token)) fail('page_open_graph_missing', { route, token })
   }
-  if (page.productId && page.html.includes(`content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}"`)) fail('landing_page_generic_share_card_present', { route })
+  if (activeLanding && page.html.includes(`content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}"`)) fail('landing_page_generic_share_card_present', { route })
   if (route !== '/' && !page.html.includes('href="/contact/">Contact</a>')) fail('support_footer_contact_missing', { route })
 }
 const pageTitles = manifest.pages.map((page) => page.title)
@@ -284,16 +294,16 @@ for (const token of [
   'id="products"',
   '>Products<',
   'Start with Shop Profit Control, then choose a connected workflow.',
-  'Shop surfaces the first accountable operating action. Plant, Website, and Ecommerce remain focused local products with guided samples of their own.',
+  manifest.company.statement,
   'id="model" aria-label="Free and managed SuperMega"',
   'Free product. Managed intelligence.',
   'Run the products free. Add managed company intelligence when the workflow proves value.',
   'Operate without a stripped-down plan.',
-  'Every workflow visible in Shop, Plant, Website, and Ecommerce remains available in the browser workspace.',
+  `Current product doors: ${publicProductNames}. Retained workspaces remain accessible separately.`,
   'Grounded answers from validated local records',
   'No account or model call required',
   'Use approved context across products.',
-  'Approved AI context across all four products',
+  'Approved AI context across the active products',
   'Persistent company history and role-aware access',
   'Reviewed recommendations and accountable actions',
   'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.',
@@ -409,11 +419,11 @@ for (const product of publicProducts) {
 }
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', '/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||\'\')', "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', `${JSON.stringify(['guide', ...publicProducts.map(product => product.id)])}.includes(requestedProduct||'')`, "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
-for (const token of ["query.get('source')==='managed-intelligence'", "if(managedIntelligenceRequest&&!handoff.toString())", 'Request managed company intelligence.', 'Describe the first Shop, Plant, Website, or Ecommerce workflow that should use approved company context.', 'Start with one proven workflow.', 'tenant boundary, recovery plan, and actions that must stay review-gated.', "submit.textContent='Request managed pilot'"]) {
+for (const token of ["query.get('source')==='managed-intelligence'", "if(managedIntelligenceRequest&&!handoff.toString())", 'Request managed company intelligence.', `Describe the first ${publicProductNames} workflow that should use approved company context.`, 'Start with one proven workflow.', 'tenant boundary, recovery plan, and actions that must stay review-gated.', "submit.textContent='Request managed pilot'"]) {
   if (!contact.includes(token)) fail('managed_intelligence_contact_contract_missing', { token })
 }
 if (/<(?:input|textarea)\b(?=[^>]*\bname="(?:name|email|company|template|goal)")(?=[^>]*\bvalue=)[^>]*>/i.test(contact)
@@ -454,6 +464,12 @@ if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_in
 const sitemap = readStatic('sitemap.xml')
 for (const page of manifest.pages) {
   const canonical = new URL(page.route, `${manifest.release.productionDomain}/`).href
+  if (!discoverablePages.includes(page)) {
+    if (sitemap.includes(`<loc>${canonical}</loc>`)) fail('retained_product_in_sitemap', { route: page.route })
+    const retained = readStatic(page.file)
+    if (!retained.includes('name="robots" content="noindex,follow"') || !retained.includes('not offered for new setup') || retained.includes('class="trade-card')) fail('retained_product_boundary_missing', { route: page.route })
+    continue
+  }
   if (!sitemap.includes(`<loc>${canonical}</loc>`)) fail('sitemap_route_missing', { route: page.route })
 }
 
@@ -492,7 +508,9 @@ for (const [name, value] of Object.entries({ 'cross-origin-opener-policy': 'same
 }
 for (const redirect of manifest.redirects) {
   const route = config.routes.find((entry) => entry.src === redirect.source)
-  if (route?.status !== 308 || route?.headers?.Location !== redirect.destination) fail('retired_route_redirect_missing', { redirect, actual: route })
+  const retained = manifest.customerProducts.find(product => product.publicAnchor === redirect.destination && !publicProducts.includes(product))
+  const destination = retained ? `/${retained.id}/` : redirect.destination
+  if (route?.status !== 308 || route?.headers?.Location !== destination) fail('retired_route_redirect_missing', { redirect, actual: route })
 }
 for (const route of [
   ['^/api/contact-submissions/status/?$', '/api/contact-submissions.js'],
