@@ -94,7 +94,9 @@ export function PublishWorkspace({
   const [evidenceVerifier, setEvidenceVerifier] = useState(managedActorId ? '' : 'Website owner')
   const [reviewer, setReviewer] = useState(managedActorId ? '' : 'Website owner')
   const [approvalNote, setApprovalNote] = useState(managedActorId ? '' : `Content, responsive preview, and destinations reviewed for ${workspace.siteName}.`)
-  const [approvalConfirmed, setApprovalConfirmed] = useState(false)
+  const [confirmedApprovalKey, setConfirmedApprovalKey] = useState('')
+  const approvalKey = JSON.stringify([fingerprint, workspace.contentRevision, managedActorId || reviewer.trim(), approvalNote.trim(), workspace.evidence.map((entry) => entry.id)])
+  const approvalConfirmed = confirmedApprovalKey === approvalKey
   const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | ''>('')
   const bodyRef = useRef<HTMLDivElement>(null)
   const passedCount = checks.filter((check) => check.passed).length
@@ -179,7 +181,7 @@ export function PublishWorkspace({
     const saved = await onApprove({ reviewer: managedActorId || reviewer.trim(), note: approvalNote.trim() })
     setSubmitting('')
     if (saved) {
-      setApprovalConfirmed(false)
+      setConfirmedApprovalKey('')
       setActiveStep('snapshot')
     }
   }
@@ -450,7 +452,7 @@ export function PublishWorkspace({
                 <input
                   checked={approvalConfirmed}
                   disabled={!allChecksPass || approvalIsCurrent}
-                  onChange={(event) => setApprovalConfirmed(event.target.checked)}
+                  onChange={(event) => setConfirmedApprovalKey(event.target.checked ? approvalKey : '')}
                   type="checkbox"
                 />
                 <span>I reviewed this exact website version and accept the saved notes.</span>

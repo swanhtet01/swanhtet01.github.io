@@ -35,7 +35,7 @@
     "website:export:verify": "node tools/test_website_export.mjs",
     "website:load:verify": "node tools/test_website_workspace_load.mjs",
     "website:session:verify": "node tools/test_website_edit_session.mjs",
-    "website:publish:verify": "node tools/test_website_publish_gate.mjs",
+    "website:publish:verify": "node tools/test_website_publish_gate.mjs && node --test tools/website_approval_confirmation.test.mjs",
     "website:inbox:verify": "node tools/test_website_inbox_continuity.mjs",
     "workspace:storage:verify": "node tools/test_workspace_storage_registry.mjs",
     "commerce:state:verify": "node tools/test_commerce_state_validator.mjs",
