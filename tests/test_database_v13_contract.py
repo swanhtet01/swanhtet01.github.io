@@ -167,8 +167,31 @@ class V13CatalogTests(unittest.TestCase):
                 with self.subTest(function_or_policy=row[identity]):
                     damaged = deepcopy(self.good)
                     chosen = next(r for r in damaged[key] if r[identity] == row[identity])
-                    chosen[field] += " OR true"
+                    changed_field = "with_check" if field == "qual" and chosen[field] is None else field
+                    chosen[changed_field] += " OR true"
                     self.assertFalse(self.evaluate(damaged)["ready"])
+
+    def test_website_catalog_rows_cannot_be_omitted_duplicated_or_changed(self):
+        for key in ("functions", "policies", "indexes", "triggers", "acl_entries", "backend_acl_dependencies"):
+            for index, row in enumerate(self.good[key]):
+                if 'website' not in str(row):
+                    continue
+                for operation in ("remove", "duplicate"):
+                    with self.subTest(surface=key, index=index, operation=operation):
+                        bad = deepcopy(self.good)
+                        if operation == "remove":
+                            bad[key].pop(index)
+                        else:
+                            bad[key].append(deepcopy(row))
+                        self.assertFalse(self.evaluate(bad)["ready"])
+        for row in self.good['policies']:
+            if row['policy_name'] not in current.WEBSITE_POLICIES:
+                continue
+            for field in ('qual', 'with_check'):
+                bad = deepcopy(self.good)
+                chosen = next(r for r in bad['policies'] if r['policy_name'] == row['policy_name'])
+                chosen[field] = 'true'
+                self.assertFalse(self.evaluate(bad)['ready'])
 
     def test_future_old_or_missing_version_and_duplicate_objects_are_denied(self):
         for version in (None, 11, 12, 14, "13", True):
@@ -183,6 +206,18 @@ class V13CatalogTests(unittest.TestCase):
     def test_actual_database_privilege_and_rls_drift_is_rejected_and_restored(self):
         pg = proof.pg
         cases = (
+            ("alter table app_private.website_customer_reviews no force row level security",
+             "alter table app_private.website_customer_reviews force row level security"),
+            ("grant delete on app_private.website_customer_feedback to supermega_trial_backend",
+             "revoke delete on app_private.website_customer_feedback from supermega_trial_backend"),
+            ("grant select on app_private.website_customer_reviews to authenticated",
+             "revoke select on app_private.website_customer_reviews from authenticated"),
+            ("alter function app_private.website_review_entitled() security invoker",
+             "alter function app_private.website_review_entitled() security definer"),
+            ("alter table app_private.website_customer_reviews disable trigger website_review_guard",
+             "alter table app_private.website_customer_reviews enable trigger website_review_guard"),
+            ("drop index app_private.website_customer_reviews_active_idx; create index website_customer_reviews_active_idx on app_private.website_customer_reviews(workspace_id) where status='stale'",
+             "drop index app_private.website_customer_reviews_active_idx; create index website_customer_reviews_active_idx on app_private.website_customer_reviews(workspace_id) where status='active'"),
             ('alter table app_private.billing_invoices alter column workspace_id type text collate "C"',
              'alter table app_private.billing_invoices alter column workspace_id type text collate "default"'),
             ("grant update on app_private.self_serve_attempt_budgets to supermega_trial_backend",
