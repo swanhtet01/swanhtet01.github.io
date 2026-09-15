@@ -1,11 +1,26 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import vm from 'node:vm'
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 const source = await read('showroom/src/core/CoreShell.tsx')
 const entry = source.slice(source.indexOf('export function ProductHomePage()'))
 const message = 'We set it up. You approve the result and run your business.'
+
+test('next steps routes active local products to assisted setup and preserves managed and Plant behavior', async () => {
+  const navigator = await read('showroom/src/core/ProductSystemNavigator.tsx')
+  const expression = navigator.match(/const assistedSetupProduct = ([\s\S]*?)\n  const capabilities/)?.[1]
+  assert.ok(expression)
+  for (const [product, expected] of [['commerce', 'shop'], ['website', 'website'], ['ecommerce', 'ecommerce'], ['production', null]]) {
+    assert.equal(vm.runInNewContext(expression, {product, managed: false}), expected)
+    assert.equal(vm.runInNewContext(expression, {product, managed: true}), null)
+  }
+  assert.ok(navigator.includes('product=${assistedSetupProduct}&source=product-next-steps'))
+  assert.ok(navigator.includes('target="_blank" rel="noopener noreferrer"'))
+  assert.ok(navigator.includes('to={clientSetupPath(product)}'))
+  assert.ok(navigator.includes('<ProductDataImport details={details} managed={managed} product={product} />'))
+})
 
 test('both shell headers offer setup help without changing login or signup routes', () => {
   assert.equal(source.split('href={assistedSetupHref}').length - 1, 2)
