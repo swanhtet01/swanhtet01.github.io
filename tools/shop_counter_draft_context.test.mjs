@@ -17,8 +17,9 @@ test('checking, local, company and user switches reset in-memory basket identity
 })
 test('Counter applies policy before recovery or persistence, with synchronous keyed remount', () => {
   const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
-  assert.ok(source.includes('useState(() => persistLocalDraft ? readShopCounterDraft() : null)'))
-  assert.match(source, /useEffect\(\(\) => \{\s+if \(!persistLocalDraft\) return\s+try \{\s+if \(liveCartJson/)
+  assert.ok(source.includes('if (!persistLocalDraft) return createCounterTicketSession(null, null, initialCustomer)'))
+  assert.ok(source.includes('createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer)'))
+  assert.equal(source.includes('SHOP_COUNTER_DRAFT_KEY'), false)
   assert.ok(source.includes('<ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft}'))
   assert.ok(source.includes('shopCounterDraftContext(confirmedLocalShop, managedIdentity)'))
 })

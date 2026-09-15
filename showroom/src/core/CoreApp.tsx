@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
+import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCommerceItems,
@@ -1213,11 +1214,25 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   productImageScope: string
   sampleCatalogActive: boolean
 }) {
-  const [restoredDraft] = useState(() => persistLocalDraft ? readShopCounterDraft() : null)
-  const [cart, setCart] = useState<Record<string, number>>(() => restoredDraft?.cart ?? {})
-  const [customer, setCustomer] = useState(() => restoredDraft?.customer || initialCustomer)
-  const [payment, setPayment] = useState(() => restoredDraft?.payment ?? 'Cash')
-  const [outcome, setOutcome] = useState<'paid_handoff' | 'open_order'>(() => restoredDraft?.outcome ?? 'paid_handoff')
+  const [tickets] = useState(() => {
+    if (!persistLocalDraft) return createCounterTicketSession(null, null, initialCustomer)
+    try { return createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer) }
+    catch { return createCounterTicketSession({ getItem: () => { throw new Error('unavailable') }, setItem: () => { throw new Error('unavailable') } }, null) }
+  })
+  const ticketSnapshot = useSyncExternalStore(tickets.subscribe, tickets.getSnapshot)
+  const { cart, customer, payment, outcome, parked, activeLabel } = ticketSnapshot.state
+  const [ticketLabel, setTicketLabel] = useState('')
+  const [ticketsOpen, setTicketsOpen] = useState(false)
+  useEffect(() => { tickets.activate(); return () => tickets.deactivate() }, [tickets])
+  function updateBasket(patch: Partial<CounterBasket>) {
+    tickets.dispatch({ kind: 'save', basket: { ...tickets.getSnapshot().state, ...patch } })
+  }
+  function setCart(value: Record<string, number> | ((current: Record<string, number>) => Record<string, number>)) {
+    updateBasket({ cart: typeof value === 'function' ? value(tickets.getSnapshot().state.cart) : value })
+  }
+  const setCustomer = (value: string) => updateBasket({ customer: value })
+  const setPayment = (value: string) => updateBasket({ payment: value })
+  const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
   const [cartOpen, setCartOpen] = useState(false)
 
@@ -1226,30 +1241,19 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
     ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
     : items
   const lines = items.flatMap((item) => {
-    const quantity = Math.min(cart[item.sku] ?? 0, item.onHand)
+    const quantity = cart[item.sku] ?? 0
     return quantity > 0 ? [{ item, quantity }] : []
   })
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
   const effectiveOutcome = canCompleteInOneReview ? outcome : 'open_order'
 
-  // Persist what the counter can actually act on, not the raw cart. `lines` is the same
-  // derived value the UI uses: catalog SKUs only, clamped to live stock. Judging emptiness
-  // from raw cart keys instead left a draft the operator could neither see nor remove —
-  // the Clear button is gated on unitCount, so a cart holding only sold-out or deleted SKUs
-  // rendered as an empty counter while quietly resurrecting a stale customer and payment
-  // method on every load. A sale exists only if it has at least one sellable line.
-  const liveCartJson = JSON.stringify(Object.fromEntries(lines.map((line) => [line.item.sku, line.quantity])))
-  useEffect(() => {
-    if (!persistLocalDraft) return
-    try {
-      if (liveCartJson === '{}') window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
-      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart: JSON.parse(liveCartJson), customer, payment, outcome }))
-    } catch {
-      // Storage full or blocked. The counter keeps working in memory; losing persistence
-      // must never cost the operator the sale they are ringing up right now.
-    }
-  }, [persistLocalDraft, liveCartJson, customer, payment, outcome])
+  // Never silently discard unavailable lines from recovery or from a parked table.
+  const catalogChanged = Object.entries(cart).some(([sku, quantity]) => {
+    const item = items.find(candidate => candidate.sku === sku)
+    return !item || quantity > item.onHand
+  })
+  const recoveryPaused = ticketSnapshot.blocked || ticketSnapshot.pending > 0
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
@@ -1298,15 +1302,12 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   }
 
   function clearSale() {
-    setCart({})
-    setCustomer('')
-    setPayment('Cash')
-    setOutcome('paid_handoff')
+    tickets.dispatch({ kind: 'save', basket: emptyCounterBasket() })
     setCartOpen(false)
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
-    if (!lines.length || disabled) return
+    if (!lines.length || disabled || catalogChanged || recoveryPaused || !tickets.checkpoint()) return
     onReview({
       lines: lines.map((line) => ({ sku: line.item.sku, quantity: line.quantity })),
       customer: customer.trim(),
@@ -1341,6 +1342,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           <div>
             <span className="core-eyebrow">{counterContextLabel}</span>
             <h2>{bi('Tap an item to add it')}</h2>
+            {persistLocalDraft ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Tickets on this device ({parked.length} parked)</button> : null}
             {businessTemplate && sampleCatalogActive
               ? <p className="shop-pack-context"><span>{packContext}</span></p>
               : industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
@@ -1410,8 +1412,21 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
       <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
+        {ticketSnapshot.error ? <p className="authority-note" role="alert">{ticketSnapshot.error}</p> : null}
+        {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
-        <header><div><span className="core-eyebrow">{bi('Current sale')}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{unitCount ? <button className="text-link" onClick={clearSale} type="button">{bi('Clear')}</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        <header><div><span className="core-eyebrow">{activeLabel || bi('Current sale')}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{bi('Clear')}</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        {persistLocalDraft ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>Parked tickets ({parked.length}) · this device</summary>
+          <p>Saved here only; not sent to kitchen, paid or stock-reserved. Review current prices when resumed.</p>
+          <label>Table or ticket name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
+          <button type="button" disabled={!Object.keys(cart).length || recoveryPaused || !(ticketLabel.trim() || activeLabel)} onClick={() => {
+            if (tickets.dispatch({ kind: 'park', id: crypto.randomUUID(), label: ticketLabel.trim() || activeLabel })) { setTicketLabel(''); setCartOpen(false) }
+          }}>Park current ticket</button>
+          {parked.map(ticket => <button type="button" key={ticket.id} disabled={Object.keys(cart).length > 0 || recoveryPaused} onClick={() => {
+            if (tickets.dispatch({ kind: 'resume', id: ticket.id })) { setTicketLabel(''); setTicketsOpen(false); setCartOpen(true) }
+          }}>Resume {ticket.label} · {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items'}</button>)}
+          {ticketSnapshot.pending ? <p role="status">Saving on this device…</p> : null}
+        </details> : null}
         <div className="shop-cart-lines">
           {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>{bi('Your sale is empty')}</strong><small>{bi('Tap any product to begin.')}</small></div>}
         </div>
@@ -1432,7 +1447,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
         </div>
-        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}<span aria-hidden="true">→</span></button><small>{effectiveOutcome === 'paid_handoff' ? 'One review records payment, handoff, stock, and the order record.' : 'Creates an open order; payment and handoff stay for Orders.'}</small></footer></> : null}
+        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}<span aria-hidden="true">→</span></button><small>{effectiveOutcome === 'paid_handoff' ? 'One review records payment, handoff, stock, and the order record.' : 'Creates an open order; payment and handoff stay for Orders.'}</small></footer></> : null}
       </aside>
     </div>
     {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
@@ -1447,12 +1462,6 @@ function localCommerceOrderDraftStorageKey(scope: string) {
   return `${SHOP_ORDER_DRAFT_RESET_PREFIX}${encodeURIComponent(scope)}`
 }
 
-// The half-rung sale was the only counter state held purely in React. Every link in the
-// Shop header is a route change, and setTab replaces history rather than pushing, so one
-// mis-tap on "2 open orders" discarded the basket with no Back button to return to — at a
-// real counter, in front of a customer. Persisted per device, like every other workspace
-// record, so nothing leaves the browser.
-const SHOP_COUNTER_DRAFT_KEY = 'supermega.shop.counter_draft.v1'
 // Who is on the till. Remembered so the accountable-review sheet can default to them
 // instead of demanding the same name at every step of a shift. Kept on the device only,
 // like every other workspace record, and always editable at the moment of confirming.
@@ -1474,41 +1483,6 @@ function rememberLastOperator(name: string) {
   } catch {
     // Storage unavailable. The name still applied to this action; only the convenience
     // of pre-filling the next one is lost.
-  }
-}
-
-type ShopCounterDraft = {
-  cart: Record<string, number>
-  customer: string
-  payment: string
-  outcome: 'paid_handoff' | 'open_order'
-}
-
-// Validates field by field rather than trusting the parse: this value survives upgrades and
-// hand-edited storage, and a malformed draft must degrade to an empty counter, never throw
-// on the way to rendering it. Quantities are re-clamped against live stock at render, so a
-// stale SKU here is inert.
-function readShopCounterDraft(): ShopCounterDraft | null {
-  try {
-    const raw = window.localStorage.getItem(SHOP_COUNTER_DRAFT_KEY)
-    if (!raw) return null
-    const parsed: unknown = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') return null
-    const draft = parsed as Partial<ShopCounterDraft>
-    const cart: Record<string, number> = {}
-    if (draft.cart && typeof draft.cart === 'object' && !Array.isArray(draft.cart)) {
-      for (const [sku, quantity] of Object.entries(draft.cart)) {
-        if (sku && Number.isSafeInteger(quantity) && (quantity as number) > 0) cart[sku] = quantity as number
-      }
-    }
-    return {
-      cart,
-      customer: typeof draft.customer === 'string' ? draft.customer.slice(0, 120) : '',
-      payment: typeof draft.payment === 'string' && draft.payment ? draft.payment : 'Cash',
-      outcome: draft.outcome === 'open_order' ? 'open_order' : 'paid_handoff',
-    }
-  } catch {
-    return null
   }
 }
 
