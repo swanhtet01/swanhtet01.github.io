@@ -59,6 +59,20 @@ class V13CatalogTests(unittest.TestCase):
     def evaluate(self, snapshot):
         return audit.evaluate_snapshot(snapshot, schema_profile=current.PROFILE)
 
+    def test_referencing_foreign_key_does_not_duplicate_owned_index(self):
+        indexes = [r for r in self.good['indexes'] if r['table_name'].startswith('website_')]
+        expected = {
+            'website_customer_feedback_pkey': 'p',
+            'website_customer_feedback_review_idx': None,
+            'website_customer_reviews_active_idx': None,
+            'website_customer_reviews_pkey': 'p',
+            'website_customer_reviews_recipient_idx': None,
+            'website_customer_reviews_workspace_id_review_id_key': 'u',
+        }
+        self.assertEqual(len(indexes), len(expected))
+        self.assertEqual({r['index_name']: r['constraint_type'] for r in indexes}, expected)
+        self.assertEqual(len({r['index_name'] for r in self.good['indexes']}), len(self.good['indexes']))
+
     def test_valid_migrated_v13_is_exactly_ready(self):
         report = self.evaluate(self.good)
         diagnostics = {"failed": report["failed_checks"],

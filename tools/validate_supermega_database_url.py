@@ -1523,6 +1523,8 @@ def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> 
             join pg_am access_method on access_method.oid = index_record.relam
             left join pg_constraint constraint_record
               on constraint_record.conindid = index_catalog.indexrelid
+             and constraint_record.conrelid = index_catalog.indrelid
+             and constraint_record.contype in ('p', 'u', 'x')
             where schema_record.nspname = 'app_private'
             order by table_record.relname, index_record.relname
             """,
