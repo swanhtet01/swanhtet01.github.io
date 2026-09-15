@@ -9,7 +9,7 @@ from supermega_runtime.trial_store import (
 
 
 LOGGER = "supermega_runtime.trial_store"
-SECRET = "postgres://customer:password@private-host/customer-data"
+SECRET = "PRIVATE_READINESS_TEST_DATA_MUST_NOT_APPEAR_IN_LOGS"
 
 
 class ReadinessDiagnosticsTests(unittest.TestCase):
