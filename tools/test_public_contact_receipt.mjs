@@ -79,6 +79,28 @@ test('product handoffs prefill hidden context and product changes discard stale 
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
+test('three service-first doors retain product identity through uncertain delivery and confirmation', async () => {
+  for (const product of ['website', 'ecommerce', 'shop']) {
+    const state = harness([new Error('connection lost'), { body: receipt }], '?product=' + product + '&source=' + product + '-preview')
+    assert.equal(state.calls.length, 0, 'opening a door does not send a brief')
+    state.fields.get('[name="company"]').value = 'Synthetic service business'
+    state.fields.get('[name="goal"]').value = 'Prepare our ' + product + ' for owner review'
+    await state.submit()
+    const original = JSON.parse(state.calls[0].body)
+    assert.equal(state.calls[0].url, '/api/contact-submissions')
+    assert.equal(state.calls[0].method, 'POST')
+    assert.equal(original.product, product)
+    assert.equal(original.template, '', 'no fabricated template or builder prerequisite')
+    assert.equal(original.goal, 'Prepare our ' + product + ' for owner review')
+    assert.equal(original.idempotency_key, state.calls[0].headers['x-idempotency-key'])
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Request received/)
+    await state.submit()
+    assert.equal(state.calls[1].body, state.calls[0].body)
+    assert.equal(state.calls[1].headers['x-idempotency-key'], state.calls[0].headers['x-idempotency-key'])
+    assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-0123456789ABCDEF/)
+    assert.equal(state.resets(), 1)
+  }
+})
 test('only explicit pre-delivery validation failures unlock a corrected brief', async () => {
   for (const reason of ['invalid_request', 'required_fields_missing', 'product_not_supported', 'trial_proof_invalid', 'idempotency_key_required']) {
     const state = harness([{ ok: false, status: 400, body: { status: 'error', reason } }, { body: receipt }])

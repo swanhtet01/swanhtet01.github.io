@@ -416,6 +416,24 @@ try {
   assert.ok(customerAck.body.text.includes(ackAccepted.body.request_id))
   assert.ok(customerAck.body.text.includes('Your trial claim code: SM-2CDE-4FGH'))
   assert.ok(customerAck.body.subject.includes('We received your request'))
+  assert.match(customerAck.body.text, /confirm the scope, price and timing/)
+  assert.match(customerAck.body.text, /You do not need to build it yourself/)
+  assert.match(customerAck.body.text, /Going live is a separate step after your approval and readiness checks/)
+  assert.match(customerAck.body.text, /does not create an account, publish a site, connect your business data or take payment/)
+  assert.match(customerAck.body.text, /do not send passwords, payment slips or customer records/)
+  assert.doesNotMatch(customerAck.body.text, /one business day|founder|trial keeps working/)
+
+  for (const [index, product] of ['shop', 'website', 'ecommerce'].entries()) {
+    const before = resendMail.length
+    const accepted = await invoke({ body: { ...validSubmission, product, template: '', goal: 'Prepare our setup for review' }, headers: withKey(410 + index, { 'x-forwarded-for': '203.0.113.' + (50 + index) }), activeHandler: resendHandler })
+    assert.equal(accepted.status, 202)
+    assert.equal(resendMail.length, before + 2)
+    const acknowledgement = resendMail.at(-1)
+    assert.deepEqual(acknowledgement.body.to, [validSubmission.email])
+    assert.ok(acknowledgement.body.text.includes(accepted.body.request_id))
+    assert.match(acknowledgement.body.text, /Once agreed, we prepare your setup or preview/)
+    assert.doesNotMatch(acknowledgement.body.text, /Your trial claim code|one business day|founder|trial keeps working/)
+  }
 
   // The acknowledgement is best-effort: its failure must never fail a delivered lead.
   let ackAttempted = false
