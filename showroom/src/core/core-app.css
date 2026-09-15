@@ -214,7 +214,7 @@ details:not([open]) > :not(summary) { display: none; }
 .core-button:disabled, .text-link:disabled { opacity: .48; cursor: not-allowed; }
 .danger-text { color: var(--core-danger); }
 
-.product-home-screen { max-width: 980px; height: auto; min-height: 100%; justify-content: flex-start; gap: 16px; margin-inline: auto; }
+.product-home-screen { max-width: 980px; height: auto; min-height: 100%; max-height: 100%; overflow-y: auto; justify-content: flex-start; gap: 16px; margin-inline: auto; }
 .product-home-screen > * { flex-shrink: 0; }
 .product-home-screen .page-heading { min-height: 0; align-items: flex-start; }
 .product-home-screen .page-heading p { max-width: 680px; white-space: normal; }

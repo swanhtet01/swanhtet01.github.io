@@ -1848,7 +1848,7 @@
 .website-today {
   order: 1;
   display: grid;
-  grid-template-columns: minmax(260px, .9fr) minmax(420px, 1.45fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   gap: 12px;
   border: 1px solid var(--website-line-strong);
   border-radius: 14px;

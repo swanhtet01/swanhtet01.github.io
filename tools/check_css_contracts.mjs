@@ -75,7 +75,7 @@ const PUBLISH_CSS = 'showroom/src/products/website/publish-workspace.css'
 const CEILINGS = new Map([
   ['showroom/src/core/core-app.css', { hex: 96, px: 2230 }],
   ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 111, px: 349 }],
-  ['showroom/src/products/website/website-product.css', { hex: 60, px: 657 }],
+  ['showroom/src/products/website/website-product.css', { hex: 60, px: 655 }],
   ['showroom/src/products/website/publish-workspace.css', { hex: 1, px: 195 }],
 ])
 
@@ -385,6 +385,7 @@ const entryRules = [...entryCss.matchAll(/\.product-home-screen\s*\{([^}]+)\}/g)
 const entryChildren = [...entryCss.matchAll(/\.product-home-screen\s*>\s*\*\s*\{([^}]+)\}/g)].map((match) => match[1]).join('\n')
 check(/(?:^|;)\s*height:\s*auto\s*;/.test(entryRules), 'product entry grows with its service panel and product cards')
 check(/min-height:\s*100%\s*;/.test(entryRules), 'short product entry retains the available workspace height')
+check(/max-height:\s*100%\s*;/.test(entryRules) && /overflow-y:\s*auto\s*;/.test(entryRules), 'product entry owns scrolling when desktop content exceeds the workspace')
 check(/justify-content:\s*flex-start\s*;/.test(entryRules) && !/justify-content:\s*center/.test(entryRules), 'overflowing product entry never centers content above its scroll origin')
 check(/flex-shrink:\s*0\s*;/.test(entryChildren), 'product entry heading and setup panel cannot shrink into one another')
 
