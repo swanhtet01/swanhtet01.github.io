@@ -1831,8 +1831,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-cart-lines article > div:first-child strong { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
 .shop-cart-lines article small { color: var(--core-quiet); font-size: 0.5625rem; }
 .shop-cart-lines article > b { grid-column: 2; color: var(--core-muted); font-family: var(--core-mono); font-size: 0.625rem; text-align: right; }
-.shop-quantity-stepper { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: 28px 26px 28px; align-items: center; border: 1px solid var(--core-line-strong); border-radius: 9px; background: var(--core-panel-raised); }
-.shop-quantity-stepper button { width: 28px; min-height: 30px; border: 0; background: transparent; color: var(--core-green); cursor: pointer; }
+.shop-quantity-stepper { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: 44px 30px 44px; align-items: center; border: 1px solid var(--core-line-strong); border-radius: 9px; background: var(--core-panel-raised); }
+.shop-quantity-stepper button { width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--core-green); cursor: pointer; }
 .shop-quantity-stepper button:disabled { color: var(--core-quiet); cursor: not-allowed; }
 .shop-quantity-stepper strong { text-align: center; font-family: var(--core-mono); font-size: 0.625rem; }
 .shop-empty-cart { min-height: 170px; display: grid; place-content: center; justify-items: center; color: var(--core-muted); text-align: center; }
