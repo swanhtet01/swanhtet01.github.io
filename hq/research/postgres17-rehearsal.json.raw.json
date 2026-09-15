@@ -160,7 +160,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:4ca553dfdfc3b7809f2e17df485cbe82f685133948e3275d47ccf4fe7394d083",
+    "digest": "sha256:79bb37c5259e206186ef386f728a0ec4f856c25d3cc5558242aede16ff4663ef",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -178,6 +178,8 @@
       "supabase/migrations/20260817090000_private_trial_backend_v12_billing_rail.sql",
       "supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
       "supabase/migrations/20260907024457_self_serve_durable_attempt_budget.sql",
+      "supabase/migrations/20260915184728_website_customer_review_storage.sql",
+      "supabase/migrations/20260915191528_website_review_entitlement_proof.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/managed_activation.py",
@@ -185,8 +187,13 @@
       "supermega_runtime/runtime.py",
       "supermega_runtime/trial_runtime.py",
       "supermega_runtime/trial_store.py",
+      "supermega_runtime/website_customer_review.py",
+      "supermega_runtime/website_customer_review_store.py",
+      "supermega_runtime/website_release_foundation.py",
+      "supermega_runtime/website_runtime.py",
       "tests/test_billing_rail.py",
       "tests/test_postgres17_rehearsal_contract.py",
+      "tests/test_website_runtime.py",
       "tools/activate_supermega_database.ps1",
       "tools/private_trial_v13_contract.py",
       "tools/record_postgres17_rehearsal.mjs",
@@ -201,7 +208,7 @@
   },
   "migrations": {
     "catalog_contract": "supermega_private_trial_database_v13_self_serve_v1",
-    "count": 15,
+    "count": 17,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
       "20260722005134_private_trial_backend_foundation.sql",
@@ -217,7 +224,9 @@
       "20260816120000_private_trial_backend_v11_self_serve_grants.sql",
       "20260817090000_private_trial_backend_v12_billing_rail.sql",
       "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
-      "20260907024457_self_serve_durable_attempt_budget.sql"
+      "20260907024457_self_serve_durable_attempt_budget.sql",
+      "20260915184728_website_customer_review_storage.sql",
+      "20260915191528_website_review_entitlement_proof.sql"
     ],
     "production_validator_ready": true,
     "schema_profile": "v13-self-serve",
@@ -229,15 +238,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:33332ff6e6af8debe3fedaf2e4c58108a14c482a8aafb52145ac256f633f908a",
-    "private_snapshot_before": "sha256:33332ff6e6af8debe3fedaf2e4c58108a14c482a8aafb52145ac256f633f908a",
+    "private_snapshot_after": "sha256:3e9c07329f5ed12c4e7ae4985a51da53c81469aba47e40233d84d14bf7b43e72",
+    "private_snapshot_before": "sha256:3e9c07329f5ed12c4e7ae4985a51da53c81469aba47e40233d84d14bf7b43e72",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "9308b62ca2d1efbbe68bbdb1e858a5c0a7511a62",
-    "implementation_digest": "sha256:4ca553dfdfc3b7809f2e17df485cbe82f685133948e3275d47ccf4fe7394d083",
-    "tree": "cdc580abc90e2af814f196957e59b2e792d948f4"
+    "head": "8a46bd43667f779d92cd24e4a21ac72ab455552b",
+    "implementation_digest": "sha256:79bb37c5259e206186ef386f728a0ec4f856c25d3cc5558242aede16ff4663ef",
+    "tree": "ad6d46771e3644b245c47a29c6c3dc8d62a163f7"
   },
   "status": "rehearsed",
   "storage": {
