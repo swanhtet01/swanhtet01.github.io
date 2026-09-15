@@ -668,11 +668,15 @@ export function ProductHomePage() {
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
   const [localProductSetups, setLocalProductSetups] = useState<Record<SetupProductId, { startedAt?: string; workspace: string } | null> | null>(null)
+  const [activeSetupIds, setActiveSetupIds] = useState<SetupProductId[]>([])
+  const [setupLoadFailed, setSetupLoadFailed] = useState(false)
+  const [setupLoadAttempt, setSetupLoadAttempt] = useState(0)
   useEffect(() => {
     let active = true
     if (managedPortal || typeof window === 'undefined') return () => { active = false }
-    void import('./product-setup').then(({ readProductSetup }) => {
+    void import('./product-setup').then(({ readProductSetup, activeSetupProductContracts }) => {
       if (!active) return
+      setActiveSetupIds(activeSetupProductContracts.map(product => product.id))
       setLocalProductSetups({
         commerce: readProductSetup(window.localStorage, 'commerce'),
         production: readProductSetup(window.localStorage, 'production'),
@@ -681,16 +685,24 @@ export function ProductHomePage() {
       })
     }).catch(() => {
       // A missing setup chunk must not invent first-run or saved-workspace state.
-      if (active) setLocalProductSetups(null)
+      if (active) {
+        setLocalProductSetups(null)
+        setSetupLoadFailed(true)
+      }
     })
     return () => { active = false }
-  }, [managedPortal])
+  }, [managedPortal, setupLoadAttempt])
   const productSetups = managedPortal ? null : localProductSetups
   const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
   const nextSetupStep = (() => {
     if (!productSetups) return null
-    return STEP_SUGGESTIONS.find(([id]) => !productSetups[id]?.startedAt) ?? null
+    return STEP_SUGGESTIONS.find(([id]) => activeSetupIds.includes(id) && !productSetups[id]?.startedAt) ?? null
   })()
+  if (!managedPortal && !productSetups) {
+    return setupLoadFailed
+      ? <PortalAccessPanel action={<button className="button" onClick={() => { setSetupLoadFailed(false); setSetupLoadAttempt(attempt => attempt + 1) }} type="button">Retry loading products</button>} copy="We could not read product setup information. Saved records have not been changed. Check that browser storage is available, then retry." title="Products could not load" />
+      : <PortalAccessPanel copy="Reading product setup information. Saved records are unchanged." title="Loading products" />
+  }
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
@@ -716,25 +728,32 @@ export function ProductHomePage() {
         <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
       ) : null}
       <nav aria-label="Choose product" className="product-track-grid">
-        {customerProducts.map(([name, outcome, firstAction, path], index) => {
+        {customerProducts.filter(([name]) => managedPortal
+          ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
+          : activeSetupIds.includes(PRODUCT_SETUP_KEY[name]) || Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]))
+          .sort(([left], [right]) => managedPortal ? 0
+            : (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]))
+              - (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right])))
+          .map(([name, outcome, firstAction, path], index) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
           if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
           const setup = productSetups?.[setupKey]
+          if (!managedPortal && !activeSetupIds.includes(setupKey) && !setup) return null
           const workspaceName = setup?.startedAt ? setup.workspace : null
           return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
-                <small>First action</small>
+                <small>{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Retained workspace' : 'First action'}</small>
                 <h2>{name}</h2>
                 <p>{outcome}</p>
                 {workspaceName ? <span className="product-track-workspace">Continue saved workspace: {workspaceName}</span> : null}
               </span>
-              <strong className="product-track-open">{firstAction} <span aria-hidden="true">→</span></strong>
+              <strong className="product-track-open">{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Continue saved workspace' : firstAction} <span aria-hidden="true">→</span></strong>
             </Link>
         })}
       </nav>
       {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products} /></Suspense> : null}
-      {!managedPortal ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
+      {!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
       <p className="product-home-note">{managedPortal ? 'Separate workspaces, roles, and access per product.' : 'Samples stay separate.'}</p>
     </div>
   )

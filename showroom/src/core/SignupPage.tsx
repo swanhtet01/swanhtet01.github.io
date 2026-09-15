@@ -13,7 +13,7 @@ import {
   provisionLocalShopIndustryPack,
   provisionLocalShopWorkingSample,
 } from './product-onboarding-runtime'
-import { rememberProductSetup, seedSetupForProduct } from './product-setup'
+import { activeSetupProductContracts, rememberProductSetup, seedSetupForProduct } from './product-setup'
 import {
   ACCOUNT_REQUEST_DETAIL,
   createTrialSignupRecord,
@@ -31,6 +31,8 @@ import {
 import { useSetupWorkspace } from './workspace-runtime'
 
 const entryClassName = 'workspace-screen managed-login-screen signup-entry-screen'
+const activeTrialChoices = activeSetupProductContracts.map(product =>
+  TRIAL_SIGNUP_PRODUCT_CHOICES.find(choice => choice.id === product.id)!)
 
 /**
  * The front door. Everything decidable lives in signup-trial.ts, which a guard can reach; this
@@ -47,7 +49,10 @@ export function SignupPage() {
   const requestedTrade = new URLSearchParams(location.search).get('template')
   const requestedProduct = new URLSearchParams(location.search).get('product')
   const [existing, setExisting] = useState<TrialSignupRecord | null>(() => readTrialSignup(window.localStorage))
-  const [selectedProduct, setSelectedProduct] = useState<TrialSignupProduct>(() => trialSignupProductChoice(requestedProduct).id)
+  const [selectedProduct, setSelectedProduct] = useState<TrialSignupProduct>(() => {
+    const requested = trialSignupProductChoice(requestedProduct).id
+    return activeTrialChoices.some(choice => choice.id === requested) ? requested : 'commerce'
+  })
   const [businessName, setBusinessName] = useState('')
   const [ownerName, setOwnerName] = useState('')
 
@@ -228,7 +233,7 @@ export function SignupPage() {
             rather than a paragraph with no relationship to any control. */}
         <label>Business name<input aria-describedby={noticeTone === 'error' ? 'signup-notice' : undefined} autoComplete="organization" maxLength={120} onChange={(event) => setBusinessName(event.target.value)} required value={businessName} /></label>
         <label>Start with<select onChange={(event) => setSelectedProduct(event.target.value as TrialSignupProduct)} value={selectedProduct}>
-          {TRIAL_SIGNUP_PRODUCT_CHOICES.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+          {activeTrialChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
         </select></label>
         {selectedProduct === 'commerce' ? <label>What kind of business?<select onChange={(event) => setChoiceId(event.target.value)} value={choiceId}>
           <option value="">Standard starter catalog</option>

@@ -11,6 +11,36 @@ const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 
 const html = async path => readFile(resolve(root, '.vercel/output/static', path), 'utf8')
 const main = value => value.match(/<main[\s\S]*?<\/main>/)?.[0] ?? ''
 
+test('new trial choices consume active products and reject retired query selection', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/SignupPage.tsx'), 'utf8')
+  assert.match(source, /activeSetupProductContracts\.map/)
+  assert.match(source, /activeTrialChoices\.some\(choice => choice\.id === requested\) \? requested : 'commerce'/)
+  assert.match(source, /activeTrialChoices\.map\(\(choice\) => <option/)
+  assert.doesNotMatch(source, /TRIAL_SIGNUP_PRODUCT_CHOICES\.map\(/)
+})
+
+test('unavailable sign-in has one no-account sample path, separate from assisted setup', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/ManagedLoginPage.tsx'), 'utf8')
+  const unavailable = source.slice(source.indexOf('<section className="managed-login-panel" aria-label="Company account unavailable">'))
+  assert.match(unavailable, /to="\/\?choose=1">Try a sample — no account/)
+  assert.match(unavailable, /Ask SuperMega to set me up/)
+  assert.doesNotMatch(unavailable, /Free trial|Try free demo/)
+  assert.match(source, /Date\.now\(\) < cooldownUntil/)
+})
+
+test('launcher consumes active policy without discarding retained or assigned access', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/CoreShell.tsx'), 'utf8')
+  assert.match(source, /setActiveSetupIds\(activeSetupProductContracts\.map\(product => product\.id\)\)/)
+  assert.match(source, /activeSetupIds\.includes\(id\) && !productSetups\[id\]\?\.startedAt/)
+  assert.match(source, /!managedPortal && !activeSetupIds\.includes\(setupKey\) && !setup/)
+  assert.match(source, /managedPortal && !managedProductIsVisible\(portalAccess\.products, setupKey\)/)
+  assert.match(source, /Retained workspace/)
+  assert.match(source, /setSetupLoadFailed\(true\)/)
+  assert.match(source, /\[managedPortal, setupLoadAttempt\]/)
+  assert.match(source, /setSetupLoadAttempt\(attempt => attempt \+ 1\)/)
+  assert.match(source, /Products could not load/)
+})
+
 test('one source policy declares exactly three active acquisition doors', () => {
   const before = JSON.stringify(manifest)
   assert.deepEqual(activeProductContracts(manifest).map(p => p.id), ['shop', 'ecommerce', 'website'])

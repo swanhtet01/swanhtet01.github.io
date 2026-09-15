@@ -308,8 +308,8 @@ export function ManagedLoginPage() {
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? bi('Open company') : bi('Find my company')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
-        <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
-        <div className="managed-login-actions">{signupPolicy ? <button className="core-button primary" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <Link className="core-button primary" to={signupPath}>Free trial</Link>}<Link className="core-button" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
+        <div><span className="core-eyebrow">Company account</span><h2>Company sign-in is not available here yet.</h2><p>Explore a sample without an account. Sample records stay on this device; they are not a shared company workspace.</p></div>
+        <div className="managed-login-actions"><Link className="core-button primary" to="/?choose=1">Try a sample — no account</Link>{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}<a className="core-button" href={managedAccountRequestUrl(productIntent)}>Ask SuperMega to set me up</a></div>
       </section>}
     </div>
   )
