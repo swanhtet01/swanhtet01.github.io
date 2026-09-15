@@ -53,6 +53,51 @@ At each agreed intake review, reconcile open references with assigned owners
 and next actions. Notification failure or an unassigned retained request is an
 operational issue to resolve, not a reason to claim the customer was contacted.
 
+## Prepare a received setup request with the existing tools
+
+This is a staff-only local workflow, not a customer-facing builder or a hosted
+inbox. First locate the authorized private `supermega.contact.created` event
+for the exact received reference. Do not reconstruct an event from analytics,
+paste customer information into source, or treat a notification as assignment.
+Run from the current verified repository checkout. Replace the quoted path
+placeholders with approved private locations outside Git; outputs must be new.
+
+```powershell
+npm.cmd run client:workspace:contact:review-template -- "<private-event.json>" --out "<new-private-owner-review.json>"
+```
+
+An accountable person must review the generated template: exact lead, workspace,
+implementation owner, preset, selected products, company/goal review, private
+workspace approval and review time. Leave gates false until that review occurs.
+Website requests select Website; Ecommerce preparation includes Shop for its
+request handoff. Do not use the generic default initializer, which can include
+unrequested products. A template suggestion is not agreed scope.
+
+```powershell
+npm.cmd run client:workspace:from-contact -- "<new-private-client-folder>" --contact-event "<private-event.json>" --owner-review "<private-owner-review.json>"
+npm.cmd run client:workspace:contact:verify -- "<private-client-folder>"
+```
+
+Follow the generated `START-HERE.md`. Review only selected product CSVs; replace
+every sample row before using customer data. An absent CSV deliberately retains
+a labelled sample fixture, so preparation success alone is not live readiness.
+
+```powershell
+npm.cmd run client:prepare -- --data-dir "<private-client-folder>" --out "<new-private-preparation.json>"
+npm.cmd run client:prepare:verify -- "<private-preparation.json>"
+```
+
+Keep the preparation private: it may contain business data and is not a shareable
+customer preview URL. Record only the reference, owner, stage and evidence pointer
+in the approved tracker. Staff then prepare a separately reviewed preview and
+obtain the customer's decision on that revision. No command above sends a message,
+creates a live account, imports operational records or publishes a site.
+
+On existing output, missing approval or a binding error, stop and verify the
+existing workspace; never overwrite it or invent approval to make the tool pass.
+The Vision inbox processor is not the intake queue for Shop/Website/Ecommerce.
+Hosted receipt-to-staff discovery still requires separate observed evidence.
+
 ## "A customer says they lost data"
 
 The product is honest about where data lives: browser-local storage for the
