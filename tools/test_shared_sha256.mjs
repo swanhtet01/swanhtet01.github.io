@@ -10,7 +10,8 @@ import { sha256Hex } from '../showroom/src/core/sha256.ts'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
 const ts = require('typescript')
 const paths = ['showroom/src/core/commerce-workspace.ts', 'showroom/src/core/shop-inventory-foundation.ts',
-  'showroom/src/products/website/website-release-foundation.ts']
+  'showroom/src/products/website/website-release-foundation.ts', 'showroom/src/core/managed-trial-proof.ts',
+  'showroom/src/core/plant-order-foundation.ts']
 const baseline = '8acba1266308af287025fb508d5c825c682cf87b'
 function previousDigest(path) {
   const source = execFileSync('git', ['show', `${baseline}:${path}`], { encoding: 'utf8' })
@@ -35,12 +36,13 @@ test('shared digest preserves UTF-8, padding boundaries and historical product e
   }
 })
 
-test('all three consumers use the neutral utility and Commerce preserves its public export', () => {
+test('all five consumers use the neutral utility and existing public exports remain', () => {
   for (const path of paths) {
     const source = readFileSync(path, 'utf8')
     assert.match(source, /import \{ sha256Hex \} from ['"].*\/sha256\.ts['"]/)
     assert.doesNotMatch(source, /function sha256Hex|sha256RoundConstants/)
   }
   assert.match(readFileSync(paths[0], 'utf8'), /export \{ sha256Hex \} from ['"]\.\/sha256\.ts['"]/)
+  assert.match(readFileSync(paths[3], 'utf8'), /export \{ sha256Hex \} from ['"]\.\/sha256\.ts['"]/)
   assert.doesNotMatch(readFileSync('showroom/src/core/sha256.ts', 'utf8'), /^import /m)
 })
