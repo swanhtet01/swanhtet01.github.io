@@ -16,7 +16,17 @@ export function projectClientSetupManifest(source: Manifest) {
       if (![name, status, headline].every(value => typeof value === 'string') || !Array.isArray(templates)) {
         throw new Error('client_setup_manifest_invalid')
       }
-      return { id, runtimeId, name, status, headline, templates }
+      const clientTemplates = templates.map(value => {
+        if (!value || typeof value !== 'object') throw new Error('client_setup_template_invalid')
+        const { id, name, outcome, workflow, entryPoints, metric } = value as Record<string, unknown>
+        if (![id, name, outcome, metric].every(field => typeof field === 'string')
+          || !Array.isArray(workflow) || !workflow.every(field => typeof field === 'string')
+          || !Array.isArray(entryPoints) || !entryPoints.every(field => typeof field === 'string')) {
+          throw new Error('client_setup_template_invalid')
+        }
+        return { id, name, outcome, workflow, entryPoints, metric }
+      })
+      return { id, runtimeId, name, status, headline, templates: clientTemplates }
     }),
   }
 }
