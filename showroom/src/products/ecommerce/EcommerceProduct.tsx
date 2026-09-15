@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
@@ -299,7 +300,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
-  const [customerRequestDeliveryConfirmed, setCustomerRequestDeliveryConfirmed] = useState(false)
+  const [customerRequestDeliveryConfirmed, setCustomerRequestDeliveryConfirmed] = useState<DeliveryConfirmation | null>(null)
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
   const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
@@ -1487,7 +1488,7 @@ export function EcommerceProduct() {
     ['Boundary', 'No booking'],
   ] as const
   const requestWaitingInLocalMode = customerRequestState === 'waiting_shop_review' && !managedIdentity
-  const requestDeliveryVerified = Boolean(managedIdentity && customerRequestDeliveryConfirmed)
+  const requestDeliveryVerified = Boolean(managedIdentity && deliveryConfirmedForScope(customerRequestDeliveryConfirmed, buyingScope))
   const requestWaitingQueueLabel = requestWaitingInLocalMode ? 'Saved locally' : requestDeliveryVerified ? 'Request sent' : 'Delivery unverified'
   const ecommerceWaitingHeadline = requestWaitingInLocalMode ? 'Sample request saved locally' : requestDeliveryVerified ? 'Request sent to Shop' : 'Request saved — verify Shop delivery'
   const ecommerceWaitingSummary = requestWaitingInLocalMode

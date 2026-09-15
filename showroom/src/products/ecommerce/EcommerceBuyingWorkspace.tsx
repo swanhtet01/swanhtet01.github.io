@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
-import { confirmManagedRequest, managedRequestWasConfirmed } from './managed-request-confirmation'
+import { confirmManagedRequest, managedRequestWasConfirmed, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import {
   buildEcommerceCheckoutQuote,
@@ -76,7 +76,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
-  onDeliveryConfirmationChange?: (confirmed: boolean) => void
+  onDeliveryConfirmationChange?: (confirmation: DeliveryConfirmation | null) => void
   preview: StorefrontPreview
   scope: string
   sourcePreviewDigest: string
@@ -366,9 +366,9 @@ export function EcommerceBuyingWorkspace({
   const customerRequestState = latestRequestOrder ? 'confirmed' : latestRequest ? 'waiting_shop_review' : 'idle'
   useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
   useEffect(() => {
-    onDeliveryConfirmationChange?.(managedDeliveryConfirmed)
-    return () => onDeliveryConfirmationChange?.(false)
-  }, [managedDeliveryConfirmed, onDeliveryConfirmationChange])
+    onDeliveryConfirmationChange?.({ scope, requestId: latestRequest?.id ?? '', confirmed: managedDeliveryConfirmed })
+    return () => onDeliveryConfirmationChange?.(null)
+  }, [scope, latestRequest?.id, managedDeliveryConfirmed, onDeliveryConfirmationChange])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
