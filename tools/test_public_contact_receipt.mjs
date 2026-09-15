@@ -22,6 +22,7 @@ test('service brief asks for a business result without requiring template knowle
 function harness(responses, search = '') {
   const fields = new Map()
   const events = new Map()
+  const windowEvents = new Map()
   let handler, resets = 0
   const calls = []
   const timers = new Map()
@@ -39,7 +40,7 @@ function harness(responses, search = '') {
   runInNewContext(script, {
     document: { querySelector: selector => selector === '[data-contact-form]' ? form : null, referrer: '' },
     location: { search, hash: '', href: 'https://supermega.dev/contact/' + search },
-    URLSearchParams, window: { crypto }, crypto,
+    URLSearchParams, window: { crypto, addEventListener(name, callback) { windowEvents.set(name, callback) }, removeEventListener(name, callback) { if (windowEvents.get(name) === callback) windowEvents.delete(name) } }, crypto,
     AbortController,
     setTimeout(callback, delay) { assert.equal(delay, 20000); timers.set(++timerId, callback); return timerId },
     clearTimeout(id) { timers.delete(id) },
@@ -58,7 +59,7 @@ function harness(responses, search = '') {
     },
   })
   form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { fields, calls, timers, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { fields, calls, timers, windowEvents, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
 test('product handoffs prefill hidden context and product changes discard stale templates only', () => {
@@ -79,6 +80,33 @@ test('product handoffs prefill hidden context and product changes discard stale 
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
+test('navigation warning exists only during pending or unconfirmed delivery', async () => {
+  let finish
+  const pending = new Promise(resolve => { finish = resolve })
+  const state = harness([pending, { body: receipt }])
+  assert.equal(state.windowEvents.size, 0)
+  const attempt = state.submit()
+  const warning = state.windowEvents.get('beforeunload')
+  assert.equal(typeof warning, 'function')
+  let prevented = false
+  const event = { preventDefault() { prevented = true }, returnValue: undefined }
+  warning(event)
+  assert.equal(prevented, true)
+  assert.equal(event.returnValue, true)
+  finish(new Error('response lost'))
+  await attempt
+  assert.equal(state.windowEvents.get('beforeunload'), warning)
+  assert.match(state.fields.get('[data-form-status]').textContent, /reloading or closing it loses this retry state/)
+  await state.submit()
+  assert.equal(state.windowEvents.size, 0)
+  assert.equal(state.calls[0].body, state.calls[1].body)
+  prevented = false
+  warning(event)
+  assert.equal(prevented, false, 'stale callback cannot warn after confirmation')
+  const rejected = harness([{ ok: false, status: 400, body: { status: 'error', reason: 'required_fields_missing' } }])
+  await rejected.submit()
+  assert.equal(rejected.windowEvents.size, 0)
+})
 test('three service-first doors retain product identity through uncertain delivery and confirmation', async () => {
   for (const product of ['website', 'ecommerce', 'shop']) {
     const state = harness([new Error('connection lost'), { body: receipt }], '?product=' + product + '&source=' + product + '-preview')
