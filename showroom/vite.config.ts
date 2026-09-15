@@ -100,6 +100,11 @@ export default defineConfig({
       output: {
         onlyExplicitManualChunks: true,
         manualChunks(id) {
+          // Keep lightweight login/recovery routing separate even when the
+          // managed Auth transport also consumes the strict review-return parser.
+          if (id.includes('/src/core/account-routes.ts')) {
+            return 'account-routes'
+          }
           if (id.includes('vite/preload-helper')) {
             return 'preload-helper'
           }
