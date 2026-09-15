@@ -27,10 +27,6 @@ function signupProductSlug(product: SetupProductId) {
   return product
 }
 
-function clientSetupPath(product: SetupProductId) {
-  return `/settings/?product=${encodeURIComponent(signupProductSlug(product))}`
-}
-
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
 type RuntimeActivationStep = {
@@ -707,7 +703,7 @@ export function ProductHomePage() {
     <div className="workspace-screen product-home-screen">
       {managedPortal
         ? <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
-        : <PageHeading copy="Working samples. Add data when ready." eyebrow="Products" title="Switch product" />}
+        : <PageHeading copy="We set it up. You approve the result and run your business." eyebrow="Products" title="Switch product" />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -723,9 +719,14 @@ export function ProductHomePage() {
         ? <PortalAccessPanel copy="No active product. Ask the owner to assign one." title="No products" />
         : null}
       {!managedPortal && productSetups && !anyStarted ? (
-        <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — one catalog and order flow connects the rest.</p>
+        <section aria-label="Setup by SuperMega" className="platform-start-nudge">
+          <strong>Tell us what your business needs.</strong>
+          <p>We prepare your Website or Ecommerce catalog for review, or configure Shop for your daily sales. You do not need to learn a builder.</p>
+          <a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Request setup by SuperMega</a>
+          <p>Want to look around first? The sample workspaces below are optional. They are not a live customer setup.</p>
+        </section>
       ) : nextSetupStep ? (
-        <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
+        <p className="platform-start-nudge"><strong>Your saved work stays here.</strong> For another product, <a className="platform-start-link" href={`https://supermega.dev/contact/?product=${nextSetupStep[0] === 'commerce' ? 'shop' : nextSetupStep[0]}&source=assisted-app-entry`}>request {nextSetupStep[1]} setup</a>. SuperMega prepares it for your review.</p>
       ) : null}
       <nav aria-label="Choose product" className="product-track-grid">
         {customerProducts.filter(([name]) => managedPortal
