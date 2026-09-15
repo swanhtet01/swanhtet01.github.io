@@ -669,13 +669,15 @@ const contactScript = `<script>(function(){
     history.replaceState(null,'',location.pathname+location.search);
   }
   form.addEventListener('submit',async function(event){
-    event.preventDefault();if(submit.disabled)return;status.textContent='Sending...';submit.disabled=true;
+    event.preventDefault();if(submit.disabled)return;status.textContent='Sending...';submit.disabled=true;var deadline;
     try{
       if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';
       var payload=Object.fromEntries(new FormData(form).entries());
-      var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});
-      var body=await response.json().catch(function(){return null});if(!response.ok)throw new Error(body&&body.reason||'send_failed');if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');form.reset();requestKey.value='';status.textContent='Request received: '+body.request_id+'. Keep this ID for follow-up.';
-    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached trial summary changed or does not match this request. Open the request again from SuperMega.':'We could not confirm receipt. Your details are still here. Please try again; the same request reference will be reused.';}finally{submit.disabled=false;}
+      var controller=new AbortController();
+      var pending=fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload),signal:controller.signal}).then(async function(response){return {response:response,body:await response.json().catch(function(){return null})}});
+      var result=await Promise.race([pending,new Promise(function(resolve,reject){deadline=setTimeout(function(){reject(new Error('receipt_unconfirmed'));controller.abort()},20000)})]);
+      var response=result.response,body=result.body;if(!response.ok)throw new Error(body&&body.reason||'send_failed');if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');form.reset();requestKey.value='';status.textContent='Request received: '+body.request_id+'. Keep this ID for follow-up.';
+    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached trial summary changed or does not match this request. Open the request again from SuperMega.':'We could not confirm receipt. Your details are still here. Please try again; the same request reference will be reused.';}finally{clearTimeout(deadline);submit.disabled=false;}
   });
 })();</script>`
 
