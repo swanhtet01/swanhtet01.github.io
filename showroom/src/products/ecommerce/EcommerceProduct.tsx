@@ -1781,6 +1781,9 @@ export function EcommerceProduct() {
 
   const showAssistedCatalogSetup = !catalogHydrating && !managedIdentity
     && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
+  const assistedCatalogEntry = showAssistedCatalogSetup && workspaceView === 'preview'
+    && !savedDraft && ecommerceTodayAction === 'Try sample request'
+    && ecommerceTodayState === 'ready' && !ecommerceTodayCartUnits
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -1790,15 +1793,18 @@ export function EcommerceProduct() {
           <h1>Ecommerce</h1>
           <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Explore a local catalog preview. SuperMega can prepare your catalog for you; sample requests are not live orders.'}</p>
         </div>
-        {showAssistedCatalogSetup ? <a className="core-button secondary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
+        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
       </header>
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Start here</span>
-          <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
-          <p>{ecommerceTodaySummary}</p>
-          <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
+          <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Let SuperMega prepare your catalog' : ecommerceTodayHeadline}</h2>
+          <p>{assistedCatalogEntry ? 'Tell us what you sell. We confirm the scope, prepare your catalog and send a preview for approval. You do not need to build the store yourself. Requesting setup does not publish a store or activate orders, payments or stock.' : ecommerceTodaySummary}</p>
+          {assistedCatalogEntry ? <div className="form-actions ecommerce-service-actions">
+            <a className="core-button primary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a>
+            <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Try sample request</button>
+          </div> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
         </div>
         {ecommerceTodayGuided ? (
           <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
@@ -2044,13 +2050,13 @@ export function EcommerceProduct() {
         </div>
       </details>
 
-      <label className="ecommerce-workspace-switch">
+      {!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">
         <span>View</span>
         <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
           <option value="preview">Store</option>
           <option value="setup">Edit store</option>
         </select>
-      </label>
+      </label> : null}
 
       <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">

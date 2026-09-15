@@ -139,6 +139,12 @@
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > p { grid-area: summary; margin-bottom: 0; }
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > .core-button { grid-area: action; min-width: 132px; }
 
+.ecommerce-today-priority > .ecommerce-service-actions {
+  grid-area: action;
+  align-items: stretch;
+  flex-direction: column;
+}
+
 .ecommerce-today-priority {
   min-width: 0;
   display: grid;

@@ -24,14 +24,15 @@ test('phone catalog remains readable with a retained Desktop preview selection',
 test('local entry consistently names a sample request in source and acceptance contracts', () => {
   for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx', './verify_app_build.mjs', './verify_app_release_live.mjs', './verify_exact_app_preview.mjs']) {
     const text = readFileSync(new URL(path, import.meta.url), 'utf8')
-    assert.ok(text.includes("'Try one sample request'"), path)
+    if (path !== './verify_exact_app_preview.mjs') assert.ok(text.includes("'Try one sample request'"), path)
+    else assert.ok(text.includes("'Let SuperMega prepare your catalog', 'Request catalog setup'"), path)
     assert.ok(text.includes("'Try sample request'"), path)
     assert.doesNotMatch(text, /'Try one customer order'|'Start sample order'/)
   }
 })
 test('assisted catalog setup stays available in both local views and preserves the draft tab', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
-  const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*return \(/)?.[1]
+  const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*const assistedCatalogEntry/)?.[1]
   assert.ok(expression)
   const ready = { catalogHydrating: false, managedIdentity: null, catalog: { source: 'sample' }, draftIssue: '', draftBusy: false, workspaceView: 'preview' }
   assert.equal(vm.runInNewContext(expression, ready), true)
@@ -43,7 +44,24 @@ test('assisted catalog setup stays available in both local views and preserves t
   }
   assert.match(product, /product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer"/)
   assert.match(product, /sample requests are not live orders/)
-  assert.match(product, /\{ecommerceTodayHeadline\}/)
+  assert.match(product, /: ecommerceTodayHeadline\}/)
+})
+
+test('fresh assisted entry yields to retained work, carts, attention and editor state', () => {
+  const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*return \(/)?.[1]
+  assert.ok(expression)
+  const ready = { showAssistedCatalogSetup: true, workspaceView: 'preview', savedDraft: null, ecommerceTodayAction: 'Try sample request', ecommerceTodayState: 'ready', ecommerceTodayCartUnits: 0 }
+  assert.equal(vm.runInNewContext(expression, ready), true)
+  for (const blocked of [{ showAssistedCatalogSetup: false }, { workspaceView: 'setup' }, { savedDraft: { revision: 1 } }, { ecommerceTodayAction: 'Review checkout' }, { ecommerceTodayAction: 'View request receipt' }, { ecommerceTodayAction: 'Fix order import' }, { ecommerceTodayState: 'attention' }, { ecommerceTodayState: 'setup' }, { ecommerceTodayCartUnits: 1 }]) {
+    assert.equal(vm.runInNewContext(expression, { ...ready, ...blocked }), false)
+  }
+  assert.ok(product.includes('{!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">'))
+  assert.ok(product.includes('Let SuperMega prepare your catalog'))
+  assert.ok(product.includes('Requesting setup does not publish a store or activate orders, payments or stock.'))
+  const action = product.slice(product.indexOf('{assistedCatalogEntry ? <div className="form-actions ecommerce-service-actions">'), product.indexOf('{ecommerceTodayGuided ? ('))
+  assert.match(action, /<a className="core-button primary"[^>]+>Request catalog setup/)
+  assert.match(action, /<button className="core-button secondary" onClick=\{runOrderAutopilot\} type="button">Try sample request/)
 })
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('buying.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
