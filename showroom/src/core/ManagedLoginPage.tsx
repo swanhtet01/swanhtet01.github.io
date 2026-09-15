@@ -149,6 +149,8 @@ export function ManagedLoginPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (!managedReady || busy || accountRequestPending.current) return
+    accountRequestPending.current = true
     setBusy(true)
     setNoticeTone('quiet')
     try {
@@ -178,12 +180,16 @@ export function ManagedLoginPage() {
       setNoticeTone('error')
       setNotice(error instanceof Error ? error.message : 'Managed sign-in failed.')
     } finally {
+      setPassword('')
+      accountRequestPending.current = false
       setBusy(false)
     }
   }
 
   async function activate(event: FormEvent) {
     event.preventDefault()
+    if (!managedReady || busy || accountRequestPending.current) return
+    accountRequestPending.current = true
     setBusy(true)
     setNoticeTone('quiet')
     setClaimCodeFieldError(false)
@@ -208,12 +214,15 @@ export function ManagedLoginPage() {
       } else {
         setNotice(error instanceof Error ? error.message : 'The company could not be activated.')
       }
+    } finally {
+      accountRequestPending.current = false
       setBusy(false)
     }
   }
 
   async function chooseAnotherCompany() {
-    if (!existingIdentity) return
+    if (!existingIdentity || busy || accountRequestPending.current) return
+    accountRequestPending.current = true
     setBusy(true)
     setNoticeTone('quiet')
     setNotice('Finding your other companies...')
@@ -233,11 +242,14 @@ export function ManagedLoginPage() {
       setExistingIdentity(null)
       setNotice(error instanceof Error ? error.message : 'Your company list could not be loaded.')
     } finally {
+      accountRequestPending.current = false
       setBusy(false)
     }
   }
 
   async function signOut() {
+    if (busy || accountRequestPending.current) return
+    accountRequestPending.current = true
     setBusy(true)
     setNoticeTone('quiet')
     try {
@@ -253,6 +265,7 @@ export function ManagedLoginPage() {
       setNoticeTone('error')
       setNotice(error instanceof Error ? error.message : 'Sign out could not be completed.')
     } finally {
+      accountRequestPending.current = false
       setBusy(false)
     }
   }
@@ -291,7 +304,7 @@ export function ManagedLoginPage() {
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
         <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Ask a person to finish setup instead</a>
-        <button className="account-inline-link account-link-button" onClick={() => { setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">{bi('Back to sign in')}</button>
+        <button className="account-inline-link account-link-button" disabled={busy} onClick={() => { if (accountRequestPending.current) return; setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">{bi('Back to sign in')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : managedReady ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
         <div><span className="core-eyebrow">Company account</span><h2>{directory ? 'Choose your company.' : 'Use your work account.'}</h2><p>{directory ? 'Only active companies assigned to this account are shown.' : 'No workspace code or technical setup is required.'}</p></div>
