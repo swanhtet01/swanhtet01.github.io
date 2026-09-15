@@ -655,7 +655,7 @@ const contactScript = `<script>(function(){
     if(!proof)return;
     if(proof.proof_product===(product&&product.value||'')&&proof.proof_template===(template&&template.value.trim().toLowerCase()||''))return;
     proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;
-    if(copyHeading)copyHeading.textContent='Your setup is ready.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
+    if(copyHeading)copyHeading.textContent='Your brief is ready to review.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
   }
   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged()});
   if(template)template.addEventListener('input',detachProofIfChanged);
@@ -670,7 +670,7 @@ const contactScript = `<script>(function(){
     var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';
     if(heading)heading.textContent='Finish your '+productName+' request.';
     if(lede)lede.textContent='Your company and goal are already filled. Add your name and reply email, review the request, then send it.';
-    if(copyHeading)copyHeading.textContent=proof?'Your trial proof is attached.':'Your setup is ready.';
+    if(copyHeading)copyHeading.textContent=proof?'Your trial proof is attached.':'Your brief is ready to review.';
     if(copy)copy.textContent=proof?'Readiness, source count, behavior count, reviewed decisions, and the digest-bound outcome summary move forward. Raw records, questions, approval contents, and account details stay out.':'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.';
     status.textContent=proof?'Trial summary attached for review. Nothing has been sent.':proofResult.attempted?'Company and goal are ready. Trial proof was not attached because it did not match this request.':'Company and goal are ready for review from your AI memory.';
     history.replaceState(null,'',location.pathname+location.search);

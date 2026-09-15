@@ -19,17 +19,18 @@ test('service brief asks for a business result without requiring template knowle
   assert.match(html, /name="goal" required maxlength="4000"/)
 })
 
-function harness(responses, search = '') {
+function harness(responses, search = '', hash = '') {
   const fields = new Map()
   const events = new Map()
   const windowEvents = new Map()
   let handler, resets = 0
   const calls = []
   const timers = new Map()
+  const headings = new Map()
   let timerId = 0
   const form = {
     querySelector(selector) {
-      if (!fields.has(selector)) fields.set(selector, { value: selector === '[name="product"]' ? 'guide' : '', addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
+      if (!fields.has(selector)) fields.set(selector, { value: selector === '[name="product"]' ? 'guide' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
     addEventListener(name, callback) { if (name === 'submit') handler = callback },
@@ -38,8 +39,16 @@ function harness(responses, search = '') {
   let keys = 0
   const crypto = { randomUUID: () => 'local-retry-key-' + ++keys }
   runInNewContext(script, {
-    document: { querySelector: selector => selector === '[data-contact-form]' ? form : null, referrer: '' },
-    location: { search, hash: '', href: 'https://supermega.dev/contact/' + search },
+    document: { querySelector: selector => {
+      if (selector === '[data-contact-form]') return form
+      if (['[data-contact-heading]', '[data-contact-lede]', '[data-contact-copy-heading]', '[data-contact-copy]'].includes(selector)) {
+        if (!headings.has(selector)) headings.set(selector, { textContent: '' })
+        return headings.get(selector)
+      }
+      return null
+    }, referrer: '' },
+    history: { replaceState() {} },
+    location: { search, hash, pathname: '/contact/', href: 'https://supermega.dev/contact/' + search },
     URLSearchParams, window: { crypto, addEventListener(name, callback) { windowEvents.set(name, callback) }, removeEventListener(name, callback) { if (windowEvents.get(name) === callback) windowEvents.delete(name) } }, crypto,
     AbortController,
     setTimeout(callback, delay) { assert.equal(delay, 20000); timers.set(++timerId, callback); return timerId },
@@ -59,8 +68,16 @@ function harness(responses, search = '') {
     },
   })
   form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { fields, calls, timers, windowEvents, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { fields, headings, calls, timers, windowEvents, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
+
+test('prefilled brief does not claim that customer setup is complete', () => {
+  const state = harness([], '?product=website', '#company=Example&goal=Prepare%20our%20website')
+  assert.equal(state.headings.get('[data-contact-copy-heading]').textContent, 'Your brief is ready to review.')
+  assert.equal(state.fields.get('[name="company"]').value, 'Example')
+  assert.equal(state.calls.length, 0)
+  assert.doesNotMatch(script, /Your setup is ready\./)
+})
 
 test('product handoffs prefill hidden context and product changes discard stale templates only', () => {
   for (const product of ['shop', 'ecommerce', 'website']) {
