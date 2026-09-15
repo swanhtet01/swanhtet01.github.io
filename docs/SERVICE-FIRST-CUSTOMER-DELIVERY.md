@@ -187,3 +187,27 @@ Company coordination records the owner, next action and evidence link for each
 item. It does not authorize outreach, account creation or a release. The current
 corporate task's administrator/authenticated-agent dependency remains unresolved;
 do not claim an autonomous R&D team is operating until that dependency is verified.
+
+### Preparation ownership (proposed, not accepted assignments)
+
+- Corporate agent: task/moderator scripts, pseudonymous result fields and balanced
+  variant order, using the existing corporate preparation role.
+- Product lead with Corporate agent: exact variant revisions, disposable fixtures,
+  expected task results and failure/recovery checks.
+- Owner with Corporate agent: name the accountable study owner/moderator and
+  intended participant segment before any recruitment.
+- Workspace administrator: verify restricted consent/contact storage before any
+  participant information is collected. This dependency remains unresolved.
+
+The retained predecessor for the service-first app-entry comparison is the parent
+of `b6712b71` (resolve and inspect its full SHA before use); the current study
+candidate must likewise be pinned after implementation stabilizes. Do not treat
+unbuilt historical source as a usable baseline or compare unequal starting data.
+
+Backend inspection: `supermega_runtime/website_runtime.py` already validates exact
+content source and lifecycle record relationships; managed approval uses the
+existing Website command surface. The seven `tests.test_website_runtime` tests
+passed locally on 2026-09-15. This does not prove live authorization or customer
+access. Before implementation, define separate customer review/change-request
+permissions and their server-side checks; never widen `website.write` merely to
+make a customer review screen work.
