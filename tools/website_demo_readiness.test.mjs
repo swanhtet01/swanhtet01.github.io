@@ -58,6 +58,17 @@ function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
 }
 
+test('Website keeps readiness visible while detailed checks collapse before the preview', () => {
+  assert.match(websiteProductSource, /<details className="website-today-checks">\s*<summary>Site checks · \{websiteTodayMetrics\[1\]\[1\]\}<\/summary>/)
+  const checks = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
+  assert.match(checks, /aria-label="Website today status"/)
+  assert.match(checks, /websiteTodayMetrics\.map/)
+  assert.match(checks, /<\/details>/)
+  assert.match(websiteProductSource, /<div className="website-today-source" role="status">[\s\S]*?\{websiteReviewNote\}/)
+  assert.match(websiteProductCss, /\.website-today-checks > summary \{\s*min-height: 2\.75rem;/)
+  assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
+})
+
 test('mobile Website actions wrap complete labels without shrinking tap targets', () => {
   const mobile = websiteProductCss.slice(websiteProductCss.indexOf('@media screen and (max-width: 560px) {'))
   assert.match(mobile, /\.website-primary-actions > \.website-button \{\s*white-space: normal;\s*overflow-wrap: anywhere;\s*line-height: 1\.3;\s*padding-block: \.5rem;\s*text-align: center;\s*\}/)

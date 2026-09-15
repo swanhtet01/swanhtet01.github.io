@@ -1198,9 +1198,12 @@ export function WebsiteProduct() {
               <p>{websiteAgentReason}</p>
               <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
             </div>
-            <div aria-label="Website today status" className="website-today-metrics" role="group">
-              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
+            <details className="website-today-checks">
+              <summary>Site checks · {websiteTodayMetrics[1][1]}</summary>
+              <div aria-label="Website today status" className="website-today-metrics" role="group">
+                {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+              </div>
+            </details>
             <div className="website-today-source" role="status">
               <span>{websiteTodayContext}</span>
               <small>{websiteReviewNote}</small>
