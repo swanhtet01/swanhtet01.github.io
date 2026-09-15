@@ -416,6 +416,8 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
 
     <ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />
 
+    <details aria-label="Optional Shop walkthroughs" className="shop-today-workspaces">
+      <summary><span><strong>Optional walkthroughs</strong><small>Synthetic examples, separate from your Shop records</small></span><b>2 demos</b></summary>
     <section aria-label="Synthetic bakery Batch Profit Control demo" className="shop-margin-control">
       <header>
         <div>
@@ -491,6 +493,8 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </> : null}
       <p className="panel-note">Your current Shop workspace above remains authoritative and unchanged. This demo performs no payment, stock, supplier, accounting, customer, hosted, model, provider, or production action.</p>
     </section>
+
+    </details>
 
     <details className="shop-today-workspaces">
       <summary><span><strong>More Shop tools</strong><small>Customers, finance, channels, and purchasing</small></span><b>{modules.length} connected areas</b></summary>
