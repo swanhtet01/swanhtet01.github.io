@@ -27,12 +27,15 @@ EXTRAS = (
     "20260817090000_private_trial_backend_v12_billing_rail.sql",
     "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
     "20260907024457_self_serve_durable_attempt_budget.sql",
+    "20260915184728_website_customer_review_storage.sql",
+    "20260915191528_website_review_entitlement_proof.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")
 TABLES = (
     "approval_requests", "billing_entitlements", "billing_events", "billing_invoices",
-    "self_serve_attempt_budgets", "trial_schema_meta", "workspace_access_controls",
+    "self_serve_attempt_budgets", "trial_schema_meta",
+    "website_customer_feedback", "website_customer_reviews", "workspace_access_controls",
     "workspace_events", "workspace_memberships", "workspace_state",
 )
 CHECKS = (

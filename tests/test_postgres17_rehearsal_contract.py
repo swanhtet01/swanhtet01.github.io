@@ -33,7 +33,20 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertEqual(module.CURRENT_MIGRATIONS, (*module.MIGRATIONS,
             "20260817090000_private_trial_backend_v12_billing_rail.sql",
             "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
-            "20260907024457_self_serve_durable_attempt_budget.sql"))
+            "20260907024457_self_serve_durable_attempt_budget.sql",
+            "20260915184728_website_customer_review_storage.sql",
+            "20260915191528_website_review_entitlement_proof.sql"))
+        observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
+                                if path.name != "20260711081300_public_legacy_baseline.sql"))
+        self.assertEqual(module.CURRENT_MIGRATIONS, observed)
+
+    def test_account_restore_inventory_includes_website_review_history(self) -> None:
+        from tools import rehearse_self_serve_v13 as account
+        module = _load_rehearsal()
+        self.assertEqual(account.MIGRATIONS, module.CURRENT_MIGRATIONS)
+        self.assertEqual(account.TABLES, tuple(sorted(set(account.TABLES))))
+        self.assertIn("website_customer_reviews", account.TABLES)
+        self.assertIn("website_customer_feedback", account.TABLES)
 
     def test_rehearsal_declares_the_complete_fail_closed_boundary(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")

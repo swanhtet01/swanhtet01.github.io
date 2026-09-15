@@ -20,6 +20,8 @@ const migrations = [
   '20260817090000_private_trial_backend_v12_billing_rail.sql',
   '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql',
   '20260907024457_self_serve_durable_attempt_budget.sql',
+  '20260915184728_website_customer_review_storage.sql',
+  '20260915191528_website_review_entitlement_proof.sql',
 ]
 
 const implementationPaths = [...new Set([
