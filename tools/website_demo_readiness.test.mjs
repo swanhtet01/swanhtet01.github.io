@@ -80,6 +80,18 @@ test('assisted Website entry stays local-only and defers to recovery and edit st
   assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
 })
 
+test('untouched assisted preview does not invite customers into the builder', () => {
+  const expression = websiteProductSource.match(/const showWebsiteEditorAction = ([^\r\n]+)/)?.[1]
+  assert.ok(expression)
+  for (const showAssistedWebsitePreview of [false, true]) {
+    for (const starterAvailable of [false, true]) {
+      assert.equal(runInNewContext(expression, { showAssistedWebsitePreview, starterAvailable }), !(showAssistedWebsitePreview && starterAvailable))
+    }
+  }
+  assert.match(websiteProductSource, /\{showWebsiteEditorAction \? <button[\s\S]*?\{websiteSurfaceActionLabel\}\s*<\/button> : null\}/)
+  assert.match(websiteProductSource, /if \(pendingRestoredDraft\) \{\s*focusRestoredDraftChoice\(\)/)
+})
+
 test('Website keeps readiness visible while detailed checks collapse before the preview', () => {
   assert.match(websiteProductSource, /<details className="website-today-checks">\s*<summary>Site checks · \{websiteTodayMetrics\[1\]\[1\]\}<\/summary>/)
   const checks = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))

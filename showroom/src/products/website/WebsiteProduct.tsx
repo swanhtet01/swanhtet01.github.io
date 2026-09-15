@@ -286,6 +286,7 @@ export function WebsiteProduct() {
     && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
     && !hasUnsavedChanges && !starterSetupActive
   const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'
+  const showWebsiteEditorAction = !(showAssistedWebsitePreview && starterAvailable)
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
     ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
@@ -1328,7 +1329,7 @@ export function WebsiteProduct() {
                     </div>
                   </details>
                 ) : null}
-                <button
+                {showWebsiteEditorAction ? <button
                   className={`website-button ${surface === 'preview' && !starterAvailable ? 'is-primary' : 'is-secondary'}`}
                   disabled={portalViewOnly && surface === 'preview'}
                   onClick={() => {
@@ -1342,7 +1343,7 @@ export function WebsiteProduct() {
                   type="button"
                 >
                   {websiteSurfaceActionLabel}
-                </button>
+                </button> : null}
                 {hasUnsavedChanges ? (
                   <>
                     <button
