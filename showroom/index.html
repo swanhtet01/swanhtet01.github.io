@@ -2,11 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!--
-      Second layer behind the response headers in vercel.json, for any host that
-      cannot set them. frame-ancestors is deliberately absent: it is ignored in a
-      meta policy, so clickjacking is refused by the header alone.
-    -->
+    <!-- CSP fallback; frame-ancestors is enforced by response headers only. -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co; worker-src 'self' blob:; manifest-src 'self'"
@@ -14,9 +10,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.svg" />
     <link rel="mask-icon" href="/favicon.svg" color="#0b745e" />
-    <!-- iOS "Add to Home Screen" does not read the manifest's icons at all -- it only
-         ever looks for this link. Without it, an installed iOS shortcut fell back to a
-         screenshot of the page instead of the brand mark. -->
+    <!-- iOS home-screen installs require this icon link. -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -26,15 +20,7 @@
       content="A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write."
     />
     <meta name="theme-color" content="#f6f4ee" />
-    <!-- Zero-flash theme restore. A returning user's theme choice lives in localStorage
-         and CoreShell only stamps it onto <html> after React mounts, so without this a
-         dark-theme user saw a light flash on every load. Still a render-blocking classic
-         script, so it runs before the browser paints and the CSS in core-app.css that
-         matches :root[data-supermega-theme="dark"] is already active at first paint.
-         It is a FILE and not an inline block because the content policy on this app is
-         `script-src 'self'` with no hash and no nonce: an inline script here is refused
-         outright and never runs. Source and the THEME_KEY note live beside the other two
-         shell scripts in tools/write_app_release_metadata.mjs. -->
+    <!-- Blocking external theme restore prevents flash; script-src self forbids inline code. -->
     <script src="/theme-restore.js"></script>
     <meta property="og:title" content="SuperMega" />
     <meta
@@ -52,10 +38,7 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- Both of these are files rather than inline blocks for the same reason as
-         /theme-restore.js above: `script-src 'self'` refuses inline script, so the
-         registration below silently never ran and the app had no service worker and
-         no offline mode at all. Sources: tools/write_app_release_metadata.mjs. -->
+    <!-- CSP-safe external scripts; sources in tools/write_app_release_metadata.mjs. -->
     <script src="/sw-register.js"></script>
     <script src="/vercel-insights.js"></script>
   </body>
