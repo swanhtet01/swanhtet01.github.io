@@ -38,7 +38,7 @@ export function verifyCurrentReleaseAssets({
     ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit sample', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
     ['ecommerce', ecommerceProductCorpus, ['Extra order tools', 'Preview verification', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
     ['data_onboarding', clientDataOnboardingChunk, ['Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'No customer message, payment, website publish, or automation runs from this check.']],
-    ['company_login', managedLoginChunk, ['Open your company.', 'Try free demo', 'Request company account']],
+    ['company_login', managedLoginChunk, ['Open your company.', 'Company sign-in is not available here yet.', 'Try a sample — no account', 'Ask SuperMega to set me up', 'Sample records stay on this device; they are not a shared company workspace.']],
     ['account_recovery', managedAccountChunk, ['Recover your account.', 'Secure your account.', 'Save password and continue']],
     ['company_backup', companyBackupCorpus, ['supermega.company_backup.v1', 'Customer-owned and encrypted', 'Download encrypted backup', 'Auth sessions, company account IDs, and credentials are excluded.']],
     ['activation', activationRunbookChunk, ['Evidence to go live', 'proof gates ready']],
@@ -612,7 +612,8 @@ for (const required of ['Premium pilot', 'Your business context, remembered.', '
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_premium_pilot_context:${required}`)
 }
 const managedLoginLiveCopyUpdates = new Map([
-  ['Request managed activation', 'Request company account'],
+  ['Open free workspace', 'Try a sample — no account'],
+  ['Request managed activation', 'Ask SuperMega to set me up'],
 ])
 for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Use your work account.', 'No workspace code or technical setup is required.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
   const currentRequired = managedLoginLiveCopyUpdates.get(required) ?? required

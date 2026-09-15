@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { activeSetupProductContracts, productContracts, seedSetupForProduct,
   rememberProductSetup, readProductSetup, setupProductFromQuery } from '../showroom/src/core/product-setup.ts'
@@ -35,6 +36,29 @@ test('unavailable sign-in has one no-account sample path, separate from assisted
   assert.match(unavailable, /Ask SuperMega to set me up/)
   assert.doesNotMatch(unavailable, /Free trial|Try free demo/)
   assert.match(source, /Date\.now\(\) < cooldownUntil/)
+})
+
+test('release assets require the current login choices and local workspace boundary', async () => {
+  const source = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
+  const body = source.slice(source.indexOf('export function verifyCurrentReleaseAssets('), source.indexOf('async function readArtifactChunk('))
+    .replace('export function', 'function')
+  // Extract only the pure validator: importing this CLI would make live requests.
+  const validate = runInNewContext(`${body}; verifyCurrentReleaseAssets`)
+  const inspectGroups = runInNewContext(`${body.replace('let checks = 0', 'return groups; let checks = 0')}; verifyCurrentReleaseAssets`)
+  const keys = ['assetCorpus', 'operationsChunk', 'productSystemNavigatorChunk', 'productOnboardingChunk', 'settingsChunk', 'ecommerceProductCorpus', 'websiteChunk', 'clientDataOnboardingChunk', 'managedLoginChunk', 'managedAccountChunk', 'companyBackupCorpus', 'activationRunbookChunk']
+  const input = { manifest: { brand: { colors: { accent: '#fixture-accent', ink: '#fixture-ink' } } }, ...Object.fromEntries(keys.map(key => [key, key])) }
+  const groups = inspectGroups(input)
+  for (const key of keys) input[key] = ''
+  for (const [, key, required] of groups) input[key] += `${required.join('\n')}\n`
+  assert.doesNotThrow(() => validate(input))
+  const requiredLogin = groups.find(([name]) => name === 'company_login')[2]
+  for (const label of ['Try a sample — no account', 'Ask SuperMega to set me up', 'Sample records stay on this device; they are not a shared company workspace.']) {
+    assert.ok(requiredLogin.includes(label), `missing login contract: ${label}`)
+  }
+  for (const label of requiredLogin) {
+    assert.throws(() => validate({ ...input, managedLoginChunk: input.managedLoginChunk.replace(label, '') }), /missing_current_release_asset:company_login:/)
+  }
+  assert.throws(() => validate({ ...input, managedLoginChunk: 'Open your company. Try free demo Request company account' }), /missing_current_release_asset:company_login:/)
 })
 
 test('launcher consumes active policy without discarding retained or assigned access', async () => {
