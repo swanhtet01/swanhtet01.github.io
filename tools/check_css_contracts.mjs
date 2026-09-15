@@ -372,6 +372,12 @@ if (lowerings.length) {
   console.log('css contracts: NEW FLOORS WRITTEN to tools/check_css_contracts.mjs -- commit this file with the batch that retired the literals')
 }
 
+// A truncated name can hide the only distinction between two sellable items.
+const productNameRules = [...readFileSync(resolve(ROOT, CORE_CSS), 'utf8').matchAll(/\.shop-product-copy strong\s*\{([^}]+)\}/g)].map((match) => match[1]).join('\n')
+check(/white-space:\s*normal/.test(productNameRules), 'counter item names wrap instead of truncating')
+check(/overflow-wrap:\s*anywhere/.test(productNameRules), 'unbroken counter item names stay inside their tile')
+check(!/white-space:\s*nowrap|text-overflow:\s*ellipsis|line-clamp|overflow:\s*hidden/.test(productNameRules), 'responsive counter name rules never hide the item identity')
+
 console.log(
   `css contracts: ${checks} checks passed (${liveHexTotal} live hex under ${[...CEILINGS.values()].reduce((a, b) => a + b.hex, 0)} ceiling and ${livePxTotal} live px under ${[...CEILINGS.values()].reduce((a, b) => a + b.px, 0)} ceiling across ${CASCADES.size} stylesheets, ${varUseTotal} var() consumptions all resolving, ${lowerings.length} ceilings lowered)`,
 )

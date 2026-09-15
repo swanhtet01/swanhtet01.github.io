@@ -1808,7 +1808,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-product-art .art-detail { fill: var(--art-detail); }
 .shop-product-art .art-highlight { fill: none; stroke: rgba(255,255,255,.8); stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
 .shop-product-copy { min-width: 0; display: grid; gap: 3px; }
-.shop-product-copy strong { overflow: hidden; font-size: 0.875rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+/* Counter operators must distinguish full item names before adding a sale line. */
+.shop-product-copy strong { font-size: 0.875rem; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
 /* Price and stock are the two numbers the counter actually reads, and they were the
    smallest text on the screen — 12px and 9px, on a tile 220px tall. Burmese script needs
    more height than Latin to stay legible, and the reader is often standing over a phone in
