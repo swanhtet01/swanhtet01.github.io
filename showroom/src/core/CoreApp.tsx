@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { shopCounterDraftContext } from './shop-counter-draft-context'
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCommerceItems,
@@ -1194,7 +1195,7 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, productImageScope, sampleCatalogActive }: {
+function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, sampleCatalogActive }: {
   businessTemplate: ShopBusinessTemplate | null
   canCompleteInOneReview: boolean
   disabled: boolean
@@ -1208,10 +1209,11 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
   paymentQrScope: string
+  persistLocalDraft: boolean
   productImageScope: string
   sampleCatalogActive: boolean
 }) {
-  const [restoredDraft] = useState(readShopCounterDraft)
+  const [restoredDraft] = useState(() => persistLocalDraft ? readShopCounterDraft() : null)
   const [cart, setCart] = useState<Record<string, number>>(() => restoredDraft?.cart ?? {})
   const [customer, setCustomer] = useState(() => restoredDraft?.customer || initialCustomer)
   const [payment, setPayment] = useState(() => restoredDraft?.payment ?? 'Cash')
@@ -1239,6 +1241,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   // method on every load. A sale exists only if it has at least one sellable line.
   const liveCartJson = JSON.stringify(Object.fromEntries(lines.map((line) => [line.item.sku, line.quantity])))
   useEffect(() => {
+    if (!persistLocalDraft) return
     try {
       if (liveCartJson === '{}') window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
       else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart: JSON.parse(liveCartJson), customer, payment, outcome }))
@@ -1246,7 +1249,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
       // Storage full or blocked. The counter keeps working in memory; losing persistence
       // must never cost the operator the sale they are ringing up right now.
     }
-  }, [liveCartJson, customer, payment, outcome])
+  }, [persistLocalDraft, liveCartJson, customer, payment, outcome])
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
@@ -1407,6 +1410,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
       <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
+        {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
         <header><div><span className="core-eyebrow">{bi('Current sale')}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{unitCount ? <button className="text-link" onClick={clearSale} type="button">{bi('Clear')}</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
         <div className="shop-cart-lines">
           {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>{bi('Your sale is empty')}</strong><small>{bi('Tap any product to begin.')}</small></div>}
@@ -1672,6 +1676,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
+  const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
   // Money-path isolation (payment-qr-store.ts scope note): the QR lookup key must
   // carry which company this browser is operating as, or a later workspace could
   // show an earlier merchant's bank QR at its counter.
@@ -6810,7 +6815,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopTradeDemoNotice}
-    <ShopCounter businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || shopTradeDemoCheckoutBlocked} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || shopTradeDemoCheckoutBlocked} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} sampleCatalogActive={shopSampleCatalogActive} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
