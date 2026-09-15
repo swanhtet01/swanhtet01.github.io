@@ -719,6 +719,18 @@ def _policy_expression_matches(expression: Any, expected_sha256: str | None) -> 
     return _catalog_expression_fingerprint(expression) == expected_sha256
 
 
+def _index_predicate_matches(row: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+    """Partial indexes require an explicit, literal-preserving catalog predicate."""
+    predicate = expected.get("predicate_expression")
+    observed = row.get("predicate_expression")
+    if predicate is None:
+        return row.get("no_predicate") is True and observed is None
+    return (isinstance(predicate, str) and bool(predicate.strip())
+            and row.get("no_predicate") is False
+            and isinstance(observed, str)
+            and observed.replace("\r\n", "\n") == predicate.replace("\r\n", "\n"))
+
+
 def _safe_runtime_membership_options(row: Mapping[str, Any]) -> bool:
     return (
         row.get("admin_option") is False
@@ -1491,6 +1503,7 @@ def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> 
                    index_catalog.indnatts = index_catalog.indnkeyatts as no_included_columns,
                    not index_catalog.indnullsnotdistinct as nulls_distinct,
                    index_catalog.indpred is null as no_predicate,
+                   pg_get_expr(index_catalog.indpred, index_catalog.indrelid, false) as predicate_expression,
                    index_catalog.indexprs is null as no_expressions,
                    array(
                      select pg_get_indexdef(
@@ -2007,7 +2020,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any], *, schema_profile: str = "leg
                 and _bool(row.get("not_exclusion"))
                 and _bool(row.get("no_included_columns"))
                 and _bool(row.get("nulls_distinct"))
-                and _bool(row.get("no_predicate"))
+                and _index_predicate_matches(row, expected)
                 and _bool(row.get("no_expressions"))
                 and _normalized_index_keys(row.get("key_columns")) == expected["keys"]
                 and _ordered_ints(row.get("key_options")) == expected["options"]

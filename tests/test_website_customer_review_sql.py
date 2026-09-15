@@ -76,6 +76,28 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         with connection.cursor() as cursor:
             PostgresTrialStore._set_context(cursor, TrialPrincipal(workspace, actor, actor_kind="human"))
 
+    def test_release_validator_reads_exact_partial_index_predicate(self):
+        from tools.validate_supermega_database_url import _index_predicate_matches
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("set transaction read only")
+            rows = connection.execute("""
+                select c.relname, i.indpred is null,
+                       pg_get_expr(i.indpred, i.indrelid, false)
+                from pg_index i join pg_class c on c.oid=i.indexrelid
+                join pg_namespace n on n.oid=c.relnamespace
+                where n.nspname='app_private' and c.relname in
+                  ('website_customer_reviews_active_idx','website_customer_reviews_recipient_idx')
+                order by c.relname
+            """).fetchall()
+        self.assertEqual(len(rows), 2)
+        for name, absent, expression in rows:
+            row = {"no_predicate": absent, "predicate_expression": expression}
+            expected = {"predicate_expression": "(status = 'active'::text)"} if name.endswith('active_idx') else {}
+            self.assertTrue(_index_predicate_matches(row, expected))
+            if expected:
+                self.assertFalse(_index_predicate_matches(row, {}))
+                self.assertFalse(_index_predicate_matches(row, {"predicate_expression": "(status = 'ACTIVE'::text)"}))
+
     @contextmanager
     def transaction(self, actor=OWNER, workspace=WORKSPACE, isolation=None):
         connection = pg._connect(self.runtime_url)
