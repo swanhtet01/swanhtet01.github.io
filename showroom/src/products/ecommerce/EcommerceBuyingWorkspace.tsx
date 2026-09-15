@@ -1338,7 +1338,7 @@ export function EcommerceBuyingWorkspace({
             </article>
           ) : quoteCurrent ? (
             <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
-              <span className="status-pill ready">Request sent</span>
+              <span className="status-pill ready">{onRecordManagedRequest ? 'Request sent to Shop' : 'Request saved on this device'}</span>
               <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">

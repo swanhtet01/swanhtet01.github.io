@@ -18,3 +18,8 @@ test('the browser-local truth boundary is the element brought into view', () => 
   assert.match(source, /Shop still confirms stock, promise, payment, and delivery\./)
   assert.doesNotMatch(source, /requestReceiptRef/)
 })
+
+test('the receipt badge distinguishes browser retention from managed submission', () => {
+  assert.match(source, /\{onRecordManagedRequest \? 'Request sent to Shop' : 'Request saved on this device'\}/)
+  assert.doesNotMatch(source, />Request sent<\/span>/)
+})
