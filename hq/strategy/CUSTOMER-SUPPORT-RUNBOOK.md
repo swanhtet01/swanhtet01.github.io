@@ -1,6 +1,6 @@
 # Customer support runbook — first response, no ticketing system
 
-Status: v1. Written 2026-08-17 after a company review found no documented
+Status: v2. Local operating guidance; hosted intake and staffing must be verified before launch. Originally written 2026-08-17 after a company review found no documented
 support procedure existed anywhere in the repo — the only prior answer to
 "a customer reports a problem" was the founder finding out by phone. This
 does not add a support tool; it writes down what to actually do with the
@@ -10,12 +10,48 @@ from zero.
 ## The channel today
 
 There is no ticketing system connector (no Zendesk/Freshdesk/Intercom). The
-only inbound channel is `supermega.dev/contact`, which lands in
-`supermega_leads` and fans out to the founder's email/Telegram
+public intake route is `supermega.dev/contact`. Depending on configuration,
+it may retain a request in `supermega_leads` and/or deliver it through email,
+Telegram or a webhook
 (`SUPERMEGA_CONTACT_NOTIFY_EMAIL`, default `swanhtet@supermega.dev`) — see
 `tools/create_public_vercel_output.mjs`. Until a real support inbox exists,
-**that email is support.** Reply from it directly; there is no queue to
-triage against.
+**that configured email is the support contact**, not proof of a staffed queue.
+The generated handler may return a receipt after durable retention even if
+notifications fail. It can also accept through a configured delivery channel
+when durable storage is not configured. A receipt is therefore not proof that
+someone read the request, that an email reached an inbox, or that an account
+was created. The status endpoint reports configuration, not end-to-end delivery.
+
+## Request received → assigned → prepared → reviewed
+
+Before accepting real setup work, name an intake owner and backup, verify the
+configured inbox is accessible, and prove an authorized synthetic request can
+be found there or in the approved retained-intake workflow. Do not call intake
+operational if there is no staffed route to find accepted requests. Record the
+test reference and observed result; provider acceptance alone is insufficient.
+
+Use the existing private operating tracker, not a new public spreadsheet or
+an unapproved integration. Track only reference, product, assigned owner,
+stage, next action and agreed follow-up date. Keep contact details and briefs
+in their approved source rather than copying them across agent workspaces.
+
+1. **Received:** locate the exact `LEAD-…` reference; reconcile retries by that
+   reference before creating another task. If it cannot be located, escalate
+   as intake-unconfirmed; do not ask the customer to submit repeatedly.
+2. **Assigned:** a named person accepts responsibility and confirms needs,
+   scope, price and timing. Do not infer that an acknowledgement email is a
+   human response or an agreed deadline.
+3. **Prepared:** SuperMega prepares the Website/catalog preview or Shop setup.
+   Ask for the business result, not for the customer to learn a builder.
+4. **Reviewed:** record the customer's explicit decision against the exact
+   preview/setup revision. A request for changes is not publication approval.
+5. **Ready for activation:** separately verify account access, data/import
+   scope, recovery and product-specific release checks. Receipt, price
+   agreement and preview approval do not bypass deployment or data gates.
+
+At each agreed intake review, reconcile open references with assigned owners
+and next actions. Notification failure or an unassigned retained request is an
+operational issue to resolve, not a reason to claim the customer was contacted.
 
 ## "A customer says they lost data"
 
@@ -40,28 +76,29 @@ restore point the product already made automatically.
    is not recoverable by SuperMega — there is nothing to restore from because
    nothing left the device. Say this plainly and early; do not imply a
    recovery is being attempted if none is possible.
-5. For a MANAGED workspace (the customer has a company account, not just a
-   free trial): the trial store's durable event log means the record itself
-   cannot silently vanish — a missing record is very likely a display/sync
-   issue, not data loss. Escalate to engineering with the workspace id and
-   the exact screen; do not attempt a database action from this runbook.
+5. For a MANAGED workspace: treat a missing record as an unresolved incident.
+   A durable event-log design does not prove this particular write was
+   committed, retained or recoverable. Preserve the visible status and
+   approximate time; escalate through the approved private engineering
+   channel. Do not assume a display issue, promise recovery, retry a financial
+   operation, or attempt a database action from this runbook.
 
 ## "A customer says a sale didn't record"
 
 1. Ask for the approximate time, item, and amount — Shop's daily-close and
    order history are searchable by these.
-2. Ask them to check **Shop → Orders**. Every sale that reaches "Create
-   order" exists as an order record even before payment/fulfilment is
-   finished — if it is not there, the confirmation dialog was likely
-   cancelled or never completed on their end (the product never silently
-   drops a confirmed order; every write requires the explicit "Confirm to
-   create the order" step, which they would remember).
+2. Ask them to check **Shop → Orders**, including the selected workspace,
+   date/filter and any pending sync or conflict notice. A clicked button or
+   remembered confirmation is not proof of a committed order. If the result
+   is missing or uncertain, preserve the reference/status and escalate before
+   repeating the sale, payment or stock action. Do not blame customer
+   cancellation or claim the product cannot lose a confirmed write.
 3. If a sale shows in daily-close totals but the customer disputes it, or
    vice versa: this is a genuine discrepancy, not a support script item.
    Escalate to engineering with the exact order id/time; do not attempt to
-   edit records — the ledger and order history are append-only by design
-   (corrections post reversals, never edits), so "fixing" it directly is not
-   possible even for the founder, and that is intentional.
+   edit records. Engineering must inspect the exact evidence and use the
+   applicable reviewed correction/reversal workflow. Never improvise a direct
+   database repair or represent a manual payment record as provider settlement.
 4. Never promise a refund, credit, or compensation from this runbook. That is
    a business decision, not a support script step.
 
