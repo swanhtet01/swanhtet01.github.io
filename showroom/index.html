@@ -2,43 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- CSP fallback; frame-ancestors is enforced by response headers only. -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co; worker-src 'self' blob:; manifest-src 'self'"
-    />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co; worker-src 'self' blob:; manifest-src 'self'" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.svg" />
     <link rel="mask-icon" href="/favicon.svg" color="#0b745e" />
-    <!-- iOS home-screen installs require this icon link. -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuperMega</title>
-    <meta
-      name="description"
-      content="A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write."
-    />
+    <meta name="description" content="A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write." />
     <meta name="theme-color" content="#f6f4ee" />
-    <!-- Blocking external theme restore prevents flash; script-src self forbids inline code. -->
     <script src="/theme-restore.js"></script>
     <meta property="og:title" content="SuperMega" />
-    <meta
-      property="og:description"
-      content="A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write."
-    />
+    <meta property="og:description" content="A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="SuperMega" />
-    <meta
-      name="twitter:description"
-      content="A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write."
-    />
+    <meta name="twitter:description" content="A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write." />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- CSP-safe external scripts; sources in tools/write_app_release_metadata.mjs. -->
     <script src="/sw-register.js"></script>
     <script src="/vercel-insights.js"></script>
   </body>
