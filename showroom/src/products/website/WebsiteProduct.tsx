@@ -11,6 +11,7 @@ import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
+import { WebsiteReviewInbox } from './WebsiteReviewInbox'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
@@ -160,6 +161,7 @@ export function WebsiteProduct() {
     storageMode,
     storageIssue,
     managedActorId,
+    managedWorkspaceId,
     canWrite,
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1375,6 +1377,8 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
+          {storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
+            ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
           {!starterSetupActive ? <details className="website-start-tools website-business-controls">
             <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">

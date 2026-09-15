@@ -1,0 +1,80 @@
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
+import test from 'node:test'
+const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+const { build } = require('esbuild')
+const source = readFileSync('showroom/src/products/website/WebsiteReviewInbox.tsx', 'utf8')
+// Expose the real private validators in the test bundle only; production keeps
+// the component module compatible with React Fast Refresh.
+const output = await build({ stdin: { contents: source + '\nexport { verifyStaffReviews, verifyStaffChanges };',
+  resolveDir: 'showroom/src/products/website', loader: 'tsx' }, bundle: true, write: false,
+  platform: 'node', format: 'cjs', jsx: 'automatic', logLevel: 'silent', plugins: [{ name: 'inbox-offline', setup(b) {
+    b.onResolve({ filter: /^(react|react\/jsx-runtime)$|managed-trial$/ }, args => ({ path: args.path, namespace: 'mock' }))
+    b.onLoad({ filter: /.*/, namespace: 'mock' }, args => ({ contents: args.path === 'react' ? `
+      export const useState = init => { const h=globalThis.h; const i=h.cursor++; if(!(i in h.slots)) h.slots[i]=typeof init==='function'?init():init;
+        return [h.slots[i], value=>{h.slots[i]=typeof value==='function'?value(h.slots[i]):value}]; };
+      export const useRef=init=>useState(()=>({current:init}))[0];
+      export const useEffect=fn=>{globalThis.h.effects.push(fn)};
+    ` : args.path === 'react/jsx-runtime' ? 'export const jsx=(type,props)=>({type,props}); export const jsxs=jsx;' : `
+      export const currentManagedIdentity=async()=>globalThis.h.identity;
+      export const sameManagedIdentity=(a,b)=>a.userId===b.userId&&a.workspaceId===b.workspaceId;
+      export const loadManagedWebsiteReviewStaffPage=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.response(...args)};
+    ` }))
+  } }] })
+const sandbox = { module: { exports: {} }, structuredClone, setTimeout, window: { addEventListener() {}, removeEventListener() {} } }
+sandbox.exports = sandbox.module.exports
+runInNewContext(output.outputFiles[0].text, sandbox)
+const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox } = sandbox.module.exports
+const id = n => `11111111-1111-4111-8111-${String(n).padStart(12, '0')}`
+const row = { reviewId: id(1), contentRevision: 1, sourceVersion: 2, preparedAt: '2026-09-16T00:00:00+00:00', expiresAt: '2026-09-17T00:00:00+00:00', status: 'active', hasChangeRequests: true }
+const listing = { reviews: [row], nextAfter: null, order: 'review_id_ascending', publicationAuthorized: false }
+const feedback = { reviewId: row.reviewId, contentRevision: 1, sourceVersion: 2, previewDigest: `sha256:${'a'.repeat(64)}`, reviewStatus: 'active', publicationAuthorized: false,
+  requests: [{ commandId: id(2), note: 'ပိုတိုအောင်ရေးပေးပါ <script>not executable</script>', createdAt: '2026-09-16T01:00:00.000002+00:00' },
+    { commandId: id(3), note: 'Retained older request', createdAt: '2026-09-16T01:00:00.000001+00:00' }], nextAfter: null }
+function elements(tree) { return Array.isArray(tree) ? tree.flatMap(elements) : tree && typeof tree === 'object' ? [tree, ...elements(tree.props?.children)] : [] }
+function text(tree) { return Array.isArray(tree) ? tree.map(text).join('') : tree && typeof tree === 'object' ? text(tree.props?.children) : typeof tree === 'string' || typeof tree === 'number' ? String(tree) : '' }
+function render() { sandbox.h.cursor = 0; sandbox.h.effects = []; return WebsiteReviewInbox({ actorId: 'actor', workspaceId: 'company' }) }
+const click = (tree, label) => elements(tree).find(node => node.type === 'button' && text(node) === label).props.onClick()
+const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve)) }
+function fixture(response = (_identity, review) => review ? feedback : listing) {
+  sandbox.h = { slots: [], cursor: 0, effects: [], calls: [], identity: { userId: 'actor', workspaceId: 'company' }, response }
+}
+test('metadata list is strictly bounded, ordered and identity-free', () => {
+  assert.equal(verifyStaffReviews(listing).reviews.length, 1)
+  for (const bad of [{ ...listing, publicationAuthorized: true }, { ...listing, actorId: 'private' },
+    { ...listing, reviews: [row, row] }, { ...listing, reviews: Array(51).fill(row) }, { ...listing, nextAfter: row.reviewId },
+    { ...listing, reviews: [{ ...row, recipientActorId: 'private' }] }]) assert.throws(() => verifyStaffReviews(bad))
+  assert.throws(() => verifyStaffReviews(listing, row.reviewId))
+})
+test('feedback binds source revision, preserves microsecond order and remains plain text', () => {
+  assert.equal(verifyStaffChanges(feedback, row).requests[0].note, feedback.requests[0].note)
+  for (const bad of [{ ...feedback, sourceVersion: 3 }, { ...feedback, publicationAuthorized: true },
+    { ...feedback, requests: [...feedback.requests].reverse() }, { ...feedback, requests: [feedback.requests[0], feedback.requests[0]] },
+    { ...feedback, requests: [{ ...feedback.requests[0], note: 'x'.repeat(2001) }] }]) assert.throws(() => verifyStaffChanges(bad, row))
+})
+test('actual inbox loads on demand, displays retained notes and does not send writes', async () => {
+  fixture(); let tree = render(); assert.equal(sandbox.h.calls.length, 0)
+  click(tree, 'Refresh reviews'); await settle(); tree = render()
+  assert.match(text(tree), /Customer changes retained/)
+  click(tree, 'Read requests for revision 1'); await settle(); tree = render()
+  assert.ok(text(tree).includes(feedback.requests[0].note))
+  assert.equal(elements(tree).some(node => node.type === 'script' || node.props?.dangerouslySetInnerHTML), false)
+  assert.equal(sandbox.h.calls.length, 2)
+})
+test('late responses after account change or cleanup cannot reveal private notes', async () => {
+  let release
+  fixture(() => new Promise(resolve => { release = resolve }))
+  let tree = render(); const cleanup = sandbox.h.effects[0]()
+  click(tree, 'Refresh reviews'); await settle()
+  sandbox.h.identity = { userId: 'other', workspaceId: 'elsewhere' }
+  release(listing); await settle(); tree = render()
+  assert.doesNotMatch(text(tree), /Customer changes retained/)
+  assert.match(text(tree), /could not be verified/)
+  cleanup()
+  fixture(() => new Promise(resolve => { release = resolve }))
+  tree = render(); const unmount = sandbox.h.effects[0]()
+  click(tree, 'Refresh reviews'); await settle(); unmount(); release(listing); await settle()
+  assert.equal(sandbox.h.slots[0], null)
+})

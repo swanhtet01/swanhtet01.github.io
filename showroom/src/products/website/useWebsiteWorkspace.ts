@@ -252,6 +252,7 @@ export function useWebsiteWorkspace(): {
   storageMode: StorageMode
   storageIssue: string
   managedActorId: string
+  managedWorkspaceId: string
   canWrite: boolean
 } {
   const [initialWorkspace] = useState(loadInitialWorkspace)
@@ -259,6 +260,7 @@ export function useWebsiteWorkspace(): {
   const [storageMode, setStorageMode] = useState<StorageMode>(initialWorkspace.storageMode)
   const [storageIssue, setStorageIssue] = useState(initialWorkspace.storageIssue)
   const [managedActorId, setManagedActorId] = useState('')
+  const [managedWorkspaceId, setManagedWorkspaceId] = useState('')
   const [canWrite, setCanWrite] = useState(true)
   const [repairAvailable, setRepairAvailable] = useState(Boolean(initialWorkspace.invalidCandidate))
   const [repairCandidateRevision, setRepairCandidateRevision] = useState(initialWorkspace.invalidCandidate ? 1 : 0)
@@ -355,6 +357,7 @@ export function useWebsiteWorkspace(): {
         managedCanWriteRef.current = managedCanWrite
         setCanWrite(managedCanWrite)
         setManagedActorId(bootstrap.identity.actor_id)
+        setManagedWorkspaceId(bootstrap.identity.workspace_id)
         managedVersionRef.current = managedVersion
         workspaceRef.current = managedWorkspace
         setWorkspace(managedWorkspace)
@@ -373,6 +376,7 @@ export function useWebsiteWorkspace(): {
           managedIdentityRef.current = null
           managedVersionRef.current = 0
           setManagedActorId('')
+          setManagedWorkspaceId('')
           workspaceRef.current = hiddenLocalWorkspace
           setWorkspace(hiddenLocalWorkspace)
           updateRepairCandidate(null)
@@ -503,6 +507,7 @@ export function useWebsiteWorkspace(): {
                 const refreshed = restoreWorkspace(record.state)
                 if (!refreshed) throw new Error('The newer managed Website state is invalid.', { cause: error })
                 setManagedActorId(bootstrap.identity.actor_id)
+                setManagedWorkspaceId(bootstrap.identity.workspace_id)
                 managedCanWriteRef.current = refreshedCanWrite
                 setCanWrite(refreshedCanWrite)
                 managedVersionRef.current = record.version
@@ -622,6 +627,7 @@ export function useWebsiteWorkspace(): {
     storageMode,
     storageIssue,
     managedActorId,
+    managedWorkspaceId,
     canWrite: storageMode !== 'managed' || canWrite,
   }
 }
