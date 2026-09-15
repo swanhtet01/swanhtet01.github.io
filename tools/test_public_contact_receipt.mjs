@@ -48,7 +48,7 @@ function harness(responses, search = '') {
       calls.push({ url, ...options })
       const next = await responses.shift()
       if (next instanceof Error) throw next
-      return { ok: next.ok !== false, json: async () => {
+      return { ok: next.ok !== false, status: next.status ?? 200, json: async () => {
         if (next.invalidJson) throw new Error('invalid JSON')
         return next.body
       } }
@@ -76,6 +76,28 @@ test('product handoffs prefill hidden context and product changes discard stale 
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
+test('only explicit pre-delivery validation failures unlock a corrected brief', async () => {
+  for (const reason of ['invalid_request', 'required_fields_missing', 'product_not_supported', 'trial_proof_invalid', 'idempotency_key_required']) {
+    const state = harness([{ ok: false, status: 400, body: { status: 'error', reason } }, { body: receipt }])
+    await state.submit()
+    assert.equal(state.resets(), 0)
+    assert.equal(state.fields.get('[name="idempotency_key"]').value, '')
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Request received|Retry sends/)
+    state.fields.get('[name="goal"]').value = 'Corrected brief'
+    await state.submit()
+    assert.equal(JSON.parse(state.calls[1].body).goal, 'Corrected brief')
+    assert.notEqual(state.calls[0].headers['x-idempotency-key'], state.calls[1].headers['x-idempotency-key'])
+  }
+  for (const status of [409, 429, 503]) {
+    const state = harness([{ ok: false, status, body: { status: 'error', reason: 'invalid_request' } }, { body: receipt }])
+    await state.submit()
+    state.fields.get('[name="goal"]').value = 'Later edit'
+    await state.submit()
+    assert.equal(state.calls[0].body, state.calls[1].body)
+    assert.equal(state.calls[0].headers['x-idempotency-key'], state.calls[1].headers['x-idempotency-key'])
+    assert.equal(state.resets(), 0)
+  }
+})
 test('late edits survive confirmation and uncertain retries resend the original brief', async () => {
   for (const failFirst of [false, true]) {
     let finish
