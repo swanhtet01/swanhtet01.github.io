@@ -2,6 +2,8 @@
 
 This gate records a browser-rendered local build and then verifies the saved evidence from disk. It is a candidate-integrity check, not a deployment, exact Vercel preview, customer pilot, production, revenue, or managed-persistence claim.
 
+The three new-user launcher cases require exactly Shop, Ecommerce, Website in that order, linked to `/shop/`, `/ecommerce/`, `/website/`. The renderer checks the visible navigation both before and after capture; the disk consumer revalidates the recorded links. Missing, duplicated, reordered, extra or misrouted cards fail closed. Plant remains covered by its separate compatibility-route cases, not a new-user acquisition card. Older full reports without launcher-link evidence must be regenerated, not relabeled as passing.
+
 ## Generate one exact proof
 
 Start from the reviewed clean commit. Use a new evidence directory that does not already contain files. Do not use real customer names, phone numbers, credentials, or private business records in screenshots.

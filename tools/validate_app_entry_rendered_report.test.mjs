@@ -14,6 +14,8 @@ import {
 } from './rendered_proof_provenance.mjs'
 import {
   APP_ENTRY_RENDERED_VALIDATION_CONTRACT,
+  assertCaseSemantics,
+  assertLauncherProductLinks,
   assertRenderedProofCaseMatrix,
   parseRenderedProofValidationArgs,
   validateRenderedProofReport,
@@ -29,6 +31,26 @@ function runGit(directory, args) {
   assert.equal(result.status, 0, result.stderr)
   return String(result.stdout || '').trim()
 }
+
+test('launcher evidence binds exact visible product order and routes in the disk consumer', () => {
+  const links = [{ name: 'Shop', href: '/shop/' }, { name: 'Ecommerce', href: '/ecommerce/' }, { name: 'Website', href: '/website/' }]
+  assert.doesNotThrow(() => assertLauncherProductLinks(links))
+  const invalid = [undefined, [], links.slice(0, 2), [...links, { name: 'Plant', href: '/plant/' }],
+    [links[1], links[0], links[2]], [links[0], links[0], links[2]],
+    [links[0], { name: 'Ecommerce', href: '/login' }, links[2]]]
+  for (const name of ['desktop root shows launcher despite remembered product', 'desktop choose query shows launcher', 'mobile root shows launcher']) {
+    const width = name.startsWith('mobile') ? 390 : 1280
+    const height = width === 390 ? 844 : 900
+    const expected = { name, width, height }
+    const entry = { ok: true, failures: [], runtime: { clean: true, errors: [] }, bodyLength: 100,
+      path: '/', viewport: `${width}x${height}`, network: { mutatingRequestCount: 0, mutatingRequests: [] },
+      rendered: { viewportWidth: width, viewportHeight: height, documentScrollWidth: width, noHorizontalOverflow: true, launcherLinks: links } }
+    assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+    for (const wrong of invalid) {
+      assert.throws(() => assertCaseSemantics({ ...entry, rendered: { ...entry.rendered, launcherLinks: wrong } }, expected), /launcher_products_mismatch/)
+    }
+  }
+})
 
 function ecommerceCase({ file, screenshot, viewport, width, height }) {
   return {

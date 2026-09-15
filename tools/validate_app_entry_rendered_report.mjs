@@ -20,6 +20,14 @@ const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
 const MAX_CASES = 100
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
+export function assertLauncherProductLinks(links) {
+  const expected = [['Shop', '/shop/'], ['Ecommerce', '/ecommerce/'], ['Website', '/website/']]
+  if (!Array.isArray(links) || links.length !== expected.length
+    || links.some((link, index) => !link || link.name !== expected[index][0] || link.href !== expected[index][1])) {
+    throw new Error('app_entry_rendered_launcher_products_mismatch')
+  }
+}
+
 const FULL_CASE_MATRIX = Object.freeze([
   { name: 'desktop root shows launcher despite remembered product', route: '/', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: 'app-launcher-desktop-1280x900.png' },
   { name: 'desktop choose query shows launcher', route: '/?choose=1', viewport: '1280x900', width: 1280, height: 900, path: '/?choose=1', screenshot: null },
@@ -179,7 +187,7 @@ export function assertRenderedProofCaseMatrix(cases, scope) {
   return expectedCases
 }
 
-function assertCaseSemantics(testCase, expected) {
+export function assertCaseSemantics(testCase, expected) {
   if (!isObject(testCase) || testCase.ok !== true) fail('app_entry_rendered_case_failed')
   if (exactArray(testCase.failures, 'app_entry_rendered_case_failures_invalid').length) fail('app_entry_rendered_case_failed')
   if (!isObject(testCase.runtime) || testCase.runtime.clean !== true) fail('app_entry_rendered_case_runtime_failed')
@@ -199,6 +207,10 @@ function assertCaseSemantics(testCase, expected) {
     || !Number.isFinite(rendered.documentScrollWidth) || rendered.documentScrollWidth < 1
     || rendered.documentScrollWidth > rendered.viewportWidth + 1
     || rendered.noHorizontalOverflow !== true) fail('app_entry_rendered_viewport_or_overflow_invalid')
+
+  if (expected.name === 'desktop root shows launcher despite remembered product'
+    || expected.name === 'desktop choose query shows launcher'
+    || expected.name === 'mobile root shows launcher') assertLauncherProductLinks(rendered.launcherLinks)
 
   if (expected.semantics === 'shop-counter') {
     const layout = testCase.layout

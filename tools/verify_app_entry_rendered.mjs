@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
+import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -276,6 +277,9 @@ async function readRenderedState(cdp, sessionId) {
       documentScrollWidth: document.documentElement ? document.documentElement.scrollWidth : 0,
       overlay: Boolean(document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')),
       seedError: window.__supermegaSeedError || '',
+      launcherLinks: [...document.querySelectorAll('nav[aria-label="Choose product"] a')]
+        .filter(link => link.getClientRects().length && getComputedStyle(link).visibility !== 'hidden')
+        .map(link => ({ name: link.querySelector('h2')?.textContent.trim() || '', href: link.getAttribute('href') })),
     }))()`)
 }
 
@@ -729,6 +733,13 @@ export async function verifyCase(cdp, origin, testCase) {
       expectedPathLabel: testCase.expectedPathLabel,
     })
     const finalRendered = afterCapture
+    let launcherFailure = ''
+    if (testCase.requireLauncherProducts) {
+      try {
+        assertLauncherProductLinks(beforeCapture.launcherLinks)
+        assertLauncherProductLinks(afterCapture.launcherLinks)
+      } catch { launcherFailure = 'app_entry_rendered_launcher_products_mismatch' }
+    }
     const missingText = testCase.expectedText.filter((needle) => !(finalRendered?.text || '').includes(needle))
     const renderedViewportMatches = Math.abs((finalRendered?.viewportWidth ?? 0) - testCase.width) <= 1
       && Math.abs((finalRendered?.viewportHeight ?? 0) - testCase.height) <= 1
@@ -759,6 +770,7 @@ export async function verifyCase(cdp, origin, testCase) {
       network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
     } : null
     const failures = [
+      ...(launcherFailure ? [launcherFailure] : []),
       ...finalLocation.failures,
       ...(finalRendered?.bodyLength > 0 ? [] : ['blank page']),
       ...(finalRendered?.overlay ? ['framework error overlay present'] : []),
@@ -797,6 +809,7 @@ export async function verifyCase(cdp, origin, testCase) {
       ...(testCase.expectedOrigin ? { origin: finalLocation.final.origin, hash: finalLocation.final.hash } : {}),
       bodyLength: finalRendered?.bodyLength || 0,
       rendered: {
+        ...(testCase.requireLauncherProducts ? { launcherLinks: finalRendered.launcherLinks } : {}),
         viewportWidth: finalRendered?.viewportWidth || 0,
         viewportHeight: finalRendered?.viewportHeight || 0,
         documentScrollWidth: finalRendered?.documentScrollWidth || 0,
@@ -832,8 +845,6 @@ const launcherText = [
   'First action',
   'Shop',
   'Complete a sample sale',
-  'Plant',
-  'Run a sample production job',
   'Website',
   'Preview a business website',
   'Ecommerce',
@@ -860,6 +871,7 @@ const shopSetup = {
 const tests = [
   {
     name: 'desktop root shows launcher despite remembered product',
+    requireLauncherProducts: true,
     route: '/',
     width: 1280,
     height: 900,
@@ -870,6 +882,7 @@ const tests = [
   },
   {
     name: 'desktop choose query shows launcher',
+    requireLauncherProducts: true,
     route: '/?choose=1',
     width: 1280,
     height: 900,
@@ -879,6 +892,7 @@ const tests = [
   },
   {
     name: 'mobile root shows launcher',
+    requireLauncherProducts: true,
     route: '/',
     width: 390,
     height: 844,
