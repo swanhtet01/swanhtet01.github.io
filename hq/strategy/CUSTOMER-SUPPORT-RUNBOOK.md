@@ -69,6 +69,21 @@ npm.cmd run client:workspace:contact:review-template -- "<private-event.json>" -
 An accountable person must review the generated template: exact lead, workspace,
 implementation owner, preset, selected products, company/goal review, private
 workspace approval and review time. Leave gates false until that review occurs.
+The v2 review binds `requestDigest` to the normalized lead, product, company,
+goal, requested template and submission time. If any of these changes, generate
+a new review template and review the changed brief; do not copy the old approvals.
+Legacy v1 reviews are rejected. This digest detects changed content, not the
+identity or authenticity of the reviewer. Names, email and raw contact fields
+are excluded from this preparation binding and remain in the private intake system.
+Preparation also verifies any retained CONTACT-INTAKE.json against client.json
+before compiling packages. A changed owner, product selection or damaged receipt
+must be resolved through reviewed intake, not by skipping the standalone verifier.
+New contact-created folders use `supermega.client_contact_profile.v1` and pin the
+intake digest in client.json. Removing or replacing the receipt fails preparation.
+Older contact folders must be regenerated into a new private directory after review;
+they are not silently migrated. Generic local sample folders remain supported but
+do not establish customer approval. These local integrity checks are not signatures
+or protection against an actor rewriting the entire folder.
 Website requests select Website; Ecommerce preparation includes Shop for its
 request handoff. Do not use the generic default initializer, which can include
 unrequested products. A template suggestion is not agreed scope.
