@@ -23,7 +23,9 @@ export function managedAccountRequestUrl(value: string | null) {
   return `https://supermega.dev/contact/?${query.toString()}`
 }
 
-export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null) {
+export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null, search = '') {
+  const reviewPath = managedLoginReviewPath(search)
+  if (reviewPath) return `${path}?product=website&review=${reviewPath.split('/').at(-1)}`
   const product = accountProductSlug(value)
   return product ? `${path}?product=${encodeURIComponent(product)}` : path
 }

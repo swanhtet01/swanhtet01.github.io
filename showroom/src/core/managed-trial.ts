@@ -1,4 +1,5 @@
 import type { Session } from '@supabase/auth-js'
+import { managedLoginReviewPath } from './account-routes.ts'
 import { validateCreateAccountRequest, type CreateAccountInput } from './signup-account.ts'
 import { readManagedSignupPolicy } from './managed-signup-policy.ts'
 import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
@@ -2658,6 +2659,8 @@ function managedAccountRedirectUrl(purpose: 'recovery' | 'signup' = 'recovery') 
   }
   const redirect = new URL('/account/setup', origin)
   redirect.searchParams.set('mode', purpose)
+  const reviewPath = purpose === 'recovery' ? managedLoginReviewPath(window.location.search) : null
+  if (reviewPath) redirect.searchParams.set('review', reviewPath.split('/').at(-1)!)
   return redirect.toString()
 }
 
@@ -2785,7 +2788,8 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
   const query = new URLSearchParams(rawQuery)
   const fragment = new URLSearchParams(rawFragment)
   const purpose = accountPurpose(query.get('mode'), fragment.get('type'))
-  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'error', 'error_code', 'error_description'])
+  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'review', 'error', 'error_code', 'error_description'])
+    && (!query.has('review') || (purpose === 'recovery' && managedLoginReviewPath(rawQuery) !== null))
   const fragmentAllowed = exactAuthParameters(fragment, ['access_token', 'refresh_token', 'expires_at', 'expires_in', 'token_type', 'type', 'error', 'error_code', 'error_description'])
   const code = query.get('code') ?? ''
   const accessToken = fragment.get('access_token') ?? ''

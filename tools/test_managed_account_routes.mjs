@@ -383,6 +383,48 @@ test('invalid callback grammar is scrubbed before any provider operation even wi
   }, false)
 })
 
+test('Website review recovery retains only the canonical review ID and scrubs the callback', async () => {
+  const review = '11111111-1111-4111-8111-111111111111'
+  const query = `?product=website&review=${review}&returnTo=https://outside.invalid&workspace=other`
+  const recovery = managedAccountPath('/account/recovery', 'shop', query)
+  assert.equal(recovery, `/account/recovery?product=website&review=${review}`)
+  assert.equal(managedAccountPath('/login', null, query), `/login?product=website&review=${review}`)
+  await withAuth(async (mod, state) => {
+    state.location.search = recovery.slice(recovery.indexOf('?'))
+    await mod.requestManagedPasswordRecovery('owner@example.invalid')
+    const redirect = state.calls.find(([name]) => name === 'resetPasswordForEmail')[2].redirectTo
+    assert.equal(redirect, `https://app.example.invalid/account/setup?mode=recovery&review=${review}`)
+    state.calls.length = 0
+    state.location.search = new URL(redirect).search + `&code=${'c'.repeat(20)}`
+    const result = await mod.beginManagedAccountSetup()
+    assert.equal(result.purpose, 'recovery')
+    assert.deepEqual(state.calls[0], ['scrub', '/account/setup'])
+    assert.equal(state.location.search, '')
+    assert.equal(state.calls.filter(([name]) => name === 'exchangeCodeForSession').length, 1)
+    assert.equal(state.calls.some(([name]) => name === 'fetch'), false, 'review URL grants no membership or preview read')
+  })
+  const account = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
+  assert.ok(account.includes('managedLoginReviewPath(location.search) ?? managedPortalEntryPath(productIntent)'))
+  const open = account.slice(account.indexOf('async function openWorkspace'), account.indexOf('async function requestRecovery'))
+  assert.ok(open.indexOf('await completeManagedWorkspaceSignIn') < open.indexOf('await loadManagedBootstrap'))
+  assert.ok(open.indexOf('await loadManagedBootstrap') < open.indexOf('navigate(portalEntryPath)'))
+  assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', productIntent, location.search)"))
+})
+
+test('invalid or wrong-purpose review callbacks fail before provider access', async () => {
+  const review = '11111111-1111-4111-8111-111111111111'
+  for (const query of [
+    `mode=signup&review=${review}`, `mode=invite&review=${review}`,
+    `mode=recovery&review=${review}&review=${review}`, 'mode=recovery&review=',
+    `mode=recovery&review=${review}%0A`, 'mode=recovery&review=https://outside.invalid',
+  ]) await withAuth(async (mod, state) => {
+    state.location.search = `?${query}&code=${'c'.repeat(20)}`
+    await rejectsCode(mod.beginManagedAccountSetup(), 'account_link_invalid')
+    assert.deepEqual(state.calls, [['scrub', '/account/setup']])
+  })
+  assert.equal(managedAccountPath('/account/recovery', 'website', `?review=${review}&review=${review}`), '/account/recovery?product=website')
+})
+
 test('unverified/anonymous/changed users cannot claim signup completion from local metadata', async () => {
   for (const change of [
     { email_confirmed_at: null, user_metadata: { email_verified: true } },
