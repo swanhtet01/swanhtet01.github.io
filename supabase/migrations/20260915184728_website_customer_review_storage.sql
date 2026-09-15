@@ -122,6 +122,10 @@ create function app_private.guard_website_review() returns trigger
 language plpgsql security invoker set search_path = pg_catalog, app_private as $$
 declare source app_private.workspace_state%rowtype; expected_preview jsonb;
 begin
+  -- Advisory locks serialize operations but cannot refresh an old RR snapshot.
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception using errcode='0A000', message='website_review_requires_read_committed';
+  end if;
   if tg_op = 'DELETE' then
     raise exception using errcode='55000', message='website_review_history_immutable';
   end if;
@@ -167,6 +171,9 @@ create function app_private.invalidate_website_reviews() returns trigger
 language plpgsql security invoker set search_path = pg_catalog, app_private as $$
 begin
   if old.surface = 'website' then
+    if current_setting('transaction_isolation') <> 'read committed' then
+      raise exception using errcode='0A000', message='website_review_requires_read_committed';
+    end if;
     perform pg_advisory_xact_lock(hashtextextended('website-review:' || old.workspace_id,0));
     update app_private.website_customer_reviews set status = 'stale'
       where workspace_id = old.workspace_id and status = 'active';
@@ -181,6 +188,9 @@ create function app_private.guard_website_feedback() returns trigger
 language plpgsql security invoker set search_path = pg_catalog, app_private as $$
 declare assignment app_private.website_customer_reviews%rowtype;
 begin
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception using errcode='0A000', message='website_review_requires_read_committed';
+  end if;
   if tg_op <> 'INSERT' then
     raise exception using errcode='55000', message='website_feedback_history_immutable';
   end if;

@@ -1,9 +1,12 @@
 """Opt-in real loopback PostgreSQL tests. Never accepts a supplied database URL."""
 
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 import json
 import os
+from queue import Queue
+import time
 import unittest
 from uuid import uuid4
 
@@ -65,9 +68,13 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             PostgresTrialStore._set_context(cursor, TrialPrincipal(workspace, actor, actor_kind="human"))
 
     @contextmanager
-    def transaction(self, actor=OWNER, workspace=WORKSPACE):
+    def transaction(self, actor=OWNER, workspace=WORKSPACE, isolation=None):
         connection = pg._connect(self.runtime_url)
         try:
+            if isolation == "repeatable read":
+                connection.execute("set transaction isolation level repeatable read")
+            elif isolation == "serializable":
+                connection.execute("set transaction isolation level serializable")
             self.context(connection, actor, workspace)
             yield connection
         finally:
@@ -227,6 +234,70 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         with self.transaction() as connection:
             self.assertEqual(connection.execute("select count(*) from app_private.website_customer_feedback where review_id=%s", (review[0],)).fetchone()[0], 1)
             self.assertEqual(connection.execute("select status from app_private.website_customer_reviews where review_id=%s", (review[0],)).fetchone()[0], "stale")
+
+    def test_repeatable_read_old_snapshot_cannot_submit_after_edit_or_revoke(self):
+        for change in ("edit", "revoke"):
+            with self.subTest(change=change):
+                with self.transaction() as setup:
+                    review = self.prepare(setup)
+                    setup.commit()
+                with self.transaction(RECIPIENT, isolation="repeatable read") as customer:
+                    self.assertEqual(customer.execute("select status from app_private.website_customer_reviews where review_id=%s", (review[0],)).fetchone()[0], "active")
+                    with self.transaction() as editor:
+                        if change == "edit":
+                            self.edit(editor)
+                        else:
+                            editor.execute("update app_private.website_customer_reviews set status='revoked' where review_id=%s", (review[0],))
+                        editor.commit()
+                    # Establish the precise stale-snapshot condition, not a new transaction.
+                    self.assertEqual(customer.execute("select status from app_private.website_customer_reviews where review_id=%s", (review[0],)).fetchone()[0], "active")
+                    with self.assertRaises(self.db_error) as caught:
+                        self.feedback(customer, review)
+                    self.assertEqual(caught.exception.sqlstate, "0A000")
+
+    def test_preparation_and_website_edit_require_read_committed(self):
+        for isolation in ("repeatable read", "serializable"):
+            for action in (self.prepare, self.edit):
+                with self.subTest(isolation=isolation, action=action.__name__), self.transaction(isolation=isolation) as connection:
+                    with self.assertRaises(self.db_error) as caught:
+                        action(connection)
+                    self.assertEqual(caught.exception.sqlstate, "0A000")
+
+    def test_read_committed_wait_then_resume_rechecks_assignment(self):
+        with self.transaction() as setup:
+            review = self.prepare(setup)
+            setup.commit()
+        pid_queue = Queue(maxsize=1)
+
+        def submit():
+            with self.transaction(RECIPIENT) as customer:
+                customer.execute("set local lock_timeout='3s'")
+                pid_queue.put(customer.execute("select pg_backend_pid()").fetchone()[0])
+                try:
+                    self.feedback(customer, review)
+                except self.db_error as error:
+                    return error.sqlstate
+                return "unexpected_success"
+
+        # One bounded SQL worker is necessary to test a waiting statement. This
+        # is not parallel product/test-suite execution or a second agent.
+        with self.transaction() as editor, ThreadPoolExecutor(max_workers=1) as worker:
+            self.edit(editor)
+            pending = worker.submit(submit)
+            try:
+                pid = pid_queue.get(timeout=2)
+                deadline, waiting = time.monotonic() + 2, False
+                with pg._connect(self.admin_url, autocommit=True) as observer:
+                    while time.monotonic() < deadline:
+                        waiting = observer.execute("select wait_event_type='Lock' from pg_stat_activity where pid=%s", (pid,)).fetchone()[0]
+                        if waiting:
+                            break
+                        time.sleep(0.01)
+                self.assertTrue(waiting, "feedback must actually wait on the edit")
+                editor.commit()
+                self.assertEqual(pending.result(timeout=3), "42501")
+            finally:
+                editor.rollback()
 
 
 if __name__ == "__main__":
