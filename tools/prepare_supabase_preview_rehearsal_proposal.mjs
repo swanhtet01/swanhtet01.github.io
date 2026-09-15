@@ -10,10 +10,10 @@ export const SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT = 'supermega.supabase-
 const root = resolve(import.meta.dirname, '..')
 const output = resolve(root, 'hq', 'readiness', 'supabase-preview-rehearsal-proposal.json')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
-const EXPECTED_MIGRATION_COUNT = 16
-const EXPECTED_PRIVATE_MIGRATION_COUNT = 15
+const EXPECTED_MIGRATION_COUNT = 18
+const EXPECTED_PRIVATE_MIGRATION_COUNT = 17
 const EXPECTED_PUBLIC_BASELINE = '20260711081300_public_legacy_baseline.sql'
-const EXPECTED_FINAL_MIGRATION = '20260907024457_self_serve_durable_attempt_budget.sql'
+const EXPECTED_FINAL_MIGRATION = '20260915191528_website_review_entitlement_proof.sql'
 const EXPECTED_MIGRATIONS = Object.freeze([
   EXPECTED_PUBLIC_BASELINE,
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -30,6 +30,8 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   '20260816120000_private_trial_backend_v11_self_serve_grants.sql',
   '20260817090000_private_trial_backend_v12_billing_rail.sql',
   '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql',
+  '20260907024457_self_serve_durable_attempt_budget.sql',
+  '20260915184728_website_customer_review_storage.sql',
   EXPECTED_FINAL_MIGRATION,
 ])
 const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 13
@@ -205,6 +207,8 @@ function validateProposalShape(packet) {
     'preview-branch-status-and-migration-list',
     'source-controlled-migration-chain-applied-through-v13',
     'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
+    'website-review-recipient-isolation-entitlement-and-session-revocation',
+    'website-review-and-feedback-nonempty-backup-restore',
     'metadata-only-schema-fingerprint-comparison',
     'public-table-rls-and-anon-authenticated-denial',
     'private-schema-backend-role-policy-and-no-browser-grants',
@@ -305,6 +309,8 @@ export async function buildSupabasePreviewRehearsalProposal({
       'clean-empty-data-less-branch-confirmed',
       'source-controlled-migration-chain-applied-through-v13',
       'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
+      'website-review-recipient-isolation-entitlement-and-session-revocation',
+      'website-review-and-feedback-nonempty-backup-restore',
       'metadata-only-schema-fingerprint-comparison',
       'public-table-rls-and-anon-authenticated-denial',
       'private-schema-backend-role-policy-and-no-browser-grants',

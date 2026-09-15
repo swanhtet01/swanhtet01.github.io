@@ -65,11 +65,11 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
-  assert.equal(built.migrationPlan.migrationCount, 16)
-  assert.equal(built.migrationPlan.privateMigrationCount, 15)
+  assert.equal(built.migrationPlan.migrationCount, 18)
+  assert.equal(built.migrationPlan.privateMigrationCount, 17)
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(built.migrationPlan.finalMigration, '20260907024457_self_serve_durable_attempt_budget.sql')
+  assert.equal(built.migrationPlan.finalMigration, '20260915191528_website_review_entitlement_proof.sql')
   assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
@@ -86,9 +86,14 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
 
-test('binds exact ordered public baseline and all fifteen private migrations, including budget', async () => {
+test('binds exact ordered public baseline and seventeen private migrations including Website reviews', async () => {
   const built = await proposal()
   const entries = built.migrationPlan.migrations
+  assert.deepEqual(entries.slice(-3).map(entry => entry.name), [
+    '20260907024457_self_serve_durable_attempt_budget.sql',
+    '20260915184728_website_customer_review_storage.sql',
+    '20260915191528_website_review_entitlement_proof.sql',
+  ])
   assert.equal(validatePreviewMigrationEntries(entries), entries)
   for (const mutate of [list => list.pop(), list => list.push({ ...list.at(-1) }),
     list => { list[1] = { ...list[0] } }, list => { [list[1], list[2]] = [list[2], list[1]] },
@@ -101,11 +106,13 @@ test('binds exact ordered public baseline and all fifteen private migrations, in
   }
 })
 
-test('rehashing cannot hide omitted budget evidence or turn historical audit into current proof', async () => {
+test('rehashing cannot hide omitted budget or Website evidence or turn historical audit into current proof', async () => {
   for (const mutate of [p => { p.migrationPlan.migrations.at(-1).digest = `sha256:${'1'.repeat(64)}` },
     p => { p.productionBaseline.currentCandidateProven = true },
     p => { p.productionBaseline.currentStateRevalidated = true },
-    p => { p.requiredEvidence = p.requiredEvidence.filter(e => !e.startsWith('durable-attempt-budget-')) }]) {
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => !e.startsWith('durable-attempt-budget-')) },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'website-review-recipient-isolation-entitlement-and-session-revocation') },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'website-review-and-feedback-nonempty-backup-restore') }]) {
     const altered = structuredClone(await proposal())
     mutate(altered)
     const { digest: ignored, ...body } = altered
