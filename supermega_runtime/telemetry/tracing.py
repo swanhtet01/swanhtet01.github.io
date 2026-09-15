@@ -120,7 +120,19 @@ class RedactingSpanProcessor:
         """
 
         from opentelemetry.sdk.trace import Event, ReadableSpan
-        from opentelemetry.trace import Status
+        from opentelemetry.trace import Link, SpanContext, Status
+
+        def safe_context(context: Any) -> Any:
+            if context is None:
+                return None
+            # Preserve correlation, but never export arbitrary vendor tracestate
+            # values received from an upstream request or attached to a link.
+            return SpanContext(
+                trace_id=context.trace_id,
+                span_id=context.span_id,
+                is_remote=context.is_remote,
+                trace_flags=context.trace_flags,
+            )
 
         current = dict(span.attributes or {})
         if any(key in current for key in redact.FORBIDDEN_ATTRIBUTE_KEYS):
@@ -129,8 +141,8 @@ class RedactingSpanProcessor:
         sanitized_name = redact.scrub_span_name(span.name)
         return ReadableSpan(
             name=sanitized_name,
-            context=span.context,
-            parent=span.parent,
+            context=safe_context(span.context),
+            parent=safe_context(span.parent),
             resource=span.resource,
             attributes=sanitized_attributes,
             # Exception events can contain raw request data and full local
@@ -143,7 +155,13 @@ class RedactingSpanProcessor:
                 )
                 for event in (span.events or ())
             ),
-            links=span.links,
+            links=tuple(
+                Link(
+                    context=safe_context(link.context),
+                    attributes=redact.scrub_attributes(dict(link.attributes or {})),
+                )
+                for link in (span.links or ())
+            ),
             kind=span.kind,
             # Keep the error signal, never the free-form exception description.
             status=Status(status_code=span.status.status_code),

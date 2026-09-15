@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Event, ReadableSpan
-from opentelemetry.trace import SpanContext, Status, StatusCode, TraceFlags
+from opentelemetry.trace import Link, SpanContext, Status, StatusCode, TraceFlags, TraceState
 
 from supermega_runtime.telemetry.tracing import RedactingSpanProcessor
 
@@ -36,6 +36,31 @@ def sample_span():
 
 
 class SpanProcessorTests(unittest.TestCase):
+    def test_links_and_trace_state_cannot_bypass_scrubbing(self):
+        context = SpanContext(12, 34, True, TraceFlags(1), TraceState([("vendor", "private-context")]))
+        original = ReadableSpan(
+            name="shop.order.confirm",
+            context=context,
+            parent=context,
+            resource=Resource({"service.name": "supermega-runtime"}),
+            links=[Link(context, {"customer.note": "private-note", "order.line_count": 3})],
+            status=Status(StatusCode.OK),
+            start_time=1,
+            end_time=3,
+        )
+        safe = RedactingSpanProcessor._sanitized_copy(original)
+        for exported_context in (safe.context, safe.parent, safe.links[0].context):
+            self.assertEqual(exported_context.trace_id, 12)
+            self.assertEqual(exported_context.span_id, 34)
+            self.assertTrue(exported_context.is_remote)
+            self.assertEqual(exported_context.trace_flags, context.trace_flags)
+            self.assertEqual(len(exported_context.trace_state), 0)
+        self.assertEqual(dict(safe.links[0].attributes), {"order.line_count": 3})
+        self.assertEqual(safe.status.status_code, StatusCode.OK)
+        self.assertNotIn("private", safe.to_json())
+        self.assertEqual(original.context.trace_state.get("vendor"), "private-context")
+        self.assertIn("customer.note", original.links[0].attributes)
+
     def test_event_and_status_payloads_cannot_bypass_attribute_redaction(self):
         exporter = RecordingExporter()
         original = sample_span()
