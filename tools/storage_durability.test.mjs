@@ -1155,6 +1155,8 @@ test('restore requires explicit review of the exact selected snapshot', async ()
   assert.ok(page.includes('Confirm restore of this snapshot'))
   assert.ok(page.includes('Work saved after the snapshot may be lost.'))
   assert.ok(page.includes('saved {restorePoint.createdAt}'))
+  assert.ok(page.includes("this device's closed days, one row per sale"))
+  assert.ok(page.includes('Shop cannot restore it. For recovery, use Download workspace backup above.'))
   for (const action of ['function saveRestorePoint()', 'async function loadBackupFile', 'async function restoreWorkspace()']) {
     const start = page.indexOf(action)
     assert.ok(start >= 0 && page.slice(start, start + 300).includes('setReviewedRestorePoint(null)'), `${action} invalidates prior review`)

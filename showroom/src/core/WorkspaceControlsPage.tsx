@@ -729,7 +729,7 @@ export function WorkspaceControlsPage() {
         </section>
 
         <section className="core-panel">
-          <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Read-only summaries pulled from what is already saved in Shop, Plant, Website, and Ecommerce. Nothing changes by looking.</p></div>
+          <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Read-only summaries of saved Shop, Plant, Website and Ecommerce records.</p></div>
           <div className="trial-actions">
             <Link className="core-button primary" to="/settings/?view=ceo-brief#controls">Operating brief</Link>
             <Link className="core-button" to="/settings/?view=shop-revenue#controls">Shop revenue</Link>
@@ -798,7 +798,7 @@ export function WorkspaceControlsPage() {
             An owner told to "export a backup" by the storage warning needs to know which file
             does which, or she will keep the wrong one. */}
         <section className="core-panel">
-          <div><span className="core-eyebrow">Sales archive</span><h2>Keep a readable copy of your sales.</h2><p>This file lists every trading day you have closed on this device, one row for each sale, as a spreadsheet you or your accountant can open anywhere. It is a record to keep and read — Shop cannot load it back in. To be able to put this device back the way it was, use Download workspace backup above; that is the file Shop can read.</p></div>
+          <div><span className="core-eyebrow">Sales archive</span><h2>Keep a readable copy of your sales.</h2><p>Spreadsheet of this device's closed days, one row per sale. Keep it for your records or accountant; Shop cannot restore it. For recovery, use Download workspace backup above.</p></div>
           <div className="trial-actions">
             <button className="core-button" disabled={archiveBusy} onClick={() => downloadSalesArchive()} type="button">{archiveBusy ? 'Preparing...' : 'Download sales archive'}</button>
           </div>
