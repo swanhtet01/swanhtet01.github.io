@@ -124,6 +124,9 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
+    "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
+    "supermega_runtime/website_runtime.py", "supermega_runtime/website_release_foundation.py",
+    "tests/test_website_runtime.py",
     "tools/rehearse_self_serve_v13.py", "tools/private_trial_v13_contract.py",
     "tools/run_postgres17_rehearsal.mjs", "tools/record_postgres17_rehearsal.mjs",
     "tools/record_postgres17_rehearsal.test.mjs", "tests/test_postgres17_rehearsal_contract.py",
@@ -3773,6 +3776,7 @@ def _run_rehearsal(
             restored_snapshot = account_proof.snapshot(restore_admin_database_url)
             if restored_snapshot != private_snapshot:
                 raise RehearsalFailure("restored_private_rows_mismatch")
+            account_proof.verify_website_review(restored_runtime_url, retained)
             from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialRateLimited
             store = PostgresTrialStore(restored_runtime_url, reducer=lambda *_: None, write_enabled=True)
             identity = TrialPrincipal(workspace_id=retained["workspace"], actor_id=retained["actor"],

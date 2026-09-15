@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import os
@@ -222,7 +223,58 @@ def exercise(admin_url, runtime_url, head):
         pass
     ledger.grant_entitlement(**grant_args)
     require(store.readiness(principal(workspace)).premium_unlocked, "explicit_grant_not_visible")
-    return {"workspace": workspace, "actor": actors[0], "session": sessions[0]}
+    # Synthetic fixture setup is privileged; review and feedback writes below
+    # must use the restricted runtime adapter, never direct table inserts.
+    from tests.test_website_runtime import _state
+    from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
+    website = created[PRODUCTS.index("website")].workspace_id
+    recipient_id, recipient_session = str(uuid4()), str(uuid4())
+    with pg._connect(admin_url) as conn:
+        conn.execute("insert into auth.sessions(id,user_id) values (%s::uuid,%s::uuid)",
+                     (recipient_session, recipient_id))
+        conn.execute("insert into app_private.workspace_memberships(workspace_id,actor_id,status,capabilities,actor_kind) values (%s,%s,'active',array['website.review'],'human')",
+                     (website, recipient_id))
+        conn.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'website',1,%s::jsonb,%s)",
+                     (website, json.dumps(_state()), actors[0]))
+    operator = principal(website)
+    recipient = TrialPrincipal(workspace_id=website, actor_id=recipient_id, actor_kind="human",
+        authenticated=True, session_id=recipient_session, identity_provider="supabase")
+    adapter = WebsiteCustomerReviewStore(store)
+    review = adapter.prepare(operator, review_id=str(uuid4()), recipient_actor_id=recipient_id,
+        expected_version=1, expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+    payload = {"commandId": str(uuid4()), "reviewId": review["reviewId"],
+               "previewDigest": review["previewDigest"], "note": "Synthetic recovery check: shorten the headline."}
+    feedback = adapter.request_changes(recipient, payload)
+    require(review["persisted"] and not review["replayed"] and feedback["persisted"]
+            and not feedback["replayed"], "website_review_not_retained")
+    retained = {"workspace": workspace, "actor": actors[0], "session": sessions[0],
+        "website": {"workspace": website, "recipient": recipient_id, "session": recipient_session,
+            "reviewId": review["reviewId"], "payload": payload,
+            "preview": adapter.preview(recipient, review["reviewId"]),
+            "feedback": adapter.feedback(operator, review["reviewId"])}}
+    verify_website_review(runtime_url, retained)
+    return retained
+
+
+def verify_website_review(runtime_url, retained):
+    """Read-only, nonempty runtime recovery proof; exact rows are also snapshot-bound."""
+    from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
+    from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
+    website = retained["website"]
+    adapter = WebsiteCustomerReviewStore(PostgresTrialStore(runtime_url,
+        reducer=lambda *_: None, write_enabled=False))
+    def who(actor, session):
+        return TrialPrincipal(workspace_id=website["workspace"], actor_id=actor, actor_kind="human",
+            authenticated=True, session_id=session, identity_provider="supabase")
+    preview = adapter.preview(who(website["recipient"], website["session"]), website["reviewId"])
+    feedback = adapter.feedback(who(retained["actor"], retained["session"]), website["reviewId"])
+    require(preview == website["preview"] and preview["publicationAuthorized"] is False,
+            "restored_website_preview_mismatch")
+    require(feedback == website["feedback"] and feedback["publicationAuthorized"] is False
+            and len(feedback["requests"]) == 1
+            and feedback["requests"][0]["commandId"] == website["payload"]["commandId"]
+            and feedback["requests"][0]["note"] == website["payload"]["note"],
+            "restored_website_feedback_mismatch")
 
 
 def run(expected_head):
@@ -276,6 +328,7 @@ def run(expected_head):
             pg._restore_database(postgres_bin=binary, admin_password=admin_secret,
                 port=port, backup_file=backup, environment=environment)
             require(snapshot(admin) == before, "restored_records_mismatch")
+            verify_website_review(runtime, retained)
             restored_catalog = audit_database(runtime, storage_audit_database_url=admin,
                                               schema_profile="v13-self-serve")
             require(restored_catalog["ready"] is True, "restored_v13_catalog_not_ready")

@@ -4,6 +4,7 @@ Run with SUPERMEGA_RUN_WEBSITE_REVIEW_SQL=1 and SUPERMEGA_TRIAL_SCHEMA_VERSION=1
 """
 
 from contextlib import contextmanager
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -12,6 +13,7 @@ import os
 from queue import Queue
 import time
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from tools import rehearse_supermega_postgres17 as pg
@@ -97,6 +99,27 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             if expected:
                 self.assertFalse(_index_predicate_matches(row, {}))
                 self.assertFalse(_index_predicate_matches(row, {"predicate_expression": "(status = 'ACTIVE'::text)"}))
+
+    def test_rehearsal_retains_nonempty_runtime_review_and_feedback(self):
+        from tools import rehearse_self_serve_v13 as proof
+        with patch.dict(os.environ, {"SUPERMEGA_BILLING_SCHEMA_VERSION": "13"}):
+            retained = proof.exercise(self.admin_url, self.runtime_url, "a" * 40)
+            before = proof.snapshot(self.admin_url)
+            proof.verify_website_review(self.runtime_url, retained)
+            self.assertEqual(proof.snapshot(self.admin_url), before)
+            for field, replacement, code in (
+                ("preview", {}, "restored_website_preview_mismatch"),
+                ("feedback", {"requests": []}, "restored_website_feedback_mismatch"),
+            ):
+                invalid = deepcopy(retained)
+                invalid["website"][field] = replacement
+                with self.subTest(field=field), self.assertRaisesRegex(pg.RehearsalFailure, code):
+                    proof.verify_website_review(self.runtime_url, invalid)
+            with pg._connect(self.admin_url) as connection:
+                connection.execute("set transaction read only")
+                for table in ("website_customer_reviews", "website_customer_feedback"):
+                    self.assertEqual(connection.execute(f"select count(*) from app_private.{table} where workspace_id=%s",
+                        (retained["website"]["workspace"],)).fetchone()[0], 1)
 
     @contextmanager
     def transaction(self, actor=OWNER, workspace=WORKSPACE, isolation=None):
