@@ -26,7 +26,11 @@ class FullChainProofContractTests(unittest.TestCase):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name != "20260711081300_public_legacy_baseline.sql")
         self.assertEqual(list(proof.MIGRATIONS), actual)
-        self.assertEqual(len(proof.MIGRATIONS), 15)
+        self.assertEqual(len(proof.MIGRATIONS), 17)
+        self.assertEqual(proof.MIGRATIONS[-2:], (
+            "20260915184728_website_customer_review_storage.sql",
+            "20260915191528_website_review_entitlement_proof.sql",
+        ))
 
     def test_matrix_has_exact_unique_behavior_checks(self):
         self.assertEqual(len(proof.CHECKS), 17)
