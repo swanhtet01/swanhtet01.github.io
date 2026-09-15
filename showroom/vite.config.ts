@@ -63,7 +63,7 @@ function localHealthPlugin(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: projectRoot,
   publicDir: resolve(projectRoot, 'public-app'),
   // Dependencies can be supplied through a read-only/junctioned node_modules on the
@@ -73,9 +73,16 @@ export default defineConfig({
   cacheDir: resolve(projectRoot, '../.tmp/vite-cache'),
   // Preserve field-level tree shaking instead of retaining entire large JSON blobs.
   json: { stringify: false },
+  // Compact production JSX without changing source components or the development
+  // runtime. Explicit aliases avoid requiring a React namespace in every TSX file.
+  esbuild: command === 'build' ? {
+    jsxFactory: '__supermegaCreateElement',
+    jsxFragment: '__supermegaFragment',
+    jsxInject: "import { createElement as __supermegaCreateElement, Fragment as __supermegaFragment } from 'react'",
+  } : undefined,
   plugins: [
     clientSetupManifestPlugin(projectRoot),
-    react(),
+    react({ jsxRuntime: command === 'build' ? 'classic' : 'automatic' }),
     localHealthPlugin(),
     shouldAnalyzeBundle
       ? visualizer({
@@ -136,4 +143,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
