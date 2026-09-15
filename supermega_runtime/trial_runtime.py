@@ -10,7 +10,7 @@ import os
 from typing import Any, Literal, Protocol, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
@@ -1080,7 +1080,7 @@ def create_trial_router(
     router = APIRouter(prefix=TRIAL_API_PREFIX, tags=["private-trial"])
 
     @router.post("/workspaces")
-    async def trial_self_serve_workspace(request: Request) -> dict[str, Any]:
+    async def trial_self_serve_workspace(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
         # Fail-closed service gate FIRST: until the founder opens the
         # activation window the endpoint is dark for every caller, before any
         # auth, parsing, or storage work happens (spec section 4).
@@ -1128,18 +1128,28 @@ def create_trial_router(
             and not result.idempotent_replay
             and str(getattr(session, "email", "") or "").strip()
         ):
-            # Courtesy send, strictly after the durable write and strictly
-            # unable to change the outcome: the sender returns a bool and any
-            # unexpected exception is swallowed here. Replays never send.
-            try:
-                send_welcome_email(
-                    to_email=session.email,
-                    business_name=result.label,
-                    workspace_id=result.workspace_id,
-                    claim_code=result.claim_code,
-                )
-            except Exception:  # noqa: BLE001 - the tenant exists; email is best-effort
-                pass
+            # Nonessential courtesy email runs after the response, off the
+            # event loop. This is not a durable queue: process termination can
+            # lose a send. Account creation and login do not depend on it.
+            # Capture only immutable message fields, not request/store state.
+            def send_courtesy(*, to_email: str, business_name: str, workspace_id: str, claim_code: str) -> None:
+                try:
+                    send_welcome_email(
+                        to_email=to_email,
+                        business_name=business_name,
+                        workspace_id=workspace_id,
+                        claim_code=claim_code,
+                    )
+                except Exception:  # noqa: BLE001 - no retry; tenant already exists
+                    pass
+
+            background_tasks.add_task(
+                send_courtesy,
+                to_email=session.email,
+                business_name=result.label,
+                workspace_id=result.workspace_id,
+                claim_code=result.claim_code,
+            )
         return {
             "contract": SELF_SERVE_ACTIVATION_CONTRACT,
             "status": "already_created" if result.idempotent_replay else "created",
