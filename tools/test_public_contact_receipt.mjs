@@ -34,7 +34,8 @@ function harness(responses, search = '') {
     addEventListener(name, callback) { if (name === 'submit') handler = callback },
     reset() { resets++; for (const field of fields.values()) field.value = '' },
   }
-  const crypto = { randomUUID: () => 'fixed-local-retry-key' }
+  let keys = 0
+  const crypto = { randomUUID: () => 'local-retry-key-' + ++keys }
   runInNewContext(script, {
     document: { querySelector: selector => selector === '[data-contact-form]' ? form : null, referrer: '' },
     location: { search, hash: '', href: 'https://supermega.dev/contact/' + search },
@@ -75,6 +76,30 @@ test('product handoffs prefill hidden context and product changes discard stale 
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
+test('late edits survive confirmation and uncertain retries resend the original brief', async () => {
+  for (const failFirst of [false, true]) {
+    let finish
+    const pending = new Promise(resolve => { finish = resolve })
+    const state = harness([pending, { body: receipt }, { body: receipt }])
+    const first = state.submit()
+    state.fields.get('[name="goal"]').value = 'Revised brief not yet sent'
+    finish(failFirst ? new Error('network') : { body: receipt })
+    await first
+    if (failFirst) {
+      assert.match(state.fields.get('[data-form-status]').textContent, /Retry sends the original brief/)
+      await state.submit()
+      assert.equal(state.calls[0].body, state.calls[1].body)
+      assert.equal(state.calls[0].headers['x-idempotency-key'], state.calls[1].headers['x-idempotency-key'])
+    }
+    assert.equal(state.resets(), 0)
+    assert.equal(state.fields.get('[name="goal"]').value, 'Revised brief not yet sent')
+    assert.match(state.fields.get('[data-form-status]').textContent, /later edits.*have not been sent/)
+    await state.submit()
+    assert.equal(JSON.parse(state.calls.at(-1).body).goal, 'Revised brief not yet sent')
+    assert.notEqual(state.calls.at(-1).headers['x-idempotency-key'], state.calls[0].headers['x-idempotency-key'])
+    assert.equal(state.resets(), 1)
+  }
+})
 test('valid generated receipt confirms and clears the brief', async () => {
   const state = harness([{ body: receipt }])
   await state.submit()
