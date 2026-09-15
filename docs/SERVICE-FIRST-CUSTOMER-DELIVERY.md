@@ -211,3 +211,65 @@ passed locally on 2026-09-15. This does not prove live authorization or customer
 access. Before implementation, define separate customer review/change-request
 permissions and their server-side checks; never widen `website.write` merely to
 make a customer review screen work.
+
+## ERRC operating decisions
+
+Owner-requested 2026-09-15; hypotheses below are not demonstrated market advantage.
+Use the [ERRC framework](https://www.blueoceanstrategy.com/tools/errc-grid/) to
+improve customer value and delivery cost together, not to add modules indefinitely.
+
+| Action | Product and company decision | Evidence required |
+| --- | --- | --- |
+| Eliminate | Mandatory builder/template learning; unsupported live claims; duplicate status reports and invented customer evidence | Customer reaches the correct brief without configuration; each delivery has one authoritative queue record |
+| Reduce | Above-fold choices, repeated data entry, manual retyping between intake and setup, duplicate builds and idle model work | Task time/help requests plus measured operator minutes and compute cost; no regression in correctness |
+| Raise | Understandable status, stable drafts, access isolation, restoration, Myanmar device/language usability and predictable support | Exact task completion and failure-recovery checks; consented operator observation; hosted isolation/restore evidence |
+| Create | Prepared trade-specific Shop workspace; done-for-you Website/catalog delivery; revision-bound customer review and clear change requests | End-to-end prepared delivery and customer acceptance of the exact revision; not just a new screen |
+
+For every experiment record the problem, current evidence, ERRC action, owner,
+variant/source revision, expected outcome, primary metric, risk guardrail,
+test cost and decision (adopt/revise/reject/inconclusive). Reuse SETUP-01,
+REVIEW-01 and SHOP-01 above instead of creating overlapping studies. Add another
+variant only when it answers a distinct unresolved question. Hundreds of property
+tests or fault simulations are useful when they cover real cases; repeated AI
+opinions are not independent samples or proof of customer preference.
+
+## Engineering and operations assurance
+
+Use [NIST SSDF SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final) for secure
+development practices and [OWASP ASVS](https://github.com/OWASP/ASVS) for concrete
+application-security verification. Pin the selected version and applicable
+requirement IDs in each security review; this document is not a full mapping,
+certification or assertion of compliance. Do not claim ISO certification without
+an actual assessed management system and valid certification evidence.
+
+Prioritize verified server-side membership/roles, input validation, session
+revocation, tenant isolation, private exports, idempotent writes, dependency review,
+secret handling, restore drills and actionable incident ownership. Tests must
+exercise denial and failure paths as well as success. Human review owns security
+decisions; generated code and green source checks do not establish hosted safety.
+
+Architecture efficiency decisions need a measured baseline: initial/route bytes,
+device responsiveness, API latency, storage growth, recurring infrastructure cost,
+support time and restore time. Preserve the canonical backend and template
+contracts. Prefer focused checks during iteration and one final full gate per
+stabilized candidate; keep diagnostic subsets clearly distinct from a full seal.
+No new framework, model service or database solely to make the stack sound modern.
+
+## Premium onboarding communication
+
+The corporate task audits existing source-owned templates before new copy is
+implemented. A useful welcome/invitation has a recognizable sender, reason for
+receipt, the exact product/customer context, one clear next action, honest access
+status, accurate expiry/recovery guidance when applicable, and a support route.
+Provide readable plain text as well as responsive HTML. Never request passwords
+by email, echo invitation tokens into logs/reports, imply payment confirmation,
+or announce a workspace as ready before its acceptance gate. Draft generation,
+provider acceptance, mailbox receipt and successful customer access are separate
+states. Received SOL invitation metadata alone is not sign-in acceptance.
+
+Review English/Myanmar wording with intended operators; do not fabricate a
+translation review. Test links, keyboard/readability, missing/expired access,
+resend cooldown and duplicate-send prevention with approved synthetic fixtures.
+No live email A/B allocation, customer recruitment or sends are authorized by
+this protocol. Email quality is measured by understood next action and successful
+authorized access, not decorative copy or open-tracking pixels.
