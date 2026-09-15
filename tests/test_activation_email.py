@@ -86,10 +86,35 @@ class ActivationEmailTests(unittest.TestCase):
         )
         payload = json.loads(request.data.decode("utf-8"))
         self.assertEqual(payload["to"], ["owner@example.invalid"])
-        self.assertIn("SM-ABCD-2345", payload["text"])
-        self.assertIn("Yangon Tyre and Service", payload["subject"])
+        self.assertNotIn("SM-ABCD-2345", json.dumps(payload))
+        self.assertEqual(payload["subject"], "Company account created - Yangon Tyre and Service | SuperMega")
         # The courtesy email never carries secrets or session material.
         self.assertNotIn("Bearer", payload["text"])
+
+    def test_welcome_has_one_sign_in_action_and_precise_status(self) -> None:
+        text = activation_email._welcome_text("Example Shop")
+        self.assertEqual(text.count("https://"), 1)
+        self.assertIn("https://app.supermega.dev/login", text)
+        self.assertIn("same account you used during setup", text)
+        self.assertIn("companies assigned to that account", text)
+        self.assertIn("does not import your browser-local sample records", text)
+        self.assertIn("readiness are separate from account creation", text)
+        self.assertIn("reply to this email for setup help", text)
+        self.assertIn("Do not send passwords, sign-in codes or customer records", text)
+        for retired_claim in ("is active", "claim code", "Next steps:", "any time", "only shared with people you invite"):
+            self.assertNotIn(retired_claim, text)
+
+    def test_recovery_uses_configured_reply_address(self) -> None:
+        opener = _RecordingOpener()
+        env_patch, opener_patch = self._patched(opener, {
+            "RESEND_API_KEY": "re_test_key",
+            "SUPERMEGA_CONTACT_NOTIFY_EMAIL": "setup@example.invalid",
+        })
+        with env_patch, opener_patch:
+            self.assertTrue(_send(business_name="မြန်မာ ဆိုင်"))
+        payload = json.loads(opener.requests[0].data.decode("utf-8"))
+        self.assertEqual(payload["reply_to"], "setup@example.invalid")
+        self.assertIn("မြန်မာ ဆိုင်", payload["text"])
 
     def test_provider_failure_returns_false_never_raises(self) -> None:
         opener = _RecordingOpener(error=URLError("connection refused"))
