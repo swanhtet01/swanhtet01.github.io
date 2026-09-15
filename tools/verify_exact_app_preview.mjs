@@ -1003,7 +1003,7 @@ function expectedText(spec, publicHomepageExpectedText) {
   ]
   if (spec.surface === 'plant') return ['Plant', 'working sample', "These dates belong to this browser-local sample, not today's production."]
   if (spec.surface === 'website') return ['Website', 'Make this website yours', 'Nothing has been deployed.']
-  return ['Ecommerce', 'Try one customer order', 'Start sample order']
+  return ['Ecommerce', 'Try one sample request', 'Try sample request']
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText) {

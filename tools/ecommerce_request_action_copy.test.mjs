@@ -10,6 +10,14 @@ test('launcher promises a local request, not a delivered Shop order', () => {
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
+test('local entry consistently names a sample request in source and acceptance contracts', () => {
+  for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx', './verify_app_build.mjs', './verify_app_release_live.mjs', './verify_exact_app_preview.mjs']) {
+    const text = readFileSync(new URL(path, import.meta.url), 'utf8')
+    assert.ok(text.includes("'Try one sample request'"), path)
+    assert.ok(text.includes("'Try sample request'"), path)
+    assert.doesNotMatch(text, /'Try one customer order'|'Start sample order'/)
+  }
+})
 test('assisted catalog setup stays available in both local views and preserves the draft tab', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*return \(/)?.[1]

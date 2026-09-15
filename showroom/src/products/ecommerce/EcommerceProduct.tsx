@@ -1608,7 +1608,7 @@ export function EcommerceProduct() {
           ? 'Review cart quote'
           : managedIdentity
             ? 'Open store for ordering'
-            : 'Start sample order'
+            : 'Try sample request'
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : customerRequestState === 'waiting_shop_review'
@@ -1683,7 +1683,7 @@ export function EcommerceProduct() {
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
                 : managedIdentity
                   ? 'Your store is ready for the next order'
-                  : 'Try one customer order'
+                  : 'Try one sample request'
   const ecommerceTodaySummary = importNeeded
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : storefrontSetupRequired
@@ -1715,7 +1715,7 @@ export function EcommerceProduct() {
               ? 'Review checkout'
               : managedIdentity
                 ? 'Prepare next order'
-                : 'Start sample order'
+                : 'Try sample request'
   const ecommerceTodayMetrics = [
     ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
     ['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
