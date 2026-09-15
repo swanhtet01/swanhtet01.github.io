@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { clientSetupManifestPlugin } from './scripts/client-setup-manifest.ts'
 
 const projectRoot = realpathSync(dirname(fileURLToPath(import.meta.url)))
 const localApi = process.env.SUPERMEGA_LOCAL_API?.trim()
@@ -73,6 +74,7 @@ export default defineConfig({
   // Preserve field-level tree shaking instead of retaining entire large JSON blobs.
   json: { stringify: false },
   plugins: [
+    clientSetupManifestPlugin(projectRoot),
     react(),
     localHealthPlugin(),
     shouldAnalyzeBundle
