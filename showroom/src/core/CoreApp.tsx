@@ -854,6 +854,17 @@ function commandUuid() {
 
 
 
+function OperationsDialogHeader({ eyebrow, titleId, title, closeLabel, onClose, largeCloseTarget = false }: {
+  eyebrow: string
+  titleId: string
+  title: ReactNode
+  closeLabel: string
+  onClose: () => void
+  largeCloseTarget?: boolean
+}) {
+  return <div className="panel-head"><div><span className="core-eyebrow">{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button aria-label={closeLabel} className="text-link" onClick={onClose} style={largeCloseTarget ? { minHeight: 44, minWidth: 44 } : undefined} type="button">Close</button></div>
+}
+
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('en-US').format(value)} MMK`
 }
@@ -10203,7 +10214,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantBusinessControls}
     <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule() }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>
+        <OperationsDialogHeader eyebrow="Plant plan" titleId="job-schedule-title" title={<>Change {scheduleDraft.jobId} plan</>} closeLabel="Close job schedule" onClose={closeJobSchedule} />
         <form autoComplete="off" className="core-form" onSubmit={reviewJobSchedule}>
           <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setScheduleDraft((current) => current ? { ...current, priority: event.target.value as ProductionJobPriority } : current)} value={scheduleDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setScheduleDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={scheduleDraft.dueAt} /></label></div>
           <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setScheduleDraft((current) => current ? { ...current, owner: event.target.value } : current)} placeholder="Named person or role" required value={scheduleDraft.owner} /></label>
@@ -10291,7 +10302,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </div>
     </div>
     <dialog aria-labelledby="downtime-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeDowntimeDialog() }} ref={downtimeDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Equipment record</span><h2 id="downtime-dialog-title">Machine downtime</h2></div><button aria-label="Close downtime records" className="text-link" onClick={closeDowntimeDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+      <OperationsDialogHeader eyebrow="Equipment record" titleId="downtime-dialog-title" title="Machine downtime" closeLabel="Close downtime records" onClose={closeDowntimeDialog} largeCloseTarget />
       {openDowntimeIntervals.length ? <div className="issue-list">{openDowntimeIntervals.map((interval, index) => <article key={interval.startActionId}>
         <span aria-hidden="true" className="issue-mark">DT</span>
         <div><strong>{interval.machineName} · downtime open</strong><small style={wrappedIssueDetail}>Started {formatTime(interval.startedAt)} by {interval.startedBy} · {formatDowntimeDuration(issueClock - Date.parse(interval.startedAt))} elapsed</small><small style={wrappedIssueDetail}>Reason: {interval.startReason}</small><small style={wrappedIssueDetail}>Evidence: {interval.startEvidenceReference} · Action: {interval.startActionId}</small></div>
@@ -10305,7 +10316,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <p className="panel-copy">This human record is separate from machine status. It sends no equipment command and changes no job or output.</p>
     </dialog>
     <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+      <OperationsDialogHeader eyebrow="Owned work" titleId="maintenance-dialog-title" title="Machine maintenance" closeLabel="Close maintenance work" onClose={closeMaintenanceDialog} largeCloseTarget />
       {readyMaintenanceDueItems.length ? <><p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`}</p><div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => <article key={item.assetId}><div><strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong><small style={wrappedIssueDetail}>{item.criticality} · {item.owner} · Strategy R{item.strategyRevision}</small><small style={wrappedIssueDetail}>{item.procedureReference}</small></div>{index === 0 ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => { setMaintenanceCompletionDraft(null); setMaintenanceMachineId(item.assetId); requestAnimationFrame(() => maintenanceMachineSelectRef.current?.focus()) }} type="button">Review next</button> : null}</article>)}</div></> : null}
       {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
         <span aria-hidden="true" className="issue-mark">MX</span>
@@ -10334,7 +10345,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Equipment observation</span><h2 id="machine-observation-title">{observedMachine.name}</h2></div><button aria-label="Close equipment observation" className="text-link" onClick={closeMachineObservation} type="button">Close</button></div>
+        <OperationsDialogHeader eyebrow="Equipment observation" titleId="machine-observation-title" title={observedMachine.name} closeLabel="Close equipment observation" onClose={closeMachineObservation} />
         <form className="core-form" onSubmit={reviewMachineObservation}>
           <label>New recorded status<select onChange={(event) => setMachineObservation((current) => current ? { ...current, toState: event.target.value as ProductionMachineState } : current)} value={machineObservation.toState}>{machineObservationTargets.map((state) => <option key={state} value={state}>{productionMachineStateLabels[state]}</option>)}</select></label>
           <p className="panel-copy">Currently recorded as {productionMachineStateLabels[observedMachine.state]}. This records an operator observation only; it does not start, stop, or control equipment.</p>
@@ -10344,7 +10355,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </> : null}
     </dialog>
     <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeIssueDialog() }} ref={issueDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">{issueMaintenanceFindingSource ? 'Review maintenance finding' : 'Record an observation'}</h2></div><button aria-label="Close problem form" className="text-link" onClick={closeIssueDialog} type="button">Close</button></div>
+      <OperationsDialogHeader eyebrow="Plant problem" titleId="production-issue-title" title={issueMaintenanceFindingSource ? 'Review maintenance finding' : 'Record an observation'} closeLabel="Close problem form" onClose={closeIssueDialog} />
       <form autoComplete="off" className="core-form" onSubmit={createIssue}>
         {issueMaintenanceFindingSource ? <p className="form-notice" role="status"><strong>Linked completion</strong><br />{issueMaintenanceFindingSource.equipmentName} · Strategy R{issueMaintenanceFindingSource.strategyRevision} · {issueMaintenanceFindingSource.returnToService.replaceAll('_', ' ')}<br />Owner: {issueMaintenanceFindingSource.maintenanceOwner} · Evidence: {issueMaintenanceFindingSource.evidenceReference}</p> : null}
         <div className="form-row"><label>Type<select disabled={Boolean(issueMaintenanceFindingSource)} value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<input maxLength={120} onChange={(event) => setArea(event.target.value)} placeholder="Line, machine, or work centre" required value={area} /></label></div>
@@ -10358,7 +10369,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="maintenance-corrective-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setMaintenanceCorrectiveDraft(null) }} ref={maintenanceCorrectiveDialogRef}>
       {maintenanceCorrectiveDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Maintenance closeout</span><h2 id="maintenance-corrective-title">Review corrective action</h2></div><button aria-label="Close corrective action form" className="text-link" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Close</button></div>
+        <OperationsDialogHeader eyebrow="Maintenance closeout" titleId="maintenance-corrective-title" title="Review corrective action" closeLabel="Close corrective action form" onClose={() => setMaintenanceCorrectiveDraft(null)} />
         <form autoComplete="off" className="core-form" onSubmit={reviewMaintenanceCorrectiveResolution}>
           <label>Corrective action<textarea autoFocus maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What was corrected or controlled?" required value={maintenanceCorrectiveDraft.correctiveAction} /></label>
           <label>Verification result<textarea maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What evidence shows the action was effective?" required value={maintenanceCorrectiveDraft.verificationResult} /></label>
@@ -10370,7 +10381,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="quality-corrective-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setQualityCorrectiveDraft(null) }} ref={qualityCorrectiveDialogRef}>
       {qualityCorrectiveDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Quality CAPA</span><h2 id="quality-corrective-title">Verify corrective action</h2></div><button aria-label="Close quality CAPA form" className="text-link" onClick={() => setQualityCorrectiveDraft(null)} type="button">Close</button></div>
+        <OperationsDialogHeader eyebrow="Quality CAPA" titleId="quality-corrective-title" title="Verify corrective action" closeLabel="Close quality CAPA form" onClose={() => setQualityCorrectiveDraft(null)} />
         <form autoComplete="off" className="core-form" onSubmit={reviewQualityCorrectiveResolution}>
           <label>Failure mode<input autoFocus maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, failureMode: event.target.value } : current)} placeholder="Stable name used to find repeats" required value={qualityCorrectiveDraft.failureMode} /><small>Use the same short name when the same defect happens again.</small></label>
           <div className="form-row"><label>Cause category<select onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, causeCategory: event.target.value as ProductionQualityCauseCategory } : current)} value={qualityCorrectiveDraft.causeCategory}>{productionQualityCauseCategories.map((category) => <option key={category} value={category}>{productionQualityCauseLabels[category]}</option>)}</select></label><label>Effectiveness owner<input autoComplete="off" maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessOwner: event.target.value } : current)} placeholder="Named person or role" required value={qualityCorrectiveDraft.effectivenessOwner} /></label></div>
