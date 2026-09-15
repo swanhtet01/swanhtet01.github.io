@@ -67,4 +67,3 @@ export function sha256Hex(source: string) {
   }
   return Array.from(hash, (word) => word.toString(16).padStart(8, '0')).join('')
 }
-
