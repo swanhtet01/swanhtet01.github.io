@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { buildClientContactReviewTemplate, initializeClientWorkspaceFromContact, prepareClientDemo, verifyClientDemoPreparation } from './prepare_client_demo.mjs'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
@@ -585,7 +588,54 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 145 }, null, 2))
+  // Exercise the actual generated API event through the actual staff preparation
+  // consumer. Delivery is intercepted: no network, messages or customer records.
+  clearChannels()
+  process.env.SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET = randomUUID()
+  process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
+  const integrationRoot = await mkdtemp(resolve(tmpdir(), 'supermega-contact-handoff-'))
+  try {
+    for (const product of ['shop', 'website', 'ecommerce']) {
+      let deliveredEvent
+      let deliveryCount = 0
+      globalThis.fetch = async (url, options) => {
+        assert.equal(url, 'https://lead-router.example.test/events')
+        assert.equal(options.method, 'POST')
+        deliveryCount++
+        deliveredEvent = JSON.parse(options.body)
+        return { ok: true, status: 200 }
+      }
+      const response = await invoke({
+        activeHandler: loadHandler({ fresh: true }),
+        body: { ...validSubmission, product, template: '', goal: 'Prepare our ' + product + ' for review', source_url: 'https://supermega.dev/contact/?product=' + product },
+        headers: { 'x-idempotency-key': randomUUID() },
+      })
+      assert.equal(response.status, 202)
+      assert.equal(deliveryCount, 1)
+      assert.equal(deliveredEvent.record.lead_id, response.body.request_id)
+      assert.equal(deliveredEvent.record.goal, 'Prepare our ' + product + ' for review')
+      const review = {
+        ...buildClientContactReviewTemplate(deliveredEvent),
+        workspace: 'Synthetic handoff workspace', implementationOwner: 'Synthetic reviewer',
+        companyReviewed: true, goalReviewed: true, privateWorkspaceApproved: true,
+        reviewedAt: new Date().toISOString(),
+      }
+      const directory = resolve(integrationRoot, product)
+      const initialized = await initializeClientWorkspaceFromContact({ directory, event: deliveredEvent, review })
+      assert.equal(initialized.requestedProduct, product === 'shop' ? 'commerce' : product)
+      const preparation = await prepareClientDemo({ dataDirectory: directory })
+      assert.deepEqual(preparation.products.map(item => item.product), product === 'ecommerce' ? ['commerce', 'ecommerce'] : [product === 'shop' ? 'commerce' : product])
+      assert.equal(preparation.client.owner, 'Synthetic reviewer')
+      assert.equal(verifyClientDemoPreparation(preparation).status, 'verified_not_applied')
+      assert.equal(preparation.controls.externalWritesPerformed, false)
+      assert.equal(preparation.controls.containsSampleFixtures, true)
+      assert.doesNotMatch(JSON.stringify(preparation), /operator@example\.com|Trial Operator/)
+    }
+  } finally {
+    await rm(integrationRoot, { recursive: true, force: true })
+  }
+
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 145, serviceHandoffJourneys: 3 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {
