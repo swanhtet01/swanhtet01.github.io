@@ -56,7 +56,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 ## 5. The close
 
-- Self-serve close: send them to the public `/shop/` page and have them press `Start free sample` (`https://app.supermega.dev/settings/?product=shop`) on their own phone before they leave.
-- Assisted close: the public landing page's second button `Request assisted setup` opens `/contact/?product=shop`, pre-selecting Shop in the `Starting point` field. The form asks `What happens now, and what should be better?` and submits with `Send workflow`; the confirmation starts with `Request received: ` and an ID to keep.
+- Primary close: `Request assisted setup` opens `/contact/?product=shop`, pre-selecting Shop in `What do you need?`. The form asks `What would you like us to prepare?` and submits with `Request setup` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
+- Optional self-configuration: `Choose Shop type or continue saved` (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
 - Managed pilot close (multi-product or AI-context interest): `/contact/?product=guide&source=managed-intelligence` — the contact page retitles itself and the submit button becomes `Request managed pilot`.

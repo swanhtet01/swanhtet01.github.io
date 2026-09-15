@@ -39,7 +39,7 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 
 ## 5. The close
 
-- Self-serve close: public `/website/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=website`). The downloaded website file is the take-home artifact — let them keep it.
-- Assisted close: the landing page's `Request assisted setup` button opens `/contact/?product=website` with Website pre-selected in `Starting point`; submit with `Send workflow`, confirmation starts `Request received: `.
+- Primary close: the landing page's `Request assisted setup` button opens `/contact/?product=website` with Website pre-selected in `What do you need?`; submit with `Request setup` only when the customer authorizes sending their brief. Confirmation starts `Request received: `; retain the ID. SuperMega prepares the site after scope agreement, the customer reviews it, and publication remains separate.
+- Optional sample: `Start free sample` (`https://app.supermega.dev/settings/?product=website`). The downloaded website file is a local artifact, not a hosted site; customers need not learn the builder to request delivery.
 - From inside the app: the setup page's "Ask SuperMega to set up Website" link carries the template, for example `https://supermega.dev/contact/?product=website&template=business-presence&utm_source=app&utm_medium=guided_trial`.
 - Managed hosting or pilot: `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.

@@ -40,6 +40,6 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 ## 5. The close
 
 - Self-serve close: public `/plant/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=plant`), on the supervisor's own phone.
-- Assisted close: the landing page's `Request assisted setup` button opens `/contact/?product=plant` with Plant pre-selected in `Starting point`; the form submits with `Send workflow` and confirms with `Request received: ` plus an ID.
+- Retained compatibility route: the historical `Request assisted setup` target is `/contact/?product=plant`. Plant is not in the current public product selector; do not promise Plant pre-selection or sell this retained sample as an active offering. For an explicitly requested enquiry, use `Help me choose` under `What do you need?` and submit with `Request setup` only with authorization; a `Request received: ` ID confirms the brief, not Plant activation.
 - From inside the app: the setup page's "Ask SuperMega to set up Plant" link carries the template, for example `https://supermega.dev/contact/?product=plant&template=production-control&utm_source=app&utm_medium=guided_trial`.
 - Managed pilot close: `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.

@@ -16,7 +16,7 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 
 1. Best demo order: run the Shop guided setup first (see shop.md) so the handoff has a Shop side to land in; the two samples share the browser workspace.
 2. Open `https://app.supermega.dev/settings/?product=ecommerce` — the same destination as the `Start free sample` button on the public `/ecommerce/` landing page.
-3. Under `Name your workspace`, enter the client's name in `Business name`.
+3. Under `Name your workspace`, enter a fictional demonstration name in `Business name`, not the client's private data.
 4. Press `Create Ecommerce and open the store`. A storefront and checkout sample are provisioned and the app opens `/ecommerce/`. The stated first result is `Open a working online store`.
 5. Confirm the sidebar badge reads `Demo mode` and the store header eyebrow reads `Sample store`. The `Start here` headline on a fresh sample is `Try one customer order` with the button `Start sample order`.
 
@@ -26,10 +26,9 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 2. Tap `Add to cart` on one or two products; the button flips to `In cart`, and availability is honest per item (`Available` or `Sold out`).
 3. Open the `Cart and checkout` panel (`Review one total before Shop`). Show the cart lines with quantities and the products total.
 4. Fill the customer fields — Name and Phone — then `Receive order`: `Pickup · included` or `Delivery · Shop confirms`. Payment shows the sample notice (quoted in section 4); the empty-cart copy already set the rule: `Nothing goes to Shop until you review the exact quote.`
-5. Press `Send order request`. The receipt appears with the `Request sent` pill, one exact total, and a countdown — the approved workflow step is `Review a 15-minute whole-MMK quote`.
-6. Press `Continue in Shop`. The app navigates to the Shop order queue (`/shop/?tab=orders&source=ecommerce`) where a named person reviews the request — this is the accountability handoff, the core selling moment.
-7. Confirm the draft in Shop, then return to Ecommerce: the receipt now reads `Confirmed in Shop` with the Shop order ID, and offers `Start another order`.
-8. Wrap on the order workspace panel (`Order workspace`): on a fresh local sample it reads `Try the sample order flow`, and after confirmation the timeline shows the one path from cart to return, with `Open Shop order queue` linking back.
+5. Press `Save request on this device`. The receipt must say `Request saved on this device`; show the total and browser-local boundary. The quote step is `Review a 15-minute whole-MMK quote`. Do not describe this as delivered to a company.
+6. Explain the distinction: `Send order request` and `Request sent to Shop` belong to the separately configured managed path. A local receipt does not prove that path, a confirmed order, payment or stock reservation. Do not run a managed write during this demo.
+7. Finish with `Request catalog setup`. SuperMega prepares the catalog after scope is agreed; the customer should not have to learn the operator builder. Explain preview review and separate publication, rather than promising an already-live store.
 
 ## 4. Objection handling: the boundary
 
@@ -43,7 +42,7 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 
 ## 5. The close
 
-- Self-serve close: public `/ecommerce/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=ecommerce`), on the seller's own phone.
-- Assisted close: the landing page's `Request assisted setup` button opens `/contact/?product=ecommerce` with Ecommerce pre-selected in `Starting point`; submit with `Send workflow`, confirmation starts `Request received: `.
+- Primary close: the landing page's `Request assisted setup` button opens `/contact/?product=ecommerce` with Ecommerce pre-selected in `What do you need?`; submit with `Request setup` only when the customer authorizes sending their brief. Confirmation starts `Request received: `; keep the ID. This is brief receipt, not delivery of a working store.
+- Optional sample: `Start free sample` (`https://app.supermega.dev/settings/?product=ecommerce`) is for exploration, not a required customer setup task.
 - From inside the app: the setup page's "Ask SuperMega to set up Ecommerce" link carries the template, for example `https://supermega.dev/contact/?product=ecommerce&template=social-storefront&utm_source=app&utm_medium=guided_trial`.
 - Managed pilot close (usually paired with Shop): `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.
