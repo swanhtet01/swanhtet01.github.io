@@ -11,6 +11,15 @@ const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 
 const html = async path => readFile(resolve(root, '.vercel/output/static', path), 'utf8')
 const main = value => value.match(/<main[\s\S]*?<\/main>/)?.[0] ?? ''
 
+test('retired direct setup stops before write-capable onboarding hooks mount', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
+  const gate = source.slice(source.indexOf('export function ProductOnboardingPage('), source.indexOf('function ActiveProductOnboardingPage('))
+  assert.match(gate, /!activeSetupProductContracts\.some\(contract => contract\.id === product\)/)
+  assert.match(gate, /Open retained Plant workspace/)
+  assert.match(gate, /return <ActiveProductOnboardingPage key=\{product\}/)
+  assert.doesNotMatch(gate, /useSetupWorkspace|useProductionWorkspace|rememberProductSetup|useEffect/)
+})
+
 test('new trial choices consume active products and reject retired query selection', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/SignupPage.tsx'), 'utf8')
   assert.match(source, /activeSetupProductContracts\.map/)

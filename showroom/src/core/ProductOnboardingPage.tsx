@@ -12,6 +12,7 @@ import {
 } from './pilot-outcome'
 import { currentProductionShiftClose } from './production-workspace'
 import {
+  activeSetupProductContracts,
   plantPackSaveAllowed,
   productContracts,
   managedTrialRequestUrl,
@@ -138,6 +139,16 @@ const onboardingFirstRunSteps: Record<SetupProductId, readonly { title: string; 
 }
 
 export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
+  if (!activeSetupProductContracts.some(contract => contract.id === product)) {
+    return <div className="workspace-screen">
+      <PageHeading eyebrow="Retained product" title="Plant is not available for new setup." copy="Existing records are unchanged. Open the retained workspace to continue existing work, or choose a current product." />
+      <div className="managed-login-actions"><Link className="core-button" to="/plant/">Open retained Plant workspace</Link><Link className="core-button primary" to="/?choose=1">Choose Shop, Ecommerce or Website</Link></div>
+    </div>
+  }
+  return <ActiveProductOnboardingPage key={product} product={product} />
+}
+
+function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const runtime = useOutletContext<RuntimeHealth>()
   const navigate = useNavigate()
   const location = useLocation()
