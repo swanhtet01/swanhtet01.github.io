@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:a6afc11ff348b28a8da4967abb4c3e84e282d8cc6ce0412fd86267f713c61ae3",
+  "sourceDigest": "sha256:e4fbf9c7882ca2a8b34933dd5ebc919fabe3e3f22b067f680328ff3947250740",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -27,7 +27,7 @@
           "www.supermega.dev"
         ],
         "buildScript": "node tools/create_public_vercel_output.mjs",
-        "verifyScript": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify",
+        "verifyScript": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify",
         "output": ".vercel/output",
         "productionPromotion": "owner-approved coordinated workflow only"
       },
@@ -242,7 +242,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:5b1a21f44793e31b705c5106c1a7e347c5fae07f52ee9be0e13d743c89dfbc67"
+      "digest": "sha256:f677307ee289453caca7ff49c25a06530b3959742c359d4e09c958543302de65"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
