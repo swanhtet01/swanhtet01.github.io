@@ -43,7 +43,10 @@ function harness(responses, search = '') {
     AbortController,
     setTimeout(callback, delay) { assert.equal(delay, 20000); timers.set(++timerId, callback); return timerId },
     clearTimeout(id) { timers.delete(id) },
-    FormData: class { entries() { return [['goal', form.querySelector('[name="goal"]').value]] } },
+    FormData: class { entries() { return [...fields].flatMap(([selector, field]) => {
+      const name = selector.match(/^\[name="([^"]+)"\]$/)?.[1]
+      return name ? [[name, field.value]] : []
+    }) } },
     fetch: async (url, options) => {
       calls.push({ url, ...options })
       const next = await responses.shift()
@@ -121,6 +124,25 @@ test('late edits survive confirmation and uncertain retries resend the original 
     assert.notEqual(state.calls.at(-1).headers['x-idempotency-key'], state.calls[0].headers['x-idempotency-key'])
     assert.equal(state.resets(), 1)
   }
+})
+test('product and company changes survive an original receipt without changing its retry payload', async () => {
+  const state = harness([new Error('offline'), { body: receipt }, { body: receipt }], '?product=shop&template=retail')
+  state.fields.get('[name="company"]').value = 'Original business'
+  await state.submit()
+  state.changeProduct('website')
+  state.fields.get('[name="company"]').value = 'Revised business'
+  await state.submit()
+  assert.equal(state.calls[0].body, state.calls[1].body)
+  assert.equal(state.resets(), 0)
+  assert.equal(state.fields.get('[name="product"]').value, 'website')
+  assert.equal(state.fields.get('[name="company"]').value, 'Revised business')
+  await state.submit()
+  const next = JSON.parse(state.calls[2].body)
+  assert.equal(next.product, 'website')
+  assert.equal(next.company, 'Revised business')
+  assert.equal(next.template, '')
+  assert.equal(next.idempotency_key, state.calls[2].headers['x-idempotency-key'])
+  assert.notEqual(next.idempotency_key, JSON.parse(state.calls[0].body).idempotency_key)
 })
 test('valid generated receipt confirms and clears the brief', async () => {
   const state = harness([{ body: receipt }])
