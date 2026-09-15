@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import test from 'node:test'
 import { createReviewAccessBoundary } from '../showroom/src/products/website/customer-review-access.ts'
+import { customerWebsiteReviewLoginPath } from '../showroom/src/core/account-routes.ts'
 
 // Use the installed React renderer and TypeScript compiler; no browser, auth,
 // network, private workspace, or new dependency is involved in this test.
@@ -17,6 +18,7 @@ const module = { exports: {} }
 vm.runInNewContext(compiled, { exports: module.exports, require: name => {
   if (name.endsWith('.css')) return {}
   if (name === './customer-review-access') return { createReviewAccessBoundary }
+  if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
   if (name === '../../core/managed-trial' || name === './customer-review-contract') return new Proxy({}, { get: () => { throw new Error('Pure preview must not access auth or transport') } })
   return require(name)
 } })

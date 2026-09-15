@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router'
 import { currentManagedIdentity, loadManagedWebsiteReview, sameManagedIdentity, sendManagedWebsiteReviewChanges, type ManagedIdentity } from '../../core/managed-trial'
 import { verifyCustomerChangeAcknowledgement, verifyCustomerWebsiteReview, type CustomerWebsiteReview } from './customer-review-contract'
 import { createReviewAccessBoundary } from './customer-review-access'
+import { customerWebsiteReviewLoginPath } from '../../core/account-routes'
 import './website-product.css'
 import './customer-review.css'
 
@@ -37,7 +38,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
           pending.current = null; setUnconfirmed(false); setNote('')
         }
         lastIdentity.current = identity
-        if (!identity) { setReview(null); setActor(null); setMessage('Sign in to your company account, then return here and open the review.'); return }
+        if (!identity) { setReview(null); setActor(null); setMessage('Sign in to open your prepared review. We will bring you back here.'); return }
         const verified = await verifyCustomerWebsiteReview(await loadManagedWebsiteReview(reviewId, identity), reviewId)
         if (!active || !access.isCurrent(epoch)) return
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
@@ -95,7 +96,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   return <main className="website-product customer-website-review">
     <header className="customer-review-heading"><Link to="/">SuperMega</Link><h1>Your prepared Website</h1><p>Review the pages. Tell us what to change. We handle the build.</p></header>
     <p role="status" aria-live="polite">{message}</p>
-    {!review && <div className="customer-review-actions"><Link to="/login?product=website" target="_blank" rel="noreferrer">Sign in</Link><button type="button" onClick={() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setAttempt(value => value + 1) }}>Open review</button></div>}
+    {!review && <div className="customer-review-actions"><Link to={customerWebsiteReviewLoginPath(reviewId)}>Sign in</Link><button type="button" onClick={() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setAttempt(value => value + 1) }}>Open review</button></div>}
     {review && <>
       <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId} />
       <form className="customer-review-feedback" onSubmit={submit}><h2>What would you like changed?</h2><label htmlFor="website-review-note">Your change request</label><textarea id="website-review-note" rows={4} maxLength={2000} value={note} readOnly={unconfirmed} onChange={event => setNote(event.target.value)} required /><p>SuperMega reviews your request. This does not approve or publish the Website.</p><button type="submit" disabled={busy || !note.trim()}>{busy ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
