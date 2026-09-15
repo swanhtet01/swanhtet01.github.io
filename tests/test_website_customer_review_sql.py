@@ -5,6 +5,7 @@ Run with SUPERMEGA_RUN_WEBSITE_REVIEW_SQL=1 and SUPERMEGA_TRIAL_SCHEMA_VERSION=1
 
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import os
@@ -112,6 +113,53 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             review = self.prepare(connection)
             connection.commit()
         return review
+
+    def preparation_arguments(self):
+        with self.transaction() as connection:
+            version = connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='website'", (WORKSPACE,)).fetchone()[0]
+        return dict(review_id=str(uuid4()), recipient_actor_id=RECIPIENT, expected_version=version,
+                    expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+
+    def test_operator_prepares_customer_reviews_and_withdraws_without_state_mutation(self):
+        adapter = self.adapter()
+        operator = TrialPrincipal(WORKSPACE, OWNER, "human")
+        recipient = TrialPrincipal(WORKSPACE, RECIPIENT, "human")
+        arguments = self.preparation_arguments()
+        with self.transaction() as connection:
+            before = connection.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='website'", (WORKSPACE,)).fetchone()
+        created = adapter.prepare(operator, **arguments)
+        self.assertTrue(created["persisted"])
+        self.assertFalse(created["replayed"])
+        self.assertTrue(adapter.prepare(operator, **arguments)["replayed"])
+        preview = adapter.preview(recipient, created["reviewId"])
+        self.assertEqual(preview["previewDigest"], created["previewDigest"])
+        self.assertEqual(adapter.revoke(operator, created["reviewId"])["status"], "revoked")
+        self.assertTrue(adapter.revoke(operator, created["reviewId"])["replayed"])
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.preview(recipient, created["reviewId"])
+        with self.assertRaises(TrialValidationError):
+            adapter.prepare(operator, **arguments)
+        with self.transaction() as connection:
+            self.assertEqual(connection.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='website'", (WORKSPACE,)).fetchone(), before)
+
+    def test_preparation_denies_customer_wrong_recipient_stale_and_conflicting_input(self):
+        adapter = self.adapter()
+        operator = TrialPrincipal(WORKSPACE, OWNER, "human")
+        arguments = self.preparation_arguments()
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.prepare(TrialPrincipal(WORKSPACE, RECIPIENT, "human"), **arguments)
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.prepare(operator, **(arguments | {"recipient_actor_id": str(uuid4())}))
+        for changed in ({"expected_version": arguments["expected_version"]+1}, {"expected_version": True},
+                        {"expires_at": (datetime.now(timezone.utc)+timedelta(days=8)).isoformat()},
+                        {"expires_at": (datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat()}):
+            with self.subTest(changed=changed), self.assertRaises(TrialValidationError):
+                adapter.prepare(operator, **(arguments | changed))
+        created = adapter.prepare(operator, **arguments)
+        with self.assertRaises(TrialValidationError):
+            adapter.prepare(operator, **(arguments | {"expires_at": (datetime.now(timezone.utc)+timedelta(days=2)).isoformat()}))
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.revoke(TrialPrincipal(WORKSPACE, RECIPIENT, "human"), created["reviewId"])
 
     def test_adapter_preview_feedback_replay_and_conflict_real_transactions(self):
         review = self.retained_assignment()

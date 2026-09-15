@@ -8,10 +8,12 @@ against that same invalidation lock. No membership or publishing is granted.
 
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import timedelta
+import json
 from typing import Any, Mapping
 
 from .trial_store import PostgresTrialStore, TrialPrincipal, TrialPermissionDenied, TrialValidationError, TrialNotReadyError
-from .website_customer_review import _digest, _text, _uuid
+from .website_customer_review import _digest, _text, _uuid, _time, _preview
 
 
 class WebsiteCustomerReviewStore:
@@ -19,7 +21,7 @@ class WebsiteCustomerReviewStore:
         self.store = store
 
     @contextmanager
-    def _transaction(self, principal: TrialPrincipal, *, write: bool, capability: str):
+    def _transaction(self, principal: TrialPrincipal, *, write: bool, capability: str, lock_source: bool = False):
         actor = principal.normalized()
         if actor.actor_kind != "human":
             raise TrialPermissionDenied(capability)
@@ -36,6 +38,12 @@ class WebsiteCustomerReviewStore:
             cursor.execute("select current_setting('transaction_isolation') as isolation")
             if cursor.fetchone()["isolation"] != "read committed":
                 raise TrialValidationError("website_review_requires_read_committed")
+            if lock_source:
+                # Match the Website UPDATE/INSERT-trigger ordering: source row
+                # first, then advisory lock. Never invert this during preparation.
+                cursor.execute("select version from app_private.workspace_state where workspace_id=%s and surface='website' for update", (actor.workspace_id,))
+                if cursor.fetchone() is None:
+                    raise TrialValidationError("website_review_source_missing")
             cursor.execute("select pg_advisory_xact_lock(hashtextextended('website-review:' || %s,0))", (actor.workspace_id,))
             # A lock wait may outlive session or entitlement revocation.
             self.store._assert_active_identity_session(cursor, actor)
@@ -43,6 +51,66 @@ class WebsiteCustomerReviewStore:
                 raise TrialPermissionDenied(capability)
             yield cursor, actor
         # Returning to the caller happens only after the outer transaction commits.
+
+    def prepare(self, principal: TrialPrincipal, *, review_id: str, recipient_actor_id: str,
+                expected_version: int, expires_at: str) -> dict[str, Any]:
+        review_id, recipient = _uuid(review_id), _uuid(recipient_actor_id)
+        expiry = _time(expires_at)
+        if type(expected_version) is not int or expected_version < 1:
+            raise TrialValidationError("website_review_source_stale")
+        with self._transaction(principal, write=True, capability="website.write", lock_source=True) as (cursor, actor):
+            cursor.execute("select clock_timestamp() as now")
+            now = cursor.fetchone()["now"]
+            if not now < expiry <= now + timedelta(days=7):
+                raise TrialValidationError("website_review_expiry_invalid")
+            cursor.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='website'", (actor.workspace_id,))
+            source = cursor.fetchone()
+            if source is None or source["version"] != expected_version:
+                raise TrialValidationError("website_review_source_stale")
+            cursor.execute("select app_private.website_review_recipient_ready(%s) as ready", (recipient,))
+            if (cursor.fetchone() or {}).get("ready") is not True:
+                raise TrialPermissionDenied("website.review")
+            revision, preview = _preview(source["state_json"])
+            digest = _digest(preview)
+            cursor.execute("""select recipient_actor_id,prepared_by,source_version,preview_digest,expires_at,status
+                from app_private.website_customer_reviews where workspace_id=%s and review_id=%s""", (actor.workspace_id, review_id))
+            prior = cursor.fetchone()
+            replay = prior is not None
+            if prior is not None:
+                if (prior["recipient_actor_id"] != recipient or prior["prepared_by"] != actor.actor_id
+                        or prior["source_version"] != expected_version or prior["preview_digest"] != digest
+                        or prior["expires_at"] != expiry or prior["status"] != "active"):
+                    raise TrialValidationError("website_review_prepare_conflict")
+            else:
+                cursor.execute("""insert into app_private.website_customer_reviews
+                    (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
+                    values (%s,%s,%s,%s,%s,%s::jsonb,%s,%s)""",
+                    (review_id, actor.workspace_id, recipient, actor.actor_id, expected_version,
+                     json.dumps(preview, ensure_ascii=False), digest, expiry))
+            cursor.execute("""select review_id from app_private.website_customer_reviews
+                where workspace_id=%s and review_id=%s and status='active' and expires_at>clock_timestamp()""", (actor.workspace_id, review_id))
+            if cursor.fetchone() is None:
+                raise TrialValidationError("website_review_expired")
+            result = {"reviewId": review_id, "contentRevision": revision, "sourceVersion": expected_version,
+                      "previewDigest": digest, "expiresAt": expiry.isoformat(), "status": "prepared_preview",
+                      "persisted": True, "replayed": replay, "publicationAuthorized": False}
+        return result
+
+    def revoke(self, principal: TrialPrincipal, review_id: str) -> dict[str, Any]:
+        review_id = _uuid(review_id)
+        with self._transaction(principal, write=True, capability="website.write") as (cursor, actor):
+            cursor.execute("select status from app_private.website_customer_reviews where workspace_id=%s and review_id=%s", (actor.workspace_id, review_id))
+            prior = cursor.fetchone()
+            if prior is None:
+                raise TrialPermissionDenied("website.write")
+            replay = prior["status"] == "revoked"
+            if not replay:
+                cursor.execute("update app_private.website_customer_reviews set status='revoked' where workspace_id=%s and review_id=%s returning status", (actor.workspace_id, review_id))
+                if (cursor.fetchone() or {}).get("status") != "revoked":
+                    raise TrialValidationError("website_review_revoke_failed")
+            result = {"reviewId": review_id, "status": "revoked", "persisted": True,
+                      "replayed": replay, "publicationAuthorized": False}
+        return result
 
     @staticmethod
     def _assignment(cursor: Any, actor: TrialPrincipal, review_id: str):
