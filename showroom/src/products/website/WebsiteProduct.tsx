@@ -14,6 +14,7 @@ import { SitePreview } from './SitePreview'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
+import { websiteDraftDifference } from './website-draft-difference'
 import {
   captureWebsiteLead,
   emptyWebsiteLeadLedger,
@@ -1178,6 +1179,7 @@ export function WebsiteProduct() {
                   Current {isUntouchedWebsiteStarter(workspace) ? 'sample' : 'saved Website'}: <strong>{workspace.siteName}</strong>.
                   {' '}Unsaved tab draft: <strong>{pendingRestoredDraft.session.workspace.siteName}</strong>.
                 </p>
+                <p>{websiteDraftDifference(workspace, pendingRestoredDraft.session.workspace)}</p>
                 <small>SuperMega held the older draft aside. Nothing was overwritten, deployed, published, or sent.</small>
               </div>
               <div className="website-restored-draft-actions">
