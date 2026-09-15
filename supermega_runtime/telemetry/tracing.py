@@ -88,9 +88,12 @@ class RedactingSpanProcessor:
         try:
             sanitized = self._sanitized_copy(span)
         except Exception:  # pragma: no cover - a scrub bug must never leak a span
-            _LOGGER.exception("supermega.telemetry: span scrub failed; dropping span")
+            _LOGGER.warning("supermega.telemetry: span scrub failed; dropping span")
             return
-        self._exporter.export((sanitized,))
+        try:
+            self._exporter.export((sanitized,))
+        except Exception:  # telemetry failures must not change product behavior
+            _LOGGER.warning("supermega.telemetry: span export failed; dropping span")
 
     def shutdown(self) -> None:
         self._exporter.shutdown()
@@ -116,7 +119,8 @@ class RedactingSpanProcessor:
         this scrubber independent of that private implementation detail.
         """
 
-        from opentelemetry.sdk.trace import ReadableSpan
+        from opentelemetry.sdk.trace import Event, ReadableSpan
+        from opentelemetry.trace import Status
 
         current = dict(span.attributes or {})
         if any(key in current for key in redact.FORBIDDEN_ATTRIBUTE_KEYS):
@@ -129,10 +133,20 @@ class RedactingSpanProcessor:
             parent=span.parent,
             resource=span.resource,
             attributes=sanitized_attributes,
-            events=span.events,
+            # Exception events can contain raw request data and full local
+            # paths even when top-level attributes have been scrubbed.
+            events=tuple(
+                Event(
+                    name=redact.scrub_span_name(event.name),
+                    attributes=redact.scrub_attributes(dict(event.attributes or {})),
+                    timestamp=event.timestamp,
+                )
+                for event in (span.events or ())
+            ),
             links=span.links,
             kind=span.kind,
-            status=span.status,
+            # Keep the error signal, never the free-form exception description.
+            status=Status(status_code=span.status.status_code),
             start_time=span.start_time,
             end_time=span.end_time,
             instrumentation_scope=getattr(span, "instrumentation_scope", None),
