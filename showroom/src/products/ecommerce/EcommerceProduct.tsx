@@ -299,6 +299,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
+  const [customerRequestDeliveryConfirmed, setCustomerRequestDeliveryConfirmed] = useState(false)
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
   const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
@@ -1486,18 +1487,19 @@ export function EcommerceProduct() {
     ['Boundary', 'No booking'],
   ] as const
   const requestWaitingInLocalMode = customerRequestState === 'waiting_shop_review' && !managedIdentity
-  const requestWaitingQueueLabel = requestWaitingInLocalMode ? 'Saved locally' : 'Request sent'
-  const ecommerceWaitingHeadline = requestWaitingInLocalMode ? 'Sample request saved locally' : 'Request sent to Shop'
+  const requestDeliveryVerified = Boolean(managedIdentity && customerRequestDeliveryConfirmed)
+  const requestWaitingQueueLabel = requestWaitingInLocalMode ? 'Saved locally' : requestDeliveryVerified ? 'Request sent' : 'Delivery unverified'
+  const ecommerceWaitingHeadline = requestWaitingInLocalMode ? 'Sample request saved locally' : requestDeliveryVerified ? 'Request sent to Shop' : 'Request saved — verify Shop delivery'
   const ecommerceWaitingSummary = requestWaitingInLocalMode
     ? 'The sample customer request is saved on this device for Shop review. No Shop inbox write, charge, stock, delivery, or customer message happened.'
-    : 'No charge or stock change happens until Shop confirms the order.'
-  const ecommerceWaitingMetric = requestWaitingInLocalMode ? 'Local receipt' : 'Review waiting'
+    : requestDeliveryVerified ? 'No charge or stock change happens until Shop confirms the order.' : 'This device retained the request, but delivery to Company Shop is not verified in this session. Check the request before retrying. No charge or stock change is confirmed.'
+  const ecommerceWaitingMetric = requestWaitingInLocalMode ? 'Local receipt' : requestDeliveryVerified ? 'Review waiting' : 'Delivery unverified'
   const waitingShopReviewReason = requestWaitingInLocalMode
     ? 'The customer request is retained only in browser-local recovery until the operator opens the Shop review draft.'
-    : 'The customer request is retained in the Company Shop inbox for operator review.'
+    : requestDeliveryVerified ? 'The customer request is retained in the Company Shop inbox for operator review.' : 'A local recovery record does not prove Company Shop received the request.'
   const waitingShopReviewGate = requestWaitingInLocalMode
     ? 'Open the local Shop review draft before claiming Shop has received the request.'
-    : 'The Shop operator confirms stock, promise, payment, and delivery.'
+    : requestDeliveryVerified ? 'The Shop operator confirms stock, promise, payment, and delivery.' : 'Verify or retry the same request before claiming Company Shop delivery.'
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
     : !selectedSkus.length
@@ -2279,6 +2281,7 @@ export function EcommerceProduct() {
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}
               onRequestStateChange={setCustomerRequestState}
+              onDeliveryConfirmationChange={setCustomerRequestDeliveryConfirmed}
               preview={previewResult.preview}
               scope={buyingScope}
               sourcePreviewDigest={digest}

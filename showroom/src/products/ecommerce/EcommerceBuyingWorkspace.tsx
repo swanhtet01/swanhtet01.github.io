@@ -76,6 +76,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
+  onDeliveryConfirmationChange?: (confirmed: boolean) => void
   preview: StorefrontPreview
   scope: string
   sourcePreviewDigest: string
@@ -146,6 +147,7 @@ export function EcommerceBuyingWorkspace({
   onOpenSupport,
   onRecordManagedRequest,
   onRequestStateChange,
+  onDeliveryConfirmationChange,
   preview,
   scope,
   sourcePreviewDigest,
@@ -363,6 +365,10 @@ export function EcommerceBuyingWorkspace({
   const latestRequestOrder = latestRequestEntry?.order ?? null
   const customerRequestState = latestRequestOrder ? 'confirmed' : latestRequest ? 'waiting_shop_review' : 'idle'
   useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
+  useEffect(() => {
+    onDeliveryConfirmationChange?.(managedDeliveryConfirmed)
+    return () => onDeliveryConfirmationChange?.(false)
+  }, [managedDeliveryConfirmed, onDeliveryConfirmationChange])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
