@@ -1779,14 +1779,19 @@ export function EcommerceProduct() {
     })
   }, [aiAgentJob, location.pathname, location.search])
 
+  const showAssistedCatalogSetup = !catalogHydrating && !managedIdentity
+    && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
+    && workspaceView === 'preview'
+
   return (
     <div className="workspace-screen ecommerce-product">
       <header className="ecommerce-heading">
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
           <h1>Ecommerce</h1>
-          <p>Sell online with products, cart, orders, delivery, and returns.</p>
+          <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Explore a local catalog preview. SuperMega can prepare your catalog for you; sample requests are not live orders.'}</p>
         </div>
+        {showAssistedCatalogSetup ? <a className="core-button secondary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
       </header>
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>

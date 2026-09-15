@@ -10,6 +10,19 @@ test('launcher promises a local request, not a delivered Shop order', () => {
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
+test('assisted catalog setup is local-only and preserves the current preview tab', () => {
+  const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*return \(/)?.[1]
+  assert.ok(expression)
+  const ready = { catalogHydrating: false, managedIdentity: null, catalog: { source: 'sample' }, draftIssue: '', draftBusy: false, workspaceView: 'preview' }
+  assert.equal(vm.runInNewContext(expression, ready), true)
+  for (const blocked of [{catalogHydrating:true}, {managedIdentity:{}}, {catalog:{source:'unavailable'}}, {draftIssue:'read failed'}, {draftBusy:true}, {workspaceView:'setup'}]) {
+    assert.equal(vm.runInNewContext(expression, {...ready,...blocked}), false)
+  }
+  assert.match(product, /product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer"/)
+  assert.match(product, /sample requests are not live orders/)
+  assert.match(product, /\{ecommerceTodayHeadline\}/)
+})
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('buying.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 let action
