@@ -140,7 +140,8 @@ class WebsiteCustomerReviewStore:
 
         The cursor identifies a retained row in this exact review; its server
         timestamp plus command ID supplies deterministic keyset pagination.
-        Newly arriving feedback appears on a fresh first page, not mid-history.
+        This is a live read, not a cross-page snapshot. Restart at the first
+        page to reconcile feedback arriving while staff browse older requests.
         """
         review_id = _uuid(review_id)
         if after is not None:

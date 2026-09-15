@@ -212,13 +212,27 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         from uuid import UUID
         review = self.retained_assignment()
         with self.transaction(RECIPIENT) as connection:
-            for number in range(1, 54):
+            # Deliberately scramble physical insertion order, so time/insertion
+            # order cannot accidentally substitute for the UUID tie-breaker.
+            for number in [*range(1, 54, 2), *range(2, 54, 2)]:
                 self.feedback(connection, review, UUID(int=number), note=f"Correction {number}")
             connection.commit()
+        # Synthetic fixture only in this test's disposable loopback cluster.
+        # The real trigger assigns clock_timestamp() on every insert. Pin all
+        # timestamps explicitly, restore the exact guard before the adapter
+        # runs its normal catalog checks, and prove equality rather than assume.
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("alter table app_private.website_customer_feedback disable trigger website_feedback_guard")
+            connection.execute("""update app_private.website_customer_feedback set created_at=(
+                select max(created_at) from app_private.website_customer_feedback where review_id=%s)
+                where review_id=%s""", (review[0], review[0]))
+            connection.execute("alter table app_private.website_customer_feedback enable trigger website_feedback_guard")
+            self.assertEqual(connection.execute("select count(distinct created_at),count(*) from app_private.website_customer_feedback where review_id=%s", (review[0],)).fetchone(), (1, 53))
         adapter = self.adapter(write=False)
         operator = TrialPrincipal(WORKSPACE, OWNER, "human")
         first = adapter.feedback(operator, str(review[0]))
         self.assertEqual(len(first["requests"]), 50)
+        self.assertEqual([row["commandId"] for row in first["requests"]], [str(UUID(int=i)) for i in range(53, 3, -1)])
         self.assertEqual(first["nextAfter"], str(UUID(int=4)))
         second = adapter.feedback(operator, str(review[0]), after=first["nextAfter"])
         self.assertEqual([row["commandId"] for row in second["requests"]], [str(UUID(int=i)) for i in (3, 2, 1)])
