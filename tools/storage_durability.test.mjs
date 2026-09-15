@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import './local_workspace_backup_roundtrip.test.mjs'
 
 // The module memoises its persist() request at module scope, which is the behaviour
 // under test in "asks once". Each case therefore imports a fresh instance through a
