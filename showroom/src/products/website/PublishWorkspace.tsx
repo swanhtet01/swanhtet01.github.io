@@ -98,6 +98,8 @@ export function PublishWorkspace({
   const approvalKey = JSON.stringify([fingerprint, workspace.contentRevision, managedActorId || reviewer.trim(), approvalNote.trim(), workspace.evidence.map((entry) => entry.id)])
   const approvalConfirmed = confirmedApprovalKey === approvalKey
   const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | ''>('')
+  const [saveIssue, setSaveIssue] = useState('')
+  const saveInFlight = useRef(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const passedCount = checks.filter((check) => check.passed).length
   const allChecksPass = passedCount === checks.length
@@ -153,43 +155,70 @@ export function PublishWorkspace({
 
   async function submitEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (saveInFlight.current) return
+    saveInFlight.current = true
+    setSaveIssue('')
     setSubmitting('evidence')
-    const saved = await onAddEvidence({
-      kind: evidenceKind,
-      finding: evidenceFinding.trim(),
-      reference: evidenceReference.trim(),
-      verifiedBy: managedActorId || evidenceVerifier.trim(),
-    })
-    setSubmitting('')
-    if (saved) {
-      const nextRequirement = evidenceRequirements.find((requirement) => (
-        requirement.id !== evidenceKind && !currentEvidenceByKind.get(requirement.id)
-      ))
-      if (nextRequirement) chooseEvidenceKind(nextRequirement.id)
-      else {
-        setEvidenceFinding('')
-        setEvidenceReference('')
-        setActiveStep('approval')
+    try {
+      const saved = await onAddEvidence({
+        kind: evidenceKind,
+        finding: evidenceFinding.trim(),
+        reference: evidenceReference.trim(),
+        verifiedBy: managedActorId || evidenceVerifier.trim(),
+      })
+      if (saved) {
+        const nextRequirement = evidenceRequirements.find((requirement) => (
+          requirement.id !== evidenceKind && !currentEvidenceByKind.get(requirement.id)
+        ))
+        if (nextRequirement) chooseEvidenceKind(nextRequirement.id)
+        else {
+          setEvidenceFinding('')
+          setEvidenceReference('')
+          setActiveStep('approval')
+        }
       }
+    } catch {
+      setSaveIssue('Could not confirm the save. Your entries are still here. Check the saved history before trying again.')
+    } finally {
+      saveInFlight.current = false
+      setSubmitting('')
     }
   }
 
   async function submitApproval(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!allChecksPass || !approvalConfirmed) return
+    if (saveInFlight.current) return
+    saveInFlight.current = true
+    setSaveIssue('')
     setSubmitting('approval')
-    const saved = await onApprove({ reviewer: managedActorId || reviewer.trim(), note: approvalNote.trim() })
-    setSubmitting('')
-    if (saved) {
-      setConfirmedApprovalKey('')
-      setActiveStep('snapshot')
+    try {
+      const saved = await onApprove({ reviewer: managedActorId || reviewer.trim(), note: approvalNote.trim() })
+      if (saved) {
+        setConfirmedApprovalKey('')
+        setActiveStep('snapshot')
+      }
+    } catch {
+      setSaveIssue('Could not confirm the save. Your entries are still here. Check the saved history before trying again.')
+    } finally {
+      saveInFlight.current = false
+      setSubmitting('')
     }
   }
 
   async function recordSnapshot() {
+    if (saveInFlight.current) return
+    saveInFlight.current = true
+    setSaveIssue('')
     setSubmitting('snapshot')
-    await onRecordPublish()
-    setSubmitting('')
+    try {
+      await onRecordPublish()
+    } catch {
+      setSaveIssue('Could not confirm the save. Check the saved site files before trying again.')
+    } finally {
+      saveInFlight.current = false
+      setSubmitting('')
+    }
   }
 
   function selectStep(step: PublishStep) {
@@ -241,6 +270,7 @@ export function PublishWorkspace({
       </div>
 
       <div className="website-editor-scroll publish-flow-body" ref={bodyRef}>
+        {saveIssue ? <p role="alert">{saveIssue}</p> : null}
         {activeStep === 'checks' ? (
           <section
             className="website-publish-section publish-flow-card"
