@@ -81,7 +81,10 @@ export const productContracts: Record<SetupProductId, ProductContract> = {
 
 // New-product selectors use this acquisition list. Keep productContracts complete:
 // saved Plant setups, route parsing and recovery still require its stable identity.
-export const activeSetupProductContracts: ProductContract[] = activeProductContracts(siteManifest)
+export const activeSetupProductContracts: ProductContract[] = activeProductContracts({
+  customerProducts: siteManifest.customerProducts,
+  productVisibility: siteManifest.productVisibility,
+})
   .map(product => productContracts[product.runtimeId as SetupProductId])
 
 export function productDisplayName(product: SetupProductId) {

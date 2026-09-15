@@ -70,6 +70,8 @@ export default defineConfig({
   // directory atomically, so keep generated cache in this checkout's ignored .tmp
   // directory instead of trying to write through the dependency junction.
   cacheDir: resolve(projectRoot, '../.tmp/vite-cache'),
+  // Preserve field-level tree shaking instead of retaining entire large JSON blobs.
+  json: { stringify: false },
   plugins: [
     react(),
     localHealthPlugin(),
