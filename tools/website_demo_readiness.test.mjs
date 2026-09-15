@@ -58,13 +58,23 @@ function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
 }
 
+test('assisted Website entry stays local-only and defers to recovery and edit states', () => {
+  assert.match(websiteProductSource, /const showAssistedWebsitePreview = storageMode !== 'managed'/)
+  assert.match(websiteProductSource, /view === 'content' && surface === 'preview'/)
+  assert.match(websiteProductSource, /!storageIssue && !canRepairLocalStorage && !pendingRestoredDraft/)
+  assert.match(websiteProductSource, /!hasUnsavedChanges && !starterSetupActive/)
+  assert.match(websiteProductSource, /href="https:\/\/supermega.dev\/contact\/\?product=website&source=website-preview">Request Website setup<\/a>/)
+  assert.match(websiteProductSource, /You do not need to edit the site yourself\./)
+  assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
+})
+
 test('Website keeps readiness visible while detailed checks collapse before the preview', () => {
   assert.match(websiteProductSource, /<details className="website-today-checks">\s*<summary>Site checks · \{websiteTodayMetrics\[1\]\[1\]\}<\/summary>/)
   const checks = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
   assert.match(checks, /aria-label="Website today status"/)
   assert.match(checks, /websiteTodayMetrics\.map/)
   assert.match(checks, /<\/details>/)
-  assert.match(websiteProductSource, /<div className="website-today-source" role="status">[\s\S]*?\{websiteReviewNote\}/)
+  assert.match(websiteProductSource, /<div className="website-today-source" role="status">[\s\S]*?\{showAssistedWebsitePreview \? 'Requesting setup does not publish this preview, connect a domain or approve a release\.' : websiteReviewNote\}/)
   assert.match(websiteProductCss, /\.website-today-checks > summary \{\s*min-height: 2\.75rem;/)
   assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
 })

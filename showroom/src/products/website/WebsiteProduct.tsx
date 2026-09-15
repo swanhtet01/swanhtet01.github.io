@@ -279,6 +279,10 @@ export function WebsiteProduct() {
   const websiteSurfaceActionLabel = surface === 'preview'
     ? starterAvailable ? 'Edit sample' : 'Edit page'
     : 'Preview'
+  const showAssistedWebsitePreview = storageMode !== 'managed'
+    && view === 'content' && surface === 'preview'
+    && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
+    && !hasUnsavedChanges && !starterSetupActive
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
     ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
@@ -1163,7 +1167,7 @@ export function WebsiteProduct() {
           <header className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{activeViewCopy.copy}</p>
+              <p>{showAssistedWebsitePreview ? 'Review this local preview. SuperMega can prepare the finished website for you; nothing here is published.' : activeViewCopy.copy}</p>
             </div>
             {view === 'publish' ? (
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
@@ -1194,9 +1198,13 @@ export function WebsiteProduct() {
           {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Start here</span>
-              <h2 id="website-today-title">{websiteAgentJob}</h2>
-              <p>{websiteAgentReason}</p>
-              <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
+              <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Let SuperMega prepare your website' : websiteAgentJob}</h2>
+              <p>{showAssistedWebsitePreview ? 'Use this preview as a reference. Tell us about your business; we confirm the scope, prepare the pages and send a preview for your approval. You do not need to edit the site yourself.' : websiteAgentReason}</p>
+              {showAssistedWebsitePreview ? (
+                <a className="website-button is-primary is-compact" href="https://supermega.dev/contact/?product=website&source=website-preview">Request Website setup</a>
+              ) : (
+                <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
+              )}
             </div>
             <details className="website-today-checks">
               <summary>Site checks · {websiteTodayMetrics[1][1]}</summary>
@@ -1206,7 +1214,7 @@ export function WebsiteProduct() {
             </details>
             <div className="website-today-source" role="status">
               <span>{websiteTodayContext}</span>
-              <small>{websiteReviewNote}</small>
+              <small>{showAssistedWebsitePreview ? 'Requesting setup does not publish this preview, connect a domain or approve a release.' : websiteReviewNote}</small>
             </div>
           </section> : null}
 
