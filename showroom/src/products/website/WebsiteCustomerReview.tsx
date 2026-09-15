@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { currentManagedIdentity, loadManagedWebsiteReview, sameManagedIdentity, sendManagedWebsiteReviewChanges, type ManagedIdentity } from '../../core/managed-trial'
 import { verifyCustomerChangeAcknowledgement, verifyCustomerWebsiteReview, type CustomerWebsiteReview } from './customer-review-contract'
+import { createReviewAccessBoundary } from './customer-review-access'
 import './website-product.css'
 import './customer-review.css'
 
@@ -22,65 +23,79 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   const [attempt, setAttempt] = useState(0)
   const [unconfirmed, setUnconfirmed] = useState(false)
   const pending = useRef<Pending | null>(null)
-  const generation = useRef(0)
+  const [access] = useState(() => createReviewAccessBoundary(currentManagedIdentity, sameManagedIdentity))
   const lastIdentity = useRef<ManagedIdentity | null>(null)
 
   useEffect(() => {
     let active = true
-    const epoch = ++generation.current
+    const epoch = access.invalidate()
     async function open() {
       try {
         const identity = await currentManagedIdentity()
-        if (!active) return
+        if (!active || !access.isCurrent(epoch)) return
         if (!identity || !lastIdentity.current || !sameManagedIdentity(identity, lastIdentity.current)) {
           pending.current = null; setUnconfirmed(false); setNote('')
         }
         lastIdentity.current = identity
-        if (!identity) { setMessage('Sign in to your company account, then return here and open the review.'); return }
+        if (!identity) { setReview(null); setActor(null); setMessage('Sign in to your company account, then return here and open the review.'); return }
         const verified = await verifyCustomerWebsiteReview(await loadManagedWebsiteReview(reviewId, identity), reviewId)
-        if (!active || generation.current !== epoch) return
-        setActor(identity); setReview(verified); setPageId(verified.preview.pages[0].id)
-        setMessage('Prepared for your review. Not a published website.')
+        if (!active || !access.isCurrent(epoch)) return
+        const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
+          setActor(identity); setReview(verified); setPageId(verified.preview.pages[0].id)
+          setMessage('Prepared for your review. Not a published website.')
+        })
+        if (!accepted && access.isCurrent(epoch)) {
+          setReview(null); setActor(null); pending.current = null; setUnconfirmed(false); setNote('')
+          setMessage('Your review access changed. Sign in and reopen the review.')
+        }
       } catch {
-        if (active) setMessage('This review is unavailable, expired, or not assigned to this account. Ask SuperMega for a current review.')
+        if (active && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('This review is unavailable, expired, or not assigned to this account. Ask SuperMega for a current review.') }
       }
     }
     void open()
-    const refresh = () => { setReview(null); setActor(null); setBusy(false); setMessage('Checking your review access…'); setAttempt(value => value + 1) }
+    const refresh = () => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setMessage('Checking your review access…'); setAttempt(value => value + 1) }
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
-    return () => { active = false; generation.current = epoch + 1; window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
-  }, [reviewId, attempt])
+    return () => { active = false; access.invalidate(); window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
+  }, [reviewId, attempt, access])
 
   useEffect(() => {
     if (!review) return
-    const timer = window.setTimeout(() => { setReview(null); setMessage('This review has expired. Ask SuperMega for a fresh review.') }, Math.max(0, Date.parse(review.expiresAt) - Date.now()))
+    const timer = window.setTimeout(() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); pending.current = null; setUnconfirmed(false); setNote(''); setMessage('This review has expired. Ask SuperMega for a fresh review.') }, Math.max(0, Date.parse(review.expiresAt) - Date.now()))
     return () => window.clearTimeout(timer)
-  }, [review])
+  }, [review, access])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!review || !actor || busy || Date.parse(review.expiresAt) <= Date.now()) return
-    const epoch = generation.current
+    const epoch = access.capture()
     const request = pending.current ?? { identity: actor, payload: { reviewId, commandId: crypto.randomUUID(), previewDigest: review.previewDigest, note: note.trim() } }
     if (!request.payload.note || request.payload.reviewId !== reviewId || !sameManagedIdentity(request.identity, actor)) return
     pending.current = request
     setBusy(true); setUnconfirmed(true); setMessage('Saving your change request…')
+    function denyChangedAccess() {
+      if (!access.isCurrent(epoch)) return
+      setReview(null); setActor(null); pending.current = null; setUnconfirmed(false); setNote('')
+      setMessage('Your review access changed. Sign in and reopen the review.')
+    }
     try {
       const response = await sendManagedWebsiteReviewChanges(request.payload, request.identity)
       verifyCustomerChangeAcknowledgement(response, request.payload)
-      if (generation.current !== epoch) return
-      pending.current = null; setUnconfirmed(false); setNote('')
-      setMessage('Your change request is saved for SuperMega. Nothing has been published.')
+      const accepted = await access.commit(epoch, request.identity, review.expiresAt, () => {
+        pending.current = null; setUnconfirmed(false); setNote('')
+        setMessage('Your change request is saved for SuperMega. Nothing has been published.')
+      })
+      if (!accepted) denyChangedAccess()
     } catch {
-      if (generation.current === epoch) setMessage('We could not confirm the save. Retry this same request; it will not create a duplicate.')
-    } finally { if (generation.current === epoch) setBusy(false) }
+      const accepted = await access.commit(epoch, request.identity, review.expiresAt, () => setMessage('We could not confirm the save. Retry this same request; it will not create a duplicate.'))
+      if (!accepted) denyChangedAccess()
+    } finally { if (access.isCurrent(epoch)) setBusy(false) }
   }
 
   return <main className="website-product customer-website-review">
     <header className="customer-review-heading"><Link to="/">SuperMega</Link><h1>Your prepared Website</h1><p>Review the pages. Tell us what to change. We handle the build.</p></header>
     <p role="status" aria-live="polite">{message}</p>
-    {!review && <div className="customer-review-actions"><Link to="/login?product=website" target="_blank" rel="noreferrer">Sign in</Link><button type="button" onClick={() => setAttempt(value => value + 1)}>Open review</button></div>}
+    {!review && <div className="customer-review-actions"><Link to="/login?product=website" target="_blank" rel="noreferrer">Sign in</Link><button type="button" onClick={() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setAttempt(value => value + 1) }}>Open review</button></div>}
     {review && <>
       <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId} />
       <form className="customer-review-feedback" onSubmit={submit}><h2>What would you like changed?</h2><label htmlFor="website-review-note">Your change request</label><textarea id="website-review-note" rows={4} maxLength={2000} value={note} readOnly={unconfirmed} onChange={event => setNote(event.target.value)} required /><p>SuperMega reviews your request. This does not approve or publish the Website.</p><button type="submit" disabled={busy || !note.trim()}>{busy ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>

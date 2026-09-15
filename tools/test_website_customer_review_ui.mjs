@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import test from 'node:test'
+import { createReviewAccessBoundary } from '../showroom/src/products/website/customer-review-access.ts'
 
 // Use the installed React renderer and TypeScript compiler; no browser, auth,
 // network, private workspace, or new dependency is involved in this test.
@@ -15,6 +16,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
 const module = { exports: {} }
 vm.runInNewContext(compiled, { exports: module.exports, require: name => {
   if (name.endsWith('.css')) return {}
+  if (name === './customer-review-access') return { createReviewAccessBoundary }
   if (name === '../../core/managed-trial' || name === './customer-review-contract') return new Proxy({}, { get: () => { throw new Error('Pure preview must not access auth or transport') } })
   return require(name)
 } })
@@ -46,8 +48,65 @@ test('route and lifecycle safety source pins remain explicit (not browser proof)
   const routes = readFileSync(new URL('../showroom/src/App.tsx', import.meta.url), 'utf8')
   assert.ok(routes.includes('website/review/:reviewId'))
   for (const pin of ['key={reviewId}', 'verifyCustomerWebsiteReview', 'verifyCustomerChangeAcknowledgement',
-    'pending.current ??', 'generation.current !== epoch', 'readOnly={unconfirmed}',
+    'pending.current ??', '!access.isCurrent(epoch)', 'readOnly={unconfirmed}',
     "window.removeEventListener('storage', refresh)", "window.removeEventListener('focus', refresh)",
     'Date.parse(review.expiresAt) <= Date.now()', 'sameManagedIdentity(request.identity, actor)']) assert.ok(source.includes(pin), pin)
   assert.doesNotMatch(source, /dangerouslySetInnerHTML|localStorage\.setItem|sessionStorage\.setItem/)
+  assert.ok(source.includes('const refresh = () => { access.invalidate(); setReview(null); setActor(null)'))
+})
+
+const expiry = '2026-09-17T00:00:00Z'
+const now = () => Date.parse('2026-09-16T00:00:00Z')
+const same = (a, b) => a.userId === b.userId && a.workspaceId === b.workspaceId
+const actor = { userId: 'owner-a', workspaceId: 'company-a' }
+function deferred() { let resolve; const promise = new Promise(done => { resolve = done }); return { promise, resolve } }
+
+test('old preview cannot commit between synchronous refresh and passive cleanup', async () => {
+  const load = deferred()
+  const boundary = createReviewAccessBoundary(async () => actor, same, now)
+  const epoch = boundary.invalidate()
+  let preview = null
+  const opening = (async () => { await load.promise; return boundary.commit(epoch, actor, expiry, () => { preview = 'private' }) })()
+  boundary.invalidate() // Event handler, before any simulated effect cleanup.
+  load.resolve()
+  assert.equal(await opening, false)
+  assert.equal(preview, null)
+})
+test('sign-out or account/workspace switch during digest verification cannot reveal a preview', async () => {
+  for (const changed of [null, { ...actor, userId: 'owner-b' }, { ...actor, workspaceId: 'company-b' }]) {
+    const verification = deferred()
+    let identity = actor
+    const boundary = createReviewAccessBoundary(async () => identity, same, now)
+    const epoch = boundary.invalidate()
+    let preview = null
+    const opening = (async () => { await verification.promise; return boundary.commit(epoch, actor, expiry, () => { preview = 'private' }) })()
+    identity = changed
+    verification.resolve()
+    assert.equal(await opening, false)
+    assert.equal(preview, null)
+  }
+})
+test('late save acknowledgement and identity lookup cannot overwrite access invalidation', async () => {
+  const identity = deferred()
+  const boundary = createReviewAccessBoundary(() => identity.promise, same, now)
+  const epoch = boundary.invalidate()
+  let message = 'Checking access'
+  const saving = boundary.commit(epoch, actor, expiry, () => { message = 'Saved' })
+  boundary.invalidate()
+  identity.resolve(actor)
+  assert.equal(await saving, false)
+  assert.equal(message, 'Checking access')
+})
+test('current identity can commit; expiry and identity errors fail closed', async () => {
+  let clock = now()
+  let broken = false
+  const boundary = createReviewAccessBoundary(async () => { if (broken) throw new Error('offline'); return actor }, same, () => clock)
+  const epoch = boundary.invalidate()
+  let writes = 0
+  assert.equal(await boundary.commit(epoch, actor, expiry, () => { writes++ }), true)
+  clock = Date.parse(expiry)
+  assert.equal(await boundary.commit(epoch, actor, expiry, () => { writes++ }), false)
+  clock = now(); broken = true
+  assert.equal(await boundary.commit(epoch, actor, expiry, () => { writes++ }), false)
+  assert.equal(writes, 1)
 })
