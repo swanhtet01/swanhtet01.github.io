@@ -1145,3 +1145,17 @@ test('the device warning stays out of the product workspaces', async () => {
     'the device-wide backup warning has been rendered inside a product workspace -- the Shop meter already occupies that screen, and two storage warnings in one place is the failure this was shaped to avoid',
   )
 })
+
+test('restore requires explicit review of the exact selected snapshot', async () => {
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  assert.ok(page.includes('reviewedRestorePoint !== restorePoint || restoreBusy'))
+  assert.ok(page.includes('onClick={() => setReviewedRestorePoint(restorePoint)}'))
+  assert.ok(page.includes('Cancel restore'))
+  assert.ok(page.includes('Confirm restore of this snapshot'))
+  assert.ok(page.includes('Work saved after the snapshot may be lost.'))
+  assert.ok(page.includes('saved {restorePoint.createdAt}'))
+  for (const action of ['function saveRestorePoint()', 'async function loadBackupFile', 'async function restoreWorkspace()']) {
+    const start = page.indexOf(action)
+    assert.ok(start >= 0 && page.slice(start, start + 300).includes('setReviewedRestorePoint(null)'), `${action} invalidates prior review`)
+  }
+})

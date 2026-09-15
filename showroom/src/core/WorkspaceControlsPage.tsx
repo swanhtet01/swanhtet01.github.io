@@ -530,6 +530,7 @@ export function WorkspaceControlsPage() {
   const [searchParams] = useSearchParams()
   const [currentBackup, setCurrentBackup] = useState<LocalWorkspaceBackup | null>(collectCurrentBackup)
   const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadRestorePoint)
+  const [reviewedRestorePoint, setReviewedRestorePoint] = useState<LocalWorkspaceBackup | null>(null)
   const [restorePointLabel, setRestorePointLabel] = useState(restorePoint ? 'Saved on this device' : '')
   const [notice, setNotice] = useState('')
   const [restoreBusy, setRestoreBusy] = useState(false)
@@ -565,6 +566,7 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'ceo-brief') return <Suspense fallback={REPORT_FALLBACK}><CeoOperatingBriefView backupReady={Boolean(currentBackup)} runtime={runtime} /></Suspense>
 
   function saveRestorePoint() {
+    setReviewedRestorePoint(null)
     const backup = collectCurrentBackup()
     if (!backup) {
       setNotice('This workspace is too large to save safely. Download smaller product exports before resetting this device.')
@@ -583,6 +585,7 @@ export function WorkspaceControlsPage() {
 
   async function loadBackupFile(file: File | null) {
     if (!file) return
+    setReviewedRestorePoint(null)
     try {
       if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega backup smaller than 5 MB.')
       const parsed: unknown = JSON.parse(await file.text())
@@ -598,8 +601,9 @@ export function WorkspaceControlsPage() {
   }
 
   async function restoreWorkspace() {
-    if (!restorePoint || restoreBusy) return
+    if (!restorePoint || reviewedRestorePoint !== restorePoint || restoreBusy) return
     setRestoreBusy(true)
+    setReviewedRestorePoint(null)
     try {
       await applyLocalWorkspaceBackup(window.localStorage, restorePoint)
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
@@ -801,7 +805,17 @@ export function WorkspaceControlsPage() {
           {archiveNotice ? <p aria-live="polite" className="form-notice" role="status">{archiveNotice}</p> : null}
         </section>
 
-        {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} records</small></div><button className="core-button primary" disabled={restoreBusy} onClick={restoreWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}
+        {restorePoint ? <section aria-label="Local workspace restore point" className="core-panel">
+          <h2>Restore point ready.</h2>
+          <p>{restorePointLabel} · {Object.keys(restorePoint.records).length} records · saved {restorePoint.createdAt}</p>
+          {reviewedRestorePoint === restorePoint ? <>
+            <p role="alert">This replaces the registered local workspace records in this browser with this snapshot. Work saved after the snapshot may be lost. Download a current workspace backup first if you need to keep it. Managed server records are not restored by this action.</p>
+            <div className="trial-actions">
+              <button className="core-button" disabled={restoreBusy} onClick={() => setReviewedRestorePoint(null)} type="button">Cancel restore</button>
+              <button className="core-button danger" disabled={restoreBusy} onClick={() => void restoreWorkspace()} type="button">Confirm restore of this snapshot</button>
+            </div>
+          </> : <button className="core-button" disabled={restoreBusy} onClick={() => setReviewedRestorePoint(restorePoint)} type="button">{restoreBusy ? 'Restoring...' : 'Review restore'}</button>}
+        </section> : null}
         {notice ? <p aria-live="polite" className="form-notice" role="status">{notice}</p> : null}
 
         <details className="compact-disclosure">
