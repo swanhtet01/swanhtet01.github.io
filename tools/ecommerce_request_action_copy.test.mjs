@@ -13,7 +13,7 @@ const ts = require('typescript')
 test('phone catalog remains readable with a retained Desktop preview selection', () => {
   const css = readFileSync(new URL('../showroom/src/products/ecommerce/ecommerce-product.css', import.meta.url), 'utf8')
   const block = css.slice(css.indexOf('/* A retained Desktop preview selection'), css.indexOf('/* ============================================================================', css.indexOf('/* A retained Desktop preview selection')))
-  assert.match(block, /@media \(max-width: 760px\)/)
+  assert.match(block, /@media \(max-width: 47\.5rem\)/)
   assert.match(block, /\.ecommerce-preview-frame \.storefront-preview \.storefront-grid\s*\{\s*grid-template-columns: minmax\(0, 1fr\);/)
   assert.match(block, /grid-template-columns: 4rem minmax\(0, 1fr\)/)
   for (const [index, tag] of ['small', 'strong', 'span', 'b'].entries()) {

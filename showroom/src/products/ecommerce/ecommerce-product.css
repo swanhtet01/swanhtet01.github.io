@@ -1948,7 +1948,7 @@
 .storefront-grid article > .storefront-product-photo { object-fit: cover; }
 
 /* A retained Desktop preview selection must not squeeze two cards onto a phone. */
-@media (max-width: 760px) {
+@media (max-width: 47.5rem) {
   .ecommerce-preview-frame .storefront-preview .storefront-grid {
     grid-template-columns: minmax(0, 1fr);
   }
