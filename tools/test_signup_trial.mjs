@@ -307,7 +307,12 @@ check(!appSource.includes('<Navigate replace to="/login" />} path="signup"'), 'a
 const shellSource = readFileSync('showroom/src/core/CoreShell.tsx', 'utf8')
 const loginSource = readFileSync('showroom/src/core/ManagedLoginPage.tsx', 'utf8')
 check(shellSource.split('to={signupPath}').length - 1 === 2, 'desktop and mobile product pages preserve product intent in Free trial links')
-check(loginSource.split('to={signupPath}').length - 1 === 2, 'both login-to-trial links preserve the requested product')
+check(loginSource.split('to={signupPath}').length - 1 === 1, 'managed login retains one product-specific trial link')
+const unavailableLogin = loginSource.slice(loginSource.indexOf('aria-label="Company account unavailable"'))
+check(unavailableLogin.includes('to="/?choose=1">Try a sample — no account</Link>'), 'unavailable login offers the no-account sample chooser directly')
+check(!unavailableLogin.includes('to={signupPath}'), 'unavailable login does not duplicate sample access with a signup detour')
+check(unavailableLogin.includes('Sample records stay on this device; they are not a shared company workspace.'), 'sample access keeps the local-only boundary visible')
+check(unavailableLogin.includes('href={managedAccountRequestUrl(productIntent)}'), 'assisted setup preserves product intent separately from samples')
 
 const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
 check(coreCss.includes('.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0;'), 'signup controls cannot overflow the mobile content width')
