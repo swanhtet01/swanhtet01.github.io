@@ -263,7 +263,8 @@ requireContract('CI verifies exact-source desktop and 390px journeys for all fou
   && renderedJourneyVerifier.includes('noHorizontalOverflow: true')
   && renderedJourneyVerifier.includes("getComputedStyle(currentSale).transform === 'none'")
   && renderedJourneyVerifier.includes('Number.parseFloat(getComputedStyle(currentSale).opacity) === 1')
-  && renderedJourneyVerifier.includes('&& (!mobile || state?.drawerTransitionSettled)')
+  && renderedJourneyVerifier.includes('const drawerSettled = !mobile || state?.drawerTransitionSettled === true')
+  && renderedJourneyVerifier.includes('ok: missingText.length === 0 && drawerSettled && Boolean(state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton)')
   && !ciWorkflow.includes('actions/upload-artifact'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('coordinated release avoids redundant local app install',
