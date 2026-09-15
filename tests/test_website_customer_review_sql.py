@@ -20,7 +20,10 @@ from supermega_runtime.website_customer_review_store import WebsiteCustomerRevie
 from supermega_runtime.website_runtime import _website_artifact
 from tests.test_website_runtime import _state
 
-MIGRATION = "20260915184728_website_customer_review_storage.sql"
+REVIEW_MIGRATIONS = (
+    "20260915184728_website_customer_review_storage.sql",
+    "20260915191528_website_review_entitlement_proof.sql",
+)
 WORKSPACE = "rehearsal-product"
 OWNER = "owner-product"
 RECIPIENT = "22222222-2222-4222-8222-222222222222"
@@ -31,6 +34,8 @@ DIGEST = "sha256:" + "a" * 64
 class WebsiteReviewSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if pg.CURRENT_MIGRATIONS[-2:] != REVIEW_MIGRATIONS:
+            raise RuntimeError("website_review_complete_migration_chain_required")
         import psycopg
         cls.db_error = psycopg.Error
         cls.bin = pg._default_postgres_bin()
@@ -56,8 +61,6 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         pg._provision_runtime(cls.admin_url, runtime_password)
         pg._seed_rehearsal_data(cls.admin_url)
         with pg._connect(cls.admin_url) as connection:
-            connection.execute((pg.MIGRATION_DIRECTORY / MIGRATION).read_text(encoding="utf-8"))
-            connection.execute((pg.MIGRATION_DIRECTORY / "20260915191528_website_review_entitlement_proof.sql").read_text(encoding="utf-8"))
             connection.execute("insert into app_private.workspace_memberships(workspace_id,actor_id,status,capabilities,actor_kind) values (%s,%s,'active',array['website.review'],'human')", (WORKSPACE, RECIPIENT))
             connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'website',1,%s::jsonb,%s)", (WORKSPACE, json.dumps(_state()), OWNER))
 
