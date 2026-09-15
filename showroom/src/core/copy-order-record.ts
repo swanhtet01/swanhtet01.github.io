@@ -7,6 +7,6 @@ export async function copyOrderRecordText(
     await clipboard.writeText(text)
     return 'Order record copied.'
   } catch {
-    return 'Could not copy. Try again or use Print receipt to save a copy.'
+    return 'Could not copy. Try again or use Print order record to save a copy.'
   }
 }

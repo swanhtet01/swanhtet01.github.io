@@ -6197,7 +6197,7 @@ if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') ret
   || !i18nActionsTable.includes("'Stock':")
   || !i18nActionsTable.includes("'Review order':")
   || !i18nActionsTable.includes("'Create order':")
-  || !i18nActionsTable.includes("'Print receipt':")
+  || !i18nActionsTable.includes("'Print order record':")
   // The documented refusal. 'Products' in the phone bottom bar opens the SuperMega
   // product chooser, NOT the shop's goods, one cell away from the Stock tab. The
   // refusal is recorded in i18n-actions.ts; this is what keeps someone from closing
@@ -6351,7 +6351,7 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   // G1 counter slice: the receipt dialog's own labels go through bi(), while the
   // PRINTED acknowledgement stays one declared language. See the scope note in
   // ReceiptDialog.tsx -- that document is evidence, not a customer slip.
-  || !receiptDialogSource.includes("{bi('Print receipt')}")
+  || !receiptDialogSource.includes("{bi('Print order record')}")
   || !receiptDialogSource.includes("{bi('Total')}")
   || !receiptDialogSource.includes("{bi('Close')}")
   || !receiptDialogSource.includes('<!DOCTYPE html>\n<html lang="en">')

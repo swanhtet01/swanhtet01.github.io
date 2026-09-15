@@ -17,6 +17,8 @@ test('denied and missing clipboard return actionable feedback, not an unhandled 
   for (const clipboard of [undefined, { writeText: async () => { throw new Error('private browser detail') } }]) {
     const result = await copyOrderRecordText('Synthetic order record', clipboard)
     assert.match(result, /^Could not copy\./)
+    assert.match(result, /use Print order record to save a copy\./)
+    assert.doesNotMatch(result, /Print receipt/)
     assert.doesNotMatch(result, /private browser detail/)
   }
 })
@@ -25,4 +27,6 @@ test('dialog announces the result only for the acknowledgement that was copied',
   const dialog = readFileSync(new URL('../showroom/src/core/ReceiptDialog.tsx', import.meta.url), 'utf8')
   assert.match(dialog, /aria-live="polite" role="status"/)
   assert.match(dialog, /copyResult\?\.record === ack \? copyResult.notice : ''/)
+  assert.match(dialog, /bi\('Print order record'\)/)
+  assert.doesNotMatch(dialog, /bi\('Print receipt'\)/)
 })

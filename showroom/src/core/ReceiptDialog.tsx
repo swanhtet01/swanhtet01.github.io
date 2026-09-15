@@ -233,7 +233,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
         <p className="receipt-dialog-notice">{ack.notice}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
         <div className="receipt-dialog-actions">
-          <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print receipt')}</button>
+          <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
           <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
           <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
         </div>
