@@ -510,6 +510,17 @@ test('the browser-local lane still installs every trade catalog through the real
     assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved')
     assert.equal(protectedStore.map.get(commerceKey), draftOnlyBefore, 'a draft-only operator workspace was not replaced')
     assert.equal(protectedStore.map.has('supermega.shop.counter_draft.v1'), true, 'the in-progress sale was retained')
+    const ticketsModel = await import('../showroom/src/core/shop-parked-tickets.ts')
+    const active = ticketsModel.transitionCounterTickets(ticketsModel.parseCounterTickets(null), {
+      kind: 'save', basket: { cart: { 'OWNER-SKU': 1 }, customer: '', payment: 'Cash', outcome: 'paid_handoff' },
+    })
+    const parkedOnly = JSON.stringify(ticketsModel.transitionCounterTickets(active, { kind: 'park', id: 'table-one', label: 'Table 1' }))
+    protectedStore.map.set('supermega.shop.counter_draft.v1', parkedOnly)
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved')
+    assert.equal(protectedStore.map.get('supermega.shop.counter_draft.v1'), parkedOnly, 'parked-only work survives a different trade door byte-for-byte')
+    assert.equal(protectedStore.map.get(commerceKey), draftOnlyBefore, 'parked work cannot authorize a catalog replacement')
+    protectedStore.map.set('supermega.shop.counter_draft.v1', JSON.stringify({ schema: 'unknown', cart: {} }))
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved', 'unknown ticket recovery fails closed')
     protectedStore.map.delete('supermega.shop.counter_draft.v1')
     assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'installed')
     const ownerChange = await commerceModel.mutateCommerceWorkspace((current) => commerceModel.registerCommerceItem(current, {

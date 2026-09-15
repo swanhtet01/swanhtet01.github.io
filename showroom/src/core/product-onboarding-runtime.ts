@@ -3,6 +3,7 @@
 // directly under node for its runtime checks, where an extensionless specifier does not resolve.
 // Vite tolerates either, so the omission only shows in CI -- see the identical note atop
 // local-merchandising-import.ts.
+import { parseCounterTickets } from './shop-parked-tickets.ts'
 import {
   clientDemoPresets,
   clientImportTemplate,
@@ -477,6 +478,10 @@ function localShopCounterDraftHasLines() {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true
+    if ('schema' in parsed) {
+      const tickets = parseCounterTickets(raw)
+      return tickets.parked.length > 0 || Object.keys(tickets.cart).length > 0
+    }
     const cart = (parsed as { cart?: unknown }).cart
     if (!cart || typeof cart !== 'object' || Array.isArray(cart)) return true
     return Object.entries(cart).some(([sku, quantity]) => Boolean(sku)
