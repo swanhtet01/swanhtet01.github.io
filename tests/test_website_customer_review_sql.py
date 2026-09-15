@@ -1,4 +1,7 @@
-"""Opt-in real loopback PostgreSQL tests. Never accepts a supplied database URL."""
+"""Opt-in real loopback PostgreSQL tests. Never accepts a supplied database URL.
+
+Run with SUPERMEGA_RUN_WEBSITE_REVIEW_SQL=1 and SUPERMEGA_TRIAL_SCHEMA_VERSION=13.
+"""
 
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +14,8 @@ import unittest
 from uuid import uuid4
 
 from tools import rehearse_supermega_postgres17 as pg
-from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
+from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialPermissionDenied, TrialValidationError, TrialNotReadyError
+from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
 from supermega_runtime.website_runtime import _website_artifact
 from tests.test_website_runtime import _state
 
@@ -52,6 +56,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         pg._seed_rehearsal_data(cls.admin_url)
         with pg._connect(cls.admin_url) as connection:
             connection.execute((pg.MIGRATION_DIRECTORY / MIGRATION).read_text(encoding="utf-8"))
+            connection.execute((pg.MIGRATION_DIRECTORY / "20260915191528_website_review_entitlement_proof.sql").read_text(encoding="utf-8"))
             connection.execute("insert into app_private.workspace_memberships(workspace_id,actor_id,status,capabilities,actor_kind) values (%s,%s,'active',array['website.review'],'human')", (WORKSPACE, RECIPIENT))
             connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'website',1,%s::jsonb,%s)", (WORKSPACE, json.dumps(_state()), OWNER))
 
@@ -98,6 +103,147 @@ class WebsiteReviewSqlTests(unittest.TestCase):
 
     def edit(self, connection):
         connection.execute("update app_private.workspace_state set version=version+1 where workspace_id=%s and surface='website'", (WORKSPACE,))
+
+    def adapter(self, *, write=True):
+        return WebsiteCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=write))
+
+    def retained_assignment(self):
+        with self.transaction() as connection:
+            review = self.prepare(connection)
+            connection.commit()
+        return review
+
+    def test_adapter_preview_feedback_replay_and_conflict_real_transactions(self):
+        review = self.retained_assignment()
+        actor = TrialPrincipal(WORKSPACE, RECIPIENT, actor_kind="human")
+        adapter = self.adapter()
+        preview = adapter.preview(actor, str(review[0]))
+        self.assertEqual(preview["previewDigest"], review[2])
+        self.assertNotIn("recipientActorId", preview)
+        payload = dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2], note="Shorten the title")
+        result = adapter.request_changes(actor, payload)
+        self.assertTrue(result["persisted"])
+        self.assertFalse(result["replayed"])
+        replay = adapter.request_changes(actor, payload)
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(result["createdAt"], replay["createdAt"])
+        with self.assertRaises(TrialValidationError):
+            adapter.request_changes(actor, payload | {"note": "Different title"})
+        with self.transaction(RECIPIENT) as connection:
+            self.assertEqual(connection.execute("select count(*) from app_private.website_customer_feedback where command_id=%s", (payload["commandId"],)).fetchone()[0], 1)
+        with self.transaction() as connection:
+            connection.execute("update app_private.website_customer_reviews set status='revoked' where review_id=%s", (review[0],))
+            connection.commit()
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.preview(actor, str(review[0]))
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.request_changes(actor, payload)
+
+    def test_adapter_rechecks_real_supabase_session_before_retry(self):
+        review = self.retained_assignment()
+        session = str(uuid4())
+        actor = TrialPrincipal(WORKSPACE, RECIPIENT, "human", session_id=session, identity_provider="supabase")
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("insert into auth.sessions(id,user_id) values (%s,%s)", (session, RECIPIENT))
+        adapter = self.adapter()
+        payload = dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2], note="Simplify wording")
+        self.assertTrue(adapter.request_changes(actor, payload)["persisted"])
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("delete from auth.sessions where id=%s", (session,))
+        with self.assertRaises(TrialNotReadyError):
+            adapter.request_changes(actor, payload)
+        with self.assertRaises(TrialNotReadyError):
+            adapter.preview(actor, str(review[0]))
+
+    def test_adapter_denies_wrong_recipient_workspace_kind_and_write_disabled(self):
+        review = self.retained_assignment()
+        for actor in (TrialPrincipal(WORKSPACE, OWNER, "human"), TrialPrincipal("rehearsal-b", "owner-b", "human"), TrialPrincipal(WORKSPACE, RECIPIENT, "agent")):
+            with self.subTest(actor=actor), self.assertRaises(TrialPermissionDenied):
+                self.adapter().preview(actor, str(review[0]))
+        with self.assertRaises(TrialNotReadyError):
+            self.adapter(write=False).request_changes(TrialPrincipal(WORKSPACE, RECIPIENT, "human"),
+                dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2], note="Shorten title"))
+
+    def test_adapter_rejects_expired_and_corrupt_request_identity(self):
+        review = self.retained_assignment()
+        actor = TrialPrincipal(WORKSPACE, RECIPIENT, "human")
+        adapter = self.adapter()
+        payload = dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=DIGEST, note="Shorten title")
+        with self.assertRaises(TrialValidationError):
+            adapter.request_changes(actor, payload)
+        with self.assertRaises(TrialValidationError):
+            adapter.request_changes(actor, payload | {"actorId": RECIPIENT})
+        with self.transaction() as connection:
+            expired = self.prepare(connection, expiry="20 milliseconds")
+            connection.commit()
+        time.sleep(0.03)
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.preview(actor, str(expired[0]))
+
+    def test_runtime_catalog_rejects_partial_or_disabled_review_guards(self):
+        from psycopg.rows import dict_row
+        for sql in ("drop trigger website_review_guard on app_private.website_customer_reviews",
+                    "alter table app_private.website_customer_feedback disable trigger website_feedback_guard"):
+            with self.subTest(sql=sql), pg._connect(self.admin_url) as connection:
+                try:
+                    connection.execute(sql)
+                    with connection.cursor(row_factory=dict_row) as cursor, self.assertRaises(TrialNotReadyError):
+                        PostgresTrialStore._assert_schema(cursor)
+                finally:
+                    connection.rollback()
+
+    def test_reviewer_entitlement_proves_boolean_without_company_event_access(self):
+        with self.transaction(RECIPIENT) as connection:
+            self.assertEqual(connection.execute("select payload_json from app_private.workspace_events where surface='company'").fetchall(), [])
+            self.assertTrue(connection.execute("select app_private.website_review_entitled()").fetchone()[0])
+            self.assertEqual(connection.execute("select has_function_privilege('anon','app_private.website_review_entitled()','execute'), has_function_privilege('authenticated','app_private.website_review_entitled()','execute'), has_function_privilege('service_role','app_private.website_review_entitled()','execute')").fetchone(), (False, False, False))
+        with self.transaction(OWNER) as connection:
+            self.assertFalse(connection.execute("select app_private.website_review_entitled()").fetchone()[0])
+        with self.transaction("owner-b", "rehearsal-b") as connection:
+            self.assertFalse(connection.execute("select app_private.website_review_entitled()").fetchone()[0])
+
+    def test_reviewer_entitlement_requires_canonical_current_activation(self):
+        vectors = (({"products": ["website"]}, True), ({"product": "website"}, True),
+                   ({"products": ["ecommerce"]}, False), ({"products": []}, False),
+                   ({"products": ["website", "shop"]}, False), ({"products": ["website", "website"]}, False),
+                   ({"products": ["website", "unknown"]}, False), ({"products": "website"}, False))
+        for payload, expected in vectors:
+            with self.subTest(payload=payload), pg._connect(self.admin_url) as connection:
+                try:
+                    connection.execute("""insert into app_private.workspace_events
+                        (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
+                        values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human',%s::jsonb,'{}'::jsonb)""",
+                        (uuid4(), WORKSPACE, uuid4(), 'a'*64, OWNER, json.dumps(payload)))
+                    self.context(connection, RECIPIENT)
+                    self.assertEqual(connection.execute("select app_private.website_review_entitled()").fetchone()[0], expected)
+                finally:
+                    connection.rollback()
+
+    def test_reviewer_entitlement_denies_suspended_removed_and_nonhuman_members(self):
+        changes = (("update app_private.workspace_access_controls set status='suspended' where workspace_id=%s", (WORKSPACE,)),
+                   ("update app_private.workspace_memberships set status='revoked' where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT)),
+                   ("update app_private.workspace_memberships set capabilities=array[]::text[] where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT)),
+                   ("update app_private.workspace_memberships set actor_kind='agent' where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT)))
+        for sql, params in changes:
+            with self.subTest(sql=sql), pg._connect(self.admin_url) as connection:
+                try:
+                    connection.execute(sql, params)
+                    self.context(connection, RECIPIENT)
+                    self.assertFalse(connection.execute("select app_private.website_review_entitled()").fetchone()[0])
+                finally:
+                    connection.rollback()
+
+    def test_reviewer_activation_has_precedence_over_newer_creation_event(self):
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute("""insert into app_private.workspace_events
+                    (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
+                    values (%s,%s,%s,%s,'company','company.workspace.created',%s,'human','{"products":["shop"]}'::jsonb,'{}'::jsonb)""",
+                    (uuid4(), WORKSPACE, uuid4(), 'b'*64, OWNER))
+                self.context(connection, RECIPIENT)
+                self.assertTrue(connection.execute("select app_private.website_review_entitled()").fetchone()[0])
+            finally:
+                connection.rollback()
 
     def test_recipient_can_read_prepared_preview_but_not_workspace_or_directory(self):
         with self.transaction() as connection:

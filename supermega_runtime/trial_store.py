@@ -314,12 +314,14 @@ def capabilities_for_product_entitlements(
         capability
         for surface in ("commerce", "production", "website")
         for capability in (f"{surface}.read", f"{surface}.write")
-    }
+    } | {"website.review"}
     allowed_capabilities = {
         capability
         for surface in allowed_surfaces
         for capability in (f"{surface}.read", f"{surface}.write")
     }
+    if "website" in allowed_surfaces:
+        allowed_capabilities.add("website.review")
     return frozenset(
         capability
         for capability in granted
@@ -3352,6 +3354,32 @@ def _normalize_sql_source(value: Any) -> str:
     return " ".join(str(value or "").strip().lower().split())
 
 
+_WEBSITE_REVIEW_TRIGGERS = {
+    ("website_customer_reviews", "website_review_guard"): (31, "guard_website_review", "8f8af0590da5a261d83bbeb533c32e66d8f93b107c1678816914e87d5142e9ab"),
+    ("workspace_state", "website_reviews_invalidate"): (25, "invalidate_website_reviews", "2cd9786703eabacac44f2c1d41bd8f8f15a071d87974d2df767e6f6a5a0dcd5e"),
+    ("website_customer_feedback", "website_feedback_guard"): (31, "guard_website_feedback", "50985a3ff0c869379803e8ea8d1bdcdffc1643b933d473b2b813721a79730f4d"),
+}
+
+
+def _without_verified_website_review_triggers(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Optional extension: accept all three exact guards or none, never ignore drift."""
+    extension = [row for row in rows if (row.get("table_name"), row.get("trigger_name")) in _WEBSITE_REVIEW_TRIGGERS]
+    if not extension:
+        return list(rows)
+    if len(extension) != 3 or len({(row["table_name"], row["trigger_name"]) for row in extension}) != 3:
+        raise TrialNotReadyError(("schema_ready",))
+    for row in extension:
+        mask, function, digest = _WEBSITE_REVIEW_TRIGGERS[(row["table_name"], row["trigger_name"])]
+        if (row.get("event_mask") != mask or row.get("enabled") != "O"
+                or not all(row.get(key) for key in ("no_when_clause", "no_arguments", "no_column_filter", "no_constraint_link", "not_deferrable", "not_initially_deferred", "no_transition_tables"))
+                or row.get("function_schema") != "app_private" or row.get("function_name") != function
+                or row.get("function_language") != "plpgsql" or row.get("security_definer") is not False
+                or tuple(row.get("function_config") or ()) != ("search_path=pg_catalog, app_private",)
+                or sha256(_normalize_sql_source(row.get("function_source")).encode()).hexdigest() != digest):
+            raise TrialNotReadyError(("schema_ready",))
+    return [row for row in rows if (row.get("table_name"), row.get("trigger_name")) not in _WEBSITE_REVIEW_TRIGGERS]
+
+
 def _require_human_decider(principal: TrialPrincipal) -> None:
     if principal.actor_kind != HUMAN_ACTOR_KIND:
         raise TrialHumanApprovalRequired()
@@ -3573,7 +3601,7 @@ class PostgresTrialStore:
             order by table_record.relname, trigger_record.tgname
             """
         )
-        trigger_rows = cursor.fetchall()
+        trigger_rows = _without_verified_website_review_triggers(cursor.fetchall())
         if len(trigger_rows) != len(_PRIVATE_HARDENING_TRIGGER_CONTRACT):
             raise TrialNotReadyError(("schema_ready",))
         actual_triggers: dict[tuple[str, str], dict[str, Any]] = {}
@@ -4313,7 +4341,34 @@ class PostgresTrialStore:
             payload = row[0]
         else:
             payload = None
-        return activation_product_entitlements(payload)
+        products = activation_product_entitlements(payload)
+        if products:
+            return products
+        # Review-only members cannot read company events. A separately installed
+        # private boolean proof may supply ONLY Website, never event contents or
+        # a capability. Verify its complete privileged-code identity before use.
+        cursor.execute("""select p.prosrc as source, p.prosecdef as definer,
+            p.provolatile as volatility, p.proconfig as config, l.lanname as language,
+            p.prorettype='boolean'::regtype as boolean_result,
+            (r.rolsuper or r.rolbypassrls) and r.rolname <> current_user as trusted_owner,
+            not has_function_privilege('anon',p.oid,'EXECUTE')
+              and not has_function_privilege('authenticated',p.oid,'EXECUTE')
+              and not has_function_privilege('service_role',p.oid,'EXECUTE') as private_execute
+            from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+            join pg_roles r on r.oid=p.proowner join pg_language l on l.oid=p.prolang
+            where n.nspname='app_private' and p.proname='website_review_entitled' and p.pronargs=0""")
+        proof = cursor.fetchone()
+        if not isinstance(proof, Mapping) or not proof.get("source"):
+            return ()
+        if (proof.get("definer") is not True or proof.get("volatility") != "s"
+                or proof.get("language") != "sql" or proof.get("boolean_result") is not True
+                or proof.get("trusted_owner") is not True or proof.get("private_execute") is not True
+                or tuple(proof.get("config") or ()) != ("search_path=pg_catalog, app_private",)
+                or sha256(_normalize_sql_source(proof["source"]).encode()).hexdigest()
+                != "c6c8000c5abf562fc347e432562a14e2142f154eadd02802883b7fece05422b3"):
+            raise TrialNotReadyError(("website_review_entitlement_proof",))
+        cursor.execute("select app_private.website_review_entitled() as entitled")
+        return ("website",) if (cursor.fetchone() or {}).get("entitled") is True else ()
 
     @staticmethod
     def _premium_unlocked(cursor: Any, workspace_id: str) -> bool:
