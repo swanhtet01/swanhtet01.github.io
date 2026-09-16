@@ -69,11 +69,21 @@ for (const forbidden of ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'localStorage
 }
 
 check(coreApp.includes("import { BarcodeScanButton } from './BarcodeScanButton'"), 'core_app_barcode_import_missing')
-check(count(coreApp, '<BarcodeScanButton') === 6, 'barcode_call_site_count_changed')
+// Both managed setup branches render the same catalogForm after deduplication.
+// Five source sites still cover the six original screen placements.
+check(count(coreApp, '<BarcodeScanButton') === 5, 'barcode_call_site_count_changed')
+const catalogFormStart = coreApp.indexOf('const catalogForm = <form')
+const catalogFormEnd = coreApp.indexOf('</form>', catalogFormStart)
+check(catalogFormStart >= 0 && catalogFormEnd > catalogFormStart, 'barcode_shared_catalog_form_missing')
+const catalogForm = coreApp.slice(catalogFormStart, catalogFormEnd)
+check(count(catalogForm, '<BarcodeScanButton') === 1
+  && catalogForm.includes('onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))}'), 'barcode_shared_catalog_scan_must_only_fill_sku')
+check(count(coreApp, '{catalogForm}') === 1 && count(coreApp, '</details> : catalogForm}') === 1,
+  'barcode_both_managed_catalog_entry_paths_required')
 check(coreApp.includes('placeholder="Search or scan SKU"'), 'shop_counter_keyboard_wedge_placeholder_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
 check(coreApp.includes('label="Scan a barcode with the camera" onDetected={addCameraScan}'), 'shop_counter_camera_handler_missing')
-check(count(coreApp, 'label="Scan the product barcode into the SKU field"') === 3, 'shop_catalog_sku_scan_site_count_changed')
+check(count(coreApp, 'label="Scan the product barcode into the SKU field"') === 2, 'shop_catalog_sku_scan_site_count_changed')
 check(coreApp.includes('label="Scan the job card to choose this job" onDetected={selectScannedJob}'), 'plant_job_scan_handler_missing')
 check(coreApp.includes('label="Scan the material label into the material field" onDetected={applyScannedMaterialRef}'), 'plant_material_scan_handler_missing')
 
@@ -105,4 +115,4 @@ check(css.includes('.barcode-scan-button { flex: 0 0 auto; min-width: 44px; min-
 check(css.includes('.barcode-scan-video { width: 100%; aspect-ratio: 4 / 3;'), 'barcode_scan_video_stage_missing')
 check(css.includes('.plant-job-scan-miss { overflow-wrap: anywhere; }'), 'plant_scan_miss_wrap_missing')
 
-console.log(`barcode scan boundary: ${checks} checks passed (6 call sites, no scan-triggered domain writes, keyboard fallback retained)`)
+console.log(`barcode scan boundary: ${checks} checks passed (5 source sites; shared managed form in both setup branches; no scan-triggered domain writes; keyboard fallback retained)`)
