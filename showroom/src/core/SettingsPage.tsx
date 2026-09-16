@@ -328,6 +328,7 @@ export function SettingsPage() {
   const [restoreBusy, setRestoreBusy] = useState(false)
   const [restoreArmed, setRestoreArmed] = useState(false)
   const restoreLoadSequence = useRef(0)
+  const localWorkspaceOperation = useRef<'restore' | 'reset' | null>(null)
   const [restoreNotice, setRestoreNotice] = useState('')
   const [settingsStep, setSettingsStep] = useState<'workflow' | 'success'>('workflow')
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
@@ -1811,7 +1812,7 @@ export function SettingsPage() {
   }
 
   function saveLocalRestorePoint() {
-    if (restoreBusy) return
+    if (localWorkspaceOperation.current) return
     restoreLoadSequence.current += 1
     setRestoreArmed(false)
     const backup = collectLocalWorkspaceBackup(window.localStorage)
@@ -1830,7 +1831,7 @@ export function SettingsPage() {
   }
 
   async function loadEvidenceRestorePoint(file: File | null) {
-    if (!file || restoreBusy) return
+    if (!file || localWorkspaceOperation.current) return
     const sequence = ++restoreLoadSequence.current
     setRestoreArmed(false)
     setRestorePoint(null)
@@ -1853,7 +1854,8 @@ export function SettingsPage() {
   }
 
   async function restoreSavedLocalWorkspace() {
-    if (!restorePoint || restoreBusy || !restoreArmed) return
+    if (!restorePoint || localWorkspaceOperation.current || !restoreArmed) return
+    localWorkspaceOperation.current = 'restore'
     restoreLoadSequence.current += 1
     setRestoreArmed(false)
     setRestoreBusy(true)
@@ -1862,13 +1864,17 @@ export function SettingsPage() {
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       window.location.assign('/settings/#controls')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setRestoreNotice(error instanceof Error ? error.message : 'The previous local workspace could not be restored safely.')
       setRestoreBusy(false)
     }
   }
 
   async function resetDemoWorkspace() {
-    if (restoreBusy) return
+    if (localWorkspaceOperation.current) return
+    localWorkspaceOperation.current = 'reset'
+    restoreLoadSequence.current += 1
+    setRestoreArmed(false)
     setResetBusy(true)
     try {
       if (!loadLocalWorkspaceRestorePoint()) {
@@ -1882,6 +1888,7 @@ export function SettingsPage() {
       resettableKeys.forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setNotice(error instanceof Error ? error.message : 'The local trial could not be reset safely.')
       setResetBusy(false)
     }
