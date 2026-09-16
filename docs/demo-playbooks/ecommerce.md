@@ -18,11 +18,11 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 2. Open `https://app.supermega.dev/settings/?product=ecommerce` — the same destination as the `Start free sample` button on the public `/ecommerce/` landing page.
 3. Under `Name your workspace`, enter a fictional demonstration name in `Business name`, not the client's private data.
 4. Press `Create Ecommerce and open the store`. A storefront and checkout sample are provisioned and the app opens `/ecommerce/`. The stated first result is `Open a working online store`.
-5. Confirm the sidebar badge reads `Demo mode` and the store header eyebrow reads `Sample store`. The `Start here` headline on a fresh sample is `Try one customer order` with the button `Start sample order`.
+5. Confirm the sidebar badge reads `Demo mode` and the store header eyebrow reads `Sample store`. The `Start here` panel offers `Try sample request`. Its headline is `Let SuperMega prepare your catalog` on the assisted entry or `Try one sample request` on a ready local sample. Neither entry proves a live store or a confirmed order.
 
 ## 3. Demo script
 
-1. Start on `/ecommerce/`. Press `Start sample order` in the `Start here` panel, or scroll to the storefront directly — this is what the client's customer would see.
+1. Start on `/ecommerce/`. Press `Try sample request` in the `Start here` panel, or scroll to the storefront directly — this previews the customer flow without publishing a store.
 2. Tap `Add to cart` on one or two products; the button flips to `In cart`, and availability is honest per item (`Available` or `Sold out`).
 3. Open the `Cart and checkout` panel (`Review one total before Shop`). Show the cart lines with quantities and the products total.
 4. Fill the customer fields — Name and Phone — then `Receive order`: `Pickup · included` or `Delivery · Shop confirms`. Payment shows the sample notice (quoted in section 4); the empty-cart copy already set the rule: `Nothing goes to Shop until you review the exact quote.`
