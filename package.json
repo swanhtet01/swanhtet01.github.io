@@ -794,7 +794,7 @@
     "shop:packs:self-test": "node --test tools/shop_industry_pack_provisioning.test.mjs",
     "shop:business:templates:self-test": "node --test tools/shop_business_templates.test.mjs",
     "shop:schedule:demo:self-test": "node --test tools/shop_service_schedule_demo.test.mjs",
-    "shop:next-action:self-test": "node --test tools/shop_next_action.test.mjs",
+    "shop:next-action:self-test": "node --test tools/shop_next_action.test.mjs tools/test_shop_counter_touch_targets.mjs",
     "plant:demo:self-test": "node --test tools/plant_production_demo.test.mjs",
     "website:demo:self-test": "node --test tools/website_demo_readiness.test.mjs",
     "ecommerce:demo:self-test": "node --test tools/ecommerce_storefront_demo.test.mjs",

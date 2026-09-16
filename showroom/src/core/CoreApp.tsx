@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
+import { installShopSaleFocus } from './shop-sale-focus'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
@@ -1248,6 +1249,12 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
   const [cartOpen, setCartOpen] = useState(false)
+  const salePanelRef = useRef<HTMLElement>(null)
+  const saleSearchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!cartOpen || !salePanelRef.current) return
+    return installShopSaleFocus(salePanelRef.current, () => setCartOpen(false), () => saleSearchRef.current)
+  }, [cartOpen])
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
@@ -1376,7 +1383,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
               <span><strong>Close day + reload</strong><small>Count cash, payments, open orders, and stock</small></span>
             </div> : null}
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
         {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
             button replaces its whole subtree in the accessibility tree, so the
@@ -1433,7 +1440,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
-      <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
+      <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale" ref={salePanelRef} tabIndex={-1}>
         {ticketSnapshot.error ? <p className="authority-note" role="alert">{ticketSnapshot.error}</p> : null}
         {checkoutOrderId ? <div className="authority-note" role="alert"><p>This basket is locked to checkout {checkoutOrderId}. Do not record it again.</p>
           {recordedOrderIds.includes(checkoutOrderId)

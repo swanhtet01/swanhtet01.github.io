@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import './shop_sale_focus.test.mjs'
 
 test('base counter quantity controls support tablet touch without a phone breakpoint', () => {
   const css = readFileSync(new URL('../showroom/src/core/core-app.css', import.meta.url), 'utf8')
