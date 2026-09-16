@@ -1366,10 +1366,10 @@ export function EcommerceBuyingWorkspace({
             </article>
           ) : (
             <div className="ecommerce-stale-quote" role="status">
-              <strong>{latestRequestOrder ? 'Start another order' : 'Cart changed — review a new total'}</strong>
+              <strong>{latestRequestOrder ? 'Start another order' : 'Review a new total'}</strong>
               <small>{latestRequestOrder
                 ? `Order ${latestRequestOrder.id} is already confirmed. Review a new total only when creating another order.`
-                : 'The previous quote remains in Your orders and cannot continue with this cart.'}</small>
+                : 'The previous quote remains in Your orders. Review the current items and details before requesting a new total.'}</small>
             </div>
           ) : null}
 
@@ -1393,7 +1393,7 @@ export function EcommerceBuyingWorkspace({
                        {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
                        {entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}
                     </div>
-                    <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>
+                    <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">{entry.order ? 'Reorder' : 'Review items again'}</button>
                   </article>
                 ))}
               </div>

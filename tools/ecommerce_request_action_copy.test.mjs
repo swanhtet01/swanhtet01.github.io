@@ -90,3 +90,33 @@ test('rendered local proof rejects the old send claim rather than accepting eith
   assert.ok(harness.includes('button[data-request-mode="local"]'))
   assert.ok(harness.includes("submit?.textContent.trim() !== 'Save request on this device'"))
 })
+
+test('stale quote guidance does not invent a cart edit or an accepted order', () => {
+  let stale
+  function find(node) {
+    if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(prop => prop.name?.text === 'className' && prop.initializer?.text === 'ecommerce-stale-quote')) stale = node
+    ts.forEachChild(node, find)
+  }
+  find(ast)
+  assert.ok(stale)
+  const strong = stale.children.find(child => ts.isJsxElement(child) && child.openingElement.tagName.getText(ast) === 'strong')
+  const title = strong.children.find(child => ts.isJsxExpression(child)).expression.getText(ast)
+  assert.equal(vm.runInNewContext(title, { latestRequestOrder: null }), 'Review a new total')
+  assert.equal(vm.runInNewContext(title, { latestRequestOrder: { id: 'fixture-order' } }), 'Start another order')
+  assert.doesNotMatch(stale.getText(ast), /Cart changed|cannot continue with this cart/)
+  assert.match(stale.getText(ast), /Review the current items and details before requesting a new total/)
+})
+
+test('only recorded orders use the Reorder label; saved quotes invite a fresh review', () => {
+  let reorderButton
+  function find(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === 'button'
+      && node.openingElement.attributes.properties.some(prop => prop.name?.text === 'onClick' && prop.initializer?.getText(ast) === '{() => reorder(entry)}')) reorderButton = node
+    ts.forEachChild(node, find)
+  }
+  find(ast)
+  assert.ok(reorderButton)
+  const expression = reorderButton.children.find(child => ts.isJsxExpression(child)).expression.getText(ast)
+  for (const order of [null, undefined]) assert.equal(vm.runInNewContext(expression, { entry: { order } }), 'Review items again')
+  assert.equal(vm.runInNewContext(expression, { entry: { order: { id: 'fixture-order' } } }), 'Reorder')
+})
