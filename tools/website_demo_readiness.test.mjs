@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { runInNewContext } from 'node:vm'
+import './test_website_status_guidance_ui.mjs'
 
 import {
   MAX_WEBSITE_PAGES,
