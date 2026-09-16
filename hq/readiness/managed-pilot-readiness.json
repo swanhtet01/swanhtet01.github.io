@@ -16,7 +16,7 @@
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:a36da6b90e2f8487b851fd6f3c464cba5bfe30fcdf165e3d145cb84e011c4a4b",
+  "sourceDigest": "sha256:0d4689d52191f5b368c8af00c558a4e3aa5bad1f63861fd1bc460c1bc97259d2",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -310,7 +310,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:09dbc8c80a1de76154946ec6a184dc28214f079659ee590f21a1e3a47ee7a25e"
+      "digest": "sha256:65c88bbc9afadc93f1aaf059d3bae90ffeef0b5569b3a8ce1fa583143b35fd53"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
