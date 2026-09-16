@@ -113,6 +113,80 @@ existing workspace; never overwrite it or invent approval to make the tool pass.
 The Vision inbox processor is not the intake queue for Shop/Website/Ecommerce.
 Hosted receipt-to-staff discovery still requires separate observed evidence.
 
+## Service-first setup and bounded experiments
+
+Operating decision: Website and Ecommerce are prepared by SuperMega, not sold
+as a requirement to learn an editor. Shop is prepared with the customer and
+then handed over for daily use. Builder, import and deployment controls stay
+in the staff workflow. The customer needs one next action and a clear status.
+
+| Product | Customer supplies | Staff prepares | Customer reviews | First-value evidence |
+| --- | --- | --- | --- | --- |
+| Shop | Trade, item list and operating needs | Reviewed template, items, roles and backup walkthrough | Items, prices and daily workflow | Authorized operator completes a sale-to-close journey and recovery check |
+| Website | Business brief and approved content | Responsive preview, copy and images for review | Exact preview and requested changes | Owner approves the exact preview; publication is a separate gate |
+| Ecommerce | Catalog and request-handling needs | Catalog preview and request-to-Shop handoff | Items and request wording | Authorized test request is found once in the intended staff workflow |
+
+Do not describe a screenshot, local sample sale or generated package as any
+of these customer outcomes. Preview links and staff preparation receipts are
+different deliverables. Never send private preparation JSON as the preview.
+
+### One experiment card, one accountable owner
+
+Use the existing private tracker. Each card records: experiment reference,
+product, named owner and independent reviewer, exact source/preview revision,
+hypothesis, control, proposed variant, eligibility and consent, task script,
+primary measure, safety measures, sample/stopping rule, evidence references,
+decision and follow-up. No new analytics vendor or automatic assignment is
+authorized here. Avoid copying customer details into research records.
+
+Initial hypotheses (queued, not validated):
+
+- Shop: a staff-prepared trade setup reduces help needed to complete the first
+  sale-to-close task compared with an unprepared template selection flow.
+- Website: brief-to-prepared-preview needs fewer customer corrections and less
+  customer effort than asking the owner to configure an editor.
+- Ecommerce: a prepared catalog plus an explicit request-only handoff improves
+  accurate understanding of what happens after submission.
+
+Begin with formative usability sessions, not a conversion A/B claim: five
+consenting participants per product, one synthetic scenario per session, no
+real sale, message, payment, stock change or publication. This is a planning
+target, not five completed sessions. Record unaided task completion, assistance
+count, active task minutes, staff preparation minutes, correction count and
+whether the participant correctly describes the storage/payment/publication
+boundary. Include mobile, tablet and desktop across the recruited sessions;
+record device/language context coarsely, without contact or device identifiers.
+
+Stop a session for data exposure, destructive ambiguity, mistaken payment or
+publication belief, or an unrecoverable error. Preserve only approved minimal
+evidence, fix and re-review before resuming. Report failures and withdrawals
+in the denominator. State observed n and uncertainty; five sessions can reveal
+usability problems but cannot establish a statistically reliable A/B winner.
+
+A later live A/B experiment requires separate approval and a preregistered
+allocation method, baseline, minimum meaningful effect, sample-size rationale,
+duration, primary metric and stopping rule. Keep assignment stable, do not
+change price or safety gates between variants, and do not repeatedly peek and
+declare a winner. Until real evidence exists, decision = not yet tested.
+
+### Capacity and handover before wider reach
+
+Start with one active preparation per named delivery owner. This is an initial
+work-in-progress limit, not a proven capacity or a customer SLA. Queue additional
+requests with an agreed next update; do not generate unlimited agent tasks.
+Review queue age, time to prepared preview, support minutes, correction rate
+and unresolved incidents weekly. Increase capacity only after handovers and
+recovery are observed to work, not because more variants can be generated.
+
+For every handover retain the exact accepted revision, named operating owner,
+access check, product-specific first-value evidence, backup/recovery result,
+support route and next review date in the approved private tracker. Separate
+states are local-tested, hosted-verified and customer-accepted. None implies
+the next. Enterprise readiness additionally needs measured isolation,
+availability, recovery and support evidence; it is not a UI label or an
+experiment outcome. This runbook grants no contact, account, deployment,
+database or commercial action authority.
+
 ## "A customer says they lost data"
 
 The product is honest about where data lives: browser-local storage for the

@@ -32,3 +32,21 @@ test('staff handoff preserves review, sample and private-output boundaries', asy
     'Hosted receipt-to-staff discovery still requires separate observed evidence.',
   ]) assert.ok(guide.includes(text), text)
 })
+
+test('setup experiments distinguish customer outcomes from synthetic checks and scale claims', async () => {
+  const guide = await read('hq/strategy/CUSTOMER-SUPPORT-RUNBOOK.md')
+  for (const text of [
+    '| Shop |', '| Website |', '| Ecommerce |',
+    'one accountable owner',
+    'exact source/preview revision',
+    'eligibility and consent',
+    'staff preparation minutes',
+    'failures and withdrawals',
+    'cannot establish a statistically reliable A/B winner',
+    'sample-size rationale',
+    'decision = not yet tested',
+    'one active preparation per named delivery owner',
+    'local-tested, hosted-verified and customer-accepted',
+    'grants no contact, account, deployment',
+  ]) assert.ok(guide.includes(text), text)
+})
