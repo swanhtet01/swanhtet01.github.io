@@ -122,17 +122,18 @@ test('narrow phones give the saved Website primary action a full row without cha
   assert.match(websiteProductSource, /surface === 'work' \? \(/)
 })
 
-test('the Website FILE status stays fully readable on desktop and keeps the mobile layout', () => {
+test('all Website status values wrap in container-fitting cells and keep the mobile layout', () => {
   assert.match(
     websiteProductSource,
     /\['File', hasUnsavedChanges \? 'Blocked by draft' : releaseRecordRequired \? publishIsCurrent \? 'Ready' : 'Needed' : 'Ready to download'\]/,
     'the guarded status must remain the current source-owned FILE truth',
   )
 
-  const ellipsisRule = '.website-today-metrics strong { overflow: hidden; color: var(--website-ink); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }'
-  const fileRule = '.website-today-metrics span:last-child strong { overflow: visible; text-overflow: clip; white-space: normal; }'
-  assert.ok(websiteProductCss.includes(ellipsisRule), 'other compact Website metrics retain their bounded ellipsis behavior')
-  assert.ok(websiteProductCss.indexOf(fileRule) > websiteProductCss.indexOf(ellipsisRule), 'the FILE value override must follow and defeat the generic ellipsis rule')
+  assert.match(websiteProductCss, /\.website-today-metrics \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 8rem\), 1fr\)\);/, 'tablet panels must fit cells to their own width, not force five columns')
+  const valueRules = [...websiteProductCss.matchAll(/\.website-today-metrics[^{}]*strong\s*\{([^}]*)\}/g)].map((match) => match[1]).join('\n')
+  assert.match(valueRules, /white-space: normal;/, 'every status can wrap, not only FILE')
+  assert.match(valueRules, /overflow-wrap: anywhere;/, 'long status tokens cannot force overflow')
+  assert.doesNotMatch(valueRules, /text-overflow:\s*ellipsis|white-space:\s*nowrap|overflow:\s*hidden/, 'later value rules must not restore truncation')
   assert.match(
     websiteProductCss,
     /@media \(max-width: 760px\) \{[\s\S]*?\.website-today-metrics \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}\n  \.website-today-metrics span:last-child \{ grid-column: 1 \/ -1; \}/,

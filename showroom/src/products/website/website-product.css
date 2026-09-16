@@ -1885,7 +1885,7 @@
 .website-today-metrics {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
   align-self: start;
   gap: 1px;
   overflow: hidden;
@@ -1896,8 +1896,7 @@
 
 .website-today-metrics span { min-width: 0; display: grid; gap: 3px; padding: 10px 8px; background: var(--website-panel); }
 .website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
-.website-today-metrics strong { overflow: hidden; color: var(--website-ink); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }
-.website-today-metrics span:last-child strong { overflow: visible; text-overflow: clip; white-space: normal; }
+.website-today-metrics strong { color: var(--website-ink); font-size: 0.6875rem; white-space: normal; overflow-wrap: anywhere; }
 
 .website-today-source {
   grid-column: 1 / -1;
