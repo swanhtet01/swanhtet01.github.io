@@ -19,12 +19,26 @@ test('complete migration chain and adversarial private catalog changes', async t
       .filter(name => name.endsWith('.sql') && name !== '20260711081300_public_legacy_baseline.sql').sort()
     for (const name of names) await db.exec(await readFile(resolve(root, 'supabase/migrations', name), 'utf8'))
     await t.test('exact full catalog accepted', async () => { await verify(db) })
+    await t.test('checkout CRLF and LF preserve the same function contract', async () => {
+      await db.exec('begin')
+      try {
+        await db.exec(`do $$ declare definition text; begin
+          select pg_get_functiondef('app_private.guard_website_review()'::regprocedure) into definition;
+          execute replace(replace(definition, chr(13)||chr(10), chr(10)), chr(10), chr(13)||chr(10));
+        end $$`)
+        await verify(db)
+      } finally { await db.exec('rollback') }
+    })
     const mutations = [
       ['forced RLS removed', 'alter table app_private.website_customer_reviews no force row level security'],
       ['browser table grant', 'grant select on app_private.website_customer_reviews to authenticated'],
       ['permissive tenant policy', 'alter policy website_reviews_read on app_private.website_customer_reviews using (true)'],
       ['privileged function publicly callable', 'grant execute on function app_private.website_review_entitled() to public'],
       ['entitlement function forged', `create or replace function app_private.website_review_entitled() returns boolean language sql stable security definer set search_path=pg_catalog,app_private as 'select true'`],
+      ['semantically significant literal whitespace changed', `do $$ declare definition text; begin
+        select pg_get_functiondef('app_private.guard_website_review()'::regprocedure) into definition;
+        execute replace(definition, '''read committed''', '''read  committed''');
+      end $$`],
       ['review immutability trigger disabled', 'alter table app_private.website_customer_reviews disable trigger website_review_guard'],
       ['review index removed', 'drop index app_private.website_customer_reviews_active_idx'],
       ['new unverified private table', 'create table app_private.unverified_private_data(id text)'],

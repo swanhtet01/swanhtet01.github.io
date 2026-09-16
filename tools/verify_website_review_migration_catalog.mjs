@@ -20,7 +20,7 @@ export const websiteReviewCatalogQueries = {
   functions: `select p.proname, pg_get_function_identity_arguments(p.oid) as arguments,
     pg_get_function_result(p.oid) as result, l.lanname, pg_get_userbyid(p.proowner) as owner,
     p.prosecdef,p.provolatile,p.proisstrict,p.proconfig,p.proacl::text,
-    regexp_replace(trim(p.prosrc), '[[:space:]]+', ' ', 'g') as source
+    replace(p.prosrc, chr(13) || chr(10), chr(10)) as source
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     join pg_language l on l.oid=p.prolang where n.nspname='app_private'
     order by p.proname,arguments`,
@@ -43,7 +43,7 @@ const expected = {
   relations: 'cd7c608026e58d22c3ba0ebfa27b3d931731eac11d97beb8faf9f0059c225ab4',
   columns: 'd2f5a7fe54f3d0c5e1f9a11ddf748e5f94419ff0ab7a54fcc1dfaa42bda9181b',
   policies: '2e5108a45f0c350e6a25f5acb6b6b663bd3c7bdb83131c48ab0841164efde753',
-  functions: '35423c15d7e608c284ae7549254dab83491c5aee07c0e12424a7f662bc31bb2d',
+  functions: 'd05d8014af2f212bc11a90219a8076dafb82cfc7296a1d908097f4818a533097',
   triggers: '02128e48e9e8e2a02e272b334f345ecd985a434fe48024aebe3c2e56e11473fc',
   constraints: 'f1be192e6d4c0eb0efb6af013a6fe0a66bcc9a4f1936b8f53246e4047ec73a8c',
   indexes: '0e1511fb7ef7462f232c47f568fffa1fa8fc36b2991a35c7a641ba7419c20bbc',
