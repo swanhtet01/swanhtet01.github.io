@@ -17,6 +17,12 @@ export function installShopSaleFocus(panel: HTMLElement, close: () => void, fall
   const candidates = () => Array.from(panel.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,summary,[tabindex]'))
     .filter(element => element.tabIndex >= 0 && !element.matches(':disabled,[inert], [inert] *') && visible(element))
   const focusFirst = () => (candidates()[0] ?? panel).focus({ preventScroll: true })
+  const settleFocus = () => {
+    if (!disposed && media.matches && !nativeModalOpen() && !panel.contains(doc.activeElement)) focusFirst()
+  }
+  const onTransitionEnd = (event: TransitionEvent) => {
+    if (event.target === panel) settleFocus()
+  }
   const restoreAttribute = (name: string, value: string | null) => value === null ? panel.removeAttribute(name) : panel.setAttribute(name, value)
   const syncMode = () => {
     if (focusFrame !== undefined) view.cancelAnimationFrame(focusFrame)
@@ -28,7 +34,7 @@ export function installShopSaleFocus(panel: HTMLElement, close: () => void, fall
       // Retry after layout, but never displace a user's focus already inside.
       focusFrame = view.requestAnimationFrame(() => {
         focusFrame = undefined
-        if (!disposed && media.matches && !nativeModalOpen() && !panel.contains(doc.activeElement)) focusFirst()
+        settleFocus()
       })
     } else {
       restoreAttribute('role', originalRole)
@@ -60,6 +66,7 @@ export function installShopSaleFocus(panel: HTMLElement, close: () => void, fall
   doc.addEventListener('keydown', onKey, true)
   doc.addEventListener('focusin', onFocus)
   media.addEventListener('change', syncMode)
+  panel.addEventListener('transitionend', onTransitionEnd)
   syncMode()
   return () => {
     disposed = true
@@ -67,6 +74,7 @@ export function installShopSaleFocus(panel: HTMLElement, close: () => void, fall
     doc.removeEventListener('keydown', onKey, true)
     doc.removeEventListener('focusin', onFocus)
     media.removeEventListener('change', syncMode)
+    panel.removeEventListener('transitionend', onTransitionEnd)
     restoreAttribute('role', originalRole)
     restoreAttribute('aria-modal', originalModal)
     if (media.matches && !nativeModalOpen()) {

@@ -5,6 +5,7 @@ import { installShopSaleFocus, SHOP_SALE_OVERLAY_QUERY } from '../showroom/src/c
 
 function fixture(narrow = true, openingBlocked = false) {
   const handlers = new Map()
+  const panelHandlers = new Map()
   const frames = new Map()
   let nextFrame = 0
   const media = { matches: narrow, addEventListener: (_, fn) => { media.changed = fn }, removeEventListener: () => { media.changed = null } }
@@ -25,6 +26,7 @@ function fixture(narrow = true, openingBlocked = false) {
   const last = element('last')
   const attrs = new Map()
   const panel = Object.assign(element('panel'), { ownerDocument: doc, tabIndex: -1, children: [first, last],
+    addEventListener: (name, fn) => panelHandlers.set(name, fn), removeEventListener: name => panelHandlers.delete(name),
     getAttribute: key => attrs.get(key) ?? null, setAttribute: (key, value) => attrs.set(key, value), removeAttribute: key => attrs.delete(key),
     contains: el => Boolean(el?.inside), querySelectorAll() { return this.children },
   })
@@ -36,9 +38,26 @@ function fixture(narrow = true, openingBlocked = false) {
     handlers.get('keydown')?.(event)
     return event
   }
-  const paint = () => { openingBlocked = false; const pending = [...frames.values()]; frames.clear(); pending.forEach(fn => fn()) }
-  return { doc, media, panel, opener, search, first, last, attrs, handlers, cleanup, key, element, frames, paint, closed: () => closed }
+  const paint = (unblock = true) => { if (unblock) openingBlocked = false; const pending = [...frames.values()]; frames.clear(); pending.forEach(fn => fn()) }
+  const settle = (target = panel) => { openingBlocked = false; panelHandlers.get('transitionend')?.({ target }) }
+  return { doc, media, panel, opener, search, first, last, attrs, handlers, panelHandlers, cleanup, key, element, frames, paint, settle, closed: () => closed }
 }
+
+test('opening transition can outlast first paint and settles focus without a polling loop', () => {
+  const f = fixture(true, true)
+  f.paint(false)
+  assert.equal(f.doc.activeElement, f.opener)
+  f.settle(f.first)
+  assert.equal(f.doc.activeElement, f.opener)
+  f.settle()
+  assert.equal(f.doc.activeElement, f.first)
+  assert.equal(f.frames.size, 0)
+  f.doc.activeElement = f.last
+  f.settle()
+  assert.equal(f.doc.activeElement, f.last)
+  f.cleanup()
+  assert.equal(f.panelHandlers.size, 0)
+})
 
 test('opening layout retries rejected focus once after paint', () => {
   const f = fixture(true, true)
@@ -56,6 +75,7 @@ test('pending opening focus yields to native dialog, existing focus, desktop and
     if (mode === 'desktop') { f.media.matches = false; f.media.changed() }
     if (mode === 'cleanup') f.cleanup()
     f.paint()
+    f.settle()
     assert.equal(f.doc.activeElement, mode === 'inside' ? f.last : f.opener, mode)
   }
 })
