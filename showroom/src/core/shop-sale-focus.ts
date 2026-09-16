@@ -9,6 +9,8 @@ export function installShopSaleFocus(panel: HTMLElement, close: () => void, fall
   const opener = doc.activeElement as HTMLElement | null
   const originalRole = panel.getAttribute('role')
   const originalModal = panel.getAttribute('aria-modal')
+  let focusFrame: number | undefined
+  let disposed = false
   const visible = (element: HTMLElement | null): element is HTMLElement => Boolean(element?.isConnected
     && element.getClientRects().length && view.getComputedStyle(element).visibility !== 'hidden')
   const nativeModalOpen = () => Boolean(doc.querySelector('dialog:modal'))
@@ -17,10 +19,17 @@ export function installShopSaleFocus(panel: HTMLElement, close: () => void, fall
   const focusFirst = () => (candidates()[0] ?? panel).focus({ preventScroll: true })
   const restoreAttribute = (name: string, value: string | null) => value === null ? panel.removeAttribute(name) : panel.setAttribute(name, value)
   const syncMode = () => {
+    if (focusFrame !== undefined) view.cancelAnimationFrame(focusFrame)
     if (media.matches) {
       panel.setAttribute('role', 'dialog')
       panel.setAttribute('aria-modal', 'true')
       if (!nativeModalOpen() && !panel.contains(doc.activeElement)) focusFirst()
+      // A visibility transition can reject focus during the opening commit.
+      // Retry after layout, but never displace a user's focus already inside.
+      focusFrame = view.requestAnimationFrame(() => {
+        focusFrame = undefined
+        if (!disposed && media.matches && !nativeModalOpen() && !panel.contains(doc.activeElement)) focusFirst()
+      })
     } else {
       restoreAttribute('role', originalRole)
       restoreAttribute('aria-modal', originalModal)
@@ -53,6 +62,8 @@ export function installShopSaleFocus(panel: HTMLElement, close: () => void, fall
   media.addEventListener('change', syncMode)
   syncMode()
   return () => {
+    disposed = true
+    if (focusFrame !== undefined) view.cancelAnimationFrame(focusFrame)
     doc.removeEventListener('keydown', onKey, true)
     doc.removeEventListener('focusin', onFocus)
     media.removeEventListener('change', syncMode)

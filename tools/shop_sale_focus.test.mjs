@@ -3,18 +3,21 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { installShopSaleFocus, SHOP_SALE_OVERLAY_QUERY } from '../showroom/src/core/shop-sale-focus.ts'
 
-function fixture(narrow = true) {
+function fixture(narrow = true, openingBlocked = false) {
   const handlers = new Map()
+  const frames = new Map()
+  let nextFrame = 0
   const media = { matches: narrow, addEventListener: (_, fn) => { media.changed = fn }, removeEventListener: () => { media.changed = null } }
   const doc = {
     nativeModal: false,
-    defaultView: { matchMedia: query => { assert.equal(query, SHOP_SALE_OVERLAY_QUERY); return media }, getComputedStyle: el => ({ visibility: el.hidden ? 'hidden' : 'visible' }) },
+    defaultView: { matchMedia: query => { assert.equal(query, SHOP_SALE_OVERLAY_QUERY); return media }, getComputedStyle: el => ({ visibility: el.hidden ? 'hidden' : 'visible' }),
+      requestAnimationFrame: fn => { frames.set(++nextFrame, fn); return nextFrame }, cancelAnimationFrame: id => frames.delete(id) },
     addEventListener: (name, fn) => handlers.set(name, fn), removeEventListener: name => handlers.delete(name),
     querySelector: selector => { assert.equal(selector, 'dialog:modal'); return doc.nativeModal ? {} : null },
   }
   const element = (id, inside = true) => ({ id, inside, isConnected: true, hidden: false, disabled: false, tabIndex: 0,
     getClientRects() { return this.noLayout ? [] : [{}] }, matches() { return this.disabled || this.inert },
-    focus() { doc.activeElement = this; handlers.get('focusin')?.() },
+    focus() { if (openingBlocked && this.inside) return; doc.activeElement = this; handlers.get('focusin')?.() },
   })
   const opener = element('opener', false)
   const search = element('search', false)
@@ -33,8 +36,29 @@ function fixture(narrow = true) {
     handlers.get('keydown')?.(event)
     return event
   }
-  return { doc, media, panel, opener, search, first, last, attrs, handlers, cleanup, key, element, closed: () => closed }
+  const paint = () => { openingBlocked = false; const pending = [...frames.values()]; frames.clear(); pending.forEach(fn => fn()) }
+  return { doc, media, panel, opener, search, first, last, attrs, handlers, cleanup, key, element, frames, paint, closed: () => closed }
 }
+
+test('opening layout retries rejected focus once after paint', () => {
+  const f = fixture(true, true)
+  assert.equal(f.doc.activeElement, f.opener)
+  f.paint()
+  assert.equal(f.doc.activeElement, f.first)
+  assert.equal(f.frames.size, 0)
+})
+
+test('pending opening focus yields to native dialog, existing focus, desktop and cleanup', () => {
+  for (const mode of ['native', 'inside', 'desktop', 'cleanup']) {
+    const f = fixture(true, true)
+    if (mode === 'native') f.doc.nativeModal = true
+    if (mode === 'inside') f.doc.activeElement = f.last
+    if (mode === 'desktop') { f.media.matches = false; f.media.changed() }
+    if (mode === 'cleanup') f.cleanup()
+    f.paint()
+    assert.equal(f.doc.activeElement, mode === 'inside' ? f.last : f.opener, mode)
+  }
+})
 
 test('narrow sale is a dialog, receives focus and wraps Tab in both directions', () => {
   const f = fixture()
