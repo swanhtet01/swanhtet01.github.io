@@ -57,3 +57,24 @@ test('all three source-owned release consumers pin the current positioning', asy
     assert.ok(!consumer.includes('Working samples. Add data when ready.'), path)
   }
 })
+
+test('build verifier retains accepted scroll layout and brief-bound v2 preparation guards', async () => {
+  const verifier = await read('tools/verify_app_build.mjs')
+  const css = await read('showroom/src/core/core-app.css')
+  const preparation = await read('tools/prepare_client_demo.mjs')
+  const layout = '.product-home-screen { max-width: 980px; height: auto; min-height: 100%; max-height: 100%; overflow-y: auto; justify-content: flex-start;'
+  assert.ok(css.includes(layout))
+  assert.ok(verifier.includes(layout))
+  assert.ok(!verifier.includes('.product-home-screen { max-width: 980px; justify-content: center;'))
+  for (const pin of [
+    "CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v2'",
+    "CLIENT_CONTACT_PROFILE_SCHEMA = 'supermega.client_contact_profile.v1'",
+    'requestDigest: sha256(JSON.stringify(contact))',
+    "if (review.requestDigest !== sha256(JSON.stringify(contact))) fail('client_contact_review_request_changed')",
+    'if (contactBound) await verifyContactClientWorkspace(directoryRealPath)',
+  ]) {
+    assert.ok(preparation.includes(pin), pin)
+    assert.ok(verifier.includes(pin), pin)
+  }
+  assert.ok(!verifier.includes("CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v1'"))
+})

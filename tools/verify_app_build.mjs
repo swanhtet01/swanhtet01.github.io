@@ -1404,7 +1404,7 @@ if (!productHomePageContract.includes('title="Switch product"')
   || productHomePageContract.includes('Try demo')
   || coreShellSource.includes("lazy(() => import('./ProductHomeToday')")
   || coreShellSource.includes("lazy(() => import('./ProductHomeReadiness')")
-  || !coreCssSource.includes('.product-home-screen { max-width: 980px; justify-content: center;')
+  || !coreCssSource.includes('.product-home-screen { max-width: 980px; height: auto; min-height: 100%; max-height: 100%; overflow-y: auto; justify-content: flex-start;')
   || !coreCssSource.includes('.product-track-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }')
   || !coreCssSource.includes('.product-track-grid { grid-template-columns: 1fr; gap: 8px; }')
   || !coreCssSource.includes('.product-track-card { min-width: 0; min-height: 148px; display: grid; grid-template-columns: 38px minmax(0,1fr);')
@@ -1430,7 +1430,7 @@ if (!productHomePageContract.includes('title="Switch product"')
   || productHomePageContract.includes('HQ')
   || productHomePageContract.includes('Operations')
   // Setup-aware home page: each product card shows its workspace name when started,
-  // and new clients get a "start with Shop" nudge when nothing has been set up yet.
+  // and new clients get assisted setup when nothing has been set up yet.
   || !productHomePageContract.includes("void import('./product-setup')")
   || !productHomePageContract.includes("readProductSetup(window.localStorage, 'commerce')")
   || !productHomePageContract.includes("readProductSetup(window.localStorage, 'production')")
@@ -5560,7 +5560,11 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
 if (rootPackage.scripts?.['client:workspace:contact:review-template'] !== 'node tools/prepare_client_demo.mjs --contact-review-template'
   || rootPackage.scripts?.['client:workspace:from-contact'] !== 'node tools/prepare_client_demo.mjs --init-from-contact'
   || rootPackage.scripts?.['client:workspace:contact:verify'] !== 'node tools/prepare_client_demo.mjs --verify-contact-workspace'
-  || !clientPreparationToolSource.includes("CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v1'")
+  || !clientPreparationToolSource.includes("CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v2'")
+  || !clientPreparationToolSource.includes("CLIENT_CONTACT_PROFILE_SCHEMA = 'supermega.client_contact_profile.v1'")
+  || !clientPreparationToolSource.includes('requestDigest: sha256(JSON.stringify(contact))')
+  || !clientPreparationToolSource.includes("if (review.requestDigest !== sha256(JSON.stringify(contact))) fail('client_contact_review_request_changed')")
+  || !clientPreparationToolSource.includes('if (contactBound) await verifyContactClientWorkspace(directoryRealPath)')
   || !clientPreparationToolSource.includes("CLIENT_CONTACT_INTAKE_CONTRACT = 'supermega.client_contact_intake.v1'")
   || !clientPreparationToolSource.includes("CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT = 'supermega.client_contact_intake_workspace.v1'")
   || !clientPreparationToolSource.includes('export function buildClientContactIntake')
