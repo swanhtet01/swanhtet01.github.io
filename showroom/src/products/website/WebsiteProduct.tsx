@@ -1216,6 +1216,17 @@ export function WebsiteProduct() {
               <div aria-label="Website today status" className="website-today-metrics" role="group">
                 {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
               </div>
+              {hasUnsavedChanges ? (
+                <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
+              ) : failingContentChecks.length > 0 ? (
+                <div className="website-check-guidance">
+                  <h3>Needs attention</h3>
+                  <ul>
+                    {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
+                  </ul>
+                  {showAssistedWebsitePreview ? <p>You do not need to fix these yourself. Request Website setup above so SuperMega can review the work with you. Nothing is published automatically.</p> : null}
+                </div>
+              ) : null}
             </details>
             <div className="website-today-source" role="status">
               <span>{websiteTodayContext}</span>

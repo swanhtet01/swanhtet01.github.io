@@ -103,6 +103,35 @@ test('Website keeps readiness visible while detailed checks collapse before the 
   assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
 })
 
+test('expanded checks explain failures without inviting assisted customers to publish or edit', () => {
+  const panel = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
+  assert.match(panel, /hasUnsavedChanges \? \([\s\S]*Save or discard your draft[\s\S]*\) : failingContentChecks.length > 0 \? /)
+  assert.match(panel, /failingContentChecks\.map\(\(check\) => <li key=\{check.id\}><strong>\{check.label\}<\/strong><p>\{check.detail\}<\/p><\/li>\)/)
+  assert.match(panel, /showAssistedWebsitePreview \? <p>You do not need to fix these yourself\./)
+  assert.match(panel, /Nothing is published automatically\./)
+  assert.doesNotMatch(panel, /dangerouslySetInnerHTML|onClick=|<button|<a\s/)
+  assert.match(websiteProductCss, /\.website-check-guidance \{[^}]*overflow-wrap: anywhere;/)
+})
+
+test('failed navigation checks never claim their destinations are ready', () => {
+  const workspace = createInitialWorkspace()
+  const navigation = () => readinessChecks(workspace).find((check) => check.id === 'navigation')
+  assert.equal(navigation().passed, true)
+  workspace.pages[0].stage = 'draft'
+  assert.equal(navigation().passed, false)
+  assert.equal(navigation().detail, 'Review navigation: every visible item needs a label and a page marked ready.')
+  workspace.pages[0].stage = 'ready'
+  workspace.pages[0].navigation.label = '  '
+  assert.equal(navigation().passed, false)
+  assert.match(navigation().detail, /every visible item needs a label/)
+  workspace.pages[0].navigation.label = 'Home'
+  assert.equal(navigation().passed, true)
+  assert.match(navigation().detail, /have labels and ready destinations/)
+  for (const page of workspace.pages) page.navigation.visible = false
+  assert.equal(navigation().passed, false)
+  assert.equal(navigation().detail, 'Show at least one page in navigation.')
+})
+
 test('mobile Website actions wrap complete labels without shrinking tap targets', () => {
   assert.match(websiteProductCss, /\.website-preview-controls > button \{\s*min-width: 76px;\s*min-height: 2\.75rem;/)
   const mobile = websiteProductCss.slice(websiteProductCss.indexOf('@media screen and (max-width: 560px) {'))

@@ -1898,6 +1898,12 @@
 .website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
 .website-today-metrics strong { color: var(--website-ink); font-size: 0.6875rem; white-space: normal; overflow-wrap: anywhere; }
 
+.website-check-guidance { margin: .75rem 0 0; color: var(--website-ink); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.website-check-guidance h3 { margin: 0 0 .5rem; font-size: inherit; }
+.website-check-guidance ul { margin: 0; padding-inline-start: 1.25rem; }
+.website-check-guidance li + li { margin-top: .75rem; }
+.website-check-guidance p { margin: .375rem 0 0; }
+
 .website-today-source {
   grid-column: 1 / -1;
   display: flex;
