@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 
 import { PGlite } from '@electric-sql/pglite'
 import { verifySelfServeAttemptBudget } from './verify_self_serve_attempt_budget.mjs'
+import { verifyWebsiteReviewMigrationCatalog } from './verify_website_review_migration_catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
@@ -30,6 +31,8 @@ const expectedMigrations = [
   '20260817090000_private_trial_backend_v12_billing_rail.sql',
   '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql',
   '20260907024457_self_serve_durable_attempt_budget.sql',
+  '20260915184728_website_customer_review_storage.sql',
+  '20260915191528_website_review_entitlement_proof.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -431,7 +434,9 @@ const migrationNames = allMigrationNames.filter((name) => !outOfScopeMigrations.
 const database = new PGlite()
 await database.waitReady
 await seedSupabaseRoles(database)
-await applyMigrations(database)
+// Preserve the exact pre-review catalog assertions, then verify the entire
+// resulting private catalog after applying both Website review migrations.
+await applyMigrations(database, expectedMigrations.slice(0, -2))
 
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
@@ -870,6 +875,8 @@ requireCheck(
 )
 
 await verifySelfServeAttemptBudget(database, requireCheck)
+await applyMigrations(database, expectedMigrations.slice(-2))
+await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()
 await unsafeRoleDatabase.waitReady
