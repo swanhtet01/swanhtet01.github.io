@@ -1916,9 +1916,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
   const effectiveCloseSettlementDraft = [...closeExpectedByPayment.entries()]
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-    .map(([paymentMethod, expectedMmk]) => closeSettlementDraft.find((line) => line.paymentMethod === paymentMethod) ?? {
+    .map(([paymentMethod]) => closeSettlementDraft.find((line) => line.paymentMethod === paymentMethod) ?? {
       paymentMethod,
-      countedMmk: String(expectedMmk),
+      countedMmk: '',
       varianceOwner: '',
       varianceReason: '',
     })
