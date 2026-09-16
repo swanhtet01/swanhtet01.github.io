@@ -326,6 +326,8 @@ export function SettingsPage() {
   const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadLocalWorkspaceRestorePoint)
   const [restorePointLabel, setRestorePointLabel] = useState(() => loadLocalWorkspaceRestorePoint() ? 'Saved on this device' : '')
   const [restoreBusy, setRestoreBusy] = useState(false)
+  const [restoreArmed, setRestoreArmed] = useState(false)
+  const restoreLoadSequence = useRef(0)
   const [restoreNotice, setRestoreNotice] = useState('')
   const [settingsStep, setSettingsStep] = useState<'workflow' | 'success'>('workflow')
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
@@ -1809,6 +1811,9 @@ export function SettingsPage() {
   }
 
   function saveLocalRestorePoint() {
+    if (restoreBusy) return
+    restoreLoadSequence.current += 1
+    setRestoreArmed(false)
     const backup = collectLocalWorkspaceBackup(window.localStorage)
     if (!backup) {
       setRestoreNotice('This local workspace is too large to save safely. Export evidence before resetting.')
@@ -1825,22 +1830,32 @@ export function SettingsPage() {
   }
 
   async function loadEvidenceRestorePoint(file: File | null) {
-    if (!file) return
+    if (!file || restoreBusy) return
+    const sequence = ++restoreLoadSequence.current
+    setRestoreArmed(false)
+    setRestorePoint(null)
+    setRestorePointLabel('')
     try {
+      window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega evidence file smaller than 5 MB.')
-      const backup = restoreLocalWorkspaceBackupFromEvidence(JSON.parse(await file.text()))
+      const text = await file.text()
+      if (sequence !== restoreLoadSequence.current) return
+      const backup = restoreLocalWorkspaceBackupFromEvidence(JSON.parse(text))
       if (!backup) throw new Error('This evidence file cannot restore a local workspace. Export a current version 24 evidence file first.')
       window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
       setRestorePoint(backup)
       setRestorePointLabel(file.name)
       setRestoreNotice(`${Object.keys(backup.records).length} local records verified. Restore only when you are ready to replace this browser workspace.`)
     } catch (error) {
+      if (sequence !== restoreLoadSequence.current) return
       setRestoreNotice(error instanceof Error ? error.message : 'The evidence backup could not be loaded.')
     }
   }
 
   async function restoreSavedLocalWorkspace() {
-    if (!restorePoint || restoreBusy) return
+    if (!restorePoint || restoreBusy || !restoreArmed) return
+    restoreLoadSequence.current += 1
+    setRestoreArmed(false)
     setRestoreBusy(true)
     try {
       await applyLocalWorkspaceBackup(window.localStorage, restorePoint)
@@ -1853,6 +1868,7 @@ export function SettingsPage() {
   }
 
   async function resetDemoWorkspace() {
+    if (restoreBusy) return
     setResetBusy(true)
     try {
       if (!loadLocalWorkspaceRestorePoint()) {
@@ -2144,7 +2160,7 @@ export function SettingsPage() {
       <details className="settings-advanced" id="controls" open={location.hash === '#controls' || undefined}>
         <summary><span>Advanced controls</span><small>Security, evidence, reset</small></summary>
         <div className="settings-advanced-content">
-          {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} local records</small></div><button className="core-button" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}
+          {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} local records</small>{restoreArmed ? <p role="alert">Replace this browser workspace with this restore point? Current local records will be replaced, not merged. Export current evidence first if you need to keep it. This does not restore cloud data.</p> : null}</div>{restoreArmed ? <><button className="core-button" onClick={() => setRestoreArmed(false)} type="button">Cancel restore</button><button className="core-button danger" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">Confirm replace local workspace</button></> : <button className="core-button" disabled={restoreBusy} onClick={() => setRestoreArmed(true)} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button>}</section> : null}
           {restoreNotice ? <p className="form-notice settings-restore-point" role="status">{restoreNotice}</p> : null}
           <section className="core-panel system-boundary-panel">
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
