@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import './shop_action_feedback.test.mjs'
 import './shop_sale_focus.test.mjs'
 
 test('base counter quantity controls support tablet touch without a phone breakpoint', () => {

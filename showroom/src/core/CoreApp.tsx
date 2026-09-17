@@ -3853,17 +3853,21 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       throw error
     }
     if (!managedIdentity) setActions((current) => [record, ...current])
-    if (pendingAction.presentation === 'counter') recordBehaviorSignal(window.localStorage, {
-      event: 'first_value_completed',
-      product: 'commerce',
-      route: commerceLocation.pathname + commerceLocation.search,
-      detail: counterSettlement
-        ? 'Completed a reviewed Shop sale with payment, handoff, stock, and its order record ready.'
-        : 'Created a reviewed Shop order and reserved its stock.',
-    })
-    if (counterSettlement) emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })
-    else if (pendingAction.presentation === 'counter') emitMetric({ product: 'shop', capability: 'shop-counter', action: 'order.created', ts: Date.now() })
-    if (pendingAction.kind === 'daily_close') emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })
+    try {
+      if (pendingAction.presentation === 'counter') recordBehaviorSignal(window.localStorage, {
+        event: 'first_value_completed',
+        product: 'commerce',
+        route: commerceLocation.pathname + commerceLocation.search,
+        detail: counterSettlement
+          ? 'Completed a reviewed Shop sale with payment, handoff, stock, and its order record ready.'
+          : 'Created a reviewed Shop order and reserved its stock.',
+      })
+      if (counterSettlement) emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })
+      else if (pendingAction.presentation === 'counter') emitMetric({ product: 'shop', capability: 'shop-counter', action: 'order.created', ts: Date.now() })
+      if (pendingAction.kind === 'daily_close') emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })
+    } catch {
+      // Optional telemetry cannot invalidate a committed Shop action.
+    }
     setNotice(pendingAction.presentation === 'counter'
       ? counterSettlement
         ? `Sale ${commerceOrderDisplayReference(pendingAction.subjectId)} completed. Payment and handoff recorded; order record ready.`
