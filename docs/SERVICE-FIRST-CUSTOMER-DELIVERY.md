@@ -182,6 +182,31 @@ synthetic fixtures only until a real customer separately approves use.
   segments or claiming a win from pageviews. Traffic and permission are currently
   unverified, so no live allocation or statistical winner is authorized here.
 
+Record each consented formative session with
+`tools/record_product_usability_observation.mjs`. Its input stays private; the
+one-write receipt retains only a pseudonymous session digest, closed issue codes,
+task timing/outcome, boundary checks and safety flags. It rejects dirty or wrong
+source state and does not retain names, contacts, notes or recordings. The manual
+observer attestation is explicitly non-cryptographic, and no number of formative
+receipts proves a quantitative winner. Hundreds of synthetic generations are not
+a substitute for one observed target-user task; quantitative testing starts only
+after the prespecified sample-size and stopping rule above are approved.
+
+Keep the private input outside the repository and use a random session code:
+
+```powershell
+$head = git rev-parse HEAD
+npm run research:usability:record -- --input C:\private\session-input.json `
+  --out C:\reviewed\session-receipt.json --expected-head $head
+```
+
+The exact input fields are `contract`, `experimentId`, `candidateCommit`,
+`comparisonCommit`, `variant`, `sessionCode`, `consentAttested`, `observerRole`,
+`observedAt`, `language`, `deviceClass`, `taskOutcome`, `activeSeconds`,
+`helpRequests`, `moderatorInterventions`, `issueCodes`, `boundaryChecks` and
+`safety`. Use only the closed values enforced by the tool and its self-test; never
+put participant identity or free text into this input or its retained receipt.
+
 ### Delivery and scaling work order
 
 1. Reliable brief intake and a named operator to own the reply.

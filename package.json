@@ -31,6 +31,8 @@
     "design:critique:verify": "node tools/validate_design_critique_receipt.mjs",
     "design:critique:self-test": "node --test tools/test_design_critique_receipt.mjs",
     "design:critique:preflight": "npm run design:critique:self-test && npm run preapp:entry:rendered:verify && npm run tools:syntax:verify",
+    "research:usability:self-test": "node --test tools/record_product_usability_observation.test.mjs",
+    "research:usability:record": "node tools/record_product_usability_observation.mjs",
     "tools:syntax:verify": "node tools/verify_tool_syntax.mjs",
     "demo:playbooks:verify": "node tools/test_demo_playbooks.mjs && npm run shop:android-smoke:self-test",
     "website:export:verify": "node tools/test_website_export.mjs",
