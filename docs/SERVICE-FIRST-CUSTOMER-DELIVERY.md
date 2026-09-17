@@ -103,18 +103,20 @@ No new hosted, customer, publishing, payment, stock or provider authority is gra
 
 ## Reuse map for the next delivery slice
 
-Source inspection on 2026-09-15 identified these existing boundaries:
+Source reconciliation on 2026-09-18 identified these existing boundaries:
 
 | Existing source | Reuse | Missing proof or implementation |
 | --- | --- | --- |
-| `showroom/src/core/CoreShell.tsx` | Assigned-product portal routing and managed access state | Customer-specific review access must be established, not inferred from a URL |
-| `showroom/src/products/website/WebsiteProduct.tsx` | `approveCurrentRevision`, evidence capture and retained approved site file | Existing operator workflow is not an independently authenticated customer acceptance journey |
-| `showroom/src/products/website/WebsiteProduct.tsx` | `portalViewOnly` and operator restrictions | Do not grant editing privileges merely so a customer can request changes |
-| `tools/create_public_vercel_output.mjs` | Validated brief intake with receipt and idempotency | An intake receipt is not a delivery record, customer account or approval |
+| `showroom/src/core/CoreShell.tsx` | Assigned-product portal routing and managed access state | A route chooses presentation only; server membership remains authoritative |
+| `WebsiteCustomerReview.tsx`, `website_customer_review.py`, `website_customer_review_store.py` and `trial_runtime.py` | Authenticated recipient-only preview, exact revision/digest binding, expiry, idempotent change request and retained inbox | Current-source behavior still needs exact hosted authorization, expiry, retry and recovery proof |
+| `20260915184728_website_customer_review_storage.sql` | Forced RLS, separate `website.review` capability, immutable feedback and stale-on-edit review invalidation | Migration and cross-tenant denial need non-production PostgreSQL/Supabase rehearsal before activation |
+| `showroom/src/products/website/WebsiteProduct.tsx` | Operator approval, evidence capture and retained approved site file | Operator approval is not authenticated customer acceptance |
+| `tools/create_public_vercel_output.mjs` | Validated brief intake, idempotent receipt and product-specific customer acknowledgement | An intake receipt is not a delivery record, customer account or approval |
 
-Do not create a second identity, publishing or approval authority. Before adding
-customer review controls, trace the existing server authorization and revision
-contract. A typed reviewer name is an attestation, not authenticated customer proof.
+Do not create a second identity, publishing or approval authority. Extend the
+existing review assignment and revision contract. Never widen `website.write` for
+a customer, infer access from a URL, or convert change-request feedback into an
+approval. A typed reviewer name is an attestation, not authenticated customer proof.
 
 The next complete journey must demonstrate:
 
@@ -129,9 +131,12 @@ The next complete journey must demonstrate:
 5. A separate release step binds hosted identity and recovery evidence. The
    customer can distinguish preview approval, deployment pending and verified live.
 
-These are acceptance requirements, not newly implemented capabilities. Reuse the
-Website path first, then qualify Ecommerce catalog review and Shop setup acceptance
-against their actual state models rather than assuming identical semantics.
+Items 1, 2 and the change-request portion of item 4 exist in current local source;
+they are not hosted acceptance evidence. Item 3 requires a distinct server-authorized
+customer decision bound to the existing review assignment. Item 5 remains a separate
+release concern. Reuse the Website path first, then qualify Ecommerce catalog review
+and Shop setup acceptance against their actual state models rather than assuming
+identical semantics.
 
 ## Prioritized setup experiments
 
@@ -142,12 +147,14 @@ experiment. It must not be counted as an onboarding A/B test or customer evidenc
 | ID | Hypothesis | Comparison | Observable task outcome |
 | --- | --- | --- | --- |
 | SETUP-01 | Result-first briefs reduce confusion relative to template-first setup | Retained earlier template-first design versus current assisted brief, same fictional business | Participant chooses the correct product, supplies enough scope to prepare it, and explains what happens next without coaching |
-| REVIEW-01 | A preview plus a short checklist is easier than exposing the builder | Existing operator review versus a customer review flow, only after that flow exists | Participant identifies the exact revision, requests one change, and distinguishes approval from publication |
+| REVIEW-01 | A preview plus a short checklist is easier than exposing the builder | Existing operator review versus the current customer review/change-request route, using the same exact synthetic revision | Participant identifies the exact revision, requests one change, and distinguishes feedback, customer acceptance and publication |
 | SHOP-01 | Prepared catalog and trade defaults reduce first-sale setup effort | Self-configuration versus operator-prepared synthetic workspace | Participant records the specified sale and manual tender correctly, finds the receipt and knows how to correct a mistake |
 
-Run these sequentially, not as concurrent local model workloads. SETUP-01 is first;
-REVIEW-01 is blocked on the missing customer review implementation. SHOP-01 uses
-disposable synthetic fixtures only until a real customer separately approves use.
+Run these sequentially, not as concurrent local model workloads. SETUP-01 is first.
+REVIEW-01 may run locally with approved synthetic fixtures after its exact candidate,
+moderator script and expected outcomes are pinned; hosted customer-access proof and
+the missing acceptance decision remain separate gates. SHOP-01 uses disposable
+synthetic fixtures only until a real customer separately approves use.
 
 ### Study controls and decision rules
 
@@ -204,13 +211,13 @@ of `b6712b71` (resolve and inspect its full SHA before use); the current study
 candidate must likewise be pinned after implementation stabilizes. Do not treat
 unbuilt historical source as a usable baseline or compare unequal starting data.
 
-Backend inspection: `supermega_runtime/website_runtime.py` already validates exact
-content source and lifecycle record relationships; managed approval uses the
-existing Website command surface. The seven `tests.test_website_runtime` tests
-passed locally on 2026-09-15. This does not prove live authorization or customer
-access. Before implementation, define separate customer review/change-request
-permissions and their server-side checks; never widen `website.write` merely to
-make a customer review screen work.
+Backend inspection: `supermega_runtime/website_runtime.py` validates exact content
+source and lifecycle record relationships. The separate customer-review path now
+uses `website.review`, recipient-scoped RLS, exact preview digests, stale-on-edit
+invalidation and idempotent feedback. This does not prove live authorization or
+customer access. The next implementation decision is a separate authenticated
+customer acceptance record, not another review store and not broader Website write
+access. It must become stale with the exact revision and must not publish or deploy.
 
 ## ERRC operating decisions
 
