@@ -17,20 +17,17 @@ const requiredOnboardingCopy = [
   'Take one sale',
   'Reconcile payment and close day',
   'Cash, KBZPay, WavePay, AYA Pay, or MMQR',
-  'Beauty spa for the first spa pilot',
+  'Choose your trade to start with a matching catalog and workflow.',
   'Yangon Wellness Spa',
   'Use the current starter sample',
-  'Shop pilot proof rule',
-  'Run one day before adding modules',
-  'Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check.',
-  'accepted order-to-close runs',
-  'daily closes observed',
-  'unexplained payment or stock changes',
-  'Paid pilot only after the owner can name faster close',
 ]
 
 for (const copy of requiredOnboardingCopy) {
   check(onboardingSource.includes(copy), `Shop onboarding includes first-run copy: ${copy}`)
+}
+
+for (const internalCopy of ['Shop pilot proof rule', 'Spa services vertical pack:', 'accepted order-to-close runs', 'Paid pilot only after']) {
+  check(!onboardingSource.includes(internalCopy), `Internal pilot criteria stay out of customer setup: ${internalCopy}`)
 }
 
 check(

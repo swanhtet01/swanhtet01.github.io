@@ -114,7 +114,7 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
 
 const onboardingFirstRunSteps: Record<SetupProductId, readonly { title: string; detail: string }[]> = {
   commerce: [
-    { title: 'Pick your business type', detail: 'Use Beauty spa for the first spa pilot, or choose another Shop starter.' },
+    { title: 'Pick your business type', detail: 'Choose your trade to start with a matching catalog and workflow.' },
     { title: 'Load starter data or import your services/products', detail: 'SuperMega prepares catalog, stock, appointments, and starter sales locally.' },
     { title: 'Take one sale', detail: 'Use Cash, KBZPay, WavePay, AYA Pay, or MMQR at the counter.' },
     { title: 'Reconcile payment and close day', detail: 'Orders, payment status, stock movement, and daily close stay tied together.' },
@@ -635,21 +635,6 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 <button className="core-button primary" onClick={useRequestedPlantPack} type="button">Use {pendingRequestedPlantIndustryPack.name} for reviewed setup</button>
               </div>
               <p>No Plant record or saved plant type changes until the requested pack is explicitly selected and the setup form is submitted.</p>
-            </section>
-          ) : null}
-          {product === 'commerce' ? (
-            <section aria-label="Shop pilot proof rule" className="product-onboarding-proof">
-              <div>
-                <span className="core-eyebrow">Pilot proof</span>
-                <h3>Run one day before adding modules</h3>
-                <p>Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check.</p>
-              </div>
-              <ul>
-                <li><strong>20</strong><span>accepted order-to-close runs</span></li>
-                <li><strong>5</strong><span>daily closes observed</span></li>
-                <li><strong>0</strong><span>unexplained payment or stock changes</span></li>
-              </ul>
-              <p>Paid pilot only after the owner can name faster close, fewer package mistakes, or clearer payment reconciliation.</p>
             </section>
           ) : null}
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={businessNamePlaceholder} required value={setup.workspace} /></label>
