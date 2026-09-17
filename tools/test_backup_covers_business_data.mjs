@@ -320,3 +320,8 @@ check(
 }
 
 console.log(`backup covers business data contract: ${checks} checks passed`)
+
+// Keep customer and internal recovery race regressions in the existing release
+// gate, rather than leaving them as manually invoked tests only.
+await import('./local_restore_confirmation.test.mjs')
+await import('./workspace_recovery_races.test.mjs')
