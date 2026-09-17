@@ -1804,7 +1804,7 @@ export function EcommerceProduct() {
           {assistedCatalogEntry ? <>
             <details className="ecommerce-assisted-intake">
               <summary>What to send · about 2 minutes</summary>
-              <p><strong>Send only your product list or photos and the prices you use today.</strong> A spreadsheet, POS export, PDF, menu, or chat photos are enough to start.</p>
+              <p><strong>Tell us what you sell and where a public menu or catalog can be reviewed.</strong> A short list of key products and prices is enough to start. After scope confirmation, SuperMega provides a safe transfer method for any private spreadsheet or POS export.</p>
               <p>SuperMega cleans the catalog, drafts categories and descriptions, and prepares the customer view and Shop handoff. You review one preview before anything becomes live.</p>
             </details>
             <div className="form-actions ecommerce-service-actions">

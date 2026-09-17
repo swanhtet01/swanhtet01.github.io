@@ -1214,7 +1214,7 @@ export function WebsiteProduct() {
                   <details className="website-today-checks website-assisted-intake">
                     <summary>What to send · about 2 minutes</summary>
                     <div className="website-check-guidance">
-                      <p><strong>Send only your business name, best contact, and whatever you already have.</strong> A Facebook page, menu, brochure, logo, or photos are enough to start.</p>
+                      <p><strong>Tell us your business name, best contact, and where public material can be reviewed.</strong> A Facebook page, public menu, or short description is enough to start. Keep passwords and private customer data out.</p>
                       <p>SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview. You review one preview; domain connection and publishing stay separate.</p>
                     </div>
                   </details>
