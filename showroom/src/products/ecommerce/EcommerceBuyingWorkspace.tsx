@@ -1181,12 +1181,16 @@ export function EcommerceBuyingWorkspace({
       setFreshQuoteId('')
       setManagedConfirmation('')
       if (onRecordManagedRequest) setManagedConfirmation(await confirmManagedRequest(request, onRecordManagedRequest))
-      recordBehaviorSignal(window.localStorage, {
-        event: 'first_value_completed',
-        product: 'ecommerce',
-        route: window.location.pathname + window.location.search,
-        detail: 'Saved a reviewed Ecommerce order request for Shop review.',
-      })
+      try {
+        recordBehaviorSignal(window.localStorage, {
+          event: 'first_value_completed',
+          product: 'ecommerce',
+          route: window.location.pathname + window.location.search,
+          detail: 'Saved a reviewed Ecommerce order request for Shop review.',
+        })
+      } catch {
+        // Optional behavior recording cannot invalidate a retained request.
+      }
       setFreshQuoteId(request.id)
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
