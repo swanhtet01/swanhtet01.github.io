@@ -985,6 +985,17 @@ function sourceAttribution(sourceUrl) {
   }
 }
 
+function deliveryNextStep(workflow) {
+  const steps = {
+    commerce: 'Validate the Shop trade, import source and first-sale workflow; return one scoped setup plan.',
+    website: 'Validate the public source material and desired contact action; prepare the page plan and preview scope.',
+    ecommerce: 'Validate the catalog source, request flow and Shop handoff; prepare the catalog cleanup scope.',
+    production: 'Validate the operating workflow, accountable roles and sample boundary; prepare the Plant setup scope.',
+    guide: 'Choose the smallest suitable product path and return one scoped setup recommendation.',
+  }
+  return steps[text(workflow, 40).toLowerCase()] || steps.guide
+}
+
 function recordFrom(safe, req, idempotencyKey, fingerprint) {
   const submittedAt = new Date().toISOString()
   const leadId = 'LEAD-' + keyedDigest('lead:' + idempotencyKey).slice(0, 16).toUpperCase()
@@ -1015,7 +1026,7 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
     lead_stage: 'new',
     status: 'new',
     owner: 'SuperMega',
-    next_step: 'Review the workflow and reply with the smallest useful next step.',
+    next_step: deliveryNextStep(safe.product),
     submitted_at: submittedAt,
     raw: {
       ...contactSafe,
@@ -1120,7 +1131,7 @@ async function sendResend(record) {
   if (!key) return { status: 'skipped' }
   const to = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
-  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + record.company, 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
+  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + record.company, 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Operator next step: ' + record.next_step, '', 'Customer brief:', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
   const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + record.company, text: body }), signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('email_' + response.status)
   return { status: 'ready', channel: 'email' }
@@ -1130,7 +1141,7 @@ async function sendTelegram(record) {
   const token = env('TELEGRAM_BOT_TOKEN')
   const chatId = env('TELEGRAM_CHAT_ID')
   if (!token || !chatId) return { status: 'skipped' }
-  const message = ['New SuperMega request', record.company + ' · ' + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
+  const message = ['New SuperMega request', record.company + ' · ' + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', 'Next: ' + record.next_step, '', 'Customer brief:', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
   const response = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: message, disable_web_page_preview: true }), signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('telegram_' + response.status)
   return { status: 'ready', channel: 'telegram' }

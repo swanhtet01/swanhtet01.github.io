@@ -189,6 +189,7 @@ try {
   assert.equal(event.record.workflow, 'guide')
   assert.equal(event.record.email, 'operator@example.com')
   assert.equal(event.record.source, 'supermega.dev')
+  assert.equal(event.record.next_step, 'Choose the smallest suitable product path and return one scoped setup recommendation.')
   assert.equal(accepted.body.proof_bound, false)
 
   const replay = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
@@ -214,6 +215,7 @@ try {
   const websiteEvent = JSON.parse(delivered.options.body)
   assert.equal(websiteEvent.record.workflow, 'website')
   assert.equal(websiteEvent.record.requested_package, 'lead-generation')
+  assert.equal(websiteEvent.record.next_step, 'Validate the public source material and desired contact action; prepare the page plan and preview scope.')
   assert.equal(websiteEvent.record.utm_source, 'linkedin')
   assert.equal(websiteEvent.record.utm_medium, 'social')
   assert.equal(websiteEvent.record.utm_campaign, 'website-launch')
@@ -228,6 +230,7 @@ try {
   const ecommerceEvent = JSON.parse(delivered.options.body)
   assert.equal(ecommerceEvent.record.workflow, 'ecommerce')
   assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
+  assert.equal(ecommerceEvent.record.next_step, 'Validate the catalog source, request flow and Shop handoff; prepare the catalog cleanup scope.')
 
   const claimAccepted = await invoke({
     body: { ...validSubmission, trial_claim_code: 'sm-7hk2-9mt4' },
@@ -413,6 +416,8 @@ try {
   assert.deepEqual(founderNotify.body.to, ['swanhtet@supermega.dev'])
   assert.equal(founderNotify.body.reply_to, validSubmission.email)
   assert.ok(founderNotify.body.text.includes('Trial claim code: SM-2CDE-4FGH'))
+  assert.match(founderNotify.body.text, /Operator next step: Validate the operating workflow, accountable roles and sample boundary/)
+  assert.match(founderNotify.body.text, /Customer brief:/)
   assert.deepEqual(customerAck.body.to, [validSubmission.email])
   assert.equal(customerAck.body.reply_to, 'swanhtet@supermega.dev')
   assert.equal(customerAck.headers['idempotency-key'], `supermega-contact-ack/${ackAccepted.body.request_id}`)
