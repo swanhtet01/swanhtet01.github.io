@@ -668,8 +668,8 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 <header><span className="core-eyebrow">Plan guide</span><strong>{shopPlanGuide.coreFocus}</strong><small>{shopPlanGuide.boundary}</small></header>
                 <div>
                   <article><b>Core · included</b><p>Run the complete day on one device.</p><ul>{shopPlanGuide.core.map((item) => <li key={item.id}>{item.label}</li>)}</ul></article>
-                  <article><b>Premium · less admin</b><p>Add server-assisted work only when useful.</p><ul>{shopPlanGuide.premium.map((item) => <li key={item.id}>{item.label}{item.id === 'ai-demand-advice' ? ' · being designed' : ''}</li>)}</ul></article>
-                  <article><b>Managed · team scale</b><p>Add shared records, access control and proof.</p><ul>{shopPlanGuide.managed.map((item) => <li key={item.id}>{item.label}</li>)}</ul></article>
+                  <article><b>Premium · less admin</b><p>Discuss help with routine work.</p><ul>{shopPlanGuide.premium.map((item) => <li key={item.id}>{item.label} — {item.availabilityLabel}</li>)}</ul></article>
+                  <article><b>Managed · team scale</b><p>Discuss shared records and team access.</p><ul>{shopPlanGuide.managed.map((item) => <li key={item.id}>{item.label} — {item.availabilityLabel}</li>)}</ul></article>
                 </div>
               </section> : null}
             </details>

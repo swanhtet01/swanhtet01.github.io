@@ -71,8 +71,8 @@ export type ShopPlanGuide = {
   templateId: ShopBusinessTemplateId
   coreFocus: string
   core: readonly Capability[]
-  premium: readonly Capability[]
-  managed: readonly Capability[]
+  premium: readonly (Capability & { availabilityLabel: string })[]
+  managed: readonly (Capability & { availabilityLabel: string })[]
   boundary: string
 }
 
@@ -202,8 +202,8 @@ export const capabilities: readonly Capability[] = [
     id: 'cloud-backup',
     label: 'Automatic off-device backup',
     tier: 'premium',
-    outcome: 'Your encrypted backup kept for you, so a lost phone is not a lost business.',
-    reason: 'We hold the storage. Manual backup stays free forever.',
+    outcome: 'Planned: automatic storage of your encrypted backup away from this device. Use manual backup and restore today.',
+    reason: 'Hosted backup delivery and recovery must be verified before this is offered. Manual backup stays free forever.',
   },
 
   // --- enterprise: records shared between people ---------------------------------------
@@ -292,8 +292,13 @@ export function shopPlanGuideForTemplate(templateId: ShopBusinessTemplateId): Sh
     templateId,
     coreFocus: shopTemplateFocus[templateId],
     core: coreIds.map(capability),
-    premium: ['ai-order-intake', 'cloud-backup', 'ai-demand-advice'].map(capability),
-    managed: ['shared-workspace', 'staff-roles', 'verified-statements'].map(capability),
+    premium: ['ai-order-intake', 'cloud-backup', 'ai-demand-advice'].map((id) => ({
+      ...capability(id),
+      availabilityLabel: id === 'ai-order-intake' ? 'Availability confirmed during setup' : 'Planned',
+    })),
+    managed: ['shared-workspace', 'staff-roles', 'verified-statements'].map((id) => ({
+      ...capability(id), availabilityLabel: 'Availability confirmed during setup',
+    })),
     boundary: 'Core works on this device. Premium and Managed require reviewed activation; this screen neither charges nor activates them.',
   }
 }

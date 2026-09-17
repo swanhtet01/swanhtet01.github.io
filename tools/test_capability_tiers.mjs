@@ -146,6 +146,10 @@ for (const templateId of shopPlanTemplateIds) {
   check(guide.managed.length >= 3 && guide.managed.every((item) => item.tier === 'enterprise'), `${templateId}: Managed contains only shared-team capabilities`)
   check(new Set([...guide.core, ...guide.premium, ...guide.managed].map((item) => item.id)).size === guide.core.length + guide.premium.length + guide.managed.length, `${templateId}: guide repeats no capability`)
   check(guide.boundary.includes('neither charges nor activates'), `${templateId}: plan guide grants no commercial authority`)
+  for (const id of ['cloud-backup', 'ai-demand-advice']) {
+    check(guide.premium.find((item) => item.id === id)?.availabilityLabel === 'Planned', `${templateId}: ${id} cannot be advertised as available`)
+  }
+  check(guide.managed.every((item) => item.availabilityLabel === 'Availability confirmed during setup'), `${templateId}: a plan guide does not establish managed activation`)
 }
 assert.throws(() => shopPlanGuideForTemplate('unknown-template'), /Unknown Shop plan template/)
 
