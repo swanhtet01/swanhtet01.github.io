@@ -848,13 +848,17 @@ export function WebsiteProduct() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 5_000)
-      recordBehaviorSignal(window.localStorage, {
-        event: 'first_value_completed',
-        product: 'website',
-        route: location.pathname + location.search,
-        detail: 'Produced a reviewable Website preview file from saved content.',
-      })
-      emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
+      try {
+        recordBehaviorSignal(window.localStorage, {
+          event: 'first_value_completed',
+          product: 'website',
+          route: location.pathname + location.search,
+          detail: 'Produced a reviewable Website preview file from saved content.',
+        })
+        emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
+      } catch {
+        // Optional telemetry cannot turn a requested download into a failure.
+      }
       setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
     } catch (error) {
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
