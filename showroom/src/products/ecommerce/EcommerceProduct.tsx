@@ -1801,10 +1801,17 @@ export function EcommerceProduct() {
           <span className="core-eyebrow">Start here</span>
           <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Let SuperMega prepare your catalog' : ecommerceTodayHeadline}</h2>
           <p>{assistedCatalogEntry ? 'Tell us what you sell. We confirm the scope, prepare your catalog and send a preview for approval. You do not need to build the store yourself. Requesting setup does not publish a store or activate orders, payments or stock.' : ecommerceTodaySummary}</p>
-          {assistedCatalogEntry ? <div className="form-actions ecommerce-service-actions">
-            <a className="core-button primary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a>
-            <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Try sample request</button>
-          </div> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
+          {assistedCatalogEntry ? <>
+            <details className="ecommerce-assisted-intake">
+              <summary>What to send · about 2 minutes</summary>
+              <p><strong>Send only your product list or photos and the prices you use today.</strong> A spreadsheet, POS export, PDF, menu, or chat photos are enough to start.</p>
+              <p>SuperMega cleans the catalog, drafts categories and descriptions, and prepares the customer view and Shop handoff. You review one preview before anything becomes live.</p>
+            </details>
+            <div className="form-actions ecommerce-service-actions">
+              <a className="core-button primary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a>
+              <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Try sample request</button>
+            </div>
+          </> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
         </div>
         {ecommerceTodayGuided ? (
           <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">

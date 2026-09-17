@@ -1210,7 +1210,16 @@ export function WebsiteProduct() {
               <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Let SuperMega prepare your website' : websiteAgentJob}</h2>
               <p>{showAssistedWebsitePreview ? 'Use this preview as a reference. Tell us about your business; we confirm the scope, prepare the pages and send a preview for your approval. You do not need to edit the site yourself.' : websiteAgentReason}</p>
               {showAssistedWebsitePreview ? (
-                <a className="website-button is-primary is-compact" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>
+                <>
+                  <details className="website-today-checks website-assisted-intake">
+                    <summary>What to send · about 2 minutes</summary>
+                    <div className="website-check-guidance">
+                      <p><strong>Send only your business name, best contact, and whatever you already have.</strong> A Facebook page, menu, brochure, logo, or photos are enough to start.</p>
+                      <p>SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview. You review one preview; domain connection and publishing stay separate.</p>
+                    </div>
+                  </details>
+                  <a className="website-button is-primary is-compact" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>
+                </>
               ) : (
                 <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
               )}

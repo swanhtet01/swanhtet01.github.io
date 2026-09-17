@@ -79,6 +79,10 @@ test('assisted Website entry stays local-only and defers to recovery and edit st
     }
   }
   assert.match(websiteProductSource, /You do not need to edit the site yourself\./)
+  assert.match(websiteProductSource, /Send only your business name, best contact, and whatever you already have/)
+  assert.match(websiteProductSource, /A Facebook page, menu, brochure, logo, or photos are enough to start/)
+  assert.match(websiteProductSource, /SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview/)
+  assert.match(websiteProductSource, /You review one preview; domain connection and publishing stay separate/)
   assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
 })
 

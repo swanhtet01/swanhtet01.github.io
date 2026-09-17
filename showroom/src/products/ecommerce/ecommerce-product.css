@@ -145,6 +145,29 @@
   flex-direction: column;
 }
 
+.ecommerce-assisted-intake {
+  width: min(100%, 36.875rem);
+  border: .0625rem solid color-mix(in srgb, var(--core-line) 80%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--core-panel) 72%, transparent);
+  color: var(--core-muted);
+  font-size: var(--font-size-sm);
+}
+
+.ecommerce-assisted-intake > summary {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  padding: .5rem .75rem;
+  color: var(--core-ink);
+  cursor: pointer;
+  font-weight: var(--font-weight-bold);
+}
+
+.ecommerce-assisted-intake > p { margin: 0; padding: 0 .75rem .625rem; }
+.ecommerce-assisted-intake > p + p { padding-top: .125rem; }
+.ecommerce-assisted-intake > summary:focus-visible { outline: .125rem solid var(--core-green); outline-offset: .125rem; }
+
 .ecommerce-today-priority {
   min-width: 0;
   display: grid;
