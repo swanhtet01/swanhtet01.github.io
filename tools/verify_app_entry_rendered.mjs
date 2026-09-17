@@ -542,7 +542,7 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
 
 async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   const started = await evalInPage(cdp, sessionId, `(() => {
-    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Start sample order');
+    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Try sample request');
     if (!button || button.disabled) return false;
     button.click();
     return true;
@@ -992,7 +992,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/website/',
-    expectedText: ['Website', 'Customize this demo', 'Saved on this device', 'The working sample stays unchanged until you choose Customize demo.'],
+    expectedText: ['Website', 'Let SuperMega prepare your website', 'Request Website setup', 'Saved on this device', 'Requesting setup does not publish this preview, connect a domain or approve a release.'],
     screenshotName: 'website-working-sample-desktop-1280x900',
     seed: {},
   },
@@ -1003,7 +1003,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/website/',
-    expectedText: ['Website', 'Customize this demo', 'Saved on this device', 'The working sample stays unchanged until you choose Customize demo.'],
+    expectedText: ['Website', 'Let SuperMega prepare your website', 'Request Website setup', 'Saved on this device', 'Requesting setup does not publish this preview, connect a domain or approve a release.'],
     screenshotName: 'website-working-sample-mobile-390x844',
     seed: {},
   },

@@ -6,6 +6,17 @@ import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { counterCaptureReady } from './verify_app_entry_rendered.mjs'
 
+const renderedVerifierSource = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
+
+test('rendered harness follows current assisted Website and Ecommerce entry actions', () => {
+  assert.match(renderedVerifierSource, /candidate\.textContent\.trim\(\) === 'Try sample request'/)
+  assert.match(renderedVerifierSource, /'Let SuperMega prepare your website'/)
+  assert.match(renderedVerifierSource, /'Request Website setup'/)
+  assert.match(renderedVerifierSource, /'Requesting setup does not publish this preview, connect a domain or approve a release\.'/)
+  assert.doesNotMatch(renderedVerifierSource, /'Start sample order'/)
+  assert.doesNotMatch(renderedVerifierSource, /'The working sample stays unchanged until you choose Customize demo\.'/)
+})
+
 test('counter capture waits for persisted basket readiness without accepting disabled controls', () => {
   const ready = { text: 'PAYMENT Keep as open order Total Review & complete sale', payment: {}, openOrderChoice: {},
     total: {}, reviewButton: {}, drawerTransitionSettled: true, accessibility: { ok: true } }
@@ -378,9 +389,10 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
   const sourceBoundText = [
     [coreApp, 'Record first shift output'],
     [coreApp, "These dates belong to this browser-local sample, not today's production."],
-    [websiteProduct, 'Customize this demo'],
+    [websiteProduct, 'Let SuperMega prepare your website'],
+    [websiteProduct, 'Request Website setup'],
     [websiteProduct, 'Saved on this device'],
-    [websiteProduct, 'The working sample stays unchanged until you choose Customize demo.'],
+    [websiteProduct, 'Requesting setup does not publish this preview, connect a domain or approve a release.'],
     [ecommerceProduct, 'Sample request saved locally'],
     [ecommerceWorkspace, 'This sample order request is saved on this device for Shop review.'],
     [ecommerceWorkspace, 'This browser demo retained the request.'],
@@ -394,7 +406,7 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
   unfinishedRedirect[6].path = '/plant/'
   assert.throws(() => assertRenderedProofCaseMatrix(unfinishedRedirect, 'full'), /case_matrix_mismatch/)
   const expectedTextBodies = [...renderer.matchAll(/expectedText:\s*\[([^\]]*)\]/g)].map((match) => match[1])
-  for (const retired of ['Make this website yours', 'Nothing has been deployed.', 'Try one customer order', 'Start sample order']) {
+  for (const retired of ['Make this website yours', 'Nothing has been deployed.', 'Try one customer order', 'Start sample order', 'The working sample stays unchanged until you choose Customize demo.']) {
     assert.equal(expectedTextBodies.some((body) => body.includes(retired)), false, `retired rendered expectation remains: ${retired}`)
   }
 })
