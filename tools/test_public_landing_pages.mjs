@@ -159,6 +159,11 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
   check(privacy.includes(token), `public_observability_privacy_disclosure:${token}`)
 }
 
+const contact = readStatic('contact/index.html')
+for (const token of ['Request received:', 'No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.', 'Keep this ID for follow-up.']) {
+  check(contact.includes(token), `contact_confirmed_receipt_guidance:${token}`)
+}
+
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
 const homePage = manifest.pages.find((page) => page.route === '/')
