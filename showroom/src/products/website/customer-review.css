@@ -8,9 +8,16 @@
 .customer-website-review :is(a, button, textarea):focus-visible { outline: 2px solid var(--website-green); outline-offset: 3px; }
 .customer-review-feedback button { background: var(--website-green); color: var(--website-panel); font-weight: 650; }
 .customer-review-actions [aria-current="page"] { outline: 2px solid currentColor; outline-offset: 2px; }
+.customer-review-guide { display: grid; gap: 1rem; margin-block: 1.5rem; padding: clamp(1rem, 2.5vw, 1.5rem); border: .0625rem solid var(--website-line-strong); border-radius: .75rem; background: var(--website-panel); }
+.customer-review-guide h2, .customer-review-guide p { margin: 0; }
+.customer-review-guide h2 { margin-top: .25rem; font-size: clamp(1.25rem, 3vw, 1.75rem); }
+.customer-review-guide ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 0; padding: 0; list-style: none; counter-reset: review-step; }
+.customer-review-guide li { min-width: 0; display: grid; align-content: start; gap: .375rem; padding: .875rem; border-radius: .625rem; background: var(--website-soft); counter-increment: review-step; }
+.customer-review-guide li::before { content: counter(review-step); width: 1.75rem; height: 1.75rem; display: grid; place-items: center; border-radius: 50%; background: var(--website-green); color: var(--website-panel); font-weight: 750; }
+.customer-review-guide li span, .customer-review-guide > p { color: var(--website-muted); font-size: var(--font-size-sm); line-height: 1.45; }
 .customer-website-review .website-preview-site { width: 100%; min-width: 0; overflow-wrap: anywhere; }
 .customer-website-review .preview-section-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
 .customer-review-feedback { display: grid; gap: .75rem; max-width: 44rem; margin-block: 2rem; }
 .customer-review-feedback textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: .75rem; font: inherit; border: 1px solid currentColor; border-radius: .5rem; }
 .customer-review-feedback button { justify-self: start; }
-@media (max-width: 40rem) { .customer-website-review .preview-site-header { flex-wrap: wrap; gap: .75rem; } }
+@media (max-width: 40rem) { .customer-review-guide ol { grid-template-columns: minmax(0, 1fr); } .customer-website-review .preview-site-header { flex-wrap: wrap; gap: .75rem; } }

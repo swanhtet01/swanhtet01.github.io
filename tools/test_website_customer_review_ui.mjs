@@ -57,6 +57,15 @@ test('route and lifecycle safety source pins remain explicit (not browser proof)
   assert.ok(source.includes('const refresh = () => { access.invalidate(); setReview(null); setActor(null)'))
 })
 
+test('customer review is a short result-review journey rather than a builder', () => {
+  for (const text of ['Review in 3 steps', 'Open each prepared page', 'Check the business facts, offers, and contact action',
+    'Describe only what needs changing', 'SuperMega makes the updates and sends a new exact revision.',
+    'When the revision looks right, SuperMega prepares the separate exact-revision approval. Nothing is published from this screen.']) assert.ok(source.includes(text), text)
+  assert.match(source, /placeholder="Example: On Home, change the phone number to…"/)
+  assert.match(source, /aria-describedby="website-review-note-help"/)
+  assert.doesNotMatch(source, /Edit page|Customize page|Publish now|Approve and publish/)
+})
+
 const expiry = '2026-09-17T00:00:00Z'
 const now = () => Date.parse('2026-09-16T00:00:00Z')
 const same = (a, b) => a.userId === b.userId && a.workspaceId === b.workspaceId

@@ -98,8 +98,17 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
     <p role="status" aria-live="polite">{message}</p>
     {!review && <div className="customer-review-actions"><Link to={customerWebsiteReviewLoginPath(reviewId)}>Sign in</Link><button type="button" onClick={() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setAttempt(value => value + 1) }}>Open review</button></div>}
     {review && <>
+      <section aria-labelledby="customer-review-guide-title" className="customer-review-guide">
+        <div><span className="core-eyebrow">Private review</span><h2 id="customer-review-guide-title">Review in 3 steps</h2></div>
+        <ol>
+          <li><strong>Open each prepared page</strong><span>{review.preview.pages.length} {review.preview.pages.length === 1 ? 'page' : 'pages'} ready</span></li>
+          <li><strong>Check the business facts, offers, and contact action</strong><span>No design or editing work required</span></li>
+          <li><strong>Describe only what needs changing</strong><span>SuperMega makes the updates and sends a new exact revision.</span></li>
+        </ol>
+        <p>When the revision looks right, SuperMega prepares the separate exact-revision approval. Nothing is published from this screen.</p>
+      </section>
       <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId} />
-      <form className="customer-review-feedback" onSubmit={submit}><h2>What would you like changed?</h2><label htmlFor="website-review-note">Your change request</label><textarea id="website-review-note" rows={4} maxLength={2000} value={note} readOnly={unconfirmed} onChange={event => setNote(event.target.value)} required /><p>SuperMega reviews your request. This does not approve or publish the Website.</p><button type="submit" disabled={busy || !note.trim()}>{busy ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
+      <form className="customer-review-feedback" onSubmit={submit}><h2>What would you like changed?</h2><label htmlFor="website-review-note">Only describe the changes</label><textarea aria-describedby="website-review-note-help" id="website-review-note" rows={4} maxLength={2000} placeholder="Example: On Home, change the phone number to…" value={note} readOnly={unconfirmed} onChange={event => setNote(event.target.value)} required /><p id="website-review-note-help">SuperMega reviews your request. This does not approve or publish the Website.</p><button type="submit" disabled={busy || !note.trim()}>{busy ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
     </>}
   </main>
 }
