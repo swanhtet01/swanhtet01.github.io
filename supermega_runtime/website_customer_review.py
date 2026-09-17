@@ -18,10 +18,13 @@ from .website_runtime import validate_website_state, _website_artifact
 
 REVIEW_CONTRACT = "supermega.website.customer-review.v1"
 FEEDBACK_CONTRACT = "supermega.website.customer-change-request.v1"
+ACCEPTANCE_CONTRACT = "supermega.website.customer-acceptance.v1"
 REVIEW_CAPABILITY = "website.review"
 _FIELDS = frozenset({"contract", "reviewId", "workspaceId", "recipientActorId", "preparedBy",
                      "preparedAt", "expiresAt", "contentRevision", "preview", "previewDigest", "status"})
 _FEEDBACK_FIELDS = frozenset({"commandId", "reviewId", "previewDigest", "note"})
+_ACCEPTANCE_FIELDS = frozenset({"commandId", "reviewId", "previewDigest", "decision"})
+_ACCEPTANCE_DECISION = "accept_preview_for_release_review"
 
 
 def _fail(code: str) -> None:
@@ -162,3 +165,33 @@ def build_customer_change_request(review: Mapping[str, Any], state: Mapping[str,
                 "contentRevision": review["contentRevision"], "previewDigest": review["previewDigest"], "note": note}
     return identity | {"commandFingerprint": _digest(identity), "createdAt": stamp.isoformat(),
                        "persisted": False, "publicationAuthorized": False}
+
+
+def build_customer_acceptance(review: Mapping[str, Any], state: Mapping[str, Any],
+                              payload: Mapping[str, Any], *, principal: TrialPrincipal,
+                              readiness: TrialReadiness, now: datetime | None = None) -> dict[str, Any]:
+    """Build an exact-preview acceptance candidate for guarded persistence.
+
+    Acceptance means the customer is satisfied with this prepared revision and
+    SuperMega may begin operator release review. It never publishes, deploys,
+    connects a domain or grants provider authority. The store must reject an
+    acceptance when retained change requests exist for the same review.
+    """
+    actor, stamp = _authorized_review(
+        review, state, principal=principal, readiness=readiness, now=now, write=True,
+    )
+    if not isinstance(payload, Mapping) or set(payload) != _ACCEPTANCE_FIELDS:
+        _fail("acceptance_payload_invalid")
+    command_id = _uuid(payload["commandId"])
+    if (payload["reviewId"] != review["reviewId"]
+            or payload["previewDigest"] != review["previewDigest"]):
+        _fail("stale_revision")
+    if payload["decision"] != _ACCEPTANCE_DECISION:
+        _fail("acceptance_decision_invalid")
+    identity = {"contract": ACCEPTANCE_CONTRACT, "workspaceId": actor.workspace_id,
+                "actorId": actor.actor_id, "reviewId": review["reviewId"],
+                "commandId": command_id, "contentRevision": review["contentRevision"],
+                "previewDigest": review["previewDigest"], "decision": _ACCEPTANCE_DECISION}
+    return identity | {"commandFingerprint": _digest(identity), "acceptedAt": stamp.isoformat(),
+                       "status": "accepted_for_operator_release_review", "persisted": False,
+                       "publicationAuthorized": False, "deploymentAuthorized": False}

@@ -7,7 +7,8 @@ import unittest
 
 from supermega_runtime.trial_store import TrialPrincipal, TrialReadiness, TrialValidationError
 from supermega_runtime.website_customer_review import (
-    build_customer_change_request, customer_review_projection, prepare_customer_review,
+    build_customer_acceptance, build_customer_change_request, customer_review_projection,
+    prepare_customer_review,
 )
 from tests.test_website_runtime import _state
 
@@ -15,6 +16,7 @@ NOW = datetime(2026, 9, 16, 0, 0, tzinfo=timezone.utc)
 REVIEW_ID = "11111111-1111-4111-8111-111111111111"
 RECIPIENT = "22222222-2222-4222-8222-222222222222"
 COMMAND_ID = "33333333-3333-4333-8333-333333333333"
+ACCEPTANCE_ID = "44444444-4444-4444-8444-444444444444"
 
 
 class CustomerReviewTests(unittest.TestCase):
@@ -31,6 +33,11 @@ class CustomerReviewTests(unittest.TestCase):
         self.review = self.prepare()
         self.payload = {"commandId": COMMAND_ID, "reviewId": REVIEW_ID,
                         "previewDigest": self.review["previewDigest"], "note": "Please shorten the heading."}
+        self.acceptance_payload = {
+            "commandId": ACCEPTANCE_ID, "reviewId": REVIEW_ID,
+            "previewDigest": self.review["previewDigest"],
+            "decision": "accept_preview_for_release_review",
+        }
 
     def prepare(self, **changes):
         arguments = dict(principal=self.operator, readiness=self.operator_ready,
@@ -45,6 +52,12 @@ class CustomerReviewTests(unittest.TestCase):
     def request(self, **changes):
         arguments = dict(principal=self.customer, readiness=self.ready, now=NOW)
         return build_customer_change_request(self.review, self.state, self.payload, **(arguments | changes))
+
+    def accept(self, **changes):
+        arguments = dict(principal=self.customer, readiness=self.ready, now=NOW)
+        return build_customer_acceptance(
+            self.review, self.state, self.acceptance_payload, **(arguments | changes),
+        )
 
     def test_projection_is_explicit_public_content_only(self):
         result = self.project()
@@ -93,6 +106,40 @@ class CustomerReviewTests(unittest.TestCase):
         self.assertNotEqual(first["createdAt"], second["createdAt"])
         self.payload["note"] = "Different request"
         self.assertNotEqual(first["commandFingerprint"], self.request()["commandFingerprint"])
+
+    def test_acceptance_binds_exact_authenticated_revision_without_release_authority(self):
+        before = deepcopy((self.state, self.review, self.acceptance_payload))
+        result = self.accept()
+        self.assertEqual((self.state, self.review, self.acceptance_payload), before)
+        self.assertEqual(result["contract"], "supermega.website.customer-acceptance.v1")
+        self.assertEqual(result["actorId"], RECIPIENT)
+        self.assertEqual(result["contentRevision"], self.review["contentRevision"])
+        self.assertEqual(result["previewDigest"], self.review["previewDigest"])
+        self.assertEqual(result["status"], "accepted_for_operator_release_review")
+        self.assertEqual(result["acceptedAt"], NOW.isoformat())
+        self.assertFalse(result["persisted"])
+        self.assertFalse(result["publicationAuthorized"])
+        self.assertFalse(result["deploymentAuthorized"])
+
+    def test_acceptance_fingerprint_is_retry_stable_and_payload_is_exact(self):
+        first = self.accept()
+        second = self.accept(now=NOW + timedelta(minutes=1))
+        self.assertEqual(first["commandFingerprint"], second["commandFingerprint"])
+        self.assertNotEqual(first["acceptedAt"], second["acceptedAt"])
+        for field, value in (
+            ("decision", "publish_now"),
+            ("reviewId", "wrong"),
+            ("previewDigest", "sha256:" + "0" * 64),
+        ):
+            original = self.acceptance_payload[field]
+            self.acceptance_payload[field] = value
+            expected = "acceptance_decision_invalid" if field == "decision" else "stale_revision"
+            with self.subTest(field=field), self.assertRaisesRegex(TrialValidationError, expected):
+                self.accept()
+            self.acceptance_payload[field] = original
+        self.acceptance_payload["published"] = True
+        with self.assertRaisesRegex(TrialValidationError, "acceptance_payload_invalid"):
+            self.accept()
 
     def test_narrow_reviewer_cannot_prepare(self):
         with self.assertRaisesRegex(TrialValidationError, "access_denied"):
