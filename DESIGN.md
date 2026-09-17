@@ -134,6 +134,8 @@ service, cloud providers, or public-API catalog for this contract.
 - `hq/strategy/DESIGN-REVIEW-2026-08-18.md` — independent review precedent.
 - `docs/APP-ENTRY-RENDERED-PROOF.md` — exact rendered-evidence generation and
   disk validation.
+- `docs/SERVICE-FIRST-CUSTOMER-DELIVERY.md` — canonical customer-delivery,
+  ERRC, engineering-assurance and domain/runtime topology contract.
 - `showroom/src/core/core-app.css` — canonical application tokens.
 - `showroom/src/products/website/website-release-foundation.ts` — typed
   Website brand-token contract.

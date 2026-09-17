@@ -255,6 +255,44 @@ contracts. Prefer focused checks during iteration and one final full gate per
 stabilized candidate; keep diagnostic subsets clearly distinct from a full seal.
 No new framework, model service or database solely to make the stack sound modern.
 
+### Canonical domain and runtime topology
+
+Use the fewest public origins that preserve a clear trust boundary:
+
+| Origin | Sole responsibility | Must not become |
+| --- | --- | --- |
+| `supermega.dev` and `www.supermega.dev` | Public positioning, product explanation, privacy and validated setup intake | A customer workspace, privileged API, builder or tenant authority |
+| `app.supermega.dev` | Named-user portal, assigned products and same-origin `/api/*` managed operations | A public marketing CMS or an origin that infers workspace access from a URL |
+| Immutable Vercel preview origins | Exact-commit release and customer-preview evidence before promotion | Stable customer addresses or evidence of production acceptance |
+| Optional branded customer hostname | Approved presentation and product entry after exact preview acceptance | Authentication, membership, workspace selection or a second backend |
+| Independently hosted status origin, when adopted | Availability and incident communication when the primary pair is impaired | Application telemetry, customer records or a substitute for provider evidence |
+
+Keep the existing `supermega-public` and `megaos` Vercel projects and the one
+canonical private Supabase data plane. Do not create product-specific APIs,
+databases, auth systems or permanent subdomains for Website, Ecommerce or Shop.
+Add a distinct API origin only after an external machine-client contract requires
+versioned public APIs, separate rate limits and explicit CORS; internal browser
+traffic remains same-origin under `app.supermega.dev/api/*`.
+
+Hostnames choose presentation, never tenant authority. Every private operation
+derives the named user, active membership, workspace, capability and current
+version on the server. Cookies and credentials stay host-only where possible;
+wildcard credentialed CORS is prohibited. Public intake payloads never enter URLs,
+analytics, error text or release artifacts.
+
+Release the public and app surfaces as one exact-commit pair: immutable candidates,
+release-identity probes, route/browser acceptance, explicit promotion, paired
+production verification and exact rollback targets. A READY deployment, DNS answer
+or HTTP 200 is not sufficient. Branded domains attach only after the tested target
+is known and never by force-reassigning an origin from another project.
+
+Keep product telemetry closed-vocabulary and content-free. Product stages may
+record product and lifecycle state; operations may measure availability, latency,
+error rate, conflict/outbox age, backup age and restore result. Names, contacts,
+notes, prices, receipts, workspace identifiers, preview content and prompts remain
+outside analytics. Provider queueing is not proof of ingestion, customer use or
+commercial value.
+
 ## Premium onboarding communication
 
 The corporate task audits existing source-owned templates before new copy is
