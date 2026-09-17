@@ -15,6 +15,8 @@
  * agreed with the founder. A guard asserts no amount ever appears in this file.
  */
 
+import type { ShopBusinessTemplateId } from '../products/shop/business-templates'
+
 export const CAPABILITY_TIER_SCHEMA = 'supermega.capability_tiers.v1' as const
 
 /**
@@ -34,6 +36,44 @@ export type Capability = {
   outcome: string
   /** Why it sits at this tier. An owner is owed a reason, not a wall. */
   reason: string
+}
+
+export const SHOP_PLAN_GUIDE_SCHEMA = 'supermega.shop.plan_guide.v1' as const
+
+export const shopPlanTemplateIds: readonly ShopBusinessTemplateId[] = [
+  'mini-mart',
+  'pharmacy',
+  'phone-electronics',
+  'fashion',
+  'hardware',
+  'tea-coffee',
+  'auto-parts',
+  'restaurant',
+  'beauty-spa',
+  'bakery',
+]
+
+const shopTemplateFocus: Record<ShopBusinessTemplateId, string> = {
+  'mini-mart': 'Fast counter sales, stock levels and a trustworthy daily close.',
+  pharmacy: 'Counter sales, stock accountability, returns and a trustworthy daily close.',
+  'phone-electronics': 'Counter sales, customer orders, returns and stock accountability.',
+  fashion: 'Fast counter sales, customer orders, returns and stock accountability.',
+  hardware: 'Counter sales, held orders, stock levels and a trustworthy daily close.',
+  'tea-coffee': 'Fast order entry, stock usage and a trustworthy daily close.',
+  'auto-parts': 'Part lookup, held orders, returns and stock accountability.',
+  restaurant: 'Fast order entry, held orders, stock usage and a trustworthy daily close.',
+  'beauty-spa': 'Appointments, packages, counter sales and a trustworthy daily close.',
+  bakery: 'Fast counter sales, production-aware stock and a trustworthy daily close.',
+}
+
+export type ShopPlanGuide = {
+  schema: typeof SHOP_PLAN_GUIDE_SCHEMA
+  templateId: ShopBusinessTemplateId
+  coreFocus: string
+  core: readonly Capability[]
+  premium: readonly Capability[]
+  managed: readonly Capability[]
+  boundary: string
 }
 
 /**
@@ -231,5 +271,29 @@ export function lockedCapabilityNotice(id: string) {
     outcome: found.outcome,
     reason: found.reason,
     action: 'Talk to us about this',
+  }
+}
+
+/**
+ * A compact commercial guide for the Shop setup screen. It recommends an order, never an
+ * entitlement: Core is the complete one-device operating loop, Premium adds server-assisted
+ * work, and Managed adds shared records and governance. Prices and activation state remain
+ * outside the browser so a template or URL can never grant paid access.
+ */
+export function shopPlanGuideForTemplate(templateId: ShopBusinessTemplateId): ShopPlanGuide {
+  if (!shopPlanTemplateIds.includes(templateId)) throw new Error(`Unknown Shop plan template ${templateId}.`)
+  const coreIds = templateId === 'beauty-spa'
+    ? ['shop-appointments', 'shop-counter', 'shop-daily-close', 'local-backup']
+    : templateId === 'restaurant' || templateId === 'tea-coffee' || templateId === 'bakery'
+      ? ['shop-counter', 'shop-orders', 'shop-inventory', 'shop-daily-close']
+      : ['shop-counter', 'shop-inventory', 'shop-orders', 'shop-daily-close']
+  return {
+    schema: SHOP_PLAN_GUIDE_SCHEMA,
+    templateId,
+    coreFocus: shopTemplateFocus[templateId],
+    core: coreIds.map(capability),
+    premium: ['ai-order-intake', 'cloud-backup', 'ai-demand-advice'].map(capability),
+    managed: ['shared-workspace', 'staff-roles', 'verified-statements'].map(capability),
+    boundary: 'Core works on this device. Premium and Managed require reviewed activation; this screen neither charges nor activates them.',
   }
 }

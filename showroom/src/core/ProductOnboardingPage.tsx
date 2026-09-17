@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
+import { shopPlanGuideForTemplate } from './capability-tiers'
 import { emitOutcomeTelemetry } from '../analytics/outcome-telemetry'
 import { PageHeading, type RuntimeHealth } from './CoreShell'
 import {
@@ -216,6 +217,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     ? templateDoorSelection.requestedTemplate
     : null
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
+  const shopPlanGuide = selectedBusinessTemplate ? shopPlanGuideForTemplate(selectedBusinessTemplate.id) : null
   // Shop and Plant setup for a signed-in company account. Plant packs and generic Shop packs are
   // still device-only. A named Shop trade now has a separate reviewed server activation path;
   // onboarding routes there but does not claim the catalog exists before the owner approves it.
@@ -677,6 +679,14 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.`
                   : `${selectedShopIndustryPack.firstWorkflow} ${selectedShopIndustryPack.description}`}</small>
               </label>
+              {shopPlanGuide ? <section aria-label={`${selectedBusinessTemplate?.name.en} plan guide`} className="shop-plan-guide">
+                <header><span className="core-eyebrow">Plan guide</span><strong>{shopPlanGuide.coreFocus}</strong><small>{shopPlanGuide.boundary}</small></header>
+                <div>
+                  <article><b>Core · included</b><p>Run the complete day on one device.</p><ul>{shopPlanGuide.core.map((item) => <li key={item.id}>{item.label}</li>)}</ul></article>
+                  <article><b>Premium · less admin</b><p>Add server-assisted work only when useful.</p><ul>{shopPlanGuide.premium.map((item) => <li key={item.id}>{item.label}{item.id === 'ai-demand-advice' ? ' · being designed' : ''}</li>)}</ul></article>
+                  <article><b>Managed · team scale</b><p>Add shared records, access control and proof.</p><ul>{shopPlanGuide.managed.map((item) => <li key={item.id}>{item.label}</li>)}</ul></article>
+                </div>
+              </section> : null}
             </details>
           ) : null}
           {/* Plant shipped five industry packs and reached one. plantIndustryPackId was read from
