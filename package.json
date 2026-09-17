@@ -14,6 +14,7 @@
     "app:build:checked": "npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test",
     "app:lint": "npm --prefix showroom run lint",
     "app:typecheck": "npm --prefix showroom exec -- tsc --noEmit -p showroom/tsconfig.app.json && npm --prefix showroom exec -- tsc --noEmit -p showroom/tsconfig.node.json",
+    "ai:content:proposal:verify": "node tools/test_ai_content_proposal.mjs",
     "database:runtime-role:self-test": "python -m unittest tests.test_runtime_role_provisioning",
     "preapp:verify:local": "npm run security:legacy-credential-paths:verify && npm run security:legacy-smoke-paths:verify && npm run shop:run001:claims:verify",
     "app:verify:local": "node tools/run_app_verify.mjs",
