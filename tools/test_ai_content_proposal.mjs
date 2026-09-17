@@ -57,6 +57,21 @@ await assert.rejects(model.createAiContentProposal({ proposalId: 'AIC-1234ABCD',
 checks += 1
 
 const implementation = readFileSync('showroom/src/core/ai-content-proposal.ts', 'utf8')
+for (const change of [{ proposalId: 'invalid' }, { proposalId: ['AIC-1234ABCD'] }, { generatedAt: 'invalid' }]) {
+  await assert.rejects(model.acceptAiContentProposalForDraft({ ...proposal, ...change }, source, { reviewedBy: 'Owner', meaningReviewed: true }), /id is invalid|ISO timestamp/)
+  checks += 1
+}
+const mutableProposal = structuredClone(proposal)
+const mutableReview = { reviewedBy: 'Owner', meaningReviewed: true }
+const pendingAcceptance = model.acceptAiContentProposalForDraft(mutableProposal, source, mutableReview)
+mutableProposal.candidateText = 'Changed after review started.'
+mutableReview.reviewedBy = 'Different reviewer'
+const stableAcceptance = await pendingAcceptance
+check(stableAcceptance.draftText === proposal.candidateText && stableAcceptance.reviewedBy === 'Owner', 'acceptance snapshots text and reviewer before asynchronous hashing')
+const mutableRequest = { proposalId: 'AIC-1234ABCD', generatedAt: proposal.generatedAt, source, candidateText: proposal.candidateText }
+const pendingCreation = model.createAiContentProposal(mutableRequest)
+mutableRequest.candidateText = 'Changed during hashing.'
+check((await pendingCreation).candidateText === proposal.candidateText, 'creation snapshots candidate text before asynchronous hashing')
 for (const forbidden of ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest', 'navigator.sendBeacon']) {
   check(!implementation.includes(forbidden), `contract has no ${forbidden} side effect`)
 }

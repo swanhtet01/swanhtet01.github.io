@@ -128,15 +128,18 @@ export async function createAiContentProposal(value: unknown): Promise<AiContent
   const input = record(value)
   exactKeys(input, ['proposalId', 'generatedAt', 'source', 'candidateText'], 'AI content proposal request')
   const source = validateSource(input.source)
+  if (typeof input.proposalId !== 'string' || !proposalIdPattern.test(input.proposalId)) throw new Error('AI content proposal id is invalid.')
+  const proposalId = input.proposalId
+  const generatedAt = iso(input.generatedAt)
+  const candidateText = boundedText(input.candidateText, 'candidateText', 600)
   if (await aiContentSourceDigest(digestableSource(source)) !== source.sourceDigest) throw new Error('AI content source digest is stale or invalid.')
-  if (!proposalIdPattern.test(String(input.proposalId))) throw new Error('AI content proposal id is invalid.')
   return {
     schema: AI_CONTENT_PROPOSAL_SCHEMA,
-    proposalId: String(input.proposalId),
-    generatedAt: iso(input.generatedAt),
+    proposalId,
+    generatedAt,
     ...source,
     generatedClassification: 'ai_generated_unverified',
-    candidateText: boundedText(input.candidateText, 'candidateText', 600),
+    candidateText,
     meaningReviewed: false,
     publicationAuthorized: false,
     businessRecordMutationAuthorized: false,
@@ -156,19 +159,23 @@ export async function acceptAiContentProposalForDraft(
   }
   const currentSource = validateSource(currentSourceValue)
   const source = validateSource({ product: proposal.product, workspaceScope: proposal.workspaceScope, templateId: proposal.templateId, sourceRevision: proposal.sourceRevision, sourceDigest: proposal.sourceDigest, field: proposal.field, currentText: proposal.currentText, facts: proposal.facts })
-  if (await aiContentSourceDigest(digestableSource(currentSource)) !== currentSource.sourceDigest
-    || JSON.stringify(currentSource) !== JSON.stringify(source)) throw new Error('AI content proposal is stale or belongs to another scope.')
+  if (typeof proposal.proposalId !== 'string' || !proposalIdPattern.test(proposal.proposalId)) throw new Error('AI content proposal id is invalid.')
+  const proposalId = proposal.proposalId
+  iso(proposal.generatedAt)
+  const draftText = boundedText(proposal.candidateText, 'candidateText', 600)
   if (review.meaningReviewed !== true) throw new Error('A human meaning review is required.')
   const reviewedBy = boundedText(review.reviewedBy, 'reviewedBy', 80)
+  if (await aiContentSourceDigest(digestableSource(currentSource)) !== currentSource.sourceDigest
+    || JSON.stringify(currentSource) !== JSON.stringify(source)) throw new Error('AI content proposal is stale or belongs to another scope.')
   return {
-    proposalId: String(proposal.proposalId),
+    proposalId,
     product: currentSource.product,
     workspaceScope: currentSource.workspaceScope,
     templateId: currentSource.templateId,
     sourceRevision: currentSource.sourceRevision,
     sourceDigest: currentSource.sourceDigest,
     field: currentSource.field,
-    draftText: boundedText(proposal.candidateText, 'candidateText', 600),
+    draftText,
     reviewedBy,
     meaningReviewed: true as const,
     draftOnly: true as const,
