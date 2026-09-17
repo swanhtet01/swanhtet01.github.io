@@ -99,3 +99,25 @@ test('failed reset or restore releases synchronous ownership without navigation'
     assert.equal(h.calls.some(call => call[0] === 'navigate'), false)
   }
 })
+
+test('actual build assertion accepts the new guards and rejects their removal', () => {
+  const verifier = readFileSync('tools/verify_app_build.mjs', 'utf8')
+  const start = verifier.indexOf("if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage()')")
+  const marker = "fail('customer_workspace_controls_not_isolated_or_safe')"
+  const end = verifier.indexOf(marker, start) + marker.length
+  assert.ok(start >= 0 && end > start)
+  const check = new Function('workspaceControlsPageSource', 'fail', verifier.slice(start, end))
+  const failures = text => { const result = []; check(text, code => result.push(code)); return result }
+  assert.deepEqual(failures(source), [])
+  for (const token of [
+    'reviewedRestorePoint !== restorePoint || localWorkspaceOperation.current',
+    "localWorkspaceOperation.current = 'restore'",
+    "localWorkspaceOperation.current = 'reset'",
+    'if (!file || localWorkspaceOperation.current) return',
+    'if (localWorkspaceOperation.current) return',
+    'if (sequence !== restoreLoadSequence.current) return',
+  ]) {
+    assert.ok(source.includes(token))
+    assert.deepEqual(failures(source.replaceAll(token, 'REMOVED_GUARD')), ['customer_workspace_controls_not_isolated_or_safe'])
+  }
+})

@@ -2983,7 +2983,12 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || !workspaceControlsPageSource.includes('Review restore')
   || !workspaceControlsPageSource.includes('Cancel restore')
   || !workspaceControlsPageSource.includes('Confirm restore of this snapshot')
-  || !workspaceControlsPageSource.includes('reviewedRestorePoint !== restorePoint || restoreBusy')
+  || !workspaceControlsPageSource.includes('reviewedRestorePoint !== restorePoint || localWorkspaceOperation.current')
+  || !workspaceControlsPageSource.includes("localWorkspaceOperation.current = 'restore'")
+  || !workspaceControlsPageSource.includes("localWorkspaceOperation.current = 'reset'")
+  || !workspaceControlsPageSource.includes('if (!file || localWorkspaceOperation.current) return')
+  || (workspaceControlsPageSource.match(/if \(localWorkspaceOperation\.current\) return/g) ?? []).length !== 2
+  || !workspaceControlsPageSource.includes('if (sequence !== restoreLoadSequence.current) return')
   || !workspaceControlsPageSource.includes('Work saved after the snapshot may be lost.')
   || !workspaceControlsPageSource.includes('restoreLocalWorkspaceBackup(parsed) ?? restoreLocalWorkspaceBackupFromEvidence(parsed)')
   || !workspaceControlsPageSource.includes('applyLocalWorkspaceBackup(window.localStorage, restorePoint)')
