@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
 
 import { getRecordedEvents, LOCAL_METRICS_MAX_EVENTS, projectLocalActivityLifecycle } from '../analytics/metrics-collector'
@@ -534,6 +534,8 @@ export function WorkspaceControlsPage() {
   const [restorePointLabel, setRestorePointLabel] = useState(restorePoint ? 'Saved on this device' : '')
   const [notice, setNotice] = useState('')
   const [restoreBusy, setRestoreBusy] = useState(false)
+  const localWorkspaceOperation = useRef<'restore' | 'reset' | null>(null)
+  const restoreLoadSequence = useRef(0)
   const [resetArmed, setResetArmed] = useState(false)
 
   const [resetBusy, setResetBusy] = useState(false)
@@ -566,6 +568,8 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'ceo-brief') return <Suspense fallback={REPORT_FALLBACK}><CeoOperatingBriefView backupReady={Boolean(currentBackup)} runtime={runtime} /></Suspense>
 
   function saveRestorePoint() {
+    if (localWorkspaceOperation.current) return
+    restoreLoadSequence.current += 1
     setReviewedRestorePoint(null)
     const backup = collectCurrentBackup()
     if (!backup) {
@@ -584,11 +588,17 @@ export function WorkspaceControlsPage() {
   }
 
   async function loadBackupFile(file: File | null) {
-    if (!file) return
+    if (!file || localWorkspaceOperation.current) return
+    const sequence = ++restoreLoadSequence.current
     setReviewedRestorePoint(null)
+    setRestorePoint(null)
+    setRestorePointLabel('')
     try {
+      window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega backup smaller than 5 MB.')
-      const parsed: unknown = JSON.parse(await file.text())
+      const text = await file.text()
+      if (sequence !== restoreLoadSequence.current) return
+      const parsed: unknown = JSON.parse(text)
       const backup = restoreLocalWorkspaceBackup(parsed) ?? restoreLocalWorkspaceBackupFromEvidence(parsed)
       if (!backup) throw new Error('This is not a valid SuperMega workspace backup or version 24 evidence file.')
       window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
@@ -596,12 +606,15 @@ export function WorkspaceControlsPage() {
       setRestorePointLabel(file.name)
       setNotice(`${Object.keys(backup.records).length} records verified. Restore only when you are ready to replace this browser workspace.`)
     } catch (error) {
+      if (sequence !== restoreLoadSequence.current) return
       setNotice(error instanceof Error ? error.message : 'The workspace backup could not be loaded.')
     }
   }
 
   async function restoreWorkspace() {
-    if (!restorePoint || reviewedRestorePoint !== restorePoint || restoreBusy) return
+    if (!restorePoint || reviewedRestorePoint !== restorePoint || localWorkspaceOperation.current) return
+    localWorkspaceOperation.current = 'restore'
+    restoreLoadSequence.current += 1
     setRestoreBusy(true)
     setReviewedRestorePoint(null)
     try {
@@ -609,6 +622,7 @@ export function WorkspaceControlsPage() {
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       window.location.assign('/')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setNotice(error instanceof Error ? error.message : 'The previous workspace could not be restored safely.')
       setRestoreBusy(false)
     }
@@ -684,7 +698,10 @@ export function WorkspaceControlsPage() {
   }
 
   async function resetWorkspace() {
-    if (resetBusy) return
+    if (localWorkspaceOperation.current) return
+    localWorkspaceOperation.current = 'reset'
+    restoreLoadSequence.current += 1
+    setReviewedRestorePoint(null)
     setResetBusy(true)
     try {
       if (!loadRestorePoint()) {
@@ -706,6 +723,7 @@ export function WorkspaceControlsPage() {
       listLocalWorkspaceStorageKeys(window.localStorage).forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setNotice(error instanceof Error ? error.message : 'The workspace could not be reset safely.')
       setResetBusy(false)
     }
