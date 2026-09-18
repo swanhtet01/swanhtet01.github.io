@@ -115,6 +115,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
 
 export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: CustomerWebsiteReview; pageId: string; onPageChange: (id: string) => void }) {
   const page = review.preview.pages.find(item => item.id === pageId) ?? review.preview.pages[0]
+  const destination = reviewContactDestination(page.hero.ctaHref)
   return <>
       <nav className="customer-review-actions" aria-label="Prepared pages">{review.preview.pages.map(item => <button type="button" key={item.id} aria-current={item.id === page.id ? 'page' : undefined} onClick={() => onPageChange(item.id)}>{item.navigation.label || item.seo.title || 'Page'}</button>)}</nav>
       <article className="website-preview-site" aria-label="Prepared page preview">
@@ -123,5 +124,26 @@ export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: 
           <section className="preview-section-grid">{page.sections.map(section => <article key={section.id}><span>{section.eyebrow}</span><h3>{section.title}</h3><p>{section.body}</p></article>)}</section></div>
         <footer className="preview-site-footer">Preview only · links and publishing are disabled</footer>
       </article>
+      <details className="customer-review-details" key={page.id}>
+        <summary>Check contact destination and search listing</summary>
+        <dl>
+          <dt>Contact button</dt><dd>{page.hero.ctaLabel || 'No contact button prepared'}</dd>
+          <dt>Prepared destination — not clickable</dt><dd>{destination}</dd>
+          <dt>Search title</dt><dd>{page.seo.title || 'Not prepared yet'}</dd>
+          <dt>Search description</dt><dd>{page.seo.description || 'Not prepared yet'}</dd>
+        </dl>
+        <p>Check these details before requesting changes. This is prepared text, not proof that a link works or that search engines have listed your site.</p>
+      </details>
     </>
+}
+
+function reviewContactDestination(value: string): string {
+  if (!value.trim()) return 'Not prepared yet'
+  if (value !== value.trim() || Array.from(value).some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127) || value.includes('\\')) return 'Needs correction by SuperMega'
+  if (/^\/(?!\/)|^#/.test(value)) return value
+  try {
+    const url = new URL(value)
+    if (!['https:', 'http:', 'mailto:', 'tel:'].includes(url.protocol) || url.username || url.password) return 'Needs correction by SuperMega'
+    return value
+  } catch { return 'Needs correction by SuperMega' }
 }

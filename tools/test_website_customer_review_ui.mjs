@@ -15,7 +15,7 @@ const { renderToStaticMarkup } = require('react-dom/server')
 const source = readFileSync(new URL('../showroom/src/products/website/WebsiteCustomerReview.tsx', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 const module = { exports: {} }
-vm.runInNewContext(compiled, { exports: module.exports, require: name => {
+vm.runInNewContext(compiled, { URL, exports: module.exports, require: name => {
   if (name.endsWith('.css')) return {}
   if (name === './customer-review-access') return { createReviewAccessBoundary }
   if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
@@ -55,6 +55,38 @@ test('route and lifecycle safety source pins remain explicit (not browser proof)
     'Date.parse(review.expiresAt) <= Date.now()', 'sameManagedIdentity(request.identity, actor)']) assert.ok(source.includes(pin), pin)
   assert.doesNotMatch(source, /dangerouslySetInnerHTML|localStorage\.setItem|sessionStorage\.setItem/)
   assert.ok(source.includes('const refresh = () => { access.invalidate(); setReview(null); setActor(null)'))
+})
+test('customer can inspect exact contact and search text without navigating or publishing', () => {
+  const prepared = page('Home')
+  prepared.hero.ctaHref = 'https://example.com/contact'
+  prepared.seo.description = 'Prepared <description>'
+  const html = render([prepared])
+  assert.ok(html.includes('<details'))
+  assert.ok(html.includes('https://example.com/contact'))
+  assert.ok(html.includes('Prepared &lt;description&gt;'))
+  assert.ok(html.includes('not proof that a link works'))
+  assert.doesNotMatch(html, /href=|<a\b|<iframe|<script/)
+})
+test('unsafe or credential-bearing destinations are withheld and absent text is explicit', () => {
+  for (const destination of ['javascript:alert(1)', 'data:text/html,unsafe', '//example.com', 'https://user@example.com', ' https://example.com', '/\\example.com']) {
+    const prepared = page('Home')
+    prepared.hero.ctaHref = destination
+    const html = render([prepared])
+    assert.ok(html.includes('Needs correction by SuperMega'), destination)
+    assert.ok(!html.includes(destination), destination)
+  }
+  const prepared = page('Home')
+  prepared.hero.ctaHref = ''
+  assert.ok(render([prepared]).includes('Not prepared yet'))
+})
+test('supported contact routes stay visible as inert text', () => {
+  for (const destination of ['/contact/', '#contact', 'mailto:hello@example.com', 'tel:+10000000000']) {
+    const prepared = page('Home')
+    prepared.hero.ctaHref = destination
+    const html = render([prepared])
+    assert.ok(html.includes(destination), destination)
+    assert.doesNotMatch(html, /href=/)
+  }
 })
 
 test('customer review is a short result-review journey rather than a builder', () => {

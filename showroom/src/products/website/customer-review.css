@@ -20,4 +20,10 @@
 .customer-review-feedback { display: grid; gap: .75rem; max-width: 44rem; margin-block: 2rem; }
 .customer-review-feedback textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: .75rem; font: inherit; border: 1px solid currentColor; border-radius: .5rem; }
 .customer-review-feedback button { justify-self: start; }
+.customer-review-details { margin-block: 1rem; padding: 1rem; border: 1px solid var(--website-line-strong); border-radius: .75rem; background: var(--website-panel); }
+.customer-review-details summary { min-height: 2.75rem; align-content: center; cursor: pointer; font-weight: 650; }
+.customer-review-details summary:focus-visible { outline: 2px solid var(--website-green); outline-offset: 3px; }
+.customer-review-details dl { display: grid; gap: .5rem; margin-block: 1rem; }
+.customer-review-details dt { font-weight: 650; }
+.customer-review-details dd { margin: 0 0 .75rem; overflow-wrap: anywhere; }
 @media (max-width: 40rem) { .customer-review-guide ol { grid-template-columns: minmax(0, 1fr); } .customer-website-review .preview-site-header { flex-wrap: wrap; gap: .75rem; } }
