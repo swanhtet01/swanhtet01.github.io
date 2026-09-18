@@ -1063,7 +1063,7 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 17
+  && databaseRehearsal.migration?.count === databaseImplementationPaths.filter((path) => path.startsWith('supabase/migrations/')).length
   && databaseRehearsal.migration?.schemaVersion === 13
   && databaseRehearsal.migration?.productionValidatorReady === true
   && Object.keys(databaseRehearsal.checks || {}).length === 72
