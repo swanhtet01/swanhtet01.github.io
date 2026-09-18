@@ -143,6 +143,10 @@ export function WebsiteStarterSetup({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (importBusy || importPreview) {
+      setImportMessage(importBusy ? 'Wait for the file preview, or cancel it before preparing your draft.' : 'Use reviewed entries or discard the preview before preparing your draft.')
+      return
+    }
     setAttempted(true)
     if (issues.length > 0) {
       requestAnimationFrame(() => {
@@ -169,7 +173,8 @@ export function WebsiteStarterSetup({
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         <footer className="website-starter-actions">
           <button className="website-button is-secondary" onClick={onViewSample} type="button">View example</button>
-          <button className="website-button is-primary" type="submit">Prepare private draft</button>
+          <button className="website-button is-primary" type="submit" disabled={importBusy || Boolean(importPreview)} aria-describedby={importBusy || importPreview ? 'website-import-pending' : undefined}>Prepare private draft</button>
+          {importBusy || importPreview ? <p id="website-import-pending" role="status">{importBusy ? 'File preview is loading. Wait or cancel it before preparing your draft.' : 'Review and use the imported entries, or discard the preview before preparing your draft.'}</p> : null}
         </footer>
 
         <label className="website-starter-trade">
@@ -190,7 +195,7 @@ export function WebsiteStarterSetup({
         <div className="website-form-grid two-columns website-starter-identity-grid">
           <label>
             <span>Is the business already operating?</span>
-            <select value={businessStage} onChange={(event) => setBusinessStage(event.target.value as 'new' | 'existing')} aria-describedby="website-business-stage-help">
+            <select value={businessStage} disabled={importBusy || Boolean(importPreview)} onChange={(event) => setBusinessStage(event.target.value as 'new' | 'existing')} aria-describedby="website-business-stage-help">
               <option value="new">New business or planning a launch</option>
               <option value="existing">Existing business</option>
             </select>

@@ -105,6 +105,10 @@ test('CSV selection is preview-only until explicitly accepted and cannot replace
   }
   await selectFile()
   assert.equal(ui.nodes().filter(node => node.type === 'fieldset').length, 0)
+  assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, true)
+  ui.submit()
+  assert.equal(ui.created.length, 0)
+  assert.match(ui.find(node => node.props.id === 'website-import-pending').props.children, /discard/)
   ui.click('Use reviewed entries'); ui.submit()
   assert.equal(ui.created[0].offerings, 'Tea | 2000 MMK')
   await selectFile()
@@ -121,7 +125,12 @@ test('canceling a slow read ignores its late result and allows another preview',
   const select = file => { ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [file], value: file.name } }); ui.render() }
   select({ name: 'slow.csv', size: 40, text: () => slow })
   await new Promise(resolve => setImmediate(resolve)); ui.render()
+  assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, true)
+  assert.equal(ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.disabled, true)
+  ui.submit()
+  assert.equal(ui.created.length, 0)
   ui.click('Cancel file preview')
+  assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, false)
   select({ name: 'new.csv', size: 40, text: async () => 'name,description\nNew entry,Confirmed details' })
   await new Promise(resolve => setImmediate(resolve)); ui.render()
   finish('name,description\nOld entry,Outdated details')
