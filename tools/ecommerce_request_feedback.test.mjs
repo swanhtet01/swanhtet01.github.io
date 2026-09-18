@@ -9,7 +9,7 @@ const end = source.indexOf('\n  async function openOperatorReview', start)
 assert.ok(start >= 0 && end > start)
 const handler = source.slice(start, end).replace('event: FormEvent<HTMLFormElement>', 'event')
 
-async function run({ managed = false, failure = '' } = {}) {
+async function run({ managed = false, failure = '', duplicate = false } = {}) {
   const result = { saved: 0, delivered: 0, notice: '', fresh: '', busy: false }
   const window = { location: { pathname: '/ecommerce/', search: '' } }
   Object.defineProperty(window, 'localStorage', { get() {
@@ -17,7 +17,7 @@ async function run({ managed = false, failure = '' } = {}) {
     return {}
   } })
   const context = {
-    window, Error, disabled: false, quoteBusy: false, recoveryBlocked: false,
+    window, Error, disabled: false, quoteBusy: false, quoteInFlight: { current: false }, recoveryBlocked: false,
     cart: [{ sku: 'SYNTHETIC' }], paymentPolicyReady: true,
     crypto: { randomUUID: () => 'synthetic' }, scope: 'local', sourcePreviewDigest: 'digest', preview: {},
     sourceStorefront: null, activeBuyingState: { requests: [], headDigest: 'head' },
@@ -39,7 +39,11 @@ async function run({ managed = false, failure = '' } = {}) {
     confirmManagedRequest: async (request, callback) => { await callback(request); return 'confirmed' },
     recordBehaviorSignal() { if (failure === 'behavior') throw new Error('optional behavior failed') },
   }
-  await runInNewContext(handler + '\nreviewOrder({ preventDefault() {} })', context)
+  const invoke = runInNewContext(handler + '\nreviewOrder', context)
+  const first = invoke({ preventDefault() {} })
+  if (duplicate) await invoke({ preventDefault() {} })
+  await first
+  assert.equal(context.quoteInFlight.current, false, 'completion or failure releases the synchronous guard')
   return result
 }
 for (const managed of [false, true]) for (const failure of ['', 'storage', 'behavior']) {
@@ -60,5 +64,15 @@ for (const failure of ['save', 'delivery']) {
     assert.equal(result.fresh, '')
     assert.equal(result.busy, false)
     assert.match(result.notice, /unconfirmed/)
+  })
+}
+
+for (const managed of [false, true]) {
+  test(`same-render double submit starts one request: managed=${managed}`, async () => {
+    const result = await run({ managed, duplicate: true })
+    assert.equal(result.saved, 1)
+    assert.equal(result.delivered, managed ? 1 : 0)
+    assert.equal(result.fresh, 'REQUEST')
+    assert.equal(result.busy, false)
   })
 }

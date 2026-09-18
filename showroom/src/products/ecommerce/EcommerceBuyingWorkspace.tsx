@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { SavedRequestReceipt } from './SavedRequestReceipt'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -171,6 +171,7 @@ export function EcommerceBuyingWorkspace({
   const [promotionCode, setPromotionCode] = useState('')
   const [open, setOpen] = useState(false)
   const [quoteBusy, setQuoteBusy] = useState(false)
+  const quoteInFlight = useRef(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
   const [managedConfirmation, setManagedConfirmation] = useState('')
@@ -1107,7 +1108,7 @@ export function EcommerceBuyingWorkspace({
 
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (disabled || quoteBusy || recoveryBlocked || !cart.length) return
+    if (disabled || quoteBusy || quoteInFlight.current || recoveryBlocked || !cart.length) return
     if (!paymentPolicyReady) {
       setNotice(`Shop has no active payment method for ${fulfilment}. Set one up in Shop before reviewing this order.`)
       return
@@ -1116,6 +1117,7 @@ export function EcommerceBuyingWorkspace({
       setNotice('Secure checkout identity is unavailable. Nothing was recorded.')
       return
     }
+    quoteInFlight.current = true
     setQuoteBusy(true)
     setNotice('')
     try {
@@ -1200,6 +1202,7 @@ export function EcommerceBuyingWorkspace({
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
     } finally {
+      quoteInFlight.current = false
       setQuoteBusy(false)
     }
   }
