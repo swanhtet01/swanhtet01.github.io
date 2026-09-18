@@ -8,6 +8,7 @@ import {
   readLocalShopBusinessTemplateId,
 } from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
+import { AssistedDeliveryScope } from '../AssistedDeliveryScope'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
@@ -1218,7 +1219,7 @@ export function WebsiteProduct() {
                       <p>SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview. You review one preview; domain connection and publishing stay separate.</p>
                     </div>
                   </details>
-                  <a className="website-button is-primary is-compact" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>
+                  <AssistedDeliveryScope product="website" />
                 </>
               ) : (
                 <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>

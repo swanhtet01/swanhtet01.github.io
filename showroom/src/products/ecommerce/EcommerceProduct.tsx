@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { AssistedDeliveryScope } from '../AssistedDeliveryScope'
 import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -1807,8 +1808,8 @@ export function EcommerceProduct() {
               <p><strong>Tell us what you sell and where a public menu or catalog can be reviewed.</strong> A short list of key products and prices is enough to start. After scope confirmation, SuperMega provides a safe transfer method for any private spreadsheet or POS export.</p>
               <p>SuperMega cleans the catalog, drafts categories and descriptions, and prepares the customer view and Shop handoff. You review one preview before anything becomes live.</p>
             </details>
+            <AssistedDeliveryScope product="ecommerce" />
             <div className="form-actions ecommerce-service-actions">
-              <a className="core-button primary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a>
               <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Try sample request</button>
             </div>
           </> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
