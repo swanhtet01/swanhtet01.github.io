@@ -191,5 +191,10 @@ export function getRecordedEvents(): readonly MetricEvent[] {
 }
 
 export function emitMetric(detail: MetricEvent): void {
-  window.dispatchEvent(new CustomEvent('supermega:metric', { detail }))
+  try {
+    if (!validMetricEvent(detail)) return
+    window.dispatchEvent(new CustomEvent('supermega:metric', { detail: { ...detail } }))
+  } catch {
+    // Optional local instrumentation must never interrupt a business action.
+  }
 }

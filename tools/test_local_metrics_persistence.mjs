@@ -25,7 +25,7 @@ const bundle = await build({
   stdin: {
     contents: `export {
       LOCAL_METRICS_STORAGE_KEY, LOCAL_METRICS_SCHEMA, LOCAL_METRICS_MAX_EVENTS,
-      projectLocalActivityLifecycle, readStoredMetrics, writeStoredMetrics, validMetricEvent,
+      projectLocalActivityLifecycle, readStoredMetrics, writeStoredMetrics, validMetricEvent, emitMetric,
     } from './metrics-collector.ts'`,
     resolveDir: 'showroom/src/analytics',
     sourcefile: 'showroom/src/analytics/metrics-persistence-test-entry.ts',
@@ -40,7 +40,7 @@ const bundle = await build({
 
 const {
   LOCAL_METRICS_STORAGE_KEY, LOCAL_METRICS_SCHEMA, LOCAL_METRICS_MAX_EVENTS,
-  projectLocalActivityLifecycle, readStoredMetrics, writeStoredMetrics, validMetricEvent,
+  projectLocalActivityLifecycle, readStoredMetrics, writeStoredMetrics, validMetricEvent, emitMetric,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 const controlsPageSource = readFileSync('showroom/src/core/WorkspaceControlsPage.tsx', 'utf8')
@@ -215,6 +215,37 @@ const sale = (ts = 1) => ({ product: 'shop', capability: 'shop-counter', action:
   check(!localMetricsViewSource.includes('getSessionEvents()'), 'view no longer mislabels the across-session record as one session')
   check(controlsPageSource.includes('to="/settings/?view=local-metrics#controls">Device activity</Link>'), 'Reports links to the device activity lifecycle with the current label')
   check(!controlsPageSource.includes('>Session metrics</Link>'), 'the obsolete session-only label cannot return')
+}
+
+// Optional instrumentation cannot turn a completed business action into failure.
+{
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const event = { product: 'shop', capability: null, action: 'sale.completed', ts: 1700000000000 }
+  try {
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: undefined })
+    assert.doesNotThrow(() => emitMetric(event))
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent() { throw new Error('dispatch unavailable') } } })
+    assert.doesNotThrow(() => emitMetric(event))
+    let dispatched = 0
+    let captured
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent(received) {
+      dispatched++
+      captured = { type: received.type, detail: { ...received.detail } }
+      received.detail.action = 'listener.changed'
+    } } })
+    emitMetric(event)
+    check(captured?.type === 'supermega:metric', 'event channel remains local and unchanged')
+    assert.deepEqual(captured.detail, event)
+    check(dispatched === 1, 'valid event is dispatched once')
+    check(event.action === 'sale.completed', 'listeners cannot mutate the caller event')
+    emitMetric({ ...event, contact: 'synthetic-private-field' })
+    emitMetric({ ...event, ts: NaN })
+    check(dispatched === 1, 'invalid or extra-field payloads are not dispatched')
+    checks += 2
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'window', previous)
+    else delete globalThis.window
+  }
 }
 
 console.log(`local metrics persistence: ${checks} checks passed`)
