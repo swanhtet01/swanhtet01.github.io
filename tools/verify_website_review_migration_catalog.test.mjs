@@ -30,6 +30,12 @@ test('complete migration chain and adversarial private catalog changes', async t
       } finally { await db.exec('rollback') }
     })
     const mutations = [
+      ['acceptance forced RLS removed', 'alter table app_private.website_customer_acceptances no force row level security'],
+      ['acceptance browser grant', 'grant select on app_private.website_customer_acceptances to authenticated'],
+      ['acceptance cross-tenant policy', 'alter policy website_acceptance_read on app_private.website_customer_acceptances using (true)'],
+      ['acceptance immutable guard disabled', 'alter table app_private.website_customer_acceptances disable trigger website_acceptance_guard'],
+      ['feedback acceptance exclusion disabled', 'alter table app_private.website_customer_feedback disable trigger website_feedback_acceptance_guard'],
+      ['acceptance content binding weakened', 'alter table app_private.website_customer_acceptances alter column preview_digest drop not null'],
       ['forced RLS removed', 'alter table app_private.website_customer_reviews no force row level security'],
       ['browser table grant', 'grant select on app_private.website_customer_reviews to authenticated'],
       ['permissive tenant policy', 'alter policy website_reviews_read on app_private.website_customer_reviews using (true)'],

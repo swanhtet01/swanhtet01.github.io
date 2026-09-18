@@ -33,7 +33,12 @@ const expectedMigrations = [
   '20260907024457_self_serve_durable_attempt_budget.sql',
   '20260915184728_website_customer_review_storage.sql',
   '20260915191528_website_review_entitlement_proof.sql',
+  '20260918011500_website_customer_acceptance.sql',
 ]
+// Verify the original private catalog before all Website-review extensions, then
+// verify the complete extended catalog. Adding an extension must not shift the
+// baseline boundary and accidentally skip an earlier policy check.
+const websiteReviewStart = expectedMigrations.indexOf('20260915184728_website_customer_review_storage.sql')
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
     command: 'ALL',
@@ -435,8 +440,8 @@ const database = new PGlite()
 await database.waitReady
 await seedSupabaseRoles(database)
 // Preserve the exact pre-review catalog assertions, then verify the entire
-// resulting private catalog after applying both Website review migrations.
-await applyMigrations(database, expectedMigrations.slice(0, -2))
+// resulting private catalog after applying the Website review and acceptance migrations.
+await applyMigrations(database, expectedMigrations.slice(0, websiteReviewStart))
 
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
@@ -875,7 +880,7 @@ requireCheck(
 )
 
 await verifySelfServeAttemptBudget(database, requireCheck)
-await applyMigrations(database, expectedMigrations.slice(-2))
+await applyMigrations(database, expectedMigrations.slice(websiteReviewStart))
 await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()

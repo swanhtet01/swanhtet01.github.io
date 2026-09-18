@@ -40,13 +40,13 @@ export const websiteReviewCatalogQueries = {
 }
 
 const expected = {
-  relations: 'cd7c608026e58d22c3ba0ebfa27b3d931731eac11d97beb8faf9f0059c225ab4',
-  columns: 'd2f5a7fe54f3d0c5e1f9a11ddf748e5f94419ff0ab7a54fcc1dfaa42bda9181b',
-  policies: '2e5108a45f0c350e6a25f5acb6b6b663bd3c7bdb83131c48ab0841164efde753',
-  functions: 'd05d8014af2f212bc11a90219a8076dafb82cfc7296a1d908097f4818a533097',
-  triggers: '02128e48e9e8e2a02e272b334f345ecd985a434fe48024aebe3c2e56e11473fc',
-  constraints: 'f1be192e6d4c0eb0efb6af013a6fe0a66bcc9a4f1936b8f53246e4047ec73a8c',
-  indexes: '0e1511fb7ef7462f232c47f568fffa1fa8fc36b2991a35c7a641ba7419c20bbc',
+  relations: '3c44055e324575be93a05084d9ee02fc71a43cc00c482ef55f3b52c1228bb7a8',
+  columns: '25369a7f720e9d382f9fcd52c62f93017183b2f2b77e6add1f17d202292077de',
+  policies: '94e6ba31279e8fbf1a51b8534ec76524856c89eab1ed900ed1ac4a13afd920ba',
+  functions: '43363d70f1d95f0f5eae86a5787c835f13424bdd4268e17e11308685224b5b37',
+  triggers: '84436c5251aeaffca50ec335499803ded93f84cb49f023dac890a64f80cee742',
+  constraints: 'aa3867fd2063efbe6009f9a696399806576ebb5d093046792fa93f6063747102',
+  indexes: 'a78adb1cdfc7a5a8904166eff3df39d71689e141df2a69af06d9d7eb5930e051',
 }
 
 export async function websiteReviewCatalogDigests(database) {
