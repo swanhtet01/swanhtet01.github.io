@@ -6,6 +6,7 @@ import test from 'node:test'
 import * as starter from '../showroom/src/products/website/website-starter.ts'
 import * as trade from '../showroom/src/products/website/website-trade-brief.ts'
 import * as offeringImport from '../showroom/src/products/website/website-offering-import.ts'
+import './test_website_shell_flow.mjs'
 
 // Exercise actual component handlers with deterministic hook state. This is not
 // a browser/layout test or evidence of customer usability.
