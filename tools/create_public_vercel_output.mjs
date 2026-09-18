@@ -812,6 +812,7 @@ const TRIAL_PROOF_BASE_FIELDS = ['proof_contract', 'proof_version', 'proof_diges
 const APPROVED_CONTEXT_FIELDS = ['proof_context_contract', 'proof_context_digest', 'proof_context_outcome_digest', 'proof_context_approved', 'proof_context_raw_records']
 const TRIAL_PROOF_FIELDS = [...TRIAL_PROOF_BASE_FIELDS, ...APPROVED_CONTEXT_FIELDS]
 const replayCache = new Map()
+const inFlightRequests = new Map()
 const rateBuckets = new Map()
 
 const text = (value, max = 4000) => String(value || '').trim().slice(0, max)
@@ -1258,10 +1259,15 @@ module.exports = async function handler(req, res) {
   const cached = replayCache.get(cacheKey)
   if (cached && cached.fingerprint !== fingerprint) { send(res, 409, { status: 'error', reason: 'idempotency_conflict' }); return }
   if (cached) { send(res, 202, cached.body, { 'x-idempotent-replay': 'true' }); return }
+  const pendingFingerprint = inFlightRequests.get(cacheKey)
+  if (pendingFingerprint) { send(res, 409, { status: 'error', reason: pendingFingerprint === fingerprint ? 'request_in_progress' : 'idempotency_conflict' }, { 'retry-after': '2' }); return }
+  if (inFlightRequests.size >= CACHE_LIMIT) { send(res, 503, { status: 'error', reason: 'contact_busy' }, { 'retry-after': '2' }); return }
 
   const rate = localRateLimit(req, now)
   if (!rate.allowed) { send(res, 429, { status: 'error', reason: 'rate_limited' }, { 'retry-after': String(rate.retryAfter) }); return }
 
+  inFlightRequests.set(cacheKey, fingerprint)
+  try {
   const record = recordFrom(safe, req, idempotencyKey, fingerprint)
   let storeResult
   try { storeResult = await saveSupabase(record, fingerprint) } catch {
@@ -1285,6 +1291,9 @@ module.exports = async function handler(req, res) {
   try { await sendCustomerAcknowledgement(record) } catch {}
   replayCache.set(cacheKey, { fingerprint, body: acceptedBody, expiresAt: now + IDEMPOTENCY_TTL_MS })
   send(res, 202, acceptedBody)
+  } finally {
+    inFlightRequests.delete(cacheKey)
+  }
 }
 `
 

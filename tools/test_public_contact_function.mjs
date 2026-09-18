@@ -467,6 +467,41 @@ try {
   assert.equal(ackFailed.status, 202)
   assert.equal(ackAttempted, true)
 
+  // Overlapping retries must not start a second delivery in this instance.
+  let finishDelivery, deliveryStarted
+  const started = new Promise(resolve => { deliveryStarted = resolve })
+  const held = new Promise(resolve => { finishDelivery = resolve })
+  let overlappingCalls = 0
+  globalThis.fetch = async () => {
+    overlappingCalls++
+    if (overlappingCalls === 1) { deliveryStarted(); await held }
+    return { ok: true, status: 200, json: async () => ({ id: 'local-simulated-mail' }) }
+  }
+  const concurrentHandler = loadHandler({ fresh: true })
+  const concurrentArgs = { body: validSubmission, headers: withKey(450), activeHandler: concurrentHandler }
+  const firstDelivery = invoke(concurrentArgs)
+  await started
+  const overlapping = await invoke(concurrentArgs)
+  assert.equal(overlapping.status, 409)
+  assert.equal(overlapping.body.reason, 'request_in_progress')
+  const conflicting = await invoke({ ...concurrentArgs, body: { ...validSubmission, goal: 'A different brief' } })
+  assert.equal(conflicting.body.reason, 'idempotency_conflict')
+  assert.equal(overlappingCalls, 1)
+  finishDelivery()
+  const originalDelivery = await firstDelivery
+  assert.equal(originalDelivery.status, 202)
+  const completedReplay = await invoke(concurrentArgs)
+  assert.deepEqual(completedReplay.body, originalDelivery.body)
+  assert.equal(completedReplay.headers['x-idempotent-replay'], 'true')
+  assert.equal(overlappingCalls, 2, 'one operator notification and one acknowledgement only')
+  const recoveryArgs = { ...concurrentArgs, headers: withKey(451) }
+  globalThis.fetch = async () => { throw new Error('simulated delivery unavailable') }
+  const failedDelivery = await invoke(recoveryArgs)
+  assert.equal(failedDelivery.status, 503)
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ id: 'recovered-local-mail' }) })
+  const recoveredDelivery = await invoke(recoveryArgs)
+  assert.equal(recoveredDelivery.status, 202, 'failed delivery releases the in-flight guard for an exact retry')
+
   clearChannels()
   process.env.SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET = 'test-only-contact-idempotency-secret-0001'
   process.env.SUPABASE_URL = 'https://example.supabase.co'
