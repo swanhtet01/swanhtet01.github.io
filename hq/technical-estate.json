@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:2cf7980123e32da1c5e192ed94f7036e1aab39b7a5684935e5bc8792ae31f81a",
+  "sourceDigest": "sha256:dbff0a413f7fa7b04f517f57ddd546741b104040d260557aabfaf39a8caa0f77",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -250,7 +250,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json#semantic-projection-v1",
-      "digest": "sha256:832e370b628d7b25c540167ca73a2824b8d3a181e75044d040a0dd3fa18f718c"
+      "digest": "sha256:24766c66b070bcabcf02cd0918dc1837afe3b686612e2e94f0fb63ad4d4eef93"
     }
   ]
 }
