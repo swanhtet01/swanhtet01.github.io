@@ -147,4 +147,31 @@ assert.throws(
 )
 checks += 1
 
+// Exported document IDs share one namespace, including the skip-link target
+// and section headings. Path links must resolve to their own page in any order.
+for (const slugs of [
+  ['/', '/content', '/home', '/home-section-1'],
+  ['/', '/home-section-1', '/content', '/home'],
+  ['/', '/a/b', '/a-b', '/a-b-2'],
+]) {
+  const artifact = {
+    ...englishArtifact,
+    pages: slugs.map((slug, index) => ({
+      ...englishArtifact.pages[0], slug,
+      navigation: { visible: true, label: `Page ${index}` },
+      hero: { ...englishArtifact.pages[0].hero, ctaLabel: `Open ${index}`, ctaHref: slug },
+    })),
+  }
+  const html = buildWebsiteHtml(artifact)
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])
+  check(new Set(ids).size === ids.length, `unique document IDs for ${slugs.join(', ')}`)
+  const articles = [...html.matchAll(/<article\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/article>/g)]
+  check(articles.length === slugs.length, 'every page remains available')
+  articles.forEach((article, index) => {
+    check(article[2].includes(`href="#${article[1]}"`), `page ${index} CTA resolves to its own article`)
+    check(html.includes(`href="#${article[1]}">Page ${index}</a>`), `page ${index} navigation resolves correctly`)
+  })
+  check(buildWebsiteHtml(artifact) === html, 'anchor allocation is deterministic')
+}
+
 console.log(`website export contract: ${checks} checks passed`)

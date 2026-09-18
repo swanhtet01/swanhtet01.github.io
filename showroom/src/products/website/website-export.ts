@@ -471,13 +471,24 @@ function renderCta(label: string, destination: SafeDestination) {
 }
 
 function createPageTargets(artifact: WebsiteArtifact): PageTarget[] {
-  const counts = new Map<string, number>()
+  const usedIds = new Set(['content'])
   return artifact.pages.map((page) => {
     const slug = normalizePageSlug(page.slug)
     const base = slug === '/' ? 'home' : slug.slice(1).replaceAll('/', '-')
-    const count = (counts.get(base) ?? 0) + 1
-    counts.set(base, count)
-    return { anchor: count === 1 ? base : `${base}-${count}`, slug }
+    let anchor = base
+    let suffix = 1
+    const documentIds = (candidate: string) => [
+      candidate,
+      ...page.sections.map((_, index) => `${candidate}-section-${index + 1}`),
+    ]
+    // Reserve the complete page namespace, not just its flattened path: a
+    // later page can otherwise collide with an earlier page's section heading.
+    while (documentIds(anchor).some((id) => usedIds.has(id))) {
+      suffix += 1
+      anchor = `${base}-${suffix}`
+    }
+    documentIds(anchor).forEach((id) => usedIds.add(id))
+    return { anchor, slug }
   })
 }
 
