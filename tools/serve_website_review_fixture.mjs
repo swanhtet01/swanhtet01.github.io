@@ -56,7 +56,7 @@ const result = await build({
         <button onClick={()=>setGeneration(n=>n+1)}>Reopen component</button>
         <button onClick={()=>{f.loseNext=true}}>Lose next save response</button>
         <button onClick={()=>{f.reviewStatus='revoked';setGeneration(n=>n+1)}}>Withdraw synthetic review</button>
-      </nav>{mode==='customer'?<MemoryRouter key={generation} initialEntries={['/website/review/'+id]}><Routes>
+      </nav>{mode==='customer'?<MemoryRouter key={generation} initialEntries={['/website/review/'+f.review.reviewId]}><Routes>
         <Route path='/website/review/:reviewId' element={<WebsiteCustomerReview/>}/></Routes></MemoryRouter>
       :<main className='website-product qa-staff' key={generation}><WebsiteReviewInbox workspaceId='fixture-company' actorId='fixture-user'/></main>}</>}
     createRoot(document.getElementById('root')).render(<App/>); report();
@@ -89,6 +89,14 @@ const result = await build({
       }
       export const sendManagedWebsiteReviewChanges=async payload=>save(payload,'changes');
       export const sendManagedWebsiteAcceptance=async payload=>save(payload,'accept');
+      export const loadManagedWebsiteRecipients=async()=>{read();return {recipients:[{grantId:'22222222-2222-4222-8222-222222222222',label:'Example Studio reviewer'}],nextAfter:null,order:'grant_id_ascending',accessGranted:false}};
+      export const prepareManagedWebsiteReview=async payload=>{const f=read();
+        if(payload.recipientGrantId!=='22222222-2222-4222-8222-222222222222'||payload.expectedVersion!==2)throw Error('invalid_preparation');
+        if(f.receipts.has(payload.reviewId))return {...copy(f.receipts.get(payload.reviewId)),replayed:true};
+        f.review={...f.review,reviewId:payload.reviewId,expiresAt:payload.expiresAt};f.preparedAt=new Date().toISOString();f.reviewStatus='active';f.acceptance=null;f.changes=[];
+        const result={reviewId:payload.reviewId,contentRevision:7,sourceVersion:2,preparedAt:f.preparedAt,previewDigest:f.review.previewDigest,expiresAt:payload.expiresAt,status:'prepared_preview',persisted:true,replayed:false,publicationAuthorized:false};
+        f.receipts.set(payload.reviewId,copy(result));f.counts.syntheticWrites++;f.report();
+        if(f.loseNext){f.loseNext=false;throw Error('synthetic_response_lost')}return result};
       export const withdrawManagedWebsiteReview=async reviewId=>{const f=read();if(reviewId!==f.review.reviewId)throw Error('wrong_review');
         const replayed=f.reviewStatus==='revoked';f.reviewStatus='revoked';if(!replayed)f.counts.syntheticWrites++;f.report();
         if(f.loseNext){f.loseNext=false;throw Error('synthetic_response_lost')}

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { currentManagedIdentity, loadManagedWebsitePreparation, loadManagedWebsiteReviewStaffPage, sameManagedIdentity, withdrawManagedWebsiteReview } from '../../core/managed-trial'
+import { currentManagedIdentity, loadManagedWebsitePreparation, loadManagedWebsiteReviewStaffPage, loadManagedWebsiteRecipients, prepareManagedWebsiteReview, sameManagedIdentity, withdrawManagedWebsiteReview } from '../../core/managed-trial'
 import { reviewContactDestination, verifyWebsitePreviewContent, type CustomerWebsiteReview } from './customer-review-contract'
 
 type Review = { reviewId: string; contentRevision: number; sourceVersion: number; preparedAt: string; expiresAt: string; status: string; hasChangeRequests: boolean; hasCustomerAcceptance: boolean }
 type Acceptance = { contentRevision: number; sourceVersion: number; previewDigest: string; acceptedAt: string; status: 'accepted_for_operator_release_review'; publicationAuthorized: false; deploymentAuthorized: false }
 type Changes = { reviewId: string; contentRevision: number; sourceVersion: number; previewDigest: string; reviewStatus: string; acceptance: Acceptance | null; requests: { commandId: string; note: string; createdAt: string }[]; nextAfter: string | null; publicationAuthorized: false }
 type Listing = { reviews: Review[]; nextAfter: string | null; order: 'review_id_ascending'; publicationAuthorized: false }
-type Preparation = { sourceVersion: number; contentRevision: number; readAt: string; preview: CustomerWebsiteReview['preview'] }
+type Preparation = { sourceVersion: number; contentRevision: number; previewDigest: string; readAt: string; preview: CustomerWebsiteReview['preview'] }
+type Recipients = { recipients: { grantId: string; label: string }[]; nextAfter: string | null; order: 'grant_id_ascending'; accessGranted: false }
+type PrepareCommand = { reviewId: string; recipientGrantId: string; expectedVersion: number; expiresAt: string }
 const uuid = (value: unknown): value is string => typeof value === 'string' && value.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
 const time = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value))
 const version = (value: unknown, min = 0) => Number.isSafeInteger(value) && Number(value) >= min
@@ -79,7 +81,21 @@ async function verifyPreparation(value: unknown): Promise<Preparation> {
   if (root.status !== 'saved_source_preview' || !version(root.sourceVersion, 1) || !version(root.contentRevision)
     || !time(root.readAt) || root.reviewCreated !== false || root.publicationAuthorized !== false || root.deploymentAuthorized !== false) return invalid()
   const preview = await verifyWebsitePreviewContent(root.preview, root.previewDigest)
-  return { sourceVersion: Number(root.sourceVersion), contentRevision: Number(root.contentRevision), readAt: String(root.readAt), preview }
+  return { sourceVersion: Number(root.sourceVersion), contentRevision: Number(root.contentRevision), previewDigest: String(root.previewDigest), readAt: String(root.readAt), preview }
+}
+
+function verifyRecipients(value: unknown, after?: string): Recipients {
+  const root = exact(value, ['recipients', 'nextAfter', 'order', 'accessGranted'])
+  if (root.accessGranted !== false || root.order !== 'grant_id_ascending' || !Array.isArray(root.recipients) || root.recipients.length > 50) return invalid()
+  let previous = after ?? ''
+  for (const raw of root.recipients) {
+    const row = exact(raw, ['grantId', 'label'])
+    if (!uuid(row.grantId) || row.grantId <= previous || typeof row.label !== 'string' || !row.label.trim()
+      || Array.from(row.label).length > 120 || Array.from(row.label).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) return invalid()
+    previous = row.grantId
+  }
+  if (root.nextAfter !== null && (root.recipients.length !== 50 || root.nextAfter !== previous)) return invalid()
+  return structuredClone(root) as Recipients
 }
 
 export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: string; actorId: string }) {
@@ -91,12 +107,17 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   const [now, setNow] = useState(() => Date.now())
   const [preparation, setPreparation] = useState<Preparation | null>(null)
   const [withdrawal, setWithdrawal] = useState<string | null>(null)
+  const [recipients, setRecipients] = useState<Recipients | null>(null)
+  const [recipient, setRecipient] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const [prepareCommand, setPrepareCommand] = useState<PrepareCommand | null>(null)
   const epoch = useRef(0)
   const pending = useRef(false)
   useEffect(() => {
     const invalidate = () => { epoch.current++ }
     const clear = () => {
       invalidate(); pending.current = false; setBusy(false); setListing(null); setSelected(null); setChanges(null); setPreparation(null); setWithdrawal(null)
+      setRecipients(null); setRecipient(''); setConfirmed(false); setPrepareCommand(null)
       setMessage('Account context changed. Refresh to read this company’s reviews.')
     }
     window.addEventListener('storage', clear); window.addEventListener('focus', clear)
@@ -117,6 +138,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     const attempt = ++epoch.current
     setPreparation(null)
     setWithdrawal(null)
+    setRecipients(null); setRecipient(''); setConfirmed(false); setPrepareCommand(null)
     setChanges(null); setSelected(review ?? null)
     if (!review) setListing(null)
     setMessage('Checking current company access…')
@@ -148,6 +170,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     const attempt = ++epoch.current
     setPreparation(null); setSelected(null); setChanges(null); setListing(null)
     setWithdrawal(null)
+    setRecipients(null); setRecipient(''); setConfirmed(false); setPrepareCommand(null)
     setMessage('Checking the saved Website and current company access…')
     try {
       const identity = await currentManagedIdentity()
@@ -161,6 +184,63 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       setMessage('Saved source verified. This has not created or sent a customer review. Unsaved edits are not included.')
     } catch {
       if (attempt === epoch.current) setMessage('The saved Website could not be verified, or access changed. Save your work and check again.')
+    } finally {
+      if (attempt === epoch.current) { pending.current = false; setBusy(false) }
+    }
+  }
+
+  async function chooseCustomer(after?: string) {
+    if (pending.current || !preparation || prepareCommand) return
+    pending.current = true; setBusy(true)
+    const attempt = ++epoch.current
+    setRecipients(null); setRecipient(''); setConfirmed(false)
+    try {
+      const identity = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!identity || identity.workspaceId !== workspaceId || identity.userId !== actorId) throw new Error('Access changed')
+      const result = verifyRecipients(await loadManagedWebsiteRecipients(identity, after), after)
+      const current = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
+      setRecipients(result)
+      setMessage('Choose an enrolled customer. Nothing is selected or sent automatically.')
+    } catch {
+      if (attempt === epoch.current) setMessage('Eligible customers could not be verified. Ask the workspace owner to check review-only enrollment.')
+    } finally {
+      if (attempt === epoch.current) { pending.current = false; setBusy(false) }
+    }
+  }
+
+  async function prepareReview() {
+    if (pending.current || !preparation || !confirmed || !recipients?.recipients.some(row => row.grantId === recipient)) return
+    pending.current = true; setBusy(true)
+    const attempt = ++epoch.current
+    const command = prepareCommand ?? { reviewId: crypto.randomUUID(), recipientGrantId: recipient,
+      expectedVersion: preparation.sourceVersion, expiresAt: new Date(Date.now() + 86_400_000).toISOString() }
+    setPrepareCommand(command)
+    setMessage('Preparing the exact saved revision for this customer…')
+    try {
+      const identity = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!identity || identity.workspaceId !== workspaceId || identity.userId !== actorId) throw new Error('Access changed')
+      const raw = exact(await prepareManagedWebsiteReview(command, identity), ['reviewId', 'contentRevision', 'sourceVersion', 'preparedAt', 'previewDigest', 'expiresAt', 'status', 'persisted', 'replayed', 'publicationAuthorized'])
+      if (raw.reviewId !== command.reviewId || raw.contentRevision !== preparation.contentRevision || raw.sourceVersion !== command.expectedVersion
+        || raw.previewDigest !== preparation.previewDigest || !time(raw.preparedAt) || !time(raw.expiresAt)
+        || Date.parse(String(raw.expiresAt)) !== Date.parse(command.expiresAt) || Date.parse(String(raw.preparedAt)) >= Date.parse(command.expiresAt)
+        || Date.parse(String(raw.preparedAt)) < Date.parse(preparation.readAt) || Date.parse(command.expiresAt) <= Date.now()
+        || raw.status !== 'prepared_preview' || raw.persisted !== true || typeof raw.replayed !== 'boolean' || raw.publicationAuthorized !== false) return invalid()
+      const current = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
+      const review: Review = { reviewId: command.reviewId, contentRevision: preparation.contentRevision, sourceVersion: preparation.sourceVersion,
+        preparedAt: String(raw.preparedAt), expiresAt: String(raw.expiresAt), status: 'active', hasChangeRequests: false, hasCustomerAcceptance: false }
+      setPreparation(null); setRecipients(null); setRecipient(''); setConfirmed(false); setPrepareCommand(null)
+      // Read current decisions before offering a handoff; a replay may already
+      // have customer feedback or acceptance, which must never be guessed away.
+      setListing({ reviews: [review], nextAfter: null, order: 'review_id_ascending', publicationAuthorized: false })
+      setMessage('Private review prepared for the selected customer. Open its decision to check current status and the handoff message. Nothing was sent or published.')
+    } catch {
+      if (attempt === epoch.current) setMessage('Preparation could not be confirmed. Retry this same review, or refresh reviews to reconcile it. Do not create a second review until its status is known.')
     } finally {
       if (attempt === epoch.current) { pending.current = false; setBusy(false) }
     }
@@ -207,7 +287,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     {preparation ? <section aria-label="Verified saved Website" style={{ overflowWrap: 'anywhere' }}>
       <h3>{preparation.preview.siteName} · saved revision {preparation.contentRevision}</h3>
       <p>Source version {preparation.sourceVersion} · read <time dateTime={preparation.readAt}>{new Date(preparation.readAt).toLocaleString()}</time>. Later edits require another check.</p>
-      <p>These are saved pages, not a customer invitation. Assigning an account and preparing its review remain separate.</p>
+      <p>Check these saved pages, then choose an enrolled customer. This does not send an invitation or publish the Website.</p>
       {preparation.preview.pages.map(page => <details key={page.id}>
         <summary style={{ minHeight: 44, padding: '0.75rem 0', boxSizing: 'border-box', cursor: 'pointer' }}>{page.navigation.label || page.seo.title || 'Page'} · {page.hero.headline}</summary>
         <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{page.hero.summary}</p>
@@ -216,10 +296,33 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
         <p style={{ overflowWrap: 'anywhere' }}>Destination (not clickable): {reviewContactDestination(page.hero.ctaHref)}</p>
         <p>Search title: {page.seo.title || 'Not prepared'}</p><p>Search description: {page.seo.description || 'Not prepared'}</p>
       </details>)}
+      <button className="core-button" disabled={busy || !!prepareCommand} type="button" onClick={() => void chooseCustomer()}>Choose customer for review</button>
+      {recipients ? <section aria-label="Prepare customer review">
+        {prepareCommand ? <p style={{ overflowWrap: 'anywhere' }}>Pending review reference: {prepareCommand.reviewId}. Retry reuses this reference; check it in the review list after refreshing.</p> : null}
+        {recipients.recipients.length === 0 ? <p>No eligible customers on this page. The owner must enroll a review-only account before preparing a review.</p> : <>
+          <label htmlFor="website-review-recipient">Enrolled customer</label>
+          <select id="website-review-recipient" disabled={busy || !!prepareCommand} value={recipient}
+            style={{ width: '100%', minHeight: 44, maxWidth: '100%' }} onChange={event => { setRecipient(event.target.value); setConfirmed(false) }}>
+            <option value="">Choose a customer</option>
+            {recipients.recipients.map(row => <option key={row.grantId} value={row.grantId}>{row.label} · {row.grantId.slice(0, 8)}</option>)}
+          </select>
+          {recipient ? <>
+            <p style={{ overflowWrap: 'anywhere' }}>Enrollment reference: {recipient}. Check with the owner if customer names are similar.</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minHeight: 44 }}>
+              <input type="checkbox" checked={confirmed} disabled={busy || !!prepareCommand} style={{ width: 20, height: 20, flex: '0 0 20px' }}
+                onChange={event => setConfirmed(event.target.checked)} />
+              I checked the customer and saved revision {preparation.contentRevision}. Prepare a private 24-hour review, without sending or publishing.
+            </label>
+            <button className="core-button" disabled={busy || !confirmed} type="button" onClick={() => void prepareReview()}>{prepareCommand ? 'Retry same review' : 'Prepare private review'}</button>
+          </> : null}
+        </>}
+        {recipients.nextAfter ? <button className="core-button" disabled={busy || !!prepareCommand} type="button" onClick={() => void chooseCustomer(recipients.nextAfter!)}>Next customers</button> : null}
+      </section> : null}
     </section> : null}
     {listing?.reviews.length === 0 ? <p>No prepared reviews in this company yet.</p> : null}
     <ul>{listing?.reviews.map(review => <li key={review.reviewId}>
       <strong>Revision {review.contentRevision}</strong> · {review.status} · prepared {new Date(review.preparedAt).toLocaleString()}
+      <p style={{ overflowWrap: 'anywhere' }}>Review reference: {review.reviewId}</p>
       <p>{review.hasCustomerAcceptance ? 'Customer acceptance retained — release review still required' : review.hasChangeRequests ? 'Customer changes retained'
         : review.status === 'revoked' ? 'Review withdrawn — no new customer decision can be submitted'
           : review.status === 'expired' ? 'Review expired — prepare a new review'

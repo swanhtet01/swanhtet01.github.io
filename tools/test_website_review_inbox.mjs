@@ -9,7 +9,7 @@ const { build } = require('esbuild')
 const source = readFileSync('showroom/src/products/website/WebsiteReviewInbox.tsx', 'utf8')
 // Expose the real private validators in the test bundle only; production keeps
 // the component module compatible with React Fast Refresh.
-const output = await build({ stdin: { contents: source + '\nexport { verifyStaffReviews, verifyStaffChanges, customerHandoff, verifyPreparation };',
+const output = await build({ stdin: { contents: source + '\nexport { verifyStaffReviews, verifyStaffChanges, customerHandoff, verifyPreparation, verifyRecipients };',
   resolveDir: 'showroom/src/products/website', loader: 'tsx' }, bundle: true, write: false,
   platform: 'node', format: 'cjs', jsx: 'automatic', logLevel: 'silent', plugins: [{ name: 'inbox-offline', setup(b) {
     b.onResolve({ filter: /^(react|react\/jsx-runtime)$|managed-trial$/ }, args => ({ path: args.path, namespace: 'mock' }))
@@ -18,18 +18,20 @@ const output = await build({ stdin: { contents: source + '\nexport { verifyStaff
         return [h.slots[i], value=>{h.slots[i]=typeof value==='function'?value(h.slots[i]):value}]; };
       export const useRef=init=>useState(()=>({current:init}))[0];
       export const useEffect=fn=>{globalThis.h.effects.push(fn)};
-    ` : args.path === 'react/jsx-runtime' ? 'export const jsx=(type,props)=>({type,props}); export const jsxs=jsx;' : `
+    ` : args.path === 'react/jsx-runtime' ? 'export const jsx=(type,props)=>({type,props}); export const jsxs=jsx; export const Fragment="fragment";' : `
       export const currentManagedIdentity=async()=>globalThis.h.identity;
       export const sameManagedIdentity=(a,b)=>a.userId===b.userId&&a.workspaceId===b.workspaceId;
       export const loadManagedWebsiteReviewStaffPage=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.response(...args)};
       export const loadManagedWebsitePreparation=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.prepareResponse(...args)};
       export const withdrawManagedWebsiteReview=async(...args)=>{globalThis.h.writes.push(args);return globalThis.h.withdrawResponse(...args)};
+      export const loadManagedWebsiteRecipients=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.recipientResponse(...args)};
+      export const prepareManagedWebsiteReview=async(...args)=>{globalThis.h.writes.push(args);return globalThis.h.createResponse(...args)};
     ` }))
   } }] })
 const sandbox = { module: { exports: {} }, structuredClone, TextEncoder, URL, crypto: webcrypto, setTimeout, window: { location: { origin: 'https://app.supermega.dev' }, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout } }
 sandbox.exports = sandbox.module.exports
 runInNewContext(output.outputFiles[0].text, sandbox)
-const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox, customerHandoff, verifyPreparation } = sandbox.module.exports
+const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox, customerHandoff, verifyPreparation, verifyRecipients } = sandbox.module.exports
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12, '0')}`
 const row = { reviewId: id(1), contentRevision: 1, sourceVersion: 2, preparedAt: '2026-09-16T00:00:00+00:00', expiresAt: '2026-09-17T00:00:00+00:00', status: 'active', hasChangeRequests: true, hasCustomerAcceptance: false }
 const listing = { reviews: [row], nextAfter: null, order: 'review_id_ascending', publicationAuthorized: false }
@@ -321,4 +323,83 @@ test('confirmation does not advertise sharing while the operator is withdrawing 
   assert.match(text(tree), /cannot be undone/)
   assert.doesNotMatch(text(tree), /Customer handoff is available/)
   assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+})
+
+const recipients = { recipients: [{ grantId: id(8), label: 'Example customer' }], nextAfter: null, order: 'grant_id_ascending', accessGranted: false }
+function prepareReceipt(command) {
+  return { reviewId: command.reviewId, contentRevision: 2, sourceVersion: 3,
+    preparedAt: new Date().toISOString(), previewDigest: preparationFixture().previewDigest,
+    expiresAt: command.expiresAt, status: 'prepared_preview', persisted: true, replayed: false, publicationAuthorized: false }
+}
+async function openRecipients() {
+  sandbox.h.prepareResponse = () => preparationFixture()
+  sandbox.h.recipientResponse = () => recipients
+  let tree = render(); click(tree, 'Check saved Website before handoff'); await settle(); tree = render()
+  click(tree, 'Choose customer for review'); await settle(); return render()
+}
+function selectAndConfirm(tree) {
+  elements(tree).find(n => n.type === 'select').props.onChange({ target: { value: id(8) } }); tree = render()
+  elements(tree).find(n => n.type === 'input' && n.props.type === 'checkbox').props.onChange({ target: { checked: true } })
+  return render()
+}
+
+test('customer choices are bounded, strictly typed, ordered and identity-minimal', () => {
+  assert.equal(verifyRecipients(recipients).recipients[0].label, 'Example customer')
+  for (const bad of [{ ...recipients, accessGranted: true }, { ...recipients, nextAfter: id(8) },
+    { ...recipients, recipients: Array(51).fill(recipients.recipients[0]) },
+    { ...recipients, recipients: [recipients.recipients[0], recipients.recipients[0]] },
+    { ...recipients, recipients: [{ ...recipients.recipients[0], actorId: 'private' }] },
+    { ...recipients, recipients: [{ ...recipients.recipients[0], label: 'bad\nname' }] }]) assert.throws(() => verifyRecipients(bad))
+  assert.throws(() => verifyRecipients(recipients, id(8)))
+})
+
+test('owner explicitly selects and confirms before creating an exact private review', async () => {
+  fixture(); sandbox.h.createResponse = command => prepareReceipt(command)
+  let tree = await openRecipients()
+  const select = elements(tree).find(n => n.type === 'select')
+  assert.equal(select.props.value, '')
+  assert.equal(select.props.style.minHeight, 44)
+  assert.equal(sandbox.h.writes.length, 0)
+  tree = selectAndConfirm(tree)
+  click(tree, 'Prepare private review'); click(tree, 'Prepare private review'); await settle(); tree = render()
+  assert.equal(sandbox.h.writes.length, 1)
+  const [command, identity] = sandbox.h.writes[0]
+  assert.equal(command.recipientGrantId, id(8)); assert.equal(command.expectedVersion, 3)
+  assert.equal(identity.workspaceId, 'company')
+  assert.deepEqual(Object.keys(command).sort(), ['expectedVersion', 'expiresAt', 'recipientGrantId', 'reviewId'])
+  assert.match(text(tree), /Private review prepared for the selected customer/)
+  assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+  assert.match(text(tree), /Read decision for revision 2/)
+})
+
+test('lost preparation response retains the exact command for an idempotent retry', async () => {
+  fixture(); let first
+  sandbox.h.createResponse = command => { if (!first) { first = structuredClone(command); throw Error('lost') } return { ...prepareReceipt(command), replayed: true } }
+  let tree = selectAndConfirm(await openRecipients()); click(tree, 'Prepare private review'); await settle(); tree = render()
+  assert.match(text(tree), /could not be confirmed/)
+  assert.equal(elements(tree).find(n => n.type === 'select').props.disabled, true)
+  click(tree, 'Retry same review'); await settle(); tree = render()
+  assert.deepEqual(structuredClone(sandbox.h.writes[1][0]), first)
+  assert.match(text(tree), /Private review prepared/)
+})
+
+test('tampered receipts and switched accounts never create a successful handoff', async () => {
+  for (const delta of [{ previewDigest: `sha256:${'f'.repeat(64)}` }, { sourceVersion: 99 },
+    { persisted: false }, { publicationAuthorized: true }, { recipientActorId: 'private' }]) {
+    fixture(); sandbox.h.createResponse = command => ({ ...prepareReceipt(command), ...delta })
+    let tree = selectAndConfirm(await openRecipients()); click(tree, 'Prepare private review'); await settle(); tree = render()
+    assert.match(text(tree), /could not be confirmed/)
+    assert.doesNotMatch(text(tree), /Private review prepared/)
+  }
+  fixture(); let tree = selectAndConfirm(await openRecipients())
+  sandbox.h.identity = { userId: 'other', workspaceId: 'elsewhere' }
+  click(tree, 'Prepare private review'); await settle()
+  assert.equal(sandbox.h.writes.length, 0)
+})
+
+test('preparation transport binds expected identity and never sends a raw customer actor ID', () => {
+  const transport = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
+  const slice = transport.slice(transport.indexOf('export async function loadManagedWebsiteRecipients('), transport.indexOf('export async function withdrawManagedWebsiteReview('))
+  for (const boundary of ['recipientGrantId', "method: 'POST'", "cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
+  assert.doesNotMatch(slice, /recipientActorId|workspaceId=/)
 })

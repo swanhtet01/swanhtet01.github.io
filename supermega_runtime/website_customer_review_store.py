@@ -205,11 +205,13 @@ class WebsiteCustomerReviewStore:
                     values (%s,%s,%s,%s,%s,%s::jsonb,%s,%s)""",
                     (review_id, actor.workspace_id, recipient, actor.actor_id, expected_version,
                      json.dumps(preview, ensure_ascii=False), digest, expiry))
-            cursor.execute("""select review_id from app_private.website_customer_reviews
+            cursor.execute("""select review_id,prepared_at from app_private.website_customer_reviews
                 where workspace_id=%s and review_id=%s and status='active' and expires_at>clock_timestamp()""", (actor.workspace_id, review_id))
-            if cursor.fetchone() is None:
+            retained = cursor.fetchone()
+            if retained is None:
                 raise TrialValidationError("website_review_expired")
             result = {"reviewId": review_id, "contentRevision": revision, "sourceVersion": expected_version,
+                      "preparedAt": retained["prepared_at"].isoformat(),
                       "previewDigest": digest, "expiresAt": expiry.isoformat(), "status": "prepared_preview",
                       "persisted": True, "replayed": replay, "publicationAuthorized": False}
         return result
