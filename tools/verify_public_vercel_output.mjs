@@ -382,9 +382,9 @@ for (const product of publicProducts) {
   ]) {
     if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
   }
-  const expectedGuidedSampleCount = product.id === 'shop' ? 1 : 2
+  const expectedGuidedSampleCount = 1
   if (countOccurrences(landing, guidedSampleAnchor) !== expectedGuidedSampleCount) fail('landing_guided_sample_action_count_wrong', { route: landingRoute })
-  if (countOccurrences(landing, assistedSetupAnchor) !== 1) fail('landing_assisted_setup_action_count_wrong', { route: landingRoute })
+  if (countOccurrences(landing, assistedSetupAnchor) !== (product.id === 'shop' ? 1 : 2)) fail('landing_assisted_setup_action_count_wrong', { route: landingRoute })
   if (landing.includes(`>Set up ${product.name} data</a>`)) fail('superseded_setup_cta_present', { route: landingRoute })
   if (product.id === 'shop') {
     if (countOccurrences(landing, shopProfitControlAnchor) !== 2) fail('shop_profit_control_action_count_wrong')

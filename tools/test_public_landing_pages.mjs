@@ -86,7 +86,7 @@ for (const page of landingPages) {
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check(html.includes(`<h1>${product.headline}</h1>`), `landing_headline:${page.route}`)
   check(html.includes('id="first-loop"'), `landing_first_loop_section:${page.route}`)
-  check(html.includes('First operating loop'), `landing_first_loop_label:${page.route}`)
+  check(html.includes(product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'), `landing_first_loop_label:${page.route}`)
   check(html.includes(`<ol class="first-loop-list" aria-label="${product.name} first operating loop">`), `landing_first_loop_accessible:${page.route}`)
   for (const item of product.firstOperatingLoop) {
     check(html.includes(item), `landing_first_loop_item:${page.route}:${item}`)
@@ -97,6 +97,17 @@ for (const page of landingPages) {
   check(html.includes(`href="${guidedSampleHref}">${guidedSampleLabel}</a>`), `landing_guided_sample_cta:${page.route}`)
   check(product.secondaryCta?.label === 'Request assisted setup' && product.secondaryCta.url === assistedSetupHref, `landing_assisted_setup_manifest:${page.route}`)
   check(html.includes(`href="${assistedSetupHref}">Request assisted setup</a>`), `landing_assisted_setup_cta:${page.route}`)
+  if (['website', 'ecommerce'].includes(product.id)) {
+    check(html.includes(`<a class="button primary" href="${assistedSetupHref}">Request assisted setup</a>`), `landing_service_primary:${page.route}`)
+    check(!html.includes(`<a class="button primary" href="${guidedSampleHref}">`), `landing_sample_not_primary:${page.route}`)
+    check(html.includes('id="prepared-delivery"'), `landing_prepared_deliverables:${page.route}`)
+    check(html.indexOf('id="prepared-delivery"') < html.indexOf('id="first-loop"'), `landing_service_before_sample:${page.route}`)
+    check(html.includes('You can request assisted setup without completing this sample.'), `landing_sample_not_prerequisite:${page.route}`)
+    check(html.includes('Scope, price and timing are agreed before work begins.'), `landing_scope_before_work:${page.route}`)
+    check(html.includes('You review facts and image rights; nothing is published, sent or charged automatically.'), `landing_ai_review_boundary:${page.route}`)
+    check(html.includes('The free sample is optional and is not a live service.'), `landing_optional_sample_boundary:${page.route}`)
+    check(html.includes(product.id === 'website' ? 'Domain ownership, publishing, maintenance and any forms are scoped and checked separately.' : 'a request is not a confirmed order or payment.'), `landing_product_delivery_boundary:${page.route}`)
+  }
   check(html.includes('Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.'), `landing_external_effect_boundary:${page.route}`)
   check(html.includes('Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.'), `landing_managed_activation_boundary:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
@@ -249,7 +260,9 @@ const allLandingHtml = landingPages.map((page) => readStatic(page.file)).join('\
 for (const product of manifest.customerProducts) {
   check(!allLandingHtml.includes(`Set up ${product.name} data`), `assisted_setup_old_label_absent:${product.id}`)
 }
-check(countOccurrences(allLandingHtml, '>Request assisted setup</a>') === activeIds.length, 'assisted_setup_exactly_once_per_active_product')
+for (const id of activeIds) {
+  check(countOccurrences(readStatic(`${id}/index.html`), `href="/contact/?product=${id}">Request assisted setup</a>`) === (id === 'shop' ? 1 : 2), `assisted_setup_product_specific_count:${id}`)
+}
 
 const ecommerceLanding = readStatic('ecommerce/index.html')
 for (const token of [

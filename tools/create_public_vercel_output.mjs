@@ -320,8 +320,8 @@ const sharedStyle = `
   .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(25,54,42,.045); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 16px; }
-  .compact-first { display: grid; gap: 4px; margin-top: 14px; border-left: 2px solid var(--green); padding-left: 10px; color: var(--muted); font-size: 11px; line-height: 1.4; }
-  .compact-first span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; font-weight: 760; text-transform: uppercase; }
+  .compact-first { display: grid; gap: 4px; margin-top: 14px; border-left: 2px solid var(--green); padding-left: 10px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .compact-first span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 760; text-transform: uppercase; }
   .compact-solution > .card-link { margin-top: auto; }
   .compact-solution > .card-link + .card-link { margin-top: 2px; }
   .first-loop { scroll-margin-top: 92px; }
@@ -499,7 +499,7 @@ function productCardHtml(product, index) {
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
-    <div class="compact-first"><span>First loop</span>${escapeHtml(firstLoop[0])}</div>
+    <div class="compact-first"><span>Start here</span>${escapeHtml(firstLoop[0])}</div>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
     <a class="card-link" href="/${escapeHtml(product.id)}/">${escapeHtml(product.name)} overview</a>
     <a class="card-link" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a>
@@ -601,13 +601,37 @@ function firstJobTemplatesHtml(productId) {
   return `<section class="frame section" id="first-job-templates"><div class="section-head"><span class="eyebrow">${escapeHtml(section.doors.length)} validated starting points</span><h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.intro)}</p></div><div class="trade-grid" aria-label="${escapeHtml(customerProductContract(productId).name)} first-job templates">${section.doors.map(({ id, name, note, href }) => `<a class="trade-card first-job-card" data-template="${escapeHtml(id)}" href="${escapeHtml(href)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div><div class="control-line"><span class="eyebrow">Browser-local setup only</span><p>Opening a door does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue. Any later setup change remains an explicit reviewed action.</p></div></section>`
 }
 
+function assistedDeliverablesHtml(productId) {
+  const offers = {
+    website: {
+      title: 'A Website prepared for your business, not another builder to learn.',
+      steps: [
+        ['Share the essentials', 'Tell us what you offer, who it is for and how people should reach you. Existing copy and photos are optional starting points.'],
+        ['Review your prepared pages', 'We agree the scope, then prepare a responsive layout, business copy and clear contact actions. You review names, services, images and claims before approval.'],
+        ['Approve a separate launch', 'Receive a reviewed preview and an agreed handoff. Domain ownership, publishing, maintenance and any forms are scoped and checked separately.'],
+      ],
+    },
+    ecommerce: {
+      title: 'A prepared catalog with a clear path from interest to request.',
+      steps: [
+        ['Share your product list', 'Start with a list or existing catalog. We confirm product details, variants, photos and prices with you rather than inventing them.'],
+        ['Review the customer journey', 'We prepare the catalog and cart for review. Check the item details and request handoff; a request is not a confirmed order or payment.'],
+        ['Agree how requests are handled', 'Confirm who reviews requests and how availability and manual payment are checked. Live access, delivery rules and integrations require a separate agreed setup.'],
+      ],
+    },
+  }
+  const offer = offers[productId]
+  if (!offer) return ''
+  return `<section class="frame section" id="prepared-delivery"><div class="section-head"><span class="eyebrow">Done with SuperMega</span><h2>${escapeHtml(offer.title)}</h2><p>No builder experience needed. Scope, price and timing are agreed before work begins.</p></div><ol class="delivery-steps">${offer.steps.map(([title, body]) => `<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></li>`).join('')}</ol><p class="delivery-summary">AI may help prepare drafts from approved material. You review facts and image rights; nothing is published, sent or charged automatically. The free sample is optional and is not a live service.</p></section>`
+}
+
 function productLandingHtml(product, page) {
   const guidedSample = guidedSampleAction(product)
   const assistedSetup = assistedSetupAction(product)
-  const leadingAction = product.id === 'shop' ? SHOP_PROFIT_CONTROL_ACTION : guidedSample
+  const leadingAction = product.id === 'shop' ? SHOP_PROFIT_CONTROL_ACTION : assistedSetup
   const actionsHtml = product.id === 'shop'
     ? `<a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
-    : `<a class="button primary" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
+    : `<a class="button primary" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a>`
   const description = page.description || product.description
   const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
   const firstLoop = productFirstOperatingLoop(product)
@@ -622,7 +646,8 @@ function productLandingHtml(product, page) {
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
     <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
-    <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">First operating loop</span><h2>Start with one ${escapeHtml(product.name)} job.</h2><p>This is the path a new owner should understand before looking at advanced modules.</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
+    ${assistedDeliverablesHtml(product.id)}
+    <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">${product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'}</span><h2>${product.id === 'shop' ? `Start with one ${escapeHtml(product.name)} job.` : 'Want to explore the example first?'}</h2><p>${product.id === 'shop' ? 'This is the path a new owner should understand before looking at advanced modules.' : 'You can request assisted setup without completing this sample. These steps explain the local example, not work you must do before contacting us.'}</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
     ${firstJobTemplatesHtml(product.id)}
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
