@@ -258,7 +258,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 self.assertEqual(body["order"], "review_id_ascending")
                 self.assertLessEqual(len(body["reviews"]), 50)
                 for row in body["reviews"]:
-                    self.assertEqual(set(row), {"reviewId", "contentRevision", "sourceVersion", "preparedAt", "expiresAt", "status", "hasChangeRequests"})
+                    self.assertEqual(set(row), {"reviewId", "contentRevision", "sourceVersion", "preparedAt", "expiresAt", "status", "hasChangeRequests", "hasCustomerAcceptance"})
                 self.assertNotIn("Private customer correction", response.text)
                 self.assertNotIn(RECIPIENT, response.text)
                 rows.extend(body["reviews"])
@@ -321,7 +321,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             self.assertEqual(result.status_code, 200, result.text)
             self.assertEqual(result.headers["cache-control"], "private, no-store")
             self.assertEqual(result.json()["requests"][0]["note"], payload["note"])
-            self.assertEqual(set(result.json()), {"reviewId", "contentRevision", "sourceVersion", "previewDigest", "reviewStatus", "publicationAuthorized", "requests", "nextAfter"})
+            self.assertEqual(set(result.json()), {"reviewId", "contentRevision", "sourceVersion", "previewDigest", "reviewStatus", "publicationAuthorized", "requests", "nextAfter", "acceptance"})
             self.assertEqual(set(result.json()["requests"][0]), {"commandId", "note", "createdAt"})
             for query in ("?after=bad", "?after=", "?workspaceId=other", "?after="+payload["commandId"]+"&after="+payload["commandId"]):
                 self.assertEqual(client.get(url+"/change-requests"+query, headers=owner).status_code, 422)
@@ -330,6 +330,53 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             self.assertEqual(retained["reviewStatus"], "revoked")
             self.assertFalse(retained["publicationAuthorized"])
             self.assertEqual(retained["requests"], result.json()["requests"])
+
+    def test_staff_acceptance_is_exact_private_and_historical_after_withdrawal(self):
+        review = self.retained_assignment()
+        adapter = self.adapter()
+        accepted = adapter.accept(TrialPrincipal(WORKSPACE, RECIPIENT, 'human'),
+            dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2],
+                 decision='accept_preview_for_release_review'))
+        url = '/api/trial/v1/website-reviews/' + str(review[0])
+        owner = {'x-test-actor': 'operator'}
+        with self.http_client() as client:
+            for actor in ('customer', 'other', 'agent'):
+                denied = client.get(url + '/change-requests', headers={'x-test-actor': actor})
+                self.assertEqual(denied.status_code, 403)
+                self.assertEqual(denied.headers['cache-control'], 'private, no-store')
+            result = client.get(url + '/change-requests', headers=owner)
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.headers['cache-control'], 'private, no-store')
+            body = result.json()
+            receipt = body['acceptance']
+            self.assertEqual(receipt['acceptedAt'], accepted['acceptedAt'])
+            self.assertEqual(receipt['contentRevision'], body['contentRevision'])
+            self.assertEqual(receipt['sourceVersion'], body['sourceVersion'])
+            self.assertEqual(receipt['previewDigest'], body['previewDigest'])
+            self.assertEqual(receipt['status'], 'accepted_for_operator_release_review')
+            self.assertFalse(receipt['publicationAuthorized'])
+            self.assertFalse(receipt['deploymentAuthorized'])
+            self.assertEqual(body['requests'], [])
+            self.assertNotIn(RECIPIENT, result.text)
+            operator = TrialPrincipal(WORKSPACE, OWNER, 'human')
+            # Keyset ordering may put this synthetic review after older fixtures.
+            rows, after = [], None
+            for _ in range(10):
+                page = adapter.list_reviews(operator, after=after)
+                rows.extend(page['reviews'])
+                after = page['nextAfter']
+                if after is None:
+                    break
+            else:
+                self.fail('acceptance listing pagination did not terminate')
+            metadata = next(row for row in rows if row['reviewId'] == str(review[0]))
+            self.assertTrue(metadata['hasCustomerAcceptance'])
+            self.assertFalse(metadata['hasChangeRequests'])
+            self.assertEqual(client.post(url + '/withdraw', headers=owner, json={}).status_code, 200)
+            historical = client.get(url + '/change-requests', headers=owner).json()
+            self.assertEqual(historical['reviewStatus'], 'revoked')
+            self.assertEqual(historical['acceptance'], receipt)
+            self.assertFalse(historical['publicationAuthorized'])
 
     def test_staff_feedback_pagination_handles_equal_timestamps_and_bound_cursors(self):
         from uuid import UUID

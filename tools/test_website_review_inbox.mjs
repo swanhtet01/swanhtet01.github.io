@@ -28,9 +28,9 @@ sandbox.exports = sandbox.module.exports
 runInNewContext(output.outputFiles[0].text, sandbox)
 const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox } = sandbox.module.exports
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12, '0')}`
-const row = { reviewId: id(1), contentRevision: 1, sourceVersion: 2, preparedAt: '2026-09-16T00:00:00+00:00', expiresAt: '2026-09-17T00:00:00+00:00', status: 'active', hasChangeRequests: true }
+const row = { reviewId: id(1), contentRevision: 1, sourceVersion: 2, preparedAt: '2026-09-16T00:00:00+00:00', expiresAt: '2026-09-17T00:00:00+00:00', status: 'active', hasChangeRequests: true, hasCustomerAcceptance: false }
 const listing = { reviews: [row], nextAfter: null, order: 'review_id_ascending', publicationAuthorized: false }
-const feedback = { reviewId: row.reviewId, contentRevision: 1, sourceVersion: 2, previewDigest: `sha256:${'a'.repeat(64)}`, reviewStatus: 'active', publicationAuthorized: false,
+const feedback = { reviewId: row.reviewId, contentRevision: 1, sourceVersion: 2, previewDigest: `sha256:${'a'.repeat(64)}`, reviewStatus: 'active', publicationAuthorized: false, acceptance: null,
   requests: [{ commandId: id(2), note: 'ပိုတိုအောင်ရေးပေးပါ <script>not executable</script>', createdAt: '2026-09-16T01:00:00.000002+00:00' },
     { commandId: id(3), note: 'Retained older request', createdAt: '2026-09-16T01:00:00.000001+00:00' }], nextAfter: null }
 function elements(tree) { return Array.isArray(tree) ? tree.flatMap(elements) : tree && typeof tree === 'object' ? [tree, ...elements(tree.props?.children)] : [] }
@@ -45,7 +45,9 @@ test('metadata list is strictly bounded, ordered and identity-free', () => {
   assert.equal(verifyStaffReviews(listing).reviews.length, 1)
   for (const bad of [{ ...listing, publicationAuthorized: true }, { ...listing, actorId: 'private' },
     { ...listing, reviews: [row, row] }, { ...listing, reviews: Array(51).fill(row) }, { ...listing, nextAfter: row.reviewId },
-    { ...listing, reviews: [{ ...row, recipientActorId: 'private' }] }]) assert.throws(() => verifyStaffReviews(bad))
+    { ...listing, reviews: [{ ...row, recipientActorId: 'private' }] },
+    { ...listing, reviews: [{ ...row, hasCustomerAcceptance: true }] },
+    { ...listing, reviews: [{ ...row, hasCustomerAcceptance: 'yes' }] }]) assert.throws(() => verifyStaffReviews(bad))
   assert.throws(() => verifyStaffReviews(listing, row.reviewId))
 })
 test('feedback binds source revision, preserves microsecond order and remains plain text', () => {
@@ -58,9 +60,39 @@ test('actual inbox loads on demand, displays retained notes and does not send wr
   fixture(); let tree = render(); assert.equal(sandbox.h.calls.length, 0)
   click(tree, 'Refresh reviews'); await settle(); tree = render()
   assert.match(text(tree), /Customer changes retained/)
-  click(tree, 'Read requests for revision 1'); await settle(); tree = render()
+  click(tree, 'Read decision for revision 1'); await settle(); tree = render()
   assert.ok(text(tree).includes(feedback.requests[0].note))
   assert.equal(elements(tree).some(node => node.type === 'script' || node.props?.dangerouslySetInnerHTML), false)
+  assert.equal(sandbox.h.calls.length, 2)
+})
+
+const acceptance = { contentRevision: 1, sourceVersion: 2, previewDigest: feedback.previewDigest,
+  acceptedAt: '2026-09-16T02:00:00+00:00', status: 'accepted_for_operator_release_review',
+  publicationAuthorized: false, deploymentAuthorized: false }
+
+test('staff acceptance rejects wrong revision, conflicting feedback and authority claims', () => {
+  const decision = { ...feedback, requests: [], acceptance }
+  assert.equal(verifyStaffChanges(decision, row).acceptance.acceptedAt, acceptance.acceptedAt)
+  for (const change of [{ contentRevision: 2 }, { sourceVersion: 3 }, { previewDigest: `sha256:${'b'.repeat(64)}` },
+    { acceptedAt: 'bad' }, { acceptedAt: row.expiresAt }, { acceptedAt: '2026-09-15T00:00:00Z' },
+    { status: 'published' }, { publicationAuthorized: true }, { deploymentAuthorized: true }, { actorId: 'private' }]) {
+    assert.throws(() => verifyStaffChanges({ ...decision, acceptance: { ...acceptance, ...change } }, row))
+  }
+  assert.throws(() => verifyStaffChanges({ ...feedback, acceptance }, row))
+})
+
+test('operator sees accepted revision and historical warning without a publish action', async () => {
+  const acceptedRow = { ...row, hasChangeRequests: false, hasCustomerAcceptance: true, status: 'revoked' }
+  fixture((_identity, review) => review ? { ...feedback, requests: [], acceptance, reviewStatus: 'revoked' }
+    : { ...listing, reviews: [acceptedRow] })
+  let tree = render()
+  click(tree, 'Refresh reviews'); await settle(); tree = render()
+  assert.match(text(tree), /Customer acceptance retained — release review still required/)
+  click(tree, 'Read decision for revision 1'); await settle(); tree = render()
+  assert.match(text(tree), /Historical decision only/)
+  assert.match(text(tree), /Not published or deployment-authorized/)
+  assert.match(text(tree), /Revision 1/)
+  assert.equal(elements(tree).some(node => node.type === 'button' && /publish|deploy|send/i.test(text(node))), false)
   assert.equal(sandbox.h.calls.length, 2)
 })
 test('late responses after account change or cleanup cannot reveal private notes', async () => {

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { currentManagedIdentity, loadManagedWebsiteReviewStaffPage, sameManagedIdentity } from '../../core/managed-trial'
 
-type Review = { reviewId: string; contentRevision: number; sourceVersion: number; preparedAt: string; expiresAt: string; status: string; hasChangeRequests: boolean }
-type Changes = { reviewId: string; contentRevision: number; sourceVersion: number; previewDigest: string; reviewStatus: string; requests: { commandId: string; note: string; createdAt: string }[]; nextAfter: string | null; publicationAuthorized: false }
+type Review = { reviewId: string; contentRevision: number; sourceVersion: number; preparedAt: string; expiresAt: string; status: string; hasChangeRequests: boolean; hasCustomerAcceptance: boolean }
+type Acceptance = { contentRevision: number; sourceVersion: number; previewDigest: string; acceptedAt: string; status: 'accepted_for_operator_release_review'; publicationAuthorized: false; deploymentAuthorized: false }
+type Changes = { reviewId: string; contentRevision: number; sourceVersion: number; previewDigest: string; reviewStatus: string; acceptance: Acceptance | null; requests: { commandId: string; note: string; createdAt: string }[]; nextAfter: string | null; publicationAuthorized: false }
 type Listing = { reviews: Review[]; nextAfter: string | null; order: 'review_id_ascending'; publicationAuthorized: false }
 const uuid = (value: unknown): value is string => typeof value === 'string' && value.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
 const time = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value))
@@ -19,9 +20,10 @@ function verifyStaffReviews(value: unknown, after?: string): Listing {
   if (root.publicationAuthorized !== false || root.order !== 'review_id_ascending' || !Array.isArray(root.reviews) || root.reviews.length > 50) return invalid()
   let prior = after ?? ''
   for (const raw of root.reviews) {
-    const row = exact(raw, ['reviewId', 'contentRevision', 'sourceVersion', 'preparedAt', 'expiresAt', 'status', 'hasChangeRequests'])
+    const row = exact(raw, ['reviewId', 'contentRevision', 'sourceVersion', 'preparedAt', 'expiresAt', 'status', 'hasChangeRequests', 'hasCustomerAcceptance'])
     if (!uuid(row.reviewId) || row.reviewId <= prior || !version(row.contentRevision) || !version(row.sourceVersion, 1)
-      || !time(row.preparedAt) || !time(row.expiresAt) || !status(row.status) || typeof row.hasChangeRequests !== 'boolean') return invalid()
+      || !time(row.preparedAt) || !time(row.expiresAt) || !status(row.status) || typeof row.hasChangeRequests !== 'boolean'
+      || typeof row.hasCustomerAcceptance !== 'boolean' || (row.hasChangeRequests && row.hasCustomerAcceptance)) return invalid()
     prior = row.reviewId
   }
   if (root.nextAfter !== null && (root.reviews.length !== 50 || root.nextAfter !== prior)) return invalid()
@@ -29,10 +31,19 @@ function verifyStaffReviews(value: unknown, after?: string): Listing {
 }
 
 function verifyStaffChanges(value: unknown, review: Review): Changes {
-  const root = exact(value, ['reviewId', 'contentRevision', 'sourceVersion', 'previewDigest', 'reviewStatus', 'requests', 'nextAfter', 'publicationAuthorized'])
+  const root = exact(value, ['reviewId', 'contentRevision', 'sourceVersion', 'previewDigest', 'reviewStatus', 'acceptance', 'requests', 'nextAfter', 'publicationAuthorized'])
   if (root.publicationAuthorized !== false || root.reviewId !== review.reviewId || root.contentRevision !== review.contentRevision
     || root.sourceVersion !== review.sourceVersion || typeof root.previewDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(root.previewDigest)
     || !status(root.reviewStatus) || !Array.isArray(root.requests) || root.requests.length > 50) return invalid()
+  if (root.acceptance !== null) {
+    const accepted = exact(root.acceptance, ['contentRevision', 'sourceVersion', 'previewDigest', 'acceptedAt', 'status', 'publicationAuthorized', 'deploymentAuthorized'])
+    if (root.requests.length || root.nextAfter !== null || accepted.contentRevision !== root.contentRevision
+      || accepted.sourceVersion !== root.sourceVersion || accepted.previewDigest !== root.previewDigest
+      || accepted.status !== 'accepted_for_operator_release_review' || accepted.publicationAuthorized !== false
+      || accepted.deploymentAuthorized !== false || !time(accepted.acceptedAt)
+      || Date.parse(String(accepted.acceptedAt)) < Date.parse(review.preparedAt)
+      || Date.parse(String(accepted.acceptedAt)) >= Date.parse(review.expiresAt)) return invalid()
+  }
   const ids = new Set<string>()
   let previous: { at: bigint; id: string } | undefined
   for (const raw of root.requests) {
@@ -84,7 +95,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       if (attempt !== epoch.current) return
       if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
       if (review) setChanges(data as Changes); else setListing(data as Listing)
-      setMessage(review ? 'Retained customer requests. They do not approve publication.' : 'Reviews are ordered by reference, not by date. Refresh starts again at the first page.')
+      setMessage(review ? 'Retained customer decisions. They do not authorize publication.' : 'Reviews are ordered by reference, not by date. Refresh starts again at the first page.')
     } catch {
       if (attempt === epoch.current) {
         setListing(null); setSelected(null); setChanges(null)
@@ -96,20 +107,23 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   }
 
   return <section className="website-editor-panel" aria-labelledby="website-review-inbox-title">
-    <h2 id="website-review-inbox-title">Customer review requests</h2>
-    <p>Read customer feedback on prepared revisions. Making edits, preparing a new review and publishing remain separate.</p>
+    <h2 id="website-review-inbox-title">Customer review decisions</h2>
+    <p>Read customer feedback and acceptance of prepared revisions. Making edits, preparing a new review and publishing remain separate.</p>
     <button className="core-button" disabled={busy} onClick={() => void load()} type="button">Refresh reviews</button>
     <p className="form-notice" role="status">{message}</p>
     {listing?.reviews.length === 0 ? <p>No prepared reviews in this company yet.</p> : null}
     <ul>{listing?.reviews.map(review => <li key={review.reviewId}>
       <strong>Revision {review.contentRevision}</strong> · {review.status} · prepared {new Date(review.preparedAt).toLocaleString()}
-      <p>{review.hasChangeRequests ? 'Customer changes retained' : 'No change requests recorded'} · expires {new Date(review.expiresAt).toLocaleString()}</p>
-      <button className="core-button" disabled={busy} onClick={() => void load(review)} type="button">Read requests for revision {review.contentRevision}</button>
+      <p>{review.hasCustomerAcceptance ? 'Customer acceptance retained — release review still required' : review.hasChangeRequests ? 'Customer changes retained' : 'Awaiting customer decision'} · expires {new Date(review.expiresAt).toLocaleString()}</p>
+      <button className="core-button" disabled={busy} onClick={() => void load(review)} type="button">Read decision for revision {review.contentRevision}</button>
     </li>)}</ul>
     {listing?.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void load(undefined, listing.nextAfter!)} type="button">Next reviews</button> : null}
-    {changes && selected ? <section aria-label="Selected revision change requests">
+    {changes && selected ? <section aria-label="Selected revision customer decision">
       <h3>Revision {changes.contentRevision} · {changes.reviewStatus}</h3>
-      {changes.requests.length === 0 ? <p>No customer change requests for this revision.</p> : null}
+      {changes.acceptance ? <div><h4>Customer acceptance retained</h4>
+        <p>Accepted <time dateTime={changes.acceptance.acceptedAt}>{new Date(changes.acceptance.acceptedAt).toLocaleString()}</time> for revision {changes.contentRevision} only. Not published or deployment-authorized.</p>
+        <p>{changes.reviewStatus === 'active' ? 'Complete the separate release checks before publishing.' : 'Historical decision only. This review is no longer active; prepare a fresh review before proceeding.'}</p>
+      </div> : changes.requests.length === 0 ? <p>No customer decision recorded for this revision.</p> : null}
       <ul>{changes.requests.map(request => <li key={request.commandId}><time dateTime={request.createdAt}>{new Date(request.createdAt).toLocaleString()}</time><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{request.note}</p></li>)}</ul>
       {changes.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void load(selected, changes.nextAfter!)} type="button">Older requests</button> : null}
     </section> : null}

@@ -69,7 +69,7 @@ class WebsiteCustomerReviewStore:
         """Staff metadata only; UUID keyset order is not chronological or a snapshot."""
         if after is not None:
             after = _uuid(after)
-        with self._transaction(principal, write=False, capability="website.write") as (cursor, actor):
+        with self._transaction(principal, write=False, capability="website.write", require_acceptance=True) as (cursor, actor):
             if after is not None:
                 cursor.execute("select review_id from app_private.website_customer_reviews where workspace_id=%s and review_id=%s",
                                (actor.workspace_id, after))
@@ -80,14 +80,18 @@ class WebsiteCustomerReviewStore:
             cursor.execute("""select r.review_id,r.content_revision,r.source_version,r.prepared_at,r.expires_at,
                 case when r.status='active' and r.expires_at<=clock_timestamp() then 'expired' else r.status end as status,
                 exists(select 1 from app_private.website_customer_feedback f
-                    where f.workspace_id=r.workspace_id and f.review_id=r.review_id) as has_changes
+                    where f.workspace_id=r.workspace_id and f.review_id=r.review_id) as has_changes,
+                exists(select 1 from app_private.website_customer_acceptances a
+                    where a.workspace_id=r.workspace_id and a.review_id=r.review_id) as has_acceptance
                 from app_private.website_customer_reviews r
                 where r.workspace_id=%s """ + boundary + " order by r.review_id limit 51", parameters)
             rows = cursor.fetchall()
+            if any(row["has_changes"] and row["has_acceptance"] for row in rows):
+                raise TrialValidationError("website_review_decision_conflict")
             reviews = [{"reviewId": str(row["review_id"]), "contentRevision": row["content_revision"],
                         "sourceVersion": row["source_version"], "preparedAt": row["prepared_at"].isoformat(),
                         "expiresAt": row["expires_at"].isoformat(), "status": row["status"],
-                        "hasChangeRequests": row["has_changes"]} for row in rows[:50]]
+                        "hasChangeRequests": row["has_changes"], "hasCustomerAcceptance": row["has_acceptance"]} for row in rows[:50]]
             return {"reviews": reviews, "nextAfter": reviews[-1]["reviewId"] if len(rows) > 50 else None,
                     "order": "review_id_ascending", "publicationAuthorized": False}
 
@@ -185,13 +189,25 @@ class WebsiteCustomerReviewStore:
         review_id = _uuid(review_id)
         if after is not None:
             after = _uuid(after)
-        with self._transaction(principal, write=False, capability="website.write") as (cursor, actor):
+        with self._transaction(principal, write=False, capability="website.write", require_acceptance=True) as (cursor, actor):
             cursor.execute("""select content_revision,source_version,preview_digest,recipient_actor_id,
                 case when status='active' and expires_at<=clock_timestamp() then 'expired' else status end as status
                 from app_private.website_customer_reviews where workspace_id=%s and review_id=%s""", (actor.workspace_id, review_id))
             review = cursor.fetchone()
             if review is None:
                 raise TrialPermissionDenied("website.write")
+            cursor.execute("""select a.content_revision,a.source_version,a.preview_digest,a.decision,a.accepted_at,
+                exists(select 1 from app_private.website_customer_feedback f
+                    where f.workspace_id=a.workspace_id and f.review_id=a.review_id) as has_changes
+                from app_private.website_customer_acceptances a where workspace_id=%s and review_id=%s""",
+                (actor.workspace_id, review_id))
+            accepted = cursor.fetchone()
+            if accepted is not None and (accepted["has_changes"]
+                    or accepted["content_revision"] != review["content_revision"]
+                    or accepted["source_version"] != review["source_version"]
+                    or accepted["preview_digest"] != review["preview_digest"]
+                    or accepted["decision"] != "accept_preview_for_release_review"):
+                raise TrialValidationError("website_review_acceptance_revision_invalid")
             anchor = None
             if after is not None:
                 cursor.execute("""select created_at,command_id from app_private.website_customer_feedback
@@ -217,6 +233,11 @@ class WebsiteCustomerReviewStore:
             result = {"reviewId": review_id, "contentRevision": review["content_revision"],
                       "sourceVersion": review["source_version"], "previewDigest": review["preview_digest"],
                       "reviewStatus": review["status"], "publicationAuthorized": False,
+                      "acceptance": {"contentRevision": accepted["content_revision"],
+                          "sourceVersion": accepted["source_version"], "previewDigest": accepted["preview_digest"],
+                          "acceptedAt": accepted["accepted_at"].isoformat(),
+                          "status": "accepted_for_operator_release_review", "publicationAuthorized": False,
+                          "deploymentAuthorized": False} if accepted else None,
                       "requests": [{"commandId": str(row["command_id"]), "note": row["note"],
                                     "createdAt": row["created_at"].isoformat()} for row in page],
                       "nextAfter": str(page[-1]["command_id"]) if len(rows) > 50 else None}
