@@ -163,6 +163,14 @@ test('rendered customer decisions show consent only when actionable and never a 
   }
 })
 
+test('consent uses a full touch label without inheriting full-width text-input styling', () => {
+  const css = readFileSync(new URL('../showroom/src/products/website/customer-review.css', import.meta.url), 'utf8')
+  assert.match(renderDecision('pending_review'), /<label class="customer-review-consent"><input type="checkbox"/)
+  assert.match(css, /\.customer-website-review \.customer-review-consent \{[^}]*display: flex;[^}]*min-height: 2\.75rem;/)
+  assert.match(css, /input\[type="checkbox"\] \{[^}]*width: 1\.25rem;[^}]*min-height: 1\.25rem;/)
+  assert.match(css, /:is\(a, button, input, textarea\):focus-visible/)
+})
+
 const expiry = '2026-09-17T00:00:00Z'
 const now = () => Date.parse('2026-09-16T00:00:00Z')
 const same = (a, b) => a.userId === b.userId && a.workspaceId === b.workspaceId
