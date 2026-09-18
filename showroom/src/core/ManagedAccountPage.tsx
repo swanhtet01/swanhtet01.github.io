@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
@@ -39,6 +39,7 @@ export function ManagedAccountPage() {
   const [notice, setNotice] = useState(() => recoveryRequest ? '' : 'Checking your secure account link...')
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
+  const accountRequestPending = useRef(false)
 
   useEffect(() => {
     if (recoveryRequest || runtime.status === 'checking') return
@@ -76,27 +77,32 @@ export function ManagedAccountPage() {
 
   async function requestRecovery(event: FormEvent) {
     event.preventDefault()
+    if (!managedReady || busy || sent || accountRequestPending.current) return
+    accountRequestPending.current = true
     setBusy(true)
     setNotice('Sending a secure recovery link...')
     try {
       await requestManagedPasswordRecovery(email)
       setEmail('')
       setSent(true)
-      setNotice('If this email belongs to a managed account, a recovery link is on its way.')
+      setNotice('Recovery requested. If this address is eligible, check your inbox and spam folder for the latest link. This screen cannot confirm email delivery.')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'A recovery link could not be sent. Try again.')
     } finally {
+      accountRequestPending.current = false
       setBusy(false)
     }
   }
 
   async function savePassword(event: FormEvent) {
     event.preventDefault()
+    if (!managedReady || busy || accountRequestPending.current) return
     if (!setup || setup.purpose === 'signup') return
     if (password !== confirmation) {
       setNotice('The passwords do not match.')
       return
     }
+    accountRequestPending.current = true
     setBusy(true)
     setNotice('Securing your managed account...')
     try {
@@ -121,26 +127,30 @@ export function ManagedAccountPage() {
       setConfirmation('')
       setNotice(error instanceof Error ? error.message : 'The password could not be saved.')
     } finally {
+      accountRequestPending.current = false
       setBusy(false)
     }
   }
 
   async function chooseWorkspace(event: FormEvent) {
     event.preventDefault()
-    if (!directory) return
+    if (!managedReady || busy || accountRequestPending.current || !directory) return
+    accountRequestPending.current = true
     setBusy(true)
     setNotice('Opening your company...')
     try {
       await openWorkspace(directory, workspaceId)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The company could not be opened.')
+    } finally {
+      accountRequestPending.current = false
       setBusy(false)
     }
   }
 
   if (recoveryRequest) {
     return <div className="workspace-screen managed-login-screen">
-      <PageHeading eyebrow="Company account" title="Recover your account." copy="Enter your work email. We will send one secure password link." />
+      <PageHeading eyebrow="Company account" title="Recover your account." copy="Enter your work email to request a secure password link." />
       {!managedReady ? <ManagedUnavailable productIntent={productIntent} /> : sent ? <section className="managed-login-panel" aria-label="Recovery link requested">
         <div><span className="core-eyebrow">Check your inbox</span><h2>Recovery requested.</h2><p>{notice}</p></div>
         <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent, location.search)}>Back to sign in</Link><button className="core-button account-link-button" onClick={() => { setSent(false); setNotice('') }} type="button">Try another email</button></div>

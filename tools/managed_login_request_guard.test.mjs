@@ -7,12 +7,12 @@ const require = createRequire(new URL('../showroom/package.json', import.meta.ur
 const ts = require('typescript')
 const source = readFileSync(new URL('../showroom/src/core/ManagedLoginPage.tsx', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('login.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-function handler(name, context) {
+function handler(name, context, parsedSource = ast) {
   let found
   function visit(node) { if (ts.isFunctionDeclaration(node) && node.name?.text === name) found = node; ts.forEachChild(node, visit) }
-  visit(ast)
+  visit(parsedSource)
   assert.ok(found, name)
-  const js = ts.transpileModule(found.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  const js = ts.transpileModule(found.getText(parsedSource), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
   return vm.runInNewContext(`${js}; ${name}`, context)
 }
 const event = { preventDefault() {} }
@@ -75,4 +75,82 @@ test('unavailable managed runtime never starts sign-in or activation', async () 
   context.managedReady = false
   await handler('submit', context)(event); await handler('activate', context)(event)
   assert.deepEqual(busyStates, [])
+})
+
+const accountSource = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
+const accountAst = ts.createSourceFile('account.tsx', accountSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+for (const [name, provider] of [['requestRecovery', 'requestManagedPasswordRecovery'], ['savePassword', 'completeManagedAccountPassword'], ['chooseWorkspace', 'openWorkspace']]) {
+  test(`${name} prevents rapid duplicate requests and releases its lock after failure`, async () => {
+    const { context } = fixture()
+    Object.assign(context, { sent: false, setup: { purpose: 'recovery' }, directory: { workspaces: [] },
+      confirmation: context.password, setSent() {}, setConfirmation() {} })
+    let reject, calls = 0
+    context[provider] = () => { calls++; return new Promise((_, fail) => { reject = fail }) }
+    const run = handler(name, context, accountAst)
+    const first = run(event)
+    await run(event)
+    assert.equal(calls, 1)
+    reject(new Error('Synthetic failure'))
+    await first
+    assert.equal(context.accountRequestPending.current, false)
+    const retry = run(event)
+    assert.equal(calls, 2)
+    reject(new Error('Synthetic failure'))
+    await retry
+  })
+  test(`${name} cannot overlap another request or use unavailable managed auth`, async () => {
+    const { context, busyStates } = fixture()
+    Object.assign(context, { sent: false, setup: { purpose: 'recovery' }, directory: {}, confirmation: context.password })
+    context.accountRequestPending.current = true
+    await handler(name, context, accountAst)(event)
+    context.accountRequestPending.current = false
+    context.managedReady = false
+    await handler(name, context, accountAst)(event)
+    assert.deepEqual(busyStates, [])
+  })
+}
+
+test('recovery success remains enumeration-safe and does not claim delivery', async () => {
+  const { context } = fixture()
+  const notices = []
+  Object.assign(context, { sent: false, setNotice: value => notices.push(value),
+    setSent: value => { context.sent = value }, requestManagedPasswordRecovery: async () => {} })
+  const run = handler('requestRecovery', context, accountAst)
+  await run(event)
+  assert.equal(context.sent, true)
+  assert.equal(context.accountRequestPending.current, false)
+  assert.match(notices.at(-1), /If this address is eligible/)
+  assert.match(notices.at(-1), /cannot confirm email delivery/)
+  context.requestManagedPasswordRecovery = () => { assert.fail('already requested') }
+  await run(event)
+})
+
+test('password save keeps the lock until the assigned company finishes opening', async () => {
+  const { context, passwords } = fixture()
+  Object.assign(context, { sent: false, setup: { purpose: 'recovery' }, confirmation: context.password,
+    setConfirmation() {}, completeManagedAccountPassword: async () => ({ workspaces: [{ workspaceId: 'one' }] }) })
+  let finishOpen, signalOpen
+  const opened = new Promise(resolve => { signalOpen = resolve })
+  context.openWorkspace = () => new Promise(resolve => { finishOpen = resolve; signalOpen() })
+  const run = handler('savePassword', context, accountAst)
+  const pending = run(event)
+  await opened
+  assert.equal(context.accountRequestPending.current, true)
+  assert.equal(passwords.at(-1), '')
+  await handler('requestRecovery', context, accountAst)(event)
+  finishOpen()
+  await pending
+  assert.equal(context.accountRequestPending.current, false)
+})
+
+test('confirmed signup and mismatched passwords cannot invoke password update', async () => {
+  const { context, busyStates } = fixture()
+  Object.assign(context, { setup: { purpose: 'signup' }, confirmation: context.password,
+    completeManagedAccountPassword: () => assert.fail('password update not permitted') })
+  await handler('savePassword', context, accountAst)(event)
+  context.setup = { purpose: 'recovery' }
+  context.confirmation = 'different'
+  await handler('savePassword', context, accountAst)(event)
+  assert.deepEqual(busyStates, [])
+  assert.equal(context.accountRequestPending.current, false)
 })
