@@ -35,7 +35,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
             "20260907024457_self_serve_durable_attempt_budget.sql",
             "20260915184728_website_customer_review_storage.sql",
-            "20260915191528_website_review_entitlement_proof.sql"))
+            "20260915191528_website_review_entitlement_proof.sql",
+            "20260918011500_website_customer_acceptance.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name != "20260711081300_public_legacy_baseline.sql"))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
@@ -47,6 +48,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertEqual(account.TABLES, tuple(sorted(set(account.TABLES))))
         self.assertIn("website_customer_reviews", account.TABLES)
         self.assertIn("website_customer_feedback", account.TABLES)
+        self.assertIn("website_customer_acceptances", account.TABLES)
+        self.assertIn("supermega_runtime/website_acceptance_schema.py", module.IMPLEMENTATION_PATHS)
 
     def test_rehearsal_declares_the_complete_fail_closed_boundary(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")

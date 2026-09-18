@@ -12,7 +12,7 @@ from supermega_runtime.website_acceptance_schema import (
 class AcceptanceSchemaTests(unittest.TestCase):
     def setUp(self):
         source = (Path(__file__).resolve().parents[1] /
-                  "supabase/rehearsal/website_customer_acceptance.sql").read_text(encoding="utf-8")
+                  "supabase/migrations/20260918011500_website_customer_acceptance.sql").read_text(encoding="utf-8")
         self.rows = []
         for (table, trigger), (mask, function, _) in ACCEPTANCE_TRIGGERS.items():
             match = re.search(r"create function app_private\." + re.escape(function)

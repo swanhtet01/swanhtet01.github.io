@@ -62,6 +62,8 @@ class V13CatalogTests(unittest.TestCase):
     def test_referencing_foreign_key_does_not_duplicate_owned_index(self):
         indexes = [r for r in self.good['indexes'] if r['table_name'].startswith('website_')]
         expected = {
+            'website_customer_acceptances_pkey': 'p',
+            'website_customer_acceptances_workspace_id_review_id_key': 'u',
             'website_customer_feedback_pkey': 'p',
             'website_customer_feedback_review_idx': None,
             'website_customer_reviews_active_idx': None,
@@ -206,6 +208,10 @@ class V13CatalogTests(unittest.TestCase):
     def test_actual_database_privilege_and_rls_drift_is_rejected_and_restored(self):
         pg = proof.pg
         cases = (
+            ("alter table app_private.website_customer_acceptances no force row level security",
+             "alter table app_private.website_customer_acceptances force row level security"),
+            ("grant update on app_private.website_customer_acceptances to supermega_trial_backend",
+             "revoke update on app_private.website_customer_acceptances from supermega_trial_backend"),
             ("alter table app_private.website_customer_reviews no force row level security",
              "alter table app_private.website_customer_reviews force row level security"),
             ("grant delete on app_private.website_customer_feedback to supermega_trial_backend",
