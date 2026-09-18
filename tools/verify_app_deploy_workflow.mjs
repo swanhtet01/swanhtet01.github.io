@@ -48,6 +48,61 @@ const agentConnectorMap = previewServer.slice(
 const failures = []
 const checks = []
 
+// Exact supported PR event shape has no path, branch, or draft exclusions.
+const allPullRequests = source => {
+  const blocks = [...source.matchAll(/^  pull_request:\n([\s\S]*?)(?=^  \S|^\S|$(?![\s\S]))/gm)]
+  return blocks.length === 1 && blocks[0][0] === '  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n'
+}
+requireContract('required workflows cover every PR including drafts',
+  [ciWorkflow, dependencyAuditWorkflow, kernelWorkflow].every(allPullRequests)
+  && ![ciWorkflow, dependencyAuditWorkflow].some(source => source.includes('github.event.pull_request.draft')))
+requireContract('required check display names bind stable job IDs',
+  ciWorkflow.includes('  validate:\n    name: SuperMega App CI\n')
+  && kernelWorkflow.includes('  verify:\n    name: Kernel Console - Verify & Owner-Gated Release\n'))
+requireContract('required verification jobs cannot be skipped or forgive errors',
+  [[ciWorkflow, 'validate'], [kernelWorkflow, 'verify']].every(([source, id]) => {
+    const header = source.split(`  ${id}:\n`)[1]?.split('    steps:\n')[0]
+    return header && !/^    (?:if|continue-on-error):/m.test(header)
+  }))
+requireContract('all dependency audit packages remain covered',
+  ['platform\n            directory: .\n', 'app\n            directory: showroom\n', 'kernel\n            directory: kernel\n']
+    .every(entry => dependencyAuditWorkflow.includes(`          - package: ${entry}`))
+  && dependencyAuditWorkflow.includes('      fail-fast: false\n')
+  && dependencyAuditWorkflow.includes('run: pip-audit -r requirements-test.txt'))
+
+for (const filter of ['paths', 'paths-ignore', 'branches', 'branches-ignore']) {
+  requireContract(`all-PR guard rejects ${filter}`, !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', `    ${filter}: [main]\n  workflow_dispatch:`)))
+}
+requireContract('all-PR guard rejects missing or duplicate trigger',
+  !allPullRequests(ciWorkflow.replace('  pull_request:', '  push:'))
+  && !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', '  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n  workflow_dispatch:')))
+const aggregate = dependencyAuditWorkflow.split('  required-audits:\n')[1]
+const aggregateScript = aggregate?.match(/^        run: node -e "([^\n]+)"$/m)?.[1]
+requireContract('audit aggregate always requires both actual results',
+  Boolean(aggregateScript)
+  && aggregate.includes('    name: Dependency Security Audit\n')
+  && aggregate.includes('    needs: [npm-audit, pip-audit]\n')
+  && aggregate.includes('    if: ${{ always() }}\n')
+  && aggregate.includes('      NPM_RESULT: ${{ needs.npm-audit.result }}\n')
+  && aggregate.includes('      PIP_RESULT: ${{ needs.pip-audit.result }}\n')
+  && aggregate.includes('    timeout-minutes: 2\n')
+  && !dependencyAuditWorkflow.includes('continue-on-error:')
+  && !dependencyAuditWorkflow.includes('secrets.'))
+if (aggregateScript) {
+  for (const npmResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
+    for (const pipResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
+      const result = spawnSync(process.execPath, ['-e', aggregateScript], { env: { ...process.env, NPM_RESULT: npmResult, PIP_RESULT: pipResult }, timeout: 5000 })
+      requireContract(`audit aggregate truth table ${npmResult || 'missing'}/${pipResult || 'missing'}`,
+        result.status === (npmResult === 'success' && pipResult === 'success' ? 0 : 1))
+    }
+  }
+}
+for (const name of ['SuperMega App CI', 'Dependency Security Audit', 'Kernel Console - Verify & Owner-Gated Release']) {
+  requireContract(`unique required job ${name}`, [ciWorkflow, dependencyAuditWorkflow, kernelWorkflow]
+    .join('\n').split('\n').filter(line => line === `    name: ${name}`).length === 1)
+}
+
+
 function requireContract(name, condition) {
   checks.push(name)
   if (!condition) failures.push(name)
@@ -57,9 +112,9 @@ requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 requireContract('dependency audit is read-only, scheduled, and covers every npm lockfile',
   packageJson.scripts?.['security:dependencies'] === 'npm audit --audit-level=low && npm --prefix showroom audit --audit-level=low && npm --prefix kernel audit --audit-level=low'
-  && dependencyAuditWorkflow.includes("- 'package-lock.json'")
-  && dependencyAuditWorkflow.includes("- 'showroom/package-lock.json'")
-  && dependencyAuditWorkflow.includes("- 'kernel/package-lock.json'")
+  && allPullRequests(dependencyAuditWorkflow) && dependencyAuditWorkflow.includes('directory: .')
+  && dependencyAuditWorkflow.includes('directory: showroom')
+  && dependencyAuditWorkflow.includes('directory: kernel')
   && dependencyAuditWorkflow.includes('workflow_dispatch:')
   && dependencyAuditWorkflow.includes("cron: '25 3 * * 1'")
   && dependencyAuditWorkflow.includes('contents: read')
@@ -326,35 +381,34 @@ requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger non-mutating review gates',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'vercel.json'") && source.includes("- '.vercelignore'")))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'vercel.json'") && source.includes("- '.vercelignore'")))
 requireContract('remote app build includes kernel release contract', generator.includes("['.github', 'kernel', 'supabase']"))
-requireContract('retired alias control triggers non-mutating review gates', [ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_retired_vercel_alias_state.mjs')))
+requireContract('retired alias control triggers non-mutating review gates', allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes('tools/verify_retired_vercel_alias_state.mjs')))
 requireContract('app and public changes trigger non-mutating review before manual release',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'showroom/**'") && source.includes('tools/create_public_vercel_output.mjs') && source.includes('tools/verify_coordinated_release_live.mjs')))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'showroom/**'") && source.includes('tools/create_public_vercel_output.mjs') && source.includes('tools/verify_coordinated_release_live.mjs')))
 requireContract('HQ-only evidence validates without redeploying unchanged products',
   !workflow.includes("- 'hq/**'")
   && !workflow.includes('tools/verify_hq_contract.mjs')
-  && ciWorkflow.includes("- 'hq/**'")
-  && ciWorkflow.includes("- 'tools/verify_hq_contract.mjs'"))
+  && allPullRequests(ciWorkflow))
 requireContract('all API tests trigger review and execute before manual release',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'tests/**'"))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'tests/**'"))
   && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
-requireContract('runtime package changes trigger non-mutating review', [ciWorkflow, appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
+requireContract('runtime package changes trigger non-mutating review', allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
 requireContract('database activation controls trigger non-mutating review',
-  [ciWorkflow, appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
 requireContract('rehearsal packet changes trigger both reviews and keep operator files ignored',
-  [ciWorkflow, appWorkflow].every((source) =>
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) =>
     source.includes('tools/prepare_supabase_rehearsal_packet.mjs')
     && source.includes('tools/prepare_supabase_rehearsal_packet.test.mjs'))
   && appWorkflow.includes("- '.gitignore'")
   && appWorkflow.includes("- '.github/workflows/showroom-ci.yml'")
   && /^\.tmp\/$/m.test(gitIgnore))
 requireContract('PostgreSQL 17 rehearsal changes trigger every non-mutating database review',
-  [ciWorkflow, appWorkflow].every((source) =>
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) =>
     source.includes('tools/rehearse_supermega_postgres17.py')
     && source.includes('tools/run_postgres17_rehearsal.mjs')))
 requireContract('migration proof changes trigger every database-aware workflow',
-  [workflow, ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
+  allPullRequests(ciWorkflow) && [workflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
 requireContract('real migration proof precedes every production candidate',
   workflow.includes('npm ci --ignore-scripts')
   && workflow.includes('node tools/verify_private_trial_migrations.mjs')
@@ -587,7 +641,7 @@ requireContract('public live health follows the canonical release workflow',
   publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
   && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))
 requireContract('scheduler authority changes trigger every non-mutating review gate',
-  [appWorkflow, ciWorkflow].every((source) =>
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) =>
     source.includes('tools/supermega_scheduler_authority.json')
     && source.includes('tools/verify_vercel_project_state.mjs')
     && source.includes('tools/test_vercel_project_state.mjs')))
