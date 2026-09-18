@@ -142,6 +142,7 @@ jobs:
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
           node tools/verify_public_deploy_guard.mjs
+          node --test tools/verify_public_deploy_guard.test.mjs
 
       - name: Install dependencies
         working-directory: showroom
