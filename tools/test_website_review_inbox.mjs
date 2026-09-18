@@ -28,7 +28,18 @@ const output = await build({ stdin: { contents: source + '\nexport { verifyStaff
       export const prepareManagedWebsiteReview=async(...args)=>{globalThis.h.writes.push(args);return globalThis.h.createResponse(...args)};
     ` }))
   } }] })
-const sandbox = { module: { exports: {} }, structuredClone, TextEncoder, URL, crypto: webcrypto, setTimeout, window: { location: { origin: 'https://app.supermega.dev' }, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout } }
+const pendingDigests = new Set()
+let beforeDigest = async () => {}
+const trackedCrypto = {
+  randomUUID: () => webcrypto.randomUUID(),
+  subtle: { digest(...args) {
+    const pending = beforeDigest().then(() => webcrypto.subtle.digest(...args))
+    pendingDigests.add(pending)
+    pending.then(() => pendingDigests.delete(pending), () => pendingDigests.delete(pending))
+    return pending
+  } },
+}
+const sandbox = { module: { exports: {} }, structuredClone, TextEncoder, URL, crypto: trackedCrypto, setTimeout, window: { location: { origin: 'https://app.supermega.dev' }, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout } }
 sandbox.exports = sandbox.module.exports
 runInNewContext(output.outputFiles[0].text, sandbox)
 const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox, customerHandoff, verifyPreparation, verifyRecipients } = sandbox.module.exports
@@ -42,13 +53,49 @@ function elements(tree) { return Array.isArray(tree) ? tree.flatMap(elements) : 
 function text(tree) { return Array.isArray(tree) ? tree.map(text).join('') : tree && typeof tree === 'object' ? text(tree.props?.children) : typeof tree === 'string' || typeof tree === 'number' ? String(tree) : '' }
 function render() { sandbox.h.cursor = 0; sandbox.h.effects = []; return WebsiteReviewInbox({ actorId: 'actor', workspaceId: 'company' }) }
 const click = (tree, label) => elements(tree).find(node => node.type === 'button' && text(node) === label).props.onClick()
-const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve)) }
+const settle = async () => {
+  let timeout
+  const deadline = new Promise((_, reject) => {
+    timeout = setTimeout(() => reject(new Error('Website test WebCrypto did not settle within 5 seconds')), 5000)
+  })
+  try {
+    // Drain React/transport continuations, but await real hashing rather than
+    // assuming the native crypto worker finishes within ten event-loop turns.
+    // Deliberately deferred transport responses remain under each test's control.
+    for (let i = 0; i < 10; i++) {
+      await new Promise(resolve => setImmediate(resolve))
+      if (pendingDigests.size) await Promise.race([Promise.allSettled([...pendingDigests]), deadline])
+    }
+  } finally { clearTimeout(timeout) }
+}
 function fixture(response = (_identity, review) => review ? feedback : listing) {
   const values = new Map()
   sandbox.window.sessionStorage = { getItem: key => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }
   sandbox.h = { slots: [], cursor: 0, effects: [], calls: [], writes: [], identity: { userId: 'actor', workspaceId: 'company' }, response }
 }
+
+test('settle waits for actual preview hashing, not a fixed number of event-loop turns', async () => {
+  fixture(); sandbox.h.prepareResponse = () => preparationFixture()
+  let release
+  beforeDigest = () => new Promise(resolve => { release = resolve })
+  let settling
+  try {
+    click(render(), 'Check saved Website before handoff')
+    let settled = false
+    settling = settle().then(() => { settled = true })
+    for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve))
+    assert.equal(typeof release, 'function')
+    assert.equal(settled, false, 'pending WebCrypto must keep the harness unsettled')
+    release(); await settling
+    assert.ok(elements(render()).some(node => node.type === 'button' && text(node) === 'Choose customer for review'))
+  } finally {
+    beforeDigest = async () => {}
+    release?.()
+    await settling
+    await Promise.allSettled([...pendingDigests])
+  }
+})
 test('metadata list is strictly bounded, ordered and identity-free', () => {
   assert.equal(verifyStaffReviews(listing).reviews.length, 1)
   for (const bad of [{ ...listing, publicationAuthorized: true }, { ...listing, actorId: 'private' },
