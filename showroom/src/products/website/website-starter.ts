@@ -26,6 +26,7 @@ export type WebsiteStarterBrief = {
   offer: string
   proof: string
   contactHref: string
+  offerings?: string
 }
 
 export type WebsiteStarterBriefIssue = {
@@ -78,6 +79,13 @@ function isCanonicalTimestamp(value: string) {
 export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
   const issues: WebsiteStarterBriefIssue[] = []
   const contactHref = normalizedLine(brief.contactHref)
+  const offerings = (brief.offerings ?? '').split(/\r?\n/u).filter((line) => line.trim())
+  if (offerings.length > 4 || offerings.some((line) => {
+    const separator = line.indexOf('|')
+    return separator < 1 || !isBoundedLine(line.slice(0, separator), 80) || !isBoundedLine(line.slice(separator + 1), 360)
+  })) {
+    issues.push({ field: 'offerings', message: 'Add up to four entries, one per line: name | description, with optional price or duration. Names must be at most 80 characters and details at most 360.' })
+  }
 
   if (!websiteStarterTemplates.some((template) => template.id === brief.templateId)) {
     issues.push({ field: 'templateId', message: 'Choose a supported website layout.' })
@@ -147,6 +155,10 @@ export function applyWebsiteStarterBrief(
   const offer = normalizedLine(brief.offer)
   const proof = normalizedLine(brief.proof)
   const contactHref = normalizedLine(brief.contactHref)
+  const offeringSections = (brief.offerings ?? '').split(/\r?\n/u).filter((line) => line.trim()).map((line, index) => {
+    const separator = line.indexOf('|')
+    return { id: `${secondary.id}-offering-${index + 1}`, eyebrow: 'What we offer', title: normalizedLine(line.slice(0, separator)), body: normalizedLine(line.slice(separator + 1)) }
+  })
   const secondaryPage = brief.templateId === 'business-presence'
     ? { name: 'About', slug: '/about', eyebrow: 'Our business', headline: `Why ${businessName} exists`, sectionEyebrow: 'How we work', sectionTitle: 'Clear service, clear next step.' }
     : brief.templateId === 'lead-generation'
@@ -198,7 +210,7 @@ export function applyWebsiteStarterBrief(
           ctaLabel: inquiry.label,
           ctaHref: contactDestination,
         },
-        sections: [
+        sections: offeringSections.length ? offeringSections : [
           { ...secondary.sections[0], eyebrow: secondaryPage.sectionEyebrow, title: secondaryPage.sectionTitle, body: proof },
           { id: `${secondary.id}-inquiry`, eyebrow: 'Your requirements', title: inquiry.title, body: inquiry.body },
           { id: `${secondary.id}-decision`, eyebrow: 'Before deciding', title: inquiry.nextTitle, body: inquiry.nextBody },

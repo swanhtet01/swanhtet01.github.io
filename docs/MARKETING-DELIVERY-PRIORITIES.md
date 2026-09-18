@@ -81,3 +81,27 @@ not loaded; this document does not claim active workers or completed experiments
 Vercel and Supabase remain delivery infrastructure, not marketing features.
 Brand work does not authorize changing domains, access, databases or service
 plans. Reuse existing identity, tenant and release systems.
+# Output-quality benchmark — 2026-09-18
+
+Owner direction: finished business content, not contact-button shells. This is a feature-gap assessment, not a parity or customer-validation claim.
+
+Primary references reviewed:
+- Shopify Spring 2026: https://www.shopify.com/editions/spring2026 — mobile store editing, Sidekick-assisted workflows and test events. Adopt reviewable automation with test evidence, not an unbounded autonomous operator.
+- Shopify Sidekick: https://help.shopify.com/en/manual/ai-powered-tools/sidekick — natural-language guidance, content and task assistance. Every SuperMega generated business fact must remain tied to approved inputs.
+- Wix restaurant templates: https://www.wix.com/website/templates/html/restaurants-food — menu, business story, table/order journeys. Useful page content comes before conversion buttons.
+
+ERRC delivery priorities:
+- Eliminate duplicated actions and unavailable-feature buttons; never present request receipt as payment or booking confirmation.
+- Reduce setup questions by reusing reviewed business information; the operator prepares, the customer reviews.
+- Raise actual page content, tablet usability, image quality, recovery clarity and measured completion rates.
+- Create template-specific output: restaurant menu, service descriptions/durations, retail product details and fulfillment terms.
+
+Implemented first increment: optional owner-supplied offering entries flow into Website preview/export using existing escaped section rendering. Four featured entries maximum under the current section model; not a full restaurant menu manager. No invented price, stock, duration or payment capability. Existing edited workspaces cannot be replaced by the starter.
+
+Remaining delivery backlog (not implemented by this change):
+1. Larger categorized menus/catalogs with reviewed images, variants and dietary/service details; shared editor/preview/export validation rather than divergent models.
+2. Ecommerce detail pages, search/filter, variants, clear manual-payment and delivery instructions, request status and recovery. Verify existing capabilities before adding duplicates.
+3. AI-assisted content/image preparation with provenance, owner correction, cost limits and explicit human approval. Generated food/product images must not misrepresent actual goods.
+4. Domain package: separate domain registration/renewal price, customer ownership, DNS/TLS verification, preview acceptance and rollback; no automatic purchase or transfer.
+5. Payment adapters later: provider/country support, server-side verified webhooks, idempotent reconciliation, refunds and secret storage. Manual recording stays available; a screenshot is evidence to review, not settled funds.
+6. Observe customer task completion on phone/tablet/desktop. Report actual participants and failures, not simulated users or invented A/B results.

@@ -79,6 +79,7 @@ export function WebsiteStarterSetup({
   const contactIssue = issueFor('contactHref')
   const offerIssue = issueFor('offer')
   const proofIssue = issueFor('proof')
+  const offeringsIssue = issueFor('offerings')
 
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
@@ -238,6 +239,20 @@ export function WebsiteStarterSetup({
           </label>
         </div>
 
+        <label>
+          <span>Menu, services or featured products <small>Optional</small></span>
+          <textarea
+            aria-describedby="website-offerings-help website-offerings-error"
+            aria-invalid={Boolean(offeringsIssue)}
+            rows={5}
+            maxLength={1800}
+            value={brief.offerings ?? ''}
+            onChange={(event) => updateBrief('offerings', event.target.value)}
+            placeholder="Item or service name | Description, optional price and duration"
+          />
+          <small id="website-offerings-help">Up to four featured entries, one per line. Use approved public details only. These become visible content on your Services, Catalog or About page—not just a contact button. Prices are display information, not payment collection.</small>
+          <small className="website-field-error" id="website-offerings-error">{offeringsIssue?.message}</small>
+        </label>
       </form>
     </section>
   )

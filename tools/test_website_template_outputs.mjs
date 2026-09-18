@@ -13,6 +13,29 @@ const expected = {
   'lead-generation': { slug: '/services', label: 'Discuss your requirements', need: 'scope of the work' },
   'catalog-showcase': { slug: '/catalog', label: 'Ask about an item', need: 'preferred variant' },
 }
+test('reviewed menu and service entries become exported content without invented prices', () => {
+  for (const template of websiteStarterTemplates) {
+    const output = applyWebsiteStarterBrief(createInitialWorkspace(), { ...brief, templateId: template.id, offerings: 'လက်ဖက်ရည် | 2,000 MMK, hot or iced\nConsultation | 30 minutes; price confirmed on inquiry\n<script> | Owner text <b>not markup</b>' }, capturedAt)
+    const page = output.pages.find(page => page.slug === expected[template.id].slug)
+    assert.equal(page.sections.length, 3)
+    assert.equal(page.sections[0].title, 'လက်ဖက်ရည်')
+    assert.equal(page.sections[0].body, '2,000 MMK, hot or iced')
+    assert.equal(page.sections[1].body, '30 minutes; price confirmed on inquiry')
+    const html = buildWebsiteHtml(createWebsitePreviewArtifact(output))
+    assert.ok(html.includes('2,000 MMK, hot or iced'))
+    assert.ok(html.includes('&lt;b&gt;not markup&lt;/b&gt;'))
+    assert.ok(html.includes('&lt;script&gt;'))
+    assert.equal(page.stage, 'draft')
+    assert.equal(output.localPublishes.length, 0)
+  }
+})
+
+test('invalid offering input fails closed instead of dropping entries or replacing existing work', () => {
+  for (const offerings of ['Missing separator', ' | details', 'Name | ', 'x'.repeat(81) + ' | details', 'Name | ' + 'x'.repeat(361), Array(5).fill('Item | detail').join('\n')]) {
+    const original = createInitialWorkspace()
+    assert.equal(applyWebsiteStarterBrief(original, { ...brief, templateId: 'lead-generation', offerings }, capturedAt), original)
+  }
+})
 for (const template of websiteStarterTemplates) {
   test(`${template.id}: useful distinct output without invented business commitments`, () => {
     const original = createInitialWorkspace()
