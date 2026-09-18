@@ -126,21 +126,21 @@ export function WebsiteStarterSetup({
     <section className="website-editor-panel website-starter-setup" aria-labelledby="website-starter-title">
       <header className="website-panel-head">
         <div>
-          <span className="website-eyebrow">Quick setup</span>
-          <h2 id="website-starter-title">Change the sample into your website</h2>
-          <p>Answer the basics only. SuperMega makes a three-page preview you can check before saving.</p>
+          <span className="website-eyebrow">Prepared by SuperMega</span>
+          <h2 id="website-starter-title">Tell us the basics. We prepare the Website.</h2>
+          <p>Give us only the details that must be correct. SuperMega drafts a private three-page Website for your review; nothing is published from here.</p>
         </div>
-        <span className="website-status is-draft">Example ready</span>
+        <span className="website-status is-draft">Private draft</span>
       </header>
 
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         <footer className="website-starter-actions">
-          <button className="website-button is-secondary" onClick={onViewSample} type="button">View sample</button>
-          <button className="website-button is-primary" type="submit">Make preview</button>
+          <button className="website-button is-secondary" onClick={onViewSample} type="button">View example</button>
+          <button className="website-button is-primary" type="submit">Prepare private draft</button>
         </footer>
 
         <label className="website-starter-trade">
-          <span>What kind of business is this?</span>
+          <span>Business type</span>
           <select onChange={(event) => chooseTrade(event.target.value)} value={tradeId}>
             <option value="">Start from the sample</option>
             {websiteTradeBriefOptions().map((trade) => (
@@ -149,14 +149,14 @@ export function WebsiteStarterSetup({
           </select>
           <small>
             {opening.detected
-              ? 'Taken from your Shop setup. Change it here if this website is for something else — anything you have already written is kept.'
-              : 'Fills the wording below for that trade. Anything you have already written is kept.'}
+              ? 'Taken from your Shop setup. Change it only if this Website is for another business; anything you have already written stays yours.'
+              : 'SuperMega uses this to start with relevant wording. Anything you have already written stays yours.'}
           </small>
         </label>
 
         <div className="website-form-grid two-columns website-starter-identity-grid">
           <label>
-            <span>Type of website</span>
+            <span>Starting layout <small>Optional</small></span>
             <select onChange={(event) => updateBrief('templateId', event.target.value as WebsiteStarterBrief['templateId'])} value={brief.templateId}>
               {websiteStarterTemplates.map((template) => <option key={template.id} value={template.id}>{template.label} — {template.detail}</option>)}
             </select>
@@ -233,7 +233,7 @@ export function WebsiteStarterSetup({
               rows={3}
               value={brief.proof}
             />
-            <small id="website-starter-proof-help">Review the suggested wording against the actual business. Use approved public copy only; do not paste private customer data.</small>
+            <small id="website-starter-proof-help">Review the suggested wording against the actual business. Use approved public copy only; do not paste customer data. SuperMega will prepare the finished revision for your review.</small>
             {proofIssue ? <small className="website-field-error" id="website-starter-error-proof">{proofIssue.message}</small> : null}
           </label>
         </div>

@@ -2718,6 +2718,46 @@
 .website-start-tools > summary b { text-transform: uppercase; }
 .website-start-tools > div { display: grid; gap: 12px; border-top: 1px solid var(--website-line); padding: 12px; }
 
+/* The Website starter is a customer-facing brief, not a dense operator console. Keep the
+   few decisions it asks for comfortably readable on a counter tablet and a phone. */
+.website-starter-setup .website-panel-head p {
+  max-width: 58ch;
+  font-size: .875rem;
+  line-height: 1.45;
+}
+
+.website-starter-setup .website-status {
+  min-height: 28px;
+  font-size: .75rem;
+}
+
+.website-starter-setup label {
+  gap: 7px;
+  font-size: .875rem;
+}
+
+.website-starter-setup input,
+.website-starter-setup select,
+.website-starter-setup textarea {
+  min-height: 44px;
+  font-size: 1rem;
+}
+
+.website-starter-setup textarea {
+  min-height: 88px;
+}
+
+.website-starter-setup label small,
+.website-starter-setup #website-starter-proof-help,
+.website-starter-setup .website-field-error {
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+
+.website-starter-setup .website-button {
+  font-size: .875rem;
+}
+
 @media screen and (max-width: 900px) {
   .website-product {
     height: auto;
