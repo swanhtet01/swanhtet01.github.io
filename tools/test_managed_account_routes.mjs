@@ -5,6 +5,9 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { execFileSync } from 'node:child_process'
 
+// Keep rapid-tap and recovery regressions in the canonical account verification gate.
+import './managed_login_request_guard.test.mjs'
+
 import {
   alternateManagedWorkspaceId,
   managedAccountPath,
