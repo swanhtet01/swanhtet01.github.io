@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { currentManagedIdentity, loadManagedWebsiteReviewStaffPage, sameManagedIdentity } from '../../core/managed-trial'
+import { currentManagedIdentity, loadManagedWebsitePreparation, loadManagedWebsiteReviewStaffPage, sameManagedIdentity } from '../../core/managed-trial'
+import { reviewContactDestination, verifyWebsitePreviewContent, type CustomerWebsiteReview } from './customer-review-contract'
 
 type Review = { reviewId: string; contentRevision: number; sourceVersion: number; preparedAt: string; expiresAt: string; status: string; hasChangeRequests: boolean; hasCustomerAcceptance: boolean }
 type Acceptance = { contentRevision: number; sourceVersion: number; previewDigest: string; acceptedAt: string; status: 'accepted_for_operator_release_review'; publicationAuthorized: false; deploymentAuthorized: false }
 type Changes = { reviewId: string; contentRevision: number; sourceVersion: number; previewDigest: string; reviewStatus: string; acceptance: Acceptance | null; requests: { commandId: string; note: string; createdAt: string }[]; nextAfter: string | null; publicationAuthorized: false }
 type Listing = { reviews: Review[]; nextAfter: string | null; order: 'review_id_ascending'; publicationAuthorized: false }
+type Preparation = { sourceVersion: number; contentRevision: number; readAt: string; preview: CustomerWebsiteReview['preview'] }
 const uuid = (value: unknown): value is string => typeof value === 'string' && value.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
 const time = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value))
 const version = (value: unknown, min = 0) => Number.isSafeInteger(value) && Number(value) >= min
@@ -72,6 +74,14 @@ function customerHandoff(review: Review, decision: Changes, origin: string, now:
   return `Your prepared Website is ready to review.\n\n${origin}/website/review/${review.reviewId}\n\nSign in with the account assigned to this review. Check revision ${review.contentRevision}, then accept it or tell us what to change. No editing is needed.\n\nThis review expires ${new Date(review.expiresAt).toLocaleString()}. Acceptance does not publish your Website or take payment. SuperMega handles the next step.`
 }
 
+async function verifyPreparation(value: unknown): Promise<Preparation> {
+  const root = exact(structuredClone(value), ['status', 'sourceVersion', 'contentRevision', 'preview', 'previewDigest', 'readAt', 'reviewCreated', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (root.status !== 'saved_source_preview' || !version(root.sourceVersion, 1) || !version(root.contentRevision)
+    || !time(root.readAt) || root.reviewCreated !== false || root.publicationAuthorized !== false || root.deploymentAuthorized !== false) return invalid()
+  const preview = await verifyWebsitePreviewContent(root.preview, root.previewDigest)
+  return { sourceVersion: Number(root.sourceVersion), contentRevision: Number(root.contentRevision), readAt: String(root.readAt), preview }
+}
+
 export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: string; actorId: string }) {
   const [listing, setListing] = useState<Listing | null>(null)
   const [selected, setSelected] = useState<Review | null>(null)
@@ -79,12 +89,13 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('Open the prepared reviews for this company. Nothing is published or sent here.')
   const [now, setNow] = useState(() => Date.now())
+  const [preparation, setPreparation] = useState<Preparation | null>(null)
   const epoch = useRef(0)
   const pending = useRef(false)
   useEffect(() => {
     const invalidate = () => { epoch.current++ }
     const clear = () => {
-      invalidate(); pending.current = false; setBusy(false); setListing(null); setSelected(null); setChanges(null)
+      invalidate(); pending.current = false; setBusy(false); setListing(null); setSelected(null); setChanges(null); setPreparation(null)
       setMessage('Account context changed. Refresh to read this company’s reviews.')
     }
     window.addEventListener('storage', clear); window.addEventListener('focus', clear)
@@ -103,6 +114,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     if (pending.current) return
     pending.current = true; setBusy(true)
     const attempt = ++epoch.current
+    setPreparation(null)
     setChanges(null); setSelected(review ?? null)
     if (!review) setListing(null)
     setMessage('Checking current company access…')
@@ -128,13 +140,50 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     }
   }
 
+  async function inspectSavedSource() {
+    if (pending.current) return
+    pending.current = true; setBusy(true)
+    const attempt = ++epoch.current
+    setPreparation(null); setSelected(null); setChanges(null); setListing(null)
+    setMessage('Checking the saved Website and current company access…')
+    try {
+      const identity = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!identity || identity.workspaceId !== workspaceId || identity.userId !== actorId) throw new Error('Access changed')
+      const result = await verifyPreparation(await loadManagedWebsitePreparation(identity))
+      const current = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
+      setPreparation(result)
+      setMessage('Saved source verified. This has not created or sent a customer review. Unsaved edits are not included.')
+    } catch {
+      if (attempt === epoch.current) setMessage('The saved Website could not be verified, or access changed. Save your work and check again.')
+    } finally {
+      if (attempt === epoch.current) { pending.current = false; setBusy(false) }
+    }
+  }
+
   const handoff = selected && changes ? customerHandoff(selected, changes, window.location.origin, now) : null
 
   return <section className="website-editor-panel" aria-labelledby="website-review-inbox-title">
     <h2 id="website-review-inbox-title">Customer review decisions</h2>
     <p>Read customer feedback and acceptance of prepared revisions. Making edits, preparing a new review and publishing remain separate.</p>
+    <button className="core-button" disabled={busy} onClick={() => void inspectSavedSource()} type="button">Check saved Website before handoff</button>
     <button className="core-button" disabled={busy} onClick={() => void load()} type="button">Refresh reviews</button>
     <p className="form-notice" role="status">{message}</p>
+    {preparation ? <section aria-label="Verified saved Website" style={{ overflowWrap: 'anywhere' }}>
+      <h3>{preparation.preview.siteName} · saved revision {preparation.contentRevision}</h3>
+      <p>Source version {preparation.sourceVersion} · read <time dateTime={preparation.readAt}>{new Date(preparation.readAt).toLocaleString()}</time>. Later edits require another check.</p>
+      <p>These are saved pages, not a customer invitation. Assigning an account and preparing its review remain separate.</p>
+      {preparation.preview.pages.map(page => <details key={page.id}>
+        <summary>{page.navigation.label || page.seo.title || 'Page'} · {page.hero.headline}</summary>
+        <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{page.hero.summary}</p>
+        {page.sections.map(section => <section key={section.id}><h4>{section.title}</h4><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{section.body}</p></section>)}
+        <p>Contact label: {page.hero.ctaLabel || 'Not prepared'}</p>
+        <p style={{ overflowWrap: 'anywhere' }}>Destination (not clickable): {reviewContactDestination(page.hero.ctaHref)}</p>
+        <p>Search title: {page.seo.title || 'Not prepared'}</p><p>Search description: {page.seo.description || 'Not prepared'}</p>
+      </details>)}
+    </section> : null}
     {listing?.reviews.length === 0 ? <p>No prepared reviews in this company yet.</p> : null}
     <ul>{listing?.reviews.map(review => <li key={review.reviewId}>
       <strong>Revision {review.contentRevision}</strong> · {review.status} · prepared {new Date(review.preparedAt).toLocaleString()}

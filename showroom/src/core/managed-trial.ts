@@ -3177,6 +3177,11 @@ export async function validateManagedClientImport(
   )
 }
 
+export async function loadManagedWebsitePreparation(expectedIdentity: ManagedIdentity) {
+  return authorizedRequest<unknown>('/api/trial/v1/website-review-preparation',
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
 export async function loadManagedWebsiteReviewStaffPage(expectedIdentity: ManagedIdentity, reviewId?: string, after?: string) {
   for (const value of [reviewId, after]) {
     if (value !== undefined && (value.length !== 36 || !/^[0-9a-f-]{36}$/.test(value)

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash, webcrypto } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
@@ -8,7 +9,7 @@ const { build } = require('esbuild')
 const source = readFileSync('showroom/src/products/website/WebsiteReviewInbox.tsx', 'utf8')
 // Expose the real private validators in the test bundle only; production keeps
 // the component module compatible with React Fast Refresh.
-const output = await build({ stdin: { contents: source + '\nexport { verifyStaffReviews, verifyStaffChanges, customerHandoff };',
+const output = await build({ stdin: { contents: source + '\nexport { verifyStaffReviews, verifyStaffChanges, customerHandoff, verifyPreparation };',
   resolveDir: 'showroom/src/products/website', loader: 'tsx' }, bundle: true, write: false,
   platform: 'node', format: 'cjs', jsx: 'automatic', logLevel: 'silent', plugins: [{ name: 'inbox-offline', setup(b) {
     b.onResolve({ filter: /^(react|react\/jsx-runtime)$|managed-trial$/ }, args => ({ path: args.path, namespace: 'mock' }))
@@ -21,12 +22,13 @@ const output = await build({ stdin: { contents: source + '\nexport { verifyStaff
       export const currentManagedIdentity=async()=>globalThis.h.identity;
       export const sameManagedIdentity=(a,b)=>a.userId===b.userId&&a.workspaceId===b.workspaceId;
       export const loadManagedWebsiteReviewStaffPage=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.response(...args)};
+      export const loadManagedWebsitePreparation=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.prepareResponse(...args)};
     ` }))
   } }] })
-const sandbox = { module: { exports: {} }, structuredClone, setTimeout, window: { location: { origin: 'https://app.supermega.dev' }, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout } }
+const sandbox = { module: { exports: {} }, structuredClone, TextEncoder, URL, crypto: webcrypto, setTimeout, window: { location: { origin: 'https://app.supermega.dev' }, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout } }
 sandbox.exports = sandbox.module.exports
 runInNewContext(output.outputFiles[0].text, sandbox)
-const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox, customerHandoff } = sandbox.module.exports
+const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox, customerHandoff, verifyPreparation } = sandbox.module.exports
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12, '0')}`
 const row = { reviewId: id(1), contentRevision: 1, sourceVersion: 2, preparedAt: '2026-09-16T00:00:00+00:00', expiresAt: '2026-09-17T00:00:00+00:00', status: 'active', hasChangeRequests: true, hasCustomerAcceptance: false }
 const listing = { reviews: [row], nextAfter: null, order: 'review_id_ascending', publicationAuthorized: false }
@@ -174,4 +176,62 @@ test('open handoff disappears at expiry without a network write or periodic poll
     delete sandbox.Date
     sandbox.window.setTimeout = setTimeout; sandbox.window.clearTimeout = clearTimeout
   }
+})
+
+const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]`
+  : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}` : JSON.stringify(value)
+function preparationFixture() {
+  const preview = { siteName: 'Example Studio', pages: [{ id: 'home', slug: '/', navigation: { label: 'Home', visible: true },
+    hero: { eyebrow: '', headline: 'Saved headline', summary: 'ဝန်ဆောင်မှု', ctaLabel: 'Ask us', ctaHref: 'javascript:alert(1)' },
+    sections: [{ id: 'one', eyebrow: '', title: 'Service', body: '<script>Not executable</script>' }], seo: { title: 'Home', description: 'Prepared details' } }] }
+  return { status: 'saved_source_preview', sourceVersion: 3, contentRevision: 2, preview,
+    previewDigest: `sha256:${createHash('sha256').update(canonical(preview)).digest('hex')}`,
+    readAt: '2026-09-18T00:00:00Z', reviewCreated: false, publicationAuthorized: false, deploymentAuthorized: false }
+}
+
+test('saved-source verification binds complete preview bytes and refuses authority or private fields', async () => {
+  const input = preparationFixture()
+  const result = await verifyPreparation(input)
+  result.preview.pages[0].hero.headline = 'Changed locally'
+  assert.equal(input.preview.pages[0].hero.headline, 'Saved headline')
+  for (const change of [{ status: 'prepared_preview' }, { sourceVersion: 0 }, { sourceVersion: 1.5 },
+    { contentRevision: -1 }, { readAt: 'bad' }, { reviewCreated: true }, { publicationAuthorized: true },
+    { deploymentAuthorized: true }, { recipientActorId: 'private' }, { previewDigest: `sha256:${'f'.repeat(64)}` }])
+    await assert.rejects(verifyPreparation({ ...preparationFixture(), ...change }))
+  const tampered = preparationFixture(); tampered.preview.pages[0].hero.headline = 'Unverified edit'
+  await assert.rejects(verifyPreparation(tampered))
+})
+
+test('staff can inspect verified saved pages without active links, an invitation or provider writes', async () => {
+  fixture(); sandbox.h.prepareResponse = () => preparationFixture()
+  let tree = render(); assert.equal(sandbox.h.calls.length, 0)
+  click(tree, 'Check saved Website before handoff'); await settle(); tree = render()
+  assert.match(text(tree), /Example Studio · saved revision 2/)
+  assert.match(text(tree), /Unsaved edits are not included/)
+  assert.match(text(tree), /Saved headline/)
+  assert.match(text(tree), /ဝန်ဆောင်မှု/)
+  assert.match(text(tree), /Destination \(not clickable\): Needs correction by SuperMega/)
+  assert.doesNotMatch(text(tree), /javascript:alert/)
+  assert.equal(elements(tree).some(n => ['a', 'iframe', 'script'].includes(n.type) || n.props?.dangerouslySetInnerHTML), false)
+  assert.equal(sandbox.h.calls.length, 1)
+  click(tree, 'Refresh reviews'); await settle(); tree = render()
+  assert.doesNotMatch(text(tree), /Saved headline/)
+})
+
+test('saved-source late response cannot cross an account boundary', async () => {
+  let release
+  fixture(); sandbox.h.prepareResponse = () => new Promise(resolve => { release = resolve })
+  let tree = render(); click(tree, 'Check saved Website before handoff'); await settle()
+  sandbox.h.identity = { userId: 'another', workspaceId: 'elsewhere' }
+  release(preparationFixture()); await settle(); tree = render()
+  assert.doesNotMatch(text(tree), /Saved headline/)
+  assert.match(text(tree), /could not be verified, or access changed/)
+})
+
+test('saved-source transport is identity-bound, no-store, and redirect-refusing', () => {
+  const transport = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
+  const slice = transport.slice(transport.indexOf('export async function loadManagedWebsitePreparation('), transport.indexOf('export async function loadManagedWebsiteReviewStaffPage('))
+  assert.match(slice, /\/api\/trial\/v1\/website-review-preparation/)
+  for (const boundary of ["cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
+  assert.doesNotMatch(slice, /POST|workspaceId=|recipientActorId=/)
 })
