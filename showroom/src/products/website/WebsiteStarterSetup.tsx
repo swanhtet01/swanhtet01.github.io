@@ -64,6 +64,7 @@ export function WebsiteStarterSetup({
   const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const [attempted, setAttempted] = useState(false)
+  const [offeringRows, setOfferingRows] = useState<{ name: string; details: string }[]>([])
   const [tradeId, setTradeId] = useState(opening.tradeId)
   // The wording currently on offer from us rather than from the owner. Starts as whatever we
   // opened with, so that opening draft counts as "not yet edited" and picking a trade
@@ -71,6 +72,7 @@ export function WebsiteStarterSetup({
   const [lastDrafted, setLastDrafted] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const starterFormRef = useRef<HTMLFormElement>(null)
   const issues = websiteStarterBriefIssues(brief)
+  if (offeringRows.some((row) => row.name.includes('|'))) issues.push({ field: 'offerings', message: 'Use a name without the | character.' })
   const issueFor = (field: keyof WebsiteStarterBrief) => (
     attempted ? issues.find((issue) => issue.field === field) : undefined
   )
@@ -80,6 +82,11 @@ export function WebsiteStarterSetup({
   const offerIssue = issueFor('offer')
   const proofIssue = issueFor('proof')
   const offeringsIssue = issueFor('offerings')
+
+  function updateOfferings(rows: { name: string; details: string }[]) {
+    setOfferingRows(rows)
+    setBrief((current) => ({ ...current, offerings: rows.map((row) => `${row.name} | ${row.details.replace(/\s+/gu, ' ')}`).join('\n') }))
+  }
 
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
@@ -239,20 +246,20 @@ export function WebsiteStarterSetup({
           </label>
         </div>
 
-        <label>
-          <span>Menu, services or featured products <small>Optional</small></span>
-          <textarea
-            aria-describedby="website-offerings-help website-offerings-error"
-            aria-invalid={Boolean(offeringsIssue)}
-            rows={5}
-            maxLength={1800}
-            value={brief.offerings ?? ''}
-            onChange={(event) => updateBrief('offerings', event.target.value)}
-            placeholder="Item or service name | Description, optional price and duration"
-          />
-          <small id="website-offerings-help">Up to four featured entries, one per line. Use approved public details only. These become visible content on your Services, Catalog or About page—not just a contact button. Prices are display information, not payment collection.</small>
-          <small className="website-field-error" id="website-offerings-error">{offeringsIssue?.message}</small>
-        </label>
+        <details open={offeringsIssue ? true : undefined}>
+          <summary>Menu, services or featured products — optional</summary>
+          <p id="website-offerings-help">Add up to four featured entries using approved public details. They appear on your Services, Catalog or About page. Displaying a price does not collect payment.</p>
+          {offeringRows.map((row, index) => (
+            <fieldset key={index}>
+              <legend>Featured entry {index + 1}</legend>
+              <label><span>Name</span><input maxLength={80} value={row.name} aria-invalid={Boolean(offeringsIssue)} aria-describedby="website-offerings-error" onChange={(event) => updateOfferings(offeringRows.map((item, position) => position === index ? { ...item, name: event.target.value } : item))} /></label>
+              <label><span>Description, price or duration</span><textarea rows={3} maxLength={360} value={row.details} aria-invalid={Boolean(offeringsIssue)} aria-describedby="website-offerings-help website-offerings-error" onChange={(event) => updateOfferings(offeringRows.map((item, position) => position === index ? { ...item, details: event.target.value } : item))} /></label>
+              <button type="button" className="website-button is-secondary" onClick={() => updateOfferings(offeringRows.filter((_, position) => position !== index))}>Remove entry {index + 1}</button>
+            </fieldset>
+          ))}
+          <button type="button" className="website-button is-secondary" disabled={offeringRows.length >= 4} onClick={() => updateOfferings([...offeringRows, { name: '', details: '' }])}>Add featured entry</button>
+          <p className="website-field-error" id="website-offerings-error" role="status">{offeringsIssue ? 'Complete each entry with a name and description, or remove the unfinished entry. Names cannot contain |.' : ''}</p>
+        </details>
       </form>
     </section>
   )
