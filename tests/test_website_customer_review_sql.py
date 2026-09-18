@@ -745,5 +745,93 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 editor.rollback()
 
 
+    def test_zzz_acceptance_extension_is_private_immutable_and_exclusive_with_feedback(self):
+        # Install only in this disposable test cluster, after baseline adapter tests.
+        # The candidate extension is deliberately absent from the release chain.
+        extension = pg.ROOT / 'supabase/rehearsal/website_customer_acceptance.sql'
+        with pg._connect(self.admin_url) as connection:
+            connection.execute(extension.read_text(encoding='utf-8'))
+
+        def accept(connection, review, *, actor=RECIPIENT, digest=None, fingerprint=None):
+            review_id, version, prepared_digest = review
+            revision = connection.execute('select content_revision from app_private.website_customer_reviews where review_id=%s', (review_id,)).fetchone()[0]
+            command = uuid4()
+            identity = dict(contract='supermega.website.customer-acceptance.v1', workspaceId=WORKSPACE,
+                            actorId=actor, reviewId=str(review_id), commandId=str(command),
+                            contentRevision=revision, previewDigest=digest or prepared_digest,
+                            decision='accept_preview_for_release_review')
+            expected = 'sha256:' + sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False,
+                                                     separators=(',', ':')).encode()).hexdigest()
+            return connection.execute('''insert into app_private.website_customer_acceptances
+                (workspace_id,actor_id,command_id,review_id,source_version,content_revision,
+                 preview_digest,command_fingerprint,decision,accepted_at)
+                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,'2000-01-01') returning accepted_at''',
+                (WORKSPACE, actor, command, review_id, version, revision, digest or prepared_digest,
+                 fingerprint or expected, identity['decision'])).fetchone()[0]
+
+        with self.transaction() as connection:
+            review = self.prepare(connection)
+            self.context(connection, RECIPIENT)
+            stamp = accept(connection, review)
+            self.assertGreater(stamp, datetime(2026, 1, 1, tzinfo=timezone.utc))
+            with self.assertRaises(self.db_error):
+                accept(connection, review)
+
+        for mutation in ('feedback_first', 'feedback_after', 'update', 'delete', 'forged_digest', 'forged_fingerprint'):
+            with self.subTest(mutation=mutation), self.transaction() as connection:
+                review = self.prepare(connection)
+                self.context(connection, RECIPIENT)
+                if mutation == 'feedback_first':
+                    self.feedback(connection, review)
+                    with self.assertRaisesRegex(self.db_error, 'website_acceptance_changes_pending'):
+                        accept(connection, review)
+                elif mutation.startswith('forged'):
+                    with self.assertRaises(self.db_error):
+                        accept(connection, review, **({'digest': DIGEST} if mutation == 'forged_digest' else {'fingerprint': DIGEST}))
+                else:
+                    accept(connection, review)
+                    with self.assertRaises(self.db_error):
+                        if mutation == 'feedback_after':
+                            self.feedback(connection, review)
+                        else:
+                            connection.execute(('update app_private.website_customer_acceptances set accepted_at=clock_timestamp()'
+                                                if mutation == 'update' else 'delete from app_private.website_customer_acceptances'))
+
+        for mode in ('wrong_actor', 'wrong_workspace', 'expired', 'revoked', 'stale'):
+            with self.subTest(mode=mode), self.transaction(isolation=mode) as connection:
+                review = self.prepare(connection, expiry='200 milliseconds' if mode == 'expired' else '1 day')
+                if mode == 'expired':
+                    connection.execute('select pg_sleep(0.25)')
+                elif mode == 'revoked':
+                    connection.execute("update app_private.website_customer_reviews set status='revoked' where review_id=%s", (review[0],))
+                elif mode == 'stale':
+                    self.edit(connection)
+                self.context(connection, OWNER if mode == 'wrong_actor' else RECIPIENT,
+                             'rehearsal-b' if mode == 'wrong_workspace' else WORKSPACE)
+                if mode == 'wrong_workspace':
+                    self.assertEqual(connection.execute('select * from app_private.website_customer_acceptances').fetchall(), [])
+                    with self.assertRaises(self.db_error):
+                        connection.execute('''insert into app_private.website_customer_acceptances
+                            (workspace_id,actor_id,command_id,review_id,source_version,content_revision,
+                             preview_digest,command_fingerprint,decision)
+                            values (%s,%s,%s,%s,%s,0,%s,%s,'accept_preview_for_release_review')''',
+                            (WORKSPACE, RECIPIENT, uuid4(), review[0], review[1], review[2], DIGEST))
+                    continue
+                with self.assertRaises(self.db_error):
+                    accept(connection, review)
+
+        review = self.retained_assignment()
+        for isolation in ('repeatable read', 'serializable'):
+            with self.subTest(isolation=isolation), self.transaction(RECIPIENT, isolation=isolation) as connection:
+                with self.assertRaisesRegex(self.db_error, 'website_review_requires_read_committed'):
+                    accept(connection, review)
+
+        with pg._connect(self.admin_url) as connection:
+            row = connection.execute("select relrowsecurity,relforcerowsecurity from pg_class where oid='app_private.website_customer_acceptances'::regclass").fetchone()
+            self.assertEqual(row, (True, True))
+            for role in ('anon', 'authenticated', 'service_role'):
+                self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.website_customer_acceptances','select,insert,update,delete')", (role,)).fetchone()[0])
+
+
 if __name__ == "__main__":
     unittest.main()
