@@ -141,6 +141,55 @@ class CustomerReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(TrialValidationError, "acceptance_payload_invalid"):
             self.accept()
 
+    def test_acceptance_rejects_every_unready_write_boundary(self):
+        for field in ("database_ready", "role_ready", "schema_ready", "auth_ready",
+                      "membership_ready", "audit_ready", "write_enabled"):
+            with self.subTest(field=field), self.assertRaisesRegex(TrialValidationError, "access_denied"):
+                self.accept(readiness=replace(self.ready, **{field: False}))
+
+    def test_acceptance_requires_assigned_human_and_exact_workspace(self):
+        for actor in (replace(self.customer, authenticated=False),
+                      replace(self.customer, actor_kind="agent"),
+                      replace(self.customer, actor_kind="service"),
+                      replace(self.customer, actor_id="other"),
+                      replace(self.customer, workspace_id="workspace-b"),
+                      replace(self.customer, identity_provider="untrusted"),
+                      replace(self.customer, identity_provider="supabase", session_id="")):
+            with self.subTest(actor=actor), self.assertRaisesRegex(TrialValidationError, "access_denied"):
+                self.accept(principal=actor)
+        with self.assertRaisesRegex(TrialValidationError, "access_denied"):
+            self.accept(principal=self.operator, readiness=self.operator_ready)
+
+    def test_acceptance_requires_review_capability_and_website_entitlement(self):
+        for ready in (replace(self.ready, capabilities=frozenset({"website.write"})),
+                      replace(self.ready, product_entitlements=()),
+                      replace(self.ready, product_entitlements=None)):
+            with self.subTest(ready=ready), self.assertRaisesRegex(TrialValidationError, "access_denied"):
+                self.accept(readiness=ready)
+
+    def test_acceptance_rejects_expired_future_and_revoked_reviews(self):
+        for stamp in (NOW - timedelta(microseconds=1), NOW + timedelta(days=1)):
+            with self.subTest(stamp=stamp), self.assertRaisesRegex(TrialValidationError, "expired_or_future"):
+                self.accept(now=stamp)
+        for status in ("revoked", "stale"):
+            self.review["status"] = status
+            with self.subTest(status=status), self.assertRaisesRegex(TrialValidationError, "access_denied"):
+                self.accept()
+
+    def test_acceptance_rejects_current_content_change_even_without_revision_bump(self):
+        self.state["pages"][0]["hero"]["headline"] = "Changed after customer review"
+        with self.assertRaisesRegex(TrialValidationError, "stale_revision"):
+            self.accept()
+
+    def test_acceptance_rejects_tampered_retained_preview_or_revision(self):
+        for field, value in (("previewDigest", "sha256:" + "0" * 64),
+                             ("contentRevision", True), ("preview", {})):
+            original = self.review[field]
+            self.review[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(TrialValidationError, "stale_revision"):
+                self.accept()
+            self.review[field] = original
+
     def test_narrow_reviewer_cannot_prepare(self):
         with self.assertRaisesRegex(TrialValidationError, "access_denied"):
             self.prepare(principal=self.customer, readiness=self.ready)
