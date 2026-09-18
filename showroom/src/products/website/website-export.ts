@@ -490,6 +490,7 @@ function createPageTargets(artifact: WebsiteArtifact): PageTarget[] {
     let suffix = 1
     const documentIds = (candidate: string) => [
       candidate,
+      `${candidate}-title`,
       ...page.sections.map((_, index) => `${candidate}-section-${index + 1}`),
     ]
     // Reserve the complete page namespace, not just its flattened path: a

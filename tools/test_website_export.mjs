@@ -153,6 +153,8 @@ for (const slugs of [
   ['/', '/content', '/home', '/home-section-1'],
   ['/', '/home-section-1', '/content', '/home'],
   ['/', '/a/b', '/a-b', '/a-b-2'],
+  ['/', '/home-title', '/contact', '/contact-title'],
+  ['/', '/contact-title', '/contact'],
 ]) {
   const artifact = {
     ...englishArtifact,
