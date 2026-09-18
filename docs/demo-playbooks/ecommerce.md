@@ -38,11 +38,11 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 
 "Is this a second stock system?" — approved boundary: `No duplicate stock ledger`. The storefront reads the Shop catalog; Shop keeps the accountable order, stock, and close records.
 
-"What do I get free, and what is paid?" — approved framing only: `Free product. Managed intelligence.`, free lane `Operate without a stripped-down plan.` with `No account or model call required`, managed gate `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` No prices — the public site carries none.
+"What do I get free, and what is paid?" — current public framing: `Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.` Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.`
 
 ## 5. The close
 
 - Primary close: the landing page's `Request assisted setup` button opens `/contact/?product=ecommerce` with Ecommerce pre-selected in `What do you need?`; submit with `Request setup` only when the customer authorizes sending their brief. Confirmation starts `Request received: `; keep the ID. This is brief receipt, not delivery of a working store.
 - Optional sample: `Start free sample` (`https://app.supermega.dev/settings/?product=ecommerce`) is for exploration, not a required customer setup task.
 - From inside the app: the setup page's "Ask SuperMega to set up Ecommerce" link carries the template, for example `https://supermega.dev/contact/?product=ecommerce&template=social-storefront&utm_source=app&utm_medium=guided_trial`.
-- Managed pilot close (usually paired with Shop): `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.
+- Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Shop handoff and managed activation require separate scope and acceptance; submitting a brief does not publish a catalog or accept an order.

@@ -20,7 +20,7 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 ## 3. Demo script
 
 1. Start on `/website/` in preview. The heading is `Website`; the `Start here` panel shows the pages, readiness, and inquiry counts at a glance.
-2. Press `Customize demo` to open the starter form: `Change the sample into your website`. Fill the client's real business details in front of them — this is the brief-to-site moment. `View sample` shows the untouched example; `Make preview` applies their answers.
+2. Press `Customize demo` to open the starter form: `Tell us the basics. We prepare the Website.` Use approved public business details only. `View example` shows the example; `Prepare private draft` applies the reviewed brief locally. Optional featured entries support up to four menu items, services or products. Existing-business CSV entries are previewed first and require `Use reviewed entries`; existing draft entries are never overwritten by import. This is a private draft, not publication or completed assisted delivery.
 3. Review the preview at desktop, tablet, and mobile widths. On a saved draft page the copy explains itself: `Check the selected page at desktop, tablet, or mobile size.`
 4. Press `Edit sample` (later `Edit page`) to change one headline live, then `Save` — or `Discard` to show that a preview never overwrites anything silently.
 5. Open the `Inquiries` disclosure: `Capture customer inquiries`. Add a test inquiry with `Add inquiry`, then `Qualify` it with a responsible person, and show `Export inquiries`. Note the on-screen line: nothing is sent to customers, CRM, or Shop from this screen.
@@ -35,11 +35,11 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 
 "Can it spam my customers?" — the inquiry inbox captures and assigns; it never sends. Approved boundaries for Website are explicit: `No CMS`, `No domain write`, `No analytics connection`, `No deployment`, `No customer send`, `No payment action`.
 
-"What do I get free, and what is paid?" — approved framing only: `Free product. Managed intelligence.`, free lane `Operate without a stripped-down plan.` with `No account or model call required`, managed gate `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` No prices — the public site carries none.
+"What do I get free, and what is paid?" — current public framing: `Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.` Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.`
 
 ## 5. The close
 
 - Primary close: the landing page's `Request assisted setup` button opens `/contact/?product=website` with Website pre-selected in `What do you need?`; submit with `Request setup` only when the customer authorizes sending their brief. Confirmation starts `Request received: `; retain the ID. SuperMega prepares the site after scope agreement, the customer reviews it, and publication remains separate.
 - Optional sample: `Start free sample` (`https://app.supermega.dev/settings/?product=website`). The downloaded website file is a local artifact, not a hosted site; customers need not learn the builder to request delivery.
 - From inside the app: the setup page's "Ask SuperMega to set up Website" link carries the template, for example `https://supermega.dev/contact/?product=website&template=business-presence&utm_source=app&utm_medium=guided_trial`.
-- Managed hosting or pilot: `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.
+- Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Hosting, domain changes and managed activation require separate scope and acceptance; submitting a brief does not publish anything.

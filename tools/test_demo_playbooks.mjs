@@ -58,8 +58,11 @@ check(generator.includes('const assistedSetup = assistedSetupAction(product)'), 
 check(generator.includes('https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}'), 'generator_guided_sample_link_pattern')
 // eslint-disable-next-line no-template-curly-in-string
 check(!generator.includes('Set up ${product.name} data'), 'generator_retired_setup_label_absent')
-check(generator.includes('/contact/?product=guide&amp;source=managed-intelligence'), 'generator_managed_pilot_link')
-derived.add('/contact/?product=guide&source=managed-intelligence')
+check(generator.includes('/contact/?product=guide&amp;source=assisted-setup'), 'generator_assisted_guide_link')
+derived.add('/contact/?product=guide&source=assisted-setup')
+// Historical deep links stay supported, but are not the current acquisition CTA.
+check(generator.includes("query.get('source')==='managed-intelligence'")
+  && generator.includes("submit.textContent='Request managed pilot'"), 'legacy_managed_pilot_deep_link_supported')
 
 check(productSetup.includes("utm_medium: 'guided_trial'")
   && productSetup.includes('return `https://supermega.dev/contact/?${query.toString()}`'), 'app_contact_url_builder_pattern')

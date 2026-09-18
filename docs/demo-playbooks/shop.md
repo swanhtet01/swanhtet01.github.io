@@ -50,7 +50,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 "Where does my data go?" — setup says `Stays on this device. Nothing is sent or published.` Nothing in the demo requires an account.
 
-"What do I get free, and what is paid?" — use the approved framing only: `Free product. Managed intelligence.` and `Run the products free. Add managed company intelligence when the workflow proves value.` The free lane is `Operate without a stripped-down plan.` with `No account or model call required`. Managed service is gated: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` Never quote a price; the public site carries none.
+"What do I get free, and what is paid?" — current public framing: `Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.` Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.`
 
 "What stops a mistake from going live?" — `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
 
@@ -59,4 +59,4 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 - Primary close: `Request assisted setup` opens `/contact/?product=shop`, pre-selecting Shop in `What do you need?`. The form asks `What would you like us to prepare?` and submits with `Request setup` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
 - Optional self-configuration: `Choose Shop type or continue saved` (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
-- Managed pilot close (multi-product or AI-context interest): `/contact/?product=guide&source=managed-intelligence` — the contact page retitles itself and the submit button becomes `Request managed pilot`.
+- Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Multi-product setup and managed activation require separate scope and acceptance; submitting a brief does not activate a workspace.
