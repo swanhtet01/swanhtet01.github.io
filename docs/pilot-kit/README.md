@@ -12,6 +12,14 @@ Both paths remain owner-gated. Synthetic, sample, browser-local, and local-rende
 
 ## Why this kit exists
 
+### Shop pilot proof rule
+
+Keep operator evidence requirements here, not in the customer setup form. Promotion requires 20 consecutive accepted order-to-close runs covering all five pilot days and five distinct observed calendar dates, with daily closes observed and reconciled. Any unexplained payment or stock changes block acceptance. Sample runs never count.
+
+Paid pilot only after the owner can name faster close or another measured operating improvement against the retained baseline, and the separate release and activation gates pass.
+
+Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check. This is the named Spa proof scope, not a requirement to display Spa instructions to every Shop trade.
+
 The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v5`, stored at `hq/readiness/managed-pilot-readiness.json`) blocks every managed claim behind the founder decision `managed-production-activation`. It requires four explicit inputs: `approve_runtime_role_provisioning`, `approve_first_named_owner_identity`, `approve_exact_production_release`, and `approve_managed_activation_window`. Its operator block requires a measured baseline (`measuredBaselineRequired`) and acceptance evidence (`acceptanceEvidenceRequired`) alongside verified email, terms acceptance, and tenant-isolation proof. Separately, `shop-spa-owner-pilot` stays `owner-gated`; this local rehearsal cannot substitute for the named client's hosted run.
 
 This kit is the paperwork for that preparation. It authorizes nothing: the founder decision remains `required` with `proposal_only` authority, and nothing in this kit touches a hosted service, spends a credential, or performs any network mutation.

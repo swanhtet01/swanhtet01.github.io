@@ -206,12 +206,18 @@ requireSnippet(baselineMeasurementText, '`owner_private_intake_ready` and Day-0 
 requireSnippet(pilotKitReadmeText, 'at least three observed manual order runs, three package-redemption runs, three daily-close runs, distinct private JSON run IDs across every baseline stream', files.pilotKitReadme)
 requireSnippet(salesAgentGuideText, 'The private baseline JSON must use distinct `runId` values across order, package-redemption, and daily-close streams', files.salesAgentGuide)
 
-requireSnippet(onboardingText, 'Shop pilot proof rule', files.onboarding)
-requireSnippet(onboardingText, 'accepted order-to-close runs', files.onboarding)
-requireSnippet(onboardingText, 'daily closes observed', files.onboarding)
-requireSnippet(onboardingText, 'unexplained payment or stock changes', files.onboarding)
-requireSnippet(onboardingText, 'Paid pilot only after the owner can name faster close', files.onboarding)
-requireSnippet(onboardingText, 'Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check.', files.onboarding)
+// Operator proof rules belong in the pilot kit, not every trade's setup screen.
+for (const rule of [
+  'Shop pilot proof rule',
+  'accepted order-to-close runs',
+  'daily closes observed',
+  'unexplained payment or stock changes',
+  'Paid pilot only after the owner can name faster close',
+  'Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check.',
+]) requireSnippet(pilotKitReadmeText, rule, files.pilotKitReadme)
+requireSnippet(onboardingText, 'Choose your trade to start with a matching catalog and workflow.', files.onboarding)
+requireSnippet(onboardingText, 'Creates local sample records, then opens the first task.', files.onboarding)
+check(!onboardingText.includes('Shop pilot proof rule'), 'operator_pilot_rules_must_not_crowd_customer_setup')
 
 requireSnippet(coreAppText, 'Spa pilot first sale', files.coreApp)
 requireSnippet(coreAppText, 'Sell package', files.coreApp)
