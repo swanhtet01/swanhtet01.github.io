@@ -44,6 +44,9 @@ function render() { sandbox.h.cursor = 0; sandbox.h.effects = []; return Website
 const click = (tree, label) => elements(tree).find(node => node.type === 'button' && text(node) === label).props.onClick()
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve)) }
 function fixture(response = (_identity, review) => review ? feedback : listing) {
+  const values = new Map()
+  sandbox.window.sessionStorage = { getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }
   sandbox.h = { slots: [], cursor: 0, effects: [], calls: [], writes: [], identity: { userId: 'actor', workspaceId: 'company' }, response }
 }
 test('metadata list is strictly bounded, ordered and identity-free', () => {
@@ -402,4 +405,92 @@ test('preparation transport binds expected identity and never sends a raw custom
   const slice = transport.slice(transport.indexOf('export async function loadManagedWebsiteRecipients('), transport.indexOf('export async function withdrawManagedWebsiteReview('))
   for (const boundary of ['recipientGrantId', "method: 'POST'", "cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
   assert.doesNotMatch(slice, /recipientActorId|workspaceId=/)
+})
+
+const recoveryKey = 'supermega.website.pending-review.v1:["company","actor"]'
+async function lostPreparation() {
+  fixture(); sandbox.h.createResponse = () => { throw Error('lost response') }
+  const tree = selectAndConfirm(await openRecipients())
+  click(tree, 'Prepare private review'); await settle()
+  return JSON.parse(sandbox.window.sessionStorage.getItem(recoveryKey))
+}
+function reloadInbox() { sandbox.h.slots = []; return render() }
+
+test('reload retains minimal reference and blocks a duplicate while list absence proves nothing', async () => {
+  const receipt = await lostPreparation()
+  assert.deepEqual(Object.keys(receipt).sort(), ['contentRevision', 'expectedVersion', 'expiresAt', 'previewDigest', 'readAt', 'recipientGrantId', 'reviewId'])
+  let tree = reloadInbox()
+  assert.ok(text(tree).includes(receipt.reviewId))
+  assert.equal(elements(tree).find(n => text(n) === 'Check saved Website before handoff').props.disabled, true)
+  click(tree, 'Check saved Website before handoff'); await settle()
+  assert.equal(sandbox.h.writes.length, 1)
+  sandbox.h.response = () => ({ ...listing, reviews: [] })
+  click(render(), 'Refresh reviews'); await settle(); tree = render()
+  assert.ok(text(tree).includes(receipt.reviewId))
+  assert.match(text(tree), /missing entry is not proof/)
+  assert.ok(sandbox.window.sessionStorage.getItem(recoveryKey))
+})
+
+test('only matching retained source, digest and expiry clear recovery after reload', async () => {
+  for (const mismatch of ['none', 'digest', 'version', 'expiry', 'early', 'delete']) {
+    const receipt = await lostPreparation()
+    const review = { ...row, reviewId: receipt.reviewId, contentRevision: receipt.contentRevision,
+      sourceVersion: receipt.expectedVersion, preparedAt: receipt.readAt, expiresAt: receipt.expiresAt, hasChangeRequests: false }
+    if (mismatch === 'version') review.sourceVersion++
+    if (mismatch === 'expiry') review.expiresAt = new Date(Date.parse(review.expiresAt) + 1000).toISOString()
+    if (mismatch === 'early') review.preparedAt = new Date(Date.parse(review.preparedAt) - 1000).toISOString()
+    sandbox.h.response = (_identity, requested) => requested ? { ...feedback, reviewId: review.reviewId,
+      contentRevision: review.contentRevision, sourceVersion: review.sourceVersion, requests: [],
+      previewDigest: mismatch === 'digest' ? `sha256:${'f'.repeat(64)}` : receipt.previewDigest }
+      : { ...listing, reviews: [review] }
+    if (mismatch === 'delete') sandbox.window.sessionStorage.removeItem = () => { throw Error('storage denied') }
+    let tree = reloadInbox(); click(tree, 'Refresh reviews'); await settle(); tree = render()
+    click(tree, 'Read decision for revision 2'); await settle(); tree = render()
+    assert.equal(sandbox.window.sessionStorage.getItem(recoveryKey) === null, mismatch === 'none')
+    assert.equal(elements(tree).find(n => text(n) === 'Check saved Website before handoff').props.disabled, mismatch !== 'none')
+    assert.equal(sandbox.h.writes.length, 1)
+  }
+})
+
+test('corrupt or inaccessible recovery storage fails closed without a write', async () => {
+  for (const mode of ['corrupt', 'read', 'write', 'silent']) {
+    fixture(); sandbox.h.createResponse = command => prepareReceipt(command)
+    if (mode === 'corrupt') sandbox.window.sessionStorage.setItem(recoveryKey, '{broken')
+    if (mode === 'read') sandbox.window.sessionStorage.getItem = () => { throw Error('denied') }
+    if (mode === 'corrupt' || mode === 'read') {
+      const tree = render(); click(tree, 'Check saved Website before handoff'); await settle()
+      assert.match(text(render()), /storage is unavailable or invalid/)
+    } else {
+      const tree = selectAndConfirm(await openRecipients())
+      sandbox.window.sessionStorage.setItem = () => { if (mode === 'write') throw Error('denied') }
+      click(tree, 'Prepare private review'); await settle()
+    }
+    assert.equal(sandbox.h.writes.length, 0)
+  }
+})
+
+test('another account cannot inherit or clear this account recovery reference', async () => {
+  const receipt = await lostPreparation()
+  sandbox.h.slots = []; sandbox.h.cursor = 0
+  const tree = WebsiteReviewInbox({ actorId: 'different', workspaceId: 'company' })
+  assert.equal(text(tree).includes(receipt.reviewId), false)
+  assert.equal(JSON.parse(sandbox.window.sessionStorage.getItem(recoveryKey)).reviewId, receipt.reviewId)
+})
+
+test('recovery is retained before dispatch and survives focus invalidation of a lost response', async () => {
+  fixture(); let release
+  sandbox.h.createResponse = command => {
+    assert.equal(JSON.parse(sandbox.window.sessionStorage.getItem(recoveryKey)).reviewId, command.reviewId)
+    return new Promise(resolve => { release = () => resolve(prepareReceipt(command)) })
+  }
+  const listeners = {}
+  sandbox.window.addEventListener = (name, fn) => { listeners[name] = fn }
+  let tree = selectAndConfirm(await openRecipients()); const cleanup = sandbox.h.effects[0]()
+  click(tree, 'Prepare private review'); await settle()
+  const before = sandbox.window.sessionStorage.getItem(recoveryKey)
+  listeners.focus(); release(); await settle(); tree = render()
+  assert.equal(sandbox.window.sessionStorage.getItem(recoveryKey), before)
+  assert.doesNotMatch(text(tree), /Private review prepared for the selected customer/)
+  assert.match(text(tree), /Unconfirmed review reference/)
+  cleanup(); sandbox.window.addEventListener = () => {}
 })

@@ -9,6 +9,34 @@ type Listing = { reviews: Review[]; nextAfter: string | null; order: 'review_id_
 type Preparation = { sourceVersion: number; contentRevision: number; previewDigest: string; readAt: string; preview: CustomerWebsiteReview['preview'] }
 type Recipients = { recipients: { grantId: string; label: string }[]; nextAfter: string | null; order: 'grant_id_ascending'; accessGranted: false }
 type PrepareCommand = { reviewId: string; recipientGrantId: string; expectedVersion: number; expiresAt: string }
+type PendingPreparation = PrepareCommand & { contentRevision: number; previewDigest: string; readAt: string }
+const pendingKey = (workspaceId: string, actorId: string) => `supermega.website.pending-review.v1:${JSON.stringify([workspaceId, actorId])}`
+function readPending(key: string): PendingPreparation | null | 'unavailable' {
+  try {
+    const raw = window.sessionStorage.getItem(key)
+    if (raw === null) return null
+    if (raw.length > 1024) return 'unavailable'
+    const row = exact(JSON.parse(raw), ['reviewId', 'recipientGrantId', 'expectedVersion', 'expiresAt', 'contentRevision', 'previewDigest', 'readAt'])
+    if (!uuid(row.reviewId) || !uuid(row.recipientGrantId) || !version(row.expectedVersion, 1) || !version(row.contentRevision)
+      || !time(row.expiresAt) || !time(row.readAt) || Date.parse(String(row.expiresAt)) <= Date.parse(String(row.readAt))
+      || typeof row.previewDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(row.previewDigest)) return 'unavailable'
+    return row as PendingPreparation
+  } catch { return 'unavailable' }
+}
+function samePending(left: PendingPreparation | null | 'unavailable', right: PendingPreparation) {
+  return left !== null && left !== 'unavailable' && Object.entries(right).every(([key, value]) => left[key as keyof PendingPreparation] === value)
+}
+function retainPending(key: string, receipt: PendingPreparation) {
+  const prior = readPending(key)
+  if (prior !== null && !samePending(prior, receipt)) throw new Error('Pending review requires reconciliation')
+  window.sessionStorage.setItem(key, JSON.stringify(receipt))
+  if (!samePending(readPending(key), receipt)) throw new Error('Pending review could not be retained')
+}
+function clearPending(key: string, receipt: PendingPreparation) {
+  if (!samePending(readPending(key), receipt)) throw new Error('Pending review changed')
+  window.sessionStorage.removeItem(key)
+  if (readPending(key) !== null) throw new Error('Pending review could not be cleared')
+}
 const uuid = (value: unknown): value is string => typeof value === 'string' && value.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
 const time = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value))
 const version = (value: unknown, min = 0) => Number.isSafeInteger(value) && Number(value) >= min
@@ -111,6 +139,8 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   const [recipient, setRecipient] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [prepareCommand, setPrepareCommand] = useState<PrepareCommand | null>(null)
+  const receiptKey = pendingKey(workspaceId, actorId)
+  const [pendingReceipt, setPendingReceipt] = useState(() => readPending(receiptKey))
   const epoch = useRef(0)
   const pending = useRef(false)
   useEffect(() => {
@@ -118,11 +148,12 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     const clear = () => {
       invalidate(); pending.current = false; setBusy(false); setListing(null); setSelected(null); setChanges(null); setPreparation(null); setWithdrawal(null)
       setRecipients(null); setRecipient(''); setConfirmed(false); setPrepareCommand(null)
+      setPendingReceipt(readPending(receiptKey))
       setMessage('Account context changed. Refresh to read this company’s reviews.')
     }
     window.addEventListener('storage', clear); window.addEventListener('focus', clear)
     return () => { invalidate(); window.removeEventListener('storage', clear); window.removeEventListener('focus', clear) }
-  }, [workspaceId, actorId])
+  }, [workspaceId, actorId, receiptKey])
   useEffect(() => {
     // Remove an expired handoff even when the operator leaves the page open.
     if (!selected || !time(selected.expiresAt)) return
@@ -151,6 +182,16 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       const current = await currentManagedIdentity()
       if (attempt !== epoch.current) return
       if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
+      const retained = readPending(receiptKey)
+      setPendingReceipt(retained)
+      if (review && retained && retained !== 'unavailable' && review.reviewId === retained.reviewId) {
+        if (review.sourceVersion !== retained.expectedVersion || review.contentRevision !== retained.contentRevision
+          || (data as Changes).previewDigest !== retained.previewDigest
+          || Date.parse(review.expiresAt) !== Date.parse(retained.expiresAt)
+          || Date.parse(review.preparedAt) < Date.parse(retained.readAt)) return invalid()
+        clearPending(receiptKey, retained)
+        setPendingReceipt(null)
+      }
       if (review) setChanges(data as Changes); else setListing(data as Listing)
       setNow(Date.now())
       setMessage(review ? 'Retained customer decisions. They do not authorize publication.' : 'Reviews are ordered by reference, not by date. Refresh starts again at the first page.')
@@ -166,6 +207,9 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
 
   async function inspectSavedSource() {
     if (pending.current) return
+    const retained = readPending(receiptKey)
+    setPendingReceipt(retained)
+    if (retained !== null) return
     pending.current = true; setBusy(true)
     const attempt = ++epoch.current
     setPreparation(null); setSelected(null); setChanges(null); setListing(null)
@@ -223,6 +267,10 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       const identity = await currentManagedIdentity()
       if (attempt !== epoch.current) return
       if (!identity || identity.workspaceId !== workspaceId || identity.userId !== actorId) throw new Error('Access changed')
+      const receipt: PendingPreparation = { ...command, contentRevision: preparation.contentRevision,
+        previewDigest: preparation.previewDigest, readAt: preparation.readAt }
+      retainPending(receiptKey, receipt)
+      setPendingReceipt(receipt)
       const raw = exact(await prepareManagedWebsiteReview(command, identity), ['reviewId', 'contentRevision', 'sourceVersion', 'preparedAt', 'previewDigest', 'expiresAt', 'status', 'persisted', 'replayed', 'publicationAuthorized'])
       if (raw.reviewId !== command.reviewId || raw.contentRevision !== preparation.contentRevision || raw.sourceVersion !== command.expectedVersion
         || raw.previewDigest !== preparation.previewDigest || !time(raw.preparedAt) || !time(raw.expiresAt)
@@ -232,6 +280,8 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       const current = await currentManagedIdentity()
       if (attempt !== epoch.current) return
       if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
+      clearPending(receiptKey, receipt)
+      setPendingReceipt(null)
       const review: Review = { reviewId: command.reviewId, contentRevision: preparation.contentRevision, sourceVersion: preparation.sourceVersion,
         preparedAt: String(raw.preparedAt), expiresAt: String(raw.expiresAt), status: 'active', hasChangeRequests: false, hasCustomerAcceptance: false }
       setPreparation(null); setRecipients(null); setRecipient(''); setConfirmed(false); setPrepareCommand(null)
@@ -281,9 +331,11 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   return <section className="website-editor-panel" aria-labelledby="website-review-inbox-title">
     <h2 id="website-review-inbox-title">Customer review decisions</h2>
     <p>Read customer feedback and acceptance of prepared revisions. Making edits, preparing a new review and publishing remain separate.</p>
-    <button className="core-button" disabled={busy} onClick={() => void inspectSavedSource()} type="button">Check saved Website before handoff</button>
+    <button className="core-button" disabled={busy || pendingReceipt !== null} onClick={() => void inspectSavedSource()} type="button">Check saved Website before handoff</button>
     <button className="core-button" disabled={busy} onClick={() => void load()} type="button">Refresh reviews</button>
     <p className="form-notice" role="status">{message}</p>
+    {pendingReceipt === 'unavailable' ? <p>Review recovery storage is unavailable or invalid. New preparation is blocked. Restore this browser session or ask the workspace owner to reconcile retained reviews; do not clear storage to retry.</p>
+      : pendingReceipt ? <p style={{ overflowWrap: 'anywhere' }}>Unconfirmed review reference: {pendingReceipt.reviewId}. Retry the same review if offered, or refresh reviews and read this exact reference before preparing another. A missing entry is not proof that preparation failed. Recovery lasts for this browser tab session only.</p> : null}
     {preparation ? <section aria-label="Verified saved Website" style={{ overflowWrap: 'anywhere' }}>
       <h3>{preparation.preview.siteName} · saved revision {preparation.contentRevision}</h3>
       <p>Source version {preparation.sourceVersion} · read <time dateTime={preparation.readAt}>{new Date(preparation.readAt).toLocaleString()}</time>. Later edits require another check.</p>
@@ -298,7 +350,6 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       </details>)}
       <button className="core-button" disabled={busy || !!prepareCommand} type="button" onClick={() => void chooseCustomer()}>Choose customer for review</button>
       {recipients ? <section aria-label="Prepare customer review">
-        {prepareCommand ? <p style={{ overflowWrap: 'anywhere' }}>Pending review reference: {prepareCommand.reviewId}. Retry reuses this reference; check it in the review list after refreshing.</p> : null}
         {recipients.recipients.length === 0 ? <p>No eligible customers on this page. The owner must enroll a review-only account before preparing a review.</p> : <>
           <label htmlFor="website-review-recipient">Enrolled customer</label>
           <select id="website-review-recipient" disabled={busy || !!prepareCommand} value={recipient}

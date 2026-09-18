@@ -179,9 +179,15 @@ an invitation or publishes content.
 
 The staff recipient-selection/preparation UI is implemented: inspect saved source,
 choose an enrolled customer, explicitly confirm the recipient and revision, then
-prepare a private 24-hour review. Lost-response retries reuse the same command
-within the mounted component; after a reload the operator must reconcile retained
-reviews before creating another. Command recovery across reload is not yet durable.
+prepare a private 24-hour review. Before dispatch, the UI retains a minimal,
+workspace-and-actor-scoped recovery reference in sessionStorage. No preview content,
+customer label, contact details or credential is included. Lost-response retries
+reuse the same command in the mounted component. Reload or focus invalidation
+preserves the reference and blocks new preparation until the operator reads the
+matching retained review with the exact version, revision, digest and expiry.
+Missing list entries, corrupt/unavailable storage and failed deletion stay blocked.
+This is tab-session recovery, not cross-device or closed-browser recovery, and not
+server-side deduplication across independent tabs. No automatic retry or send occurs.
 
 Before claiming the complete delivery journey, finish and review the verified
 account-enrollment UX, then exercise the full hosted journey. Do not rebuild the
@@ -319,8 +325,8 @@ The `40c9a3ae` setup-disclosure follow-up has its own focused tests, exact build
 tablet/mobile browser observations. Neither result proves hosted acceptance,
 conversion improvement, actual-user study completion or production readiness.
 
-Remaining delivery work is explicit: verified account enrollment; durable recovery
-of uncertain preparation after reload; independent exact-candidate review; authorized
+Remaining delivery work is explicit: verified account enrollment; cross-session
+recovery of uncertain preparation; independent exact-candidate review; authorized
 immutable hosted preview; real managed login, customer review and recovery journeys;
 then separately approved production promotion with rollback and telemetry evidence.
 
