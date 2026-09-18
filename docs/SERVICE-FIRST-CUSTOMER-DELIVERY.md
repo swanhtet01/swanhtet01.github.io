@@ -131,12 +131,35 @@ The next complete journey must demonstrate:
 5. A separate release step binds hosted identity and recovery evidence. The
    customer can distinguish preview approval, deployment pending and verified live.
 
-Items 1, 2 and the change-request portion of item 4 exist in current local source;
-they are not hosted acceptance evidence. Item 3 requires a distinct server-authorized
-customer decision bound to the existing review assignment. Item 5 remains a separate
-release concern. Reuse the Website path first, then qualify Ecommerce catalog review
-and Shop setup acceptance against their actual state models rather than assuming
-identical semantics.
+Items 1–4 now have local implementation and focused evidence: separate immutable
+customer acceptance, exact revision/digest binding, change-request exclusivity,
+lost-response replay, stale/withdrawn review denial and nonempty backup/restore.
+Staff can inspect the verified saved source and retained decisions. An eligible
+prepared review can produce a manual handoff draft on the canonical app host;
+this does not send a message or grant access. These are not hosted acceptance
+evidence. Item 5 remains a separate release concern.
+
+### Account-assignment gap
+
+The runtime membership policy is self-only. There is no customer directory or
+review-only enrollment UI to reuse, and ordinary self-serve Website ownership
+grants editing capabilities rather than the dedicated `website.review` role.
+SQL rehearsal fixtures explicitly seed that role; this must not be mistaken for
+a production invitation/provisioning workflow. Do not ask operators to type raw
+actor IDs, widen directory reads, or grant customers `website.write` as a shortcut.
+
+Before claiming the complete delivery journey, implement and review named,
+workspace-bound review-only enrollment through the existing owner-gated account
+provisioning path, its revocation/audit lifecycle, and the corresponding recipient
+selection/preparation UI. Preserve authenticated membership as authority; the
+review URL is not a bearer credential. A local database-backed login regression
+must prove assigned-company discovery, an empty business-data bootstrap for
+review-only users, denial of staff preparation, and immediate revoked-session
+denial before returning readiness or capabilities.
+
+Reuse the Website path first, then qualify Ecommerce catalog review and Shop
+setup acceptance against their actual state models rather than assuming identical
+semantics.
 
 ## Prioritized setup experiments
 

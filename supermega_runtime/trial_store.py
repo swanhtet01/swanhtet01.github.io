@@ -26,7 +26,7 @@ TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
 _READINESS_LOG = logging.getLogger(__name__)
 _READINESS_STAGES = frozenset({
     "configuration", "connect", "transaction", "probe", "role", "schema",
-    "audit", "context", "membership", "entitlements", "premium",
+    "audit", "context", "session", "membership", "entitlements", "premium",
     "cursor_close", "transaction_close", "connection_close",
 })
 _READINESS_FAILURES = frozenset({
@@ -4463,6 +4463,8 @@ class PostgresTrialStore:
                             stage = "context"
                             normalized = principal.normalized()
                             self._set_context(cursor, normalized)
+                            stage = "session"
+                            self._assert_active_identity_session(cursor, normalized)
                             stage = "membership"
                             capabilities = self._load_membership(cursor, normalized)
                             membership_ready = True
@@ -4497,6 +4499,10 @@ class PostgresTrialStore:
                 audit_ready = False
             elif "membership_ready" in exc.reasons:
                 membership_ready = False
+            elif "auth_session_active" in exc.reasons:
+                auth_ready = False
+                membership_ready = False
+                capabilities = frozenset()
         except Exception:
             _log_readiness_failure(stage, "unexpected_error")
             database_ready = False

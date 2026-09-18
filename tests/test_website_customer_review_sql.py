@@ -569,6 +569,40 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         with self.assertRaises(TrialNotReadyError):
             adapter.preview(actor, str(review[0]))
 
+    def test_review_only_login_discovery_bootstrap_and_session_revocation(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from supermega_runtime.trial_runtime import create_trial_router
+        session = str(uuid4())
+        actor = TrialPrincipal(WORKSPACE, RECIPIENT, "human", session_id=session, identity_provider="supabase")
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("insert into auth.sessions(id,user_id) values (%s,%s)", (session, RECIPIENT))
+        store = self.adapter().store
+        app = FastAPI()
+        app.include_router(create_trial_router(store=store, resolve_principal=lambda _: actor))
+        try:
+            directory, more = store.list_actor_workspaces(actor)
+            self.assertFalse(more)
+            self.assertEqual([item.workspace_id for item in directory], [WORKSPACE])
+            with TestClient(app) as client:
+                bootstrap = client.get('/api/trial/v1/bootstrap')
+                self.assertEqual(bootstrap.status_code, 200, bootstrap.text)
+                data = bootstrap.json()
+                self.assertEqual(data['states'], {})
+                self.assertEqual(data['approvals'], [])
+                self.assertEqual(data['readiness']['capabilities'], ['website.review'])
+                self.assertEqual(client.get('/api/trial/v1/website-review-preparation').status_code, 403)
+                with pg._connect(self.admin_url) as connection:
+                    connection.execute("delete from auth.sessions where id=%s", (session,))
+                with self.assertRaises(TrialNotReadyError):
+                    store.list_actor_workspaces(actor)
+                revoked = client.get('/api/trial/v1/bootstrap')
+                self.assertEqual(revoked.status_code, 401, revoked.text)
+                self.assertNotIn('website.review', revoked.text)
+        finally:
+            with pg._connect(self.admin_url) as connection:
+                connection.execute("delete from auth.sessions where id=%s", (session,))
+
     def test_adapter_denies_wrong_recipient_workspace_kind_and_write_disabled(self):
         review = self.retained_assignment()
         for actor in (TrialPrincipal(WORKSPACE, OWNER, "human"), TrialPrincipal("rehearsal-b", "owner-b", "human"), TrialPrincipal(WORKSPACE, RECIPIENT, "agent")):

@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from supermega_runtime.trial_store import (
-    PostgresTrialStore, TrialNotReadyError, _log_readiness_failure,
+    PostgresTrialStore, TrialNotReadyError, TrialPrincipal, _log_readiness_failure,
 )
 
 
@@ -95,6 +95,22 @@ class ReadinessDiagnosticsTests(unittest.TestCase):
         with self.assertLogs(LOGGER) as captured:
             _log_readiness_failure(SECRET, SECRET)
         self.assertEqual(captured.records[0].getMessage(), "trial_readiness_failure stage=unknown category=unknown")
+
+    def test_revoked_session_denies_readiness_before_membership_and_keeps_logs_coarse(self):
+        store, _ = self.make_store()
+        store._assert_active_identity_session = MagicMock(side_effect=TrialNotReadyError(('auth_session_active', SECRET)))
+        store._load_membership = MagicMock()
+        actor = TrialPrincipal('example-company', '11111111-1111-4111-8111-111111111111', 'human',
+            session_id='22222222-2222-4222-8222-222222222222', identity_provider='supabase')
+        with self.assertLogs(LOGGER) as captured:
+            result = store.readiness(actor)
+        self.assertTrue(result.database_ready and result.schema_ready and result.role_ready)
+        self.assertFalse(result.auth_ready)
+        self.assertFalse(result.membership_ready)
+        self.assertEqual(result.capabilities, frozenset())
+        store._load_membership.assert_not_called()
+        self.assertIn('stage=session category=contract_not_ready', captured.output[0])
+        self.assertNotIn(SECRET, str(captured.records[0].__dict__))
 
 
 if __name__ == "__main__":
