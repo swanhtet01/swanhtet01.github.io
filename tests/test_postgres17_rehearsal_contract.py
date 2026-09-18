@@ -26,6 +26,23 @@ def _load_rehearsal():
 
 
 class Postgres17RehearsalContractTests(unittest.TestCase):
+    def test_disposable_cluster_uses_only_tls_tcp_not_package_socket_directory(self) -> None:
+        module = _load_rehearsal()
+        with tempfile.TemporaryDirectory() as temporary:
+            data = Path(temporary) / "data"
+            data.mkdir()
+            with patch.object(module, "_binary", return_value=Path("initdb")), \
+                 patch.object(module, "_require_success"):
+                module._initialize_cluster(postgres_bin=Path(temporary), openssl=Path("openssl"),
+                    data_directory=data, admin_password=module._password(), port=15432, environment={})
+            config = (data / "postgresql.conf").read_text(encoding="utf-8")
+            self.assertEqual(config.count("unix_socket_directories = ''"), 1)
+            self.assertIn("listen_addresses = '127.0.0.1'", config)
+            self.assertIn("ssl = on", config)
+            self.assertIn("hostnossl all all 127.0.0.1/32 reject",
+                          (data / "pg_hba.conf").read_text(encoding="utf-8"))
+            self.assertFalse((data.parent / "admin-password.txt").exists())
+
     def test_postgres_bin_platform_defaults_and_explicit_override(self) -> None:
         module = _load_rehearsal()
         for platform, expected in (

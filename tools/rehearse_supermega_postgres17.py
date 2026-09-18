@@ -469,6 +469,7 @@ def _initialize_cluster(
     with (data_directory / "postgresql.conf").open("a", encoding="utf-8") as config:
         config.write("\n# SuperMega disposable PostgreSQL 17 rehearsal\n")
         config.write("listen_addresses = '127.0.0.1'\n")
+        config.write("unix_socket_directories = ''\n")
         config.write(f"port = {port}\n")
         config.write("ssl = on\n")
         config.write("ssl_cert_file = 'server.crt'\n")
