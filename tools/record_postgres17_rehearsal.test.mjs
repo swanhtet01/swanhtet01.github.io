@@ -46,6 +46,18 @@ const checkNames = [
 
 const implementation = await implementationEvidence()
 const migrationNames = implementation.paths.filter((path) => path.startsWith('supabase/migrations/')).map((path) => path.split('/').at(-1))
+test('receipt inventory matches the actual PostgreSQL runner including Website acceptance', () => {
+  const python = process.env.SUPERMEGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
+  const result = spawnSync(python, ['-c', 'import json; from tools.rehearse_supermega_postgres17 import IMPLEMENTATION_PATHS, CURRENT_MIGRATIONS; print(json.dumps({"paths": list(IMPLEMENTATION_PATHS), "migrations": list(CURRENT_MIGRATIONS)}))'], {
+    cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 10000, windowsHide: true,
+  })
+  assert.equal(result.status, 0, 'runner inventory must be readable')
+  const runner = JSON.parse(result.stdout)
+  assert.deepEqual(implementation.paths, runner.paths)
+  assert.deepEqual(migrationNames, runner.migrations)
+  assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
+  assert.equal(runner.migrations.at(-1), '20260918011500_website_customer_acceptance.sql')
+})
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
   implementationCommit: 'b'.repeat(40),
