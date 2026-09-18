@@ -154,6 +154,11 @@ export function applyWebsiteStarterBrief(
       : { name: 'Catalog', slug: '/catalog', eyebrow: 'Catalog', headline: `Explore ${businessName}`, sectionEyebrow: 'Products and packages', sectionTitle: 'Start with the right option.' }
   const contactDestination = contactHref || '/contact'
   const contactDescription = boundedSeoDescription(`Contact ${businessName} about ${offer}`)
+  const inquiry = brief.templateId === 'business-presence'
+    ? { label: 'Ask about our business', title: 'Is this the right business for you?', body: 'Tell us which service or information you need, your location if relevant, and how you would like to be contacted.', nextTitle: 'Make an informed first contact', nextBody: 'Read the business information, then ask about anything you need confirmed before making a decision.' }
+    : brief.templateId === 'lead-generation'
+      ? { label: 'Discuss your requirements', title: 'Prepare a useful service inquiry', body: 'Describe the result you need, the scope of the work, your preferred timing, and any constraints. Ask for the price and what is included before agreeing to proceed.', nextTitle: 'Compare scope, not just a headline price', nextBody: 'Ask what is included, what information is needed from you, and how changes will be handled. An inquiry is not a confirmed booking or quote.' }
+      : { label: 'Ask about an item', title: 'Find the right item or package', body: 'Include the item or package name, quantity, preferred variant, and whether you need pickup or delivery. Ask the business to confirm current price and availability.', nextTitle: 'Confirm the details before ordering', nextBody: 'Check the exact variant, total price, collection or delivery arrangements, and return terms. Browsing this catalog does not reserve stock or place an order.' }
 
   return {
     ...workspace,
@@ -190,10 +195,14 @@ export function applyWebsiteStarterBrief(
           eyebrow: secondaryPage.eyebrow,
           headline: secondaryPage.headline,
           summary: offer,
-          ctaLabel: 'Contact us',
+          ctaLabel: inquiry.label,
           ctaHref: contactDestination,
         },
-        sections: [{ ...secondary.sections[0], eyebrow: secondaryPage.sectionEyebrow, title: secondaryPage.sectionTitle, body: proof }],
+        sections: [
+          { ...secondary.sections[0], eyebrow: secondaryPage.sectionEyebrow, title: secondaryPage.sectionTitle, body: proof },
+          { id: `${secondary.id}-inquiry`, eyebrow: 'Your requirements', title: inquiry.title, body: inquiry.body },
+          { id: `${secondary.id}-decision`, eyebrow: 'Before deciding', title: inquiry.nextTitle, body: inquiry.nextBody },
+        ],
         seo: { title: `${secondaryPage.name} | ${businessName}`, description: offer },
         updatedAt: capturedAt,
       },
@@ -210,7 +219,7 @@ export function applyWebsiteStarterBrief(
           ctaLabel: contactHref ? 'Open contact channel' : '',
           ctaHref: contactHref,
         },
-        sections: [{ ...contact.sections[0], eyebrow: 'Before you send', title: 'Share the need, quantity, location, and timing.', body: `This page is for ${audience}. Contact details and claims still require owner review before release.` }],
+        sections: [{ ...contact.sections[0], eyebrow: 'Before you send', title: inquiry.title, body: inquiry.body }],
         seo: { title: `Contact | ${businessName}`, description: contactDescription },
         updatedAt: capturedAt,
       },
