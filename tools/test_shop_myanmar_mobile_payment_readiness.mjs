@@ -81,4 +81,10 @@ check(coreAppSource.includes('Payment evidence reference'), 'payment reconciliat
 check(coreAppSource.includes('Internal slip file ID or counter reference'), 'payment reconciliation accepts a privacy-minimal internal slip reference')
 check(coreAppSource.includes('it does not verify or charge a payment'), 'payment reconciliation does not overclaim payment-provider verification')
 
+const coreAppCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
+check(coreAppCss.includes('.action-confirm-form .form-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }'),
+  'mobile accountable-action buttons use two shrinkable columns')
+check(coreAppCss.includes('.action-confirm-form .form-actions .core-button { width: 100%; min-width: 0; }'),
+  'mobile accountable-action buttons cannot force horizontal overflow')
+
 console.log(JSON.stringify({ ok: true, checks }))

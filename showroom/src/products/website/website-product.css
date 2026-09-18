@@ -2727,24 +2727,24 @@
 }
 
 .website-starter-setup .website-status {
-  min-height: 28px;
+  min-height: 1.75rem;
   font-size: .75rem;
 }
 
 .website-starter-setup label {
-  gap: 7px;
+  gap: .4375rem;
   font-size: .875rem;
 }
 
 .website-starter-setup input,
 .website-starter-setup select,
 .website-starter-setup textarea {
-  min-height: 44px;
+  min-height: 2.75rem;
   font-size: 1rem;
 }
 
 .website-starter-setup textarea {
-  min-height: 88px;
+  min-height: 5.5rem;
 }
 
 .website-starter-setup label small,
