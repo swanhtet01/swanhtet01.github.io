@@ -173,6 +173,7 @@ export function EcommerceBuyingWorkspace({
   const [quoteBusy, setQuoteBusy] = useState(false)
   const quoteInFlight = useRef(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
+  const handoffInFlight = useRef(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
   const [managedConfirmation, setManagedConfirmation] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
@@ -1208,7 +1209,8 @@ export function EcommerceBuyingWorkspace({
   }
 
   async function openOperatorReview() {
-    if (!latestRequest || latestRequestConfirmed || !quoteCurrent || handoffBusy) return
+    if (disabled || recoveryBlocked || !latestRequest || latestRequestConfirmed || !quoteCurrent || handoffBusy || handoffInFlight.current) return
+    handoffInFlight.current = true
     setHandoffBusy(true)
     setNotice('')
     try {
@@ -1238,6 +1240,7 @@ export function EcommerceBuyingWorkspace({
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Shop review failed closed.')
     } finally {
+      handoffInFlight.current = false
       setHandoffBusy(false)
     }
   }
@@ -1368,7 +1371,7 @@ export function EcommerceBuyingWorkspace({
               </div>
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
               <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Saved on this device. Company Shop delivery is not verified here.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
-              <button className="core-button secondary" disabled={!quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
+              <button className="core-button secondary" disabled={disabled || recoveryBlocked || !quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
             </article>
