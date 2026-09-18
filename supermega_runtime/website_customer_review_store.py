@@ -95,6 +95,27 @@ class WebsiteCustomerReviewStore:
             return {"reviews": reviews, "nextAfter": reviews[-1]["reviewId"] if len(rows) > 50 else None,
                     "order": "review_id_ascending", "publicationAuthorized": False}
 
+    def preparation_preview(self, principal: TrialPrincipal) -> dict[str, Any]:
+        """Read the saved source, never a browser draft or a customer directory.
+
+        This is not a reservation: prepare must still compare expected_version
+        under its write lock. A concurrent edit requires a fresh preview.
+        """
+        with self._transaction(principal, write=False, capability="website.write", require_acceptance=True) as (cursor, actor):
+            cursor.execute("""select version,state_json,clock_timestamp() as read_at
+                from app_private.workspace_state where workspace_id=%s and surface='website'""", (actor.workspace_id,))
+            source = cursor.fetchone()
+            if source is None:
+                raise TrialValidationError("website_review_source_missing")
+            if not 1 <= source["version"] <= 9_007_199_254_740_991:
+                raise TrialValidationError("website_review_source_stale")
+            revision, preview = _preview(source["state_json"])
+            result = {"status": "saved_source_preview", "sourceVersion": source["version"],
+                      "contentRevision": revision, "preview": deepcopy(preview), "previewDigest": _digest(preview),
+                      "readAt": source["read_at"].isoformat(), "reviewCreated": False,
+                      "publicationAuthorized": False, "deploymentAuthorized": False}
+        return result
+
     def prepare(self, principal: TrialPrincipal, *, review_id: str, recipient_actor_id: str,
                 expected_version: int, expires_at: str) -> dict[str, Any]:
         review_id, recipient = _uuid(review_id), _uuid(recipient_actor_id)

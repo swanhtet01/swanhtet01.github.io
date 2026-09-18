@@ -198,6 +198,59 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             resolve_principal=lambda request: principals.get(request.headers.get("x-test-actor"))))
         return TestClient(app)
 
+    def test_preparation_preview_is_saved_exact_source_without_writes(self):
+        from supermega_runtime.website_customer_review import _digest, _preview
+        with self.transaction() as connection:
+            version, state = connection.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='website'", (WORKSPACE,)).fetchone()
+            before = connection.execute("select count(*) from app_private.website_customer_reviews").fetchone()[0]
+        result = self.adapter(write=False).preparation_preview(TrialPrincipal(WORKSPACE, OWNER, "human"))
+        revision, expected = _preview(state)
+        self.assertEqual(result, dict(status="saved_source_preview", sourceVersion=version,
+            contentRevision=revision, preview=expected, previewDigest=_digest(expected),
+            readAt=result["readAt"], reviewCreated=False, publicationAuthorized=False, deploymentAuthorized=False))
+        self.assertIsNotNone(datetime.fromisoformat(result["readAt"]).tzinfo)
+        with self.transaction() as connection:
+            self.assertEqual(connection.execute("select count(*) from app_private.website_customer_reviews").fetchone()[0], before)
+            self.assertEqual(connection.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='website'", (WORKSPACE,)).fetchone(), (version, state))
+        self.assertNotIn("recipientActorId", result)
+        self.assertNotIn("workspaceId", result)
+
+    def test_preparation_preview_does_not_reserve_or_bypass_changed_source(self):
+        actor = TrialPrincipal(WORKSPACE, OWNER, "human")
+        original = self.adapter().preparation_preview(actor)
+        args = self.preparation_arguments()
+        with self.transaction() as connection:
+            self.edit(connection); connection.commit()
+        with self.assertRaisesRegex(TrialValidationError, "website_review_source_stale"):
+            self.adapter().prepare(actor, **args)
+        current = self.adapter().preparation_preview(actor)
+        self.assertEqual(current["sourceVersion"], original["sourceVersion"] + 1)
+        args["expected_version"] = current["sourceVersion"]
+        prepared = self.adapter().prepare(actor, **args)
+        self.assertEqual(prepared["previewDigest"], current["previewDigest"])
+        self.assertEqual(prepared["contentRevision"], current["contentRevision"])
+
+    def test_http_preparation_preview_has_private_writer_only_read_boundary(self):
+        url = "/api/trial/v1/website-review-preparation"
+        with self.http_client() as client:
+            response = client.get(url, headers={"x-test-actor": "operator"})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["status"], "saved_source_preview")
+            self.assertFalse(response.json()["reviewCreated"])
+            self.assertEqual(response.headers["cache-control"], "private, no-store")
+            self.assertEqual(response.headers["pragma"], "no-cache")
+            for headers, code in (({}, 401), ({"x-test-actor": "customer"}, 403),
+                                  ({"x-test-actor": "other"}, 403), ({"x-test-actor": "agent"}, 403)):
+                denied = client.get(url, headers=headers)
+                self.assertEqual(denied.status_code, code, denied.text)
+                self.assertNotIn("previewDigest", denied.text)
+                self.assertEqual(denied.headers["cache-control"], "private, no-store")
+            for query in ("?workspace=elsewhere", "?recipientActorId=forged", "?expectedVersion=1"):
+                invalid = client.get(url + query, headers={"x-test-actor": "operator"})
+                self.assertEqual(invalid.status_code, 422)
+                self.assertEqual(invalid.headers["cache-control"], "private, no-store")
+            self.assertEqual(client.post(url, headers={"x-test-actor": "operator"}, json={}).status_code, 405)
+
     def test_http_prepare_customer_feedback_retry_and_withdraw_real_database(self):
         args = self.preparation_arguments()
         body = dict(reviewId=args["review_id"], recipientActorId=args["recipient_actor_id"],
