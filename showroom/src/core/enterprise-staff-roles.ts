@@ -73,8 +73,15 @@ export function isRoleValid(role: string): role is StaffRole {
 }
 
 export function canPerformWrite(actorRole: StaffRole, required: RequiredAuthority): boolean {
+  if (!isRoleValid(actorRole) || !isRoleValid(required.minimumRole)) return false
   if (actorRole === 'owner') return true
-  return ROLE_LEVEL[actorRole] >= ROLE_LEVEL[required.minimumRole]
+  if (actorRole === 'admin') return required.minimumRole !== 'owner'
+  if (actorRole === required.minimumRole) return true
+  // Levels are display/sorting metadata, not cross-job permission inheritance.
+  // A cashier must not gain stock or accounting writes merely by sharing a level.
+  if (actorRole === 'shop-supervisor') return ['cashier', 'fulfiller', 'stock-manager'].includes(required.minimumRole)
+  if (actorRole === 'plant-supervisor') return ['plant-operator', 'quality-inspector'].includes(required.minimumRole)
+  return false
 }
 
 export function isAssignmentExpired(assignment: RoleAssignment, asOf: string): boolean {
