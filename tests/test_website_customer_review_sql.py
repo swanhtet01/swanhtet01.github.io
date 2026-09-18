@@ -156,6 +156,12 @@ class WebsiteReviewSqlTests(unittest.TestCase):
     def adapter(self, *, write=True):
         return WebsiteCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=write))
 
+    def test_adapter_accept_requires_optional_schema(self):
+        with self.assertRaises(TrialNotReadyError):
+            self.adapter().accept(TrialPrincipal(WORKSPACE, RECIPIENT, "human"),
+                dict(commandId=str(uuid4()), reviewId=str(uuid4()), previewDigest=DIGEST,
+                     decision="accept_preview_for_release_review"))
+
     def retained_assignment(self):
         with self.transaction() as connection:
             review = self.prepare(connection)
@@ -752,6 +758,36 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         with pg._connect(self.admin_url) as connection:
             connection.execute(extension.read_text(encoding='utf-8'))
 
+        from supermega_runtime.website_acceptance_schema import acceptance_triggers_verified, acceptance_storage_verified
+        with pg._connect(self.admin_url) as connection:
+            self.assertTrue(acceptance_storage_verified(connection.cursor()))
+            cursor = connection.execute('''select c.relname as table_name, t.tgname as trigger_name,
+                t.tgtype::integer as event_mask, t.tgenabled as enabled,
+                t.tgqual is null as no_when_clause, t.tgnargs=0 as no_arguments,
+                cardinality(t.tgattr::int2[])=0 as no_column_filter,
+                t.tgconstraint=0 as no_constraint_link, not t.tgdeferrable as not_deferrable,
+                not t.tginitdeferred as not_initially_deferred,
+                t.tgoldtable is null and t.tgnewtable is null as no_transition_tables,
+                pn.nspname as function_schema, p.proname as function_name,
+                l.lanname as function_language, p.prosecdef as security_definer,
+                p.proconfig as function_config, p.prosrc as function_source
+                from pg_trigger t join pg_class c on c.oid=t.tgrelid
+                join pg_namespace n on n.oid=c.relnamespace
+                join pg_proc p on p.oid=t.tgfoid
+                join pg_namespace pn on pn.oid=p.pronamespace
+                join pg_language l on l.oid=p.prolang
+                where n.nspname='app_private' and not t.tgisinternal''')
+            keys = [column.name for column in cursor.description]
+            observed = [dict(zip(keys, row)) for row in cursor.fetchall()]
+            self.assertTrue(acceptance_triggers_verified(observed))
+            connection.execute('alter table app_private.website_customer_feedback disable trigger website_feedback_acceptance_guard')
+            # The modified catalog state must not be accepted; restore by rollback.
+            for row in observed:
+                if row['trigger_name'] == 'website_feedback_acceptance_guard':
+                    row['enabled'] = connection.execute("select tgenabled from pg_trigger where tgname='website_feedback_acceptance_guard'").fetchone()[0]
+            self.assertFalse(acceptance_triggers_verified(observed))
+            connection.rollback()
+
         def accept(connection, review, *, actor=RECIPIENT, digest=None, fingerprint=None):
             review_id, version, prepared_digest = review
             revision = connection.execute('select content_revision from app_private.website_customer_reviews where review_id=%s', (review_id,)).fetchone()[0]
@@ -890,6 +926,102 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             self.assertEqual(row, (True, True))
             for role in ('anon', 'authenticated', 'service_role'):
                 self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.website_customer_acceptances','select,insert,update,delete')", (role,)).fetchone()[0])
+
+        # Catalog drift is denied before product data can be read or accepted.
+        mutations = (
+            'alter table app_private.website_customer_acceptances disable row level security',
+            'alter table app_private.website_customer_acceptances no force row level security',
+            'grant select on app_private.website_customer_acceptances to anon',
+            'grant update on app_private.website_customer_acceptances to supermega_trial_backend',
+            'grant select (preview_digest) on app_private.website_customer_acceptances to authenticated',
+            'grant execute on function app_private.guard_website_acceptance() to public',
+            'drop policy website_acceptance_insert on app_private.website_customer_acceptances',
+            'create policy unexpected_read on app_private.website_customer_acceptances for select using (true)',
+            'alter table app_private.website_customer_acceptances alter accepted_at drop default',
+            'alter table app_private.website_customer_acceptances drop constraint website_customer_acceptances_workspace_id_review_id_key',
+            'alter table app_private.website_customer_acceptances add column unexpected text',
+            'create rule discard_acceptance as on insert to app_private.website_customer_acceptances do instead nothing',
+            'create table app_private.unexpected_acceptance_child () inherits (app_private.website_customer_acceptances)',
+        )
+        for sql in mutations:
+            with self.subTest(catalog_mutation=sql):
+                with pg._connect(self.admin_url) as connection:
+                    connection.execute(sql)
+                    self.assertFalse(acceptance_storage_verified(connection.cursor()))
+                    connection.rollback()
+
+        actor = TrialPrincipal(WORKSPACE, RECIPIENT, "human")
+        adapter = self.adapter()
+        review = self.retained_assignment()
+        payload = dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2],
+                       decision='accept_preview_for_release_review')
+        result = adapter.accept(actor, payload)
+        self.assertTrue(result['persisted'])
+        self.assertFalse(result['replayed'])
+        self.assertFalse(result['publicationAuthorized'])
+        self.assertFalse(result['deploymentAuthorized'])
+        self.assertEqual(adapter.accept(actor, payload), result | {'replayed': True})
+        # A retry still needs its current review capability, even if the actor
+        # retains staff read access. Historical consent is not an access token.
+        try:
+            opened = Queue(maxsize=1)
+            original_connect = adapter.store._connect
+
+            def observed_connect():
+                connection = original_connect()
+                opened.put(connection.info.backend_pid)
+                return connection
+
+            with pg._connect(self.admin_url) as leader:
+                leader.execute("select pg_advisory_xact_lock(hashtextextended('website-review:' || %s,0))", (WORKSPACE,))
+                leader.execute("update app_private.workspace_memberships set capabilities=array['website.write'] where workspace_id=%s and actor_id=%s",
+                               (WORKSPACE, RECIPIENT))
+                with patch.object(adapter.store, '_connect', side_effect=observed_connect), ThreadPoolExecutor(max_workers=1) as worker:
+                    pending = worker.submit(adapter.accept, actor, payload)
+                    try:
+                        pid, waiting = opened.get(timeout=2), False
+                        deadline = time.monotonic() + 3
+                        with pg._connect(self.admin_url, autocommit=True) as observer:
+                            while time.monotonic() < deadline:
+                                state = observer.execute("select wait_event_type='Lock' from pg_stat_activity where pid=%s", (pid,)).fetchone()
+                                if state and state[0]:
+                                    waiting = True
+                                    break
+                                time.sleep(0.01)
+                        self.assertTrue(waiting, 'retry must reach the advisory lock before capability revocation commits')
+                        leader.commit()
+                        with self.assertRaises(TrialPermissionDenied):
+                            pending.result(timeout=4)
+                    finally:
+                        leader.rollback()
+            with self.assertRaises(TrialPermissionDenied):
+                adapter.accept(actor, payload)
+        finally:
+            with pg._connect(self.admin_url) as connection:
+                connection.execute("update app_private.workspace_memberships set capabilities=array['website.review'] where workspace_id=%s and actor_id=%s",
+                                   (WORKSPACE, RECIPIENT))
+        with self.assertRaises(TrialValidationError):
+            adapter.accept(actor, payload | {'commandId': str(uuid4())})
+        with self.assertRaises(TrialValidationError):
+            adapter.accept(actor, payload | {'previewDigest': DIGEST})
+        with self.assertRaises(TrialNotReadyError):
+            self.adapter(write=False).accept(actor, payload)
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.accept(TrialPrincipal(WORKSPACE, OWNER, 'human'), payload)
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.accept(TrialPrincipal(WORKSPACE, RECIPIENT, 'agent'), payload)
+        changed = self.retained_assignment()
+        adapter.request_changes(actor, dict(commandId=str(uuid4()), reviewId=str(changed[0]),
+                                          previewDigest=changed[2], note='Shorten the title'))
+        with self.assertRaisesRegex(TrialValidationError, 'website_acceptance_changes_pending'):
+            adapter.accept(actor, payload | {'commandId': str(uuid4()), 'reviewId': str(changed[0]),
+                                            'previewDigest': changed[2]})
+        adapter.revoke(TrialPrincipal(WORKSPACE, OWNER, 'human'), str(review[0]))
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.accept(actor, payload)
+        with self.transaction(OWNER) as connection:
+            self.assertEqual(connection.execute('select count(*) from app_private.website_customer_acceptances where review_id=%s',
+                                               (review[0],)).fetchone()[0], 1)
 
 
 if __name__ == "__main__":

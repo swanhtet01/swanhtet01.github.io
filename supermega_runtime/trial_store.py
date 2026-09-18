@@ -3601,7 +3601,18 @@ class PostgresTrialStore:
             order by table_record.relname, trigger_record.tgname
             """
         )
-        trigger_rows = _without_verified_website_review_triggers(cursor.fetchall())
+        raw_triggers = cursor.fetchall()
+        trigger_rows = _without_verified_website_review_triggers(raw_triggers)
+        from .website_acceptance_schema import ACCEPTANCE_TRIGGERS, acceptance_triggers_verified, acceptance_storage_verified
+        if any((row.get("table_name"), row.get("trigger_name")) in ACCEPTANCE_TRIGGERS for row in trigger_rows):
+            # Optional extension: never whitelist a trigger by name alone.
+            if (not acceptance_triggers_verified(raw_triggers)
+                    or not set(_WEBSITE_REVIEW_TRIGGERS).issubset(
+                        {(row.get("table_name"), row.get("trigger_name")) for row in raw_triggers})
+                    or not acceptance_storage_verified(cursor)):
+                raise TrialNotReadyError(("website_acceptance_storage_ready",))
+            trigger_rows = [row for row in trigger_rows
+                            if (row.get("table_name"), row.get("trigger_name")) not in ACCEPTANCE_TRIGGERS]
         if len(trigger_rows) != len(_PRIVATE_HARDENING_TRIGGER_CONTRACT):
             raise TrialNotReadyError(("schema_ready",))
         actual_triggers: dict[tuple[str, str], dict[str, Any]] = {}

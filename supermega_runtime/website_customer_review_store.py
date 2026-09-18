@@ -21,7 +21,8 @@ class WebsiteCustomerReviewStore:
         self.store = store
 
     @contextmanager
-    def _transaction(self, principal: TrialPrincipal, *, write: bool, capability: str, lock_source: bool = False):
+    def _transaction(self, principal: TrialPrincipal, *, write: bool, capability: str, lock_source: bool = False,
+                     require_acceptance: bool = False):
         actor = principal.normalized()
         if actor.actor_kind != "human":
             raise TrialPermissionDenied(capability)
@@ -35,6 +36,16 @@ class WebsiteCustomerReviewStore:
                  ('workspace_state','website_reviews_invalidate'),('website_customer_feedback','website_feedback_guard'))""")
             if cursor.fetchone()["guards"] != 3:
                 raise TrialNotReadyError(("website_review_storage_ready",))
+            cursor.execute("""select to_regclass('app_private.website_customer_acceptances') is not null as present,
+                (select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid
+                 join pg_namespace n on n.oid=c.relnamespace where n.nspname='app_private'
+                 and not t.tgisinternal and (c.relname,t.tgname) in
+                  (('website_customer_acceptances','website_acceptance_guard'),
+                   ('website_customer_feedback','website_feedback_acceptance_guard'))) as guards""")
+            acceptance = cursor.fetchone()
+            if ((acceptance["present"] and acceptance["guards"] != 2)
+                    or (require_acceptance and not acceptance["present"])):
+                raise TrialNotReadyError(("website_acceptance_storage_ready",))
             cursor.execute("select current_setting('transaction_isolation') as isolation")
             if cursor.fetchone()["isolation"] != "read committed":
                 raise TrialValidationError("website_review_requires_read_committed")
@@ -47,6 +58,8 @@ class WebsiteCustomerReviewStore:
             cursor.execute("select pg_advisory_xact_lock(hashtextextended('website-review:' || %s,0))", (actor.workspace_id,))
             # A lock wait may outlive session or entitlement revocation.
             self.store._assert_active_identity_session(cursor, actor)
+            if capability not in self.store._load_membership(cursor, actor):
+                raise TrialPermissionDenied(capability)
             if "website" not in (self.store._product_entitlements(cursor, actor.workspace_id) or ()):
                 raise TrialPermissionDenied(capability)
             yield cursor, actor
@@ -245,4 +258,63 @@ class WebsiteCustomerReviewStore:
             result = {"commandId": command_id, "reviewId": review_id,
                       "status": "changes_requested", "createdAt": retained["created_at"].isoformat(),
                       "persisted": True, "replayed": replay, "publicationAuthorized": False}
+        return result
+
+    def accept(self, principal: TrialPrincipal, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Retain exact customer consent for operator review, never publication.
+
+        Retry the same command only. Every retry rechecks the current assignment,
+        identity and entitlement; an old receipt cannot revive revoked access.
+        """
+        if (not isinstance(payload, Mapping)
+                or set(payload) != {"commandId", "reviewId", "previewDigest", "decision"}
+                or payload["decision"] != "accept_preview_for_release_review"):
+            raise TrialValidationError("website_review_payload_invalid")
+        command_id, review_id = _uuid(payload["commandId"]), _uuid(payload["reviewId"])
+        with self._transaction(principal, write=True, capability="website.review", require_acceptance=True) as (cursor, actor):
+            row = self._assignment(cursor, actor, review_id)
+            if payload["previewDigest"] != row["preview_digest"]:
+                raise TrialValidationError("website_review_stale_revision")
+            identity = {"contract": "supermega.website.customer-acceptance.v1",
+                        "workspaceId": actor.workspace_id, "actorId": actor.actor_id,
+                        "reviewId": review_id, "commandId": command_id,
+                        "contentRevision": row["content_revision"],
+                        "previewDigest": row["preview_digest"], "decision": payload["decision"]}
+            fingerprint = _digest(identity)
+            cursor.execute("""select review_id,source_version,content_revision,preview_digest,
+                command_fingerprint,decision,accepted_at from app_private.website_customer_acceptances
+                where workspace_id=%s and actor_id=%s and command_id=%s""",
+                (actor.workspace_id, actor.actor_id, command_id))
+            retained = cursor.fetchone()
+            replay = retained is not None
+            if retained is None:
+                cursor.execute("""select exists(select 1 from app_private.website_customer_feedback
+                    where workspace_id=%s and review_id=%s) as pending,
+                    exists(select 1 from app_private.website_customer_acceptances
+                    where workspace_id=%s and review_id=%s) as accepted""",
+                    (actor.workspace_id, review_id, actor.workspace_id, review_id))
+                state = cursor.fetchone()
+                if state["pending"]:
+                    raise TrialValidationError("website_acceptance_changes_pending")
+                if state["accepted"]:
+                    raise TrialValidationError("website_review_already_accepted")
+                cursor.execute("""insert into app_private.website_customer_acceptances
+                    (workspace_id,actor_id,command_id,review_id,source_version,content_revision,
+                     preview_digest,command_fingerprint,decision) values (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    returning review_id,source_version,content_revision,preview_digest,
+                              command_fingerprint,decision,accepted_at""",
+                    (actor.workspace_id, actor.actor_id, command_id, review_id, row["source_version"],
+                     row["content_revision"], row["preview_digest"], fingerprint, payload["decision"]))
+                retained = cursor.fetchone()
+            if (str(retained["review_id"]) != review_id or retained["source_version"] != row["source_version"]
+                    or retained["content_revision"] != row["content_revision"]
+                    or retained["preview_digest"] != row["preview_digest"]
+                    or retained["command_fingerprint"] != fingerprint
+                    or retained["decision"] != payload["decision"]):
+                raise TrialValidationError("website_review_command_conflict")
+            result = {"commandId": command_id, "reviewId": review_id,
+                      "contentRevision": row["content_revision"], "previewDigest": row["preview_digest"],
+                      "acceptedAt": retained["accepted_at"].isoformat(),
+                      "status": "accepted_for_operator_release_review", "persisted": True,
+                      "replayed": replay, "publicationAuthorized": False, "deploymentAuthorized": False}
         return result
