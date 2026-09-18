@@ -76,4 +76,9 @@ for (const file of publicPaymentFiles) {
   check(!bareMyanmarMobileNumber.test(source), `${file} has no committed bare Myanmar mobile-payment number`)
 }
 
+const coreAppSource = readFileSync('showroom/src/core/CoreApp.tsx', 'utf8')
+check(coreAppSource.includes('Payment evidence reference'), 'payment reconciliation labels its evidence reference clearly')
+check(coreAppSource.includes('Internal slip file ID or counter reference'), 'payment reconciliation accepts a privacy-minimal internal slip reference')
+check(coreAppSource.includes('it does not verify or charge a payment'), 'payment reconciliation does not overclaim payment-provider verification')
+
 console.log(JSON.stringify({ ok: true, checks }))
