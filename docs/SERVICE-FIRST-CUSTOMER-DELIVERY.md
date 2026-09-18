@@ -159,6 +159,23 @@ administrative action. The operator must not receive database credentials or typ
 raw actor IDs; the later enrollment UI must bind a verified account through the
 private owner-reviewed workflow rather than widen runtime directory access.
 
+Recipient selection now has a bounded private API: the owner with Website write,
+company write and approval-decision capabilities can list only their own active,
+approved `website-reviewer` grants in the current workspace. The response contains
+the grant reference and owner-reviewed display label, not Auth IDs, email addresses,
+other roles or a global directory. Each result must match its durable approval and
+currently eligible membership; revoked grants disappear. Pages have at most 50
+entries in grant-reference order, not alphabetical order. Identical labels must
+not be silently merged or selected by the future UI.
+
+Preparing a review may use `recipientGrantId` instead of `recipientActorId`.
+The server resolves it under the same source/review lock and rechecks current
+membership, expiry and exact saved version. Unknown, foreign, unapproved or revoked
+grants fail closed. Supplying both recipient identifiers is invalid. The original
+actor-ID API remains compatible for existing reviewed internal callers; it is not
+the customer-facing selection UX. Listing a grant never creates membership, sends
+an invitation or publishes content.
+
 Before claiming the complete delivery journey, finish and review the account
 selection/enrollment UX and recipient-selection/preparation UI, then exercise the
 full hosted journey. Do not grant customers `website.write` as a shortcut.

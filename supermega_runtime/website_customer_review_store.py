@@ -116,13 +116,67 @@ class WebsiteCustomerReviewStore:
                       "publicationAuthorized": False, "deploymentAuthorized": False}
         return result
 
-    def prepare(self, principal: TrialPrincipal, *, review_id: str, recipient_actor_id: str,
-                expected_version: int, expires_at: str) -> dict[str, Any]:
-        review_id, recipient = _uuid(review_id), _uuid(recipient_actor_id)
+    def _enrolled_recipients(self, cursor: Any, actor: TrialPrincipal, *, after: str | None = None,
+                            grant_id: str | None = None) -> list[Any]:
+        # Reuse private owner-authorized grant records, not a membership/Auth
+        # directory. This list is for the owner managing delivery, not reviewers
+        # or ordinary content editors. A reference never grants access itself.
+        if not {"company.write", "approvals.decide"}.issubset(self.store._load_membership(cursor, actor)):
+            raise TrialPermissionDenied("approvals.decide")
+        cursor.execute("""select e.command_id as grant_id,
+                e.payload_json->>'memberLabel' as label,
+                e.payload_json->>'memberActorId' as recipient
+            from app_private.workspace_events e
+            join app_private.approval_requests a on a.workspace_id=e.workspace_id
+                and a.command_id=e.command_id and a.command_fingerprint=e.command_fingerprint
+            where e.workspace_id=%s and e.surface='company'
+                and e.event_type='company.staff_access.granted' and e.actor_kind='human'
+                and e.actor_id=%s and e.event_id=e.command_id
+                and a.status='approved' and a.requested_by=e.actor_id and a.decided_by=e.actor_id
+                and a.requested_actor_kind='human' and a.decided_actor_kind='human'
+                and a.decision_contract_version=2 and e.created_at>=a.decided_at
+                and e.payload_json->>'roleId'='website-reviewer'
+                and e.payload_json->'products'='["website"]'::jsonb
+                and e.payload_json->'capabilities'='["website.review"]'::jsonb
+                and e.result_json->>'contract'='supermega.workspace_staff_access_event.v1'
+                and e.result_json->>'status'='active'
+                and e.result_json->>'roleId'='website-reviewer'
+                and e.result_json->>'memberActorId'=e.payload_json->>'memberActorId'
+                and e.result_json->>'staffAccessPlanDigest'='sha256:' || e.command_fingerprint
+                and not exists (select 1 from app_private.workspace_events r
+                    where r.workspace_id=e.workspace_id and r.event_type='company.staff_access.revoked'
+                    and r.result_json->>'staffAccessPlanDigest'=e.result_json->>'staffAccessPlanDigest')
+                and app_private.website_review_recipient_ready(e.payload_json->>'memberActorId')
+                and (%s::uuid is null or e.command_id>%s::uuid)
+                and (%s::uuid is null or e.command_id=%s::uuid)
+            order by e.command_id limit 51""", (actor.workspace_id, actor.actor_id, after, after, grant_id, grant_id))
+        return cursor.fetchall()
+
+    def list_recipients(self, principal: TrialPrincipal, *, after: str | None = None) -> dict[str, Any]:
+        if after is not None:
+            after = _uuid(after)
+        with self._transaction(principal, write=False, capability="website.write", require_acceptance=True) as (cursor, actor):
+            rows = self._enrolled_recipients(cursor, actor, after=after)
+            recipients = [{"grantId": str(row["grant_id"]), "label": _text(row["label"], 120)} for row in rows[:50]]
+            return {"recipients": recipients, "nextAfter": recipients[-1]["grantId"] if len(rows) > 50 else None,
+                    "order": "grant_id_ascending", "accessGranted": False}
+
+    def prepare(self, principal: TrialPrincipal, *, review_id: str, recipient_actor_id: str | None = None,
+                expected_version: int, expires_at: str, recipient_grant_id: str | None = None) -> dict[str, Any]:
+        if (recipient_actor_id is None) == (recipient_grant_id is None):
+            raise TrialValidationError("website_review_recipient_invalid")
+        review_id = _uuid(review_id)
+        recipient = _uuid(recipient_actor_id) if recipient_actor_id is not None else None
+        grant_id = _uuid(recipient_grant_id) if recipient_grant_id is not None else None
         expiry = _time(expires_at)
         if type(expected_version) is not int or expected_version < 1:
             raise TrialValidationError("website_review_source_stale")
         with self._transaction(principal, write=True, capability="website.write", lock_source=True) as (cursor, actor):
+            if grant_id is not None:
+                recipients = self._enrolled_recipients(cursor, actor, grant_id=grant_id)
+                if len(recipients) != 1:
+                    raise TrialPermissionDenied("website.review")
+                recipient = _uuid(recipients[0]["recipient"])
             cursor.execute("select clock_timestamp() as now")
             now = cursor.fetchone()["now"]
             if not now < expiry <= now + timedelta(days=7):

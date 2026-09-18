@@ -1108,6 +1108,15 @@ def create_trial_router(
             return adapter.preparation_preview(principal)
         return await website_review_request(request, operation)
 
+    @router.get("/website-review-recipients")
+    async def list_website_review_recipients(request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            query = request.query_params
+            if set(query) - {"after"} or len(query.getlist("after")) > 1:
+                raise TrialValidationError("website_review_cursor_invalid")
+            return adapter.list_recipients(principal, after=query.get("after"))
+        return await website_review_request(request, operation)
+
     @router.get("/website-reviews")
     async def list_website_reviews(request: Request) -> JSONResponse:
         def operation(adapter, principal, _body):
@@ -1120,9 +1129,12 @@ def create_trial_router(
     @router.post("/website-reviews")
     async def prepare_website_review(request: Request) -> JSONResponse:
         def operation(adapter, principal, body):
-            if not isinstance(body, Mapping) or set(body) != {"reviewId", "recipientActorId", "expectedVersion", "expiresAt"}:
+            if request.query_params or not isinstance(body, Mapping) or set(body) not in (
+                    {"reviewId", "recipientActorId", "expectedVersion", "expiresAt"},
+                    {"reviewId", "recipientGrantId", "expectedVersion", "expiresAt"}):
                 raise TrialValidationError("website_review_request_invalid")
-            return adapter.prepare(principal, review_id=body["reviewId"], recipient_actor_id=body["recipientActorId"],
+            return adapter.prepare(principal, review_id=body["reviewId"], recipient_actor_id=body.get("recipientActorId"),
+                                   recipient_grant_id=body.get("recipientGrantId"),
                                    expected_version=body["expectedVersion"], expires_at=body["expiresAt"])
         return await website_review_request(request, operation, body_limit=2048)
 

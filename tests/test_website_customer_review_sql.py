@@ -203,13 +203,49 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         adapter = self.adapter()
         customer = TrialPrincipal(workspace, recipient, "human", identity_provider="supabase", session_id=recipient_session)
         writer = TrialPrincipal(workspace, OWNER_ID, "human", identity_provider="supabase", session_id=OWNER_SESSION_ID)
+        choices = adapter.list_recipients(writer)
+        self.assertEqual(choices, {"recipients": [{"grantId": plan["grantId"], "label": "Synthetic reviewer"}],
+                                  "nextAfter": None, "order": "grant_id_ascending", "accessGranted": False})
+        self.assertNotIn(recipient, json.dumps(choices))
+        self.assertEqual(adapter.list_recipients(writer, after=plan["grantId"])["recipients"], [])
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.list_recipients(customer)
+        fake_grant = str(uuid4())
+        with pg._connect(self.admin_url) as connection:
+            # An event-shaped row is not an owner-approved enrollment. Reuse
+            # real grant payload bytes but give it an unapproved command ID.
+            connection.execute("""insert into app_private.workspace_events
+                (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,
+                 expected_version,resulting_version,payload_json,result_json)
+                select %s,workspace_id,%s,command_fingerprint,surface,event_type,actor_id,actor_kind,
+                    expected_version,resulting_version,payload_json,result_json
+                from app_private.workspace_events where workspace_id=%s and command_id=%s""",
+                (fake_grant, fake_grant, workspace, plan["grantId"]))
+        self.assertEqual(adapter.list_recipients(writer), choices)
+        for invalid_grant in (fake_grant, str(uuid4())):
+            with self.assertRaises(TrialPermissionDenied):
+                adapter.prepare(writer, review_id=str(uuid4()), recipient_grant_id=invalid_grant,
+                    expected_version=1, expires_at=(now + timedelta(hours=1)).isoformat())
         ready = adapter.store.readiness(customer)
         self.assertTrue(ready.read_ready)
         self.assertEqual(ready.capabilities, frozenset({"website.review"}))
         with self.assertRaises(TrialPermissionDenied):
             adapter.preparation_preview(customer)
-        prepared = adapter.prepare(writer, review_id=str(uuid4()), recipient_actor_id=recipient,
-            expected_version=1, expires_at=(now + timedelta(hours=1)).isoformat())
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from supermega_runtime.trial_runtime import create_trial_router
+        app = FastAPI()
+        app.include_router(create_trial_router(store=adapter.store, resolve_principal=lambda _request: writer))
+        with TestClient(app) as client:
+            response = client.get('/api/trial/v1/website-review-recipients')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), choices)
+            self.assertEqual(response.headers['cache-control'], 'private, no-store')
+            response = client.post('/api/trial/v1/website-reviews', json={
+                'reviewId': str(uuid4()), 'recipientGrantId': plan['grantId'],
+                'expectedVersion': 1, 'expiresAt': (now + timedelta(hours=1)).isoformat()})
+            self.assertEqual(response.status_code, 200)
+            prepared = response.json()
         self.assertEqual(adapter.preview(customer, prepared["reviewId"])["previewDigest"], prepared["previewDigest"])
         revoked = provisioner.revoke(plan, activation, verified_owner_actor_id=OWNER_ID,
             verified_owner_session_id=OWNER_SESSION_ID, reason="Synthetic access ended.")
@@ -220,9 +256,28 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             adapter.preview(customer, prepared["reviewId"])
         self.assertFalse(adapter.store.readiness(customer).read_ready)
         self.assertEqual(adapter.store.readiness(customer).capabilities, frozenset())
+        self.assertEqual(adapter.list_recipients(writer)["recipients"], [])
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.prepare(writer, review_id=str(uuid4()), recipient_grant_id=plan["grantId"],
+                expected_version=1, expires_at=(now + timedelta(hours=1)).isoformat())
         with pg._connect(self.admin_url) as connection:
             self.assertEqual(connection.execute("select count(*) from app_private.workspace_events where workspace_id=%s and event_type in ('company.staff_access.granted','company.staff_access.revoked')",
-                                               (workspace,)).fetchone()[0], 2)
+                                               (workspace,)).fetchone()[0], 3)
+
+    def test_recipient_route_rejects_customer_and_query_overrides(self):
+        with self.http_client() as client:
+            denied = client.get('/api/trial/v1/website-review-recipients', headers={'x-test-actor': 'customer'})
+            self.assertEqual(denied.status_code, 403)
+            self.assertEqual(denied.headers['cache-control'], 'private, no-store')
+            for query in ('?workspaceId=other', '?recipientActorId=private', '?after=bad',
+                          '?after=' + str(uuid4()) + '&after=' + str(uuid4())):
+                response = client.get('/api/trial/v1/website-review-recipients' + query,
+                                      headers={'x-test-actor': 'operator'})
+                self.assertEqual(response.status_code, 422)
+            duplicate = client.post('/api/trial/v1/website-reviews', headers={'x-test-actor': 'operator'},
+                json={'reviewId': str(uuid4()), 'recipientActorId': RECIPIENT, 'recipientGrantId': str(uuid4()),
+                      'expectedVersion': 1, 'expiresAt': (datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()})
+            self.assertEqual(duplicate.status_code, 422)
 
     def test_adapter_accept_requires_current_assignment(self):
         with self.assertRaises(TrialPermissionDenied):
