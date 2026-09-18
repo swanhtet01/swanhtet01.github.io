@@ -176,7 +176,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       <p>Source version {preparation.sourceVersion} · read <time dateTime={preparation.readAt}>{new Date(preparation.readAt).toLocaleString()}</time>. Later edits require another check.</p>
       <p>These are saved pages, not a customer invitation. Assigning an account and preparing its review remain separate.</p>
       {preparation.preview.pages.map(page => <details key={page.id}>
-        <summary>{page.navigation.label || page.seo.title || 'Page'} · {page.hero.headline}</summary>
+        <summary style={{ minHeight: 44, padding: '0.75rem 0', boxSizing: 'border-box', cursor: 'pointer' }}>{page.navigation.label || page.seo.title || 'Page'} · {page.hero.headline}</summary>
         <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{page.hero.summary}</p>
         {page.sections.map(section => <section key={section.id}><h4>{section.title}</h4><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{section.body}</p></section>)}
         <p>Contact label: {page.hero.ctaLabel || 'Not prepared'}</p>
