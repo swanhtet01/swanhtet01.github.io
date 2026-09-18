@@ -47,6 +47,21 @@ for (const product of ['website', 'ecommerce']) {
     assert.equal(invalid.searchParams.has('template'), false)
     assert.equal(invalid.hash, '')
   })
+  test(`${product}: request action is visible before optional collapsed setup choices`, () => {
+    selectedTemplate = ''
+    const html = renderToStaticMarkup(React.createElement(AssistedDeliveryScope, { product }))
+    assert.match(html, /<details class="assisted-delivery-options"><summary>Choose a starting point · optional<\/summary>/)
+    assert.doesNotMatch(html, /<details[^>]*\bopen(?:=|\s|>)/)
+    assert.ok(html.indexOf('<a ') < html.indexOf('<details'))
+    assert.ok(html.indexOf('<select') > html.indexOf('assisted-delivery-options'))
+    for (const template of deliveryTemplates(product)) {
+      selectedTemplate = template.id
+      const selected = renderToStaticMarkup(React.createElement(AssistedDeliveryScope, { product }))
+      assert.ok(selected.includes(`Starting point: ${template.name}`))
+      assert.ok(selected.includes(`template=${template.id}`))
+    }
+    selectedTemplate = ''
+  })
 }
 test('existing contact form consumes both handoff fields', () => {
   assert.match(source, /import \{ templatesFor \} from '\.\.\/core\/product-setup'/)
@@ -73,5 +88,6 @@ test('assisted scope overrides compact-grid named placements without changing ot
   assert.match(css, /:has\(> \.assisted-delivery-scope\) \{ grid-template-columns: minmax\(0, 1fr\); grid-template-areas: none/)
   assert.match(css, /> :is\(\.core-eyebrow, h2, p, details, section, div\) \{ grid-area: auto/)
   assert.ok(css.includes('min-height: 2.75rem'))
+  assert.ok(css.includes('.website-today:has(.assisted-delivery-scope) { grid-template-columns: minmax(0, 1fr); }'))
   assert.doesNotMatch(css, /!important/)
 })

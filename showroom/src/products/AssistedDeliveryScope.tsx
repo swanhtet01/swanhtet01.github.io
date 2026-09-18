@@ -23,16 +23,19 @@ export function AssistedDeliveryScope({ product }: { product: Product }) {
   const templates = deliveryTemplates(product)
   const selected = templates.find(item => item.id === selection)
   return <section className="assisted-delivery-scope" aria-label="Choose your setup outcome">
-    <label htmlFor={id}>What should this do for your business?</label>
-    <select id={id} value={selection} onChange={event => setSelection(event.target.value)}>
-      <option value="">Help me choose</option>
-      {templates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
-    </select>
-    <div aria-live="polite">
-      <p>{selected ? selected.outcome : 'Choose a starting point, or let SuperMega recommend one. You do not need to design or build it.'}</p>
-    </div>
     <a className="assisted-delivery-request" href={deliverySetupLink(product, selection)} target="_blank" rel="noopener noreferrer">{product === 'website' ? 'Request Website setup' : 'Request catalog setup'}<span className="sr-only"> (opens in a new tab)</span></a>
     <small>Nothing is sent until you submit it. Your saved workspace stays unchanged.</small>
+    <details className="assisted-delivery-options">
+      <summary>{selected ? `Starting point: ${selected.name}` : 'Choose a starting point · optional'}</summary>
+      <label htmlFor={id}>What should this do for your business?</label>
+      <select id={id} value={selection} onChange={event => setSelection(event.target.value)}>
+        <option value="">Help me choose</option>
+        {templates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
+      </select>
+      <div aria-live="polite">
+        <p>{selected ? selected.outcome : 'SuperMega can recommend one. You do not need to choose a template or build the site yourself.'}</p>
+      </div>
+    </details>
     <details>
       <summary>What happens next</summary>
       {selected && <p><strong>Useful starting material:</strong> {selected.entryPoints.join(', ')}. Share public material first; private files use a separate safe transfer.</p>}
