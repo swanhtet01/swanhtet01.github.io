@@ -56,7 +56,7 @@ test('route and lifecycle safety source pins remain explicit (not browser proof)
     "window.removeEventListener('storage', refresh)", "window.removeEventListener('focus', refresh)",
     'Date.parse(review.expiresAt) <= Date.now()', 'sameManagedIdentity(request.identity, actor)']) assert.ok(source.includes(pin), pin)
   assert.doesNotMatch(source, /dangerouslySetInnerHTML|localStorage\.setItem|sessionStorage\.setItem/)
-  assert.ok(source.includes('const refresh = () => { access.invalidate(); setReview(null); setActor(null)'))
+  assert.ok(source.includes('const refresh = () => { access.invalidate(); setOpening(true); setReview(null); setActor(null)'))
 })
 test('customer can inspect exact contact and search text without navigating or publishing', () => {
   const prepared = page('Home')
@@ -116,13 +116,13 @@ test('acceptance has explicit consent, shared synchronous lock and receipt-bound
   assert.ok(accept.includes('access.commit(epoch, request.identity, review.expiresAt'))
 })
 
-function renderDecision(status, { confirmed = false, note = '', uncertain = false } = {}) {
+function renderDecision(status, { confirmed = false, note = '', uncertain = false, unavailable = false, opening = false } = {}) {
   const review = { reviewId: '11111111-1111-4111-8111-111111111111', contentRevision: 7,
     previewDigest: 'sha256:' + 'a'.repeat(64), preview: { siteName: 'Studio', pages: [page('home')] },
     expiresAt: '2099-01-01T00:00:00Z', status: 'prepared_preview', publicationAuthorized: false }
   const decision = { ...review, status }
-  const states = [review, actor, 'home', note, 'Prepared review', false, 0, false,
-    decision, confirmed, uncertain, {}]
+  const states = [unavailable ? null : review, actor, 'home', note, 'Prepared review', false, 0, false,
+    decision, confirmed, uncertain, {}, opening]
   let index = 0
   const controlled = { exports: {} }
   vm.runInNewContext(compiled + '; exports.TestReviewContent = CustomerReviewContent;', {
@@ -141,6 +141,21 @@ function renderDecision(status, { confirmed = false, note = '', uncertain = fals
   })
   return renderToStaticMarkup(React.createElement(controlled.exports.TestReviewContent, { reviewId: review.reviewId }))
 }
+
+test('unavailable review offers a safe recovery path and loading prevents repeated open requests', () => {
+  const loading = renderDecision('pending_review', { unavailable: true, opening: true })
+  assert.match(loading, /aria-busy="true"/)
+  assert.match(loading, /disabled="">Opening review…/)
+  assert.doesNotMatch(loading, /reply to the person/)
+  const failed = renderDecision('pending_review', { unavailable: true })
+  assert.match(failed, /aria-busy="false"/)
+  assert.match(failed, /<button type="button">Try opening again/)
+  assert.match(failed, /account assigned by SuperMega/)
+  assert.match(failed, /do not need to create another company or start a trial/)
+  assert.match(failed, /Never share your password or sign-in code/)
+  assert.ok(failed.includes(customerWebsiteReviewLoginPath('11111111-1111-4111-8111-111111111111').replaceAll('&', '&amp;')))
+  assert.doesNotMatch(failed, />Accept this revision<|<textarea|<iframe/)
+})
 
 test('rendered customer decisions show consent only when actionable and never a publish control', () => {
   const pending = renderDecision('pending_review')

@@ -33,6 +33,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   const [acceptanceUnconfirmed, setAcceptanceUnconfirmed] = useState(false)
   const [access] = useState(() => createReviewAccessBoundary(currentManagedIdentity, sameManagedIdentity))
   const lastIdentity = useRef<ManagedIdentity | null>(null)
+  const [opening, setOpening] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -67,10 +68,12 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
         }
       } catch {
         if (active && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('This review is unavailable, expired, or not assigned to this account. Ask SuperMega for a current review.') }
+      } finally {
+        if (active && access.isCurrent(epoch)) setOpening(false)
       }
     }
     void open()
-    const refresh = () => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setMessage('Checking your review access…'); setAttempt(value => value + 1) }
+    const refresh = () => { access.invalidate(); setOpening(true); setReview(null); setActor(null); setBusy(false); setMessage('Checking your review access…'); setAttempt(value => value + 1) }
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
     return () => { active = false; access.invalidate(); window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
@@ -140,7 +143,10 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   return <main className="website-product customer-website-review">
     <header className="customer-review-heading"><Link to="/">SuperMega</Link><h1>Your prepared Website</h1><p>Review the finished pages. Accept this revision or tell us what to change. We handle the build.</p></header>
     <p role="status" aria-live="polite">{message}</p>
-    {!review && <div className="customer-review-actions"><Link to={customerWebsiteReviewLoginPath(reviewId)}>Sign in</Link><button type="button" onClick={() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setAttempt(value => value + 1) }}>Open review</button></div>}
+    {!review && <section aria-label="Open your private review" aria-busy={opening}>
+      <div className="customer-review-actions"><Link to={customerWebsiteReviewLoginPath(reviewId)}>Sign in</Link><button type="button" disabled={opening} onClick={() => { access.invalidate(); setOpening(true); setReview(null); setActor(null); setBusy(false); setMessage('Checking your review access…'); setAttempt(value => value + 1) }}>{opening ? 'Opening review…' : 'Try opening again'}</button></div>
+      {!opening && <p>Use the account assigned by SuperMega and the latest review link. If it still will not open, reply to the person who sent it and ask them to check your access or send a fresh review. You do not need to create another company or start a trial. Never share your password or sign-in code.</p>}
+    </section>}
     {review && <>
       <section aria-labelledby="customer-review-guide-title" className="customer-review-guide">
         <div><span className="core-eyebrow">Private review</span><h2 id="customer-review-guide-title">Review in 3 steps</h2></div>
