@@ -8,7 +8,7 @@ const { build } = require('esbuild')
 const source = readFileSync('showroom/src/products/website/WebsiteReviewInbox.tsx', 'utf8')
 // Expose the real private validators in the test bundle only; production keeps
 // the component module compatible with React Fast Refresh.
-const output = await build({ stdin: { contents: source + '\nexport { verifyStaffReviews, verifyStaffChanges };',
+const output = await build({ stdin: { contents: source + '\nexport { verifyStaffReviews, verifyStaffChanges, customerHandoff };',
   resolveDir: 'showroom/src/products/website', loader: 'tsx' }, bundle: true, write: false,
   platform: 'node', format: 'cjs', jsx: 'automatic', logLevel: 'silent', plugins: [{ name: 'inbox-offline', setup(b) {
     b.onResolve({ filter: /^(react|react\/jsx-runtime)$|managed-trial$/ }, args => ({ path: args.path, namespace: 'mock' }))
@@ -23,10 +23,10 @@ const output = await build({ stdin: { contents: source + '\nexport { verifyStaff
       export const loadManagedWebsiteReviewStaffPage=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.response(...args)};
     ` }))
   } }] })
-const sandbox = { module: { exports: {} }, structuredClone, setTimeout, window: { addEventListener() {}, removeEventListener() {} } }
+const sandbox = { module: { exports: {} }, structuredClone, setTimeout, window: { location: { origin: 'https://app.supermega.dev' }, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout } }
 sandbox.exports = sandbox.module.exports
 runInNewContext(output.outputFiles[0].text, sandbox)
-const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox } = sandbox.module.exports
+const { verifyStaffReviews, verifyStaffChanges, WebsiteReviewInbox, customerHandoff } = sandbox.module.exports
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12, '0')}`
 const row = { reviewId: id(1), contentRevision: 1, sourceVersion: 2, preparedAt: '2026-09-16T00:00:00+00:00', expiresAt: '2026-09-17T00:00:00+00:00', status: 'active', hasChangeRequests: true, hasCustomerAcceptance: false }
 const listing = { reviews: [row], nextAfter: null, order: 'review_id_ascending', publicationAuthorized: false }
@@ -109,4 +109,69 @@ test('late responses after account change or cleanup cannot reveal private notes
   tree = render(); const unmount = sandbox.h.effects[0]()
   click(tree, 'Refresh reviews'); await settle(); unmount(); release(listing); await settle()
   assert.equal(sandbox.h.slots[0], null)
+})
+
+test('handoff binds undecided revision to canonical origin and a live expiry window', () => {
+  const pendingRow = { ...row, hasChangeRequests: false }
+  const pending = { ...feedback, requests: [] }
+  const now = Date.parse('2026-09-16T02:00:00Z')
+  const message = customerHandoff(pendingRow, pending, 'https://app.supermega.dev', now)
+  assert.match(message, new RegExp(`https://app\\.supermega\\.dev/website/review/${row.reviewId}`))
+  assert.match(message, /assigned to this review/)
+  assert.match(message, /does not publish/)
+  assert.doesNotMatch(message, /recipientActorId|workspaceId|token=|password|mailto:/)
+  for (const origin of ['http://app.supermega.dev', 'https://app.supermega.dev.evil.invalid', 'https://preview.vercel.app', 'http://127.0.0.1:4194', 'https://app.supermega.dev:8443'])
+    assert.equal(customerHandoff(pendingRow, pending, origin, now), null)
+  for (const change of [{ status: 'revoked' }, { status: 'stale' }, { status: 'expired' },
+    { hasChangeRequests: true }, { hasCustomerAcceptance: true }, { expiresAt: 'bad' },
+    { preparedAt: '2026-09-17T00:00:00Z' }, { reviewId: '../elsewhere' }])
+    assert.equal(customerHandoff({ ...pendingRow, ...change }, pending, 'https://app.supermega.dev', now), null)
+  for (const change of [{ reviewStatus: 'revoked' }, { acceptance }, { requests: feedback.requests },
+    { nextAfter: id(2) }, { reviewId: id(2) }, { contentRevision: 2 }, { sourceVersion: 3 }])
+    assert.equal(customerHandoff(pendingRow, { ...pending, ...change }, 'https://app.supermega.dev', now), null)
+  assert.equal(customerHandoff(pendingRow, pending, 'https://app.supermega.dev', Date.parse(row.expiresAt)), null)
+  assert.equal(customerHandoff(pendingRow, pending, 'https://app.supermega.dev', NaN), null)
+})
+
+test('actual staff handoff is read-only, current, and clears on account focus changes', async () => {
+  const pendingRow = { ...row, hasChangeRequests: false, preparedAt: new Date(Date.now() - 60_000).toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }
+  fixture((_identity, review) => review ? { ...feedback, requests: [] } : { ...listing, reviews: [pendingRow] })
+  const listeners = {}
+  sandbox.window.addEventListener = (name, fn) => { listeners[name] = fn }
+  let tree = render(); const cleanup = sandbox.h.effects[0]()
+  click(tree, 'Refresh reviews'); await settle(); tree = render()
+  assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+  click(tree, 'Read decision for revision 1'); await settle(); tree = render()
+  const draft = elements(tree).find(n => n.type === 'textarea')
+  assert.equal(draft.props.readOnly, true)
+  assert.match(draft.props.value, /Sign in with the account assigned/)
+  assert.equal(sandbox.h.calls.length, 2)
+  assert.equal(elements(tree).some(n => n.type === 'button' && /send|publish|deploy/i.test(text(n))), false)
+  listeners.focus(); tree = render()
+  assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+  cleanup(); sandbox.window.addEventListener = () => {}
+})
+
+test('open handoff disappears at expiry without a network write or periodic polling', async () => {
+  let clock = Date.parse('2026-09-16T02:00:00Z')
+  let expire, scheduledDelay, canceled = false
+  sandbox.Date = class extends Date { static now() { return clock } }
+  sandbox.window.setTimeout = (fn, delay) => { expire = fn; scheduledDelay = delay; return 17 }
+  sandbox.window.clearTimeout = id => { canceled = id === 17 }
+  try {
+    fixture((_identity, review) => review ? { ...feedback, requests: [] }
+      : { ...listing, reviews: [{ ...row, hasChangeRequests: false }] })
+    let tree = render(); click(tree, 'Refresh reviews'); await settle(); tree = render()
+    click(tree, 'Read decision for revision 1'); await settle(); tree = render()
+    assert.equal(elements(tree).some(n => n.type === 'textarea'), true)
+    const cancelExpiry = sandbox.h.effects[1]()
+    assert.equal(scheduledDelay, Date.parse(row.expiresAt) - clock + 1)
+    clock = Date.parse(row.expiresAt); expire(); tree = render()
+    assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+    assert.equal(sandbox.h.calls.length, 2)
+    cancelExpiry(); assert.equal(canceled, true)
+  } finally {
+    delete sandbox.Date
+    sandbox.window.setTimeout = setTimeout; sandbox.window.clearTimeout = clearTimeout
+  }
 })

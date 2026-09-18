@@ -60,12 +60,25 @@ function verifyStaffChanges(value: unknown, review: Review): Changes {
   return structuredClone(root) as Changes
 }
 
+function customerHandoff(review: Review, decision: Changes, origin: string, now: number): string | null {
+  if (origin !== 'https://app.supermega.dev' || !Number.isFinite(now)
+    || review.status !== 'active' || decision.reviewStatus !== 'active'
+    || !uuid(review.reviewId) || decision.reviewId !== review.reviewId
+    || decision.sourceVersion !== review.sourceVersion || decision.contentRevision !== review.contentRevision
+    || review.hasChangeRequests || review.hasCustomerAcceptance || decision.acceptance !== null
+    || decision.requests.length || decision.nextAfter !== null
+    || !time(review.preparedAt) || !time(review.expiresAt)
+    || now < Date.parse(review.preparedAt) || now >= Date.parse(review.expiresAt)) return null
+  return `Your prepared Website is ready to review.\n\n${origin}/website/review/${review.reviewId}\n\nSign in with the account assigned to this review. Check revision ${review.contentRevision}, then accept it or tell us what to change. No editing is needed.\n\nThis review expires ${new Date(review.expiresAt).toLocaleString()}. Acceptance does not publish your Website or take payment. SuperMega handles the next step.`
+}
+
 export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: string; actorId: string }) {
   const [listing, setListing] = useState<Listing | null>(null)
   const [selected, setSelected] = useState<Review | null>(null)
   const [changes, setChanges] = useState<Changes | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('Open the prepared reviews for this company. Nothing is published or sent here.')
+  const [now, setNow] = useState(() => Date.now())
   const epoch = useRef(0)
   const pending = useRef(false)
   useEffect(() => {
@@ -77,6 +90,14 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     window.addEventListener('storage', clear); window.addEventListener('focus', clear)
     return () => { invalidate(); window.removeEventListener('storage', clear); window.removeEventListener('focus', clear) }
   }, [workspaceId, actorId])
+  useEffect(() => {
+    // Remove an expired handoff even when the operator leaves the page open.
+    if (!selected || !time(selected.expiresAt)) return
+    const delay = Date.parse(selected.expiresAt) - Date.now()
+    if (delay <= 0) return
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(delay + 1, 2_147_483_647))
+    return () => window.clearTimeout(timer)
+  }, [selected])
 
   async function load(review?: Review, after?: string) {
     if (pending.current) return
@@ -95,6 +116,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       if (attempt !== epoch.current) return
       if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
       if (review) setChanges(data as Changes); else setListing(data as Listing)
+      setNow(Date.now())
       setMessage(review ? 'Retained customer decisions. They do not authorize publication.' : 'Reviews are ordered by reference, not by date. Refresh starts again at the first page.')
     } catch {
       if (attempt === epoch.current) {
@@ -105,6 +127,8 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       if (attempt === epoch.current) { pending.current = false; setBusy(false) }
     }
   }
+
+  const handoff = selected && changes ? customerHandoff(selected, changes, window.location.origin, now) : null
 
   return <section className="website-editor-panel" aria-labelledby="website-review-inbox-title">
     <h2 id="website-review-inbox-title">Customer review decisions</h2>
@@ -120,6 +144,12 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     {listing?.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void load(undefined, listing.nextAfter!)} type="button">Next reviews</button> : null}
     {changes && selected ? <section aria-label="Selected revision customer decision">
       <h3>Revision {changes.contentRevision} · {changes.reviewStatus}</h3>
+      {handoff ? <section aria-label="Customer handoff draft">
+        <h4>Ready to share for review</h4>
+        <p>Check the intended recipient, then copy this message into your normal conversation. Only the assigned account can open it. Nothing is sent automatically.</p>
+        <textarea aria-label="Customer review message" readOnly rows={9} value={handoff} style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} />
+      </section> : changes.reviewStatus === 'active' && !changes.acceptance && changes.requests.length === 0
+        ? <p>Customer handoff is available only for a current, undecided review on app.supermega.dev. Refresh to check its latest state.</p> : null}
       {changes.acceptance ? <div><h4>Customer acceptance retained</h4>
         <p>Accepted <time dateTime={changes.acceptance.acceptedAt}>{new Date(changes.acceptance.acceptedAt).toLocaleString()}</time> for revision {changes.contentRevision} only. Not published or deployment-authorized.</p>
         <p>{changes.reviewStatus === 'active' ? 'Complete the separate release checks before publishing.' : 'Historical decision only. This review is no longer active; prepare a fresh review before proceeding.'}</p>
