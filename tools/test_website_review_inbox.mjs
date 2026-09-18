@@ -23,6 +23,7 @@ const output = await build({ stdin: { contents: source + '\nexport { verifyStaff
       export const sameManagedIdentity=(a,b)=>a.userId===b.userId&&a.workspaceId===b.workspaceId;
       export const loadManagedWebsiteReviewStaffPage=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.response(...args)};
       export const loadManagedWebsitePreparation=async(...args)=>{globalThis.h.calls.push(args);return globalThis.h.prepareResponse(...args)};
+      export const withdrawManagedWebsiteReview=async(...args)=>{globalThis.h.writes.push(args);return globalThis.h.withdrawResponse(...args)};
     ` }))
   } }] })
 const sandbox = { module: { exports: {} }, structuredClone, TextEncoder, URL, crypto: webcrypto, setTimeout, window: { location: { origin: 'https://app.supermega.dev' }, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout } }
@@ -41,7 +42,7 @@ function render() { sandbox.h.cursor = 0; sandbox.h.effects = []; return Website
 const click = (tree, label) => elements(tree).find(node => node.type === 'button' && text(node) === label).props.onClick()
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve)) }
 function fixture(response = (_identity, review) => review ? feedback : listing) {
-  sandbox.h = { slots: [], cursor: 0, effects: [], calls: [], identity: { userId: 'actor', workspaceId: 'company' }, response }
+  sandbox.h = { slots: [], cursor: 0, effects: [], calls: [], writes: [], identity: { userId: 'actor', workspaceId: 'company' }, response }
 }
 test('metadata list is strictly bounded, ordered and identity-free', () => {
   assert.equal(verifyStaffReviews(listing).reviews.length, 1)
@@ -238,4 +239,68 @@ test('saved-source transport is identity-bound, no-store, and redirect-refusing'
   assert.match(slice, /\/api\/trial\/v1\/website-review-preparation/)
   for (const boundary of ["cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
   assert.doesNotMatch(slice, /POST|workspaceId=|recipientActorId=/)
+})
+
+async function openDecision() {
+  let tree = render(); click(tree, 'Refresh reviews'); await settle(); tree = render()
+  click(tree, 'Read decision for revision 1'); await settle(); return render()
+}
+const withdrawn = { reviewId: row.reviewId, status: 'revoked', persisted: true, replayed: false, publicationAuthorized: false }
+
+test('withdrawal requires explicit confirmation, supports cancel, and single-flights duplicate clicks', async () => {
+  fixture(); let release
+  sandbox.h.withdrawResponse = () => new Promise(resolve => { release = resolve })
+  let tree = await openDecision()
+  click(tree, 'Withdraw review link'); tree = render()
+  assert.match(text(tree), /cannot be undone/)
+  assert.equal(sandbox.h.writes.length, 0)
+  click(tree, 'Keep review link'); tree = render()
+  assert.equal(elements(tree).some(n => text(n) === 'Confirm withdrawal'), false)
+  click(tree, 'Withdraw review link'); tree = render()
+  click(tree, 'Confirm withdrawal'); click(tree, 'Confirm withdrawal'); await settle(); tree = render()
+  assert.equal(sandbox.h.writes.length, 1)
+  assert.equal(sandbox.h.writes[0][0], row.reviewId)
+  assert.equal(sandbox.h.writes[0][1].workspaceId, 'company')
+  assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+  release(withdrawn); await settle(); tree = render()
+  assert.match(text(tree), /Review link withdrawn/)
+  assert.doesNotMatch(text(tree), /Retained older request/)
+})
+
+test('unverified or lost withdrawal responses never claim success or restore shareable content', async () => {
+  for (const response of [null, { ...withdrawn, reviewId: id(9) }, { ...withdrawn, status: 'active' },
+    { ...withdrawn, persisted: false }, { ...withdrawn, publicationAuthorized: true }, { ...withdrawn, extra: true }]) {
+    fixture(); sandbox.h.withdrawResponse = () => { if (response === null) throw Error('response lost'); return response }
+    let tree = await openDecision(); click(tree, 'Withdraw review link'); tree = render()
+    click(tree, 'Confirm withdrawal'); await settle(); tree = render()
+    assert.match(text(tree), /Withdrawal could not be confirmed/)
+    assert.doesNotMatch(text(tree), /Review link withdrawn/)
+    assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+    assert.equal(sandbox.h.writes.length, 1)
+  }
+})
+
+test('account switches before dispatch deny writes and late withdrawal responses cannot claim success', async () => {
+  fixture(); let tree = await openDecision(); click(tree, 'Withdraw review link'); tree = render()
+  sandbox.h.identity = { userId: 'other', workspaceId: 'elsewhere' }
+  click(tree, 'Confirm withdrawal'); await settle(); tree = render()
+  assert.equal(sandbox.h.writes.length, 0)
+  assert.match(text(tree), /could not be confirmed/)
+  fixture(); let release
+  sandbox.h.withdrawResponse = () => new Promise(resolve => { release = resolve })
+  tree = await openDecision(); click(tree, 'Withdraw review link'); tree = render()
+  click(tree, 'Confirm withdrawal'); await settle()
+  sandbox.h.identity = { userId: 'other', workspaceId: 'elsewhere' }
+  release(withdrawn); await settle(); tree = render()
+  assert.doesNotMatch(text(tree), /Review link withdrawn/)
+})
+
+test('already withdrawn reviews offer no withdrawal action and transport binds empty payload to identity', async () => {
+  fixture((_identity, review) => review ? { ...feedback, reviewStatus: 'revoked' } : listing)
+  const tree = await openDecision()
+  assert.equal(elements(tree).some(n => n.type === 'button' && /withdraw/i.test(text(n))), false)
+  const transport = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
+  const slice = transport.slice(transport.indexOf('export async function withdrawManagedWebsiteReview('), transport.indexOf('export async function loadManagedWebsitePreparation('))
+  for (const boundary of ["method: 'POST'", 'JSON.stringify({})', "cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity', '/withdraw']) assert.ok(slice.includes(boundary))
+  assert.doesNotMatch(slice, /workspaceId=|recipientActorId=/)
 })

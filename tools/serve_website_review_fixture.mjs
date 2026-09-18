@@ -89,6 +89,10 @@ const result = await build({
       }
       export const sendManagedWebsiteReviewChanges=async payload=>save(payload,'changes');
       export const sendManagedWebsiteAcceptance=async payload=>save(payload,'accept');
+      export const withdrawManagedWebsiteReview=async reviewId=>{const f=read();if(reviewId!==f.review.reviewId)throw Error('wrong_review');
+        const replayed=f.reviewStatus==='revoked';f.reviewStatus='revoked';if(!replayed)f.counts.syntheticWrites++;f.report();
+        if(f.loseNext){f.loseNext=false;throw Error('synthetic_response_lost')}
+        return {reviewId,status:'revoked',persisted:true,replayed,publicationAuthorized:false}};
       export const loadManagedWebsitePreparation=async()=>{const f=read();return {
         status:'saved_source_preview',sourceVersion:2,contentRevision:7,preview:copy(f.review.preview),
         previewDigest:f.review.previewDigest,readAt:new Date().toISOString(),reviewCreated:false,

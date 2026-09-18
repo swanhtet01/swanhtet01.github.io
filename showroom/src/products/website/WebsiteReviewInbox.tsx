@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { currentManagedIdentity, loadManagedWebsitePreparation, loadManagedWebsiteReviewStaffPage, sameManagedIdentity } from '../../core/managed-trial'
+import { currentManagedIdentity, loadManagedWebsitePreparation, loadManagedWebsiteReviewStaffPage, sameManagedIdentity, withdrawManagedWebsiteReview } from '../../core/managed-trial'
 import { reviewContactDestination, verifyWebsitePreviewContent, type CustomerWebsiteReview } from './customer-review-contract'
 
 type Review = { reviewId: string; contentRevision: number; sourceVersion: number; preparedAt: string; expiresAt: string; status: string; hasChangeRequests: boolean; hasCustomerAcceptance: boolean }
@@ -90,12 +90,13 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   const [message, setMessage] = useState('Open the prepared reviews for this company. Nothing is published or sent here.')
   const [now, setNow] = useState(() => Date.now())
   const [preparation, setPreparation] = useState<Preparation | null>(null)
+  const [withdrawal, setWithdrawal] = useState<string | null>(null)
   const epoch = useRef(0)
   const pending = useRef(false)
   useEffect(() => {
     const invalidate = () => { epoch.current++ }
     const clear = () => {
-      invalidate(); pending.current = false; setBusy(false); setListing(null); setSelected(null); setChanges(null); setPreparation(null)
+      invalidate(); pending.current = false; setBusy(false); setListing(null); setSelected(null); setChanges(null); setPreparation(null); setWithdrawal(null)
       setMessage('Account context changed. Refresh to read this company’s reviews.')
     }
     window.addEventListener('storage', clear); window.addEventListener('focus', clear)
@@ -115,6 +116,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     pending.current = true; setBusy(true)
     const attempt = ++epoch.current
     setPreparation(null)
+    setWithdrawal(null)
     setChanges(null); setSelected(review ?? null)
     if (!review) setListing(null)
     setMessage('Checking current company access…')
@@ -145,6 +147,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     pending.current = true; setBusy(true)
     const attempt = ++epoch.current
     setPreparation(null); setSelected(null); setChanges(null); setListing(null)
+    setWithdrawal(null)
     setMessage('Checking the saved Website and current company access…')
     try {
       const identity = await currentManagedIdentity()
@@ -163,7 +166,37 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     }
   }
 
-  const handoff = selected && changes ? customerHandoff(selected, changes, window.location.origin, now) : null
+  async function withdraw() {
+    if (pending.current || !selected || !changes || withdrawal !== selected.reviewId || changes.reviewStatus === 'revoked') return
+    const review = selected
+    pending.current = true; setBusy(true)
+    const attempt = ++epoch.current
+    // Hide shareable content immediately. A lost response is not proof of failure.
+    setChanges(null); setListing(null); setWithdrawal(null)
+    setMessage('Withdrawing this review link…')
+    try {
+      const identity = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!identity || identity.workspaceId !== workspaceId || identity.userId !== actorId) throw new Error('Access changed')
+      const result = exact(await withdrawManagedWebsiteReview(review.reviewId, identity), ['reviewId', 'status', 'persisted', 'replayed', 'publicationAuthorized'])
+      if (result.reviewId !== review.reviewId || result.status !== 'revoked' || result.persisted !== true
+        || typeof result.replayed !== 'boolean' || result.publicationAuthorized !== false) return invalid()
+      const current = await currentManagedIdentity()
+      if (attempt !== epoch.current) return
+      if (!current || !sameManagedIdentity(identity, current)) throw new Error('Access changed')
+      setSelected(null)
+      setMessage('Review link withdrawn. Retained decisions and the Website are unchanged. Refresh to inspect the record.')
+    } catch {
+      if (attempt === epoch.current) {
+        setSelected(null)
+        setMessage('Withdrawal could not be confirmed. Do not share this link. Refresh to check its status before trying again.')
+      }
+    } finally {
+      if (attempt === epoch.current) { pending.current = false; setBusy(false) }
+    }
+  }
+
+  const handoff = !withdrawal && selected && changes ? customerHandoff(selected, changes, window.location.origin, now) : null
 
   return <section className="website-editor-panel" aria-labelledby="website-review-inbox-title">
     <h2 id="website-review-inbox-title">Customer review decisions</h2>
@@ -193,6 +226,11 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     {listing?.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void load(undefined, listing.nextAfter!)} type="button">Next reviews</button> : null}
     {changes && selected ? <section aria-label="Selected revision customer decision">
       <h3>Revision {changes.contentRevision} · {changes.reviewStatus}</h3>
+      {changes.reviewStatus !== 'revoked' ? withdrawal === selected.reviewId ? <section aria-label="Confirm review withdrawal">
+        <p>Withdraw the customer link for revision {selected.contentRevision}? This cannot be undone. Existing feedback and acceptance stay in history. It does not delete or unpublish the Website.</p>
+        <button className="core-button" disabled={busy} type="button" onClick={() => void withdraw()}>Confirm withdrawal</button>
+        <button className="core-button" disabled={busy} type="button" onClick={() => setWithdrawal(null)}>Keep review link</button>
+      </section> : <button className="core-button" disabled={busy} type="button" onClick={() => setWithdrawal(selected.reviewId)}>Withdraw review link</button> : null}
       {handoff ? <section aria-label="Customer handoff draft">
         <h4>Ready to share for review</h4>
         <p>Check the intended recipient, then copy this message into your normal conversation. Only the assigned account can open it. Nothing is sent automatically.</p>

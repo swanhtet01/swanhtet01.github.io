@@ -3177,6 +3177,14 @@ export async function validateManagedClientImport(
   )
 }
 
+export async function withdrawManagedWebsiteReview(reviewId: string, expectedIdentity: ManagedIdentity) {
+  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/withdraw`,
+    { method: 'POST', body: JSON.stringify({}), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
 export async function loadManagedWebsitePreparation(expectedIdentity: ManagedIdentity) {
   return authorizedRequest<unknown>('/api/trial/v1/website-review-preparation',
     { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
