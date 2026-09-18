@@ -106,8 +106,10 @@ function assertDate(value, code) {
 
 function assertTimestamp(value, code) {
   const normalized = String(value || '').trim()
+  const parsed = new Date(normalized)
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(normalized)
-    || Number.isNaN(Date.parse(normalized))) fail(code)
+    || Number.isNaN(parsed.getTime())
+    || parsed.toISOString() !== normalized) fail(code)
   return normalized
 }
 
@@ -361,6 +363,9 @@ export function validateOperatingActionBoard(board) {
   const actions = board.actions.map(validateOperatingAction)
   const actionIds = new Set()
   for (const action of actions) {
+    if (action.openedAt > generatedAt || (action.closure.closedAt && action.closure.closedAt > generatedAt)) {
+      fail('operating_action_board_snapshot_time_invalid')
+    }
     if (actionIds.has(action.id)) fail('operating_action_board_duplicate_action')
     actionIds.add(action.id)
   }

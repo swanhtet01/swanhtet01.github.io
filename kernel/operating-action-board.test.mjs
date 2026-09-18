@@ -244,12 +244,18 @@ test('requires closed actions to include measured result and derives cycle time'
     },
   })
   const validated = validateOperatingActionBoard(board({
+    generatedAt: closed.closure.closedAt,
     actions: [closed],
     weeklyReport: buildOperatingActionBoardSummary([closed]),
   }))
   assert.equal(validated.weeklyReport.closedActionCount, 1)
   assert.equal(validated.weeklyReport.measuredResultCount, 1)
   assert.equal(validated.weeklyReport.closedCycleTimeDaysMedian, 2.5)
+  const stale = board({ actions: [closed], weeklyReport: buildOperatingActionBoardSummary([closed]) })
+  assert.throws(() => validateOperatingActionBoard(stale), /operating_action_board_snapshot_time_invalid/)
+  const invalidClose = structuredClone(stale)
+  invalidClose.actions[0].closure.closedAt = '2026-08-31T24:00:00.000Z'
+  assert.throws(() => validateOperatingActionBoard(invalidClose), /operating_action_closed_at_invalid/)
   const unmeasuredClosed = {
     ...closed,
     businessImpact: {
@@ -279,4 +285,19 @@ test('requires closed actions to include measured result and derives cycle time'
       closedCycleTimeDaysMedian: null,
     },
   })), /operating_action_closed_at_invalid/)
+})
+
+test('rejects normalized invalid timestamps and snapshots older than their actions', () => {
+  for (const timestamp of ['2026-02-31T00:00:00.000Z', '2026-08-25T24:00:00.000Z', '2025-02-29T00:00:00.000Z']) {
+    assert.throws(() => validateOperatingActionBoard(board({ generatedAt: timestamp })), /operating_action_board_generated_at_invalid/)
+    const invalid = board()
+    invalid.actions[0].openedAt = timestamp
+    assert.throws(() => validateOperatingActionBoard(invalid), /operating_action_opened_at_invalid/)
+  }
+  const stale = board()
+  stale.actions[0].openedAt = '2026-08-26T00:00:00.000Z'
+  assert.throws(() => validateOperatingActionBoard(stale), /operating_action_board_snapshot_time_invalid/)
+  stale.generatedAt = stale.actions[0].openedAt
+  assert.doesNotThrow(() => validateOperatingActionBoard(stale))
+  assert.doesNotThrow(() => validateOperatingActionBoard(board({ generatedAt: '2028-02-29T00:00:00.000Z' })))
 })
