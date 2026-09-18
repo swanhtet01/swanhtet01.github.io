@@ -109,7 +109,7 @@ Source reconciliation on 2026-09-18 identified these existing boundaries:
 | --- | --- | --- |
 | `showroom/src/core/CoreShell.tsx` | Assigned-product portal routing and managed access state | A route chooses presentation only; server membership remains authoritative |
 | `WebsiteCustomerReview.tsx`, `website_customer_review.py`, `website_customer_review_store.py` and `trial_runtime.py` | Authenticated recipient-only preview, exact revision/digest binding, expiry, idempotent change request and retained inbox | Current-source behavior still needs exact hosted authorization, expiry, retry and recovery proof |
-| `20260915184728_website_customer_review_storage.sql` | Forced RLS, separate `website.review` capability, immutable feedback and stale-on-edit review invalidation | Migration and cross-tenant denial need non-production PostgreSQL/Supabase rehearsal before activation |
+| `20260915184728_website_customer_review_storage.sql` and `20260918011500_website_customer_acceptance.sql` | Forced RLS, separate `website.review` capability, immutable feedback/acceptance and stale-on-edit review invalidation | Local PostgreSQL tests and rehearsal exist; exact hosted Supabase migration, Auth and cross-tenant acceptance are still required before activation |
 | `showroom/src/products/website/WebsiteProduct.tsx` | Operator approval, evidence capture and retained approved site file | Operator approval is not authenticated customer acceptance |
 | `tools/create_public_vercel_output.mjs` | Validated brief intake, idempotent receipt and product-specific customer acknowledgement | An intake receipt is not a delivery record, customer account or approval |
 
@@ -165,8 +165,9 @@ approved `website-reviewer` grants in the current workspace. The response contai
 the grant reference and owner-reviewed display label, not Auth IDs, email addresses,
 other roles or a global directory. Each result must match its durable approval and
 currently eligible membership; revoked grants disappear. Pages have at most 50
-entries in grant-reference order, not alphabetical order. Identical labels must
-not be silently merged or selected by the future UI.
+entries in grant-reference order, not alphabetical order. The implemented staff
+UI keeps grant references visible, makes no default selection and does not merge
+identical labels.
 
 Preparing a review may use `recipientGrantId` instead of `recipientActorId`.
 The server resolves it under the same source/review lock and rechecks current
@@ -176,9 +177,15 @@ actor-ID API remains compatible for existing reviewed internal callers; it is no
 the customer-facing selection UX. Listing a grant never creates membership, sends
 an invitation or publishes content.
 
-Before claiming the complete delivery journey, finish and review the account
-selection/enrollment UX and recipient-selection/preparation UI, then exercise the
-full hosted journey. Do not grant customers `website.write` as a shortcut.
+The staff recipient-selection/preparation UI is implemented: inspect saved source,
+choose an enrolled customer, explicitly confirm the recipient and revision, then
+prepare a private 24-hour review. Lost-response retries reuse the same command
+within the mounted component; after a reload the operator must reconcile retained
+reviews before creating another. Command recovery across reload is not yet durable.
+
+Before claiming the complete delivery journey, finish and review the verified
+account-enrollment UX, then exercise the full hosted journey. Do not rebuild the
+recipient picker or grant customers `website.write` as a shortcut.
 Preserve authenticated membership as authority; the
 review URL is not a bearer credential. A local database-backed login regression
 must prove assigned-company discovery, an empty business-data bootstrap for
@@ -291,9 +298,31 @@ Backend inspection: `supermega_runtime/website_runtime.py` validates exact conte
 source and lifecycle record relationships. The separate customer-review path now
 uses `website.review`, recipient-scoped RLS, exact preview digests, stale-on-edit
 invalidation and idempotent feedback. This does not prove live authorization or
-customer access. The next implementation decision is a separate authenticated
-customer acceptance record, not another review store and not broader Website write
-access. It must become stale with the exact revision and must not publish or deploy.
+customer access. A separate immutable customer acceptance record is now implemented
+in the existing review store and acceptance migration. It binds the authenticated
+recipient, exact revision/digest and idempotent command; feedback and acceptance
+are mutually exclusive. It grants no broader Website write access and does not
+publish or deploy. Changed/withdrawn reviews retain historical decisions without
+reopening customer access.
+
+### Local evidence checkpoint — 2026-09-18
+
+At `40c9a3ae350e669fe131735277c00cd19f1b5147`, the dedicated Website review SQL suite
+passed 48/48 against disposable loopback PostgreSQL 17, including actual guarded
+transactions, synthetic Auth/session records, cross-tenant denial, source changes,
+revocation, replay and acceptance conflicts. Cleanup completed with zero PostgreSQL
+processes left. This does not test hosted Supabase Auth or a real customer account.
+
+The full 662-step app verification belongs to predecessor
+`d1786642fb80d1bfe7bb002f10dd9b98ac795ec9`, not automatically to its children.
+The `40c9a3ae` setup-disclosure follow-up has its own focused tests, exact build and
+tablet/mobile browser observations. Neither result proves hosted acceptance,
+conversion improvement, actual-user study completion or production readiness.
+
+Remaining delivery work is explicit: verified account enrollment; durable recovery
+of uncertain preparation after reload; independent exact-candidate review; authorized
+immutable hosted preview; real managed login, customer review and recovery journeys;
+then separately approved production promotion with rollback and telemetry evidence.
 
 ## ERRC operating decisions
 
