@@ -7,6 +7,15 @@ import { verifyCustomerWebsiteReview, verifyCustomerChangeAcknowledgement, verif
 const reviewId = '11111111-1111-4111-8111-111111111111'
 const commandId = '22222222-2222-4222-8222-222222222222'
 const now = Date.parse('2026-09-16T00:00:00Z')
+test('release verification includes customer and staff review suites serially', () => {
+  const { scripts } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.ok(scripts['app:verify:steps'].split(' && ').includes('npm run website:demo:self-test'))
+  const command = scripts['website:demo:self-test'].split(/\s+/u)
+  assert.deepEqual(command.slice(0, 3), ['node', '--test', '--test-concurrency=1'])
+  for (const path of ['tools/test_website_customer_review_contract.mjs', 'tools/test_website_customer_review_ui.mjs', 'tools/test_website_review_inbox.mjs']) {
+    assert.equal(command.filter(token => token === path).length, 1, path)
+  }
+})
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]`
   : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}` : JSON.stringify(value)
 function fixture() {
