@@ -84,3 +84,12 @@ test('removing a middle entry preserves remaining content and removing all remai
   ui.click('Remove entry 1'); ui.click('Remove entry 1'); ui.submit()
   assert.equal(ui.created[1].offerings, '')
 })
+
+test('new/existing business guidance never rewrites entered offerings', () => {
+  const ui = harness()
+  ui.click('Add featured entry'); ui.edit(0, 'Owner service', 'Confirmed description')
+  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
+  assert.match(ui.find(node => node.props.id === 'website-business-stage-help').props.children, /does not scrape websites/)
+  ui.submit()
+  assert.equal(ui.created[0].offerings, 'Owner service | Confirmed description')
+})

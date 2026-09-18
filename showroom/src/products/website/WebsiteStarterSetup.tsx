@@ -64,6 +64,7 @@ export function WebsiteStarterSetup({
   const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const [attempted, setAttempted] = useState(false)
+  const [businessStage, setBusinessStage] = useState<'new' | 'existing'>('new')
   const [offeringRows, setOfferingRows] = useState<{ name: string; details: string }[]>([])
   const [tradeId, setTradeId] = useState(opening.tradeId)
   // The wording currently on offer from us rather than from the owner. Starts as whatever we
@@ -163,6 +164,16 @@ export function WebsiteStarterSetup({
         </label>
 
         <div className="website-form-grid two-columns website-starter-identity-grid">
+          <label>
+            <span>Is the business already operating?</span>
+            <select value={businessStage} onChange={(event) => setBusinessStage(event.target.value as 'new' | 'existing')} aria-describedby="website-business-stage-help">
+              <option value="new">New business or planning a launch</option>
+              <option value="existing">Existing business</option>
+            </select>
+            <small id="website-business-stage-help">{businessStage === 'existing'
+              ? 'Reuse your approved menu, service list or catalog in the featured entries below. Check current prices and details first. This form does not scrape websites or import customer records; changing this choice keeps your draft.'
+              : 'Start with the services or products you are ready to describe. Leave unconfirmed prices out. This creates a private draft, not a booking, live store or published Website.'}</small>
+          </label>
           <label>
             <span>Starting layout <small>Optional</small></span>
             <select onChange={(event) => updateBrief('templateId', event.target.value as WebsiteStarterBrief['templateId'])} value={brief.templateId}>
