@@ -220,7 +220,11 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     {listing?.reviews.length === 0 ? <p>No prepared reviews in this company yet.</p> : null}
     <ul>{listing?.reviews.map(review => <li key={review.reviewId}>
       <strong>Revision {review.contentRevision}</strong> · {review.status} · prepared {new Date(review.preparedAt).toLocaleString()}
-      <p>{review.hasCustomerAcceptance ? 'Customer acceptance retained — release review still required' : review.hasChangeRequests ? 'Customer changes retained' : 'Awaiting customer decision'} · expires {new Date(review.expiresAt).toLocaleString()}</p>
+      <p>{review.hasCustomerAcceptance ? 'Customer acceptance retained — release review still required' : review.hasChangeRequests ? 'Customer changes retained'
+        : review.status === 'revoked' ? 'Review withdrawn — no new customer decision can be submitted'
+          : review.status === 'expired' ? 'Review expired — prepare a new review'
+            : review.status === 'stale' ? 'Website changed — prepare a review of the current revision'
+              : 'Awaiting customer decision'} · expires {new Date(review.expiresAt).toLocaleString()}</p>
       <button className="core-button" disabled={busy} onClick={() => void load(review)} type="button">Read decision for revision {review.contentRevision}</button>
     </li>)}</ul>
     {listing?.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void load(undefined, listing.nextAfter!)} type="button">Next reviews</button> : null}
@@ -235,7 +239,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
         <h4>Ready to share for review</h4>
         <p>Check the intended recipient, then copy this message into your normal conversation. Only the assigned account can open it. Nothing is sent automatically.</p>
         <textarea aria-label="Customer review message" readOnly rows={9} value={handoff} style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} />
-      </section> : changes.reviewStatus === 'active' && !changes.acceptance && changes.requests.length === 0
+      </section> : !withdrawal && changes.reviewStatus === 'active' && !changes.acceptance && changes.requests.length === 0
         ? <p>Customer handoff is available only for a current, undecided review on app.supermega.dev. Refresh to check its latest state.</p> : null}
       {changes.acceptance ? <div><h4>Customer acceptance retained</h4>
         <p>Accepted <time dateTime={changes.acceptance.acceptedAt}>{new Date(changes.acceptance.acceptedAt).toLocaleString()}</time> for revision {changes.contentRevision} only. Not published or deployment-authorized.</p>

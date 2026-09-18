@@ -304,3 +304,21 @@ test('already withdrawn reviews offer no withdrawal action and transport binds e
   for (const boundary of ["method: 'POST'", 'JSON.stringify({})', "cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity', '/withdraw']) assert.ok(slice.includes(boundary))
   assert.doesNotMatch(slice, /workspaceId=|recipientActorId=/)
 })
+
+test('inactive undecided reviews never say they are awaiting a customer decision', async () => {
+  for (const [status, expected] of [['revoked', 'Review withdrawn'], ['expired', 'Review expired'], ['stale', 'Website changed']]) {
+    fixture(() => ({ ...listing, reviews: [{ ...row, status, hasChangeRequests: false }] }))
+    let tree = render(); click(tree, 'Refresh reviews'); await settle(); tree = render()
+    assert.ok(text(tree).includes(expected))
+    assert.doesNotMatch(text(tree), /Awaiting customer decision/)
+  }
+})
+
+test('confirmation does not advertise sharing while the operator is withdrawing the link', async () => {
+  fixture((_identity, review) => review ? { ...feedback, requests: [] }
+    : { ...listing, reviews: [{ ...row, hasChangeRequests: false }] })
+  let tree = await openDecision(); click(tree, 'Withdraw review link'); tree = render()
+  assert.match(text(tree), /cannot be undone/)
+  assert.doesNotMatch(text(tree), /Customer handoff is available/)
+  assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
+})
