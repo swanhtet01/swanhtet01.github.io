@@ -161,6 +161,11 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             self.adapter().accept(TrialPrincipal(WORKSPACE, RECIPIENT, "human"),
                 dict(commandId=str(uuid4()), reviewId=str(uuid4()), previewDigest=DIGEST,
                      decision="accept_preview_for_release_review"))
+        with self.http_client() as client:
+            unavailable = client.get('/api/trial/v1/website-reviews/' + str(uuid4()) + '/acceptance',
+                                     headers={'x-test-actor': 'customer'})
+            self.assertEqual(unavailable.status_code, 503)
+            self.assertEqual(unavailable.headers['cache-control'], 'private, no-store')
 
     def retained_assignment(self):
         with self.transaction() as connection:
@@ -1022,6 +1027,64 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         with self.transaction(OWNER) as connection:
             self.assertEqual(connection.execute('select count(*) from app_private.website_customer_acceptances where review_id=%s',
                                                (review[0],)).fetchone()[0], 1)
+
+        # Full HTTP lifecycle against restricted PostgreSQL, not a fake adapter.
+        review = self.retained_assignment()
+        url = '/api/trial/v1/website-reviews/' + str(review[0])
+        customer = {'x-test-actor': 'customer'}
+        payload = dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2],
+                       decision='accept_preview_for_release_review')
+        with self.http_client() as client:
+            initial = client.get(url + '/acceptance', headers=customer)
+            self.assertEqual(initial.status_code, 200, initial.text)
+            self.assertEqual(initial.json()['status'], 'pending_review')
+            self.assertIsNone(initial.json()['acceptedAt'])
+            for test_actor, expected in ((None, 401), ('other', 403), ('operator', 403), ('agent', 403)):
+                headers = {'x-test-actor': test_actor} if test_actor else {}
+                for method in ('get', 'post'):
+                    with self.subTest(actor=test_actor, method=method):
+                        response = client.request(method, url + '/acceptance', headers=headers,
+                                                  **({'json': payload} if method == 'post' else {}))
+                        self.assertEqual(response.status_code, expected, response.text)
+                        self.assertEqual(response.headers['cache-control'], 'private, no-store')
+            for invalid in (payload | {'workspaceId': 'other'}, payload | {'reviewId': str(uuid4())},
+                            payload | {'decision': 'publish'}, payload | {'previewDigest': DIGEST},
+                            payload | {'commandId': 'bad'}, []):
+                response = client.post(url + '/acceptance', headers=customer, json=invalid)
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertEqual(response.headers['cache-control'], 'private, no-store')
+            too_large = client.post(url + '/acceptance', headers=customer, json=payload | {'note': 'x' * 3000})
+            self.assertEqual(too_large.status_code, 413, too_large.text)
+            self.assertEqual(too_large.headers['cache-control'], 'private, no-store')
+            for method in ('get', 'post'):
+                response = client.request(method, url + '/acceptance?workspaceId=other', headers=customer,
+                                          **({'json': payload} if method == 'post' else {}))
+                self.assertEqual(response.status_code, 422, response.text)
+            saved = client.post(url + '/acceptance', headers=customer, json=payload)
+            self.assertEqual(saved.status_code, 200, saved.text)
+            self.assertTrue(saved.json()['persisted'])
+            self.assertFalse(saved.json()['publicationAuthorized'])
+            self.assertFalse(saved.json()['deploymentAuthorized'])
+            replay = client.post(url + '/acceptance', headers=customer, json=payload)
+            self.assertEqual(replay.json(), saved.json() | {'replayed': True})
+            reloaded = client.get(url + '/acceptance', headers=customer)
+            self.assertEqual(reloaded.status_code, 200, reloaded.text)
+            self.assertEqual(reloaded.headers['cache-control'], 'private, no-store')
+            self.assertEqual(reloaded.json()['status'], 'accepted_for_operator_release_review')
+            self.assertEqual(reloaded.json()['acceptedAt'], saved.json()['acceptedAt'])
+            self.assertEqual(reloaded.json()['previewDigest'], review[2])
+            self.assertNotIn(RECIPIENT, reloaded.text)
+            rejected_change = client.post(url + '/change-requests', headers=customer,
+                json=dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2], note='Change after acceptance'))
+            self.assertEqual(rejected_change.status_code, 422, rejected_change.text)
+            self.assertEqual(rejected_change.json()['detail']['code'], 'trial_validation_error')
+            self.assertEqual(rejected_change.json()['detail']['message'], 'website_review_already_accepted')
+            withdrawal = client.post(url + '/withdraw', headers={'x-test-actor': 'operator'}, json={})
+            self.assertEqual(withdrawal.status_code, 200, withdrawal.text)
+            for method in ('get', 'post'):
+                response = client.request(method, url + '/acceptance', headers=customer,
+                                          **({'json': payload} if method == 'post' else {}))
+                self.assertEqual(response.status_code, 403, response.text)
 
 
 if __name__ == "__main__":

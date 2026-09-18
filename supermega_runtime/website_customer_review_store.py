@@ -231,6 +231,12 @@ class WebsiteCustomerReviewStore:
             row = self._assignment(cursor, actor, review_id)
             if payload["previewDigest"] != row["preview_digest"]:
                 raise TrialValidationError("website_review_stale_revision")
+            cursor.execute("select to_regclass('app_private.website_customer_acceptances') is not null as present")
+            if cursor.fetchone()["present"]:
+                cursor.execute("select review_id from app_private.website_customer_acceptances where workspace_id=%s and review_id=%s",
+                               (actor.workspace_id, review_id))
+                if cursor.fetchone() is not None:
+                    raise TrialValidationError("website_review_already_accepted")
             identity = {"contract": "supermega.website.customer-change-request.v1",
                         "workspaceId": actor.workspace_id, "actorId": actor.actor_id,
                         "reviewId": review_id, "commandId": command_id,
@@ -258,6 +264,30 @@ class WebsiteCustomerReviewStore:
             result = {"commandId": command_id, "reviewId": review_id,
                       "status": "changes_requested", "createdAt": retained["created_at"].isoformat(),
                       "persisted": True, "replayed": replay, "publicationAuthorized": False}
+        return result
+
+    def acceptance(self, principal: TrialPrincipal, review_id: str) -> dict[str, Any]:
+        """Current assigned customer decision; no staff/customer identity disclosure."""
+        review_id = _uuid(review_id)
+        with self._transaction(principal, write=False, capability="website.review", require_acceptance=True) as (cursor, actor):
+            row = self._assignment(cursor, actor, review_id)
+            cursor.execute("""select source_version,content_revision,preview_digest,decision,accepted_at
+                from app_private.website_customer_acceptances where workspace_id=%s and review_id=%s""",
+                (actor.workspace_id, review_id))
+            receipt = cursor.fetchone()
+            cursor.execute("""select exists(select 1 from app_private.website_customer_feedback
+                where workspace_id=%s and review_id=%s) as pending""", (actor.workspace_id, review_id))
+            pending = cursor.fetchone()["pending"]
+            if receipt is not None and (pending or receipt["source_version"] != row["source_version"]
+                    or receipt["content_revision"] != row["content_revision"]
+                    or receipt["preview_digest"] != row["preview_digest"]
+                    or receipt["decision"] != "accept_preview_for_release_review"):
+                raise TrialValidationError("website_review_acceptance_revision_invalid")
+            result = {"reviewId": review_id, "contentRevision": row["content_revision"],
+                      "previewDigest": row["preview_digest"], "expiresAt": row["expires_at"].isoformat(),
+                      "status": "accepted_for_operator_release_review" if receipt else "changes_requested" if pending else "pending_review",
+                      "acceptedAt": receipt["accepted_at"].isoformat() if receipt else None,
+                      "publicationAuthorized": False, "deploymentAuthorized": False}
         return result
 
     def accept(self, principal: TrialPrincipal, payload: Mapping[str, Any]) -> dict[str, Any]:

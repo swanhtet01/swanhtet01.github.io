@@ -1139,6 +1139,23 @@ def create_trial_router(
             return adapter.feedback(principal, review_id, after=query.get("after"))
         return await website_review_request(request, operation)
 
+    @router.get("/website-reviews/{review_id}/acceptance")
+    async def read_website_acceptance(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            if request.query_params:
+                raise TrialValidationError("website_review_request_invalid")
+            return adapter.acceptance(principal, review_id)
+        return await website_review_request(request, operation)
+
+    @router.post("/website-reviews/{review_id}/acceptance")
+    async def accept_website_review(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if (request.query_params or not isinstance(body, Mapping)
+                    or body.get("reviewId") != review_id):
+                raise TrialValidationError("website_review_request_invalid")
+            return adapter.accept(principal, body)
+        return await website_review_request(request, operation, body_limit=2048)
+
     @router.post("/website-reviews/{review_id}/withdraw")
     async def withdraw_website_review(review_id: str, request: Request) -> JSONResponse:
         def operation(adapter, principal, body):
