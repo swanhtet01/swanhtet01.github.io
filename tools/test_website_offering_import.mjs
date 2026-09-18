@@ -12,3 +12,13 @@ test('rejects malformed, oversized, duplicate and unsupported inputs without tru
 test('HTML-like input remains inert text rather than being executed or interpreted', () => {
   assert.deepEqual(previewWebsiteOfferingCsv('name,description\n<script>,<b>Owner text</b>'), [{ name: '<script>', details: '<b>Owner text</b>' }])
 })
+
+test('rejects non-whitespace control characters in either field while normalizing whitespace', () => {
+  for (const code of [...Array.from({ length: 32 }, (_, index) => index), 127]) {
+    const character = String.fromCharCode(code)
+    if (/\s/u.test(character)) continue
+    assert.throws(() => previewWebsiteOfferingCsv(`name,description\nNa${character}me,Details`))
+    assert.throws(() => previewWebsiteOfferingCsv(`name,description\nName,Det${character}ails`))
+  }
+  assert.deepEqual(previewWebsiteOfferingCsv('name,description\nName,"One\t two\nthree"'), [{ name: 'Name', details: 'One two three' }])
+})
