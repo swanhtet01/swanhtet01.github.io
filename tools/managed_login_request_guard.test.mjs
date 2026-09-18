@@ -20,7 +20,7 @@ function fixture() {
   const passwords = [], busyStates = []
   const noop = () => {}
   return { passwords, busyStates, context: {
-    managedReady: true, busy: false, accountRequestPending: { current: false }, directory: null,
+    managedReady: true, busy: false, accountRequestPending: { current: false }, directory: null, reviewReturnPath: null,
     email: 'synthetic@example.invalid', password: ['synthetic', 'test', 'input'].join('-'), workspaceId: '', existingIdentity: { workspaceId: 'one' },
     setBusy: value => busyStates.push(value), setPassword: value => passwords.push(value), setNoticeTone: noop, setNotice: noop,
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
@@ -75,6 +75,54 @@ test('unavailable managed runtime never starts sign-in or activation', async () 
   context.managedReady = false
   await handler('submit', context)(event); await handler('activate', context)(event)
   assert.deepEqual(busyStates, [])
+})
+
+test('unassigned Website reviewers never enter company activation; normal signup still does', async () => {
+  for (const reviewing of [true, false]) {
+    const { context } = fixture(); const activation = [], notices = []
+    Object.assign(context, { reviewReturnPath: reviewing ? '/website/review/synthetic' : null,
+      setActivating: value => activation.push(value), setNotice: value => notices.push(value),
+      signInAndDiscoverManagedWorkspaces: async () => ({ workspaces: [], email: context.email }) })
+    await handler('submit', context)(event)
+    assert.deepEqual(activation, [!reviewing])
+    assert.match(notices.at(-1), reviewing ? /Creating a company will not unlock it/ : /claim code from your free trial/)
+    if (reviewing) assert.ok(!notices.at(-1).includes(context.email))
+  }
+})
+
+test('review context blocks activation, registration and account-mode creation handlers', async () => {
+  const { context, busyStates } = fixture()
+  Object.assign(context, { reviewReturnPath: '/website/review/synthetic', signupPolicy: {},
+    createSelfServeWorkspace: () => assert.fail('review cannot create a workspace'),
+    createManagedAccount: () => assert.fail('review cannot self-enroll'),
+    setCreatingAccount: () => assert.fail('review cannot open registration') })
+  await handler('activate', context)(event)
+  await handler('requestAccount', context)(event)
+  handler('chooseAccountMode', context)(true)
+  assert.deepEqual(busyStates, [])
+})
+
+test('existing unassigned session follows the same reviewer recovery boundary on mount', async () => {
+  let effect
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === 'useEffect'
+      && node.arguments[0]?.getText(ast).includes('discoverManagedWorkspacesForCurrentSession')) effect = node.arguments[0]
+    ts.forEachChild(node, visit)
+  }
+  visit(ast); assert.ok(effect)
+  const js = ts.transpileModule(`const mount = ${effect.getText(ast)};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  for (const reviewing of [true, false]) {
+    const { context } = fixture(), activation = [], notices = []
+    Object.assign(context, { reviewReturnPath: reviewing ? '/website/review/synthetic' : null,
+      currentManagedIdentity: async () => null,
+      discoverManagedWorkspacesForCurrentSession: async () => ({ workspaces: [], email: context.email }),
+      setActivating: value => activation.push(value), setNotice: value => notices.push(value) })
+    const cleanup = vm.runInNewContext(`${js}; mount`, context)()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepEqual(activation, [!reviewing])
+    assert.match(notices.at(-1), reviewing ? /will not unlock it/ : /claim code/)
+    cleanup()
+  }
 })
 
 const accountSource = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')

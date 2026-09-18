@@ -189,6 +189,13 @@ Missing list entries, corrupt/unavailable storage and failed deletion stay block
 This is tab-session recovery, not cross-device or closed-browser recovery, and not
 server-side deduplication across independent tabs. No automatic retry or send occurs.
 
+Review-link sign-in is a distinct customer path: it retains the exact review
+through password recovery and never offers trial signup, self-enrollment or
+company activation. An authenticated account with no assignment is told to ask
+SuperMega in its existing setup conversation to verify enrollment. Creating a
+different company cannot unlock the review. Ordinary Shop/account signup remains
+available outside this path. This UI distinction grants no membership or access.
+
 Before claiming the complete delivery journey, finish and review the verified
 account-enrollment UX, then exercise the full hosted journey. Do not rebuild the
 recipient picker or grant customers `website.write` as a shortcut.
