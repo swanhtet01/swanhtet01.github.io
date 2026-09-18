@@ -7,6 +7,9 @@
 .assisted-delivery-request { display: inline-flex; justify-self: start; align-items: center; min-height: 2.75rem; padding: .5rem 1rem; box-sizing: border-box; border: 1px solid currentColor; border-radius: .5rem; color: inherit; font-weight: 700; text-decoration: none; }
 .assisted-delivery-scope :is(select, a, summary):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
 .assisted-delivery-options[open] > :is(label, select, div) { display: block; margin-block-start: .75rem; }
+.assisted-delivery-outline { margin-block-start: 1rem; padding: 1rem; border-inline-start: .1875rem solid currentColor; }
+.assisted-delivery-outline ol { display: grid; gap: .5rem; margin-block: .75rem; padding-inline-start: 1.5rem; }
+.assisted-delivery-outline li { line-height: 1.5; }
 .website-today:has(.assisted-delivery-scope) { grid-template-columns: minmax(0, 1fr); }
 .ecommerce-today[data-density] .ecommerce-today-priority:has(> .assisted-delivery-scope) { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; align-items: start; }
 .ecommerce-today[data-density] .ecommerce-today-priority:has(> .assisted-delivery-scope) > :is(.core-eyebrow, h2, p, details, section, div) { grid-area: auto; max-width: 100%; }

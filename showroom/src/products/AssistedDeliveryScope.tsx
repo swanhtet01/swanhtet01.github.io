@@ -34,11 +34,16 @@ export function AssistedDeliveryScope({ product }: { product: Product }) {
       </select>
       <div aria-live="polite">
         <p>{selected ? selected.outcome : 'SuperMega can recommend one. You do not need to choose a template or build the site yourself.'}</p>
+        {selected && <div className="assisted-delivery-outline">
+          <strong>How we prepare this with you</strong>
+          <ol>{selected.workflow.map(step => <li key={step}>{step}</li>)}</ol>
+          <p>You review the result and confirm the business details. We handle the preparation.</p>
+        </div>}
       </div>
     </details>
     <details>
       <summary>What happens next</summary>
-      {selected && <p><strong>Useful starting material:</strong> {selected.entryPoints.join(', ')}. Share public material first; private files use a separate safe transfer.</p>}
+      {selected && <p><strong>Useful starting material:</strong> choose whichever you already have: {selected.entryPoints.join(', ')}. You do not need to prepare all of these. Share public material first; private files use a separate safe transfer.</p>}
       <p>Your selection fills the request form. We confirm scope, price and timing, prepare the preview and handle setup. Publishing, domains, payment and stock actions are not enabled here.</p>
     </details>
   </section>
