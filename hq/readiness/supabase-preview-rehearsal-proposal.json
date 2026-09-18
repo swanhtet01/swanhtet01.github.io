@@ -55,11 +55,11 @@
   },
   "migrationPlan": {
     "schemaVersion": 13,
-    "migrationCount": 18,
-    "privateMigrationCount": 17,
+    "migrationCount": 19,
+    "privateMigrationCount": 18,
     "publicBaseline": "20260711081300_public_legacy_baseline.sql",
-    "finalMigration": "20260915191528_website_review_entitlement_proof.sql",
-    "chainDigest": "sha256:a8e4553cff9c95bfff230244fd809e9adf476a69fac3ebafdd368255d38b6780",
+    "finalMigration": "20260918011500_website_customer_acceptance.sql",
+    "chainDigest": "sha256:a11b843370515ed1c1fa9c98b9f53212e4cbbf2f5a8d6b6f582d8345adf337e5",
     "migrations": [
       {
         "name": "20260711081300_public_legacy_baseline.sql",
@@ -150,6 +150,11 @@
         "name": "20260915191528_website_review_entitlement_proof.sql",
         "path": "supabase/migrations/20260915191528_website_review_entitlement_proof.sql",
         "digest": "sha256:75755426b58dfe01b6efde4bd3480e2defdf5556c3e9d1352bc96c48587adf62"
+      },
+      {
+        "name": "20260918011500_website_customer_acceptance.sql",
+        "path": "supabase/migrations/20260918011500_website_customer_acceptance.sql",
+        "digest": "sha256:2ffe0304564175d9682af8525873c348d1a3638c87671d16c682e5414a2347b1"
       }
     ],
     "browserQuarantine": {
@@ -182,6 +187,8 @@
     "durable-attempt-budget-restart-concurrency-and-restored-limit-proof",
     "website-review-recipient-isolation-entitlement-and-session-revocation",
     "website-review-and-feedback-nonempty-backup-restore",
+    "website-acceptance-exact-revision-idempotency-and-decision-race-proof",
+    "website-acceptance-nonempty-backup-restore-and-no-publication-authority",
     "metadata-only-schema-fingerprint-comparison",
     "public-table-rls-and-anon-authenticated-denial",
     "private-schema-backend-role-policy-and-no-browser-grants",
@@ -230,15 +237,15 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:a8e4553cff9c95bfff230244fd809e9adf476a69fac3ebafdd368255d38b6780 on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:a11b843370515ed1c1fa9c98b9f53212e4cbbf2f5a8d6b6f582d8345adf337e5 on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:e9d28965af4e08f866e66bd5a899f7702dc3c74cafbfa9d71a0cb4ada65bae4b"
+      "digest": "sha256:3e991bd954b29328c0e7fa4a0529f90b3fb7b80f2f6eae028b53cca03f8b78c0"
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:089a80c64f3627bf5d2962fab184114e709929d1099f0237c7b30651309f61d3"
+      "digest": "sha256:cdaa8cda3e627b3f79ffd030c7758f0cedb95005a22d6d0055c0bfc5691ee9a3"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
@@ -246,7 +253,7 @@
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:97717ca04871ae78fed2c17072c0100965b1b07b72e73d1bbc2ac12f061a36d1"
+      "digest": "sha256:869efe5b3a87e97d0e4908a17593668ff90fc851bf8419c41a0dcca27a51be12"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -258,16 +265,16 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:4676b9b37800734b2330e58c81e10a9bb25526d5eb32d1d68e87e22cb3b851c1"
+      "digest": "sha256:b37210cc3a40dfa08b4440ee04e39cea14b89bdad6450b392ff366b7a90f5872"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
-      "digest": "sha256:a9d4f8936aaa487ad50e7ae26837f6ef9b912bf9a6a35f8766e75cc624768fcf"
+      "digest": "sha256:8fea9fc7545ad444d86bdf3f252c488c08b3c5922b75cc546e7fe7352b081a5f"
     },
     {
       "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:e4e8086aa07a75c65dd512c73fbd38c883d9c35219e21ab643dd53661873e219"
+  "digest": "sha256:1287d77b461860a44498bda558d2fce8d1ac721619fc170a755d81f8e43e407d"
 }
