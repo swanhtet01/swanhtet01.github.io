@@ -152,6 +152,12 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
   }
 
   const siteName = cleanText(artifact.siteName)
+  const skipLinks = targets.map((target) => (
+    `  <a class="skip-link" data-home="${target.slug === '/'}" data-page="${target.anchor}" href="#${target.anchor}">Skip to content</a>`
+  )).join('\n')
+  const activeSkipStyles = targets.map((target) => (
+    `      body:has(.site-page[id="${target.anchor}"]:target) .skip-link[data-page="${target.anchor}"] { display: block; }`
+  )).join('\n')
   const navigation = artifact.pages
     .map((page, index) => ({ page, target: targets[index] }))
     .filter((entry): entry is { page: WebsiteArtifact['pages'][number]; target: PageTarget } => (
@@ -229,6 +235,7 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
     a { color: inherit; }
     a:focus-visible { border-radius: 8px; outline: 3px solid #90a7f1; outline-offset: 3px; }
     .skip-link {
+      display: none;
       position: fixed;
       z-index: 20;
       top: 12px;
@@ -239,6 +246,7 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
       color: #ffffff;
       transform: translateY(-160%);
     }
+    .skip-link[data-home="true"] { display: block; }
     .skip-link:focus { transform: translateY(0); }
     .site-header {
       position: sticky;
@@ -291,6 +299,9 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
     }
     .site-page + .site-page { margin-top: 32px; }
     @supports selector(main:has(.site-page:target)) {
+      .skip-link[data-home="true"] { display: none; }
+      body:not(:has(.site-page:target)) .skip-link[data-home="true"] { display: block; }
+${activeSkipStyles}
       .site-page { display: none; }
       .site-page:target { display: block; }
       .site-main:not(:has(.site-page:target)) .site-page[data-home="true"] { display: block; }
@@ -399,7 +410,7 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
   </style>
 </head>
 <body>
-  <a class="skip-link" href="#content">Skip to content</a>
+${skipLinks}
   <header class="site-header">
     <div class="site-header-inner">
       <a class="site-name" href="#${homeTarget.anchor}">${escapeHtml(siteName)}</a>
