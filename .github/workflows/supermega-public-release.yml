@@ -86,6 +86,17 @@ jobs:
       - name: Install migration verifier
         run: npm ci --ignore-scripts
 
+      - name: Prepare PostgreSQL 17 test tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/supermega-pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-17 postgresql-client-17 openssl
+          /usr/lib/postgresql/17/bin/postgres --version
+          echo "SUPERMEGA_POSTGRES17_BIN=/usr/lib/postgresql/17/bin" >> "$GITHUB_ENV"
+
       - name: Verify canonical API and release contracts
         run: |
           python -m pip install --disable-pip-version-check -r requirements-test.txt

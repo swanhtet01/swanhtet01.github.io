@@ -199,6 +199,9 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
 
 
 def _default_postgres_bin() -> Path:
+    configured = str(os.getenv("SUPERMEGA_POSTGRES17_BIN", "")).strip()
+    if configured:
+        return Path(configured).expanduser()
     if os.name == "nt":
         return (
             Path.home()
@@ -208,7 +211,8 @@ def _default_postgres_bin() -> Path:
             / "pgsql"
             / "bin"
         )
-    return Path("")
+    # Ubuntu installs server tools outside PATH; require major17 at preflight.
+    return Path("/usr/lib/postgresql/17/bin")
 
 
 def _default_openssl() -> Path:

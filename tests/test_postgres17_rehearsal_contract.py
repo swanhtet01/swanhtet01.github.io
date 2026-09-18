@@ -26,6 +26,30 @@ def _load_rehearsal():
 
 
 class Postgres17RehearsalContractTests(unittest.TestCase):
+    def test_postgres_bin_platform_defaults_and_explicit_override(self) -> None:
+        module = _load_rehearsal()
+        for platform, expected in (
+            ("posix", Path("/usr/lib/postgresql/17/bin")),
+            ("nt", Path.home() / ".cache/supermega-postgresql/17.10-2/pgsql/bin"),
+        ):
+            with self.subTest(platform=platform), patch.object(
+                module, "os", SimpleNamespace(name=platform, getenv=lambda *_: "")
+            ):
+                self.assertEqual(module._default_postgres_bin(), expected)
+        with patch.object(module, "os", SimpleNamespace(
+            name="posix", getenv=lambda *_: " /explicit/pg17/bin "
+        )):
+            self.assertEqual(module._default_postgres_bin(), Path("/explicit/pg17/bin"))
+
+    def test_api_workflows_prepare_pg17_before_unconditional_discovery(self) -> None:
+        for name in ("showroom-ci.yml", "supermega-app-deploy.yml", "supermega-public-release.yml"):
+            source = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+            with self.subTest(workflow=name):
+                self.assertIn("apt-get install --yes postgresql-17 postgresql-client-17 openssl", source)
+                self.assertIn('echo "SUPERMEGA_POSTGRES17_BIN=/usr/lib/postgresql/17/bin" >> "$GITHUB_ENV"', source)
+                self.assertLess(source.index("Prepare PostgreSQL 17 test tools"),
+                                source.index("python -m unittest discover"))
+
     def test_release_rehearsal_requires_current_complete_chain(self) -> None:
         module = _load_rehearsal()
         self.assertEqual(getattr(module, "CURRENT_SCHEMA_VERSION", None), 13)
