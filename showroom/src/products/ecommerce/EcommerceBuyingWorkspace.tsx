@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { SavedRequestReceipt } from './SavedRequestReceipt'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
@@ -1368,7 +1369,9 @@ export function EcommerceBuyingWorkspace({
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
             </article>
-          ) : (
+          ) : !latestRequestOrder ? <SavedRequestReceipt reference={latestRequest.id} total={formatMmk(latestRequest.totalMmk)}
+            expiresAt={latestRequest.quote.expiresAt} expired={Date.parse(latestRequest.quote.expiresAt) <= quoteClock}
+            delivery={managedDeliveryConfirmed ? 'confirmed' : onRecordManagedRequest ? 'unverified' : 'local'} /> : (
             <div className="ecommerce-stale-quote" role="status">
               <strong>{latestRequestOrder ? 'Start another order' : 'Review a new total'}</strong>
               <small>{latestRequestOrder

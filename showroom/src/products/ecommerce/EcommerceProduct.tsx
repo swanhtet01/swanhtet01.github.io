@@ -981,6 +981,7 @@ export function EcommerceProduct() {
 
   function focusCurrentRequestReceipt() {
     const receipt = document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="true"]')
+      ?? document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="false"]')
     if (!receipt) {
       prepareQuoteRecovery()
       return
