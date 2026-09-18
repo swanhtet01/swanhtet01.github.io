@@ -25,6 +25,7 @@ from tests.test_website_runtime import _state
 REVIEW_MIGRATIONS = (
     "20260915184728_website_customer_review_storage.sql",
     "20260915191528_website_review_entitlement_proof.sql",
+    "20260918011500_website_customer_acceptance.sql",
 )
 WORKSPACE = "rehearsal-product"
 OWNER = "owner-product"
@@ -36,7 +37,7 @@ DIGEST = "sha256:" + "a" * 64
 class WebsiteReviewSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if pg.CURRENT_MIGRATIONS[-2:] != REVIEW_MIGRATIONS:
+        if pg.CURRENT_MIGRATIONS[-len(REVIEW_MIGRATIONS):] != REVIEW_MIGRATIONS:
             raise RuntimeError("website_review_complete_migration_chain_required")
         import psycopg
         cls.db_error = psycopg.Error
@@ -110,6 +111,8 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             for field, replacement, code in (
                 ("preview", {}, "restored_website_preview_mismatch"),
                 ("feedback", {"requests": []}, "restored_website_feedback_mismatch"),
+                ("acceptance", {}, "restored_website_acceptance_mismatch"),
+                ("acceptancePreview", {}, "restored_website_acceptance_preview_mismatch"),
             ):
                 invalid = deepcopy(retained)
                 invalid["website"][field] = replacement
@@ -117,9 +120,10 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                     proof.verify_website_review(self.runtime_url, invalid)
             with pg._connect(self.admin_url) as connection:
                 connection.execute("set transaction read only")
-                for table in ("website_customer_reviews", "website_customer_feedback"):
+                for table, expected_count in (("website_customer_reviews", 2), ("website_customer_feedback", 1),
+                                              ("website_customer_acceptances", 1)):
                     self.assertEqual(connection.execute(f"select count(*) from app_private.{table} where workspace_id=%s",
-                        (retained["website"]["workspace"],)).fetchone()[0], 1)
+                        (retained["website"]["workspace"],)).fetchone()[0], expected_count)
 
     @contextmanager
     def transaction(self, actor=OWNER, workspace=WORKSPACE, isolation=None):
@@ -156,15 +160,15 @@ class WebsiteReviewSqlTests(unittest.TestCase):
     def adapter(self, *, write=True):
         return WebsiteCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=write))
 
-    def test_adapter_accept_requires_optional_schema(self):
-        with self.assertRaises(TrialNotReadyError):
+    def test_adapter_accept_requires_current_assignment(self):
+        with self.assertRaises(TrialPermissionDenied):
             self.adapter().accept(TrialPrincipal(WORKSPACE, RECIPIENT, "human"),
                 dict(commandId=str(uuid4()), reviewId=str(uuid4()), previewDigest=DIGEST,
                      decision="accept_preview_for_release_review"))
         with self.http_client() as client:
             unavailable = client.get('/api/trial/v1/website-reviews/' + str(uuid4()) + '/acceptance',
                                      headers={'x-test-actor': 'customer'})
-            self.assertEqual(unavailable.status_code, 503)
+            self.assertEqual(unavailable.status_code, 403)
             self.assertEqual(unavailable.headers['cache-control'], 'private, no-store')
 
     def retained_assignment(self):
@@ -757,11 +761,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
 
 
     def test_zzz_acceptance_extension_is_private_immutable_and_exclusive_with_feedback(self):
-        # Install only in this disposable test cluster, after baseline adapter tests.
-        # The candidate extension is deliberately absent from the release chain.
-        extension = pg.ROOT / 'supabase/rehearsal/website_customer_acceptance.sql'
-        with pg._connect(self.admin_url) as connection:
-            connection.execute(extension.read_text(encoding='utf-8'))
+        # Acceptance is now installed by the complete source-owned migration chain.
 
         from supermega_runtime.website_acceptance_schema import acceptance_triggers_verified, acceptance_storage_verified
         with pg._connect(self.admin_url) as connection:

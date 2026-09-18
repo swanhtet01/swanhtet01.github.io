@@ -19,10 +19,13 @@ MIGRATION_PINS = {
     "20260907024457_self_serve_durable_attempt_budget.sql": "94aa2c57d1d7e55ee844cb8c29b41dcad54093390d321c48f5caf9da67ef606f",
     "20260915184728_website_customer_review_storage.sql": "349ad34204b4d111a0ce344e9c8d79576be0c6df2eb50b84c3901f4cf98ae5be",
     "20260915191528_website_review_entitlement_proof.sql": "75755426b58dfe01b6efde4bd3480e2defdf5556c3e9d1352bc96c48587adf62",
+    "20260918011500_website_customer_acceptance.sql": "2ffe0304564175d9682af8525873c348d1a3638c87671d16c682e5414a2347b1",
 }
 TABLES = frozenset({"billing_invoices", "billing_events", "billing_entitlements",
-                    "self_serve_attempt_budgets", "website_customer_reviews", "website_customer_feedback"})
+                    "self_serve_attempt_budgets", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances"})
 WEBSITE_FUNCTIONS = {
+    "guard_website_acceptance": ("", "trigger"),
+    "guard_website_feedback_after_acceptance": ("", "trigger"),
     "guard_website_feedback": ("", "trigger"),
     "guard_website_review": ("", "trigger"),
     "invalidate_website_reviews": ("", "trigger"),
@@ -41,6 +44,8 @@ FUNCTIONS = {
     "mark_self_serve_claim_conflict": ("admitted_at timestamp with time zone", "boolean"),
 }
 WEBSITE_POLICIES = {
+    "website_acceptance_insert": ("website_customer_acceptances", "INSERT", None, "2b9ba696100e896e4f0ed4e46ef53ad83ad8828f8ea201ec1fc3a91be287f84e"),
+    "website_acceptance_read": ("website_customer_acceptances", "SELECT", "aa4e62ec5c29d1c54a81615cf224f208cc795c541a4f9102ac5bff7bf9c29b86", None),
     "website_feedback_insert": ("website_customer_feedback", "INSERT", None, "c93ef7773593e0ed96f436fab247931dc3cf5ca1f59575833a4b879b068168b6"),
     "website_feedback_read": ("website_customer_feedback", "SELECT", "aa4e62ec5c29d1c54a81615cf224f208cc795c541a4f9102ac5bff7bf9c29b86", None),
     "website_reviews_insert": ("website_customer_reviews", "INSERT", None, "4622582ff8b62ad939ddfe03b99e3ebc33f7f5519e4342dafa8505d7a220cd01"),
@@ -51,10 +56,10 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 # Exact PostgreSQL 17 output from the pinned migrations, with all row keys retained.
 # Source-derived, synthetic catalog evidence only. Unknown/extra/missing rows fail.
 CATALOG_PINS = {
-    "extension_columns_exact": "37b2db9b140dce4b90687f50be272e140e59d8ed83a790be36119dd5cf18d548",
-    "extension_constraints_exact": "be489a166fa6dd0dec32f30a5392dd0226c41740c7e61833f2bef03f1bdd0085",
-    "extension_functions_exact": "72ddc1cc66ebdd458ec39e7fe598ce052c139d8c76618b14176a8c6ca27a5d3d",
-    "extension_policies_exact": "b560da092b3a523b2cc6edbc99bf4d5e76b916bd91a0f1924a4343ba5eb04ea2",
+    "extension_columns_exact": "0e0a5552e46d2367977e5cee97f28e274b1d8b79600c885276c791d9315e6773",
+    "extension_constraints_exact": "60bb16c1e1111001200d1f5278e252ab793ad533c2541611dd4e84c3ef66c7f4",
+    "extension_functions_exact": "171553bc23647ada1a515303617ce047ca05c060152a9f789703773208032630",
+    "extension_policies_exact": "8c6862f8c1739dd405198d142ab306ecee42ed551f6c19719a92abef7c0346ad",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
                "self_serve_attempt_budget_actor_only": "b5ae50fbc65c43344b8d3f3938f7b8a26414ae3bbb1781b6e35bf609c954f82c"}
@@ -204,14 +209,20 @@ def extend_contract(base):
         ("website_review_guard", "website_customer_reviews", "guard_website_review", 31),
         ("website_feedback_guard", "website_customer_feedback", "guard_website_feedback", 31),
         ("website_reviews_invalidate", "workspace_state", "invalidate_website_reviews", 25),
+        ("website_acceptance_guard", "website_customer_acceptances", "guard_website_acceptance", 31),
+        ("website_feedback_acceptance_guard", "website_customer_feedback", "guard_website_feedback_after_acceptance", 7),
     ):
+        trigger_sql = sql["20260918011500_website_customer_acceptance.sql"] if function in (
+            "guard_website_acceptance", "guard_website_feedback_after_acceptance") else website
         bodies = re.findall(r"create function app_private\." + function
-                            + r"\(\).*?as \$\$(.*?)\$\$;", website, re.S)
+                            + r"\(\).*?as \$\$(.*?)\$\$;", trigger_sql, re.S)
         if len(bodies) != 1:
             raise ValueError("v13_contract_website_trigger_source_missing")
         base["EXPECTED_TRIGGERS"][name] = dict(table=table, function=function,
                                               trigger_type=kind, function_source=bodies[0])
     for name, table, keys, unique, primary, constraint in (
+        ("website_customer_acceptances_pkey", "website_customer_acceptances", ("workspace_id", "actor_id", "command_id"), True, True, "p"),
+        ("website_customer_acceptances_workspace_id_review_id_key", "website_customer_acceptances", ("workspace_id", "review_id"), True, False, "u"),
         ("website_customer_feedback_pkey", "website_customer_feedback", ("workspace_id", "actor_id", "command_id"), True, True, "p"),
         ("website_customer_feedback_review_idx", "website_customer_feedback", ("workspace_id", "review_id", "created_at"), False, False, None),
         ("website_customer_reviews_active_idx", "website_customer_reviews", ("workspace_id",), False, False, None),
@@ -230,11 +241,12 @@ def extend_contract(base):
         [("function", name, role, "EXECUTE", False) for name in WEBSITE_FUNCTIONS]
         + [("table", table, role, privilege, False)
            for table, privileges in (("website_customer_reviews", ("SELECT", "INSERT", "UPDATE")),
-                                     ("website_customer_feedback", ("SELECT", "INSERT")))
+                                     ("website_customer_feedback", ("SELECT", "INSERT")),
+                                     ("website_customer_acceptances", ("SELECT", "INSERT")))
            for privilege in privileges])
     base["EXPECTED_BACKEND_ACL_DEPENDENCIES"] |= frozenset(
         [("function", f"app_private.{name}({signature[0]})", 0) for name, signature in WEBSITE_FUNCTIONS.items()]
         + [("relation", f"app_private.{table}", 0)
-           for table in ("website_customer_reviews", "website_customer_feedback")])
+           for table in ("website_customer_reviews", "website_customer_feedback", "website_customer_acceptances")])
     base.update(collect_extensions=collect_extensions, extension_checks=extension_checks)
     return base

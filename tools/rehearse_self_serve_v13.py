@@ -30,13 +30,14 @@ EXTRAS = (
     "20260907024457_self_serve_durable_attempt_budget.sql",
     "20260915184728_website_customer_review_storage.sql",
     "20260915191528_website_review_entitlement_proof.sql",
+    "20260918011500_website_customer_acceptance.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")
 TABLES = (
     "approval_requests", "billing_entitlements", "billing_events", "billing_invoices",
     "self_serve_attempt_budgets", "trial_schema_meta",
-    "website_customer_feedback", "website_customer_reviews", "workspace_access_controls",
+    "website_customer_acceptances", "website_customer_feedback", "website_customer_reviews", "workspace_access_controls",
     "workspace_events", "workspace_memberships", "workspace_state",
 )
 CHECKS = (
@@ -247,11 +248,24 @@ def exercise(admin_url, runtime_url, head):
     feedback = adapter.request_changes(recipient, payload)
     require(review["persisted"] and not review["replayed"] and feedback["persisted"]
             and not feedback["replayed"], "website_review_not_retained")
+    accepted_review = adapter.prepare(operator, review_id=str(uuid4()), recipient_actor_id=recipient_id,
+        expected_version=1, expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+    acceptance_payload = {"commandId": str(uuid4()), "reviewId": accepted_review["reviewId"],
+        "previewDigest": accepted_review["previewDigest"], "decision": "accept_preview_for_release_review"}
+    acceptance = adapter.accept(recipient, acceptance_payload)
+    require(acceptance["persisted"] is True and acceptance["replayed"] is False
+            and acceptance["publicationAuthorized"] is False and acceptance["deploymentAuthorized"] is False,
+            "website_acceptance_not_retained")
+    require(adapter.accept(recipient, acceptance_payload) == {**acceptance, "replayed": True},
+            "website_acceptance_replay_mismatch")
     retained = {"workspace": workspace, "actor": actors[0], "session": sessions[0],
         "website": {"workspace": website, "recipient": recipient_id, "session": recipient_session,
             "reviewId": review["reviewId"], "payload": payload,
             "preview": adapter.preview(recipient, review["reviewId"]),
-            "feedback": adapter.feedback(operator, review["reviewId"])}}
+            "feedback": adapter.feedback(operator, review["reviewId"]),
+            "acceptanceReviewId": accepted_review["reviewId"],
+            "acceptancePreview": adapter.preview(recipient, accepted_review["reviewId"]),
+            "acceptance": adapter.acceptance(recipient, accepted_review["reviewId"])}}
     verify_website_review(runtime_url, retained)
     return retained
 
@@ -275,6 +289,13 @@ def verify_website_review(runtime_url, retained):
             and feedback["requests"][0]["commandId"] == website["payload"]["commandId"]
             and feedback["requests"][0]["note"] == website["payload"]["note"],
             "restored_website_feedback_mismatch")
+    acceptance_preview = adapter.preview(who(website["recipient"], website["session"]), website["acceptanceReviewId"])
+    acceptance = adapter.acceptance(who(website["recipient"], website["session"]), website["acceptanceReviewId"])
+    require(acceptance_preview == website["acceptancePreview"], "restored_website_acceptance_preview_mismatch")
+    require(acceptance == website["acceptance"]
+            and acceptance["status"] == "accepted_for_operator_release_review"
+            and acceptance["publicationAuthorized"] is False and acceptance["deploymentAuthorized"] is False,
+            "restored_website_acceptance_mismatch")
 
 
 def run(expected_head):

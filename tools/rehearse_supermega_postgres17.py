@@ -62,6 +62,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20260907024457_self_serve_durable_attempt_budget.sql",
     "20260915184728_website_customer_review_storage.sql",
     "20260915191528_website_review_entitlement_proof.sql",
+    "20260918011500_website_customer_acceptance.sql",
 )
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
@@ -125,6 +126,7 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
+    "supermega_runtime/website_acceptance_schema.py",
     "supermega_runtime/website_runtime.py", "supermega_runtime/website_release_foundation.py",
     "tests/test_website_runtime.py",
     "tools/rehearse_self_serve_v13.py", "tools/private_trial_v13_contract.py",
