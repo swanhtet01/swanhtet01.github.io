@@ -89,6 +89,10 @@ const result = await build({
       }
       export const sendManagedWebsiteReviewChanges=async payload=>save(payload,'changes');
       export const sendManagedWebsiteAcceptance=async payload=>save(payload,'accept');
+      export const loadManagedWebsitePreparation=async()=>{const f=read();return {
+        status:'saved_source_preview',sourceVersion:2,contentRevision:7,preview:copy(f.review.preview),
+        previewDigest:f.review.previewDigest,readAt:new Date().toISOString(),reviewCreated:false,
+        publicationAuthorized:false,deploymentAuthorized:false}};
       export const loadManagedWebsiteReviewStaffPage=async(_identity,reviewId)=>{const f=read();return reviewId?{
         reviewId,contentRevision:7,sourceVersion:2,previewDigest:f.review.previewDigest,reviewStatus:f.reviewStatus,
         requests:copy(f.changes),acceptance:copy(f.acceptance),nextAfter:null,publicationAuthorized:false

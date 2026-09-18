@@ -6,6 +6,7 @@ import { createReviewAccessBoundary } from './customer-review-access'
 import { customerWebsiteReviewLoginPath } from '../../core/account-routes'
 import './website-product.css'
 import './customer-review.css'
+import { reviewContactDestination } from './customer-review-contract'
 
 type Pending = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; note: string } }
 type PendingAcceptance = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; decision: 'accept_preview_for_release_review' } }
@@ -187,15 +188,4 @@ export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: 
         <p>Check these details before requesting changes. This is prepared text, not proof that a link works or that search engines have listed your site.</p>
       </details>
     </>
-}
-
-function reviewContactDestination(value: string): string {
-  if (!value.trim()) return 'Not prepared yet'
-  if (value !== value.trim() || Array.from(value).some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127) || value.includes('\\')) return 'Needs correction by SuperMega'
-  if (/^\/(?!\/)|^#/.test(value)) return value
-  try {
-    const url = new URL(value)
-    if (!['https:', 'http:', 'mailto:', 'tel:'].includes(url.protocol) || url.username || url.password) return 'Needs correction by SuperMega'
-    return value
-  } catch { return 'Needs correction by SuperMega' }
 }

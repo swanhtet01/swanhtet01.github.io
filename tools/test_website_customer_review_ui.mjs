@@ -5,6 +5,7 @@ import vm from 'node:vm'
 import test from 'node:test'
 import { createReviewAccessBoundary } from '../showroom/src/products/website/customer-review-access.ts'
 import { customerWebsiteReviewLoginPath } from '../showroom/src/core/account-routes.ts'
+import { reviewContactDestination } from '../showroom/src/products/website/customer-review-contract.ts'
 
 // Use the installed React renderer and TypeScript compiler; no browser, auth,
 // network, private workspace, or new dependency is involved in this test.
@@ -19,7 +20,8 @@ vm.runInNewContext(compiled, { URL, exports: module.exports, require: name => {
   if (name.endsWith('.css')) return {}
   if (name === './customer-review-access') return { createReviewAccessBoundary }
   if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
-  if (name === '../../core/managed-trial' || name === './customer-review-contract') return new Proxy({}, { get: () => { throw new Error('Pure preview must not access auth or transport') } })
+  if (name === './customer-review-contract') return new Proxy({ reviewContactDestination }, { get: (target, key) => { if (key === 'reviewContactDestination') return target[key]; throw new Error('Pure preview must not access auth or transport') } })
+  if (name === '../../core/managed-trial') return new Proxy({}, { get: () => { throw new Error('Pure preview must not access auth or transport') } })
   return require(name)
 } })
 const { PreparedWebsitePage } = module.exports
@@ -132,7 +134,8 @@ function renderDecision(status, { confirmed = false, note = '', uncertain = fals
       if (name === 'react-router') return { Link: props => React.createElement('a', { href: props.to }, props.children) }
       if (name === './customer-review-access') return { createReviewAccessBoundary }
       if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
-      if (name === '../../core/managed-trial' || name === './customer-review-contract') return {}
+      if (name === './customer-review-contract') return { reviewContactDestination }
+      if (name === '../../core/managed-trial') return {}
       return require(name)
     },
   })
