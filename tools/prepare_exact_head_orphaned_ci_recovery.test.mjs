@@ -14,12 +14,12 @@ const tree = 'c'.repeat(40)
 const now = new Date('2026-09-01T00:20:00.000Z')
 const gitState = { branch: 'codex/release-stack-integration-rehearsal-20260825', head, tree, origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', clean: true }
 const toolDigests = Promise.resolve([{ path: 'tools/prepare_exact_head_orphaned_ci_recovery.mjs', digest: `sha256:${'1'.repeat(64)}` }, { path: 'tools/apply_exact_head_orphaned_ci_recovery.mjs', digest: `sha256:${'2'.repeat(64)}` }])
-const read = async () => 'name: SuperMega App CI\njobs:\n  validate:\n    timeout-minutes: 10\n  unrelated:\n    timeout-minutes: 1\n'
+const read = async () => 'name: SuperMega App CI\njobs:\n  validate:\n    name: SuperMega App CI\n    timeout-minutes: 10\n  unrelated:\n    timeout-minutes: 1\n'
 
 function fixture(overrides = {}) {
   const run = { id: 33, workflow_id: 44, name: 'SuperMega App CI', path: '.github/workflows/showroom-ci.yml@main', head_sha: head, event: 'pull_request', status: 'in_progress', conclusion: null, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }
-  const job = { id: 55, run_id: 33, name: 'validate', status: 'in_progress', conclusion: null, check_run_url: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/check-runs/66', started_at: '2026-09-01T00:00:00Z', completed_at: null }
-  const check = { id: 66, name: 'validate', status: 'in_progress', conclusion: null }
+  const job = { id: 55, run_id: 33, name: 'SuperMega App CI', status: 'in_progress', conclusion: null, check_run_url: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/check-runs/66', started_at: '2026-09-01T00:00:00Z', completed_at: null }
+  const check = { id: 66, name: 'SuperMega App CI', status: 'in_progress', conclusion: null }
   return {
     pr: { number: 561, state: 'open', draft: false, updated_at: '2026-09-01T00:00:00Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } },
     run, job, check,
@@ -29,10 +29,20 @@ function fixture(overrides = {}) {
   }
 }
 function fetcher(state, calls = []) { return async (path) => { calls.push(path); if (path === '/pulls/561') return state.pr; if (path === '/actions/runs/33') return state.run; if (path === '/actions/jobs/55') return state.job; if (path === '/check-runs/66') return state.check; if (path.startsWith('/commits/')) return state.checks; if (path.startsWith('/actions/runs?')) return state.runs; throw new Error(`unexpected:${path}`) } }
-async function plan(state = fixture(), options = {}) { return collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'cancel', fetchJson: fetcher(state), gitState, now, read, toolDigests, ...options }) }
+async function plan(state = fixture(), options = {}) { return collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'SuperMega App CI', phase: 'cancel', fetchJson: fetcher(state), gitState, now, read, toolDigests, ...options }) }
+
+test('renamed job binds display name while timeout stays on stable validate ID', async () => {
+  const packet = await plan()
+  assert.equal(packet.workflow.targetJobName, 'SuperMega App CI')
+  assert.equal(packet.workflow.timeoutMinutes, 10)
+  await assert.rejects(plan(fixture(), { checkName: 'validate' }), /orphaned_ci_recovery_check_invalid/)
+  for (const replacement of ['', '    name: validate\n', '    name: SuperMega App CI\n    name: SuperMega App CI\n']) {
+    await assert.rejects(plan(fixture(), { read: async () => (await read()).replace('    name: SuperMega App CI\n', replacement) }), /orphaned_ci_recovery_workflow_job_name_invalid/)
+  }
+})
 
 test('cancel plan is exact-head, stale, GET-only, and binds run/job/check/workflow timeout', async () => {
-  const calls = []; const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'cancel', fetchJson: fetcher(fixture(), calls), gitState, now, read, toolDigests })
+  const calls = []; const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'SuperMega App CI', phase: 'cancel', fetchJson: fetcher(fixture(), calls), gitState, now, read, toolDigests })
   assert.equal(packet.action.kind, 'cancel_exact_orphaned_workflow_run')
   assert.equal(packet.action.path, '/actions/runs/33/cancel')
   assert.equal(packet.workflow.timeoutMinutes, 10)
@@ -80,7 +90,7 @@ test('plan validation fails closed for replay/tamper and source workflow timeout
   assert.throws(() => validateOrphanedCiRecoveryPlan({ ...packet, action: { ...packet.action, path: '/actions/runs/34/cancel' } }, { now }), /orphaned_ci_recovery_plan_digest_invalid/)
   const stale = new Date(now.getTime() + ORPHANED_CI_RECOVERY_GRACE_MS + 10 * 60_000)
   assert.throws(() => validateOrphanedCiRecoveryPlan(packet, { now: stale }), /orphaned_ci_recovery_plan_expired/)
-  await assert.rejects(plan(fixture(), { read: async () => 'name: SuperMega App CI\njobs:\n  validate:\n    timeout-minutes: bogus' }), /orphaned_ci_recovery_workflow_timeout_invalid/)
+  await assert.rejects(plan(fixture(), { read: async () => 'name: SuperMega App CI\njobs:\n  validate:\n    name: SuperMega App CI\n    timeout-minutes: bogus' }), /orphaned_ci_recovery_workflow_timeout_invalid/)
 })
 
 test('default collector uses GET only and exhausts check/run pagination', async () => {
@@ -97,7 +107,7 @@ test('default collector uses GET only and exhausts check/run pagination', async 
     throw new Error(`unexpected:${path}`)
   }
   try {
-    const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'cancel', fetchJson: fetchGitHubJson, gitState, now, read, toolDigests })
+    const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'SuperMega App CI', phase: 'cancel', fetchJson: fetchGitHubJson, gitState, now, read, toolDigests })
     assert.equal(packet.ok, true)
     assert.equal(calls.every((call) => call.method === 'GET'), true)
     assert.equal(calls.filter((call) => call.path.endsWith('/actions/runs')).length, 2)

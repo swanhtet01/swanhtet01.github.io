@@ -19,7 +19,7 @@ const SHA = /^[0-9a-f]{40}$/
 const DIGEST = /^sha256:[0-9a-f]{64}$/
 const ACCEPTED = new Set(['success', 'neutral', 'skipped'])
 const CANONICAL_BRANCH = 'codex/release-stack-integration-rehearsal-20260825'
-const TARGET_JOB_NAME = 'validate'
+const TARGET_JOB_NAME = 'SuperMega App CI'
 const TOOL_PATHS = ['tools/prepare_exact_head_orphaned_ci_recovery.mjs', 'tools/apply_exact_head_orphaned_ci_recovery.mjs']
 const FALSE_CONTROLS = ['githubWriteAttempted', 'githubWritesPerformed', 'workflowCancelled', 'workflowRerun', 'ownerApprovalReceiptConsumed', 'workflowDispatched', 'pullRequestMutated', 'repositorySettingsMutated', 'mergePerformed', 'deploymentPerformed', 'providerMutated', 'credentialValueExposed']
 
@@ -49,6 +49,8 @@ async function workflowBinding(read = (path) => readFile(path, 'utf8')) {
   const workflowName = /^name:\s*([^\r\n]+)\s*$/m.exec(payload)?.[1]?.trim()
   const match = /^ {4}timeout-minutes:\s*(\d+)\s*$/m.exec(validateBlock || '')
   const timeoutMinutes = Number(match?.[1])
+  const jobNames = [...validateBlock.matchAll(/^ {4}name:\s*([^\r\n]+)\s*$/gm)]
+  if (jobNames.length !== 1 || jobNames[0][1].trim() !== TARGET_JOB_NAME) fail('orphaned_ci_recovery_workflow_job_name_invalid')
   if (workflowName !== 'SuperMega App CI' || !Number.isSafeInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > 120) fail('orphaned_ci_recovery_workflow_timeout_invalid')
   return { path: ORPHANED_CI_RECOVERY_WORKFLOW_PATH, name: workflowName, targetJobName: TARGET_JOB_NAME, fileDigest: digest(payload), timeoutMinutes }
 }

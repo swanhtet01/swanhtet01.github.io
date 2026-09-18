@@ -10,23 +10,23 @@ const tree = 'c'.repeat(40)
 const now = new Date('2099-09-01T00:20:00.000Z')
 const gitState = { branch: 'codex/release-stack-integration-rehearsal-20260825', head, tree, origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', clean: true }
 const tools = [{ path: 'tools/prepare_exact_head_orphaned_ci_recovery.mjs', digest: `sha256:${'1'.repeat(64)}` }, { path: 'tools/apply_exact_head_orphaned_ci_recovery.mjs', digest: `sha256:${'2'.repeat(64)}` }]
-const read = async () => 'name: SuperMega App CI\njobs:\n  validate:\n    timeout-minutes: 10\n'
+const read = async () => 'name: SuperMega App CI\njobs:\n  validate:\n    name: SuperMega App CI\n    timeout-minutes: 10\n'
 
 function state() {
   const run = { id: 33, workflow_id: 44, run_attempt: 1, name: 'SuperMega App CI', path: '.github/workflows/showroom-ci.yml@main', head_sha: head, event: 'pull_request', status: 'in_progress', conclusion: null, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }
-  const job = { id: 55, run_id: 33, name: 'validate', status: 'in_progress', conclusion: null, check_run_url: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/check-runs/66', started_at: '2026-09-01T00:00:00Z', completed_at: null }
-  const check = { id: 66, name: 'validate', status: 'in_progress', conclusion: null }
+  const job = { id: 55, run_id: 33, name: 'SuperMega App CI', status: 'in_progress', conclusion: null, check_run_url: 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io/check-runs/66', started_at: '2026-09-01T00:00:00Z', completed_at: null }
+  const check = { id: 66, name: 'SuperMega App CI', status: 'in_progress', conclusion: null }
   return { pr: { number: 561, state: 'open', draft: false, updated_at: '2026-09-01T00:00:00Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } }, run, job, check, checks: { check_runs: [check, { id: 67, name: 'verify', status: 'completed', conclusion: 'success' }] }, runs: { workflow_runs: [run] }, cancelled: false }
 }
 function fetcher(value) { return async (path) => { if (path === '/pulls/561') return value.pr; if (path === '/actions/runs/33') return value.postRunResponses?.length ? value.postRunResponses.shift() : value.rerunRun || (value.cancelled ? { ...value.run, status: 'completed', conclusion: 'cancelled' } : value.run); if (path === '/actions/jobs/55') return value.job; if (path === '/check-runs/66') return value.check; if (path.startsWith('/commits/')) return value.checks; if (path.startsWith('/actions/runs?')) return value.runs; if (path === '/actions/runs/33/attempts/2/jobs?per_page=100') return value.rerunJobs; if (path === '/check-runs/99') return value.rerunCheck; throw new Error(`unexpected:${path}`) } }
-async function plan(value) { return collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'cancel', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) }) }
+async function plan(value) { return collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'SuperMega App CI', phase: 'cancel', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) }) }
 function response(status, json = {}) { return { ok: status >= 200 && status < 300, status, async json() { return json } } }
 function queueRerun(value, { headSha = head, workflowId = 44, runAttempt = 2, jobRunId = 33, checkRunId = 99 } = {}) {
   const run = { ...value.run, workflow_id: workflowId, run_attempt: runAttempt, head_sha: headSha, status: 'queued', conclusion: null }
-  const job = { id: 88, run_id: jobRunId, name: 'validate', status: 'queued', conclusion: null, check_run_url: `https://api.github.com/repos/swanhtet01/swanhtet01.github.io/check-runs/${checkRunId}`, started_at: null, completed_at: null }
+  const job = { id: 88, run_id: jobRunId, name: 'SuperMega App CI', status: 'queued', conclusion: null, check_run_url: `https://api.github.com/repos/swanhtet01/swanhtet01.github.io/check-runs/${checkRunId}`, started_at: null, completed_at: null }
   value.rerunRun = run
   value.rerunJobs = { total_count: 1, jobs: [job] }
-  value.rerunCheck = { id: checkRunId, name: 'validate', status: 'queued', conclusion: null }
+  value.rerunCheck = { id: checkRunId, name: 'SuperMega App CI', status: 'queued', conclusion: null }
 }
 
 test('owner-approved cancellation uses exactly one POST and confirms only terminal cancellation', async () => {
@@ -90,7 +90,7 @@ test('rerun is a separate cancelled-only action and a one-use receipt cannot rep
   value.check = { ...value.check, status: 'completed', conclusion: 'cancelled' }
   value.checks = { check_runs: [value.check, { id: 67, name: 'verify', status: 'completed', conclusion: 'success' }] }
   value.runs = { workflow_runs: [value.run] }
-  const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'rerun', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) })
+  const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'SuperMega App CI', phase: 'rerun', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) })
   const waits = []
   const request = async (url, init) => { assert.equal(init.method, 'POST'); assert.equal(String(url).endsWith('/actions/jobs/55/rerun'), true); queueRerun(value); value.postRunResponses = [value.run, value.rerunRun]; return response(201, null) }
   const options = { plan: packet, fetchJson: fetcher(value), request, confirmer: () => true, env: { GITHUB_TOKEN: 'test-token-value' }, gitState, now: () => now, toolDigests: Promise.resolve(tools), read, nonce: () => '6'.repeat(64), sleep: async (milliseconds) => { waits.push(milliseconds) } }
@@ -122,7 +122,7 @@ test('rerun acknowledgement fails closed without one fresh exact workflow run an
     value.check = { ...value.check, status: 'completed', conclusion: 'cancelled' }
     value.checks = { check_runs: [value.check, { id: 67, name: 'verify', status: 'completed', conclusion: 'success' }] }
     value.runs = { workflow_runs: [value.run] }
-    const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'validate', phase: 'rerun', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) })
+    const packet = await collectOrphanedCiRecoveryPlan({ prNumber: 561, runId: 33, jobId: 55, checkName: 'SuperMega App CI', phase: 'rerun', fetchJson: fetcher(value), gitState, now, read, toolDigests: Promise.resolve(tools) })
     let calls = 0; let error
     try { await applyOrphanedCiRecovery({ plan: packet, fetchJson: fetcher(value), request: async () => { calls += 1; candidate.update(value); return response(201, null) }, confirmer: () => true, env: { GITHUB_TOKEN: 'test-token-value' }, gitState, now: () => now, toolDigests: Promise.resolve(tools), read, nonce: () => String(index + 7).repeat(64), sleep: async () => {} }) } catch (caught) { error = caught }
     assert.equal(calls, 1, candidate.name)
