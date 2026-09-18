@@ -1,5 +1,9 @@
 # Service-first customer delivery
 
+Operator procedure: [Website customer delivery runbook](WEBSITE-CUSTOMER-DELIVERY-RUNBOOK.md).
+It documents the current assisted enrollment path, not a new browser enrollment
+feature or authorization to contact customers or change hosted access.
+
 Status: implementation contract, not a claim of hosted readiness.
 
 ## Product promise
