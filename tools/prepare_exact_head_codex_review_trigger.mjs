@@ -180,29 +180,55 @@ function assertAuthorityPackets(handoff, protection) {
   }
 }
 
-function nextPagePath(response, currentPath, itemCount) {
+async function nextPagePath(response, currentPath, itemCount, repositoryId) {
   const link = response.headers?.get?.('link') || null
   if (!link) { if (itemCount >= 100) fail('exact_head_codex_review_pagination_incomplete'); return null }
   const match = link.split(',').map((entry) => entry.trim()).map((entry) => /^<([^>]+)>;\s*rel="next"$/.exec(entry)).find(Boolean)
   if (!match) { if (itemCount >= 100) fail('exact_head_codex_review_pagination_incomplete'); return null }
   let next; try { next = new URL(match[1]) } catch { fail('exact_head_codex_review_pagination_invalid') }
   const expected = new URL(API_BASE)
-  if (next.origin !== expected.origin || !next.pathname.startsWith(expected.pathname) || next.href === new URL(`${API_BASE}${currentPath}`).href) fail('exact_head_codex_review_pagination_invalid')
-  return `${next.pathname.slice(expected.pathname.length)}${next.search}`
+  const current = new URL(`${API_BASE}${currentPath}`)
+  if (next.origin !== expected.origin || next.username || next.password || next.hash) fail('exact_head_codex_review_pagination_invalid')
+  // GitHub may serialize Link URLs with its numeric repository ID. Resolve
+  // that ID from this exact named repository, never trust an arbitrary prefix.
+  const suffix = current.pathname.slice(expected.pathname.length)
+  if (next.pathname !== current.pathname) {
+    if (!next.pathname.startsWith('/repositories/')) fail('exact_head_codex_review_pagination_invalid')
+    if (next.pathname !== `/repositories/${await repositoryId()}${suffix}`) fail('exact_head_codex_review_pagination_invalid')
+  }
+  const page = current.searchParams.get('page') || '1'
+  const nextNumber = next.searchParams.get('page')
+  if (!/^[1-9]\d*$/.test(page) || !/^[1-9]\d*$/.test(nextNumber || '')
+    || Number(nextNumber) !== Number(page) + 1 || next.searchParams.getAll('page').length !== 1) fail('exact_head_codex_review_pagination_invalid')
+  current.searchParams.delete('page'); next.searchParams.delete('page')
+  current.searchParams.sort(); next.searchParams.sort()
+  if (current.search !== next.search) fail('exact_head_codex_review_pagination_invalid')
+  current.searchParams.set('page', nextNumber)
+  // Fetch through the original named repository after validating the alias.
+  return `${suffix}${current.search}`
 }
 
 async function fetchGitHubResponse(path) {
-  const response = await fetch(`${API_BASE}${path}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'supermega-exact-head-codex-review-plan' } })
+  const response = await fetch(`${API_BASE}${path}`, { redirect: 'error', signal: AbortSignal.timeout(15000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'supermega-exact-head-codex-review-plan' } })
   if (!response.ok) fail(`exact_head_codex_review_read_failed:${response.status}`)
   try { return { response, json: await response.json() } } catch { fail('exact_head_codex_review_read_json_invalid') }
 }
 
 async function fetchAllPages(path, select) {
   let next = path; const pages = []
+  let id
+  const repositoryId = async () => {
+    if (id === undefined) {
+      const { json } = await fetchGitHubResponse('')
+      if (json?.full_name !== EXACT_HEAD_CODEX_REVIEW_REPOSITORY || !Number.isSafeInteger(json.id) || json.id < 1) fail('exact_head_codex_review_repository_identity_invalid')
+      id = json.id
+    }
+    return id
+  }
   for (let page = 0; next && page < 100; page += 1) {
     const current = next; const { response, json } = await fetchGitHubResponse(current); const items = select(json)
     if (!Array.isArray(items)) fail('exact_head_codex_review_pagination_shape_invalid')
-    pages.push(...items); next = nextPagePath(response, current, items.length)
+    pages.push(...items); next = await nextPagePath(response, current, items.length, repositoryId)
   }
   if (next) fail('exact_head_codex_review_pagination_limit_exceeded')
   return pages

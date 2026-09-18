@@ -80,7 +80,7 @@ test('plan rejects non-canonical local state and malformed authority without exp
 
 test('default GitHub collector exhausts later pages before accepting checks, reviews, or prior triggers', async () => {
   const originalFetch = globalThis.fetch
-  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100&page=2>; rel="next"`
+  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100${path.endsWith('/check-runs') ? '&filter=latest' : ''}&page=2>; rel="next"`
   const oldComments = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-30T20:00:00.000Z' }))
   const oldCommentEvents = oldComments.map((comment) => ({ event: 'commented', id: comment.id }))
   const oldReviews = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, commit_id: 'd'.repeat(40) }))
@@ -104,6 +104,53 @@ test('default GitHub collector exhausts later pages before accepting checks, rev
   } finally { globalThis.fetch = originalFetch }
 })
 
+test('numeric repository pagination binds fresh identity and never follows an untrusted endpoint', async () => {
+  const original = globalThis.fetch
+  const base = 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io'
+  const numeric = 'https://api.github.com/repositories/1034056731'
+  const suffix = '/issues/561/timeline'
+  let nextUrl = numeric + suffix + '?per_page=100&page=2'
+  let repository = { id: 1034056731, full_name: 'swanhtet01/swanhtet01.github.io' }
+  let requests = []
+  globalThis.fetch = async (url, options) => {
+    requests.push(String(url))
+    assert.equal(options.redirect, 'error')
+    assert.ok(options.signal)
+    assert.ok(String(url).startsWith(base), 'alias is validated then fetched through named repository')
+    if (String(url) === base) return response(200, repository)
+    const page = new URL(url).searchParams.get('page')
+    return response(200, [{ page: page || '1' }], page ? null : '<' + nextUrl + '>; rel="next"')
+  }
+  try {
+    assert.deepEqual(await fetchGitHubJson(suffix + '?per_page=100'), [{ page: '1' }, { page: '2' }])
+    assert.equal(requests.filter(url => url === base).length, 1)
+    for (const bad of [
+      numeric.replace('1034056731', '99') + suffix + '?per_page=100&page=2',
+      numeric + '/issues/562/timeline?per_page=100&page=2',
+      base + '-other' + suffix + '?per_page=100&page=2',
+      nextUrl.replace('api.github.com', 'example.com'),
+      nextUrl.replace('https:', 'http:'),
+      nextUrl + '#private',
+      nextUrl.replace('https://', 'https://user@'),
+      nextUrl.replace('page=2', 'page=1'),
+      nextUrl.replace('page=2', 'page=3'),
+      nextUrl + '&page=2',
+      nextUrl.replace('per_page=100', 'per_page=1'),
+      nextUrl + '&state=all',
+    ]) {
+      const good = nextUrl; nextUrl = bad; requests = []
+      await assert.rejects(fetchGitHubJson(suffix + '?per_page=100'), /exact_head_codex_review_pagination_invalid/)
+      assert.ok(requests.length <= 2, 'no page-two fetch after failed binding')
+      nextUrl = good
+    }
+    for (const bad of [{ ...repository, full_name: 'other/repository' }, { ...repository, id: '1034056731' }]) {
+      const good = repository; repository = bad
+      await assert.rejects(fetchGitHubJson(suffix + '?per_page=100'), /exact_head_codex_review_repository_identity_invalid/)
+      repository = good
+    }
+  } finally { globalThis.fetch = original }
+})
+
 test('CLI main uses the exhaustive GET-only collector to write an exact no-write plan', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-exact-head-codex-review-'))
   const handoffPath = join(directory, 'handoff.json')
@@ -115,7 +162,7 @@ test('CLI main uses the exhaustive GET-only collector to write an exact no-write
   await writeFile(protectionPath, JSON.stringify(protection), 'utf8')
   const originalFetch = globalThis.fetch
   const calls = []
-  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100&page=2>; rel="next"`
+  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100${path.endsWith('/check-runs') ? '&filter=latest' : ''}&page=2>; rel="next"`
   const greenChecks = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `check-${index}`, status: 'completed', conclusion: 'success' }))
   const oldReviews = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, commit_id: 'd'.repeat(40) }))
   const oldComments = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-30T20:00:00.000Z' }))
