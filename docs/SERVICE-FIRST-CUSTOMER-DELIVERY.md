@@ -144,14 +144,25 @@ evidence. Item 5 remains a separate release concern.
 The runtime membership policy is self-only. There is no customer directory or
 review-only enrollment UI to reuse, and ordinary self-serve Website ownership
 grants editing capabilities rather than the dedicated `website.review` role.
-SQL rehearsal fixtures explicitly seed that role; this must not be mistaken for
-a production invitation/provisioning workflow. Do not ask operators to type raw
-actor IDs, widen directory reads, or grant customers `website.write` as a shortcut.
+The existing owner-gated `managed_staff_access` workflow now supports a distinct
+`website-reviewer` role: exactly `website.review`, with Website as its only product,
+even in a multi-product workspace. It requires an activated Website owner and
+uses the existing exact-plan authorization, active owner/session checks,
+preexisting non-anonymous Auth account check, conflicting-membership denial,
+immutable grant event, idempotent replay and owner-authorized revocation. It
+does not create an account or send an invitation. The legacy staff-access packet
+name is retained for compatibility; this role grants no staff read/edit powers.
 
-Before claiming the complete delivery journey, implement and review named,
-workspace-bound review-only enrollment through the existing owner-gated account
-provisioning path, its revocation/audit lifecycle, and the corresponding recipient
-selection/preparation UI. Preserve authenticated membership as authority; the
+Plan compilation and validation are local operations, not proof of owner approval
+or enrollment. Applying or revoking a membership remains a separate authorized
+administrative action. The operator must not receive database credentials or type
+raw actor IDs; the later enrollment UI must bind a verified account through the
+private owner-reviewed workflow rather than widen runtime directory access.
+
+Before claiming the complete delivery journey, finish and review the account
+selection/enrollment UX and recipient-selection/preparation UI, then exercise the
+full hosted journey. Do not grant customers `website.write` as a shortcut.
+Preserve authenticated membership as authority; the
 review URL is not a bearer credential. A local database-backed login regression
 must prove assigned-company discovery, an empty business-data bootstrap for
 review-only users, denial of staff preparation, and immediate revoked-session

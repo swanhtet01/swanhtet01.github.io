@@ -160,6 +160,70 @@ class WebsiteReviewSqlTests(unittest.TestCase):
     def adapter(self, *, write=True):
         return WebsiteCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=write))
 
+    def test_source_owned_reviewer_enrollment_review_and_revocation(self):
+        """Use the real administrative adapter, never a hand-seeded membership."""
+        import psycopg
+        from psycopg.rows import dict_row
+        from supermega_runtime.managed_activation import ManagedWorkspaceProvisioner, ManagedActivationConflict, _timestamp_text
+        from supermega_runtime.managed_staff_access import ManagedStaffAccessProvisioner, compile_staff_access_plan
+        from tests.test_managed_activation import activation_plan, OWNER_ID, OWNER_SESSION_ID
+
+        activation = activation_plan("website")
+        workspace, recipient, recipient_session = activation["workspaceId"], str(uuid4()), str(uuid4())
+        connect = lambda url: psycopg.connect(url, row_factory=dict_row)
+        # Only a disposable local Auth catalog is fabricated; no hosted account
+        # is created and no production credential or supplied DB URL is accepted.
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("create table if not exists auth.users (id uuid primary key, is_anonymous boolean not null)")
+            connection.execute("insert into auth.users values (%s,false)", (recipient,))
+            connection.execute("insert into auth.sessions(id,user_id) values (%s,%s),(%s,%s)",
+                               (OWNER_SESSION_ID, OWNER_ID, recipient_session, recipient))
+        owner = ManagedWorkspaceProvisioner(self.admin_url, connection_factory=connect)
+        owner.authorize(activation, verified_owner_actor_id=OWNER_ID, verified_owner_session_id=OWNER_SESSION_ID,
+                        decision_note="Synthetic local enrollment test only.")
+        owner.apply(activation)
+        now = datetime.now(timezone.utc)
+        plan = compile_staff_access_plan(activation, member_actor_id=recipient, member_label="Synthetic reviewer",
+            role_id="website-reviewer", approval_id=str(uuid4()), approved_at=_timestamp_text(now),
+            expires_at=_timestamp_text(now + timedelta(hours=1)), now=now)
+        provisioner = ManagedStaffAccessProvisioner(self.admin_url, connection_factory=connect)
+        with self.assertRaises(ManagedActivationConflict):
+            provisioner.apply(plan, activation)
+        provisioner.authorize(plan, activation, verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID, decision_note="Exact read-only reviewer role, synthetic test.")
+        granted = provisioner.apply(plan, activation)
+        self.assertFalse(granted["authUserCreated"])
+        self.assertFalse(granted["invitationEmailSent"])
+        self.assertTrue(provisioner.apply(plan, activation)["replayed"])
+        with pg._connect(self.admin_url) as connection:
+            self.assertEqual(connection.execute("select capabilities from app_private.workspace_memberships where workspace_id=%s and actor_id=%s",
+                (workspace, recipient)).fetchone()[0], ["website.review"])
+            connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'website',1,%s::jsonb,%s)",
+                               (workspace, json.dumps(_state()), OWNER_ID))
+        adapter = self.adapter()
+        customer = TrialPrincipal(workspace, recipient, "human", identity_provider="supabase", session_id=recipient_session)
+        writer = TrialPrincipal(workspace, OWNER_ID, "human", identity_provider="supabase", session_id=OWNER_SESSION_ID)
+        ready = adapter.store.readiness(customer)
+        self.assertTrue(ready.read_ready)
+        self.assertEqual(ready.capabilities, frozenset({"website.review"}))
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.preparation_preview(customer)
+        prepared = adapter.prepare(writer, review_id=str(uuid4()), recipient_actor_id=recipient,
+            expected_version=1, expires_at=(now + timedelta(hours=1)).isoformat())
+        self.assertEqual(adapter.preview(customer, prepared["reviewId"])["previewDigest"], prepared["previewDigest"])
+        revoked = provisioner.revoke(plan, activation, verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID, reason="Synthetic access ended.")
+        self.assertEqual(revoked["status"], "revoked")
+        self.assertTrue(provisioner.revoke(plan, activation, verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID, reason="Synthetic access ended.")["replayed"])
+        with self.assertRaisesRegex(TrialNotReadyError, "membership_ready"):
+            adapter.preview(customer, prepared["reviewId"])
+        self.assertFalse(adapter.store.readiness(customer).read_ready)
+        self.assertEqual(adapter.store.readiness(customer).capabilities, frozenset())
+        with pg._connect(self.admin_url) as connection:
+            self.assertEqual(connection.execute("select count(*) from app_private.workspace_events where workspace_id=%s and event_type in ('company.staff_access.granted','company.staff_access.revoked')",
+                                               (workspace,)).fetchone()[0], 2)
+
     def test_adapter_accept_requires_current_assignment(self):
         with self.assertRaises(TrialPermissionDenied):
             self.adapter().accept(TrialPrincipal(WORKSPACE, RECIPIENT, "human"),

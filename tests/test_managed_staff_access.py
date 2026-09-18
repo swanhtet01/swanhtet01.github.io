@@ -51,6 +51,37 @@ def staff_plan(activation, role_id: str = "product-operator"):
 
 
 class ManagedStaffAccessPlanTests(unittest.TestCase):
+    def test_website_reviewer_is_a_distinct_nonediting_delegation(self) -> None:
+        activation = activation_plan("website")
+        plan = staff_plan(activation, "website-reviewer")
+        self.assertEqual(plan["capabilities"], ["website.review"])
+        self.assertEqual(plan["products"], ["website"])
+        self.assertNotIn("website.review", activation["ownerCapabilities"])
+        self.assertEqual(validate_staff_access_plan(plan, activation, now=NOW), plan)
+        for capabilities in (["website.read"], ["website.write"], ["website.review", "company.read"],
+                             ["website.review", "approvals.decide"]):
+            tampered = deepcopy(plan)
+            tampered["capabilities"] = capabilities
+            with self.subTest(capabilities=capabilities), self.assertRaises(ManagedStaffAccessError):
+                validate_staff_access_plan(tampered, activation, now=NOW)
+        for product in ("shop", "plant", "ecommerce"):
+            with self.subTest(product=product), self.assertRaises(ManagedStaffAccessError):
+                staff_plan(activation_plan(product), "website-reviewer")
+
+    def test_multi_product_reviewer_never_inherits_other_products(self) -> None:
+        from tests.test_managed_activation import managed_trial_request_for, APPROVAL_ID, PROJECT_REF, RELEASE_COMMIT, ADMIN_CA_SHA256
+        from supermega_runtime.managed_activation import compile_multi_product_activation_plan
+        requests = [managed_trial_request_for("shop"), managed_trial_request_for("website")]
+        activation = compile_multi_product_activation_plan(
+            requests,
+            workspace_id="mingalar-fresh-mart", owner_actor_id=OWNER_ID, approval_id=APPROVAL_ID,
+            approved_by=activation_plan()["ownerLabel"], approved_at=_timestamp(NOW - timedelta(minutes=5)),
+            project_ref=PROJECT_REF, release_commit=RELEASE_COMMIT, admin_ca_sha256=ADMIN_CA_SHA256, now=NOW)
+        plan = staff_plan(activation, "website-reviewer")
+        self.assertEqual(plan["capabilities"], ["website.review"])
+        self.assertEqual(plan["products"], ["website"])
+        self.assertEqual(validate_staff_access_plan(plan, activation, now=NOW), plan)
+
     def test_roles_are_deterministic_and_never_inherit_owner_approval(self) -> None:
         activation = activation_plan()
         viewer = staff_plan(activation, "product-viewer")
@@ -103,9 +134,12 @@ class ManagedStaffAccessPlanTests(unittest.TestCase):
 
 
 class ManagedStaffAccessProvisionerTests(unittest.TestCase):
+    product = "shop"
+    role = "product-operator"
+
     def setUp(self) -> None:
         self.database = FakeDatabase()
-        self.activation = activation_plan()
+        self.activation = activation_plan(self.product)
         activation_provisioner = ManagedWorkspaceProvisioner(
             "postgresql://ignored", connection_factory=self.database.connect
         )
@@ -116,7 +150,7 @@ class ManagedStaffAccessProvisionerTests(unittest.TestCase):
             decision_note="Owner reviewed the exact workspace, release, and plan digest.",
         )
         activation_provisioner.apply(self.activation)
-        self.plan = staff_plan(self.activation)
+        self.plan = staff_plan(self.activation, self.role)
         self.provisioner = ManagedStaffAccessProvisioner(
             "postgresql://ignored", connection_factory=self.database.connect
         )
@@ -210,6 +244,12 @@ class ManagedStaffAccessProvisionerTests(unittest.TestCase):
         })
         with self.assertRaises(ManagedActivationConflict):
             self.provisioner.apply(self.plan, self.activation)
+
+
+class ManagedWebsiteReviewerProvisionerTests(ManagedStaffAccessProvisionerTests):
+    """The review-only role must pass the same grant/replay/revoke denial suite."""
+    product = "website"
+    role = "website-reviewer"
 
 
 class ManagedStaffAccessCliTests(unittest.TestCase):
