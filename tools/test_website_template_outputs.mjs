@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { createInitialWorkspace, createWebsitePreviewArtifact } from '../showroom/src/products/website/website-model.ts'
+import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace } from '../showroom/src/products/website/website-model.ts'
 import { buildWebsiteHtml } from '../showroom/src/products/website/website-export.ts'
 import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
 import { websiteTradeBrief, websiteTradeBriefOptions } from '../showroom/src/products/website/website-trade-brief.ts'
@@ -34,6 +34,26 @@ test('invalid offering input fails closed instead of dropping entries or replaci
   for (const offerings of ['Missing separator', ' | details', 'Name | ', 'x'.repeat(81) + ' | details', 'Name | ' + 'x'.repeat(361), Array(5).fill('Item | detail').join('\n')]) {
     const original = createInitialWorkspace()
     assert.equal(applyWebsiteStarterBrief(original, { ...brief, templateId: 'lead-generation', offerings }, capturedAt), original)
+  }
+})
+
+test('four featured offerings retain exact content and export after a storage round trip', () => {
+  for (const template of websiteStarterTemplates) {
+    const offerings = [
+      'လက်ဖက်ရည် | 2,000 MMK; ask about ingredients',
+      'Consultation | 30 minutes; price confirmed on inquiry',
+      'A'.repeat(80) + ' | ' + 'B'.repeat(360),
+      'Seasonal selection | Availability confirmed by the business',
+    ].join('\r\n')
+    const workspace = applyWebsiteStarterBrief(createInitialWorkspace(), { ...brief, templateId: template.id, offerings }, capturedAt)
+    const restored = restoreWorkspace(JSON.parse(JSON.stringify(workspace)))
+    assert.ok(restored, 'generated content must satisfy the actual persistence schema')
+    assert.deepEqual(restored, workspace)
+    const page = restored.pages.find(item => item.slug === expected[template.id].slug)
+    assert.equal(page.sections.length, 4)
+    assert.equal(new Set(page.sections.map(section => section.id)).size, 4)
+    assert.equal(buildWebsiteHtml(createWebsitePreviewArtifact(restored)), buildWebsiteHtml(createWebsitePreviewArtifact(workspace)))
+    assert.equal(applyWebsiteStarterBrief(restored, { ...brief, templateId: template.id, offerings: 'Replacement | Must not overwrite' }, capturedAt), restored)
   }
 })
 for (const template of websiteStarterTemplates) {
