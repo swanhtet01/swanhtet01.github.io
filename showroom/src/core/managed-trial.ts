@@ -3209,6 +3209,26 @@ export async function sendManagedWebsiteReviewChanges(
     true, expectedIdentity)
 }
 
+export async function loadManagedWebsiteAcceptance(reviewId: string, expectedIdentity: ManagedIdentity) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/acceptance`,
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function sendManagedWebsiteAcceptance(
+  payload: { reviewId: string; commandId: string; previewDigest: string; decision: 'accept_preview_for_release_review' },
+  expectedIdentity: ManagedIdentity,
+) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${payload.reviewId}/acceptance`,
+    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' },
+    true, expectedIdentity)
+}
+
 export async function preflightManagedClientImport(request: {
   expectedVersion: number
   identity: ManagedIdentity

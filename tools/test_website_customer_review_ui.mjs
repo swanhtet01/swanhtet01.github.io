@@ -91,11 +91,76 @@ test('supported contact routes stay visible as inert text', () => {
 
 test('customer review is a short result-review journey rather than a builder', () => {
   for (const text of ['Review in 3 steps', 'Open each prepared page', 'Check the business facts, offers, and contact action',
-    'Describe only what needs changing', 'SuperMega makes the updates and sends a new exact revision.',
-    'When the revision looks right, SuperMega prepares the separate exact-revision approval. Nothing is published from this screen.']) assert.ok(source.includes(text), text)
+    'Accept this revision or request changes', 'SuperMega makes the updates and sends a new exact revision.',
+    'Acceptance records your decision for this exact revision. SuperMega handles the separate release review and publishing. Nothing is published from this screen.']) assert.ok(source.includes(text), text)
   assert.match(source, /placeholder="Example: On Home, change the phone number to…"/)
   assert.match(source, /aria-describedby="website-review-note-help"/)
   assert.doesNotMatch(source, /Edit page|Customize page|Publish now|Approve and publish/)
+})
+
+test('acceptance has explicit consent, shared synchronous lock and receipt-bound reload (source contract)', () => {
+  for (const pin of ['verifyCustomerReviewDecision', 'verifyCustomerAcceptanceAcknowledgement',
+    'pendingAcceptance.current ??', 'inFlight.current', 'setDecision(saved)',
+    'setConfirmed(Boolean(pendingAcceptance.current))', 'Retry same acceptance', 'Acceptance saved',
+    'I checked the prepared pages and accept this exact revision for release review.',
+    'Accepting does not publish the Website, register a domain, or take payment.']) assert.ok(source.includes(pin), pin)
+  const accept = source.slice(source.indexOf('async function acceptRevision()'), source.indexOf('return <main'))
+  assert.ok(accept.includes('!confirmed'))
+  assert.ok(accept.includes('pending.current'))
+  assert.ok(accept.includes('note.trim()'))
+  assert.ok(accept.includes("decision?.status !== 'pending_review'"))
+  assert.ok(accept.indexOf('inFlight.current = true') < accept.indexOf('await sendManagedWebsiteAcceptance'))
+  assert.ok(accept.indexOf('verifyCustomerAcceptanceAcknowledgement') < accept.indexOf('setDecision(saved)'))
+  assert.ok(accept.includes('access.commit(epoch, request.identity, review.expiresAt'))
+})
+
+function renderDecision(status, { confirmed = false, note = '', uncertain = false } = {}) {
+  const review = { reviewId: '11111111-1111-4111-8111-111111111111', contentRevision: 7,
+    previewDigest: 'sha256:' + 'a'.repeat(64), preview: { siteName: 'Studio', pages: [page('home')] },
+    expiresAt: '2099-01-01T00:00:00Z', status: 'prepared_preview', publicationAuthorized: false }
+  const decision = { ...review, status }
+  const states = [review, actor, 'home', note, 'Prepared review', false, 0, false,
+    decision, confirmed, uncertain, {}]
+  let index = 0
+  const controlled = { exports: {} }
+  vm.runInNewContext(compiled + '; exports.TestReviewContent = CustomerReviewContent;', {
+    exports: controlled.exports, URL,
+    require: name => {
+      if (name.endsWith('.css')) return {}
+      if (name === 'react') return { ...React, useState: () => [states[index++], () => {}],
+        useEffect: () => {}, useRef: value => ({ current: value }) }
+      if (name === 'react-router') return { Link: props => React.createElement('a', { href: props.to }, props.children) }
+      if (name === './customer-review-access') return { createReviewAccessBoundary }
+      if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
+      if (name === '../../core/managed-trial' || name === './customer-review-contract') return {}
+      return require(name)
+    },
+  })
+  return renderToStaticMarkup(React.createElement(controlled.exports.TestReviewContent, { reviewId: review.reviewId }))
+}
+
+test('rendered customer decisions show consent only when actionable and never a publish control', () => {
+  const pending = renderDecision('pending_review')
+  assert.match(pending, /type="checkbox"/)
+  assert.match(pending, /<button type="button" disabled="">Accept this revision<\/button>/)
+  const confirmed = renderDecision('pending_review', { confirmed: true })
+  assert.match(confirmed, /<button type="button">Accept this revision<\/button>/)
+  const note = renderDecision('pending_review', { confirmed: true, note: 'Fix the address' })
+  assert.match(note, /clear the note before accepting/)
+  assert.match(note, /<button type="button" disabled="">Accept this revision<\/button>/)
+  const uncertain = renderDecision('pending_review', { confirmed: true, uncertain: true })
+  assert.match(uncertain, /Retry same acceptance/)
+  assert.match(uncertain, /disabled="">Request changes<\/button>/)
+  const accepted = renderDecision('accepted_for_operator_release_review')
+  assert.match(accepted, /Acceptance saved/)
+  assert.match(accepted, /Revision 7 is accepted/)
+  assert.doesNotMatch(accepted, /<form|<textarea|type="checkbox"/)
+  const changes = renderDecision('changes_requested')
+  assert.match(changes, /Request changes/)
+  assert.doesNotMatch(changes, /type="checkbox"|>Accept this revision</)
+  for (const html of [pending, confirmed, note, uncertain, accepted, changes]) {
+    assert.doesNotMatch(html, />Publish|>Deploy|>Register domain|>Pay now/)
+  }
 })
 
 const expiry = '2026-09-17T00:00:00Z'

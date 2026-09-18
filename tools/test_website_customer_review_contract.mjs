@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { verifyCustomerWebsiteReview, verifyCustomerChangeAcknowledgement } from '../showroom/src/products/website/customer-review-contract.ts'
+import { verifyCustomerWebsiteReview, verifyCustomerChangeAcknowledgement, verifyCustomerReviewDecision, verifyCustomerAcceptanceAcknowledgement } from '../showroom/src/products/website/customer-review-contract.ts'
 
 const reviewId = '11111111-1111-4111-8111-111111111111'
 const commandId = '22222222-2222-4222-8222-222222222222'
@@ -53,9 +53,44 @@ test('requires exact durable acknowledgement rather than a queued or published c
 })
 test('transport retains expected identity and rejects redirects and browser caching', () => {
   const source = readFileSync(new URL('../showroom/src/core/managed-trial.ts', import.meta.url), 'utf8')
-  const slice = source.slice(source.indexOf('export async function loadManagedWebsiteReview'), source.indexOf('export async function preflightManagedClientImport'))
-  assert.equal((slice.match(/redirect: 'error'/g) ?? []).length, 2)
-  assert.equal((slice.match(/cache: 'no-store'/g) ?? []).length, 2)
-  assert.equal((slice.match(/credentials: 'omit'/g) ?? []).length, 2)
-  assert.equal((slice.match(/true, expectedIdentity/g) ?? []).length, 2)
+  const slice = source.slice(source.indexOf('export async function loadManagedWebsiteReview('), source.indexOf('export async function preflightManagedClientImport'))
+  assert.equal((slice.match(/redirect: 'error'/g) ?? []).length, 4)
+  assert.equal((slice.match(/cache: 'no-store'/g) ?? []).length, 4)
+  assert.equal((slice.match(/credentials: 'omit'/g) ?? []).length, 4)
+  assert.equal((slice.match(/true, expectedIdentity/g) ?? []).length, 4)
+})
+
+test('decision reload binds exact review, revision, digest and expiry without publication', () => {
+  const review = fixture()
+  const decision = { reviewId, contentRevision: review.contentRevision, previewDigest: review.previewDigest,
+    expiresAt: review.expiresAt, status: 'pending_review', acceptedAt: null, publicationAuthorized: false, deploymentAuthorized: false }
+  assert.equal(verifyCustomerReviewDecision(decision, review, now).status, 'pending_review')
+  assert.equal(verifyCustomerReviewDecision({ ...decision, status: 'changes_requested' }, review, now).status, 'changes_requested')
+  const accepted = { ...decision, status: 'accepted_for_operator_release_review', acceptedAt: new Date(now).toISOString() }
+  assert.equal(verifyCustomerReviewDecision(accepted, review, now).status, accepted.status)
+  for (const change of [{ reviewId: commandId }, { contentRevision: 1 }, { previewDigest: 'sha256:other' },
+    { expiresAt: '2026-09-18T00:00:00Z' }, { acceptedAt: null }, { acceptedAt: 'invalid' },
+    { acceptedAt: new Date(now + 60000).toISOString() }, { status: 'published' },
+    { publicationAuthorized: true }, { deploymentAuthorized: true }, { actorId: 'private' }]) {
+    assert.throws(() => verifyCustomerReviewDecision({ ...accepted, ...change }, review, now))
+  }
+  assert.throws(() => verifyCustomerReviewDecision(accepted, review, Date.parse(review.expiresAt)))
+  assert.throws(() => verifyCustomerReviewDecision({ ...decision, acceptedAt: accepted.acceptedAt }, review, now))
+})
+
+test('acceptance requires exact durable receipt and rejects optimistic or cross-revision success', () => {
+  const review = fixture()
+  const request = { reviewId, commandId, previewDigest: review.previewDigest }
+  const receipt = { ...request, contentRevision: 0, acceptedAt: new Date(now).toISOString(),
+    status: 'accepted_for_operator_release_review', persisted: true, replayed: false,
+    publicationAuthorized: false, deploymentAuthorized: false }
+  assert.equal(verifyCustomerAcceptanceAcknowledgement(receipt, request, review, now).status, receipt.status)
+  assert.equal(verifyCustomerAcceptanceAcknowledgement({ ...receipt, replayed: true }, request, review, now).acceptedAt, receipt.acceptedAt)
+  for (const change of [{ commandId: reviewId }, { reviewId: commandId }, { previewDigest: 'bad' },
+    { contentRevision: 1 }, { acceptedAt: 'bad' }, { status: 'queued' }, { persisted: false },
+    { replayed: 'yes' }, { publicationAuthorized: true }, { deploymentAuthorized: true }, { extra: true }]) {
+    assert.throws(() => verifyCustomerAcceptanceAcknowledgement({ ...receipt, ...change }, request, review, now))
+  }
+  assert.throws(() => verifyCustomerAcceptanceAcknowledgement(receipt, request, { ...review, reviewId: commandId }, now))
+  assert.throws(() => verifyCustomerAcceptanceAcknowledgement(receipt, request, review, Date.parse(review.expiresAt)))
 })

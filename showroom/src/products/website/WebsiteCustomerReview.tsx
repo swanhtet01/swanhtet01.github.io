@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { currentManagedIdentity, loadManagedWebsiteReview, sameManagedIdentity, sendManagedWebsiteReviewChanges, type ManagedIdentity } from '../../core/managed-trial'
-import { verifyCustomerChangeAcknowledgement, verifyCustomerWebsiteReview, type CustomerWebsiteReview } from './customer-review-contract'
+import { currentManagedIdentity, loadManagedWebsiteReview, loadManagedWebsiteAcceptance, sameManagedIdentity, sendManagedWebsiteReviewChanges, sendManagedWebsiteAcceptance, type ManagedIdentity } from '../../core/managed-trial'
+import { verifyCustomerChangeAcknowledgement, verifyCustomerWebsiteReview, verifyCustomerReviewDecision, verifyCustomerAcceptanceAcknowledgement, type CustomerWebsiteReview, type CustomerReviewDecision } from './customer-review-contract'
 import { createReviewAccessBoundary } from './customer-review-access'
 import { customerWebsiteReviewLoginPath } from '../../core/account-routes'
 import './website-product.css'
 import './customer-review.css'
 
 type Pending = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; note: string } }
+type PendingAcceptance = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; decision: 'accept_preview_for_release_review' } }
 
 export default function WebsiteCustomerReview() {
   const { reviewId = '' } = useParams()
@@ -24,6 +25,11 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   const [attempt, setAttempt] = useState(0)
   const [unconfirmed, setUnconfirmed] = useState(false)
   const pending = useRef<Pending | null>(null)
+  const pendingAcceptance = useRef<PendingAcceptance | null>(null)
+  const inFlight = useRef(false)
+  const [decision, setDecision] = useState<CustomerReviewDecision | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [acceptanceUnconfirmed, setAcceptanceUnconfirmed] = useState(false)
   const [access] = useState(() => createReviewAccessBoundary(currentManagedIdentity, sameManagedIdentity))
   const lastIdentity = useRef<ManagedIdentity | null>(null)
 
@@ -35,15 +41,24 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
         const identity = await currentManagedIdentity()
         if (!active || !access.isCurrent(epoch)) return
         if (!identity || !lastIdentity.current || !sameManagedIdentity(identity, lastIdentity.current)) {
-          pending.current = null; setUnconfirmed(false); setNote('')
+          pending.current = null; pendingAcceptance.current = null; setUnconfirmed(false); setAcceptanceUnconfirmed(false); setNote('')
         }
         lastIdentity.current = identity
         if (!identity) { setReview(null); setActor(null); setMessage('Sign in to open your prepared review. We will bring you back here.'); return }
         const verified = await verifyCustomerWebsiteReview(await loadManagedWebsiteReview(reviewId, identity), reviewId)
         if (!active || !access.isCurrent(epoch)) return
+        const retainedDecision = verifyCustomerReviewDecision(await loadManagedWebsiteAcceptance(reviewId, identity), verified)
+        if (!active || !access.isCurrent(epoch)) return
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
           setActor(identity); setReview(verified); setPageId(verified.preview.pages[0].id)
-          setMessage('Prepared for your review. Not a published website.')
+          setDecision(retainedDecision); setConfirmed(Boolean(pendingAcceptance.current)); setBusy(inFlight.current)
+          if (retainedDecision.status !== 'pending_review') {
+            pendingAcceptance.current = null; setAcceptanceUnconfirmed(false)
+          }
+          setMessage(retainedDecision.status === 'accepted_for_operator_release_review'
+            ? 'Your acceptance is saved for SuperMega’s release review. Nothing has been published.'
+            : retainedDecision.status === 'changes_requested' ? 'Your changes are saved. SuperMega will prepare a new revision for acceptance.'
+              : 'Prepared for your review. Not a published website.')
         })
         if (!accepted && access.isCurrent(epoch)) {
           setReview(null); setActor(null); pending.current = null; setUnconfirmed(false); setNote('')
@@ -62,17 +77,19 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
 
   useEffect(() => {
     if (!review) return
-    const timer = window.setTimeout(() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); pending.current = null; setUnconfirmed(false); setNote(''); setMessage('This review has expired. Ask SuperMega for a fresh review.') }, Math.max(0, Date.parse(review.expiresAt) - Date.now()))
+    const timer = window.setTimeout(() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); pending.current = null; pendingAcceptance.current = null; setAcceptanceUnconfirmed(false); setUnconfirmed(false); setNote(''); setMessage('This review has expired. Ask SuperMega for a fresh review.') }, Math.max(0, Date.parse(review.expiresAt) - Date.now()))
     return () => window.clearTimeout(timer)
   }, [review, access])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!review || !actor || busy || Date.parse(review.expiresAt) <= Date.now()) return
+    if (!review || !actor || busy || inFlight.current || pendingAcceptance.current
+      || decision?.status === 'accepted_for_operator_release_review' || Date.parse(review.expiresAt) <= Date.now()) return
     const epoch = access.capture()
     const request = pending.current ?? { identity: actor, payload: { reviewId, commandId: crypto.randomUUID(), previewDigest: review.previewDigest, note: note.trim() } }
     if (!request.payload.note || request.payload.reviewId !== reviewId || !sameManagedIdentity(request.identity, actor)) return
     pending.current = request
+    inFlight.current = true
     setBusy(true); setUnconfirmed(true); setMessage('Saving your change request…')
     function denyChangedAccess() {
       if (!access.isCurrent(epoch)) return
@@ -84,17 +101,43 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
       verifyCustomerChangeAcknowledgement(response, request.payload)
       const accepted = await access.commit(epoch, request.identity, review.expiresAt, () => {
         pending.current = null; setUnconfirmed(false); setNote('')
+        setDecision(previous => previous ? { ...previous, status: 'changes_requested', acceptedAt: null } : null)
         setMessage('Your change request is saved for SuperMega. Nothing has been published.')
       })
       if (!accepted) denyChangedAccess()
     } catch {
       const accepted = await access.commit(epoch, request.identity, review.expiresAt, () => setMessage('We could not confirm the save. Retry this same request; it will not create a duplicate.'))
       if (!accepted) denyChangedAccess()
-    } finally { if (access.isCurrent(epoch)) setBusy(false) }
+    } finally { inFlight.current = false; setBusy(false) }
+  }
+
+  async function acceptRevision() {
+    if (!review || !actor || !confirmed || busy || inFlight.current || pending.current || note.trim()
+      || decision?.status !== 'pending_review' || Date.parse(review.expiresAt) <= Date.now()) return
+    const request = pendingAcceptance.current ?? { identity: actor, payload: { reviewId,
+      commandId: crypto.randomUUID(), previewDigest: review.previewDigest, decision: 'accept_preview_for_release_review' as const } }
+    if (!sameManagedIdentity(request.identity, actor) || request.payload.reviewId !== reviewId
+      || request.payload.previewDigest !== review.previewDigest) return
+    const epoch = access.capture()
+    pendingAcceptance.current = request; inFlight.current = true
+    setBusy(true); setAcceptanceUnconfirmed(true); setMessage('Saving your acceptance…')
+    try {
+      const response = await sendManagedWebsiteAcceptance(request.payload, request.identity)
+      const saved = verifyCustomerAcceptanceAcknowledgement(response, request.payload, review)
+      const current = await access.commit(epoch, request.identity, review.expiresAt, () => {
+        pendingAcceptance.current = null; setAcceptanceUnconfirmed(false); setDecision(saved)
+        setMessage('Your acceptance is saved for SuperMega’s release review. Nothing has been published.')
+      })
+      if (!current && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Your access changed. Sign in and reopen this review.') }
+    } catch {
+      const current = await access.commit(epoch, request.identity, review.expiresAt,
+        () => setMessage('We could not confirm acceptance. Retry the same acceptance, or reopen this review to check its saved status.'))
+      if (!current && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Your access changed. Sign in and reopen this review.') }
+    } finally { inFlight.current = false; setBusy(false) }
   }
 
   return <main className="website-product customer-website-review">
-    <header className="customer-review-heading"><Link to="/">SuperMega</Link><h1>Your prepared Website</h1><p>Review the pages. Tell us what to change. We handle the build.</p></header>
+    <header className="customer-review-heading"><Link to="/">SuperMega</Link><h1>Your prepared Website</h1><p>Review the finished pages. Accept this revision or tell us what to change. We handle the build.</p></header>
     <p role="status" aria-live="polite">{message}</p>
     {!review && <div className="customer-review-actions"><Link to={customerWebsiteReviewLoginPath(reviewId)}>Sign in</Link><button type="button" onClick={() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); setAttempt(value => value + 1) }}>Open review</button></div>}
     {review && <>
@@ -103,12 +146,21 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
         <ol>
           <li><strong>Open each prepared page</strong><span>{review.preview.pages.length} {review.preview.pages.length === 1 ? 'page' : 'pages'} ready</span></li>
           <li><strong>Check the business facts, offers, and contact action</strong><span>No design or editing work required</span></li>
-          <li><strong>Describe only what needs changing</strong><span>SuperMega makes the updates and sends a new exact revision.</span></li>
+          <li><strong>Accept this revision or request changes</strong><span>SuperMega makes the updates and sends a new exact revision.</span></li>
         </ol>
-        <p>When the revision looks right, SuperMega prepares the separate exact-revision approval. Nothing is published from this screen.</p>
+        <p>Acceptance records your decision for this exact revision. SuperMega handles the separate release review and publishing. Nothing is published from this screen.</p>
       </section>
       <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId} />
-      <form className="customer-review-feedback" onSubmit={submit}><h2>What would you like changed?</h2><label htmlFor="website-review-note">Only describe the changes</label><textarea aria-describedby="website-review-note-help" id="website-review-note" rows={4} maxLength={2000} placeholder="Example: On Home, change the phone number to…" value={note} readOnly={unconfirmed} onChange={event => setNote(event.target.value)} required /><p id="website-review-note-help">SuperMega reviews your request. This does not approve or publish the Website.</p><button type="submit" disabled={busy || !note.trim()}>{busy ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
+      {decision?.status === 'accepted_for_operator_release_review' ? <section className="customer-review-feedback"><h2>Acceptance saved</h2><p>Revision {review.contentRevision} is accepted for SuperMega’s release review, not published. Contact SuperMega if you need another revision.</p></section> : <>
+        {decision?.status === 'pending_review' && <section className="customer-review-feedback" aria-labelledby="website-accept-title">
+          <h2 id="website-accept-title">Ready for SuperMega to take the next step?</h2>
+          <label className="customer-review-consent"><input type="checkbox" checked={confirmed} disabled={busy || acceptanceUnconfirmed || unconfirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I checked the prepared pages and accept this exact revision for release review.</span></label>
+          <p>Accepting does not publish the Website, register a domain, or take payment.</p>
+          {note.trim() && <p>Send your changes below, or clear the note before accepting this revision.</p>}
+          <button type="button" disabled={!confirmed || busy || unconfirmed || Boolean(note.trim())} onClick={() => { void acceptRevision() }}>{busy && acceptanceUnconfirmed ? 'Saving acceptance…' : acceptanceUnconfirmed ? 'Retry same acceptance' : 'Accept this revision'}</button>
+        </section>}
+        <form className="customer-review-feedback" onSubmit={submit}><h2>What would you like changed?</h2><label htmlFor="website-review-note">Only describe the changes</label><textarea aria-describedby="website-review-note-help" id="website-review-note" rows={4} maxLength={2000} placeholder="Example: On Home, change the phone number to…" value={note} readOnly={unconfirmed} disabled={acceptanceUnconfirmed} onChange={event => setNote(event.target.value)} required /><p id="website-review-note-help">SuperMega reviews your request. This does not approve or publish the Website.</p><button type="submit" disabled={busy || acceptanceUnconfirmed || !note.trim()}>{busy && !acceptanceUnconfirmed ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
+      </>}
     </>}
   </main>
 }

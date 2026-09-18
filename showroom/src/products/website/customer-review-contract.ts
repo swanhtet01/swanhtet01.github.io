@@ -75,3 +75,40 @@ export function verifyCustomerChangeAcknowledgement(value: unknown, request: { r
     || !Number.isFinite(Date.parse(result.createdAt))) invalid()
   return { commandId: request.commandId, reviewId: request.reviewId, createdAt: String(result.createdAt), replayed: result.replayed === true }
 }
+
+export type CustomerReviewDecision = {
+  reviewId: string; contentRevision: number; previewDigest: string; expiresAt: string
+  status: 'pending_review' | 'changes_requested' | 'accepted_for_operator_release_review'
+  acceptedAt: string | null; publicationAuthorized: false; deploymentAuthorized: false
+}
+
+function validAcceptedAt(value: unknown, expiresAt: string, now: number): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+    && Date.parse(value) <= now && Date.parse(value) < Date.parse(expiresAt)
+}
+
+export function verifyCustomerReviewDecision(value: unknown, review: CustomerWebsiteReview, now = Date.now()): CustomerReviewDecision {
+  const result = object(value, ['reviewId', 'contentRevision', 'previewDigest', 'expiresAt', 'status',
+    'acceptedAt', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (result.reviewId !== review.reviewId || result.contentRevision !== review.contentRevision
+    || result.previewDigest !== review.previewDigest || result.expiresAt !== review.expiresAt
+    || !(Date.parse(review.expiresAt) > now) || result.publicationAuthorized !== false || result.deploymentAuthorized !== false
+    || !['pending_review', 'changes_requested', 'accepted_for_operator_release_review'].includes(String(result.status))) return invalid()
+  if (result.status === 'accepted_for_operator_release_review'
+    ? !validAcceptedAt(result.acceptedAt, review.expiresAt, now) : result.acceptedAt !== null) return invalid()
+  return structuredClone(result) as CustomerReviewDecision
+}
+
+export function verifyCustomerAcceptanceAcknowledgement(value: unknown, request: { reviewId: string; commandId: string; previewDigest: string }, review: CustomerWebsiteReview, now = Date.now()) {
+  const result = object(value, ['commandId', 'reviewId', 'contentRevision', 'previewDigest', 'acceptedAt',
+    'status', 'persisted', 'replayed', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (result.commandId !== request.commandId || result.reviewId !== request.reviewId || request.reviewId !== review.reviewId
+    || result.previewDigest !== request.previewDigest || request.previewDigest !== review.previewDigest
+    || result.contentRevision !== review.contentRevision || result.status !== 'accepted_for_operator_release_review'
+    || result.persisted !== true || typeof result.replayed !== 'boolean'
+    || result.publicationAuthorized !== false || result.deploymentAuthorized !== false
+    || !(Date.parse(review.expiresAt) > now) || !validAcceptedAt(result.acceptedAt, review.expiresAt, now)) return invalid()
+  return verifyCustomerReviewDecision({ reviewId: review.reviewId, contentRevision: review.contentRevision,
+    previewDigest: review.previewDigest, expiresAt: review.expiresAt, status: result.status,
+    acceptedAt: result.acceptedAt, publicationAuthorized: false, deploymentAuthorized: false }, review, now)
+}
