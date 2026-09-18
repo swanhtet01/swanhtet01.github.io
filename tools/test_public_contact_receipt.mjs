@@ -159,6 +159,10 @@ test('three service-first doors retain product identity through uncertain delive
     assert.equal(state.calls[1].body, state.calls[0].body)
     assert.equal(state.calls[1].headers['x-idempotency-key'], state.calls[0].headers['x-idempotency-key'])
     assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-0123456789ABCDEF/)
+    assert.match(state.fields.get('[data-form-status]').textContent, /Keep this ID for follow-up/)
+    assert.match(state.fields.get('[data-form-status]').textContent, /Next step: SuperMega reviews your brief to confirm scope, price and timing/)
+    assert.match(state.fields.get('[data-form-status]').textContent, /This receipt does not confirm an email reply, create an account, take payment or make anything live/)
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /No action is needed now|will .*reply|email (sent|delivered)/i)
     assert.equal(state.resets(), 1)
   }
 })
