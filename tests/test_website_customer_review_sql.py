@@ -826,6 +826,65 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 with self.assertRaisesRegex(self.db_error, 'website_review_requires_read_committed'):
                     accept(connection, review)
 
+        # Observe a real lock wait, then commit the winning transaction. A single
+        # bounded worker is required for the race; suites still run serially.
+        for first, second, expected_error in (
+            ('feedback', 'accept', 'website_acceptance_changes_pending'),
+            ('accept', 'feedback', 'website_review_already_accepted'),
+            ('edit', 'accept', 'website_acceptance_assignment_denied'),
+            ('revoke', 'accept', 'website_acceptance_assignment_denied'),
+        ):
+            with self.subTest(first=first, second=second):
+                review = self.retained_assignment()
+                pid_queue = Queue(maxsize=1)
+
+                def waiting_customer():
+                    with self.transaction(RECIPIENT) as customer:
+                        customer.execute("set local lock_timeout='5s'")
+                        pid_queue.put(customer.execute('select pg_backend_pid()').fetchone()[0])
+                        try:
+                            if second == 'accept':
+                                accept(customer, review)
+                            else:
+                                self.feedback(customer, review)
+                            customer.commit()
+                            return 'unexpected_success'
+                        except self.db_error as error:
+                            return str(error)
+
+                with self.transaction(OWNER if first in ('edit', 'revoke') else RECIPIENT) as leader:
+                    if first == 'feedback':
+                        self.feedback(leader, review)
+                    elif first == 'accept':
+                        accept(leader, review)
+                    elif first == 'edit':
+                        self.edit(leader)
+                    else:
+                        leader.execute("update app_private.website_customer_reviews set status='revoked' where review_id=%s", (review[0],))
+                    with ThreadPoolExecutor(max_workers=1) as worker:
+                        pending = worker.submit(waiting_customer)
+                        try:
+                            pid = pid_queue.get(timeout=2)
+                            deadline, waiting = time.monotonic() + 2, False
+                            with pg._connect(self.admin_url, autocommit=True) as observer:
+                                while time.monotonic() < deadline:
+                                    row = observer.execute("select wait_event_type='Lock' from pg_stat_activity where pid=%s", (pid,)).fetchone()
+                                    waiting = bool(row and row[0])
+                                    if waiting:
+                                        break
+                                    time.sleep(0.01)
+                            self.assertTrue(waiting, 'second decision must actually wait on the first')
+                            leader.commit()
+                            self.assertIn(expected_error, pending.result(timeout=4))
+                        finally:
+                            leader.rollback()
+                with self.transaction(OWNER) as inspect:
+                    counts = inspect.execute('''select
+                        (select count(*) from app_private.website_customer_acceptances where review_id=%s),
+                        (select count(*) from app_private.website_customer_feedback where review_id=%s)''',
+                        (review[0], review[0])).fetchone()
+                    self.assertEqual(counts, (1, 0) if first == 'accept' else (0, 1) if first == 'feedback' else (0, 0))
+
         with pg._connect(self.admin_url) as connection:
             row = connection.execute("select relrowsecurity,relforcerowsecurity from pg_class where oid='app_private.website_customer_acceptances'::regclass").fetchone()
             self.assertEqual(row, (True, True))
