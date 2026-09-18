@@ -18,7 +18,7 @@ function harness() {
   const state = [], created = []
   let cursor = 0, tree
   const exports = {}
-  runInNewContext(compiled, { exports, requestAnimationFrame: callback => callback(), require(name) {
+  runInNewContext(compiled, { exports, Error, requestAnimationFrame: callback => callback(), require(name) {
     if (name === 'react') return {
       useState(initial) { const index = cursor++; if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial; return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value }] },
       useRef(initial) { const index = cursor++; if (!(index in state)) state[index] = { current: initial }; return state[index] },
@@ -111,4 +111,33 @@ test('CSV selection is preview-only until explicitly accepted and cannot replace
   assert.equal(ui.find(node => node.type === 'button' && node.props.children === 'Use reviewed entries').props.disabled, true)
   ui.click('Discard preview'); ui.submit()
   assert.equal(ui.created[1].offerings, 'Tea | 2000 MMK')
+})
+
+test('canceling a slow read ignores its late result and allows another preview', async () => {
+  const ui = harness()
+  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
+  let finish
+  const slow = new Promise(resolve => { finish = resolve })
+  const select = file => { ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [file], value: file.name } }); ui.render() }
+  select({ name: 'slow.csv', size: 40, text: () => slow })
+  await new Promise(resolve => setImmediate(resolve)); ui.render()
+  ui.click('Cancel file preview')
+  select({ name: 'new.csv', size: 40, text: async () => 'name,description\nNew entry,Confirmed details' })
+  await new Promise(resolve => setImmediate(resolve)); ui.render()
+  finish('name,description\nOld entry,Outdated details')
+  await new Promise(resolve => setImmediate(resolve)); ui.render()
+  ui.click('Use reviewed entries'); ui.submit()
+  assert.equal(ui.created[0].offerings, 'New entry | Confirmed details')
+})
+
+test('rejected file keeps entered content and does not expose an apply action', async () => {
+  const ui = harness()
+  ui.click('Add featured entry'); ui.edit(0, 'Keep me', 'Approved details')
+  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
+  ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: 'menu.csv', size: 50, text: async () => 'name,description\nBad,"unclosed' }], value: 'menu.csv' } })
+  await new Promise(resolve => setImmediate(resolve)); ui.render()
+  assert.equal(ui.nodes().some(node => node.type === 'button' && node.props.children === 'Use reviewed entries'), false)
+  assert.match(ui.find(node => node.props.id === 'website-import-status').props.children, /unclosed/)
+  ui.submit()
+  assert.equal(ui.created[0].offerings, 'Keep me | Approved details')
 })
