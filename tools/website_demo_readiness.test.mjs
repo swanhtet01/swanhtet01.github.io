@@ -67,7 +67,8 @@ test('assisted Website entry stays local-only and defers to recovery and edit st
   assert.match(websiteProductSource, /!storageIssue && !canRepairLocalStorage && !pendingRestoredDraft/)
   assert.match(websiteProductSource, /!hasUnsavedChanges && !starterSetupActive/)
   const safeLink = 'href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>'
-  assert.equal(websiteProductSource.split(safeLink).length - 1, 2)
+  assert.equal(websiteProductSource.split(safeLink).length - 1, 1, 'operator workspace retains the direct setup route')
+  assert.equal(websiteProductSource.split('<AssistedDeliveryScope product="website" />').length - 1, 1, 'customer preview uses the template-aware request component')
   assert.match(websiteProductSource, /canRequestWebsiteSetup && surface === 'work' \? <a/)
   const expression = websiteProductSource.match(/const canRequestWebsiteSetup = ([\s\S]*?)\n\s*const showAssistedWebsitePreview/)?.[1]
   assert.ok(expression)

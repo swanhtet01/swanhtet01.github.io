@@ -66,7 +66,7 @@ test('fresh assisted entry yields to retained work, carts, attention and editor 
   assert.ok(product.includes('You review one preview before anything becomes live.'))
   const action = product.slice(product.indexOf('{assistedCatalogEntry ? <>'), product.indexOf('{ecommerceTodayGuided ? ('))
   assert.match(action, /<details className="ecommerce-assisted-intake">/)
-  assert.match(action, /<a className="core-button primary"[^>]+>Request catalog setup/)
+  assert.match(action, /<AssistedDeliveryScope product="ecommerce" \/>/)
   assert.match(action, /<button className="core-button secondary" onClick=\{runOrderAutopilot\} type="button">Try sample request/)
 })
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
