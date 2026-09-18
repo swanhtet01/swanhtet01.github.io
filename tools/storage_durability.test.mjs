@@ -1149,7 +1149,8 @@ test('the device warning stays out of the product workspaces', async () => {
 
 test('restore requires explicit review of the exact selected snapshot', async () => {
   const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
-  assert.ok(page.includes('reviewedRestorePoint !== restorePoint || restoreBusy'))
+  assert.ok(page.includes('reviewedRestorePoint !== restorePoint || localWorkspaceOperation.current'))
+  assert.ok(page.includes("localWorkspaceOperation.current = 'restore'"))
   assert.ok(page.includes('onClick={() => setReviewedRestorePoint(restorePoint)}'))
   assert.ok(page.includes('Cancel restore'))
   assert.ok(page.includes('Confirm restore of this snapshot'))
@@ -1159,6 +1160,9 @@ test('restore requires explicit review of the exact selected snapshot', async ()
   assert.ok(page.includes('Shop cannot restore it. For recovery, use Download workspace backup above.'))
   for (const action of ['function saveRestorePoint()', 'async function loadBackupFile', 'async function restoreWorkspace()']) {
     const start = page.indexOf(action)
-    assert.ok(start >= 0 && page.slice(start, start + 300).includes('setReviewedRestorePoint(null)'), `${action} invalidates prior review`)
+    const nextFunction = page.indexOf('\n  function ', start + action.length)
+    const nextAsyncFunction = page.indexOf('\n  async function ', start + action.length)
+    const end = Math.min(...[nextFunction, nextAsyncFunction, page.length].filter(index => index >= 0))
+    assert.ok(start >= 0 && page.slice(start, end).includes('setReviewedRestorePoint(null)'), `${action} invalidates prior review`)
   }
 })
