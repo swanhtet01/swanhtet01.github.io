@@ -97,6 +97,22 @@ test('product handoffs prefill hidden context and product changes discard stale 
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
+test('product-specific brief guidance preserves drafts and never sends on selection', () => {
+  const expectations = { website: 'what should visitors do?', ecommerce: 'how should you receive customer requests?', shop: 'which devices do staff use', guide: 'help choose the right service' }
+  for (const [product, hint] of Object.entries(expectations)) {
+    const state = harness([], '?product=' + product)
+    const goal = state.fields.get('[name="goal"]')
+    assert.ok(goal.placeholder.includes(hint))
+    assert.match(goal.placeholder, /Do not paste/)
+    goal.value = 'Keep my own brief exactly as written'
+    state.changeProduct('website')
+    assert.equal(goal.value, 'Keep my own brief exactly as written')
+    assert.ok(goal.placeholder.includes(expectations.website))
+    state.changeProduct('unknown')
+    assert.ok(goal.placeholder.includes(expectations.guide))
+    assert.equal(state.calls.length, 0)
+  }
+})
 test('navigation warning exists only during pending or unconfirmed delivery', async () => {
   let finish
   const pending = new Promise(resolve => { finish = resolve })

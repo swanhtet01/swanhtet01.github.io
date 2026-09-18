@@ -691,7 +691,18 @@ const contactScript = `<script>(function(){
     proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;
     if(copyHeading)copyHeading.textContent='Your brief is ready to review.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
   }
-  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged()});
+  function updateBriefHint(){
+    if(!goal)return;
+    var hints={
+      website:'What does your business offer, who should the Website reach, and what should visitors do? Existing text or photos are optional. Do not paste passwords or customer records.',
+      ecommerce:'What do you sell, roughly how many products, and how should you receive customer requests? Mention delivery or collection needs. Do not paste payment slips or customer records.',
+      shop:'What type of shop do you run, which devices do staff use, and what is the main daily task to improve? Do not paste customer records or payment details.',
+      guide:'Tell us your business type and the main result you need. We can help choose the right service. Do not paste passwords, payment details or customer records.'
+    };
+    goal.placeholder=hints[product&&product.value]||hints.guide;
+  }
+  updateBriefHint();
+  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(managedIntelligenceRequest&&!handoff.toString()){
     if(heading)heading.textContent='Request managed company intelligence.';
