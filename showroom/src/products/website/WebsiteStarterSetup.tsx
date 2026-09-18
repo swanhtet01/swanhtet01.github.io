@@ -27,8 +27,8 @@ const SAMPLE_BRIEF: WebsiteStarterBrief = {
   templateId: 'catalog-showcase',
   businessName: 'Mingalar Fresh Mart',
   audience: 'families and office buyers in Yangon',
-  offer: 'Daily groceries, pantry packs, and local delivery with clear pickup windows.',
-  proof: 'Public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.',
+  offer: 'Ask about daily groceries and pantry packs for your next shopping trip.',
+  proof: 'Share your list and quantities. Confirm current prices, availability and pickup or delivery options with the business.',
   contactHref: '',
 }
 
@@ -222,18 +222,18 @@ export function WebsiteStarterSetup({
           </label>
 
           <label>
-            <span>Why should customers trust it?</span>
+            <span>What should customers know before contacting you?</span>
             <textarea
               aria-describedby={proofIssue ? 'website-starter-proof-help website-starter-error-proof' : 'website-starter-proof-help'}
               aria-invalid={Boolean(proofIssue)}
               maxLength={360}
               onChange={(event) => updateBrief('proof', event.target.value)}
-              placeholder="e.g. A real, verifiable reason customers choose this business."
+              placeholder="e.g. Details to confirm, useful inquiry information, or a verified business fact."
               required
               rows={3}
               value={brief.proof}
             />
-            <small id="website-starter-proof-help">Use approved public copy only. Do not paste private customer data.</small>
+            <small id="website-starter-proof-help">Review the suggested wording against the actual business. Use approved public copy only; do not paste private customer data.</small>
             {proofIssue ? <small className="website-field-error" id="website-starter-error-proof">{proofIssue.message}</small> : null}
           </label>
         </div>

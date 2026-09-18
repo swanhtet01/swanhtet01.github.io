@@ -92,7 +92,7 @@ export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
     issues.push({ field: 'offer', message: 'Describe the main offer in 140 characters or fewer.' })
   }
   if (!isBoundedLine(brief.proof, 360)) {
-    issues.push({ field: 'proof', message: 'Add one supportable fact in 360 characters or fewer.' })
+    issues.push({ field: 'proof', message: 'Add useful contact guidance or a verified business fact in 360 characters or fewer.' })
   }
   if (contactHref && (contactHref.length > 160 || !isSafeHttpsDestination(contactHref))) {
     issues.push({ field: 'contactHref', message: 'Use a complete HTTPS contact link or leave it blank.' })
@@ -179,7 +179,7 @@ export function applyWebsiteStarterBrief(
           ctaHref: secondaryPage.slug,
         },
         sections: [
-          { ...home.sections[0], eyebrow: 'Proof', title: `Why choose ${businessName}?`, body: proof },
+          { ...home.sections[0], eyebrow: 'Business details', title: `About ${businessName}`, body: proof },
           { ...home.sections[1], eyebrow: 'Next step', title: 'Know what happens before you contact us.', body: `Review our ${secondaryPage.name.toLowerCase()}, then use one clear contact route when you are ready.` },
         ],
         seo: { title: `${businessName} | Home`, description: offer },
@@ -235,7 +235,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
       businessName,
       audience: 'customers ready to ask for help or a quote',
       offer: `Tell ${businessName} what you need and get one clear next step.`,
-      proof: 'Tell us what you need and get one clear next step. Every request is tracked from the first message to the final answer, so nothing is lost and nobody has to chase.',
+      proof: 'Describe the work, preferred timing and any constraints. Ask the business to confirm scope, price and the next step before agreeing to proceed.',
       contactHref: '',
     }
   }
@@ -245,7 +245,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
       businessName,
       audience: 'customers comparing products or packages',
       offer: `Explore what ${businessName} offers and ask about the right option.`,
-      proof: 'Browse what is available now and ask about the option that fits. Prices and availability come from the same record the team works from, so what you see is what we can supply.',
+      proof: 'Compare the options and ask about the exact variant, current price and availability. A catalog inquiry does not reserve stock or place an order.',
       contactHref: '',
     }
   }
@@ -254,7 +254,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
     businessName,
     audience: 'customers looking for clear company information',
     offer: `Meet ${businessName} and understand the easiest way to get help.`,
-    proof: 'Orders, questions, and delivery promises stay on one shared record, so you get a clear and consistent answer from whoever picks up.',
+    proof: 'Read the business details and ask about anything you need confirmed before visiting or choosing a service.',
     contactHref: '',
   }
 }

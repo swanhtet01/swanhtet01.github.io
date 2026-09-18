@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createInitialWorkspace, createWebsitePreviewArtifact } from '../showroom/src/products/website/website-model.ts'
 import { buildWebsiteHtml } from '../showroom/src/products/website/website-export.ts'
-import { applyWebsiteStarterBrief, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
+import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
+import { websiteTradeBrief, websiteTradeBriefOptions } from '../showroom/src/products/website/website-trade-brief.ts'
 
 const capturedAt = '2026-09-18T00:00:00.000Z'
 const brief = { businessName: 'Example Studio', audience: 'local businesses', offer: 'Print design for local businesses', proof: 'Owner-supplied description for review.', contactHref: '' }
@@ -60,4 +61,39 @@ test('operator starter does not prefill an unrelated business contact', () => {
   const source = readFileSync(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8')
   assert.match(source, /const SAMPLE_BRIEF:[\s\S]*?contactHref: ''/)
   assert.doesNotMatch(source, /https:\/\/m\.me\/mingalarfreshmart/)
+  assert.ok(source.includes('What should customers know before contacting you?'))
+  assert.ok(source.includes('Review the suggested wording against the actual business.'))
+  assert.doesNotMatch(source, /Why should customers trust it\?|same-day neighborhood delivery/)
+})
+
+test('all trade outputs give useful inquiry guidance without asserting business operations', () => {
+  const expectations = {
+    'mini-mart': 'shopping list', pharmacy: 'qualified pharmacist',
+    'phone-electronics': 'device model', fashion: 'measurements', hardware: 'specification',
+    'tea-coffee': 'ingredients', 'auto-parts': 'part number', restaurant: 'party size',
+    'beauty-spa': 'cancellation terms', bakery: 'allergens',
+  }
+  assert.deepEqual(websiteTradeBriefOptions().map(row => row.id).sort(), Object.keys(expectations).sort())
+  for (const { id } of websiteTradeBriefOptions()) {
+    const drafted = websiteTradeBrief({ tradeId: id, businessName: 'Example Business' })
+    const site = applyWebsiteStarterBrief(createInitialWorkspace(), drafted, capturedAt)
+    assert.equal(site.siteName, 'Example Business', `${id}: draft accepted`)
+    const html = buildWebsiteHtml(createWebsitePreviewArtifact(site))
+    assert.ok(html.includes(expectations[id]), `${id}: actionable customer requirements`)
+    assert.doesNotMatch(html, /reorder levels|counted daily|tracked per size|reserved rather than|actually being baked|what we can actually hand over|nothing is lost|same-day neighborhood delivery/i)
+    assert.equal(site.pages[0].sections[0].eyebrow, 'Business details')
+    assert.ok(site.pages.every(page => page.stage === 'draft'))
+    assert.deepEqual(site.localPublishes, [])
+  }
+})
+
+test('working samples never imply connected stock or guaranteed request handling', () => {
+  for (const { id } of websiteStarterTemplates) {
+    const sample = installWebsiteWorkingSample(createInitialWorkspace(), { templateId: id, businessName: 'Example Studio', capturedAt })
+    assert.ok(sample)
+    const html = buildWebsiteHtml(createWebsitePreviewArtifact(sample))
+    assert.doesNotMatch(html, /nothing is lost|same record the team works from|what we can supply|one shared record|every request is tracked/i)
+    assert.ok(html.includes('Business details'))
+    assert.deepEqual(sample.localPublishes, [])
+  }
 })
