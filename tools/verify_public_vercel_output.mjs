@@ -278,7 +278,7 @@ if (shop?.primaryCta?.label !== 'Open Shop Profit Control'
   || shop?.primaryCta?.url !== 'https://app.supermega.dev/shop/?tab=today') fail('shop_profit_control_action_drift')
 const shopProfitControlAnchor = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
 for (const token of [
-  manifest.company.positioning,
+  'Less setup.<br>More time for your business.',
   manifest.company.headline,
   manifest.company.supporting,
   'POS-independent',
@@ -295,19 +295,14 @@ for (const token of [
   '>Products<',
   'Start with Shop Profit Control, then choose a connected workflow.',
   manifest.company.statement,
-  'id="model" aria-label="Free and managed SuperMega"',
-  'Free product. Managed intelligence.',
-  'Run the products free. Add managed company intelligence when the workflow proves value.',
-  'Operate without a stripped-down plan.',
-  `Current product doors: ${publicProductNames}. Retained workspaces remain accessible separately.`,
-  'Grounded answers from validated local records',
-  'No account or model call required',
-  'Use approved context across products.',
-  'Approved AI context across the active products',
-  'Persistent company history and role-aware access',
-  'Reviewed recommendations and accountable actions',
-  'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.',
-  'href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a>',
+  'id="model" aria-label="How SuperMega prepares your business tools"',
+  'Your business. Our setup work.',
+  'Tell us the job',
+  'Review a prepared result',
+  'Prepare for daily use',
+  'We confirm scope, price and timing',
+  'A sample or submitted brief is not a live business account.',
+  'href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a>',
   'id="trust"',
   'aria-label="Security boundary"',
   'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
@@ -326,7 +321,7 @@ for (const product of publicProducts) {
   }
 }
 if (countOccurrences(home, '>Start free sample</a>') !== publicProducts.filter((product) => product.id !== 'shop').length) fail('guided_product_cta_count_wrong')
-if ((home.match(/>Request managed pilot<\/a>/g) || []).length !== 1) fail('managed_pilot_cta_count_wrong')
+if ((home.match(/>Request assisted setup<\/a>/g) || []).length !== 1) fail('assisted_setup_cta_count_wrong')
 if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
 for (const retiredToken of [
   'Four focused products',
